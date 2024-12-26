@@ -20,8 +20,8 @@ function handleKeyPress(e) {
 
 }
 
-//  // 키보드 리스너 설정 - 디버깅용
-//  v.addListener(function (e) {
+//  키보드 리스너 설정 - 디버깅용
+//  v.addListener(function (e) { 
 //   console.log('키 입력 감지:', {
 //     name: e.name,           // 키 이름
 //     state: e.state,         // 상태 (UP/DOWN)
@@ -32,22 +32,18 @@ function handleKeyPress(e) {
 //   });
 // });
 
-// function createWindow() {
-//   const win = new BrowserWindow({
-//     width: 800,
-//     height: 600,
-//     autoHideMenuBar: true,
-//     transparent: true,
-//     webPreferences: {
-//       preload: path.join(__dirname, 'preload.js')
-//     }
-//   })
-
-//   win.loadFile(path.join(__dirname, 'index.html'))
-// }
-
 function createWindow() {
   const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js')
+    }
+  })
+
+  const overlay = new BrowserWindow({
     width: 400,
     height: 100,
     frame: false,
@@ -57,17 +53,19 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
       contextIsolation: false
-    }
+    },
+    parent: win
   })
 
   // 화면 크기 얻기
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
 
-  // 우하단 위치 계산 및 설정
-  win.setPosition(width - 400, height - 100)
-
   win.loadFile(path.join(__dirname, 'index.html'))
+
+  // 우하단 위치 계산 및 설정
+  overlay.setPosition(width - 400, height - 100)
+  overlay.loadFile(path.join(__dirname, 'overlay.html'))
 }
 
 app.whenReady().then(() => {

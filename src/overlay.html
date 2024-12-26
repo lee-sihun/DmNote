@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      background: transparent;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .key {
+      width: 50px;
+      height: 50px;
+      margin: 0 10px;
+      border: 2px solid #fff;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .active {
+      background: rgba(255, 255, 255, 0.8);
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="key" id="Z">Z</div>
+  <div class="key" id="X">X</div>
+  <div class="key" id="DOT">.</div>
+  <div class="key" id="FORWARD SLASH">/</div>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    // 각 키의 상태를 개별적으로 관리
+    const keyStates = {
+      'Z': false,
+      'X': false,
+      'DOT': false,
+      'FORWARD SLASH': false
+    };
+    
+    ipcRenderer.on('keyState', (event, { key, state }) => {
+      // 각 키의 상태를 독립적으로 업데이트
+      keyStates[key] = (state === 'DOWN');
+      
+      // 모든 키 상태 개별 업데이트
+      Object.keys(keyStates).forEach(k => {
+        const element = document.getElementById(k);
+        if (element) {
+          if (keyStates[k]) {
+            element.classList.add('active');
+          } else {
+            element.classList.remove('active');
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
