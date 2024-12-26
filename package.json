@@ -1,0 +1,30 @@
+{
+  "name": "djmax-keyviewer",
+  "version": "1.0.0",
+  "description": "key viewer for DJ MAX",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.djmax.keyviewer",
+    "productName": "DJMAX Keyviewer",
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.ico"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "author": "lee-sihun",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "node-global-key-listener": "^0.3.0"
+  }
+}
