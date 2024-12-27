@@ -17,7 +17,6 @@ function handleKeyPress(e) {
       BrowserWindow.getAllWindows()[0].webContents.send('keyState', { key, state });
       break;
   }
-
 }
 
 //  키보드 리스너 설정 - 디버깅용
