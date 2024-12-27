@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@components/*": ["src/renderer/components/*"],
+      "@styles/*": ["src/renderer/styles/*"],
+      "@windows/*": ["src/renderer/windows/*"],
+      "@hooks/*": ["src/renderer/hooks/*"],
+      // "@utils/*": ["src/renderer/utils/*"]
+    }
+  }
+}

@@ -3,10 +3,13 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 module.exports = {
   mode: "development",
-  entry: "./src/renderer/index.js",
+  entry: {
+    main: "./src/renderer/windows/main/index.js",
+    overlay: "./src/renderer/windows/overlay/index.js",
+  },
   output: {
     path: path.resolve(__dirname, "dist", "renderer"),
-    filename: "bundle.js",
+    filename: "[name].bundle.js",
     publicPath: './'
   },
   module: {
@@ -29,16 +32,30 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: path.resolve(__dirname, "src", "renderer", "index.html"),
+      template: path.resolve(__dirname, "src", "renderer", "windows", "main", "index.html"),
+      filename: "index.html",
+      chunks: ["main"]
+    }),
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, "src", "renderer", "windows", "overlay", "index.html"),
+      filename: "overlay.html",
+      chunks: ["overlay"]
     }),
   ],
   devServer: {
     static: {
-      directory: path.resolve(__dirname, "dist", "renderer"),
+      directory: path.resolve(__dirname, "dist"),
     },
     port: 3000,
   },
   resolve: {
-    extensions: [".js", ".jsx"]
+    extensions: [".js", ".jsx"],
+    alias: {
+      '@components': path.resolve(__dirname, 'src/renderer/components'),
+      '@styles': path.resolve(__dirname, 'src/renderer/styles'),
+      '@windows': path.resolve(__dirname, 'src/renderer/windows'),
+      '@hooks': path.resolve(__dirname, 'src/renderer/hooks'),
+      // '@utils': path.resolve(__dirname, 'src/renderer/utils')
+    }
   }
 };

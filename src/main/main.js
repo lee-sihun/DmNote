@@ -65,7 +65,7 @@ function createWindow() {
 
   // 우하단 위치 계산 및 설정
   overlay.setPosition(width - 400, height - 100)
-  overlay.loadFile(path.join(__dirname, 'overlay.html'))
+  overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
 }
 
 app.whenReady().then(() => {
