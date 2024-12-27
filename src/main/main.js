@@ -61,7 +61,7 @@ function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
 
-  win.loadFile(path.join(__dirname, 'index.html'))
+  win.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html'));
 
   // 우하단 위치 계산 및 설정
   overlay.setPosition(width - 400, height - 100)
