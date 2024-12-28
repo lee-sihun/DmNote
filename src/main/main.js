@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen } = require('electron/main')
+const { app, BrowserWindow, screen, ipcMain } = require('electron/main')
 const path = require('node:path')
 const { GlobalKeyboardListener } = require('node-global-key-listener')
 
@@ -48,8 +48,8 @@ function handleKeyPress(e) {
 function createWindow() {
   // 메인 윈도우
   const win = new BrowserWindow({
-    width: 1200,
-    height: 600,
+    width: 900,
+    height: 485,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     webPreferences: {
@@ -82,12 +82,12 @@ function createWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: true,
+    skipTaskbar: true,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: true,
       contextIsolation: false
     },
-    parent: win
   })
 
   // 화면 크기 얻기
@@ -104,6 +104,15 @@ function createWindow() {
   } else {
     overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
   }
+
+  ipcMain.on('minimize-window', () => {
+    win.minimize()
+  })
+
+  ipcMain.on('close-window', () => {
+    win.close()
+    overlay.close()
+  })
 }
 
 app.whenReady().then(() => {
