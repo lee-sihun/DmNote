@@ -44,9 +44,14 @@ module.exports = {
   ],
   devServer: {
     static: {
-      directory: path.resolve(__dirname, "dist"),
+      directory: path.resolve(__dirname, "dist/renderer"),
     },
     port: 3000,
+    hot: true,
+    liveReload: true,
+    devMiddleware: {
+      writeToDisk: true,
+    },
   },
   resolve: {
     extensions: [".js", ".jsx"],

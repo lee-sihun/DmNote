@@ -4,8 +4,9 @@
   "description": "key viewer for DJ MAX",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "webpack && electron .",
-    "dev": "webpack serve",
+    "start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev": "webpack serve --mode development",
+    "prebuild": "webpack",
     "build": "electron-builder --win"
   },
   "build": {
@@ -17,7 +18,11 @@
     },
     "directories": {
       "output": "dist"
-    }
+    },
+    "files": [
+      "dist/renderer/**/*",
+      "src/main/**/*"
+    ]
   },
   "author": "lee-sihun",
   "license": "ISC",
@@ -27,14 +32,18 @@
     "@babel/preset-react": "^7.26.3",
     "autoprefixer": "^10.4.20",
     "babel-loader": "^9.2.1",
+    "concurrently": "^9.1.1",
+    "cross-env": "^7.0.3",
     "css-loader": "^7.1.2",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "electron-reloader": "^1.2.3",
     "html-webpack-plugin": "^5.6.3",
     "postcss": "^8.4.49",
     "postcss-loader": "^8.1.1",
     "style-loader": "^4.0.0",
     "tailwindcss": "^3.4.17",
+    "wait-on": "^8.0.1",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1",
     "webpack-dev-server": "^5.2.0"

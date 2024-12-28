@@ -2,6 +2,20 @@ const { app, BrowserWindow, screen } = require('electron/main')
 const path = require('node:path')
 const { GlobalKeyboardListener } = require('node-global-key-listener')
 
+// 메인 프로세스 코드 변경 시 자동 재시작
+if (process.env.NODE_ENV === 'development') {
+  try {
+    require('electron-reloader')(module, {
+      debug: true,
+      watchRenderer: false,
+      ignore: [
+        'node_modules/*',
+        'src/renderer/*',
+      ]
+    });
+  } catch (_) { console.log('Error'); }
+}
+
 const v = new GlobalKeyboardListener()
 
 function handleKeyPress(e) {
@@ -32,8 +46,9 @@ function handleKeyPress(e) {
 // });
 
 function createWindow() {
+  // 메인 윈도우
   const win = new BrowserWindow({
-    width: 800,
+    width: 1200,
     height: 600,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
@@ -42,6 +57,25 @@ function createWindow() {
     }
   })
 
+  // 컨텍스트 메뉴 비활성화 
+  const WM_INITMENU = 0x0116;
+  win.hookWindowMessage(WM_INITMENU, () => {
+    win.setEnabled(false);
+    win.setEnabled(true);
+  });
+
+  win.setResizable(false); // 크기 조절 방지 
+  win.setMaximizable(false); // 최대화 방지
+
+  win.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html'));
+
+  if (process.env.NODE_ENV === 'development') {
+    win.loadURL('http://localhost:3000/index.html');
+  } else {
+    win.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html'));
+  }
+
+  // 오버레이 윈도우
   const overlay = new BrowserWindow({
     width: 400,
     height: 100,
@@ -60,11 +94,16 @@ function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
 
-  win.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html'));
-
   // 우하단 위치 계산 및 설정
-  overlay.setPosition(width - 400, height - 100)
-  overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
+  overlay.setPosition(width - 400, height - 200)
+
+  // overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
+
+  if (process.env.NODE_ENV === 'development') {
+    overlay.loadURL('http://localhost:3000/overlay.html');
+  } else {
+    overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
+  }
 }
 
 app.whenReady().then(() => {
