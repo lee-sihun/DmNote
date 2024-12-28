@@ -27,6 +27,10 @@ module.exports = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader', 'postcss-loader']
+      },
+      {
+        test: /\.svg$/,
+        use: ['@svgr/webpack']
       }
     ],
   },
@@ -60,6 +64,7 @@ module.exports = {
       '@styles': path.resolve(__dirname, 'src/renderer/styles'),
       '@windows': path.resolve(__dirname, 'src/renderer/windows'),
       '@hooks': path.resolve(__dirname, 'src/renderer/hooks'),
+      '@assets': path.resolve(__dirname, 'src/renderer/assets'),
       // '@utils': path.resolve(__dirname, 'src/renderer/utils')
     }
   }

@@ -49,6 +49,7 @@
     "webpack-dev-server": "^5.2.0"
   },
   "dependencies": {
+    "@svgr/webpack": "^8.1.0",
     "node-global-key-listener": "^0.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
