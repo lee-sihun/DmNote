@@ -13,17 +13,17 @@ export default function TitleBar() {
 
   return (
     <div className="w-full h-[40px] flex justify-between items-center bg-[#1C1E25] [app-region:drag]">
-      <div className="text-[18px] font-black text-[#989BA6] ml-[24px]">DM NOTE</div>
+      <div className="text-[15px] font-black text-[#989BA6] ml-[24px]">DM NOTE</div>
       <div className="flex h-full [app-region:no-drag]">
         <button 
           onClick={handleMinimize}
-          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35]"
+          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors"
         >
           <object type="image/svg+xml" data={Minimize} className="scale-[0.9]"/>
         </button>
         <button
           onClick={handleClose} 
-          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35]"
+          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors"
         >
           <object type="image/svg+xml" data={Close} className="scale-[0.8]"/>
         </button>

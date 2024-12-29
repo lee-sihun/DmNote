@@ -4,6 +4,14 @@ module.exports = {
   theme: {
     extend: {},
   },
-  plugins: [],
+  plugins: [
+    function ({ addUtilities }) {
+      addUtilities({
+        '.all-unset': {
+          'all': 'unset'
+        }
+      })
+    }
+  ],
 }
 

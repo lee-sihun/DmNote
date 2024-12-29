@@ -28,9 +28,28 @@ module.exports = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader', 'postcss-loader']
       },
+      // {
+      //   test: /\.svg$/,
+      //   use: [
+      //     {
+      //       loader: 'file-loader',
+      //       options: {
+      //         name: '[name].[ext]',
+      //         outputPath: 'assets/'
+      //       }
+      //     }
+      //   ]
+      // },
       {
-        test: /\.svg$/,
+        test: /\.svg$/i,
+        issuer: /\.[jt]sx?$/,
         use: [
+          {
+            loader: '@svgr/webpack',
+            options: {
+              typescript: true,
+            }
+          },
           {
             loader: 'file-loader',
             options: {
@@ -39,7 +58,7 @@ module.exports = {
             }
           }
         ]
-      }
+      },
     ],
   },
   plugins: [
