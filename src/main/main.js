@@ -48,8 +48,8 @@ function handleKeyPress(e) {
 function createWindow() {
   // 메인 윈도우
   const win = new BrowserWindow({
-    width: 900,
-    height: 485,
+    width: 896,
+    height: 491,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     transparent: true,
@@ -117,7 +117,7 @@ function createWindow() {
       win.setBackgroundColor('rgba(0,0,0,0)')
     }
   }, 500)
-  
+
   // 메인 윈도우 종료 시 오버레이도 함께 종료
   win.on('closed', () => {
     clearInterval(backgroundInterval)

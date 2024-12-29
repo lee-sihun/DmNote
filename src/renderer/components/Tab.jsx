@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
+import Canvas from "./Canvas";
 
 export default function Tab() {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(1);
 
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
@@ -15,7 +16,7 @@ export default function Tab() {
       case 0:
         return <div>설정</div>;
       case 1:
-        return <div>레이아웃 설정</div>;
+        return <Canvas />;
       case 2:
         return <div>오버레이 설정</div>;
       default:
@@ -38,7 +39,7 @@ export default function Tab() {
           ))}
         </div>
       </div>
-      <div className="flex h-full text-white">
+      <div className="flex h-full">
         {renderTabContent()}
       </div>
     </div>
