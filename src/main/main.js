@@ -95,7 +95,7 @@ function createWindow() {
   const { width, height } = primaryDisplay.workAreaSize
 
   // 우하단 위치 계산 및 설정
-  overlay.setPosition(width - 400, height - 200)
+  overlay.setPosition(width - 400, height - 100)
 
   // overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
 
@@ -104,6 +104,13 @@ function createWindow() {
   } else {
     overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
   }
+
+  // 메인 윈도우 종료 시 오버레이도 함께 종료
+  win.on('closed', () => {
+    if (!overlay.isDestroyed()) {
+      overlay.close()
+    }
+  })
 
   ipcMain.on('minimize-window', () => {
     win.minimize()
