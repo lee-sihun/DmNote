@@ -12,7 +12,7 @@ export default function TitleBar() {
   };
 
   return (
-    <div className="w-full h-[40px] flex justify-between items-center bg-[#1C1E25] [app-region:drag]">
+    <div className="w-full h-[40px] flex justify-between items-center bg-[#1C1E25] rounded-t-[6px] [app-region:drag]">
       <div className="text-[15px] font-black text-[#989BA6] ml-[24px]">DM NOTE</div>
       <div className="flex h-full [app-region:no-drag]">
         <button 
@@ -23,7 +23,7 @@ export default function TitleBar() {
         </button>
         <button
           onClick={handleClose} 
-          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors"
+          className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors rounded-tr-[6px]"
         >
           <object type="image/svg+xml" data={Close} className="scale-[0.8]"/>
         </button>

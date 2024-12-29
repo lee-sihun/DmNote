@@ -52,9 +52,14 @@ function createWindow() {
     height: 485,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
+    transparent: true,
+    backgroundColor: 'rgba(0,0,0,0)',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
-    }
+    },
+    // Windows 투명도 최적화
+    vibrancy: 'under-window',
+    visualEffectState: 'active'
   })
 
   // 컨텍스트 메뉴 비활성화 
@@ -81,6 +86,7 @@ function createWindow() {
     height: 100,
     frame: false,
     transparent: true,
+    backgroundColor: 'rgba(0,0,0,0)',
     alwaysOnTop: true,
     skipTaskbar: true,
     webPreferences: {
@@ -105,8 +111,16 @@ function createWindow() {
     overlay.loadFile(path.join(__dirname, '..', '..', 'dist', 'renderer', 'overlay.html'));
   }
 
+  // 렌더링 최적화
+  const backgroundInterval = setInterval(() => {
+    if (!win.isDestroyed() && win.isVisible()) {
+      win.setBackgroundColor('rgba(0,0,0,0)')
+    }
+  }, 500)
+  
   // 메인 윈도우 종료 시 오버레이도 함께 종료
   win.on('closed', () => {
+    clearInterval(backgroundInterval)
     if (!overlay.isDestroyed()) {
       overlay.close()
     }
@@ -121,6 +135,8 @@ function createWindow() {
     overlay.close()
   })
 }
+
+// app.disableHardwareAcceleration();
 
 app.whenReady().then(() => {
   v.addListener(handleKeyPress)

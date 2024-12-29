@@ -4,7 +4,7 @@ import React from "react";
 
 export default function App() {
   return (
-    <div className="bg-[#101216] w-full h-full flex flex-col">
+    <div className="bg-[#101216] w-full h-full flex flex-col rounded-[6px]">
       <TitleBar />
       <Tab />
     </div>

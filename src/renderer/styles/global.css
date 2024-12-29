@@ -3,19 +3,25 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: 'SUIT-Regular';
-  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2') format('woff2');
+  font-family: "SUIT-Regular";
+  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2")
+    format("woff2");
   font-weight: normal;
   font-style: normal;
 }
 
 :root {
-  font-family: 'SUIT-Regular', sans-serif;
-  user-select: none;
+  font-family: "SUIT-Regular", sans-serif;
 }
 
 html,
 body,
 #root {
   height: 100%;
+  background: transparent !important;
+}
+
+* {
+  user-select: none;
+  outline: none;
 }
