@@ -34,7 +34,7 @@ function Grid() {
   });
 
   return (
-    <div className="relative w-full h-[320px] bg-[#393A3F] rounded-[6px]">
+    <div className="grid relative w-full h-[320px] bg-[#393A3F] rounded-[6px]">
       {keys.map((props, index) => (
         <Key key={index} {...props} />
       ))}
