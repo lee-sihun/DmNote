@@ -24,16 +24,12 @@ function Grid() {
       gridSize: 10, 
       initialX: dx, 
       initialY: dy,
-      containerWidth: 860,
-      containerHeight: 320,
-      width: width,
-      height: 60 
     });
     return { 
       draggableRef: draggable.ref,
       dx: draggable.dx,
       dy: draggable.dy,
-      width 
+      width,
     };
   });
 

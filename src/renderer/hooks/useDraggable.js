@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 
-export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, containerWidth, containerHeight, width, height  }) => {
+export const useDraggable = ({ gridSize, initialX = 0, initialY = 0 }) => {
   const [node, setNode] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [{ dx, dy }, setOffset] = useState({
     dx: initialX,
     dy: initialY,
@@ -11,87 +12,65 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, containerWi
     setNode(nodeEle);
   }, []);
 
+  const handleMouseOver = () => {
+    if (node && !isDragging) node.style.cursor = 'grab';
+  };
+
+  const handleMouseOut = () => {
+    if (node && !isDragging) node.style.cursor = 'default';
+  };
+
   const handleMouseDown = useCallback((e) => {
+    if (!node) return;
+    setIsDragging(true);
+    node.style.cursor = 'grabbing';
+
     const startPos = {
       x: e.clientX - dx,
       y: e.clientY - dy,
     };
 
     const handleMouseMove = (e) => {
-      // How far the mouse has been moved
-      const dx = e.clientX - startPos.x;
-      const dy = e.clientY - startPos.y;
+      const parentNode = node.parentElement;
+      const parentRect = parentNode.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      
+      const newDx = e.clientX - startPos.x;
+      const newDy = e.clientY - startPos.y;
 
-      // Calculate maximum distance
-      const maxX = containerWidth - width;
-      const maxY = containerHeight - height;
+      const maxX = parentRect.width - nodeRect.width;
+      const maxY = parentRect.height - nodeRect.height;
 
-      const snappedX = Math.min(Math.max(Math.round(dx / gridSize) * gridSize, 0), maxX);
-      const snappedY = Math.min(Math.max(Math.round(dy / gridSize) * gridSize, 0), maxY);
+      const snappedX = Math.min(Math.max(Math.round(newDx / gridSize) * gridSize, 0), maxX);
+      const snappedY = Math.min(Math.max(Math.round(newDy / gridSize) * gridSize, 0), maxY);
 
       setOffset({ dx: snappedX, dy: snappedY });
-      updateCursor();
     };
 
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      resetCursor();
+      setIsDragging(false);
+      node.style.cursor = 'grab';
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [dx, dy]);
-
-  const handleTouchStart = useCallback((e) => {
-    const touch = e.touches[0];
-
-    const startPos = {
-      x: touch.clientX - dx,
-      y: touch.clientY - dy,
-    };
-
-    const handleTouchMove = (e) => {
-      const touch = e.touches[0];
-      const dx = touch.clientX - startPos.x;
-      const dy = touch.clientY - startPos.y;
-      const snappedX = Math.round(dx / gridSize) * gridSize;
-      const snappedY = Math.round(dy / gridSize) * gridSize;
-      setOffset({ dx: snappedX, dy: snappedY });
-      updateCursor();
-    };
-
-    const handleTouchEnd = () => {
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-      resetCursor();
-    };
-
-    document.addEventListener('touchmove', handleTouchMove);
-    document.addEventListener('touchend', handleTouchEnd);
-  }, [dx, dy]);
-
-  const updateCursor = () => {
-    document.body.style.cursor = 'grabbing';
-    document.body.style.userSelect = 'none';
-  };
-
-  const resetCursor = () => {
-    document.body.style.removeProperty('cursor');
-    document.body.style.removeProperty('user-select');
-  };
+  }, [node, dx, dy, gridSize]);
 
   useEffect(() => {
-    if (!node) {
-      return;
-    }
-    node.addEventListener("mousedown", handleMouseDown);
-    node.addEventListener("touchstart", handleTouchStart);
+    if (!node) return;
+    
+    node.addEventListener('mousedown', handleMouseDown);
+    node.addEventListener('mouseover', handleMouseOver);
+    node.addEventListener('mouseout', handleMouseOut);
+    
     return () => {
-      node.removeEventListener("mousedown", handleMouseDown);
-      node.removeEventListener("touchstart", handleTouchStart);
+      node.removeEventListener('mousedown', handleMouseDown);
+      node.removeEventListener('mouseover', handleMouseOver);
+      node.removeEventListener('mouseout', handleMouseOut);
     };
-  }, [node, dx, dy]);
+  }, [node, handleMouseDown]);
 
-  return { ref, dx, dy};
+  return { ref, dx, dy };
 };
