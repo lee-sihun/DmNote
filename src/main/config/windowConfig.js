@@ -8,9 +8,11 @@ module.exports = {
     backgroundColor: 'rgba(0,0,0,0)',
     resizable: false,
     maximizable: false,
-    // 투명도 최적화 
+    // 렌더링 최적화
     vibrancy: 'under-window',
-    visualEffectState: 'active'
+    visualEffectState: 'active',
+    paintWhenInitiallyHidden: true,
+    backgroundThrottling: false
   },
   overlay: {
     width: 400,

@@ -26,8 +26,11 @@ class Application {
   }
 
   setupEventListeners() {
+    // ANGLE 백엔드 설정 (d3d11, d3d9, gl, default)
+    app.commandLine.appendSwitch('use-angle', 'd3d9')
     app.whenReady().then(() => this.createWindows())
     app.on('window-all-closed', this.handleWindowsClosed.bind(this))
+    // app.disableHardwareAcceleration()
 
     ipcMain.on('minimize-window', () => this.mainWindow.minimize())
     ipcMain.on('close-window', () => {
