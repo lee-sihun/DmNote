@@ -8,6 +8,7 @@ module.exports = {
     backgroundColor: 'rgba(0,0,0,0)',
     resizable: false,
     maximizable: false,
+    fullscreenable: false,
     // 렌더링 최적화
     vibrancy: 'under-window',
     visualEffectState: 'active',

@@ -7,7 +7,7 @@
       "@windows/*": ["src/renderer/windows/*"],
       "@hooks/*": ["src/renderer/hooks/*"],
       "@assets/*": ["src/renderer/assets/*"],
-      // "@utils/*": ["src/renderer/utils/*"]
+      "@utils/*": ["src/renderer/utils/*"]
     }
   }
 }
