@@ -28,16 +28,16 @@ export const keyMaps = {
   KeyZ: { browserKey: 'z', globalKey: 'Z', displayName: 'Z' },
 
   // 숫자
-  Digit0: { browserKey: '0', globalKey: 'NUM 0', displayName: '0' },
-  Digit1: { browserKey: '1', globalKey: 'NUM 1', displayName: '1' },
-  Digit2: { browserKey: '2', globalKey: 'NUM 2', displayName: '2' },
-  Digit3: { browserKey: '3', globalKey: 'NUM 3', displayName: '3' },
-  Digit4: { browserKey: '4', globalKey: 'NUM 4', displayName: '4' },
-  Digit5: { browserKey: '5', globalKey: 'NUM 5', displayName: '5' },
-  Digit6: { browserKey: '6', globalKey: 'NUM 6', displayName: '6' },
-  Digit7: { browserKey: '7', globalKey: 'NUM 7', displayName: '7' },
-  Digit8: { browserKey: '8', globalKey: 'NUM 8', displayName: '8' },
-  Digit9: { browserKey: '9', globalKey: 'NUM 9', displayName: '9' },
+  Digit0: { browserKey: '0', globalKey: '0', displayName: '0' },
+  Digit1: { browserKey: '1', globalKey: '1', displayName: '1' },
+  Digit2: { browserKey: '2', globalKey: '2', displayName: '2' },
+  Digit3: { browserKey: '3', globalKey: '3', displayName: '3' },
+  Digit4: { browserKey: '4', globalKey: '4', displayName: '4' },
+  Digit5: { browserKey: '5', globalKey: '5', displayName: '5' },
+  Digit6: { browserKey: '6', globalKey: '6', displayName: '6' },
+  Digit7: { browserKey: '7', globalKey: '7', displayName: '7' },
+  Digit8: { browserKey: '8', globalKey: '8', displayName: '8' },
+  Digit9: { browserKey: '9', globalKey: '9', displayName: '9' },
 
   // 특수키
   ShiftLeft: { browserKey: 'Shift', globalKey: 'LEFT SHIFT', displayName: 'LShift' },

@@ -1,13 +1,9 @@
-let store; 
+const Store = require('electron-store');
+const store = new Store();
+
 const DEFAULT_KEYS = ['Z', 'X', 'DOT', 'FORWARD SLASH'];
 
-(async () => {
-  const { default: Store } = await import('electron-store');
-  store = new Store();
-})();
-
 function loadKeys() {
-  if (!store) return DEFAULT_KEYS;
   try {
     const keys = store.get('keys');
     if (!keys) {
@@ -22,9 +18,9 @@ function loadKeys() {
 }
 
 function saveKeys(keysArray) {
-  if (!store) return;
   try {
     store.set('keys', keysArray);
+    console.log('Keys saved:', keysArray); // 디버깅용
   } catch (error) {
     console.error('Failed to save keys:', error);
   }
