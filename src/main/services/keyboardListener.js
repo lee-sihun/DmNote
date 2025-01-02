@@ -1,4 +1,5 @@
 const { GlobalKeyboardListener } = require('node-global-key-listener')
+const { loadKeys, saveKeys } = require('./keyMapping')
 
 // name: e.name,           // 키 이름
 // state: e.state,         // 상태 (UP/DOWN)
@@ -9,41 +10,57 @@ const { GlobalKeyboardListener } = require('node-global-key-listener')
 
 class KeyboardService {
   constructor() {
-    this.listener = new GlobalKeyboardListener()
-    this.overlayWindow = null
+    this.listener = new GlobalKeyboardListener();
+    this.overlayWindow = null;
+    this.keys = loadKeys();
   }
 
   setOverlayWindow(window) {
-    this.overlayWindow = window
+    this.overlayWindow = window;
   }
 
   startListening() {
-    this.listener.addListener(this.handleKeyPress.bind(this))
+    this.listener.addListener(this.handleKeyPress.bind(this));
   }
 
   stopListening() {
-    this.listener.kill()
+    this.listener.kill();
   }
 
   handleKeyPress(e) {
-    const key = e.name
-    const state = e.state
+    const key = e.name;
+    const state = e.state;
 
-    if (!this.isValidKey(key)) return
+    console.log('Received key press:', key); // 디버깅용
 
-    this.sendKeyStateToOverlay(key, state)
+    if (!this.isValidKey(key)) {
+      console.log('Invalid key:', key); // 디버깅용
+      return;
+    }
+
+    this.sendKeyStateToOverlay(key, state);
   }
 
   isValidKey(key) {
-    return ['Z', 'X', 'DOT', 'FORWARD SLASH'].includes(key)
+    return this.keys.includes(key);
+  }
+
+  updateKeyMapping(keys) {
+    console.log('Updating key mappings:', keys); // 디버깅용
+    this.keys = keys;
+    saveKeys(keys);
+  }
+
+  getKeyMappings() {
+    return this.keys;
   }
 
   sendKeyStateToOverlay(key, state) {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      // console.log(`Key: ${key}, State: ${state}`)
-      this.overlayWindow.webContents.send('keyState', { key, state })
+      console.log(`Key: ${key}, State: ${state}`)
+      this.overlayWindow.webContents.send('keyState', { key, state });
     }
   }
 }
 
-module.exports = new KeyboardService()
+module.exports = new KeyboardService();

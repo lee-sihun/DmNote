@@ -37,6 +37,16 @@ class Application {
       this.mainWindow.close()
       this.overlayWindow.close()
     })
+    
+    ipcMain.on('getKeyMappings', (e) => {
+      e.reply('updateKeyMappings', keyboardService.getKeyMappings())
+    })
+
+    // 키매핑이 업데이트 되었을 때 오버레이에 전달
+    ipcMain.on('update-key-mapping', (e, keys) => {
+      keyboardService.updateKeyMapping(keys);
+      this.overlayWindow.webContents.send('updateKeyMappings', keys);
+    })
   }
 
   createWindows() {

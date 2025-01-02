@@ -123,3 +123,8 @@ export const getKeyInfo = (code, key) => {
     displayName: key.toUpperCase()
   };
 };
+
+export const getKeyInfoByGlobalKey = (globalKey) => {
+  const found = Object.values(keyMaps).find(item => item.globalKey === globalKey);
+  return found || { browserKey: globalKey, globalKey, displayName: globalKey };
+};
