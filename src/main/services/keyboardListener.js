@@ -31,10 +31,10 @@ class KeyboardService {
     const key = e.name;
     const state = e.state;
 
-    console.log('Received key press:', key); // 디버깅용
+    // console.log('Received key press:', key); // 디버깅용
 
     if (!this.isValidKey(key)) {
-      console.log('Invalid key:', key); // 디버깅용
+      // console.log('Invalid key:', key); // 디버깅용
       return;
     }
 
@@ -46,7 +46,7 @@ class KeyboardService {
   }
 
   updateKeyMapping(keys) {
-    console.log('Updating key mappings:', keys); // 디버깅용
+    // console.log('Updating key mappings:', keys); // 디버깅용
     this.keys = keys;
     saveKeys(keys);
   }
@@ -57,7 +57,7 @@ class KeyboardService {
 
   sendKeyStateToOverlay(key, state) {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      console.log(`Key: ${key}, State: ${state}`)
+      // console.log(`Key: ${key}, State: ${state}`)
       this.overlayWindow.webContents.send('keyState', { key, state });
     }
   }

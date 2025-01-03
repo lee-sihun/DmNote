@@ -49,7 +49,7 @@ export const keyMaps = {
   Space: { browserKey: ' ', globalKey: 'SPACE', displayName: 'Space' },
   Enter: { browserKey: 'Enter', globalKey: 'RETURN', displayName: 'Enter' },
   Tab: { browserKey: 'Tab', globalKey: 'TAB', displayName: 'Tab' },
-  Backspace: { browserKey: 'Backspace', globalKey: 'BACK', displayName: 'Backspace' },
+  Backspace: { browserKey: 'Backspace', globalKey: 'BACKSPACE', displayName: 'Backspace' },
   CapsLock: { browserKey: 'CapsLock', globalKey: 'CAPITAL', displayName: 'Caps' },
 
   // 기능키

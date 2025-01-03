@@ -2,6 +2,7 @@ const { app, ipcMain } = require('electron/main')
 const MainWindow = require('./windows/mainWindow')
 const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
+const { resetKeys } = require('./services/keyMapping')
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {
@@ -47,6 +48,14 @@ class Application {
       keyboardService.updateKeyMapping(keys);
       this.overlayWindow.webContents.send('updateKeyMappings', keys);
     })
+
+    // 초기화 요청 처리
+    ipcMain.on('reset-keys', (e) => {
+      const defaultKeys = resetKeys();
+      keyboardService.updateKeyMapping(defaultKeys);
+      this.overlayWindow.webContents.send('updateKeyMappings', defaultKeys);  
+      e.reply('updateKeyMappings', defaultKeys);
+    });
   }
 
   createWindows() {

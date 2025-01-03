@@ -1,7 +1,7 @@
 const Store = require('electron-store');
 const store = new Store();
 
-const DEFAULT_KEYS = ['Z', 'X', 'DOT', 'FORWARD SLASH'];
+const DEFAULT_KEYS = ['Z', 'X', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'];
 
 function loadKeys() {
   try {
@@ -26,8 +26,19 @@ function saveKeys(keysArray) {
   }
 }
 
+function resetKeys() {
+  try {
+    store.set('keys', DEFAULT_KEYS);
+    console.log('Keys reset to default:', DEFAULT_KEYS); // 디버깅용
+    return DEFAULT_KEYS;
+  } catch (error) {
+    console.error('Failed to reset keys:', error);
+    return DEFAULT_KEYS;
+  }
+}
+
 module.exports = {
   loadKeys,
   saveKeys,
-  DEFAULT_KEYS
+  resetKeys
 };
