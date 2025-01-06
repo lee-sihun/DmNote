@@ -28,10 +28,18 @@ class KeyboardService {
   }
 
   handleKeyPress(e) {
-    const key = e.name;
+    const key = e.name || e.vKey.toString();
     const state = e.state;
 
     // console.log('Received key press:', key); // 디버깅용
+
+    // console.log('[DEBUG] Key press:', {
+    //   name: e.name, 
+    //   vKey: e.vKey, 
+    //   key: key, 
+    //   state: state,
+    //   keysInUse: this.keys
+    // });
 
     if (!this.isValidKey(key)) {
       // console.log('Invalid key:', key); // 디버깅용
