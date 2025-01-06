@@ -147,6 +147,7 @@ function Key({ draggableRef, dx, dy, width, keyName, onClick }) {
 
 function KeySettingModal({ keyData, onClose, onSave }) {
   const [key, setKey] = useState(keyData.key);
+  const [displayKey, setDisplayKey] = useState(getKeyInfoByGlobalKey(key).displayName);
   const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
@@ -154,6 +155,7 @@ function KeySettingModal({ keyData, onClose, onSave }) {
       if (isListening) {
         e.preventDefault();
         setKey(getKeyInfo(e.code, e.key).globalKey);
+        setDisplayKey(getKeyInfo(e.code, e.key).displayName);
         setIsListening(false);
       }
     }
@@ -173,7 +175,7 @@ function KeySettingModal({ keyData, onClose, onSave }) {
           onClick={() => setIsListening(true)}
           className="flex items-center h-[25px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-extrabold"
         >
-          {isListening ? "Press any key..." : key || "Click to set key"}
+          {isListening ? "Press any key..." : displayKey || "Click to set key"}
         </button>
         <div className="flex mt-2">
           <button 
