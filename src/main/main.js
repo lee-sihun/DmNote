@@ -2,7 +2,7 @@ const { app, ipcMain } = require('electron/main')
 const MainWindow = require('./windows/mainWindow')
 const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
-const { resetKeys } = require('./services/keyMapping')
+const { resetKeys } = require('./services/keyMappings')
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {

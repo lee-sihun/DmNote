@@ -1,5 +1,5 @@
 const { GlobalKeyboardListener } = require('node-global-key-listener')
-const { loadKeys, saveKeys } = require('./keyMapping')
+const { loadKeys, saveKeys } = require('./keyMappings')
 
 // name: e.name,           // 키 이름
 // state: e.state,         // 상태 (UP/DOWN)
