@@ -31,9 +31,7 @@ function Grid() {
     };
 
     const handleKeyPositions = (e, pos) => {
-      if (pos && Object.keys(pos).length > 0) {
-        setPositions(pos);
-      }
+      setPositions(pos);
     };
 
     // 초기 데이터 요청
@@ -98,6 +96,7 @@ function Grid() {
   const handleReset = () => {
     if (ipcRenderer) {
       ipcRenderer.send('reset-keys');
+      setColor("transparent");
     } else {
       console.error('ipcRenderer not available');
     }

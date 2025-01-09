@@ -3,7 +3,7 @@ const MainWindow = require('./windows/mainWindow')
 const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
 const { resetKeys } = require('./services/keyMappings')
-const { loadKeyPositions, saveKeyPositions } = require('./services/keyPositions')
+const { loadKeyPositions, saveKeyPositions, resetKeyPositions } = require('./services/keyPositions')
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {
@@ -70,9 +70,15 @@ class Application {
     // 초기화 요청 처리
     ipcMain.on('reset-keys', (e) => {
       const defaultKeys = resetKeys();
+      const defaultPositions = resetKeyPositions();
+      
       keyboardService.updateKeyMapping(defaultKeys);
-      this.overlayWindow.webContents.send('updateKeyMappings', defaultKeys);  
+      
+      this.overlayWindow.webContents.send('updateKeyMappings', defaultKeys);
+      this.overlayWindow.webContents.send('updateKeyPositions', defaultPositions);
+      
       e.reply('updateKeyMappings', defaultKeys);
+      e.reply('updateKeyPositions', defaultPositions);
     });
   }
 
