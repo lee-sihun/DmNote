@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useDraggable } from "@hooks/useDraggable";
+import { useDebounce } from "@hooks/useDebounce";
 import Palette from "./Palette";
 import { ReactComponent as ResetIcon } from "@assets/svgs/reset.svg";
 import { ReactComponent as PaletteIcon } from "@assets/svgs/palette.svg";
@@ -17,6 +18,7 @@ function Grid() {
   const [palette, setPalette] = useState(false);
   const [color, setColor] = useState("transparent");
   const [keyMappings, setKeyMappings] = useState([]);
+  const [positions, setPositions] = useState({});
   const [selectedKey, setSelectedKey] = useState(null);
 
   const ipcRenderer = window.electron.ipcRenderer;
@@ -24,41 +26,70 @@ function Grid() {
   useEffect(() => {
     if (!ipcRenderer) return;
     
-    ipcRenderer.send('getKeyMappings');
-    ipcRenderer.on('updateKeyMappings', (e, keys) => {
+    const handleKeyMappings = (e, keys) => {
       setKeyMappings(keys);
-    });
+    };
+
+    const handleKeyPositions = (e, pos) => {
+      if (pos && Object.keys(pos).length > 0) {
+        setPositions(pos);
+      }
+    };
+
+    // 초기 데이터 요청
+    ipcRenderer.send('getKeyMappings');
+    ipcRenderer.send('getKeyPositions');
+
+    // 이벤트 리스너 등록
+    ipcRenderer.on('updateKeyMappings', handleKeyMappings);
+    ipcRenderer.on('updateKeyPositions', handleKeyPositions);
 
     return () => {
       ipcRenderer.removeAllListeners('updateKeyMappings');
+      ipcRenderer.removeAllListeners('updateKeyPositions');
     };
   }, []);
 
-  const initialPositions = [
-    { dx: 280, dy: 130, width: 60 },
-    { dx: 360, dy: 130, width: 60 },
-    { dx: 440, dy: 130, width: 60 },
-    { dx: 520, dy: 130, width: 60 },
-    { dx: 140, dy: 130, width: 120 },
-    { dx: 600, dy: 130, width: 120 },
-  ];
+  const debouncedPositionUpdate = useDebounce((newPositions) => {
+    ipcRenderer.invoke('update-key-positions', newPositions)
+      .then(() => {
+        console.log('Position saved successfully');
+      })
+      .catch((error) => {
+        console.error('Failed to save position:', error);
+        // 저장 실패시 이전 positions로 롤백
+        setPositions(positions);
+      });
+  }, 100);
 
-  const keys = initialPositions.map(({ dx, dy, width }, index) => {
-    const mappedKey = keyMappings[index];
-    const draggable = useDraggable({ 
-      gridSize: 10, 
-      initialX: dx, 
-      initialY: dy,
-    });
-    return { 
-      draggableRef: draggable.ref,
-      dx: draggable.dx,
-      dy: draggable.dy,
-      width,
-      key: mappedKey,
-      index
+  const handlePositionChange = (index, dx, dy) => {
+    const newPositions = {
+      ...positions,
+      "4key": positions["4key"].map((pos, i) => {
+        if (i === index) {
+          return { ...pos, dx, dy };
+        }
+        return pos;
+      })
     };
-  });
+    setPositions(newPositions);
+    debouncedPositionUpdate(newPositions);
+  };
+
+  const renderKeys = () => {
+    if (!positions["4key"]) return null;
+
+    return positions["4key"].map((position, index) => (
+      <DraggableKey
+        key={index}
+        index={index}
+        position={position}
+        keyName={keyMappings[index] || ''}
+        onPositionChange={handlePositionChange}
+        onClick={() => setSelectedKey({ key: keyMappings[index], index })}
+      />
+    ));
+  }
 
   const handlePaletteClose = () => {
     if (palette) setPalette(false);
@@ -67,7 +98,6 @@ function Grid() {
   const handleReset = () => {
     if (ipcRenderer) {
       ipcRenderer.send('reset-keys');
-      console.log('Sent reset-keys to main process'); // 디버깅용
     } else {
       console.error('ipcRenderer not available');
     }
@@ -87,17 +117,7 @@ function Grid() {
       style={{ backgroundColor: color === "transparent" ? "#393A3F" : color }}
       onClick={handlePaletteClose}
     >
-      {keys.map(({ draggableRef, dx, dy, width, key, index }) => (
-        <Key 
-          key={index}
-          draggableRef={draggableRef}
-          dx={dx}
-          dy={dy}
-          width={width}
-          keyName={getKeyInfoByGlobalKey(key).displayName}
-          onClick={() => setSelectedKey({ index, key })}
-        />
-      ))}
+      {renderKeys()}
       <button 
         className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[57px] left-[18px]"
         onClick={() => setPalette(!palette)}
@@ -128,22 +148,29 @@ function Grid() {
   );
 }
 
+export const DraggableKey = ({ index, position, keyName, onPositionChange, onClick }) => {
+  const { dx, dy, width } = position;
+  const draggable = useDraggable({
+    gridSize: 10,
+    initialX: dx,
+    initialY: dy,
+    onPositionChange: (newDx, newDy) => onPositionChange(index, newDx, newDy)
+  });
 
-function Key({ draggableRef, dx, dy, width, keyName, onClick }) {
   return (
     <div
-      ref={draggableRef}
+      ref={draggable.ref}
       className="absolute bg-white rounded-[6px] h-[60px] cursor-pointer"
       style={{
-        transform: `translate(${dx}px, ${dy}px)`,
         width: `${width}px`,
+        transform: `translate(${draggable.dx}px, ${draggable.dy}px)`
       }}
       onClick={onClick}
     >
       <div className="flex items-center justify-center h-full">{keyName}</div>
     </div>
   );
-}
+};
 
 function KeySettingModal({ keyData, onClose, onSave }) {
   const [key, setKey] = useState(keyData.key);

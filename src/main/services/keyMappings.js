@@ -20,7 +20,7 @@ function loadKeys() {
 function saveKeys(keysArray) {
   try {
     store.set('keys', keysArray);
-    console.log('Keys saved:', keysArray); // 디버깅용
+    // console.log('Keys saved:', keysArray); // 디버깅용
   } catch (error) {
     console.error('Failed to save keys:', error);
   }
@@ -29,7 +29,7 @@ function saveKeys(keysArray) {
 function resetKeys() {
   try {
     store.set('keys', DEFAULT_KEYS);
-    console.log('Keys reset to default:', DEFAULT_KEYS); // 디버깅용
+    // console.log('Keys reset to default:', DEFAULT_KEYS); // 디버깅용
     return DEFAULT_KEYS;
   } catch (error) {
     console.error('Failed to reset keys:', error);

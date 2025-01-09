@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-export const useDraggable = ({ gridSize, initialX = 0, initialY = 0 }) => {
+export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionChange }) => {
   const [node, setNode] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [{ dx, dy }, setOffset] = useState({
@@ -45,6 +45,7 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0 }) => {
       const snappedY = Math.min(Math.max(Math.round(newDy / gridSize) * gridSize, 0), maxY);
 
       setOffset({ dx: snappedX, dy: snappedY });
+      onPositionChange?.(snappedX, snappedY);
     };
 
     const handleMouseUp = () => {

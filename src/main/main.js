@@ -3,6 +3,7 @@ const MainWindow = require('./windows/mainWindow')
 const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
 const { resetKeys } = require('./services/keyMappings')
+const { loadKeyPositions, saveKeyPositions } = require('./services/keyPositions')
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {
@@ -33,21 +34,38 @@ class Application {
     app.on('window-all-closed', this.handleWindowsClosed.bind(this))
     // app.disableHardwareAcceleration()
 
+    // 윈도우 컨트롤
     ipcMain.on('minimize-window', () => this.mainWindow.minimize())
     ipcMain.on('close-window', () => {
       this.mainWindow.close()
       this.overlayWindow.close()
     })
     
+    // 키매핑 요청 처리
     ipcMain.on('getKeyMappings', (e) => {
       e.reply('updateKeyMappings', keyboardService.getKeyMappings())
     })
 
-    // 키매핑이 업데이트 되었을 때 오버레이에 전달
     ipcMain.on('update-key-mapping', (e, keys) => {
       keyboardService.updateKeyMapping(keys);
       this.overlayWindow.webContents.send('updateKeyMappings', keys);
     })
+
+    // 키포지션 요청 처리
+    ipcMain.on('getKeyPositions', (e) => {
+      e.reply('updateKeyPositions', loadKeyPositions());
+    });
+
+    ipcMain.handle('update-key-positions', async (e, positions) => {
+      try {
+        await saveKeyPositions(positions);
+        this.overlayWindow.webContents.send('updateKeyPositions', positions);
+        return true;
+      } catch (error) {
+        console.error('Failed to save positions:', error);
+        throw error;
+      }
+    });
 
     // 초기화 요청 처리
     ipcMain.on('reset-keys', (e) => {
