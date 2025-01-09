@@ -4,6 +4,7 @@ const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
 const { resetKeys } = require('./services/keyMappings')
 const { loadKeyPositions, saveKeyPositions, resetKeyPositions } = require('./services/keyPositions')
+const { saveBackgroundColor, loadBackgroundColor, resetBackgroundColor } = require('./services/backgroundColor')
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {
@@ -67,18 +68,31 @@ class Application {
       }
     });
 
+    // 배경색 요청 처리 
+    ipcMain.on('getBackgroundColor', (e) => {
+      e.reply('updateBackgroundColor', loadBackgroundColor());
+    });
+
+    ipcMain.on('update-background-color', (e, color) => {
+      saveBackgroundColor(color);
+      this.overlayWindow.webContents.send('updateBackgroundColor', color);
+    });
+
     // 초기화 요청 처리
     ipcMain.on('reset-keys', (e) => {
       const defaultKeys = resetKeys();
       const defaultPositions = resetKeyPositions();
+      const defaultColor = resetBackgroundColor();
       
       keyboardService.updateKeyMapping(defaultKeys);
       
       this.overlayWindow.webContents.send('updateKeyMappings', defaultKeys);
       this.overlayWindow.webContents.send('updateKeyPositions', defaultPositions);
+      this.overlayWindow.webContents.send('updateBackgroundColor', defaultColor);
       
       e.reply('updateKeyMappings', defaultKeys);
       e.reply('updateKeyPositions', defaultPositions);
+      e.reply('updateBackgroundColor', defaultColor);
     });
   }
 

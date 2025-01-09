@@ -34,17 +34,24 @@ function Grid() {
       setPositions(pos);
     };
 
+    const handleColor = (e, color) => {
+      setColor(color);
+    };
+
     // 초기 데이터 요청
     ipcRenderer.send('getKeyMappings');
     ipcRenderer.send('getKeyPositions');
+    ipcRenderer.send('getBackgroundColor');
 
     // 이벤트 리스너 등록
     ipcRenderer.on('updateKeyMappings', handleKeyMappings);
     ipcRenderer.on('updateKeyPositions', handleKeyPositions);
+    ipcRenderer.on('updateBackgroundColor', handleColor);
 
     return () => {
       ipcRenderer.removeAllListeners('updateKeyMappings');
       ipcRenderer.removeAllListeners('updateKeyPositions');
+      ipcRenderer.removeAllListeners('updateBackgroundColor');
     };
   }, []);
 
@@ -74,6 +81,11 @@ function Grid() {
     debouncedPositionUpdate(newPositions);
   };
 
+  const handleColorChange = (newColor) => {
+    setColor(newColor);
+    ipcRenderer.send('update-background-color', newColor);
+  }
+
   const renderKeys = () => {
     if (!positions["4key"]) return null;
 
@@ -96,7 +108,6 @@ function Grid() {
   const handleReset = () => {
     if (ipcRenderer) {
       ipcRenderer.send('reset-keys');
-      setColor("transparent");
     } else {
       console.error('ipcRenderer not available');
     }
@@ -129,7 +140,7 @@ function Grid() {
       >
         <ResetIcon /> 
       </button>
-      {palette && <Palette color={color} onColorChange={setColor} />}
+      {palette && <Palette color={color} onColorChange={handleColorChange} />}
       {selectedKey && (
         <KeySettingModal 
           keyData={selectedKey}
