@@ -42,6 +42,22 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             {isListening ? "Press any key" : displayKey || "Click to set key"}
           </button>
         </div>
+        <div className='flex justify-between w-full mt-[18px]'>
+          <div className='flex items-center justify-between w-[122px]'>
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">비활성 상태</p>
+            <button 
+              className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+            >
+            </button>
+          </div>
+          <div className='flex items-center justify-between w-[122px]'>
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">활성 상태</p>
+            <button 
+              className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+            >
+            </button>
+          </div>
+        </div>
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[15px]">
           <button 
             onClick={handleSubmit}

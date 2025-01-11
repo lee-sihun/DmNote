@@ -8,12 +8,7 @@ class OverlayWindow {
   }
 
   create() {
-    this.window = new BrowserWindow({
-      ...windowConfig.overlay,
-      webPreferences: {
-        devTools: process.env.NODE_ENV === 'development' // 개발 모드에서만 devTools 활성화
-      }
-    })
+    this.window = new BrowserWindow(windowConfig.overlay)
     this.setPosition()
     this.disableContextMenu()
     this.loadContent()

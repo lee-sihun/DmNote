@@ -32,3 +32,9 @@ body,
     linear-gradient(to bottom, rgb(66, 66, 66) 1px, transparent 1px);
   background-size: 10px 10px;
 }
+
+.key-bg {
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+}
