@@ -27,7 +27,7 @@ export default function Tab() {
   return (
     <div className="flex flex-col flex-1 w-full h-full">
       <div className="flex w-full h-[36px] bg-[#18191F]">
-        <div className="flex items-center h-full gap-[20px] ml-[24px]">
+        <div className="flex items-center h-full gap-[20px] ml-[18px]">
           {tabs.map((tab) => (
             <Button 
               key={tab.id}
