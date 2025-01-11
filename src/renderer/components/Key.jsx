@@ -1,11 +1,50 @@
-import React from "react";
+import React from 'react';
+import { useDraggable } from '@hooks/useDraggable';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 
-export default function Key({ keyName, active }) {
+export default function DraggableKey({ index, position, keyName, onPositionChange, onClick }) {
+  const { displayName } = getKeyInfoByGlobalKey(keyName);
+  const { dx, dy, width } = position;
+  const draggable = useDraggable({
+    gridSize: 10,
+    initialX: dx,
+    initialY: dy,
+    onPositionChange: (newDx, newDy) => onPositionChange(index, newDx, newDy)
+  });
+
+  const handleClick = (e) => {
+    if (!draggable.wasMoved) {  // 위치가 변경되지 않았을 때만 onClick 실행
+      onClick(e);
+    }
+  };
+
   return (
-    <div className={`w-[50px] h-[50px] mx-2.5 border-2 border-white rounded border-solid flex items-center justify-center ${
-      active ? 'bg-white/80 text-black' : 'bg-black/50 text-white'
-    }`}>
-      {keyName}
+    <div
+      ref={draggable.ref}
+      className="absolute bg-white rounded-[6px] h-[60px] cursor-pointer"
+      style={{
+        width: `${width}px`,
+        transform: `translate(${draggable.dx}px, ${draggable.dy}px)`
+      }}
+      onClick={handleClick}
+    >
+      <div className="flex items-center justify-center h-full">{displayName}</div>
+    </div>
+  );
+};
+
+export function Key({ keyName, active, position }) {
+  const { dx, dy, width } = position;
+  
+  return (
+    <div 
+      className={`absolute bg-white rounded-[6px] h-[60px] cursor-pointer ${active ? 'bg-[#575757] text-white' : 'bg-white text-black'}`}
+      style={{
+        width: `${width}px`,
+        transform: `translate(${dx}px, ${dy}px)`
+      }}
+    >
+      <div className="flex items-center justify-center h-full">{keyName}</div>
     </div>
   )
 }

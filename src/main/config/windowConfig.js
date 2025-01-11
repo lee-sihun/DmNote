@@ -16,8 +16,8 @@ module.exports = {
     backgroundThrottling: false
   },
   overlay: {
-    width: 400,
-    height: 100,
+    width: 860,
+    height: 320,
     frame: false,
     transparent: true,
     backgroundColor: 'rgba(0,0,0,0)',

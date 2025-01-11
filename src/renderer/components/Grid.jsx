@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useKeyManager } from '@hooks/useKeyManager';
 import { usePalette } from '@hooks/usePalette';
-import DraggableKey from './DraggableKey.jsx';
+import DraggableKey from './Key.jsx';
 import Palette from './Palette';
 import KeySettingModal from './KeySettingModal';
 import { ReactComponent as ResetIcon } from "@assets/svgs/reset.svg";
