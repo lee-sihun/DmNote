@@ -92,7 +92,8 @@ module.exports = {
       '@windows': path.resolve(__dirname, 'src/renderer/windows'),
       '@hooks': path.resolve(__dirname, 'src/renderer/hooks'),
       '@assets': path.resolve(__dirname, 'src/renderer/assets'),
-      '@utils': path.resolve(__dirname, 'src/renderer/utils')
+      '@utils': path.resolve(__dirname, 'src/renderer/utils'),
+      '@stores': path.resolve(__dirname, 'src/renderer/stores'),
     }
   }
 };
