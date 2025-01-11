@@ -23,6 +23,9 @@ module.exports = {
     backgroundColor: 'rgba(0,0,0,0)',
     alwaysOnTop: true,
     skipTaskbar: true,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false

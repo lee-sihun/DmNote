@@ -41,15 +41,6 @@ class MainWindow {
     }
   }
 
-  // // 테두리 라운딩 렌더링 최적화 
-  // setupBackgroundOptimization() {
-  //   this.backgroundInterval = setInterval(() => {
-  //     if (!this.window.isDestroyed() && this.window.isVisible()) {
-  //       this.window.setBackgroundColor('rgba(0,0,0,0)')
-  //     }
-  //   }, 500)
-  // }
-
   cleanup() {
     clearInterval(this.backgroundInterval)
   }
