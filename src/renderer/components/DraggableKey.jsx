@@ -1,7 +1,9 @@
 import React from 'react';
 import { useDraggable } from '@hooks/useDraggable';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 
 export default function DraggableKey({ index, position, keyName, onPositionChange, onClick }) {
+  const { displayName } = getKeyInfoByGlobalKey(keyName);
   const { dx, dy, width } = position;
   const draggable = useDraggable({
     gridSize: 10,
@@ -26,7 +28,7 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
       }}
       onClick={handleClick}
     >
-      <div className="flex items-center justify-center h-full">{keyName}</div>
+      <div className="flex items-center justify-center h-full">{displayName}</div>
     </div>
   );
 };

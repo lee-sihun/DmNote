@@ -10,6 +10,21 @@ import { ReactComponent as PaletteIcon } from "@assets/svgs/palette.svg";
 export default function Grid() {
   const { selectedKey, setSelectedKey, keyMappings, positions, handlePositionChange, handleReset, handleKeyUpdate } = useKeyManager();
   const { color, palette, setPalette, handleColorChange, handlePaletteClose } = usePalette();
+  const ipcRenderer = window.electron.ipcRenderer;
+
+  useEffect(() => {
+    const handleReset = (e, data) => {
+      if (data.color) {
+        handleColorChange(data.color);
+      }
+    };
+
+    ipcRenderer.on('resetComplete', handleReset);
+
+    return () => {
+      ipcRenderer.removeAllListeners('resetComplete');
+    };
+  }, []);
 
   // cleanup
   useEffect(() => {
