@@ -34,7 +34,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className='flex justify-between w-full align-center'>
-          <h2 className="text-white text-[13.5px] font-extrabold leading-[24.5px]">키 매핑</h2>
+          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">키 매핑</p>
           <button 
             onClick={() => setIsListening(true)}
             className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-extrabold"

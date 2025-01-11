@@ -8,10 +8,22 @@ class OverlayWindow {
   }
 
   create() {
-    this.window = new BrowserWindow(windowConfig.overlay)
+    this.window = new BrowserWindow({
+      ...windowConfig.overlay,
+      webPreferences: {
+        devTools: process.env.NODE_ENV === 'development' // 개발 모드에서만 devTools 활성화
+      }
+    })
     this.setPosition()
     this.disableContextMenu()
     this.loadContent()
+
+    // 개발자 도구 단축키 비활성화
+    this.window.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        event.preventDefault()
+      }
+    })
     
     return this.window
   }
