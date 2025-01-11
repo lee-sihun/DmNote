@@ -76,6 +76,7 @@ export default function Grid() {
         <KeySettingModal 
           keyData={{
             key: selectedKey.key,
+            width: positions["4key"][selectedKey.index].width,
             activeImage: positions["4key"][selectedKey.index].activeImage,
             inactiveImage: positions["4key"][selectedKey.index].inactiveImage
           }}

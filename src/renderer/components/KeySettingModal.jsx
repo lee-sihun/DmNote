@@ -38,12 +38,27 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const imageUrl = e.target.result;
-        if (isActive) {
-          setActiveImage(imageUrl);
-        } else {
-          setInactiveImage(imageUrl);
-        }
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // 키 크기에 맞게 캔버스 설정
+          const width = keyData.width;
+          canvas.width = width; 
+          canvas.height = 60; 
+          
+          ctx.drawImage(img, 0, 0, width, 60);
+          
+          // WebP 포맷으로 변환 및 압축
+          const optimizedImageUrl = canvas.toDataURL('image/webp', 0.8);
+          if (isActive) {
+            setActiveImage(optimizedImageUrl);
+          } else {
+            setInactiveImage(optimizedImageUrl);
+          }
+        };
+        img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     }

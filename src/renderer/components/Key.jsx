@@ -24,11 +24,13 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
       className="absolute rounded-[6px] h-[60px] cursor-pointer"
       style={{
         width: `${width}px`,
-        transform: `translate(${draggable.dx}px, ${draggable.dy}px)`,
+        transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
         backgroundImage: inactiveImage ? `url(${inactiveImage})` : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        backgroundColor: inactiveImage ? 'transparent' : 'white'
+        backgroundColor: inactiveImage ? 'transparent' : 'white',
+        willChange: 'transform', // GPU 힌트
+        backfaceVisibility: 'hidden', // GPU 가속
       }}
       onClick={handleClick}
     >
@@ -47,12 +49,14 @@ export function Key({ keyName, active, position }) {
       className={`absolute rounded-[6px] h-[60px] ${active ? 'bg-[#575757] text-white' : 'bg-white text-black'}`}
       style={{
         width: `${width}px`,
-        transform: `translate(${dx}px, ${dy}px)`,
+        transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
         backgroundImage: active && activeImage ? 
           `url(${activeImage})` : 
           (!active && inactiveImage ? `url(${inactiveImage})` : 'none'),
         backgroundSize: 'cover',
-        backgroundPosition: 'center'
+        backgroundPosition: 'center',
+        willChange: 'transform', // GPU 힌트
+        backfaceVisibility: 'hidden', // GPU 가속
       }}
     >
       {(!active && !inactiveImage) || (active && !activeImage) ? (
