@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 
 export default function KeySettingModal({ keyData, onClose, onSave }) {
   const [key, setKey] = useState(keyData.key);
   const [displayKey, setDisplayKey] = useState(getKeyInfoByGlobalKey(key).displayName);
   const [isListening, setIsListening] = useState(false);
+  const [activeImage, setActiveImage] = useState(keyData.activeImage || '');
+  const [inactiveImage, setInactiveImage] = useState(keyData.inactiveImage || '');
+
+  const activeInputRef = useRef(null);
+  const inactiveInputRef = useRef(null);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -21,7 +26,27 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
   }, [isListening]);
 
   const handleSubmit = () => {
-    onSave(key);
+    onSave({
+      key,
+      activeImage,
+      inactiveImage
+    });
+  };
+
+  const handleImageSelect = (e, isActive) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const imageUrl = e.target.result;
+        if (isActive) {
+          setActiveImage(imageUrl);
+        } else {
+          setInactiveImage(imageUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -45,15 +70,33 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         <div className='flex justify-between w-full mt-[18px]'>
           <div className='flex items-center justify-between w-[122px]'>
             <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">비활성 상태</p>
+            <input
+              type="file"
+              accept="image/*"
+              ref={inactiveInputRef}
+              className="hidden"
+              onChange={(e) => handleImageSelect(e, false)}
+            />
             <button 
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+              onClick={() => inactiveInputRef.current.click()}
+              style={{ backgroundImage: inactiveImage ? `url(${inactiveImage})` : 'none', backgroundSize: 'cover' }}
             >
             </button>
           </div>
           <div className='flex items-center justify-between w-[122px]'>
             <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">활성 상태</p>
+            <input
+              type="file"
+              accept="image/*"
+              ref={activeInputRef}
+              className="hidden"
+              onChange={(e) => handleImageSelect(e, true)}
+            />
             <button 
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+              onClick={() => activeInputRef.current.click()}
+              style={{ backgroundImage: activeImage ? `url(${activeImage})` : 'none', backgroundSize: 'cover' }}
             >
             </button>
           </div>

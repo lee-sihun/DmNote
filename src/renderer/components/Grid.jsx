@@ -14,6 +14,9 @@ export default function Grid() {
 
   useEffect(() => {
     const handleReset = (e, data) => {
+      if (data.positions) {
+        setPositions(data.positions);
+      }
       if (data.color) {
         handleColorChange(data.color);
       }
@@ -71,7 +74,11 @@ export default function Grid() {
       {palette && <Palette color={color} onColorChange={handleColorChange} />}
       {selectedKey && (
         <KeySettingModal 
-          keyData={selectedKey}
+          keyData={{
+            key: selectedKey.key,
+            activeImage: positions["4key"][selectedKey.index].activeImage,
+            inactiveImage: positions["4key"][selectedKey.index].inactiveImage
+          }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}
         />

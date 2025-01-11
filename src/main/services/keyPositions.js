@@ -3,12 +3,12 @@ const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 280, dy: 130, width: 60 },
-    { dx: 360, dy: 130, width: 60 },
-    { dx: 440, dy: 130, width: 60 },
-    { dx: 520, dy: 130, width: 60 },
-    { dx: 140, dy: 130, width: 120 },
-    { dx: 600, dy: 130, width: 120 },
+    { dx: 280, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
+    { dx: 360, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
+    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
+    { dx: 520, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
+    { dx: 140, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
+    { dx: 600, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
   ],
 }
 

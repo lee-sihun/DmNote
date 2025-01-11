@@ -55,11 +55,23 @@ export function useKeyManager() {
     }
   };
 
-  const handleKeyUpdate = (newKey) => {
+  const handleKeyUpdate = ({ key, activeImage, inactiveImage }) => {
     const updatedKeys = [...keyMappings];
-    updatedKeys[selectedKey.index] = newKey;
+    const updatedPositions = { ...positions };
+    
+    updatedKeys[selectedKey.index] = key;
+    updatedPositions["4key"][selectedKey.index] = {
+      ...updatedPositions["4key"][selectedKey.index],
+      activeImage,
+      inactiveImage
+    };
+  
     setKeyMappings(updatedKeys);
+    setPositions(updatedPositions);
+    
     ipcRenderer.send('update-key-mapping', updatedKeys);
+    ipcRenderer.send('update-key-positions', updatedPositions);
+    
     setSelectedKey(null);
   };
 
