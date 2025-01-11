@@ -28,7 +28,7 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
       }}
       onClick={handleClick}
     >
-      <div className="flex items-center justify-center h-full">{displayName}</div>
+      <div className="flex items-center justify-center h-full font-semibold">{displayName}</div>
     </div>
   );
 };
@@ -38,13 +38,13 @@ export function Key({ keyName, active, position }) {
   
   return (
     <div 
-      className={`absolute bg-white rounded-[6px] h-[60px] cursor-pointer ${active ? 'bg-[#575757] text-white' : 'bg-white text-black'}`}
+      className={`absolute rounded-[6px] h-[60px] ${active ? 'bg-[#575757] text-white' : 'bg-white text-black'}`}
       style={{
         width: `${width}px`,
         transform: `translate(${dx}px, ${dy}px)`
       }}
     >
-      <div className="flex items-center justify-center h-full">{keyName}</div>
+      <div className="flex items-center justify-center h-full font-semibold">{keyName}</div>
     </div>
   )
 }
