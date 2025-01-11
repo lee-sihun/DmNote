@@ -8,12 +8,9 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
     dy: initialY,
   });
 
-  // props 변경을 감지하여 위치 업데이트
+  // initialX, initialY가 변경될 때마다 position 업데이트
   useEffect(() => {
-    setOffset({
-      dx: initialX,
-      dy: initialY
-    });
+    setOffset({ dx: initialX, dy: initialY });
   }, [initialX, initialY]);
 
   const ref = useCallback((nodeEle) => {

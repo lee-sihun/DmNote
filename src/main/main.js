@@ -57,15 +57,9 @@ class Application {
       e.reply('updateKeyPositions', loadKeyPositions());
     });
 
-    ipcMain.handle('update-key-positions', async (e, positions) => {
-      try {
-        await saveKeyPositions(positions);
-        this.overlayWindow.webContents.send('updateKeyPositions', positions);
-        return true;
-      } catch (error) {
-        console.error('Failed to save positions:', error);
-        throw error;
-      }
+    ipcMain.on('update-key-positions', (e, positions) => {
+      saveKeyPositions(positions);
+      this.overlayWindow.webContents.send('updateKeyPositions', positions);
     });
 
     // 배경색 요청 처리 
@@ -90,9 +84,12 @@ class Application {
       this.overlayWindow.webContents.send('updateKeyPositions', defaultPositions);
       this.overlayWindow.webContents.send('updateBackgroundColor', defaultColor);
       
-      e.reply('updateKeyMappings', defaultKeys);
-      e.reply('updateKeyPositions', defaultPositions);
-      e.reply('updateBackgroundColor', defaultColor);
+      // 모든 데이터를 한 번에 보내는 새로운 이벤트
+      e.reply('resetComplete', {
+        keys: defaultKeys,
+        positions: defaultPositions,
+        color: defaultColor
+      });
     });
   }
 
