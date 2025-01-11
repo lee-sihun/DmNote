@@ -10,6 +10,12 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
     onPositionChange: (newDx, newDy) => onPositionChange(index, newDx, newDy)
   });
 
+  const handleClick = (e) => {
+    if (!draggable.wasMoved) {  // 위치가 변경되지 않았을 때만 onClick 실행
+      onClick(e);
+    }
+  };
+
   return (
     <div
       ref={draggable.ref}
@@ -18,7 +24,7 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
         width: `${width}px`,
         transform: `translate(${draggable.dx}px, ${draggable.dy}px)`
       }}
-      onClick={onClick}
+      onClick={handleClick}
     >
       <div className="flex items-center justify-center h-full">{keyName}</div>
     </div>

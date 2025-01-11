@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionChange }) => {
   const [node, setNode] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [wasMoved, setWasMoved] = useState(false);
   const [{ dx, dy }, setOffset] = useState({
     dx: initialX,
     dy: initialY,
@@ -28,12 +29,14 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
   const handleMouseDown = useCallback((e) => {
     if (!node) return;
     setIsDragging(true);
+    setWasMoved(false);  // 드래그 시작시 이동 여부 초기화
     node.style.cursor = 'grabbing';
 
     const startPos = {
       x: e.clientX - dx,
       y: e.clientY - dy,
     };
+    const initialPosition = { dx, dy };  // 초기 위치 저장
 
     const handleMouseMove = (e) => {
       const parentNode = node.parentElement;
@@ -48,6 +51,11 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
 
       const snappedX = Math.min(Math.max(Math.round(newDx / gridSize) * gridSize, 0), maxX);
       const snappedY = Math.min(Math.max(Math.round(newDy / gridSize) * gridSize, 0), maxY);
+      
+      // 초기 위치와 비교하여 이동 여부 체크
+      if (snappedX !== initialPosition.dx || snappedY !== initialPosition.dy) {
+        setWasMoved(true);
+      }
 
       setOffset({ dx: snappedX, dy: snappedY });
       onPositionChange?.(snappedX, snappedY);
@@ -78,5 +86,5 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
     };
   }, [node, handleMouseDown]);
 
-  return { ref, dx, dy };
+  return { ref, dx, dy, wasMoved };
 };

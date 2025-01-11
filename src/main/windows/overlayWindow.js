@@ -17,7 +17,7 @@ class OverlayWindow {
 
   setPosition() {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize
-    this.window.setPosition(width - 400, height - 100)
+    this.window.setPosition(width - 800, height - 100)
   }
 
   loadContent() {
