@@ -20,6 +20,16 @@ class OverlayWindow {
       }
     })
 
+    // 최상위 레벨 설정 추가
+    this.window.setAlwaysOnTop(true, 'screen-saver', 1);
+    
+    // 포커스 관련 이벤트
+    this.window.on('blur', () => {
+      if (!this.window.isDestroyed()) {
+        this.window.setAlwaysOnTop(true, 'screen-saver', 1);
+      }
+    });
+
     // 클릭 투과 설정
     // this.window.setIgnoreMouseEvents(true, { forward: true })
     
