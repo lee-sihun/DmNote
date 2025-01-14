@@ -15,13 +15,11 @@ export default function Grid() {
     setSelectedKey, 
     keyMappings, 
     positions, 
-    currentMode,
     handlePositionChange, 
-    handleModeChange,
     handleReset, 
     handleKeyUpdate 
   } = useKeyManager();
-  const { color, palette, setPalette, handleColorChange, handlePaletteClose } = usePalette();
+  const { color, palette, setPalette, handleColorChange, handlePaletteClose, handleResetColor } = usePalette();
   const ipcRenderer = window.electron.ipcRenderer;
 
   useEffect(() => {
@@ -83,7 +81,10 @@ export default function Grid() {
       </button>
       <button 
         className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[18px] left-[18px]"
-        onClick={handleReset}
+        onClick={() => {
+          handleReset();
+          handleResetColor();
+        }}
       >
         <ResetIcon /> 
       </button>

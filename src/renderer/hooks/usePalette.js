@@ -27,11 +27,16 @@ export function usePalette() {
     if (palette) setPalette(false);
   }
 
+  const handleResetColor = () => {
+    setColor("transparent");
+  }
+
   return {
     color,
     palette,
     setPalette,
     handleColorChange,
     handlePaletteClose,
+    handleResetColor  
   };
 }
