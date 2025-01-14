@@ -1,7 +1,12 @@
 const Store = require('electron-store');
 const store = new Store();
 
-const DEFAULT_KEYS = ['Z', 'X', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'];
+const DEFAULT_KEYS = {
+  '4key': ['Z', 'X', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
+  '5key': ['Z', 'X', 'C', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
+  '6key': ['Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
+  '8key': ['A', 'S', 'D', 'F', 'H', 'J', 'K', 'L', 'LEFT SHIFT', 'RIGHT SHIFT']
+};
 
 function loadKeys() {
   try {
@@ -17,12 +22,13 @@ function loadKeys() {
   }
 }
 
-function saveKeys(keysArray) {
+function saveKeys(keysObject) {
   try {
-    store.set('keys', keysArray);
-    // console.log('Keys saved:', keysArray); // 디버깅용
+    store.set('keys', keysObject);
+    return true;
   } catch (error) {
     console.error('Failed to save keys:', error);
+    return false;
   }
 }
 

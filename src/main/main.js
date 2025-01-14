@@ -41,6 +41,20 @@ class Application {
       this.mainWindow.close()
       this.overlayWindow.close()
     })
+
+    // 키 모드 변경
+    ipcMain.on('setKeyMode', (e, mode) => {
+      if (keyboardService.setKeyMode(mode)) {
+        this.overlayWindow.webContents.send('keyModeChanged', mode);
+        e.reply('keyModeUpdated', true);
+      } else {
+        e.reply('keyModeUpdated', false);
+      }
+    });
+
+    ipcMain.on('getCurrentMode', (e) => {
+      e.reply('currentMode', keyboardService.getCurrentMode());
+    });
     
     // 키매핑 요청 처리
     ipcMain.on('getKeyMappings', (e) => {

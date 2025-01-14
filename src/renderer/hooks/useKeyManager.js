@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
 
 export function useKeyManager() {
+  const { selectedKeyType } = useKeyStore();
   const [selectedKey, setSelectedKey] = useState(null);
-  const [keyMappings, setKeyMappings] = useState([]);
+  const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -11,6 +13,7 @@ export function useKeyManager() {
 
     const handleKeyMappings = (e, keys) => setKeyMappings(keys);
     const handleKeyPositions = (e, pos) => setPositions(pos);
+    const handleKeyModeChanged = (e, mode) => setCurrentMode(mode);
     const handleReset = (e, data) => {
       setKeyMappings(data.keys);
       setPositions(data.positions);
@@ -18,14 +21,17 @@ export function useKeyManager() {
 
     ipcRenderer.send('getKeyMappings');
     ipcRenderer.send('getKeyPositions');
+    ipcRenderer.send('getCurrentMode');
 
     ipcRenderer.on('updateKeyMappings', handleKeyMappings);
     ipcRenderer.on('updateKeyPositions', handleKeyPositions);
+    ipcRenderer.on('keyModeChanged', handleKeyModeChanged);
     ipcRenderer.on('resetComplete', handleReset); 
 
     return () => {
       ipcRenderer.removeAllListeners('updateKeyMappings');
       ipcRenderer.removeAllListeners('updateKeyPositions');
+      ipcRenderer.removeAllListeners('keyModeChanged');
       ipcRenderer.removeAllListeners('resetComplete');
     };
   }, []);
@@ -34,7 +40,7 @@ export function useKeyManager() {
     setPositions(prevPositions => {
       const newPositions = {
         ...prevPositions,
-        "4key": prevPositions["4key"].map((pos, i) => {
+        [selectedKeyType]: prevPositions[selectedKeyType].map((pos, i) => {
           if (i === index) {
             return { ...pos, dx, dy };
           }
@@ -47,6 +53,10 @@ export function useKeyManager() {
     });
   };
 
+  const handleModeChange = (mode) => {
+    ipcRenderer.send('setKeyMode', mode);
+  };
+
   const handleReset = () => {
     if (ipcRenderer) {
       ipcRenderer.send('reset-keys');
@@ -55,23 +65,25 @@ export function useKeyManager() {
     }
   };
 
-  const handleKeyUpdate = ({ key, activeImage, inactiveImage }) => {
-    const updatedKeys = [...keyMappings];
+  const handleKeyUpdate = (keyData) => {
+    const { key, activeImage, inactiveImage } = keyData;
+    const updatedMappings = { ...keyMappings };
     const updatedPositions = { ...positions };
     
-    updatedKeys[selectedKey.index] = key;
-    updatedPositions["4key"][selectedKey.index] = {
-      ...updatedPositions["4key"][selectedKey.index],
-      activeImage,
-      inactiveImage
-    };
+    if (selectedKey) {
+      updatedMappings[selectedKeyType][selectedKey.index] = key;
+      updatedPositions[selectedKeyType][selectedKey.index] = {
+        ...updatedPositions[selectedKeyType][selectedKey.index],
+        activeImage,
+        inactiveImage
+      };
+    }
   
-    setKeyMappings(updatedKeys);
+    setKeyMappings(updatedMappings);
     setPositions(updatedPositions);
     
-    ipcRenderer.send('update-key-mapping', updatedKeys);
+    ipcRenderer.send('update-key-mapping', updatedMappings);
     ipcRenderer.send('update-key-positions', updatedPositions);
-    
     setSelectedKey(null);
   };
 
@@ -81,6 +93,7 @@ export function useKeyManager() {
     positions,
     setSelectedKey,
     handlePositionChange,
+    handleModeChange,
     handleReset,
     handleKeyUpdate,
   };

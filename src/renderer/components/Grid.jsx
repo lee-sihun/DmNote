@@ -6,11 +6,27 @@ import Palette from './Palette';
 import KeySettingModal from './KeySettingModal';
 import { ReactComponent as ResetIcon } from "@assets/svgs/reset.svg";
 import { ReactComponent as PaletteIcon } from "@assets/svgs/palette.svg";
+import { useKeyStore } from '@stores/useKeyStore.js';
 
 export default function Grid() {
-  const { selectedKey, setSelectedKey, keyMappings, positions, handlePositionChange, handleReset, handleKeyUpdate } = useKeyManager();
+  const { selectedKeyType } = useKeyStore();
+  const { 
+    selectedKey, 
+    setSelectedKey, 
+    keyMappings, 
+    positions, 
+    currentMode,
+    handlePositionChange, 
+    handleModeChange,
+    handleReset, 
+    handleKeyUpdate 
+  } = useKeyManager();
   const { color, palette, setPalette, handleColorChange, handlePaletteClose } = usePalette();
   const ipcRenderer = window.electron.ipcRenderer;
+
+  useEffect(() => {
+    ipcRenderer.send('setKeyMode', selectedKeyType);
+  }, [selectedKeyType]);
 
   useEffect(() => {
     const handleReset = (e, data) => {
@@ -38,16 +54,16 @@ export default function Grid() {
   }, []); 
 
   const renderKeys = () => {
-    if (!positions["4key"]) return null;
+    if (!positions[selectedKeyType]) return null;
 
-    return positions["4key"].map((position, index) => (
+    return positions[selectedKeyType].map((position, index) => (
       <DraggableKey
         key={index}
         index={index}
         position={position}
-        keyName={keyMappings[index] || ''}
+        keyName={keyMappings[selectedKeyType]?.[index] || ''}
         onPositionChange={handlePositionChange}
-        onClick={() => setSelectedKey({ key: keyMappings[index], index })}
+        onClick={() => setSelectedKey({ key: keyMappings[selectedKeyType][index], index })}
       />
     ));
   }
@@ -73,13 +89,8 @@ export default function Grid() {
       </button>
       {palette && <Palette color={color} onColorChange={handleColorChange} />}
       {selectedKey && (
-        <KeySettingModal 
-          keyData={{
-            key: selectedKey.key,
-            width: positions["4key"][selectedKey.index].width,
-            activeImage: positions["4key"][selectedKey.index].activeImage,
-            inactiveImage: positions["4key"][selectedKey.index].inactiveImage
-          }}
+        <KeySettingModal
+          keyData={selectedKey}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}
         />

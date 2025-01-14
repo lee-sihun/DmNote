@@ -13,6 +13,7 @@ class KeyboardService {
     this.listener = new GlobalKeyboardListener();
     this.overlayWindow = null;
     this.keys = loadKeys();
+    this.currentMode = '4key'; // 기본 모드
   }
 
   setOverlayWindow(window) {
@@ -27,20 +28,23 @@ class KeyboardService {
     this.listener.kill();
   }
 
+  setKeyMode(mode) {
+    if (this.keys[mode]) {
+      this.currentMode = mode;
+      return true;
+    }
+    return false;
+  }
+
+  getCurrentMode() {
+    return this.currentMode;
+  }
+
   handleKeyPress(e) {
     let key = e.name || e.vKey.toString();
     const state = e.state;
-    // console.log('Received key press:', key); // 디버깅용
-
-    // console.log('[DEBUG] Key press:', {
-    //   name: e.name, 
-    //   vKey: e.vKey, 
-    //   scanCode: e.scanCode,
-    //   rawKey: e.rawKey, 
-    // });
 
     if (!this.isValidKey(key)) {
-      // console.log('Invalid key:', key); // 디버깅용
       return;
     }
 
@@ -48,11 +52,10 @@ class KeyboardService {
   }
 
   isValidKey(key) {
-    return this.keys.includes(key);
+    return this.keys[this.currentMode].includes(key);
   }
 
   updateKeyMapping(keys) {
-    // console.log('Updating key mappings:', keys); // 디버깅용
     this.keys = keys;
     saveKeys(keys);
   }
@@ -63,8 +66,11 @@ class KeyboardService {
 
   sendKeyStateToOverlay(key, state) {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      // console.log(`Key: ${key}, State: ${state}`)
-      this.overlayWindow.webContents.send('keyState', { key, state });
+      this.overlayWindow.webContents.send('keyState', {
+        key,
+        state,
+        mode: this.currentMode
+      });
     }
   }
 }
