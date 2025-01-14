@@ -91,7 +91,12 @@ export default function Grid() {
       {palette && <Palette color={color} onColorChange={handleColorChange} />}
       {selectedKey && (
         <KeySettingModal
-          keyData={selectedKey}
+          keyData={{
+            key: selectedKey.key,
+            activeImage: positions[selectedKeyType][selectedKey.index].activeImage,
+            inactiveImage: positions[selectedKeyType][selectedKey.index].inactiveImage,
+            width: positions[selectedKeyType][selectedKey.index].width
+          }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}
         />
