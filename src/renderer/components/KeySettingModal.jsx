@@ -38,27 +38,41 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
+        // const img = new Image();
+        // img.onload = () => {
+        //   const canvas = document.createElement('canvas');
+        //   const ctx = canvas.getContext('2d', { alpha: true });
           
-          // 키 크기에 맞게 캔버스 설정
-          const width = keyData.width;
-          canvas.width = width; 
-          canvas.height = 60; 
+        //   // 키 크기에 맞게 캔버스 설정
+        //   const width = keyData.width;
+        //   canvas.width = width; 
+        //   canvas.height = 60; 
+
+        //   // 이미지 렌더링 품질 설정
+        //   ctx.imageSmoothingEnabled = true;
+        //   ctx.imageSmoothingQuality = 'high';
           
-          ctx.drawImage(img, 0, 0, width, 60);
+        //   // 투명도 유지를 위한 설정
+        //   ctx.clearRect(0, 0, width, height);
+        
+        //   // 이미지 리사이징 (Bicubic 알고리즘 사용)   
+        //   ctx.drawImage(img, 0, 0, width, 60);
           
-          // WebP 포맷으로 변환 및 압축
-          const optimizedImageUrl = canvas.toDataURL('image/webp', 0.8);
-          if (isActive) {
-            setActiveImage(optimizedImageUrl);
-          } else {
-            setInactiveImage(optimizedImageUrl);
-          }
-        };
-        img.src = e.target.result;
+        //   // WebP 포맷으로 변환 및 압축
+        //   const optimizedImageUrl = canvas.toDataURL('image/webp', 1.0);
+          
+        //   if (isActive) {
+        //     setActiveImage(optimizedImageUrl);
+        //   } else {
+        //     setInactiveImage(optimizedImageUrl);
+        //   }
+        // };
+        // img.src = e.target.result;
+        if (isActive) {
+          setActiveImage(e.target.result);
+        } else {
+          setInactiveImage(e.target.result);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -95,7 +109,12 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             <button 
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
               onClick={() => inactiveInputRef.current.click()}
-              style={{ backgroundImage: inactiveImage ? `url(${inactiveImage})` : 'none', backgroundSize: 'cover' }}
+              style={{ 
+                backgroundImage: inactiveImage ? `url(${inactiveImage})` : 'none', 
+                backgroundSize: 'cover',
+                width: (keyData.width === 120) ? '60px' : '39px',
+                height: (keyData.width === 120) ? '30px' : '39px', 
+              }}
             >
             </button>
           </div>
@@ -111,7 +130,12 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             <button 
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
               onClick={() => activeInputRef.current.click()}
-              style={{ backgroundImage: activeImage ? `url(${activeImage})` : 'none', backgroundSize: 'cover' }}
+              style={{ 
+                backgroundImage: activeImage ? `url(${activeImage})` : 'none', 
+                backgroundSize: 'cover',
+                width: (keyData.width === 120) ? '60px' : '39px',
+                height: (keyData.width === 120) ? '30px' : '39px', 
+              }}
             >
             </button>
           </div>

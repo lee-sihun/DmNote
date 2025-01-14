@@ -32,3 +32,9 @@ body,
     linear-gradient(to bottom, rgb(66, 66, 66) 1px, transparent 1px);
   background-size: 10px 10px;
 }
+
+.image-rendering {
+  image-rendering: -webkit-optimize-contrast;
+  transform:translateZ(0);
+  backface-visibility:hidden;
+}

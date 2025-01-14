@@ -46,7 +46,7 @@ export function Key({ keyName, active, position }) {
   
   return (
     <div 
-      className="absolute rounded-[6px] h-[60px] [app-region:drag]"
+      className="image-rendering absolute rounded-[6px] h-[60px] [app-region:drag]"
       style={{
         width: `${width}px`,
         transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
