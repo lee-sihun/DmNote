@@ -84,7 +84,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         </div>
         <div className='flex justify-between w-full mt-[18px]'>
           <div className='flex items-center justify-between w-[122px]'>
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">비활성 상태</p>
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">대기 상태</p>
             <input
               type="file"
               accept="image/*"
@@ -100,7 +100,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             </button>
           </div>
           <div className='flex items-center justify-between w-[122px]'>
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">활성 상태</p>
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">입력 상태</p>
             <input
               type="file"
               accept="image/*"
