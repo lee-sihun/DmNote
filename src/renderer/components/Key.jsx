@@ -46,10 +46,13 @@ export function Key({ keyName, active, position }) {
   
   return (
     <div 
-      className={`absolute rounded-[6px] h-[60px] ${active ? 'bg-[#575757] text-white' : 'bg-white text-black'}`}
+      className="absolute rounded-[6px] h-[60px]"
       style={{
         width: `${width}px`,
         transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
+        backgroundColor: (active && activeImage) || (!active && inactiveImage) ? 'transparent' :
+                        (active ? '#575757' : 'white'),
+        color: active && !activeImage ? 'white' : 'black',
         backgroundImage: active && activeImage ? 
           `url(${activeImage})` : 
           (!active && inactiveImage ? `url(${inactiveImage})` : 'none'),
