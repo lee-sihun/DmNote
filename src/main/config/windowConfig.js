@@ -1,7 +1,7 @@
 module.exports = {
   main: {
     width: 898,
-    height: 493,
+    height: 481,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     transparent: true,
