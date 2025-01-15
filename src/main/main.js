@@ -26,7 +26,7 @@ class Application {
     if (store.get('hardwareAcceleration') === undefined) {
       store.set('hardwareAcceleration', true);
     }
-    
+
     const hwAccel = store.get('hardwareAcceleration');
     if (!hwAccel) {
       app.disableHardwareAcceleration();
@@ -142,6 +142,23 @@ class Application {
 
     ipcMain.on('get-always-on-top', (e) => {
       e.reply('update-always-on-top', store.get('alwaysOnTop'));
+    });
+
+    ipcMain.on('overlay-toggle-ignore-mouse', (event, ignore) => {
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        if (ignore) {
+          this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+        } else {
+          this.overlayWindow.setIgnoreMouseEvents(false);
+        }
+      }
+    });
+
+    ipcMain.on('overlay-move', (e, x, y) => {
+      this.overlayWindow?.setPosition(
+        this.overlayWindow.getPosition()[0] + x,
+        this.overlayWindow.getPosition()[1] + y
+      );
     });
 
     // 앱 재시작

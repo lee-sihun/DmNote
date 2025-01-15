@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useDraggable } from '@hooks/useDraggable';
 import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 
@@ -42,11 +42,53 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
 };
 
 export function Key({ keyName, active, position }) {
+  const { ipcRenderer } = window.require("electron");
+  const keyRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
   const { dx, dy, width, activeImage, inactiveImage } = position;
+
+  useEffect(() => {
+    const el = keyRef.current;
+    const handleMouseEnter = () => !isDragging && ipcRenderer.send('overlay-toggle-ignore-mouse', false);
+    const handleMouseLeave = () => !isDragging && ipcRenderer.send('overlay-toggle-ignore-mouse', true);
+
+    // 전역 마우스 이벤트 핸들러
+    const handleGlobalMouseUp = () => {
+      if (isDragging) {
+        setIsDragging(false);
+        ipcRenderer.send('overlay-toggle-ignore-mouse', true);
+      }
+    };
+
+    const handleGlobalMouseMove = (e) => {
+      if (isDragging) {
+        requestAnimationFrame(() => {
+          ipcRenderer.send('overlay-move', e.movementX, e.movementY);
+        });
+      }
+    };
+
+    el.addEventListener('mouseenter', handleMouseEnter);
+    el.addEventListener('mouseleave', handleMouseLeave);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+
+    return () => {
+      el.removeEventListener('mouseenter', handleMouseEnter);
+      el.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+    };
+  }, [isDragging]);
   
   return (
     <div 
-      className="image-rendering absolute rounded-[6px] h-[60px] [app-region:drag]"
+      ref={keyRef}
+      onMouseDown={() => {
+        setIsDragging(true);
+        ipcRenderer.send('overlay-toggle-ignore-mouse', false);
+      }}
+      className="image-rendering absolute rounded-[6px] h-[60px] hover:cursor-grab active:cursor-grabbing"
       style={{
         width: `${width}px`,
         transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
