@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
+import SettingTab from "./SettingTab";
 import Canvas from "./Canvas";
 
 export default function Tab() {
-  const [activeTab, setActiveTab] = useState(1);
+  const [activeTab, setActiveTab] = useState(0);
 
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
@@ -14,7 +15,7 @@ export default function Tab() {
   const renderTabContent = () => {
     switch(activeTab) {
       case 0:
-        return <div>설정</div>;
+        return <SettingTab />;
       case 1:
         return <Canvas />;
       case 2:

@@ -5,6 +5,8 @@ const keyboardService = require('./services/keyboardListener')
 const { resetKeys } = require('./services/keyMappings')
 const { loadKeyPositions, saveKeyPositions, resetKeyPositions } = require('./services/keyPositions')
 const { saveBackgroundColor, loadBackgroundColor, resetBackgroundColor } = require('./services/backgroundColor')
+const Store = require('electron-store');
+const store = new Store();
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === 'development') {
@@ -20,6 +22,16 @@ if (process.env.NODE_ENV === 'development') {
 
 class Application {
   constructor() {
+    // 하드웨어 가속 설정
+    if (store.get('hardwareAcceleration') === undefined) {
+      store.set('hardwareAcceleration', true);
+    }
+    
+    const hwAccel = store.get('hardwareAcceleration');
+    if (!hwAccel) {
+      app.disableHardwareAcceleration();
+    }
+
     this.mainWindow = null
     this.overlayWindow = null
   }
@@ -33,7 +45,6 @@ class Application {
     app.commandLine.appendSwitch('use-angle', 'd3d9')
     app.whenReady().then(() => this.createWindows())
     app.on('window-all-closed', this.handleWindowsClosed.bind(this))
-    // app.disableHardwareAcceleration()
 
     // 윈도우 컨트롤
     ipcMain.on('minimize-window', () => this.mainWindow.minimize())
@@ -55,7 +66,7 @@ class Application {
     ipcMain.on('getCurrentMode', (e) => {
       e.reply('currentMode', keyboardService.getCurrentMode());
     });
-    
+
     // 키매핑 요청 처리
     ipcMain.on('getKeyMappings', (e) => {
       e.reply('updateKeyMappings', keyboardService.getKeyMappings())
@@ -91,19 +102,35 @@ class Application {
       const defaultKeys = resetKeys();
       const defaultPositions = resetKeyPositions();
       const defaultColor = resetBackgroundColor();
-      
+
       keyboardService.updateKeyMapping(defaultKeys);
-      
+
       this.overlayWindow.webContents.send('updateKeyMappings', defaultKeys);
       this.overlayWindow.webContents.send('updateKeyPositions', defaultPositions);
       this.overlayWindow.webContents.send('updateBackgroundColor', defaultColor);
-      
+
       // 모든 데이터를 한 번에 보내는 새로운 이벤트
       e.reply('resetComplete', {
         keys: defaultKeys,
         positions: defaultPositions,
         color: defaultColor
       });
+    });
+
+    // 하드웨어 가속 토글 
+    ipcMain.handle('toggle-hardware-acceleration', async (_, enabled) => {
+      store.set('hardwareAcceleration', enabled);
+      return true;
+    });
+
+    ipcMain.on('get-hardware-acceleration', (e) => {
+      e.reply('update-hardware-acceleration', store.get('hardwareAcceleration'));
+    });
+
+    // 앱 재시작
+    ipcMain.on('restart-app', () => {
+      app.relaunch();
+      app.exit(0);
     });
   }
 
