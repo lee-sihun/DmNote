@@ -21,12 +21,16 @@ class OverlayWindow {
     })
 
     // 최상위 레벨 설정 추가
-    this.window.setAlwaysOnTop(true, 'screen-saver', 1);
+    const store = require('electron-store');
+    const settings = new store();
+    const alwaysOnTop = settings.get('alwaysOnTop', true);
+    this.window.setAlwaysOnTop(alwaysOnTop, 'screen-saver', 1);
     
     // 포커스 관련 이벤트
     this.window.on('blur', () => {
       if (!this.window.isDestroyed()) {
-        this.window.setAlwaysOnTop(true, 'screen-saver', 1);
+        const currentSetting = settings.get('alwaysOnTop', true);
+        this.window.setAlwaysOnTop(currentSetting, 'screen-saver', 1);
       }
     });
 

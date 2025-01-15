@@ -2,7 +2,12 @@ import React, { useEffect, useState } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function SettingTab() {
-  const { hardwareAcceleration, setHardwareAcceleration } = useSettingsStore();
+  const { 
+    hardwareAcceleration, 
+    setHardwareAcceleration,
+    alwaysOnTop,
+    setAlwaysOnTop 
+  } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
   useEffect(() => {
@@ -10,11 +15,19 @@ export default function SettingTab() {
       setHardwareAcceleration(value);
     };
 
+    const alwaysOnTopHandler = (_, value) => {
+      setAlwaysOnTop(value);
+    };
+
     ipcRenderer.send('get-hardware-acceleration');
     ipcRenderer.on('update-hardware-acceleration', updateHandler);
 
+    ipcRenderer.send('get-always-on-top');
+    ipcRenderer.on('update-always-on-top', alwaysOnTopHandler);
+
     return () => {
       ipcRenderer.removeAllListeners('update-hardware-acceleration');
+      ipcRenderer.removeAllListeners('update-always-on-top');
     };
   }, []);
 
@@ -28,6 +41,12 @@ export default function SettingTab() {
     }
   };
 
+  const handleAlwaysOnTopChange = () => {
+    const newState = !alwaysOnTop;
+    setAlwaysOnTop(newState);
+    ipcRenderer.send('toggle-always-on-top', newState);
+  };
+
   return (
     <div className="flex flex-col w-full h-full p-[18px]">
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
@@ -38,7 +57,10 @@ export default function SettingTab() {
         <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">항상 위에 표시</p>
-          <Checkbox />
+          <Checkbox
+            checked={alwaysOnTop}
+            onChange={handleAlwaysOnTopChange} 
+          />
         </div>
         <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">

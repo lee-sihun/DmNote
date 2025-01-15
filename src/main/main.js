@@ -32,6 +32,11 @@ class Application {
       app.disableHardwareAcceleration();
     }
 
+    // Always on Top 설정
+    if (store.get('alwaysOnTop') === undefined) {
+      store.set('alwaysOnTop', true);
+    }
+
     this.mainWindow = null
     this.overlayWindow = null
   }
@@ -125,6 +130,18 @@ class Application {
 
     ipcMain.on('get-hardware-acceleration', (e) => {
       e.reply('update-hardware-acceleration', store.get('hardwareAcceleration'));
+    });
+
+    // 항상 위에 표시 토글
+    ipcMain.on('toggle-always-on-top', (_, enabled) => {
+      store.set('alwaysOnTop', enabled);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.setAlwaysOnTop(enabled, 'screen-saver', 1);
+      }
+    });
+
+    ipcMain.on('get-always-on-top', (e) => {
+      e.reply('update-always-on-top', store.get('alwaysOnTop'));
     });
 
     // 앱 재시작

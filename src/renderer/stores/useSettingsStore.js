@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 export const useSettingsStore = create((set) => ({
-  hardwareAcceleration: false,  // 임시 초기값
+  hardwareAcceleration: true, 
+  alwaysOnTop: true, 
   setHardwareAcceleration: (value) => set({ hardwareAcceleration: value }),
+  setAlwaysOnTop: (value) => set({ alwaysOnTop: value }),
 }));
