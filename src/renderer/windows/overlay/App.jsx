@@ -24,20 +24,26 @@ export default function App() {
 
     const keyStateListener = (e, { key, state }) => {
       if (state === 'DOWN') {
-        setKeyStates(prev => ({ ...prev, [key]: true }));
-        setPositions(prev => {
-          const newPositions = { ...prev };
-          const currentMode = keyMode;
-          const keyIndex = keyMappings[currentMode]?.indexOf(key);
-          
-          if (keyIndex !== -1 && newPositions[currentMode]) {
-            newPositions[currentMode][keyIndex] = {
-              ...newPositions[currentMode][keyIndex],
-              count: (newPositions[currentMode][keyIndex].count || 0) + 1
-            };
-            ipcRenderer.send('update-key-positions', newPositions);
+        // 이전 상태가 false일 때만 카운트 증가
+        setKeyStates(prev => {
+          const wasKeyPressed = prev[key];
+          if (!wasKeyPressed) {
+            setPositions(currentPos => {
+              const newPositions = { ...currentPos };
+              const currentMode = keyMode;
+              const keyIndex = keyMappings[currentMode]?.indexOf(key);
+              
+              if (keyIndex !== -1 && newPositions[currentMode]) {
+                newPositions[currentMode][keyIndex] = {
+                  ...newPositions[currentMode][keyIndex],
+                  count: (newPositions[currentMode][keyIndex].count || 0) + 1
+                };
+                ipcRenderer.send('update-key-positions', newPositions);
+              }
+              return newPositions;
+            });
           }
-          return newPositions;
+          return { ...prev, [key]: true };
         });
       } else {
         setKeyStates(prev => ({ ...prev, [key]: false }));
