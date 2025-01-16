@@ -197,7 +197,6 @@ class Application {
         }));
       });
       saveKeyPositions(positions);
-      // 오버레이 윈도우에 업데이트된 포지션 전송
       this.overlayWindow.webContents.send('updateKeyPositions', positions);
     });
 

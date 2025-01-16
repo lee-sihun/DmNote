@@ -2,6 +2,7 @@ import { Key } from "@components/Key";
 import React, { useState, useEffect } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { useSettingsStore } from "@stores/useSettingsStore";
+import CountDisplay from "@components/CountDisplay";
 
 export default function App() {
   const { ipcRenderer } = window.require("electron");
@@ -93,17 +94,10 @@ export default function App() {
         return (
           <React.Fragment key={index}>
             {showKeyCount && (
-              <div
-                className="font-extrabold text-[16px] text-center bg-clip-text text-transparent bg-gradient-to-b from-[#FFFFFF] to-[#757575] [text-shadow:_0_0_0.2px_rgba(255,255,255,0.5)]"
-                style={{
-                  position: 'absolute',
-                  top: position.dy - 22,
-                  left: position.dx,
-                  width: position.width,
-                }}
-              >
-                {position.count || 0}
-              </div>
+              <CountDisplay 
+                count={position.count} 
+                position={position}
+              />
             )}
             <Key 
               keyName={displayName}
