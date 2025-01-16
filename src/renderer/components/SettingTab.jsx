@@ -51,11 +51,6 @@ export default function SettingTab() {
     <div className="flex flex-col w-full h-full p-[18px]">
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">오버레이 창 고정</p>
-          <Checkbox />
-        </div>
-        <div className="w-full h-[0.75px] bg-[#3C4049]" />
-        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">항상 위에 표시</p>
           <Checkbox
             checked={alwaysOnTop}
