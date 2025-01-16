@@ -176,6 +176,31 @@ class Application {
       );
     });
 
+    // 키 카운트 표시 설정
+    ipcMain.on('toggle-show-key-count', (_, value) => {
+      store.set('showKeyCount', value);
+      this.overlayWindow.webContents.send('update-show-key-count', value);
+    });
+
+    ipcMain.on('get-show-key-count', (e) => {
+      const showKeyCount = store.get('showKeyCount', false);
+      e.reply('update-show-key-count', showKeyCount);
+    });
+
+    ipcMain.on('reset-key-count', (e) => {
+      const positions = loadKeyPositions();
+      // 모든 키의 카운트를 0으로 초기화
+      Object.keys(positions).forEach(mode => {
+        positions[mode] = positions[mode].map(pos => ({
+          ...pos,
+          count: 0
+        }));
+      });
+      saveKeyPositions(positions);
+      // 오버레이 윈도우에 업데이트된 포지션 전송
+      this.overlayWindow.webContents.send('updateKeyPositions', positions);
+    });
+
     // 앱 재시작
     ipcMain.on('restart-app', () => {
       app.relaunch();

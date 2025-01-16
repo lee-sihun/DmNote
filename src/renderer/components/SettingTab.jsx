@@ -6,7 +6,9 @@ export default function SettingTab() {
     hardwareAcceleration, 
     setHardwareAcceleration,
     alwaysOnTop,
-    setAlwaysOnTop 
+    setAlwaysOnTop,
+    showKeyCount,
+    setShowKeyCount  
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -19,15 +21,23 @@ export default function SettingTab() {
       setAlwaysOnTop(value);
     };
 
+    const showKeyCountHandler = (_, value) => {
+      setShowKeyCount(value);
+    };
+
     ipcRenderer.send('get-hardware-acceleration');
     ipcRenderer.on('update-hardware-acceleration', updateHandler);
 
     ipcRenderer.send('get-always-on-top');
     ipcRenderer.on('update-always-on-top', alwaysOnTopHandler);
 
+    ipcRenderer.send('get-show-key-count');
+    ipcRenderer.on('update-show-key-count', showKeyCountHandler);
+
     return () => {
       ipcRenderer.removeAllListeners('update-hardware-acceleration');
       ipcRenderer.removeAllListeners('update-always-on-top');
+      ipcRenderer.removeAllListeners('update-show-key-count');
     };
   }, []);
 
@@ -45,6 +55,18 @@ export default function SettingTab() {
     const newState = !alwaysOnTop;
     setAlwaysOnTop(newState);
     ipcRenderer.send('toggle-always-on-top', newState);
+  };
+
+  // 키 카운트 On/Off 핸들러
+  const handleKeyCountToggle = () => {
+    const newState = !showKeyCount;
+    setShowKeyCount(newState);
+    ipcRenderer.send('toggle-show-key-count', newState);
+  };
+
+  // 키 카운트 초기화 핸들러
+  const handleResetKeyCount = () => {
+    ipcRenderer.send('reset-key-count');
   };
 
   return (
@@ -69,9 +91,15 @@ export default function SettingTab() {
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
             키 입력 카운트 표시
-            <a className="text-[#419DFF] cursor-pointer "> [초기화]</a>
+            <a 
+              className="text-[#419DFF] cursor-pointer "
+              onClick={handleResetKeyCount}
+            > [초기화]</a>
           </p>
-          <Checkbox />
+          <Checkbox 
+            checked={showKeyCount}
+            onChange={handleKeyCountToggle}
+          />
         </div>
       </div>
     </div>

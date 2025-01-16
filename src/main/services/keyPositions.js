@@ -3,43 +3,43 @@ const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 280, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 360, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 520, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 140, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 600, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
+    { dx: 280, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 360, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 520, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 140, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 600, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
   ],
   "5key": [
-    { dx: 240, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 320, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 400, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 480, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 560, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 100, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 640, dy: 130, width: 120, activeImage: '', inactiveImage: '' }
+    { dx: 240, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 320, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 400, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 480, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 560, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 100, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 640, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 }
   ],
 "6key": [
-    { dx: 200, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 280, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 360, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 520, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 600, dy: 130, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 60, dy: 130, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 680, dy: 130, width: 120, activeImage: '', inactiveImage: '' }
+    { dx: 200, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 280, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 360, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 520, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 600, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 60, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 680, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 }
   ],
   "8key": [
-    { dx: 200, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 280, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 360, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 440, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 520, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 600, dy: 90, width: 60, activeImage: '', inactiveImage: '' },
-    { dx: 60, dy: 90, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 680, dy: 90, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 250, dy: 170, width: 120, activeImage: '', inactiveImage: '' },
-    { dx: 490, dy: 170, width: 120, activeImage: '', inactiveImage: '' }
+    { dx: 200, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 280, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 360, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 440, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 520, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 600, dy: 90, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 60, dy: 90, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 680, dy: 90, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 250, dy: 170, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 490, dy: 170, width: 120, activeImage: '', inactiveImage: '', count: 0 }
   ]
 }
 
