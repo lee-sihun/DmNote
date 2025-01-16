@@ -127,6 +127,7 @@ export function Key({ keyName, active, position }) {
         transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
         backgroundColor: (active && activeImage) || (!active && inactiveImage) ? 'transparent' :
                         (active ? '#575757' : 'white'),
+        borderRadius: active ? (activeImage ? '0' : '6px') : (inactiveImage ? '0' : '6px'), 
         color: active && !activeImage ? 'white' : 'black',
         backgroundImage: active && activeImage ? 
           `url(${activeImage})` : 
