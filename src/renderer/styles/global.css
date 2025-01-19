@@ -38,3 +38,13 @@ body,
   transform:translateZ(0);
   backface-visibility:hidden;
 }
+
+/* 라디오 버튼 스타일링 */
+input[type="radio"]:checked + span {
+  border-color: #FFB400;
+}
+
+input[type="radio"]:checked + span span {
+  background: #FFB400;
+  transform: scale(0.5);
+}

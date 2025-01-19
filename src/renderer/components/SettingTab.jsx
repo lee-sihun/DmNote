@@ -10,9 +10,26 @@ export default function SettingTab() {
     showKeyCount,
     setShowKeyCount,
     overlayLocked,     
-    setOverlayLocked  
+    setOverlayLocked,
+    angleMode,
+    setAngleMode  
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
+
+  const ANGLE_OPTIONS = [
+    {
+      value: 'd3d11',
+      label: 'Direct3D 11'
+    },
+    {
+      value: 'd3d9',
+      label: 'Direct3D 9'
+    },
+    {
+      value: 'gl',
+      label: 'OpenGL'
+    }
+  ];
 
   useEffect(() => {
     const updateHandler = (_, value) => {
@@ -42,6 +59,10 @@ export default function SettingTab() {
 
     ipcRenderer.send('get-overlay-lock');
     ipcRenderer.on('update-overlay-lock', overlayLockHandler);
+
+    ipcRenderer.invoke('get-angle-mode').then(mode => {
+      setAngleMode(mode);
+    });
 
     return () => {
       ipcRenderer.removeAllListeners('update-hardware-acceleration');
@@ -86,8 +107,19 @@ export default function SettingTab() {
     ipcRenderer.send('toggle-overlay-lock', newState);
   };
 
+  // 그래픽 렌더링 모드 변경 핸들러
+  const handleAngleModeChange = async (e) => {
+    const newMode = e.target.value;
+
+    if (window.confirm('설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?')) {
+      setAngleMode(newMode);
+      ipcRenderer.send('set-angle-mode', newMode);
+      ipcRenderer.send('restart-app');
+    }
+  };
+
   return (
-    <div className="flex flex-col w-full h-full p-[18px]">
+    <div className="flex flex-col w-full h-full p-[18px] gap-[18px]">
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">오버레이 창 고정</p>
@@ -96,6 +128,7 @@ export default function SettingTab() {
             onChange={handleOverlayLockChange}
           />
         </div>
+        <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">항상 위에 표시</p>
           <Checkbox
@@ -111,7 +144,7 @@ export default function SettingTab() {
             onChange={handleHardwareAccelerationChange}
           />
         </div>
-        <div className="w-full h-[0.75px] bg-[#3C4049]" />
+        {/* <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
             키 입력 카운트 표시
@@ -124,6 +157,24 @@ export default function SettingTab() {
             checked={showKeyCount}
             onChange={handleKeyCountToggle}
           />
+        </div> */}
+      </div>
+      <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
+        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[26px]">
+          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">그래픽 렌더링 옵션</p>
+          <div className="flex items-center gap-[40px]">
+            {ANGLE_OPTIONS.map((option) => (
+              <Radio 
+                key={option.value}
+                name="angle" 
+                value={option.value} 
+                checked={angleMode === option.value}
+                onChange={handleAngleModeChange}
+              >
+                {option.label}
+              </Radio>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -148,5 +199,29 @@ function Checkbox({ checked, onChange}) {
           ${isChecked ? 'left-[13px] bg-[#FFB400]' : 'left-[2px] bg-[#989BA6]'}`}
       />
     </div>
+  )
+}
+
+function Radio({ value, name, checked, onChange, children }) {
+  return (
+    <label className="flex items-center cursor-pointer">
+      <input 
+        type="radio" 
+        name={name}
+        value={value} 
+        className="hidden"
+        checked={checked} 
+        onChange={onChange}
+      />
+      <span className="w-[15px] h-[15px] inline-block mr-[10px] rounded-full bg-[#3B4049] border border-[#989BA6] flex-shrink-0 relative">
+        <span 
+          className={`
+            absolute inset-0 rounded-full transform transition-all duration-200
+            ${checked ? 'bg-[#FFB400] scale-[0.5]' : 'bg-transparent scale-[0.3]'}
+          `}
+        />
+      </span>
+      <span className="text-[13.5px] font-medium text-white leading-[15px] text-center">{children}</span>
+    </label>
   )
 }

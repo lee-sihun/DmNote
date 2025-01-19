@@ -42,6 +42,15 @@ class Application {
       store.set('overlayLocked', false);
     }
 
+    // ANGLE 모드 초기 설정
+    if (store.get('angleMode') === undefined) {
+      store.set('angleMode', 'd3d11');
+    }
+
+    // ANGLE 백엔드 설정 적용
+    const angleMode = store.get('angleMode');
+    app.commandLine.appendSwitch('use-angle', angleMode);
+
     this.mainWindow = null
     this.overlayWindow = null
   }
@@ -52,7 +61,7 @@ class Application {
 
   setupEventListeners() {
     // ANGLE 백엔드 설정 (d3d11, d3d9, gl, default)
-    app.commandLine.appendSwitch('use-angle', 'd3d9')
+    // app.commandLine.appendSwitch('use-angle', 'd3d9')
     app.whenReady().then(() => this.createWindows())
     app.on('window-all-closed', this.handleWindowsClosed.bind(this))
 
@@ -233,6 +242,15 @@ class Application {
     
     ipcMain.on('get-overlay-lock', (e) => {
       e.reply('update-overlay-lock', store.get('overlayLocked'));
+    });
+
+    // ANGLE 모드 설정
+    ipcMain.on('set-angle-mode', (_, mode) => {
+      store.set('angleMode', mode);
+    });
+
+    ipcMain.handle('get-angle-mode', () => {
+      return store.get('angleMode', 'd3d11');
     });
 
     // 앱 재시작
