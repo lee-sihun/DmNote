@@ -6,7 +6,7 @@ export default function DraggableKey({ index, position, keyName, onPositionChang
   const { displayName } = getKeyInfoByGlobalKey(keyName);
   const { dx, dy, width, activeImage, inactiveImage } = position;
   const draggable = useDraggable({
-    gridSize: 10,
+    gridSize: 5,
     initialX: dx,
     initialY: dy,
     onPositionChange: (newDx, newDy) => onPositionChange(index, newDx, newDy)
