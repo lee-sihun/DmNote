@@ -1,15 +1,19 @@
 const { BrowserWindow, screen } = require('electron/main')
 const path = require('node:path')
 const windowConfig = require('../config/windowConfig')
+const Store = require('electron-store')
+
+const WINDOW_POSITION_KEY = 'overlayWindowPosition'
 
 class OverlayWindow {
   constructor() {
     this.window = null
+    this.store = new Store()
   }
 
   create() {
     this.window = new BrowserWindow(windowConfig.overlay)
-    this.setPosition()
+    this.restorePosition()
     this.disableContextMenu()
     this.loadContent()
 
@@ -34,6 +38,12 @@ class OverlayWindow {
       }
     });
 
+    // 윈도우 위치 저장
+    this.window.on('moved', () => {
+      const [x, y] = this.window.getPosition()
+      this.store.set(WINDOW_POSITION_KEY, { x, y })
+    })
+
     // 오버레이 고정 설정
     const overlayLocked = settings.get('overlayLocked', true);
     this.window.setIgnoreMouseEvents(overlayLocked, { forward: true });
@@ -41,7 +51,16 @@ class OverlayWindow {
     return this.window
   }
 
-  setPosition() {
+  restorePosition() {
+    const savedPosition = this.store.get(WINDOW_POSITION_KEY)
+    if (savedPosition) {
+      this.window.setPosition(savedPosition.x, savedPosition.y)
+    } else {
+      this.setDefaultPosition()
+    }
+  }
+
+  setDefaultPosition() {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize
     this.window.setPosition(width - 860, height - 320)
   }
