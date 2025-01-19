@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
 import SettingTab from "./SettingTab";
 import Canvas from "./Canvas";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Tab() {
   const [activeTab, setActiveTab] = useState(0);
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const overlayLocked = useSettingsStore((state) => state.overlayLocked);
   const ipcRenderer = window.electron.ipcRenderer;
 
   useEffect(() => {
@@ -13,6 +15,13 @@ export default function Tab() {
       setIsOverlayVisible(visible);
     });
   }, []);
+
+  // overlayLocked 상태가 변경될 때마다 visibility 상태 동기화
+  useEffect(() => {
+    if (isOverlayVisible) {
+      ipcRenderer.send('toggle-overlay', true);
+    }
+  }, [overlayLocked]);
 
   const toggleOverlay = () => {
     const newState = !isOverlayVisible;

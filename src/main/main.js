@@ -214,6 +214,9 @@ class Application {
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         if (show) {
           this.overlayWindow.show();
+          // 오버레이가 표시될 때 현재 lock 상태 적용
+          const isLocked = store.get('overlayLocked', false);
+          this.overlayWindow.setIgnoreMouseEvents(isLocked, { forward: true });
         } else {
           this.overlayWindow.hide();
         }
