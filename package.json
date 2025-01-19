@@ -11,7 +11,7 @@
   },
   "build": {
     "appId": "com.djmax.keyviewer",
-    "productName": "DJMAX Keyviewer",
+    "productName": "DM NOTE",
     "win": {
       "target": "portable",
       "icon": "build/icon.ico"
@@ -24,8 +24,20 @@
       "src/main/**/*"
     ]
   },
+  "authors": [
+    {
+      "name": "lee-sihun",
+      "role": "Developer",
+      "url": "https://github.com/lee-sihun"
+    },
+    {
+      "name": "yeonu-me",
+      "role": "Designer",
+      "url": "https://github.com/yeonu-me"
+    }
+  ],
   "author": "lee-sihun",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
