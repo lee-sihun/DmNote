@@ -13,7 +13,7 @@ export function useKeyManager() {
 
     const handleKeyMappings = (e, keys) => setKeyMappings(keys);
     const handleKeyPositions = (e, pos) => setPositions(pos);
-    const handleKeyModeChanged = (e, mode) => setCurrentMode(mode);
+    // const handleKeyModeChanged = (e, mode) => setCurrentMode(mode);
     const handleReset = (e, data) => {
       setKeyMappings(data.keys);
       setPositions(data.positions);
@@ -21,17 +21,17 @@ export function useKeyManager() {
 
     ipcRenderer.send('getKeyMappings');
     ipcRenderer.send('getKeyPositions');
-    ipcRenderer.send('getCurrentMode');
+    // ipcRenderer.send('getCurrentMode');
 
     ipcRenderer.on('updateKeyMappings', handleKeyMappings);
     ipcRenderer.on('updateKeyPositions', handleKeyPositions);
-    ipcRenderer.on('keyModeChanged', handleKeyModeChanged);
+    // ipcRenderer.on('keyModeChanged', handleKeyModeChanged);
     ipcRenderer.on('resetComplete', handleReset); 
 
     return () => {
       ipcRenderer.removeAllListeners('updateKeyMappings');
       ipcRenderer.removeAllListeners('updateKeyPositions');
-      ipcRenderer.removeAllListeners('keyModeChanged');
+      // ipcRenderer.removeAllListeners('keyModeChanged');
       ipcRenderer.removeAllListeners('resetComplete');
     };
   }, []);
@@ -53,9 +53,9 @@ export function useKeyManager() {
     });
   };
 
-  const handleModeChange = (mode) => {
-    ipcRenderer.send('setKeyMode', mode);
-  };
+  // const handleModeChange = (mode) => {
+  //   ipcRenderer.send('setKeyMode', mode);
+  // };
 
   const handleReset = () => {
     if (ipcRenderer) {
@@ -93,7 +93,6 @@ export function useKeyManager() {
     positions,
     setSelectedKey,
     handlePositionChange,
-    handleModeChange,
     handleReset,
     handleKeyUpdate,
   };

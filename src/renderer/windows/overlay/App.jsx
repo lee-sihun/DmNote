@@ -1,8 +1,8 @@
 import { Key } from "@components/Key";
 import React, { useState, useEffect } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import CountDisplay from "@components/CountDisplay";
+// import { useSettingsStore } from "@stores/useSettingsStore";
+// import CountDisplay from "@components/CountDisplay";
 
 export default function App() {
   const { ipcRenderer } = window.require("electron");
@@ -11,8 +11,8 @@ export default function App() {
   const [positions, setPositions] = useState({});
   const [keyStates, setKeyStates] = useState({});
   const [backgroundColor, setBackgroundColor] = useState('');
-  const showKeyCount = useSettingsStore(state => state.showKeyCount);
-  const { setShowKeyCount } = useSettingsStore();
+  // const showKeyCount = useSettingsStore(state => state.showKeyCount);
+  // const { setShowKeyCount } = useSettingsStore();
 
   useEffect(() => {
     // 초기 데이터 요청
@@ -20,7 +20,7 @@ export default function App() {
     ipcRenderer.send('getKeyPositions');
     ipcRenderer.send('getCurrentMode');
     ipcRenderer.send('getBackgroundColor');
-    ipcRenderer.send('get-show-key-count');
+    // ipcRenderer.send('get-show-key-count');
 
     const keyStateListener = (e, { key, state }) => {
       if (state === 'DOWN') {
@@ -66,9 +66,9 @@ export default function App() {
       setBackgroundColor(color);
     };
 
-    const showKeyCountListener = (_, value) => {
-      setShowKeyCount(value);
-    };
+    // const showKeyCountListener = (_, value) => {
+    //   setShowKeyCount(value);
+    // };
 
     // 이벤트 리스너 등록
     ipcRenderer.on('keyState', keyStateListener);
@@ -76,7 +76,7 @@ export default function App() {
     ipcRenderer.on('updateKeyMappings', keyMappingsListener);
     ipcRenderer.on('updateKeyPositions', positionsListener);
     ipcRenderer.on('updateBackgroundColor', backgroundColorListener);
-    ipcRenderer.on('update-show-key-count', showKeyCountListener);
+    // ipcRenderer.on('update-show-key-count', showKeyCountListener);
 
     return () => {
       ipcRenderer.removeAllListeners('keyState');
@@ -84,7 +84,7 @@ export default function App() {
       ipcRenderer.removeAllListeners('updateKeyMappings');
       ipcRenderer.removeAllListeners('updateKeyPositions');
       ipcRenderer.removeAllListeners('updateBackgroundColor');
-      ipcRenderer.removeAllListeners('update-show-key-count');
+      // ipcRenderer.removeAllListeners('update-show-key-count');
     };
   }, [keyMode, keyMappings]);
 
@@ -98,19 +98,19 @@ export default function App() {
         const position = positions[keyMode]?.[index] || { dx: 0, dy: 0, width: 60 };
         
         return (
-          <React.Fragment key={index}>
-            {showKeyCount && (
-              <CountDisplay 
-                count={position.count} 
-                position={position}
-              />
-            )}
+          // <React.Fragment key={index}>
+          //   {showKeyCount && (
+          //     <CountDisplay 
+          //       count={position.count} 
+          //       position={position}
+          //     />
+          //   )}
             <Key 
               keyName={displayName}
               active={keyStates[key]}
               position={position}
             />
-          </React.Fragment>
+          // </React.Fragment>
         );
       })}
     </div>

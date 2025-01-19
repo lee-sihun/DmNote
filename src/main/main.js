@@ -158,15 +158,15 @@ class Application {
       e.reply('update-always-on-top', store.get('alwaysOnTop'));
     });
 
-    ipcMain.on('overlay-toggle-ignore-mouse', (event, ignore) => {
-      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-        if (ignore) {
-          this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-        } else {
-          this.overlayWindow.setIgnoreMouseEvents(false);
-        }
-      }
-    });
+    // ipcMain.on('overlay-toggle-ignore-mouse', (event, ignore) => {
+    //   if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+    //     if (ignore) {
+    //       this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    //     } else {
+    //       this.overlayWindow.setIgnoreMouseEvents(false);
+    //     }
+    //   }
+    // });
 
     // // 윈도우 위치 가져오기
     // ipcMain.handle('overlay-get-position', () => {
@@ -190,29 +190,29 @@ class Application {
     //   );
     // });
 
-    // 키 카운트 표시 설정
-    ipcMain.on('toggle-show-key-count', (_, value) => {
-      store.set('showKeyCount', value);
-      this.overlayWindow.webContents.send('update-show-key-count', value);
-    });
+    // // 키 카운트 표시 설정
+    // ipcMain.on('toggle-show-key-count', (_, value) => {
+    //   store.set('showKeyCount', value);
+    //   this.overlayWindow.webContents.send('update-show-key-count', value);
+    // });
 
-    ipcMain.on('get-show-key-count', (e) => {
-      const showKeyCount = store.get('showKeyCount', false);
-      e.reply('update-show-key-count', showKeyCount);
-    });
+    // ipcMain.on('get-show-key-count', (e) => {
+    //   const showKeyCount = store.get('showKeyCount', false);
+    //   e.reply('update-show-key-count', showKeyCount);
+    // });
 
-    ipcMain.on('reset-key-count', (e) => {
-      const positions = loadKeyPositions();
-      // 모든 키의 카운트를 0으로 초기화
-      Object.keys(positions).forEach(mode => {
-        positions[mode] = positions[mode].map(pos => ({
-          ...pos,
-          count: 0
-        }));
-      });
-      saveKeyPositions(positions);
-      this.overlayWindow.webContents.send('updateKeyPositions', positions);
-    });
+    // ipcMain.on('reset-key-count', (e) => {
+    //   const positions = loadKeyPositions();
+    //   // 모든 키의 카운트를 0으로 초기화
+    //   Object.keys(positions).forEach(mode => {
+    //     positions[mode] = positions[mode].map(pos => ({
+    //       ...pos,
+    //       count: 0
+    //     }));
+    //   });
+    //   saveKeyPositions(positions);
+    //   this.overlayWindow.webContents.send('updateKeyPositions', positions);
+    // });
 
     // 오버레이 표시 여부
     ipcMain.handle('get-overlay-visibility', () => {
