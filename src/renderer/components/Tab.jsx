@@ -1,15 +1,28 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
 import SettingTab from "./SettingTab";
 import Canvas from "./Canvas";
 
 export default function Tab() {
   const [activeTab, setActiveTab] = useState(0);
+  const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const ipcRenderer = window.electron.ipcRenderer;
 
+  useEffect(() => {
+    ipcRenderer.invoke('get-overlay-visibility').then(visible => {
+      setIsOverlayVisible(visible);
+    });
+  }, []);
+
+  const toggleOverlay = () => {
+    const newState = !isOverlayVisible;
+    setIsOverlayVisible(newState);
+    ipcRenderer.send('toggle-overlay', newState);
+  };
+  
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
     { id: 1, label: "레이아웃" },
-    { id: 2, label: "오버레이 열기" }
   ];
 
   const renderTabContent = () => {
@@ -18,8 +31,6 @@ export default function Tab() {
         return <SettingTab />;
       case 1:
         return <Canvas />;
-      case 2:
-        return <div>오버레이 설정</div>;
       default:
         return null;
     }
@@ -37,7 +48,16 @@ export default function Tab() {
             >
               {tab.icon || tab.label}
             </Button>
-          ))}
+          ))}       
+          <div className="flex flex-col items-center justify-between h-full">
+            <button 
+              onClick={toggleOverlay}
+              className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 text-[#989BA6]`}
+            >
+              {isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
+            </button>
+            <div className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}/>
+          </div>
         </div>
       </div>
       <div className="flex h-full">

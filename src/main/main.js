@@ -200,6 +200,21 @@ class Application {
       this.overlayWindow.webContents.send('updateKeyPositions', positions);
     });
 
+    // 오버레이 표시 여부
+    ipcMain.handle('get-overlay-visibility', () => {
+      return this.overlayWindow && !this.overlayWindow.isDestroyed() && this.overlayWindow.isVisible();
+    });
+    
+    ipcMain.on('toggle-overlay', (_, show) => {
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        if (show) {
+          this.overlayWindow.show();
+        } else {
+          this.overlayWindow.hide();
+        }
+      }
+    });
+
     // 앱 재시작
     ipcMain.on('restart-app', () => {
       app.relaunch();
