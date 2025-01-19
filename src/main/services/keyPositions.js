@@ -11,13 +11,14 @@ const DEFAULT_POSITIONS = {
     { dx: 570, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
   ],
   "5key": [
-    { dx: 260, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 330, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 400, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 470, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 540, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 130, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 610, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 }
+    { dx: 230, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 300, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 370, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 440, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 510, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 580, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 100, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 650, dy: 130, width: 120, activeImage: '', inactiveImage: '', count: 0 }
   ],
   "6key": [
     { dx: 230, dy: 130, width: 60, activeImage: '', inactiveImage: '', count: 0 },
