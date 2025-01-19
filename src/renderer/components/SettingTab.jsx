@@ -8,7 +8,9 @@ export default function SettingTab() {
     alwaysOnTop,
     setAlwaysOnTop,
     showKeyCount,
-    setShowKeyCount  
+    setShowKeyCount,
+    overlayLocked,     
+    setOverlayLocked  
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -25,6 +27,10 @@ export default function SettingTab() {
       setShowKeyCount(value);
     };
 
+    const overlayLockHandler = (_, value) => {
+      setOverlayLocked(value);
+    };
+
     ipcRenderer.send('get-hardware-acceleration');
     ipcRenderer.on('update-hardware-acceleration', updateHandler);
 
@@ -34,10 +40,14 @@ export default function SettingTab() {
     ipcRenderer.send('get-show-key-count');
     ipcRenderer.on('update-show-key-count', showKeyCountHandler);
 
+    ipcRenderer.send('get-overlay-lock');
+    ipcRenderer.on('update-overlay-lock', overlayLockHandler);
+
     return () => {
       ipcRenderer.removeAllListeners('update-hardware-acceleration');
       ipcRenderer.removeAllListeners('update-always-on-top');
       ipcRenderer.removeAllListeners('update-show-key-count');
+      ipcRenderer.removeAllListeners('update-overlay-lock');
     };
   }, []);
 
@@ -69,9 +79,23 @@ export default function SettingTab() {
     ipcRenderer.send('reset-key-count');
   };
 
+  // 오버레이 창 고정 핸들러
+  const handleOverlayLockChange = () => {
+    const newState = !overlayLocked;
+    setOverlayLocked(newState);
+    ipcRenderer.send('toggle-overlay-lock', newState);
+  };
+
   return (
     <div className="flex flex-col w-full h-full p-[18px]">
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
+        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
+          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">오버레이 창 고정</p>
+          <Checkbox
+            checked={overlayLocked}
+            onChange={handleOverlayLockChange}
+          />
+        </div>
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
           <p className="text-center font-medium w-[153px] text-white text-[13.5px]">항상 위에 표시</p>
           <Checkbox

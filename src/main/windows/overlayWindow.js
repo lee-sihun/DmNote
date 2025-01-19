@@ -34,8 +34,9 @@ class OverlayWindow {
       }
     });
 
-    // 클릭 투과 설정
-    // this.window.setIgnoreMouseEvents(true, { forward: true })
+    // 오버레이 고정 설정
+    const overlayLocked = settings.get('overlayLocked', true);
+    this.window.setIgnoreMouseEvents(overlayLocked, { forward: true });
     
     return this.window
   }

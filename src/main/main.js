@@ -37,6 +37,11 @@ class Application {
       store.set('alwaysOnTop', true);
     }
 
+    // 오버레이 고정 설정
+    if (store.get('overlayLocked') === undefined) {
+      store.set('overlayLocked', false);
+    }
+
     this.mainWindow = null
     this.overlayWindow = null
   }
@@ -213,6 +218,18 @@ class Application {
           this.overlayWindow.hide();
         }
       }
+    });
+
+    // 오버레이 고정 설정
+    ipcMain.on('toggle-overlay-lock', (_, enabled) => {
+      store.set('overlayLocked', enabled);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.setIgnoreMouseEvents(enabled, { forward: true });
+      }
+    });
+    
+    ipcMain.on('get-overlay-lock', (e) => {
+      e.reply('update-overlay-lock', store.get('overlayLocked'));
     });
 
     // 앱 재시작
