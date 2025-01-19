@@ -154,27 +154,27 @@ class Application {
       }
     });
 
-    // 윈도우 위치 가져오기
-    ipcMain.handle('overlay-get-position', () => {
-      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-        return this.overlayWindow.getPosition();
-      }
-      return [0, 0];
-    });
+    // // 윈도우 위치 가져오기
+    // ipcMain.handle('overlay-get-position', () => {
+    //   if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+    //     return this.overlayWindow.getPosition();
+    //   }
+    //   return [0, 0];
+    // });
 
-    // 윈도우 위치 설정
-    ipcMain.on('overlay-set-position', (e, x, y) => {
-      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-        this.overlayWindow.setPosition(x, y);
-      }
-    });
+    // // 윈도우 위치 설정
+    // ipcMain.on('overlay-set-position', (e, x, y) => {
+    //   if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+    //     this.overlayWindow.setPosition(x, y);
+    //   }
+    // });
 
-    ipcMain.on('overlay-move', (e, x, y) => {
-      this.overlayWindow?.setPosition(
-        this.overlayWindow.getPosition()[0] + x,
-        this.overlayWindow.getPosition()[1] + y
-      );
-    });
+    // ipcMain.on('overlay-move', (e, x, y) => {
+    //   this.overlayWindow?.setPosition(
+    //     this.overlayWindow.getPosition()[0] + x,
+    //     this.overlayWindow.getPosition()[1] + y
+    //   );
+    // });
 
     // 키 카운트 표시 설정
     ipcMain.on('toggle-show-key-count', (_, value) => {

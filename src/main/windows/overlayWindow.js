@@ -35,7 +35,7 @@ class OverlayWindow {
     });
 
     // 클릭 투과 설정
-    this.window.setIgnoreMouseEvents(true, { forward: true })
+    // this.window.setIgnoreMouseEvents(true, { forward: true })
     
     return this.window
   }

@@ -90,7 +90,7 @@ export default function App() {
 
   return (
     <div 
-      className="relative w-full h-screen m-0 overflow-hidden"
+      className="relative w-full h-screen m-0 overflow-hidden [app-region:drag]"
       style={{ backgroundColor: backgroundColor === "transparent" ? "transparent" : backgroundColor }}
     >
       {keyMappings[keyMode]?.map((key, index) => {
