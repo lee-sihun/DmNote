@@ -253,6 +253,74 @@ class Application {
       return store.get('angleMode', 'd3d11');
     });
 
+    // 프리셋 저장하기
+    ipcMain.handle('save-preset', async () => {
+      const { dialog } = require('electron');
+      const path = require('path');
+      
+      // 현재 설정들을 가져옴
+      const preset = {
+        keys: store.get('keys'),
+        keyPositions: store.get('keyPositions'),
+        backgroundColor: store.get('backgroundColor'),
+      };
+
+      const { filePath } = await dialog.showSaveDialog({
+        defaultPath: path.join(app.getPath('documents'), 'preset.json'),
+        filters: [
+          { name: 'DM NOTE Preset', extensions: ['json'] }
+        ]
+      });
+
+      if (filePath) {
+        try {
+          require('fs').writeFileSync(filePath, JSON.stringify(preset, null, 2));
+          return true;
+        } catch (err) {
+          console.error('Failed to save preset:', err);
+          return false;
+        }
+      }
+      return false;
+    });
+
+    // 프리셋 불러오기
+    ipcMain.handle('load-preset', async () => {
+      const { dialog } = require('electron');
+      
+      const { filePaths } = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'DM NOTE Preset', extensions: ['json'] }
+        ]
+      });
+
+      if (filePaths.length > 0) {
+        try {
+          const preset = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
+          
+          // 설정 적용
+          store.set('keys', preset.keys);
+          store.set('keyPositions', preset.keyPositions);
+          store.set('backgroundColor', preset.backgroundColor);
+
+          keyboardService.updateKeyMapping(preset.keys);
+          
+          [this.overlayWindow, this.mainWindow].forEach(window => {
+            window.webContents.send('updateKeyMappings', preset.keys);
+            window.webContents.send('updateKeyPositions', preset.keyPositions);
+            window.webContents.send('updateBackgroundColor', preset.backgroundColor);
+          });
+          
+          return true;
+        } catch (err) {
+          console.error('Failed to load preset:', err);
+          return false;
+        }
+      }
+      return false;
+    });
+
     // 앱 재시작
     ipcMain.on('restart-app', () => {
       app.relaunch();

@@ -5,7 +5,7 @@ import Canvas from "./Canvas";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Tab() {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(1);
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const overlayLocked = useSettingsStore((state) => state.overlayLocked);
   const ipcRenderer = window.electron.ipcRenderer;
