@@ -237,21 +237,27 @@ function Footer() {
   };
   
   return (
-    <div className="flex w-full gap-[18px]">
-      <button 
-        onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer')}
-        className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
-      >
-        <object type="image/svg+xml" data={Github} className="pointer-events-none"/>
-        <p className="text-white text-[15px] leading-[16.5px] truncate">Github</p>
-      </button>
-      <button 
-        onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer/issues')}
-        className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
-      >
-        <object type="image/svg+xml" data={Bug} className="pointer-events-none"/>
-        <p className="text-white text-[15px] leading-[16.5px] truncate">Bug Report</p>
-      </button>
+    <div className="flex flex-col w-full h-full gap-[18px] justify-between">
+      <div className="flex w-full gap-[18px]">
+        <button 
+          onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer')}
+          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+        >
+          <object type="image/svg+xml" data={Github} className="pointer-events-none"/>
+          <p className="text-white text-[15px] leading-[16.5px] truncate">Github</p>
+        </button>
+        <button 
+          onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer/issues')}
+          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+        >
+          <object type="image/svg+xml" data={Bug} className="pointer-events-none"/>
+          <p className="text-white text-[15px] leading-[16.5px] truncate">Bug Report</p>
+        </button>
+      </div>
+      <div className="flex-col w-full gap-[4px] justify-center items-center">
+        <p className="text-[#D8DADF] text-[10.5px] text-center">본 프로그램은 NEOWIZ 또는 DJMAX RESPECT V 공식 개발사와 아무런 관련이 없습니다.</p>
+        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.0)</p>
+      </div>
     </div>
   )
 }
