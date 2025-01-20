@@ -22,32 +22,38 @@ export default function App() {
     ipcRenderer.send('getBackgroundColor');
     // ipcRenderer.send('get-show-key-count');
 
-    const keyStateListener = (e, { key, state }) => {
-      if (state === 'DOWN') {
-        // 이전 상태가 false일 때만 카운트 증가
-        setKeyStates(prev => {
-          // const wasKeyPressed = prev[key];
-          // if (!wasKeyPressed) {
-          //   setPositions(currentPos => {
-          //     const newPositions = { ...currentPos };
-          //     const currentMode = keyMode;
-          //     const keyIndex = keyMappings[currentMode]?.indexOf(key);
+    // const keyStateListener = (e, { key, state }) => {
+    //   if (state === 'DOWN') {
+    //     // 이전 상태가 false일 때만 카운트 증가
+    //     setKeyStates(prev => {
+    //       // const wasKeyPressed = prev[key];
+    //       // if (!wasKeyPressed) {
+    //       //   setPositions(currentPos => {
+    //       //     const newPositions = { ...currentPos };
+    //       //     const currentMode = keyMode;
+    //       //     const keyIndex = keyMappings[currentMode]?.indexOf(key);
               
-          //     if (keyIndex !== -1 && newPositions[currentMode]) {
-          //       newPositions[currentMode][keyIndex] = {
-          //         ...newPositions[currentMode][keyIndex],
-          //         count: (newPositions[currentMode][keyIndex].count || 0) + 1
-          //       };
-          //       ipcRenderer.send('update-key-positions', newPositions);
-          //     }
-          //     return newPositions;
-          //   });
-          // }
-          return { ...prev, [key]: true };
-        });
-      } else {
-        setKeyStates(prev => ({ ...prev, [key]: false }));
-      }
+    //       //     if (keyIndex !== -1 && newPositions[currentMode]) {
+    //       //       newPositions[currentMode][keyIndex] = {
+    //       //         ...newPositions[currentMode][keyIndex],
+    //       //         count: (newPositions[currentMode][keyIndex].count || 0) + 1
+    //       //       };
+    //       //       ipcRenderer.send('update-key-positions', newPositions);
+    //       //     }
+    //       //     return newPositions;
+    //       //   });
+    //       // }
+    //       return { ...prev, [key]: true };
+    //     });
+    //   } else {
+    //     setKeyStates(prev => ({ ...prev, [key]: false }));
+    //   }
+    // };
+    const keyStateListener = (e, { key, state, mode }) => {
+      setKeyStates(prev => ({
+        ...prev,
+        [key]: state === 'DOWN'
+      }));
     };
 
     const keyModeListener = (e, mode) => {
@@ -86,7 +92,7 @@ export default function App() {
       ipcRenderer.removeAllListeners('updateBackgroundColor');
       // ipcRenderer.removeAllListeners('update-show-key-count');
     };
-  }, [keyMode, keyMappings]);
+  }, []);
 
   return (
     <div 

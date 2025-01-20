@@ -7,8 +7,8 @@ export default function SettingTab() {
     setHardwareAcceleration,
     alwaysOnTop,
     setAlwaysOnTop,
-    showKeyCount,
-    setShowKeyCount,
+    // showKeyCount,
+    // setShowKeyCount,
     overlayLocked,     
     setOverlayLocked,
     angleMode,
@@ -40,9 +40,9 @@ export default function SettingTab() {
       setAlwaysOnTop(value);
     };
 
-    const showKeyCountHandler = (_, value) => {
-      setShowKeyCount(value);
-    };
+    // const showKeyCountHandler = (_, value) => {
+    //   setShowKeyCount(value);
+    // };
 
     const overlayLockHandler = (_, value) => {
       setOverlayLocked(value);
@@ -54,8 +54,8 @@ export default function SettingTab() {
     ipcRenderer.send('get-always-on-top');
     ipcRenderer.on('update-always-on-top', alwaysOnTopHandler);
 
-    ipcRenderer.send('get-show-key-count');
-    ipcRenderer.on('update-show-key-count', showKeyCountHandler);
+    // ipcRenderer.send('get-show-key-count');
+    // ipcRenderer.on('update-show-key-count', showKeyCountHandler);
 
     ipcRenderer.send('get-overlay-lock');
     ipcRenderer.on('update-overlay-lock', overlayLockHandler);
@@ -67,7 +67,7 @@ export default function SettingTab() {
     return () => {
       ipcRenderer.removeAllListeners('update-hardware-acceleration');
       ipcRenderer.removeAllListeners('update-always-on-top');
-      ipcRenderer.removeAllListeners('update-show-key-count');
+      // ipcRenderer.removeAllListeners('update-show-key-count');
       ipcRenderer.removeAllListeners('update-overlay-lock');
     };
   }, []);
@@ -89,16 +89,16 @@ export default function SettingTab() {
   };
 
   // 키 카운트 On/Off 핸들러
-  const handleKeyCountToggle = () => {
-    const newState = !showKeyCount;
-    setShowKeyCount(newState);
-    ipcRenderer.send('toggle-show-key-count', newState);
-  };
+  // const handleKeyCountToggle = () => {
+  //   const newState = !showKeyCount;
+  //   setShowKeyCount(newState);
+  //   ipcRenderer.send('toggle-show-key-count', newState);
+  // };
 
   // 키 카운트 초기화 핸들러
-  const handleResetKeyCount = () => {
-    ipcRenderer.send('reset-key-count');
-  };
+  // const handleResetKeyCount = () => {
+  //   ipcRenderer.send('reset-key-count');
+  // };
 
   // 오버레이 창 고정 핸들러
   const handleOverlayLockChange = () => {
