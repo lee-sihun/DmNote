@@ -48,6 +48,9 @@ npm run start
 - 입력 통계 분석 기능
 
 ## 🖼️ 스크린샷
+![1](https://i.postimg.cc/MG7GdXhv/1.gif)
+![2](https://i.postimg.cc/RFGZxyCm/2.gif)
+![3](https://i.postimg.cc/wv9jPgpF/3.gif)
 
 ## 📝참고사항
 
