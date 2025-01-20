@@ -1,7 +1,7 @@
 {
   "name": "djmax-keyviewer",
   "version": "1.0.0",
-  "description": "key viewer for DJ MAX",
+  "description": "DM NOTE",
   "main": "src/main/main.js",
   "scripts": {
     "start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
