@@ -20,7 +20,7 @@ npm run start
 - **스타일링**: Tailwind CSS
 - **번들러**: Webpack
 - **키보드 후킹**: node-global-key-listener
-- **설정 저장**: electron-store
+- **세팅 저장**: electron-store
 - **빌드**: electron-builder
 
 ## ✨ 주요 기능
