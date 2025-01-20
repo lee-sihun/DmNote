@@ -16,8 +16,16 @@
       "target": "portable",
       "icon": "build/icon.ico"
     },
+    "extraResources": [
+      {
+        "from": "build/",
+        "to": "resources",
+        "filter": ["**/*"]
+      }
+    ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build" 
     },
     "files": [
       "dist/renderer/**/*",
