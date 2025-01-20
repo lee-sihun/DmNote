@@ -63,3 +63,4 @@ npm run start
 - 키보드 후킹 라이브러리로 인해 바이러스 오진이 있을 수 있습니다. [(관련 이슈)](https://github.com/LaunchMenu/node-global-key-listener?tab=readme-ov-file#disadvantages-2)
 - OBS 윈도우 캡쳐로 크로마키 없이 배경을 투명하게 불러올 수 있습니다.
 - 게임 화면 위에 표시할 경우, **항상 위에 표시**로 배치한 뒤 **오버레이 창 고정**을 활성화해주세요.
+- 기본 제공 프리셋은 resources > resources > presets 폴더에 있습니다. 
