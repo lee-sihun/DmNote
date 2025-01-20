@@ -24,6 +24,18 @@ class OverlayWindow {
       }
     })
 
+    this.window.on('close', (event) => {
+      // 앱이 종료중이 아니라면 닫기 동작 취소
+      if (!global.isAppQuitting) {
+        event.preventDefault()
+        this.window.hide()
+        this.window.webContents.send('overlay-visibility-changed', false)
+        if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+          global.mainWindow.webContents.send('overlay-visibility-changed', false)
+        }
+      }
+    })
+
     // 최상위 레벨 설정 추가
     const store = require('electron-store');
     const settings = new store();

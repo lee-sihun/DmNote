@@ -14,6 +14,17 @@ export default function Tab() {
     ipcRenderer.invoke('get-overlay-visibility').then(visible => {
       setIsOverlayVisible(visible);
     });
+
+    // 오버레이 상태 변경 이벤트 리스너
+    const handleVisibilityChange = (_, visible) => {
+      setIsOverlayVisible(visible);
+    };
+
+    ipcRenderer.on('overlay-visibility-changed', handleVisibilityChange);
+    
+    return () => {
+      ipcRenderer.removeListener('overlay-visibility-changed', handleVisibilityChange);
+    };
   }, []);
 
   // overlayLocked 상태가 변경될 때마다 visibility 상태 동기화

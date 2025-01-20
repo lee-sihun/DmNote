@@ -340,6 +340,8 @@ class Application {
     this.mainWindow = mainWindowInstance.create()
     this.overlayWindow = overlayWindowInstance.create()
 
+    global.mainWindow = this.mainWindow
+
     this.mainWindow.on('closed', () => {
       mainWindowInstance.cleanup()
       if (!this.overlayWindow.isDestroyed()) {

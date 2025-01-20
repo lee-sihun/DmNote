@@ -22,7 +22,7 @@ module.exports = {
     transparent: true,
     backgroundColor: 'rgba(0,0,0,0)',
     alwaysOnTop: true,
-    skipTaskbar: true,
+    // skipTaskbar: true,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
