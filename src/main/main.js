@@ -1,4 +1,4 @@
-const { app, ipcMain } = require('electron/main')
+const { app, ipcMain, shell } = require('electron/main')
 const MainWindow = require('./windows/mainWindow')
 const OverlayWindow = require('./windows/overlayWindow')
 const keyboardService = require('./services/keyboardListener')
@@ -319,6 +319,11 @@ class Application {
         }
       }
       return false;
+    });
+
+    // URL 열기 요청 처리
+    ipcMain.on('open-external', (_, url) => {
+      shell.openExternal(url);
     });
 
     // 앱 재시작

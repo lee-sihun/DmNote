@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
+import Github from "@assets/svgs/github.svg";
+import Bug from "@assets/svgs/Bug.svg";
 
 export default function SettingTab() {
   const { 
@@ -177,6 +179,7 @@ export default function SettingTab() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   )
 }
@@ -223,5 +226,32 @@ function Radio({ value, name, checked, onChange, children }) {
       </span>
       <span className="text-[13.5px] font-medium text-white leading-[15px] text-center">{children}</span>
     </label>
+  )
+}
+
+function Footer() {
+  const ipcRenderer = window.electron.ipcRenderer;
+  
+  const handleClick = (link) => {
+    ipcRenderer.send('open-external', link);
+  };
+  
+  return (
+    <div className="flex w-full gap-[18px]">
+      <button 
+        onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer')}
+        className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+      >
+        <object type="image/svg+xml" data={Github} className="pointer-events-none"/>
+        <p className="text-white text-[15px] leading-[16.5px] truncate">Github</p>
+      </button>
+      <button 
+        onClick={() => handleClick('https://github.com/lee-sihun/djmax-keyviewer/issues')}
+        className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+      >
+        <object type="image/svg+xml" data={Bug} className="pointer-events-none"/>
+        <p className="text-white text-[15px] leading-[16.5px] truncate">Bug Report</p>
+      </button>
+    </div>
   )
 }
