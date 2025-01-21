@@ -51,8 +51,9 @@ class Application {
     const angleMode = store.get('angleMode');
     app.commandLine.appendSwitch('use-angle', angleMode);
 
-    this.mainWindow = null
-    this.overlayWindow = null
+    this.mainWindow = null;
+    this.overlayWindow = null;
+    global.isAppQuitting = false;
   }
 
   init() {
@@ -63,7 +64,15 @@ class Application {
     // ANGLE 백엔드 설정 (d3d11, d3d9, gl, default)
     // app.commandLine.appendSwitch('use-angle', 'd3d9')
     app.whenReady().then(() => this.createWindows())
-    app.on('window-all-closed', this.handleWindowsClosed.bind(this))
+    // 앱 종료 이벤트 핸들러 추가
+    app.on('before-quit', () => {
+      global.isAppQuitting = true;
+    });
+    ipcMain.on('close-window', () => {
+      global.isAppQuitting = true;
+      this.mainWindow.close();
+      this.overlayWindow.close();
+    });
 
     // 윈도우 컨트롤
     ipcMain.on('minimize-window', () => this.mainWindow.minimize())
@@ -354,8 +363,14 @@ class Application {
   }
 
   handleWindowsClosed() {
-    keyboardService.stopListening()
-    app.quit()
+    keyboardService.stopListening();
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.destroy();
+    }
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.destroy();
+    }
+    app.quit();
   }
 }
 
