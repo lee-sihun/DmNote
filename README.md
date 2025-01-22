@@ -4,7 +4,7 @@ DJMAX 실시간 키 입력 표시 프로그램입니다.
 스트리밍이나 플레이 영상 제작 시, 키 입력을 시각적으로 보여줄 수 있습니다.
 
 ## 🚀 실행 방법
-[DM NOTE v 1.0.1 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.0.1/DM.NOTE.v.1.0.1.zip) 
+[DM NOTE v 1.0.2 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.0.2/DM.NOTE.v.1.0.2.zip) 
 
 ```bash
 git clone https://github.com/lee-sihun/djmax-keyviewer.git
