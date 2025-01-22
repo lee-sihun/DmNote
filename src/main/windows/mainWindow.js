@@ -1,6 +1,7 @@
 const { BrowserWindow } = require('electron/main')
 const path = require('node:path')
 const windowConfig = require('../config/windowConfig')
+const keyboardService = require('../services/keyboardListener')
 
 class MainWindow {
   constructor() {
@@ -16,6 +17,15 @@ class MainWindow {
         devTools: process.env.NODE_ENV === 'development' // 개발 모드에서만 devTools 활성화
       }
     })
+
+    // 윈도우 종료 이벤트 처리 추가
+    this.window.on('close', () => {
+      global.isAppQuitting = true;
+      keyboardService.stopListening() // 키보드 서비스 정지
+      if (this.backgroundInterval) {
+        clearInterval(this.backgroundInterval)
+      }
+    });
 
     this.disableContextMenu()
     this.loadContent()

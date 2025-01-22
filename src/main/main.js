@@ -64,11 +64,19 @@ class Application {
     // ANGLE 백엔드 설정 (d3d11, d3d9, gl, default)
     // app.commandLine.appendSwitch('use-angle', 'd3d9')
     app.whenReady().then(() => this.createWindows())
+    // 모든 윈도우가 닫혔을 때 앱 종료
+    app.on('window-all-closed', () => {
+      keyboardService.stopListening()
+      global.isAppQuitting = true;
+      app.quit();
+    });
     // 앱 종료 이벤트 핸들러 추가
     app.on('before-quit', () => {
+      keyboardService.stopListening()
       global.isAppQuitting = true;
     });
     ipcMain.on('close-window', () => {
+      keyboardService.stopListening()
       global.isAppQuitting = true;
       this.mainWindow.close();
       this.overlayWindow.close();
