@@ -15,11 +15,15 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
     const handleKeyPress = (e) => {
       if (isListening) {
         e.preventDefault();
-        setKey(getKeyInfo(e.code, e.key).globalKey);
-        setDisplayKey(getKeyInfo(e.code, e.key).displayName);
+        let code = e.code;
+        if (e.key === 'Shift') {
+          code = e.location === 1 ? 'ShiftLeft' : 'ShiftRight';
+        }
+        setKey(getKeyInfo(code, e.key).globalKey);
+        setDisplayKey(getKeyInfo(code, e.key).displayName);
         setIsListening(false);
       }
-    }
+    };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
