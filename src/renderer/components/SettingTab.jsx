@@ -256,7 +256,7 @@ function Footer() {
       </div>
       <div className="flex-col w-full gap-[4px] justify-center items-center">
         <p className="text-[#D8DADF] text-[10.5px] text-center">본 프로그램은 NEOWIZ 또는 DJMAX RESPECT V 공식 개발사와 아무런 관련이 없습니다.</p>
-        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.0)</p>
+        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.4)</p>
       </div>
     </div>
   )
