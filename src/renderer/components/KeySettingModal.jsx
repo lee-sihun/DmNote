@@ -1,12 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from "react";
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 
 export default function KeySettingModal({ keyData, onClose, onSave }) {
   const [key, setKey] = useState(keyData.key);
-  const [displayKey, setDisplayKey] = useState(getKeyInfoByGlobalKey(key).displayName);
+  const [displayKey, setDisplayKey] = useState(
+    getKeyInfoByGlobalKey(key).displayName
+  );
   const [isListening, setIsListening] = useState(false);
-  const [activeImage, setActiveImage] = useState(keyData.activeImage || '');
-  const [inactiveImage, setInactiveImage] = useState(keyData.inactiveImage || '');
+  const [activeImage, setActiveImage] = useState(keyData.activeImage || "");
+  const [inactiveImage, setInactiveImage] = useState(
+    keyData.inactiveImage || ""
+  );
+  const [width, setWidth] = useState(keyData.width || 60);
+  const [height, setHeight] = useState(keyData.height || 60);
 
   const activeInputRef = useRef(null);
   const inactiveInputRef = useRef(null);
@@ -16,8 +22,8 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
       if (isListening) {
         e.preventDefault();
         let code = e.code;
-        if (e.key === 'Shift') {
-          code = e.location === 1 ? 'ShiftLeft' : 'ShiftRight';
+        if (e.key === "Shift") {
+          code = e.location === 1 ? "ShiftLeft" : "ShiftRight";
         }
         setKey(getKeyInfo(code, e.key).globalKey);
         setDisplayKey(getKeyInfo(code, e.key).displayName);
@@ -25,15 +31,17 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
   }, [isListening]);
 
   const handleSubmit = () => {
     onSave({
       key,
       activeImage,
-      inactiveImage
+      inactiveImage,
+      width: parseInt(width),
+      height: parseInt(height),
     });
   };
 
@@ -46,25 +54,25 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         // img.onload = () => {
         //   const canvas = document.createElement('canvas');
         //   const ctx = canvas.getContext('2d', { alpha: true });
-          
+
         //   // 키 크기에 맞게 캔버스 설정
         //   const width = keyData.width;
-        //   canvas.width = width; 
-        //   canvas.height = 60; 
+        //   canvas.width = width;
+        //   canvas.height = 60;
 
         //   // 이미지 렌더링 품질 설정
         //   ctx.imageSmoothingEnabled = true;
         //   ctx.imageSmoothingQuality = 'high';
-          
+
         //   // 투명도 유지를 위한 설정
         //   ctx.clearRect(0, 0, width, height);
-        
-        //   // 이미지 리사이징 (Bicubic 알고리즘 사용)   
+
+        //   // 이미지 리사이징 (Bicubic 알고리즘 사용)
         //   ctx.drawImage(img, 0, 0, width, 60);
-          
+
         //   // WebP 포맷으로 변환 및 압축
         //   const optimizedImageUrl = canvas.toDataURL('image/webp', 1.0);
-          
+
         //   if (isActive) {
         //     setActiveImage(optimizedImageUrl);
         //   } else {
@@ -83,26 +91,84 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
   };
 
   return (
-    <div 
+    <div
       className="fixed top-[41px] left-[1px] flex items-center justify-center w-[896px] h-[451px] bg-[#000000] bg-opacity-[0.31] backdrop-blur-[37.5px] rounded-b-[6px]"
       onClick={onClose}
     >
-      <div 
+      <div
         className="flex flex-col items-center justify-center w-[334.5px] p-[25px] bg-[#1C1E25] border border-[#3B4049] rounded-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className='flex justify-between w-full align-center'>
-          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">키 매핑</p>
-          <button 
+        <div className="flex justify-between w-full align-center">
+          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+            키 매핑
+          </p>
+          <button
             onClick={() => setIsListening(true)}
             className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-extrabold"
           >
             {isListening ? "Press any key" : displayKey || "Click to set key"}
           </button>
         </div>
-        <div className='flex justify-between w-full mt-[18px]'>
-          <div className='flex items-center justify-between w-[122px]'>
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">대기 상태</p>
+        <div className="flex justify-between w-full mt-[18px]">
+          <div className="flex items-center justify-between w-[122px]">
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+              가로
+            </p>
+            <input
+              type="number"
+              value={width}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                if (newValue === "") {
+                  setWidth("");
+                } else {
+                  const numValue = parseInt(newValue);
+                  if (!isNaN(numValue)) {
+                    setWidth(Math.min(Math.max(numValue, 1), 999));
+                  }
+                }
+              }}
+              onBlur={(e) => {
+                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
+                  setWidth(60);
+                }
+              }}
+              className="text-center w-[50px] h-[31.5px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            />
+          </div>
+          <div className="flex items-center justify-between w-[122px]">
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+              세로
+            </p>
+            <input
+              type="number"
+              value={height}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                if (newValue === "") {
+                  setWidth("");
+                } else {
+                  const numValue = parseInt(newValue);
+                  if (!isNaN(numValue)) {
+                    setWidth(Math.min(Math.max(numValue, 1), 999));
+                  }
+                }
+              }}
+              onBlur={(e) => {
+                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
+                  setWidth(60);
+                }
+              }}
+              className="text-center w-[50px] h-[31.5px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            />
+          </div>
+        </div>
+        <div className="flex justify-between w-full mt-[18px]">
+          <div className="flex items-center justify-between w-[122px]">
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+              대기 상태
+            </p>
             <input
               type="file"
               accept="image/*"
@@ -110,20 +176,23 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
               className="hidden"
               onChange={(e) => handleImageSelect(e, false)}
             />
-            <button 
+            <button
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
               onClick={() => inactiveInputRef.current.click()}
-              style={{ 
-                backgroundImage: inactiveImage ? `url(${inactiveImage})` : 'none', 
-                backgroundSize: 'cover',
-                width: (keyData.width === 120) ? '60px' : '39px',
-                height: (keyData.width === 120) ? '30px' : '39px', 
+              style={{
+                backgroundImage: inactiveImage
+                  ? `url(${inactiveImage})`
+                  : "none",
+                backgroundSize: "cover",
+                width: "39px",
+                height: "39px",
               }}
-            >
-            </button>
+            ></button>
           </div>
-          <div className='flex items-center justify-between w-[122px]'>
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">입력 상태</p>
+          <div className="flex items-center justify-between w-[122px]">
+            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+              입력 상태
+            </p>
             <input
               type="file"
               accept="image/*"
@@ -131,27 +200,26 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
               className="hidden"
               onChange={(e) => handleImageSelect(e, true)}
             />
-            <button 
+            <button
               className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
               onClick={() => activeInputRef.current.click()}
-              style={{ 
-                backgroundImage: activeImage ? `url(${activeImage})` : 'none', 
-                backgroundSize: 'cover',
-                width: (keyData.width === 120) ? '60px' : '39px',
-                height: (keyData.width === 120) ? '30px' : '39px', 
+              style={{
+                backgroundImage: activeImage ? `url(${activeImage})` : "none",
+                backgroundSize: "cover",
+                width: "39px",
+                height: "39px",
               }}
-            >
-            </button>
+            ></button>
           </div>
         </div>
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[15px]">
-          <button 
+          <button
             onClick={handleSubmit}
             className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
           >
             저장
           </button>
-          <button 
+          <button
             onClick={onClose}
             className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
           >
@@ -160,5 +228,5 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

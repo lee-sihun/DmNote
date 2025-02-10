@@ -101,7 +101,7 @@ export default function App() {
     >
       {keyMappings[keyMode]?.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
-        const position = positions[keyMode]?.[index] || { dx: 0, dy: 0, width: 60 };
+        const position = positions[keyMode]?.[index] || { dx: 0, dy: 0, width: 60, heigt: 60 };
         
         return (
           // <React.Fragment key={index}>

@@ -48,3 +48,10 @@ input[type="radio"]:checked + span span {
   background: #FFB400;
   transform: scale(0.5);
 }
+
+/* 숫자 인풋 버튼 제거 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

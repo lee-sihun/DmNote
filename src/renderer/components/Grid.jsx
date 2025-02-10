@@ -95,7 +95,8 @@ export default function Grid() {
             key: selectedKey.key,
             activeImage: positions[selectedKeyType][selectedKey.index].activeImage,
             inactiveImage: positions[selectedKeyType][selectedKey.index].inactiveImage,
-            width: positions[selectedKeyType][selectedKey.index].width
+            width: positions[selectedKeyType][selectedKey.index].width,
+            height: positions[selectedKeyType][selectedKey.index].height
           }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}
