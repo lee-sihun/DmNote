@@ -9,7 +9,7 @@ export function usePalette() {
     if (!ipcRenderer) return;
 
     const handleColor = (e, color) => setColor(color);
-    
+
     ipcRenderer.send('getBackgroundColor');
     ipcRenderer.on('updateBackgroundColor', handleColor);
 
@@ -37,6 +37,6 @@ export function usePalette() {
     setPalette,
     handleColorChange,
     handlePaletteClose,
-    handleResetColor  
+    handleResetColor
   };
 }

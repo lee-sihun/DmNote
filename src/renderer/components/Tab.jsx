@@ -11,7 +11,7 @@ export default function Tab() {
   const ipcRenderer = window.electron.ipcRenderer;
 
   useEffect(() => {
-    ipcRenderer.invoke('get-overlay-visibility').then(visible => {
+    ipcRenderer.invoke("get-overlay-visibility").then((visible) => {
       setIsOverlayVisible(visible);
     });
 
@@ -20,33 +20,36 @@ export default function Tab() {
       setIsOverlayVisible(visible);
     };
 
-    ipcRenderer.on('overlay-visibility-changed', handleVisibilityChange);
-    
+    ipcRenderer.on("overlay-visibility-changed", handleVisibilityChange);
+
     return () => {
-      ipcRenderer.removeListener('overlay-visibility-changed', handleVisibilityChange);
+      ipcRenderer.removeListener(
+        "overlay-visibility-changed",
+        handleVisibilityChange
+      );
     };
   }, []);
 
   // overlayLocked 상태가 변경될 때마다 visibility 상태 동기화
   useEffect(() => {
     if (isOverlayVisible) {
-      ipcRenderer.send('toggle-overlay', true);
+      ipcRenderer.send("toggle-overlay", true);
     }
   }, [overlayLocked]);
 
   const toggleOverlay = () => {
     const newState = !isOverlayVisible;
     setIsOverlayVisible(newState);
-    ipcRenderer.send('toggle-overlay', newState);
+    ipcRenderer.send("toggle-overlay", newState);
   };
-  
+
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
     { id: 1, label: "레이아웃" },
   ];
 
   const renderTabContent = () => {
-    switch(activeTab) {
+    switch (activeTab) {
       case 0:
         return <SettingTab />;
       case 1:
@@ -55,48 +58,54 @@ export default function Tab() {
         return null;
     }
   };
-  
+
   return (
     <div className="flex flex-col flex-1 w-full h-full">
       <div className="flex w-full h-[36px] bg-[#18191F]">
         <div className="flex items-center h-full gap-[20px] ml-[18px]">
           {tabs.map((tab) => (
-            <Button 
+            <Button
               key={tab.id}
               isActive={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.icon || tab.label}
             </Button>
-          ))}       
+          ))}
           <div className="flex flex-col items-center justify-between h-full">
-            <button 
+            <button
               onClick={toggleOverlay}
               className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 text-[#989BA6]`}
             >
               {isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
             </button>
-            <div className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}/>
+            <div
+              className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}
+            />
           </div>
         </div>
       </div>
-      <div className="flex h-full">
-        {renderTabContent()}
-      </div>
+      <div className="flex h-full">{renderTabContent()}</div>
     </div>
-  )
+  );
 }
 
 function Button({ children, isActive, onClick }) {
   return (
     <div className="flex flex-col items-center justify-between h-full">
-      <button 
+      <button
         onClick={onClick}
-        className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 ${isActive ? 'text-white' : 'text-[#989BA6]'}`}
+        className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 ${
+          isActive ? "text-white" : "text-[#989BA6]"
+        }`}
       >
         {children}
       </button>
-      <div className={`w-[18px] h-[3px] rounded-t-[6px] ${isActive ? 'bg-[#FFB400]' : 'bg-transparent'}`}/>
+      <div
+        className={`w-[18px] h-[3px] rounded-t-[6px] ${
+          isActive ? "bg-[#FFB400]" : "bg-transparent"
+        }`}
+      />
     </div>
-  )
+  );
 }

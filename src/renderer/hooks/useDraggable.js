@@ -42,7 +42,7 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
       const parentNode = node.parentElement;
       const parentRect = parentNode.getBoundingClientRect();
       const nodeRect = node.getBoundingClientRect();
-      
+
       const newDx = e.clientX - startPos.x;
       const newDy = e.clientY - startPos.y;
 
@@ -51,7 +51,7 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
 
       const snappedX = Math.min(Math.max(Math.round(newDx / gridSize) * gridSize, 0), maxX);
       const snappedY = Math.min(Math.max(Math.round(newDy / gridSize) * gridSize, 0), maxY);
-      
+
       // 초기 위치와 비교하여 이동 여부 체크
       if (snappedX !== initialPosition.dx || snappedY !== initialPosition.dy) {
         setWasMoved(true);
@@ -74,11 +74,11 @@ export const useDraggable = ({ gridSize, initialX = 0, initialY = 0, onPositionC
 
   useEffect(() => {
     if (!node) return;
-    
+
     node.addEventListener('mousedown', handleMouseDown);
     node.addEventListener('mouseover', handleMouseOver);
     node.addEventListener('mouseout', handleMouseOut);
-    
+
     return () => {
       node.removeEventListener('mousedown', handleMouseDown);
       node.removeEventListener('mouseover', handleMouseOver);

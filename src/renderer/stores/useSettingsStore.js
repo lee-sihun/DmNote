@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 
 export const useSettingsStore = create((set) => ({
-  hardwareAcceleration: true, 
-  alwaysOnTop: true, 
+  hardwareAcceleration: true,
+  alwaysOnTop: true,
   // showKeyCount: false,
-  overlayLocked: false, 
+  overlayLocked: false,
   angleMode: 'd3d11',
   setHardwareAcceleration: (value) => set({ hardwareAcceleration: value }),
   setAlwaysOnTop: (value) => set({ alwaysOnTop: value }),

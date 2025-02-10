@@ -6,20 +6,20 @@ import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 
 export default function App() {
   const { ipcRenderer } = window.require("electron");
-  const [keyMode, setKeyMode] = useState('4key');
+  const [keyMode, setKeyMode] = useState("4key");
   const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
   const [keyStates, setKeyStates] = useState({});
-  const [backgroundColor, setBackgroundColor] = useState('');
+  const [backgroundColor, setBackgroundColor] = useState("");
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
 
   useEffect(() => {
     // 초기 데이터 요청
-    ipcRenderer.send('getKeyMappings');
-    ipcRenderer.send('getKeyPositions');
-    ipcRenderer.send('getCurrentMode');
-    ipcRenderer.send('getBackgroundColor');
+    ipcRenderer.send("getKeyMappings");
+    ipcRenderer.send("getKeyPositions");
+    ipcRenderer.send("getCurrentMode");
+    ipcRenderer.send("getBackgroundColor");
     // ipcRenderer.send('get-show-key-count');
 
     // const keyStateListener = (e, { key, state }) => {
@@ -32,7 +32,7 @@ export default function App() {
     //       //     const newPositions = { ...currentPos };
     //       //     const currentMode = keyMode;
     //       //     const keyIndex = keyMappings[currentMode]?.indexOf(key);
-              
+
     //       //     if (keyIndex !== -1 && newPositions[currentMode]) {
     //       //       newPositions[currentMode][keyIndex] = {
     //       //         ...newPositions[currentMode][keyIndex],
@@ -50,9 +50,9 @@ export default function App() {
     //   }
     // };
     const keyStateListener = (e, { key, state, mode }) => {
-      setKeyStates(prev => ({
+      setKeyStates((prev) => ({
         ...prev,
-        [key]: state === 'DOWN'
+        [key]: state === "DOWN",
       }));
     };
 
@@ -77,45 +77,53 @@ export default function App() {
     // };
 
     // 이벤트 리스너 등록
-    ipcRenderer.on('keyState', keyStateListener);
-    ipcRenderer.on('keyModeChanged', keyModeListener);
-    ipcRenderer.on('updateKeyMappings', keyMappingsListener);
-    ipcRenderer.on('updateKeyPositions', positionsListener);
-    ipcRenderer.on('updateBackgroundColor', backgroundColorListener);
+    ipcRenderer.on("keyState", keyStateListener);
+    ipcRenderer.on("keyModeChanged", keyModeListener);
+    ipcRenderer.on("updateKeyMappings", keyMappingsListener);
+    ipcRenderer.on("updateKeyPositions", positionsListener);
+    ipcRenderer.on("updateBackgroundColor", backgroundColorListener);
     // ipcRenderer.on('update-show-key-count', showKeyCountListener);
 
     return () => {
-      ipcRenderer.removeAllListeners('keyState');
-      ipcRenderer.removeAllListeners('keyModeChanged');
-      ipcRenderer.removeAllListeners('updateKeyMappings');
-      ipcRenderer.removeAllListeners('updateKeyPositions');
-      ipcRenderer.removeAllListeners('updateBackgroundColor');
+      ipcRenderer.removeAllListeners("keyState");
+      ipcRenderer.removeAllListeners("keyModeChanged");
+      ipcRenderer.removeAllListeners("updateKeyMappings");
+      ipcRenderer.removeAllListeners("updateKeyPositions");
+      ipcRenderer.removeAllListeners("updateBackgroundColor");
       // ipcRenderer.removeAllListeners('update-show-key-count');
     };
   }, []);
 
   return (
-    <div 
+    <div
       className="relative w-full h-screen m-0 overflow-hidden [app-region:drag]"
-      style={{ backgroundColor: backgroundColor === "transparent" ? "transparent" : backgroundColor }}
+      style={{
+        backgroundColor:
+          backgroundColor === "transparent" ? "transparent" : backgroundColor,
+      }}
     >
       {keyMappings[keyMode]?.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
-        const position = positions[keyMode]?.[index] || { dx: 0, dy: 0, width: 60, heigt: 60 };
-        
+        const position = positions[keyMode]?.[index] || {
+          dx: 0,
+          dy: 0,
+          width: 60,
+          heigt: 60,
+        };
+
         return (
           // <React.Fragment key={index}>
           //   {showKeyCount && (
-          //     <CountDisplay 
-          //       count={position.count} 
+          //     <CountDisplay
+          //       count={position.count}
           //       position={position}
           //     />
           //   )}
-            <Key 
-              keyName={displayName}
-              active={keyStates[key]}
-              position={position}
-            />
+          <Key
+            keyName={displayName}
+            active={keyStates[key]}
+            position={position}
+          />
           // </React.Fragment>
         );
       })}

@@ -26,7 +26,7 @@ export function useKeyManager() {
     ipcRenderer.on('updateKeyMappings', handleKeyMappings);
     ipcRenderer.on('updateKeyPositions', handleKeyPositions);
     // ipcRenderer.on('keyModeChanged', handleKeyModeChanged);
-    ipcRenderer.on('resetComplete', handleReset); 
+    ipcRenderer.on('resetComplete', handleReset);
 
     return () => {
       ipcRenderer.removeAllListeners('updateKeyMappings');
@@ -47,7 +47,7 @@ export function useKeyManager() {
           return pos;
         })
       };
-      
+
       ipcRenderer.send('update-key-positions', newPositions);
       return newPositions;
     });
@@ -69,7 +69,7 @@ export function useKeyManager() {
     const { key, activeImage, inactiveImage, width, height } = keyData;
     const updatedMappings = { ...keyMappings };
     const updatedPositions = { ...positions };
-    
+
     if (selectedKey) {
       updatedMappings[selectedKeyType][selectedKey.index] = key;
       updatedPositions[selectedKeyType][selectedKey.index] = {
@@ -80,10 +80,10 @@ export function useKeyManager() {
         height
       };
     }
-  
+
     setKeyMappings(updatedMappings);
     setPositions(updatedPositions);
-    
+
     ipcRenderer.send('update-key-mapping', updatedMappings);
     ipcRenderer.send('update-key-positions', updatedPositions);
     setSelectedKey(null);
