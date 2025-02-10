@@ -113,60 +113,6 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         <div className="flex justify-between w-full mt-[18px]">
           <div className="flex items-center justify-between w-[122px]">
             <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
-              가로
-            </p>
-            <input
-              type="number"
-              value={width}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                if (newValue === "") {
-                  setWidth("");
-                } else {
-                  const numValue = parseInt(newValue);
-                  if (!isNaN(numValue)) {
-                    setWidth(Math.min(Math.max(numValue, 1), 999));
-                  }
-                }
-              }}
-              onBlur={(e) => {
-                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
-                  setWidth(60);
-                }
-              }}
-              className="text-center w-[50px] h-[31.5px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
-            />
-          </div>
-          <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
-              세로
-            </p>
-            <input
-              type="number"
-              value={height}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                if (newValue === "") {
-                  setWidth("");
-                } else {
-                  const numValue = parseInt(newValue);
-                  if (!isNaN(numValue)) {
-                    setWidth(Math.min(Math.max(numValue, 1), 999));
-                  }
-                }
-              }}
-              onBlur={(e) => {
-                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
-                  setWidth(60);
-                }
-              }}
-              className="text-center w-[50px] h-[31.5px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
-            />
-          </div>
-        </div>
-        <div className="flex justify-between w-full mt-[18px]">
-          <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
               대기 상태
             </p>
             <input
@@ -210,6 +156,58 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
                 height: "39px",
               }}
             ></button>
+          </div>
+        </div>
+        <div className="flex justify-between w-full mt-[18px]">
+          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+            키 사이즈
+          </p>
+          <div className="flex items-center gap-[10px]">
+            <input
+              type="number"
+              value={width}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                if (newValue === "") {
+                  setWidth("");
+                } else {
+                  const numValue = parseInt(newValue);
+                  if (!isNaN(numValue)) {
+                    setWidth(Math.min(Math.max(numValue, 1), 999));
+                  }
+                }
+              }}
+              onBlur={(e) => {
+                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
+                  setWidth(60);
+                }
+              }}
+              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            />
+            <p className="text-[#989BA6] text-[13.5px] font-extrabold mt-[2px]">
+              X
+            </p>
+            <input
+              type="number"
+              value={height}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                if (newValue === "") {
+                  setHeight("");
+                } else {
+                  const numValue = parseInt(newValue);
+                  if (!isNaN(numValue)) {
+                    setHeight(Math.min(Math.max(numValue, 1), 999));
+                  }
+                }
+              }}
+              onBlur={(e) => {
+                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
+                  setHeight(60);
+                }
+              }}
+              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            />
           </div>
         </div>
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[15px]">
