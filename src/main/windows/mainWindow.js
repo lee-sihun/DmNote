@@ -37,7 +37,7 @@ class MainWindow {
     //     event.preventDefault()
     //   }
     // })
-    
+
     return this.window
   }
 

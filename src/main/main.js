@@ -203,7 +203,7 @@ class Application {
     ipcMain.handle('get-overlay-visibility', () => {
       return this.overlayWindow && !this.overlayWindow.isDestroyed() && this.overlayWindow.isVisible();
     });
-    
+
     ipcMain.on('toggle-overlay', (_, show) => {
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         if (show) {
@@ -224,7 +224,7 @@ class Application {
         this.overlayWindow.setIgnoreMouseEvents(enabled, { forward: true });
       }
     });
-    
+
     ipcMain.on('get-overlay-lock', (e) => {
       e.reply('update-overlay-lock', store.get('overlayLocked'));
     });
@@ -242,7 +242,7 @@ class Application {
     ipcMain.handle('save-preset', async () => {
       const { dialog } = require('electron');
       const path = require('path');
-      
+
       // 현재 설정들을 가져옴
       const preset = {
         keys: store.get('keys'),
@@ -272,7 +272,7 @@ class Application {
     // 프리셋 불러오기
     ipcMain.handle('load-preset', async () => {
       const { dialog } = require('electron');
-      
+
       const { filePaths } = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
@@ -283,20 +283,20 @@ class Application {
       if (filePaths.length > 0) {
         try {
           const preset = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
-          
+
           // 설정 적용
           store.set('keys', preset.keys);
           store.set('keyPositions', preset.keyPositions);
           store.set('backgroundColor', preset.backgroundColor);
 
           keyboardService.updateKeyMapping(preset.keys);
-          
+
           [this.overlayWindow, this.mainWindow].forEach(window => {
             window.webContents.send('updateKeyMappings', preset.keys);
             window.webContents.send('updateKeyPositions', preset.keyPositions);
             window.webContents.send('updateBackgroundColor', preset.backgroundColor);
           });
-          
+
           return true;
         } catch (err) {
           console.error('Failed to load preset:', err);

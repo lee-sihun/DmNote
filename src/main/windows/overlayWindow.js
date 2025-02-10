@@ -41,7 +41,7 @@ class OverlayWindow {
     const settings = new store();
     const alwaysOnTop = settings.get('alwaysOnTop', true);
     this.window.setAlwaysOnTop(alwaysOnTop, 'screen-saver', 1);
-    
+
     // 포커스 관련 이벤트
     this.window.on('blur', () => {
       if (!this.window.isDestroyed()) {
@@ -59,7 +59,7 @@ class OverlayWindow {
     // 오버레이 고정 설정
     const overlayLocked = settings.get('overlayLocked', true);
     this.window.setIgnoreMouseEvents(overlayLocked, { forward: true });
-    
+
     return this.window
   }
 
