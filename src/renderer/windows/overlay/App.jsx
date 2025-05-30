@@ -1,6 +1,8 @@
 import { Key } from "@components/Key";
+import { Track } from "@components/overlay/Track";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+import { useNoteSystem } from "@hooks/useNoteSystem";
 // import { useSettingsStore } from "@stores/useSettingsStore";
 // import CountDisplay from "@components/CountDisplay";
 
@@ -14,14 +16,38 @@ export default function App() {
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
 
+  // 노트 시스템
+  const {
+    notes,
+    keyStates: noteKeyStates,
+    handleKeyDown,
+    handleKeyUp,
+  } = useNoteSystem();
+  const [trackHeight] = useState(150); // 트랙 높이 설정
+
+  // 기존 키 상태와 노트 시스템 키 상태 병합
+  const [originalKeyStates, setOriginalKeyStates] = useState({});
+
   // 키 상태 변경 리스너
-  const keyStateListener = useCallback((e, { key, state }) => {
-    // 불필요한 객체 스프레드 제거, 직접 업데이트
-    setKeyStates((prev) => {
-      if (prev[key] === (state === "DOWN")) return prev; // 동일 상태면 업데이트 X
-      return { ...prev, [key]: state === "DOWN" };
-    });
-  }, []);
+  const keyStateListener = useCallback(
+    (e, { key, state }) => {
+      const isDown = state === "DOWN";
+
+      // 원본 키 상태 업데이트
+      setOriginalKeyStates((prev) => {
+        if (prev[key] === isDown) return prev;
+        return { ...prev, [key]: isDown };
+      });
+
+      // 노트 시스템 업데이트
+      if (isDown) {
+        handleKeyDown(key);
+      } else {
+        handleKeyUp(key);
+      }
+    },
+    [handleKeyDown, handleKeyUp]
+  );
 
   // 현재 모드의 키 목록 메모이제이션
   const currentKeys = useMemo(
@@ -117,6 +143,27 @@ export default function App() {
       }}
     >
       {currentKeys.map((key, index) => {
+        const position = currentPositions[index] || {
+          dx: 0,
+          dy: 0,
+          width: 60,
+          height: 60,
+        };
+
+        const keyNotes = notes[key] || [];
+
+        return (
+          <Track
+            key={`track-${keyMode}-${index}`}
+            notes={keyNotes}
+            width={position.width}
+            height={trackHeight}
+            position={position}
+          />
+        );
+      })}
+
+      {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
         const position = currentPositions[index] || {
           dx: 0,
@@ -136,7 +183,7 @@ export default function App() {
           <Key
             key={`${keyMode}-${index}`}
             keyName={displayName}
-            active={keyStates[key] || false}
+            active={originalKeyStates[key] || false}
             position={position}
           />
           // </React.Fragment>
