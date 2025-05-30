@@ -17,6 +17,9 @@ class OverlayWindow {
     this.disableContextMenu()
     this.loadContent()
 
+    // 렌더러 프로세스 우선순위 높이기 
+    this.window.webContents.setFrameRate(0); // 프레임 제한 해제
+
     // 개발자 도구 단축키 비활성화
     this.window.webContents.on('before-input-event', (event, input) => {
       if (input.control && input.shift && input.key.toLowerCase() === 'i') {

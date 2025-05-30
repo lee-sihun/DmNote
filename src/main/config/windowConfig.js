@@ -28,7 +28,9 @@ module.exports = {
     fullscreenable: false,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      enableBlinkFeatures: 'CSSContainment',
+      disableBlinkFeatures: 'VSync', // VSync 비활성화로 지연 최소화 (테어링 문제 체크 필요)
     }
   }
 }
