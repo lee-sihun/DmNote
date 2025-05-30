@@ -14,6 +14,9 @@ class KeyboardService {
     this.overlayWindow = null;
     this.keys = loadKeys();
     this.currentMode = '4key'; // 기본 모드
+    this.validKeySet = new Set();
+    this.updateValidKeySet();
+    this.vKeyCache = new Map();
   }
 
   setOverlayWindow(window) {
@@ -31,6 +34,7 @@ class KeyboardService {
   setKeyMode(mode) {
     if (this.keys[mode]) {
       this.currentMode = mode;
+      this.updateValidKeySet();
       return true;
     }
     return false;
@@ -44,19 +48,21 @@ class KeyboardService {
     let key = e.name || e.vKey.toString();
     const state = e.state;
 
-    if (!this.isValidKey(key)) {
+    // 배열 순차 탐색에서 해시 테이블 기반 조회로 개선 
+    if (!this.validKeySet.has(key)) {
       return;
     }
 
     this.sendKeyStateToOverlay(key, state);
   }
 
-  isValidKey(key) {
-    return this.keys[this.currentMode].includes(key);
+  updateValidKeySet() {
+    this.validKeySet = new Set(this.keys[this.currentMode] || []);
   }
 
   updateKeyMapping(keys) {
     this.keys = keys;
+    this.updateValidKeySet();
     saveKeys(keys);
   }
 
