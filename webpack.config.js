@@ -15,12 +15,16 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.jsx?$/,
+        test: /\.(js|jsx|ts|tsx)$/,
         exclude: /node_modules/,
         use: {
           loader: "babel-loader",
           options: {
-            presets: ["@babel/preset-env", "@babel/preset-react"]
+            presets: [
+              ["@babel/preset-env", { targets: "defaults" }],
+              ["@babel/preset-react", { runtime: "automatic" }],
+              "@babel/preset-typescript"
+            ]
           }
         }
       },
@@ -85,7 +89,7 @@ module.exports = {
     },
   },
   resolve: {
-    extensions: [".js", ".jsx"],
+    extensions: [".js", ".jsx", ".ts", ".tsx"],
     alias: {
       '@components': path.resolve(__dirname, 'src/renderer/components'),
       '@styles': path.resolve(__dirname, 'src/renderer/styles'),

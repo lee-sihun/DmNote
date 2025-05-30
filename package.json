@@ -4,10 +4,12 @@
   "description": "DM NOTE",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "start": "npm run type-check && cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "dev": "webpack serve --mode development",
-    "prebuild": "webpack",
-    "build": "electron-builder --win"
+    "prebuild": "npm run type-check && webpack",
+    "build": "electron-builder --win",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch"
   },
   "build": {
     "appId": "com.djmax.keyviewer",
@@ -20,12 +22,14 @@
       {
         "from": "build/",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "directories": {
       "output": "dist",
-      "buildResources": "build" 
+      "buildResources": "build"
     },
     "files": [
       "dist/renderer/**/*",
@@ -50,7 +54,13 @@
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.27.1",
     "@svgr/webpack": "^8.1.0",
+    "@types/node": "^22.15.27",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
+    "@typescript-eslint/parser": "^8.33.0",
     "autoprefixer": "^10.4.20",
     "babel-loader": "^9.2.1",
     "concurrently": "^9.1.1",
@@ -65,6 +75,8 @@
     "postcss-loader": "^8.1.1",
     "style-loader": "^4.0.0",
     "tailwindcss": "^3.4.17",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
     "wait-on": "^8.0.1",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1",
