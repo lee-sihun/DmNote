@@ -21,11 +21,14 @@ class OverlayWindow {
     this.window.webContents.setFrameRate(0); // 프레임 제한 해제
 
     // 개발자 도구 단축키 비활성화
-    this.window.webContents.on('before-input-event', (event, input) => {
-      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
-        event.preventDefault()
-      }
-    })
+    const isDev = process.env.NODE_ENV === 'development'
+    if (!isDev) {
+      this.window.webContents.on('before-input-event', (event, input) => {
+        if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+          event.preventDefault()
+        }
+      })
+    }
 
     this.window.on('close', (event) => {
       // 앱이 종료중이 아니라면 닫기 동작 취소
