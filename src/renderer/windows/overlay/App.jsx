@@ -112,6 +112,8 @@ export default function App() {
       style={{
         backgroundColor:
           backgroundColor === "transparent" ? "transparent" : backgroundColor,
+        willChange: "contents",
+        contain: "layout style paint",
       }}
     >
       {currentKeys.map((key, index) => {

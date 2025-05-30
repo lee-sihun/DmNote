@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { memo, useMemo } from "react";
 import { useDraggable } from "@hooks/useDraggable";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 
@@ -51,16 +51,15 @@ export default function DraggableKey({
   );
 }
 
-export function Key({ keyName, active, position }) {
-  const { dx, dy, width, height = 60, activeImage, inactiveImage } = position;
+export const Key = memo(
+  ({ keyName, active, position }) => {
+    const { dx, dy, width, height = 60, activeImage, inactiveImage } = position;
 
-  return (
-    <div
-      className="image-rendering absolute rounded-[6px]"
-      style={{
+    const keyStyle = useMemo(
+      () => ({
         width: `${width}px`,
         height: `${height}px`,
-        transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
+        transform: `translate3d(${dx}px, ${dy}px, 0)`,
         backgroundColor:
           (active && activeImage) || (!active && inactiveImage)
             ? "transparent"
@@ -83,15 +82,36 @@ export function Key({ keyName, active, position }) {
             : "none",
         backgroundSize: "cover",
         backgroundPosition: "center",
-        willChange: "transform", // GPU 힌트
-        backfaceVisibility: "hidden", // GPU 가속
-      }}
-    >
-      {(!active && !inactiveImage) || (active && !activeImage) ? (
-        <div className="flex items-center justify-center h-full font-semibold">
-          {keyName}
-        </div>
-      ) : null}
-    </div>
-  );
-}
+        // 고주사율 최적화
+        willChange: "transform, background-color, background-image",
+        backfaceVisibility: "hidden",
+        transformStyle: "preserve-3d",
+        contain: "layout style paint",
+      }),
+      [active, activeImage, inactiveImage, dx, dy, width, height]
+    );
+
+    return (
+      <div className="image-rendering absolute rounded-[6px]" style={keyStyle}>
+        {(!active && !inactiveImage) || (active && !activeImage) ? (
+          <div className="flex items-center justify-center h-full font-semibold">
+            {keyName}
+          </div>
+        ) : null}
+      </div>
+    );
+  },
+  (prevProps, nextProps) => {
+    // position 객체 속성 비교
+    return (
+      prevProps.active === nextProps.active &&
+      prevProps.keyName === nextProps.keyName &&
+      prevProps.position.dx === nextProps.position.dx &&
+      prevProps.position.dy === nextProps.position.dy &&
+      prevProps.position.width === nextProps.position.width &&
+      prevProps.position.height === nextProps.position.height &&
+      prevProps.position.activeImage === nextProps.position.activeImage &&
+      prevProps.position.inactiveImage === nextProps.position.inactiveImage
+    );
+  }
+);
