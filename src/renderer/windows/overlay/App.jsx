@@ -1,5 +1,5 @@
 import { Key } from "@components/Key";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 // import { useSettingsStore } from "@stores/useSettingsStore";
 // import CountDisplay from "@components/CountDisplay";
@@ -13,6 +13,25 @@ export default function App() {
   const [backgroundColor, setBackgroundColor] = useState("");
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
+
+  // 키 상태 변경 리스너
+  const keyStateListener = useCallback((e, { key, state }) => {
+    // 불필요한 객체 스프레드 제거, 직접 업데이트
+    setKeyStates((prev) => {
+      if (prev[key] === (state === "DOWN")) return prev; // 동일 상태면 업데이트 X
+      return { ...prev, [key]: state === "DOWN" };
+    });
+  }, []);
+
+  // 현재 모드의 키 목록 메모이제이션
+  const currentKeys = useMemo(
+    () => keyMappings[keyMode] || [],
+    [keyMappings, keyMode]
+  );
+  const currentPositions = useMemo(
+    () => positions[keyMode] || [],
+    [positions, keyMode]
+  );
 
   useEffect(() => {
     // 초기 데이터 요청
@@ -49,13 +68,6 @@ export default function App() {
     //     setKeyStates(prev => ({ ...prev, [key]: false }));
     //   }
     // };
-    const keyStateListener = (e, { key, state, mode }) => {
-      setKeyStates((prev) => ({
-        ...prev,
-        [key]: state === "DOWN",
-      }));
-    };
-
     const keyModeListener = (e, mode) => {
       setKeyMode(mode);
     };
@@ -92,7 +104,7 @@ export default function App() {
       ipcRenderer.removeAllListeners("updateBackgroundColor");
       // ipcRenderer.removeAllListeners('update-show-key-count');
     };
-  }, []);
+  }, [keyStateListener]);
 
   return (
     <div
@@ -102,13 +114,13 @@ export default function App() {
           backgroundColor === "transparent" ? "transparent" : backgroundColor,
       }}
     >
-      {keyMappings[keyMode]?.map((key, index) => {
+      {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
-        const position = positions[keyMode]?.[index] || {
+        const position = currentPositions[index] || {
           dx: 0,
           dy: 0,
           width: 60,
-          heigt: 60,
+          height: 60,
         };
 
         return (
@@ -120,8 +132,9 @@ export default function App() {
           //     />
           //   )}
           <Key
+            key={`${keyMode}-${index}`}
             keyName={displayName}
-            active={keyStates[key]}
+            active={keyStates[key] || false}
             position={position}
           />
           // </React.Fragment>
