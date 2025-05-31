@@ -4,10 +4,10 @@ export function useNoteSystem() {
   const [notes, setNotes] = useState({});
   const [keyStates, setKeyStates] = useState({});
   const activeNotes = useRef(new Map());
-  const animationFrame = useRef();
 
-  // 노트 생성
-  const createNote = useCallback((keyName, startTime) => {
+  // 노트 생성 시 고정된 시간 사용
+  const createNote = useCallback((keyName) => {
+    const startTime = performance.now();
     const noteId = `${keyName}_${startTime}`;
     const newNote = {
       id: noteId,
@@ -15,7 +15,7 @@ export function useNoteSystem() {
       startTime,
       endTime: null,
       isActive: true,
-      color: '#ffffff', // 활성 노트는 노란색
+      color: '#ffffff',
     };
 
     setNotes(prev => ({
@@ -26,8 +26,9 @@ export function useNoteSystem() {
     return noteId;
   }, []);
 
-  // 노트 완성
-  const finalizeNote = useCallback((keyName, noteId, endTime) => {
+  const finalizeNote = useCallback((keyName, noteId) => {
+    const endTime = performance.now();
+
     setNotes(prev => {
       if (!prev[keyName]) return prev;
 
@@ -39,7 +40,7 @@ export function useNoteSystem() {
               ...note,
               endTime,
               isActive: false,
-              color: '#ffffff', // 완성된 노트는 초록색
+              color: '#ffffff',
             };
           }
           return note;
@@ -51,46 +52,42 @@ export function useNoteSystem() {
   const handleKeyDown = useCallback((keyName) => {
     if (keyStates[keyName]) return;
 
-    const startTime = Date.now();
-    const noteId = createNote(keyName, startTime);
+    const noteId = createNote(keyName);
 
     setKeyStates(prev => ({ ...prev, [keyName]: true }));
-    activeNotes.current.set(keyName, { noteId, startTime });
+    activeNotes.current.set(keyName, { noteId });
   }, [keyStates, createNote]);
 
   const handleKeyUp = useCallback((keyName) => {
     const activeNote = activeNotes.current.get(keyName);
 
     if (activeNote) {
-      const endTime = Date.now();
-      finalizeNote(keyName, activeNote.noteId, endTime);
+      finalizeNote(keyName, activeNote.noteId);
       activeNotes.current.delete(keyName);
     }
 
     setKeyStates(prev => ({ ...prev, [keyName]: false }));
   }, [finalizeNote]);
 
-  // 화면 밖으로 나간 노트들 정리
+  // 화면 밖으로 나간 노트 정리
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
-      const currentTime = Date.now();
+      const currentTime = performance.now();
       const flowSpeed = 50;
       const trackHeight = 150;
 
       setNotes(prev => {
-        const updated = {};
         let hasChanges = false;
+        const updated = {};
 
         Object.entries(prev).forEach(([keyName, keyNotes]) => {
           const filtered = keyNotes.filter(note => {
-            // 활성 노트는 항상 유지
             if (note.isActive) return true;
 
-            // 완성된 노트는 화면 밖으로 나가면 제거
             const timeSinceCompletion = currentTime - note.endTime;
             const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
 
-            return yPosition < trackHeight + 100; // 여유분 추가
+            return yPosition < trackHeight + 150; // 여유분
           });
 
           if (filtered.length !== keyNotes.length) {
@@ -104,7 +101,7 @@ export function useNoteSystem() {
 
         return hasChanges ? updated : prev;
       });
-    }, 1000);
+    }, 3000);
 
     return () => clearInterval(cleanupInterval);
   }, []);
