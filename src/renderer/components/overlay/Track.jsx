@@ -2,45 +2,74 @@ import React, { memo, useEffect, useRef } from "react";
 import { Note } from "./Note";
 
 export const Track = memo(({ notes, width, height, position }) => {
-  // const animationRef = useRef();
-  // const trackRef = useRef();
-  // const flowOffsetRef = useRef(0);
-  // const lastTimeRef = useRef(0);
+  const trackRef = useRef();
+  const animationRef = useRef();
+  const noteRefsRef = useRef(new Map());
 
-  // // CSS Transform을 사용한 애니메이션 (React 상태 없이)
-  // useEffect(() => {
-  //   const flowSpeed = 50; // 픽셀/초
+  // 트랙 전체의 노트들을 한 번에 애니메이션
+  useEffect(() => {
+    const flowSpeed = 50;
 
-  //   const animate = (currentTime) => {
-  //     if (lastTimeRef.current === 0) {
-  //       lastTimeRef.current = currentTime;
-  //     }
+    const animate = (currentTime) => {
+      // 모든 노트들을 한 번에 업데이트
+      notes.forEach((note) => {
+        const noteElement = noteRefsRef.current.get(note.id);
+        if (!noteElement) return;
 
-  //     const deltaTime = currentTime - lastTimeRef.current;
-  //     lastTimeRef.current = currentTime;
+        const startTime = note.startTime;
+        const endTime = note.isActive ? currentTime : note.endTime;
 
-  //     // 직접 DOM 조작으로 부드러운 애니메이션
-  //     flowOffsetRef.current =
-  //       (flowOffsetRef.current + (flowSpeed * deltaTime) / 1000) % 12;
+        if (note.isActive) {
+          // 활성 노트: 높이만 변경
+          const pressDuration = currentTime - startTime;
+          const noteLength = Math.max(4, (pressDuration * flowSpeed) / 1000);
 
-  //     if (trackRef.current) {
-  //       // CSS transform을 사용해서 GPU 가속 활용
-  //       trackRef.current.style.backgroundPosition = `0 ${
-  //         -Math.round(flowOffsetRef.current * 10) / 10
-  //       }px`;
-  //     }
+          noteElement.style.height = `${Math.round(noteLength)}px`;
+          noteElement.style.bottom = "0px";
+          noteElement.style.opacity = "1";
+        } else {
+          // 완성된 노트: 위치 변경
+          const noteDuration = endTime - startTime;
+          const noteLength = Math.max(4, (noteDuration * flowSpeed) / 1000);
 
-  //     animationRef.current = requestAnimationFrame(animate);
-  //   };
+          const timeSinceCompletion = currentTime - endTime;
+          const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
 
-  //   animationRef.current = requestAnimationFrame(animate);
+          const opacity =
+            yPosition > height ? Math.max(0, 1 - (yPosition - height) / 50) : 1;
 
-  //   return () => {
-  //     if (animationRef.current) {
-  //       cancelAnimationFrame(animationRef.current);
-  //     }
-  //   };
-  // }, []);
+          noteElement.style.height = `${Math.round(noteLength)}px`;
+          noteElement.style.bottom = `${Math.round(yPosition)}px`;
+          noteElement.style.opacity = opacity;
+        }
+      });
+
+      // 노트가 있을 때만 계속 애니메이션
+      if (notes.length > 0) {
+        animationRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    // 노트가 있을 때만 애니메이션 시작
+    if (notes.length > 0) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [notes, height]); // notes 배열이 변경될 때마다 재시작
+
+  // 노트 ref 등록 함수
+  const registerNoteRef = (noteId, element) => {
+    if (element) {
+      noteRefsRef.current.set(noteId, element);
+    } else {
+      noteRefsRef.current.delete(noteId);
+    }
+  };
 
   const trackStyle = {
     position: "absolute",
@@ -53,28 +82,20 @@ export const Track = memo(({ notes, width, height, position }) => {
     borderRadius: "4px",
     overflow: "hidden",
     pointerEvents: "none",
-    // GPU 레이어 강제 생성
-    willChange: "background-position",
+    willChange: "contents",
     backfaceVisibility: "hidden",
-    transform: "translateZ(0)", // GPU 레이어 활성화
-    // 흐르는 효과를 위한 배경 패턴
-    // backgroundImage: `
-    //   repeating-linear-gradient(
-    //     0deg,
-    //     rgba(255, 255, 255, 0.1) 0px,
-    //     rgba(255, 255, 255, 0.1) 2px,
-    //     transparent 2px,
-    //     transparent 10px
-    //   )
-    // `,
-    // backgroundSize: "100% 12px",
+    transform: "translateZ(0)",
   };
 
   return (
-    // <div ref={trackRef} style={trackStyle}>
-    <div style={trackStyle}>
+    <div ref={trackRef} style={trackStyle}>
       {notes.map((note) => (
-        <Note key={note.id} note={note} trackHeight={height} />
+        <Note
+          key={note.id}
+          note={note}
+          trackHeight={height}
+          registerRef={registerNoteRef}
+        />
       ))}
     </div>
   );
