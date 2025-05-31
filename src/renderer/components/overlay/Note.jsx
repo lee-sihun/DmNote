@@ -22,11 +22,11 @@ export const Note = memo(({ note, registerRef }) => {
     height: "4px",
     backgroundColor: note.color || "#ffffff",
     borderRadius: note.isActive ? "2px 2px 0 0" : "2px",
-    opacity: 1,
+    opacity: 0.8,
     zIndex: 10,
-    boxShadow: note.isActive
-      ? "0 0 4px rgba(255, 255, 255, 0.5)"
-      : "0 0 2px rgba(255, 255, 255, 0.3)",
+    // boxShadow: note.isActive
+    //   ? "0 0 4px rgba(255, 255, 255, 0.5)"
+    //   : "0 0 2px rgba(255, 255, 255, 0.3)",
     // GPU 가속 설정
     willChange: "height, bottom, opacity",
     backfaceVisibility: "hidden",

@@ -27,7 +27,8 @@ export const Track = memo(({ notes, width, height, position }) => {
 
           noteElement.style.height = `${Math.round(noteLength)}px`;
           noteElement.style.bottom = "0px";
-          noteElement.style.opacity = "1";
+          // noteElement.style.opacity = "1";
+          noteElement.style.opacity = "0.8";
         } else {
           // 완성된 노트: 위치 변경
           const noteDuration = endTime - startTime;
@@ -41,7 +42,8 @@ export const Track = memo(({ notes, width, height, position }) => {
 
           noteElement.style.height = `${Math.round(noteLength)}px`;
           noteElement.style.bottom = `${Math.round(yPosition)}px`;
-          noteElement.style.opacity = opacity;
+          // noteElement.style.opacity = opacity;
+          noteElement.style.opacity = "0.8";
         }
       });
 
