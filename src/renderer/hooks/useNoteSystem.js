@@ -17,7 +17,6 @@ export function useNoteSystem() {
       startTime,
       endTime: null,
       isActive: true,
-      color: '#ffffff',
     };
 
     setNotes(prev => ({
@@ -42,7 +41,6 @@ export function useNoteSystem() {
               ...note,
               endTime,
               isActive: false,
-              color: '#ffffff',
             };
           }
           return note;

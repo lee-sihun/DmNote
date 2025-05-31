@@ -3,44 +3,44 @@ const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 360, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 290, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 430, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 500, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 160, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 570, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
+    { dx: 360, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 290, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 430, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 160, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 570, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
   ],
   "5key": [
-    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 }
+    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ],
   "6key": [
-    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 }
+    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ],
   "8key": [
-    { dx: 230, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 300, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 370, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 440, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 510, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 580, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 100, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 650, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 270, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 },
-    { dx: 480, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0 }
+    { dx: 230, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 300, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 440, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 510, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 580, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 100, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 650, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 270, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 480, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ]
 }
 
@@ -51,7 +51,37 @@ function loadKeyPositions() {
       store.set('keyPositions', DEFAULT_POSITIONS);
       return DEFAULT_POSITIONS;
     }
-    return positions;
+
+    // 기존 사용자를 위한 호환성 처리 - noteColor와 noteOpacity가 없는 경우 기본값 추가
+    const updatedPositions = {};
+    let hasUpdates = false;
+
+    Object.keys(positions).forEach(keyMode => {
+      updatedPositions[keyMode] = positions[keyMode].map(key => {
+        const updatedKey = { ...key };
+
+        // noteColor가 없으면 기본값 추가
+        if (!updatedKey.hasOwnProperty('noteColor')) {
+          updatedKey.noteColor = '#FFFFFF';
+          hasUpdates = true;
+        }
+
+        // noteOpacity가 없으면 기본값 추가
+        if (!updatedKey.hasOwnProperty('noteOpacity')) {
+          updatedKey.noteOpacity = 80;
+          hasUpdates = true;
+        }
+
+        return updatedKey;
+      });
+    });
+
+    // 업데이트가 있었다면 저장
+    if (hasUpdates) {
+      store.set('keyPositions', updatedPositions);
+    }
+
+    return updatedPositions;
   } catch (error) {
     console.error('Failed to load key positions:', error);
     return DEFAULT_POSITIONS;

@@ -1,6 +1,6 @@
 import React, { memo, useEffect, useRef } from "react";
 
-export const Note = memo(({ note, registerRef }) => {
+export const Note = memo(({ note, registerRef, noteColor, noteOpacity }) => {
   const noteRef = useRef();
 
   // ref 등록
@@ -20,10 +20,10 @@ export const Note = memo(({ note, registerRef }) => {
     transform: "translateX(-50%) translateZ(0)",
     width: "100%",
     height: "6px",
-    backgroundColor: note.color || "#ffffff",
+    backgroundColor: noteColor || "#ffffff",
     // borderRadius: note.isActive ? "2px 2px 0 0" : "2px",
     borderRadius: "2px",
-    opacity: 0.8,
+    opacity: (noteOpacity || 80) / 100,
     zIndex: 10,
     // boxShadow: note.isActive
     //   ? "0 0 4px rgba(255, 255, 255, 0.5)"

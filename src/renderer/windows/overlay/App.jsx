@@ -155,6 +155,8 @@ export default function App() {
           dy: 0,
           width: 60,
           height: 60,
+          noteColor: "#FFFFFF",
+          noteOpacity: 80,
         };
 
         const keyNotes = notes[key] || [];
@@ -173,6 +175,8 @@ export default function App() {
             height={trackHeight}
             // position={position}
             position={trackPosition}
+            noteColor={position.noteColor || "#FFFFFF"}
+            noteOpacity={position.noteOpacity || 80}
           />
         );
       })}
