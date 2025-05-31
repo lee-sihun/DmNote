@@ -59,6 +59,13 @@ export default function App() {
     [positions, keyMode]
   );
 
+  // 모든 키 중 가장 위에 있는 키의 Y 위치 계산
+  const topMostY = useMemo(() => {
+    if (!currentPositions.length) return 0;
+
+    return Math.min(...currentPositions.map((pos) => pos.dy));
+  }, [currentPositions]);
+
   useEffect(() => {
     // 초기 데이터 요청
     ipcRenderer.send("getKeyMappings");
@@ -152,13 +159,20 @@ export default function App() {
 
         const keyNotes = notes[key] || [];
 
+        // 트랙 위치를 가장 위쪽 키 기준으로 통일
+        const trackPosition = {
+          ...position,
+          dy: topMostY, // 모든 트랙이 동일한 Y 위치에서 시작
+        };
+
         return (
           <Track
             key={`track-${keyMode}-${index}`}
             notes={keyNotes}
             width={position.width}
             height={trackHeight}
-            position={position}
+            // position={position}
+            position={trackPosition}
           />
         );
       })}
