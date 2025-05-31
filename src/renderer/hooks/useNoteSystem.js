@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+export const FLOW_SPEED = 130;
+
 export function useNoteSystem() {
   const [notes, setNotes] = useState({});
   const [keyStates, setKeyStates] = useState({});
@@ -73,7 +75,7 @@ export function useNoteSystem() {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const currentTime = performance.now();
-      const flowSpeed = 50;
+      const flowSpeed = FLOW_SPEED;
       const trackHeight = 150;
 
       setNotes(prev => {
@@ -82,8 +84,10 @@ export function useNoteSystem() {
 
         Object.entries(prev).forEach(([keyName, keyNotes]) => {
           const filtered = keyNotes.filter(note => {
+            // 활성 노트 유지 
             if (note.isActive) return true;
 
+            // 완성된 노트만 정리
             const timeSinceCompletion = currentTime - note.endTime;
             const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
 
@@ -101,7 +105,7 @@ export function useNoteSystem() {
 
         return hasChanges ? updated : prev;
       });
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(cleanupInterval);
   }, []);

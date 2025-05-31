@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Note } from "./Note";
+import { FLOW_SPEED } from "@hooks/useNoteSystem";
 
 export const Track = memo(({ notes, width, height, position }) => {
   const trackRef = useRef();
@@ -8,7 +9,7 @@ export const Track = memo(({ notes, width, height, position }) => {
 
   // 트랙 전체의 노트들을 한 번에 애니메이션
   useEffect(() => {
-    const flowSpeed = 50;
+    const flowSpeed = FLOW_SPEED;
 
     const animate = (currentTime) => {
       // 모든 노트들을 한 번에 업데이트
@@ -77,8 +78,8 @@ export const Track = memo(({ notes, width, height, position }) => {
     top: `${position.dy - height}px`,
     width: `${width}px`,
     height: `${height}px`,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
+    // backgroundColor: "rgba(255, 255, 255, 0.05)",
+    // border: "1px solid rgba(255, 255, 255, 0.1)",
     borderRadius: "4px",
     overflow: "hidden",
     pointerEvents: "none",
