@@ -13,8 +13,18 @@ export const Track = memo(({ notes, width, height, position }) => {
     const minNoteHeight = 6; // 최소 노트 높이
     const fadeZoneHeight = 50; // 페이드 아웃 시작 높이
 
+    // 트랙에 페이드 마스크 적용
+    if (trackRef.current) {
+      const fadeStartFromBottom = height - fadeZoneHeight;
+      const trackMask = `linear-gradient(to top, 
+        rgba(0,0,0,1) 0%, 
+        rgba(0,0,0,1) ${fadeStartFromBottom}px, 
+        rgba(0,0,0,0) ${height}px)`;
+
+      trackRef.current.style.mask = trackMask;
+    }
+
     const animate = (currentTime) => {
-      // 모든 노트들을 한 번에 업데이트
       notes.forEach((note) => {
         const noteElement = noteRefsRef.current.get(note.id);
         if (!noteElement) return;
@@ -23,7 +33,7 @@ export const Track = memo(({ notes, width, height, position }) => {
         const endTime = note.isActive ? currentTime : note.endTime;
 
         if (note.isActive) {
-          // 활성 노트: 높이만 변경
+          // 활성 노트
           const pressDuration = currentTime - startTime;
           const noteLength = Math.max(
             minNoteHeight,
@@ -32,10 +42,12 @@ export const Track = memo(({ notes, width, height, position }) => {
 
           noteElement.style.height = `${Math.round(noteLength)}px`;
           noteElement.style.bottom = "0px";
-          // noteElement.style.opacity = "1";
           noteElement.style.opacity = "0.8";
+
+          // 개별 노트 마스크 제거 (트랙 마스크 사용)
+          noteElement.style.mask = "none";
         } else {
-          // 완성된 노트: 위치 변경
+          // 완성된 노트
           const noteDuration = endTime - startTime;
           const noteLength = Math.max(
             minNoteHeight,
@@ -45,28 +57,23 @@ export const Track = memo(({ notes, width, height, position }) => {
           const timeSinceCompletion = currentTime - endTime;
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
 
-          // 페이드 아웃
-          const fadeStartPosition = height - fadeZoneHeight; // 페이드 시작 지점
-          let opacity = 0.8; // 기본 투명도
+          noteElement.style.height = `${Math.round(noteLength)}px`;
+          noteElement.style.bottom = `${Math.round(yPosition)}px`;
 
-          if (yPosition > fadeStartPosition) {
-            // 페이드 영역에 들어간 경우
-            const fadeProgress =
-              (yPosition - fadeStartPosition) / fadeZoneHeight;
+          // 화면 밖으로 나가는 추가 페이드아웃만 적용
+          const screenFadeStart = height;
+          let opacity = 0.8;
+
+          if (yPosition > screenFadeStart) {
+            const fadeProgress = (yPosition - screenFadeStart) / 50;
             opacity = 0.8 * (1 - Math.min(fadeProgress, 1));
           }
 
-          // const opacity =
-          //   yPosition > height ? Math.max(0, 1 - (yPosition - height) / 50) : 1;
-
-          noteElement.style.height = `${Math.round(noteLength)}px`;
-          noteElement.style.bottom = `${Math.round(yPosition)}px`;
-          // noteElement.style.opacity = opacity;
-          noteElement.style.opacity = Math.max(0, opacity);
+          noteElement.style.opacity = opacity;
+          noteElement.style.mask = "none";
         }
       });
 
-      // 노트가 있을 때만 계속 애니메이션
       if (notes.length > 0) {
         animationRef.current = requestAnimationFrame(animate);
       }
