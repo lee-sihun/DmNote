@@ -108,6 +108,11 @@ export default function Grid() {
               positions[selectedKeyType][selectedKey.index].inactiveImage,
             width: positions[selectedKeyType][selectedKey.index].width,
             height: positions[selectedKeyType][selectedKey.index].height,
+            noteColor:
+              positions[selectedKeyType][selectedKey.index].noteColor ||
+              "#FFFFFF",
+            noteOpacity:
+              positions[selectedKeyType][selectedKey.index].noteOpacity || 80,
           }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}

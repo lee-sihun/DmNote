@@ -66,7 +66,7 @@ export function useKeyManager() {
   };
 
   const handleKeyUpdate = (keyData) => {
-    const { key, activeImage, inactiveImage, width, height } = keyData;
+    const { key, activeImage, inactiveImage, width, height, noteColor, noteOpacity } = keyData;
     const updatedMappings = { ...keyMappings };
     const updatedPositions = { ...positions };
 
@@ -77,7 +77,9 @@ export function useKeyManager() {
         activeImage,
         inactiveImage,
         width,
-        height
+        height,
+        noteColor,
+        noteOpacity,
       };
     }
 
