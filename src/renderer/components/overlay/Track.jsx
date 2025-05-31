@@ -43,7 +43,7 @@ export const Track = memo(({ notes, width, height, position }) => {
           noteElement.style.height = `${Math.round(noteLength)}px`;
           noteElement.style.bottom = "0px";
           noteElement.style.opacity = "0.8";
-
+          noteElement.style.borderRadius = "2px 2px 0 0";
           // 개별 노트 마스크 제거 (트랙 마스크 사용)
           noteElement.style.mask = "none";
         } else {
@@ -71,6 +71,7 @@ export const Track = memo(({ notes, width, height, position }) => {
 
           noteElement.style.opacity = opacity;
           noteElement.style.mask = "none";
+          noteElement.style.borderRadius = "2px";
         }
       });
 
@@ -108,7 +109,7 @@ export const Track = memo(({ notes, width, height, position }) => {
     height: `${height}px`,
     // backgroundColor: "rgba(255, 255, 255, 0.05)",
     // border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "4px",
+    // borderRadius: "4px",
     overflow: "hidden",
     pointerEvents: "none",
     willChange: "contents",
