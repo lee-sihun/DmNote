@@ -22,7 +22,7 @@ export const Note = memo(({ note, registerRef }) => {
     height: "6px",
     backgroundColor: note.color || "#ffffff",
     // borderRadius: note.isActive ? "2px 2px 0 0" : "2px",
-    borderRadius: "2px 2px 0 0",
+    borderRadius: "2px",
     opacity: 0.8,
     zIndex: 10,
     // boxShadow: note.isActive
