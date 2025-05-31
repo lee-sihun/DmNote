@@ -19,7 +19,7 @@ export const Note = memo(({ note, registerRef }) => {
     left: "50%",
     transform: "translateX(-50%) translateZ(0)",
     width: "100%",
-    height: "4px",
+    height: "6px",
     backgroundColor: note.color || "#ffffff",
     borderRadius: note.isActive ? "2px 2px 0 0" : "2px",
     opacity: 0.8,

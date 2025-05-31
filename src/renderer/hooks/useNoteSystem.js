@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-export const FLOW_SPEED = 130;
+export const FLOW_SPEED = 170;
 
 export function useNoteSystem() {
   const [notes, setNotes] = useState({});

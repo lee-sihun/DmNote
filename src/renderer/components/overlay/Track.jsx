@@ -10,6 +10,7 @@ export const Track = memo(({ notes, width, height, position }) => {
   // 트랙 전체의 노트들을 한 번에 애니메이션
   useEffect(() => {
     const flowSpeed = FLOW_SPEED;
+    const minNoteHeight = 6; // 최소 노트 높이
 
     const animate = (currentTime) => {
       // 모든 노트들을 한 번에 업데이트
@@ -23,7 +24,7 @@ export const Track = memo(({ notes, width, height, position }) => {
         if (note.isActive) {
           // 활성 노트: 높이만 변경
           const pressDuration = currentTime - startTime;
-          const noteLength = Math.max(4, (pressDuration * flowSpeed) / 1000);
+          const noteLength = Math.max(minNoteHeight, (pressDuration * flowSpeed) / 1000);
 
           noteElement.style.height = `${Math.round(noteLength)}px`;
           noteElement.style.bottom = "0px";
@@ -32,7 +33,7 @@ export const Track = memo(({ notes, width, height, position }) => {
         } else {
           // 완성된 노트: 위치 변경
           const noteDuration = endTime - startTime;
-          const noteLength = Math.max(4, (noteDuration * flowSpeed) / 1000);
+          const noteLength = Math.max(minNoteHeight, (noteDuration * flowSpeed) / 1000);
 
           const timeSinceCompletion = currentTime - endTime;
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
