@@ -11,7 +11,7 @@ export const Track = memo(
     // 트랙 전체의 노트들을 한 번에 애니메이션
     useEffect(() => {
       const flowSpeed = FLOW_SPEED;
-      const minNoteHeight = 6; // 최소 노트 높이
+      const minNoteHeight = 0; // 최소 노트 높이
       const fadeZoneHeight = 50; // 페이드 아웃 시작 높이
 
       // 트랙에 페이드 마스크 적용
