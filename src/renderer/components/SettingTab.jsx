@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import Github from "@assets/svgs/github.svg";
 import Bug from "@assets/svgs/Bug.svg";
+import Checkbox from "@components/Checkbox";
+import Radio from "@components/Radio";
+
 
 export default function SettingTab() {
   const {
@@ -218,59 +221,6 @@ export default function SettingTab() {
       </div>
       <Footer />
     </div>
-  );
-}
-
-function Checkbox({ checked, onChange }) {
-  const [isChecked, setIsChecked] = useState(checked);
-
-  useEffect(() => {
-    setIsChecked(checked);
-  }, [checked]);
-
-  return (
-    <div
-      className={`relative w-[27px] h-[16px] rounded-[75px] cursor-pointer transition-colors duration-75 
-        ${isChecked ? "bg-[#493C1D]" : "bg-[#3B4049]"}`}
-      onClick={onChange}
-    >
-      <div
-        className={`absolute w-[12px] h-[12px] rounded-[75px] top-[2px] transition-all duration-75 ease-in-out 
-          ${
-            isChecked ? "left-[13px] bg-[#FFB400]" : "left-[2px] bg-[#989BA6]"
-          }`}
-      />
-    </div>
-  );
-}
-
-function Radio({ value, name, checked, onChange, children }) {
-  return (
-    <label className="flex items-center cursor-pointer">
-      <input
-        type="radio"
-        name={name}
-        value={value}
-        className="hidden"
-        checked={checked}
-        onChange={onChange}
-      />
-      <span className="w-[15px] h-[15px] inline-block mr-[10px] rounded-full bg-[#3B4049] border border-[#989BA6] flex-shrink-0 relative">
-        <span
-          className={`
-            absolute inset-0 rounded-full transform transition-all duration-200
-            ${
-              checked
-                ? "bg-[#FFB400] scale-[0.5]"
-                : "bg-transparent scale-[0.3]"
-            }
-          `}
-        />
-      </span>
-      <span className="text-[13.5px] font-medium text-white leading-[15px] text-center">
-        {children}
-      </span>
-    </label>
   );
 }
 
