@@ -8,7 +8,7 @@ interface RadioProps {
   children: React.ReactNode;
 }
 
-const Radio: React.FC<RadioProps> = ({ value, name, checked, onChange, children }) => {
+const Radio = ({ value, name, checked, onChange, children }: RadioProps) => {
   return (
     <label className="flex items-center cursor-pointer">
       <input

@@ -5,7 +5,7 @@ interface CheckboxProps {
   onChange: () => void;
 }
 
-const Checkbox: React.FC<CheckboxProps> = ({ checked, onChange }) => {
+const Checkbox = ({ checked, onChange }: CheckboxProps) => {
   const [isChecked, setIsChecked] = useState(checked);
 
   useEffect(() => {

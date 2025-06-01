@@ -1,5 +1,5 @@
-import Tab from "@components/Tab";
-import TitleBar from "@components/TitleBar";
+import Tab from "@components/main/Tab";
+import TitleBar from "@components/main/TitleBar";
 import React from "react";
 
 export default function App() {
