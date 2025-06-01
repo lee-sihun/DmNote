@@ -42,6 +42,11 @@ class Application {
       store.set('overlayLocked', false);
     }
 
+    // 노트 효과 설정
+    if (store.get('noteEffect') === undefined) {
+      store.set('noteEffect', false);
+    }
+
     // ANGLE 모드 초기 설정
     if (store.get('angleMode') === undefined) {
       store.set('angleMode', 'd3d11');
@@ -227,6 +232,18 @@ class Application {
 
     ipcMain.on('get-overlay-lock', (e) => {
       e.reply('update-overlay-lock', store.get('overlayLocked'));
+    });
+
+    // 노트 효과 설정
+    ipcMain.on('toggle-note-effect', (_, enabled) => {
+      store.set('noteEffect', enabled);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.webContents.send('update-note-effect', enabled);
+      }
+    });
+
+    ipcMain.on('get-note-effect', (e) => {
+      e.reply('update-note-effect', store.get('noteEffect', true));
     });
 
     // ANGLE 모드 설정

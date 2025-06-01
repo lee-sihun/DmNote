@@ -11,7 +11,6 @@ export default function App() {
   const [keyMode, setKeyMode] = useState("4key");
   const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
-  const [keyStates, setKeyStates] = useState({});
   const [backgroundColor, setBackgroundColor] = useState("");
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
@@ -19,7 +18,6 @@ export default function App() {
   // 노트 시스템
   const {
     notes,
-    keyStates: noteKeyStates,
     handleKeyDown,
     handleKeyUp,
   } = useNoteSystem();
@@ -40,11 +38,13 @@ export default function App() {
       });
 
       // 노트 시스템 업데이트
-      if (isDown) {
-        handleKeyDown(key);
-      } else {
-        handleKeyUp(key);
-      }
+      requestAnimationFrame(() => {
+        if (isDown) {
+          handleKeyDown(key);
+        } else {
+          handleKeyUp(key);
+        }
+      });
     },
     [handleKeyDown, handleKeyUp]
   );

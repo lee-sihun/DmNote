@@ -15,6 +15,8 @@ export default function SettingTab() {
     setOverlayLocked,
     angleMode,
     setAngleMode,
+    noteEffect,
+    setNoteEffect,
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -50,6 +52,10 @@ export default function SettingTab() {
       setOverlayLocked(value);
     };
 
+    const noteEffectHandler = (_, value) => {
+      setNoteEffect(value);
+    };
+
     ipcRenderer.send("get-hardware-acceleration");
     ipcRenderer.on("update-hardware-acceleration", updateHandler);
 
@@ -62,6 +68,9 @@ export default function SettingTab() {
     ipcRenderer.send("get-overlay-lock");
     ipcRenderer.on("update-overlay-lock", overlayLockHandler);
 
+    ipcRenderer.send("get-note-effect");
+    ipcRenderer.on("update-note-effect", noteEffectHandler);
+
     ipcRenderer.invoke("get-angle-mode").then((mode) => {
       setAngleMode(mode);
     });
@@ -71,6 +80,7 @@ export default function SettingTab() {
       ipcRenderer.removeAllListeners("update-always-on-top");
       // ipcRenderer.removeAllListeners('update-show-key-count');
       ipcRenderer.removeAllListeners("update-overlay-lock");
+      ipcRenderer.removeAllListeners("update-note-effect");
     };
   }, []);
 
@@ -111,6 +121,13 @@ export default function SettingTab() {
     const newState = !overlayLocked;
     setOverlayLocked(newState);
     ipcRenderer.send("toggle-overlay-lock", newState);
+  };
+
+  // 노트 효과 핸들러
+  const handleNoteEffectChange = () => {
+    const newState = !noteEffect;
+    setNoteEffect(newState);
+    ipcRenderer.send("toggle-note-effect", newState);
   };
 
   // 그래픽 렌더링 모드 변경 핸들러
@@ -156,6 +173,13 @@ export default function SettingTab() {
             checked={hardwareAcceleration}
             onChange={handleHardwareAccelerationChange}
           />
+        </div>
+        <div className="w-full h-[0.75px] bg-[#3C4049]" />
+        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
+          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+            노트 효과 표시
+          </p>
+          <Checkbox checked={noteEffect} onChange={handleNoteEffectChange} />
         </div>
         {/* <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">

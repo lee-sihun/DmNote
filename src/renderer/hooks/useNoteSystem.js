@@ -1,13 +1,34 @@
+// src/renderer/hooks/useNoteSystem.js
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 export const FLOW_SPEED = 170;
 
 export function useNoteSystem() {
   const [notes, setNotes] = useState({});
-  const [keyStates, setKeyStates] = useState({});
+  const noteEffectEnabled = useRef(true);
   const activeNotes = useRef(new Map());
 
-  // 노트 생성 시 고정된 시간 사용
+  useEffect(() => {
+    const { ipcRenderer } = window.require("electron");
+
+    ipcRenderer.send("get-note-effect");
+
+    const noteEffectListener = (_, enabled) => {
+      noteEffectEnabled.current = enabled;
+
+      if (!enabled) {
+        setNotes({});
+        activeNotes.current.clear();
+      }
+    };
+
+    ipcRenderer.on("update-note-effect", noteEffectListener);
+
+    return () => {
+      ipcRenderer.removeAllListeners("update-note-effect");
+    };
+  }, []);
+
   const createNote = useCallback((keyName) => {
     const startTime = performance.now();
     const noteId = `${keyName}_${startTime}`;
@@ -32,16 +53,11 @@ export function useNoteSystem() {
 
     setNotes(prev => {
       if (!prev[keyName]) return prev;
-
       return {
         ...prev,
         [keyName]: prev[keyName].map(note => {
           if (note.id === noteId) {
-            return {
-              ...note,
-              endTime,
-              isActive: false,
-            };
+            return { ...note, endTime, isActive: false };
           }
           return note;
         }),
@@ -49,27 +65,28 @@ export function useNoteSystem() {
     });
   }, []);
 
+  // 노트 생성/완료
   const handleKeyDown = useCallback((keyName) => {
-    if (keyStates[keyName]) return;
+    if (!noteEffectEnabled.current) return;
+
+    // 활성화된 노트가 있는지 체크
+    if (activeNotes.current.has(keyName)) return;
 
     const noteId = createNote(keyName);
-
-    setKeyStates(prev => ({ ...prev, [keyName]: true }));
     activeNotes.current.set(keyName, { noteId });
-  }, [keyStates, createNote]);
+  }, [createNote]);
 
   const handleKeyUp = useCallback((keyName) => {
-    const activeNote = activeNotes.current.get(keyName);
+    if (!noteEffectEnabled.current) return;
 
+    const activeNote = activeNotes.current.get(keyName);
     if (activeNote) {
       finalizeNote(keyName, activeNote.noteId);
       activeNotes.current.delete(keyName);
     }
-
-    setKeyStates(prev => ({ ...prev, [keyName]: false }));
   }, [finalizeNote]);
 
-  // 화면 밖으로 나간 노트 정리
+  // 화면 밖으로 나간 노트 제거 
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const currentTime = performance.now();
@@ -82,13 +99,12 @@ export function useNoteSystem() {
 
         Object.entries(prev).forEach(([keyName, keyNotes]) => {
           const filtered = keyNotes.filter(note => {
-            // 활성 노트 유지 
+            // 활성화된 노트는 유지
             if (note.isActive) return true;
-
-            // 완성된 노트만 정리
+            
+            // 완료된 노트가 화면 밖으로 나갔는지 확인
             const timeSinceCompletion = currentTime - note.endTime;
             const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-
             return yPosition < trackHeight + 150; // 여유분
           });
 
@@ -110,7 +126,6 @@ export function useNoteSystem() {
 
   return {
     notes,
-    keyStates,
     handleKeyDown,
     handleKeyUp,
   };
