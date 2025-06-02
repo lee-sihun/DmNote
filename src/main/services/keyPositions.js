@@ -3,44 +3,44 @@ const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 180, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
     { dx: 565, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
   ],
   "5key": [
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 }
-  ],
-  "6key": [
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 }
-  ],
-  "8key": [
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
     { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+  ],
+  "6key": [
+    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+  ],
+  "8key": [
     { dx: 240, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
-    { dx: 435, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 }
+    { dx: 435, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
+    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
   ]
 }
 

@@ -2,10 +2,10 @@ const Store = require('electron-store');
 const store = new Store();
 
 const DEFAULT_KEYS = {
-  '4key': ['Z', 'X', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
-  '5key': ['Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
-  '6key': ['Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT'],
-  '8key': ['Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH', 'LEFT SHIFT', 'RIGHT SHIFT', 'LEFT CTRL', '25'],
+  '4key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'DOT', 'FORWARD SLASH'],
+  '5key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
+  '6key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
+  '8key': ['LEFT CTRL', '25', 'LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
 };
 
 function loadKeys() {
