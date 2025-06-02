@@ -3,44 +3,44 @@ const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 360, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 290, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 430, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 500, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 160, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 570, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 180, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
   ],
   "5key": [
-    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 240, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
+    { dx: 435, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 115, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 630, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ],
   "6key": [
-    { dx: 230, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 300, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 240, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 370, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 440, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 510, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 580, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 100, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 650, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
+    { dx: 435, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 130, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 115, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 630, dy: 130, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ],
   "8key": [
-    { dx: 230, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 300, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 240, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 305, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 370, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 440, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 510, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 580, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 100, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 650, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 270, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 480, dy: 160, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
+    { dx: 435, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 500, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 565, dy: 90, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 115, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 630, dy: 90, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 240, dy: 155, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    { dx: 435, dy: 155, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 }
   ]
 }
 
