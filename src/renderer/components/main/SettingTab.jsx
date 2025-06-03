@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
-import Github from "@assets/svgs/github.svg";
-import Bug from "@assets/svgs/Bug.svg";
+import { ReactComponent as Github } from "@assets/svgs/github.svg";
+import { ReactComponent as Bug } from "@assets/svgs/bug.svg";
 import Checkbox from "@components/Checkbox";
 import Radio from "@components/Radio";
 
@@ -231,19 +231,15 @@ function Footer() {
   };
 
   return (
-    <div className="flex flex-col w-full h-full gap-[18px] justify-between">
+    <div className="flex flex-col justify-between w-full h-full">
       <div className="flex w-full gap-[18px]">
         <button
           onClick={() =>
             handleClick("https://github.com/lee-sihun/djmax-keyviewer")
           }
-          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px]"
         >
-          <object
-            type="image/svg+xml"
-            data={Github}
-            className="pointer-events-none"
-          />
+          <Github className="flex-shrink-0 mb-[3px]" />
           <p className="text-white text-[15px] leading-[16.5px] truncate">
             Github
           </p>
@@ -252,13 +248,9 @@ function Footer() {
           onClick={() =>
             handleClick("https://github.com/lee-sihun/djmax-keyviewer/issues")
           }
-          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px] border border-[#3F444D]"
+          className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px]"
         >
-          <object
-            type="image/svg+xml"
-            data={Bug}
-            className="pointer-events-none"
-          />
+          <Bug className="flex-shrink-0 mb-[2px]" />
           <p className="text-white text-[15px] leading-[16.5px] truncate">
             Bug Report
           </p>
