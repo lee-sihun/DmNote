@@ -1,7 +1,7 @@
 // src/renderer/hooks/useNoteSystem.js
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-export const FLOW_SPEED = 170;
+export const FLOW_SPEED = 180;
 
 export function useNoteSystem() {
   const [notes, setNotes] = useState({});

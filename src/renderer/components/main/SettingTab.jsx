@@ -5,7 +5,6 @@ import Bug from "@assets/svgs/Bug.svg";
 import Checkbox from "@components/Checkbox";
 import Radio from "@components/Radio";
 
-
 export default function SettingTab() {
   const {
     hardwareAcceleration,
@@ -270,7 +269,7 @@ function Footer() {
           본 프로그램은 NEOWIZ 또는 DJMAX RESPECT V 공식 개발사와 아무런 관련이
           없습니다.
         </p>
-        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.4)</p>
+        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.5)</p>
       </div>
     </div>
   );
