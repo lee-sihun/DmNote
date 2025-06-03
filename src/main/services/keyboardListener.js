@@ -1,44 +1,30 @@
-const { GlobalKeyboardListener } = require('node-global-key-listener')
-const { loadKeys, saveKeys } = require('./keyMappings')
+const { GlobalKeyboardListener, KeyboardUtils } = require('node-global-key-listener-extended');
+const { loadKeys, saveKeys } = require('./keyMappings');
 
-// name: e.name,           // 키 이름
-// state: e.state,         // 상태 (UP/DOWN)
-// rawKey: e.rawKey,       // raw 키코드
-// vKey: e.vKey,          // 가상 키코드
-// scanCode: e.scanCode,   // 스캔 코드
-// modifiers: e.modifiers  // 수정자 키
+const NUMPAD_SCAN_CODE_MAPPING = {
+  82: 'NUMPAD 0',      // 넘패드 0 위치 (INS/0)
+  79: 'NUMPAD 1',      // 넘패드 1 위치 (END/1)
+  80: 'NUMPAD 2',      // 넘패드 2 위치 (DOWN/2)
+  81: 'NUMPAD 3',      // 넘패드 3 위치 (PGDN/3)
+  75: 'NUMPAD 4',      // 넘패드 4 위치 (LEFT/4)
+  76: 'NUMPAD 5',      // 넘패드 5 위치 (CLEAR/5)
+  77: 'NUMPAD 6',      // 넘패드 6 위치 (RIGHT/6)
+  71: 'NUMPAD 7',      // 넘패드 7 위치 (HOME/7)
+  72: 'NUMPAD 8',      // 넘패드 8 위치 (UP/8)5
+  73: 'NUMPAD 9',      // 넘패드 9 위치 (PGUP/9)
 
-// 넘패드 키 매핑 테이블 (같은 물리적 키)
-const NUMPAD_KEY_GROUPS = {
-  'NUMPAD 0': ['NUMPAD 0', 'INS'],
-  'NUMPAD 1': ['NUMPAD 1', 'END'],
-  'NUMPAD 2': ['NUMPAD 2', 'DOWN ARROW'],
-  'NUMPAD 3': ['NUMPAD 3', 'PAGE DOWN'],
-  'NUMPAD 4': ['NUMPAD 4', 'LEFT ARROW'],
-  'NUMPAD 5': ['NUMPAD 5', 'NUMPAD CLEAR'],
-  'NUMPAD 6': ['NUMPAD 6', 'RIGHT ARROW'],
-  'NUMPAD 7': ['NUMPAD 7', 'HOME'],
-  'NUMPAD 8': ['NUMPAD 8', 'UP ARROW'],
-  'NUMPAD 9': ['NUMPAD 9', 'PAGE UP'],
+  28: 'NUMPAD RETURN',    // 넘패드 엔터
+  83: 'NUMPAD DELETE',  // 넘패드 . (DELETE)
 };
-
-// 키 -> 대표키 매핑 테이블 
-const KEY_TO_REPRESENTATIVE = {};
-Object.entries(NUMPAD_KEY_GROUPS).forEach(([representative, keys]) => {
-  keys.forEach(key => {
-    KEY_TO_REPRESENTATIVE[key] = representative;
-  });
-});
 
 class KeyboardService {
   constructor() {
     this.listener = new GlobalKeyboardListener();
     this.overlayWindow = null;
     this.keys = loadKeys();
-    this.currentMode = '4key'; // 기본 모드
+    this.currentMode = '4key';
     this.validKeySet = new Set();
     this.updateValidKeySet();
-    this.vKeyCache = new Map();
   }
 
   setOverlayWindow(window) {
@@ -69,14 +55,16 @@ class KeyboardService {
   handleKeyPress(e) {
     let key = e.name || e.vKey.toString();
     const state = e.state;
+    const location = KeyboardUtils.getKeyLocation(e);
+    const scanCode = e.scanCode;
 
-    // 넘패드 키 통합 처리
-    const representativeKey = KEY_TO_REPRESENTATIVE[key];
-    if (representativeKey) {
-      key = representativeKey;
+    // console.log(`Key Pressed: ${key}, Location: ${location}, Scan Code: ${scanCode}, vKey: ${e.vKey}`);
+    // 넘패드 구분
+    if (location === 'numpad' && NUMPAD_SCAN_CODE_MAPPING[scanCode]) {
+      key = NUMPAD_SCAN_CODE_MAPPING[scanCode];
     }
 
-    // 배열 순차 탐색에서 해시 테이블 기반 조회로 개선 
+    // 유효 키 체크
     if (!this.validKeySet.has(key)) {
       return;
     }
@@ -89,16 +77,7 @@ class KeyboardService {
     this.validKeySet = new Set();
 
     currentKeys.forEach(key => {
-      // 설정된 키 추가
       this.validKeySet.add(key);
-
-      // 넘패드 키 그룹 추가
-      const keyGroup = NUMPAD_KEY_GROUPS[key];
-      if (keyGroup) {
-        keyGroup.forEach(variantKey => {
-          this.validKeySet.add(variantKey);
-        });
-      }
     });
   }
 

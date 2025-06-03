@@ -102,9 +102,9 @@ export const keyMaps = {
   NumpadMultiply: { browserKey: '*', globalKey: 'NUMPAD MULTIPLY', displayName: 'Num*' },
   NumpadAdd: { browserKey: '+', globalKey: 'NUMPAD PLUS', displayName: 'Num+' },
   NumpadSubtract: { browserKey: '-', globalKey: 'NUMPAD MINUS', displayName: 'Num-' },
-  NumpadDecimal: { browserKey: '.', globalKey: 'DELETE', displayName: 'Del' },
+  NumpadDecimal: { browserKey: '.', globalKey: 'NUMPAD DELETE', displayName: 'Num.' },
   NumpadDivide: { browserKey: '/', globalKey: 'NUMPAD DIVIDE', displayName: 'Num/' },
-  NumpadEnter: { browserKey: 'NumpadEnter', globalKey: 'RETURN', displayName: 'Enter' },
+  NumpadEnter: { browserKey: 'NumpadEnter', globalKey: 'NUMPAD RETURN', displayName: 'NumEnter' },
 
   // 기타
   Escape: { browserKey: 'Escape', globalKey: 'ESCAPE', displayName: 'Esc' },
