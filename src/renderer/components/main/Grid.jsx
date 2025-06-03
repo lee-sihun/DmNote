@@ -84,10 +84,19 @@ export default function Grid() {
       onClick={handlePaletteClose}
     >
       {noteEffect && (
-        <div
-          className="absolute left-0 right-0 h-[1px] bg-red-500"
-          style={{ top: "150px" }}
-        />
+        <>
+          <p
+            className="absolute leading-relaxed text-center text-white transform -translate-x-1/2 left-1/2"
+            style={{ top: "60px" }}
+          >
+            노트 효과를 위한 충분한 영역을 확보해야합니다. <br />
+            <b className="text-red-500">붉은 선</b> 아래에 키를 배치해주세요.
+          </p>
+          <div
+            className="absolute left-0 right-0 h-[1px] bg-red-500"
+            style={{ top: "150px" }}
+          />
+        </>
       )}
       {renderKeys()}
       <button

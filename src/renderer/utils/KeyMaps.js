@@ -104,7 +104,7 @@ export const keyMaps = {
   NumpadSubtract: { browserKey: '-', globalKey: 'NUMPAD MINUS', displayName: 'Num-' },
   NumpadDecimal: { browserKey: '.', globalKey: 'NUMPAD DELETE', displayName: 'Num.' },
   NumpadDivide: { browserKey: '/', globalKey: 'NUMPAD DIVIDE', displayName: 'Num/' },
-  NumpadEnter: { browserKey: 'NumpadEnter', globalKey: 'NUMPAD RETURN', displayName: 'NumEnter' },
+  NumpadEnter: { browserKey: 'NumpadEnter', globalKey: 'NUMPAD RETURN', displayName: 'NEnt' },
 
   // 기타
   Escape: { browserKey: 'Escape', globalKey: 'ESCAPE', displayName: 'Esc' },
