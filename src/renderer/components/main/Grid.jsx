@@ -7,9 +7,11 @@ import KeySettingModal from "./KeySettingModal";
 import { ReactComponent as ResetIcon } from "@assets/svgs/reset.svg";
 import { ReactComponent as PaletteIcon } from "@assets/svgs/palette.svg";
 import { useKeyStore } from "@stores/useKeyStore.js";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Grid() {
   const { selectedKeyType } = useKeyStore();
+  const { noteEffect } = useSettingsStore();
   const {
     selectedKey,
     setSelectedKey,
@@ -81,6 +83,12 @@ export default function Grid() {
       style={{ backgroundColor: color === "transparent" ? "#393A3F" : color }}
       onClick={handlePaletteClose}
     >
+      {noteEffect && (
+        <div
+          className="absolute left-0 right-0 h-[1px] bg-red-500"
+          style={{ top: "150px" }}
+        />
+      )}
       {renderKeys()}
       <button
         className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[57px] left-[18px]"
