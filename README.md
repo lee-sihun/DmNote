@@ -6,7 +6,7 @@ DJMAX에서 사용하기 위해 만들어진 실시간 키 입력 표시 프로�
 이외의 다른 리듬게임에서도 사용이 가능합니다.
 
 ## 🚀 실행 방법
-[DM NOTE v 1.0.4 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.0.4/DM.NOTE.v.1.0.4.zip) 
+[DM NOTE v 1.0.5 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.0.5/DM.NOTE.v.1.0.5.zip) 
 
 ```bash
 git clone https://github.com/lee-sihun/djmax-keyviewer.git
