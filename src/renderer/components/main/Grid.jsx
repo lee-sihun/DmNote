@@ -11,7 +11,7 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Grid() {
   const { selectedKeyType } = useKeyStore();
-  const { noteEffect } = useSettingsStore();
+  const { noteEffect, setNoteEffect } = useSettingsStore();
   const {
     selectedKey,
     setSelectedKey,
@@ -34,6 +34,20 @@ export default function Grid() {
   useEffect(() => {
     ipcRenderer.send("setKeyMode", selectedKeyType);
   }, [selectedKeyType]);
+
+  useEffect(() => {
+    ipcRenderer.send("get-note-effect");
+
+    const noteEffectHandler = (_, value) => {
+      setNoteEffect(value);
+    };
+
+    ipcRenderer.on("update-note-effect", noteEffectHandler);
+
+    return () => {
+      ipcRenderer.removeAllListeners("update-note-effect");
+    };
+  }, [setNoteEffect]);
 
   useEffect(() => {
     const handleReset = (e, data) => {
