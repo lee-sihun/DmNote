@@ -32,7 +32,6 @@ export default function App() {
   const [performanceMeasurementEnabled, setPerformanceMeasurementEnabled] =
     useState(true);
   const [responseTimeData, setResponseTimeData] = useState([]);
-  const frameTimeRef = useRef(null);
 
   // 키 상태 변경 리스너
   const keyStateListener = useCallback(
@@ -248,6 +247,8 @@ export default function App() {
           backgroundColor === "transparent" ? "transparent" : backgroundColor,
         willChange: "contents",
         contain: "layout style paint",
+        transform: "translateZ(0)",
+        backfaceVisibility: "hidden",
       }}
     >
       {/* 반응속도 측정 UI - 항상 표시 */}
@@ -290,64 +291,76 @@ export default function App() {
         </div>
       </div>
 
-      {currentKeys.map((key, index) => {
-        const position = currentPositions[index] || {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-          noteColor: "#FFFFFF",
-          noteOpacity: 80,
-        };
+      {/* 정적 레이어 - 트랙들 */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          contain: "layout style paint",
+          willChange: "transform",
+        }}
+      >
+        {currentKeys.map((key, index) => {
+          const position = currentPositions[index] || {
+            dx: 0,
+            dy: 0,
+            width: 60,
+            height: 60,
+            noteColor: "#FFFFFF",
+            noteOpacity: 80,
+          };
+          const keyNotes = notes[key] || [];
+          const trackPosition = { ...position, dy: topMostY };
 
-        const keyNotes = notes[key] || [];
+          return (
+            <Track
+              key={`track-${keyMode}-${index}`}
+              notes={keyNotes}
+              width={position.width}
+              height={trackHeight}
+              position={trackPosition}
+              noteColor={position.noteColor || "#FFFFFF"}
+              noteOpacity={position.noteOpacity || 80}
+            />
+          );
+        })}
+      </div>
 
-        // 트랙 위치를 가장 위쪽 키 기준으로 통일
-        const trackPosition = {
-          ...position,
-          dy: topMostY, // 모든 트랙이 동일한 Y 위치에서 시작
-        };
+      {/* 동적 레이어 - 키들만 */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          contain: "layout style paint",
+          willChange: "transform",
+          pointerEvents: "none", // 키는 클릭 불필요
+        }}
+      >
+        {currentKeys.map((key, index) => {
+          const { displayName } = getKeyInfoByGlobalKey(key);
+          const position = currentPositions[index] || {
+            dx: 0,
+            dy: 0,
+            width: 60,
+            height: 60,
+          };
 
-        return (
-          <Track
-            key={`track-${keyMode}-${index}`}
-            notes={keyNotes}
-            width={position.width}
-            height={trackHeight}
-            // position={position}
-            position={trackPosition}
-            noteColor={position.noteColor || "#FFFFFF"}
-            noteOpacity={position.noteOpacity || 80}
-          />
-        );
-      })}
-
-      {currentKeys.map((key, index) => {
-        const { displayName } = getKeyInfoByGlobalKey(key);
-        const position = currentPositions[index] || {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-        };
-
-        return (
-          // <React.Fragment key={index}>
-          //   {showKeyCount && (
-          //     <CountDisplay
-          //       count={position.count}
-          //       position={position}
-          //     />
-          //   )}
-          <Key
-            key={`${keyMode}-${index}`}
-            keyName={displayName}
-            active={originalKeyStates[key] || false}
-            position={position}
-          />
-          // </React.Fragment>
-        );
-      })}
+          return (
+            <Key
+              key={`${keyMode}-${index}`}
+              keyName={displayName}
+              active={originalKeyStates[key] || false}
+              position={position}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
