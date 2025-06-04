@@ -328,6 +328,12 @@ class Application {
       shell.openExternal(url);
     });
 
+    // 반응속도 측정 토글
+    ipcMain.on('toggle-performance-measurement', (e, enabled) => {
+      keyboardService.setPerformanceMeasurement(enabled);
+      e.reply('performance-measurement-toggled', enabled);
+    });
+
     // 앱 재시작
     ipcMain.on('restart-app', () => {
       app.relaunch();

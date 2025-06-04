@@ -25,6 +25,9 @@ class KeyboardService {
     this.currentMode = '4key';
     this.validKeySet = new Set();
     this.updateValidKeySet();
+    // 반응속도 측정을 위한 변수들
+    this.performanceMeasurementEnabled = false;
+    this.keyPressTimestamps = new Map();
   }
 
   setOverlayWindow(window) {
@@ -53,6 +56,8 @@ class KeyboardService {
   }
 
   handleKeyPress(e) {
+    const pressTimestamp = performance.now(); // 키 입력 시점 기록
+
     let key = e.name || e.vKey.toString();
     const state = e.state;
     const location = KeyboardUtils.getKeyLocation(e);
@@ -69,7 +74,12 @@ class KeyboardService {
       return;
     }
 
-    this.sendKeyStateToOverlay(key, state);
+    // 반응속도 측정이 활성화된 경우 타이밍 정보 포함
+    if (this.performanceMeasurementEnabled && state === 'DOWN') {
+      this.keyPressTimestamps.set(key, pressTimestamp);
+    }
+
+    this.sendKeyStateToOverlay(key, state, pressTimestamp);
   }
 
   updateValidKeySet() {
@@ -91,13 +101,22 @@ class KeyboardService {
     return this.keys;
   }
 
-  sendKeyStateToOverlay(key, state) {
+  sendKeyStateToOverlay(key, state, pressTimestamp = null) {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.webContents.send('keyState', {
         key,
         state,
-        mode: this.currentMode
+        mode: this.currentMode,
+        pressTimestamp: this.performanceMeasurementEnabled ? pressTimestamp : null
       });
+    }
+  }
+
+  // 반응속도 측정 모드 토글
+  setPerformanceMeasurement(enabled) {
+    this.performanceMeasurementEnabled = enabled;
+    if (!enabled) {
+      this.keyPressTimestamps.clear();
     }
   }
 }
