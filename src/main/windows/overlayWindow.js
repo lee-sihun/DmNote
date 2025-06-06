@@ -15,10 +15,34 @@ class OverlayWindow {
     this.window = new BrowserWindow(windowConfig.overlay)
     this.restorePosition()
     this.disableContextMenu()
-    this.loadContent()
-
-    // 렌더러 프로세스 우선순위 높이기 
+    this.loadContent()    // 렌더러 프로세스 우선순위 높이기 
     this.window.webContents.setFrameRate(0); // 프레임 제한 해제
+
+    // 필수 하드웨어 가속 설정 (Electron 전용)
+    this.window.webContents.executeJavaScript(`
+      // CSS 하드웨어 가속 강제 활성화
+      const style = document.createElement('style');
+      style.textContent = \`
+        * {
+          backface-visibility: hidden;
+          transform: translateZ(0);
+          perspective: 1000px;
+        }
+        body {
+          font-smoothing: antialiased;
+        }
+      \`;
+      document.head.appendChild(style);
+    `);
+
+    // GPU 상태 확인
+    this.window.webContents.on('dom-ready', () => {
+      this.window.webContents.executeJavaScript(`
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl');
+        console.log('GPU 가속:', gl ? '활성화' : '비활성화');
+      `);
+    });
 
     // 개발자 도구 단축키 비활성화
     const isDev = process.env.NODE_ENV === 'development'

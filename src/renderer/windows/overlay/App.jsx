@@ -32,7 +32,6 @@ export default function App() {
   const [performanceMeasurementEnabled, setPerformanceMeasurementEnabled] =
     useState(true);
   const [responseTimeData, setResponseTimeData] = useState([]);
-
   // 키 상태 변경 리스너
   const keyStateListener = useCallback(
     (e, { key, state }) => {
@@ -49,6 +48,12 @@ export default function App() {
           key,
           receiveTimestamp,
           enabled: performanceMeasurementEnabled,
+        });
+
+        // 즉시 키 상태 업데이트 (DOM 업데이트 트리거)
+        setOriginalKeyStates((prev) => {
+          if (prev[key] === isDown) return prev;
+          return { ...prev, [key]: isDown };
         });
 
         // 다음 프레임에서 화면 업데이트 완료 시점 측정
@@ -83,22 +88,20 @@ export default function App() {
             console.log("유효하지 않은 반응속도:", responseTime);
           }
         });
+      } else {
+        // 측정이 비활성화된 경우 일반 업데이트
+        setOriginalKeyStates((prev) => {
+          if (prev[key] === isDown) return prev;
+          return { ...prev, [key]: isDown };
+        });
       }
 
-      // 원본 키 상태 업데이트
-      setOriginalKeyStates((prev) => {
-        if (prev[key] === isDown) return prev;
-        return { ...prev, [key]: isDown };
-      });
-
-      // 노트 시스템 업데이트
-      requestAnimationFrame(() => {
-        if (isDown) {
-          handleKeyDown(key);
-        } else {
-          handleKeyUp(key);
-        }
-      });
+      // 노트 시스템 업데이트 - 별도 프레임에서 실행하여 키 반응 지연 최소화
+      if (isDown) {
+        handleKeyDown(key);
+      } else {
+        handleKeyUp(key);
+      }
     },
     [handleKeyDown, handleKeyUp, performanceMeasurementEnabled]
   );
