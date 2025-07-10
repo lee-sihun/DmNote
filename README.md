@@ -55,11 +55,23 @@ npm run start
 
 ## 🖼️ 스크린샷
 
+<img src="./images/1748967984.gif" alt="Note Effect" width="700">
+
+<img src="https://i.postimg.cc/L41mTJLR/key.gif" alt="키뷰어 데모 1" width="700">
+
+<img src="https://i.postimg.cc/RFGZxyCm/2.gif" alt="키뷰어 데모 2" width="700">
+
+<img src="https://i.postimg.cc/wv9jPgpF/3.gif" alt="키뷰어 데모 3" width="700">
+
+<!-- 
+![Note Effect](./images/1748967984.gif)
+
 ![키뷰어 데모 1](https://i.postimg.cc/L41mTJLR/key.gif)
 
 ![키뷰어 데모 2](https://i.postimg.cc/RFGZxyCm/2.gif)
 
 ![키뷰어 데모 3](https://i.postimg.cc/wv9jPgpF/3.gif)
+-->
 
 ## 📝참고사항
 
