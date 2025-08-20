@@ -14,7 +14,7 @@ module.exports = {
     visualEffectState: 'active',
     paintWhenInitiallyHidden: true,
     backgroundThrottling: false
-  }, overlay: {
+  },  overlay: {
     width: 860,
     height: 320,
     frame: false,
@@ -25,15 +25,15 @@ module.exports = {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    // 성능 최적화 설정
+    // 극도 성능 최적화 설정
     paintWhenInitiallyHidden: false,
     backgroundThrottling: false,
-    webPreferences: {
+    useContentSize: true,    webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
       enableBlinkFeatures: 'CSSContainment',
-      disableBlinkFeatures: 'VSync', // VSync 비활성화로 지연 최소화 (테어링 문제 체크 필요)
-      // GPU 가속 및 렌더링 최적화
+      disableBlinkFeatures: 'VSync',
+      // 극도 GPU 가속 및 렌더링 최적화
       experimentalFeatures: true,
       forceHardwareAcceleration: true,
       enableGpuSandbox: false,
@@ -42,9 +42,20 @@ module.exports = {
       additionalArguments: [
         '--disable-frame-rate-limit',
         '--disable-vsync',
-        '--max-active-webgl-contexts=0',
+        '--disable-gpu-vsync',
+        '--disable-features=VizDisplayCompositor',
+        '--max-active-webgl-contexts=16',
         '--disable-features=TranslateUI',
-        '--disable-component-update'
+        '--disable-component-update',
+        '--disable-background-timer-throttling',
+        '--disable-renderer-backgrounding',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-background-networking',
+        '--disable-web-security',
+        '--enable-features=VaapiVideoDecoder',
+        '--enable-zero-copy',
+        '--enable-features=UseSkiaRenderer',
+        '--force-gpu-mem-available-mb=2048'
       ]
     }
   }

@@ -1,54 +1,151 @@
 import React, { memo, useEffect, useRef } from "react";
-import { Note } from "./Note";
 import { FLOW_SPEED } from "@hooks/useNoteSystem";
 
 export const Track = memo(
   ({ notes, width, height, position, noteColor, noteOpacity }) => {
     const trackRef = useRef();
     const animationRef = useRef();
-    const noteRefsRef = useRef(new Map());
-    const lastFrameDataRef = useRef(new Map()); // 이전 프레임 데이터 캐시
-    const isAnimatingRef = useRef(false); // 애니메이션 상태 추적    // 트랙 전체의 노트들을 한 번에 애니메이션
+    const noteElementsRef = useRef(new Map());
+    const isAnimatingRef = useRef(false);
+    
     useEffect(() => {
       const flowSpeed = FLOW_SPEED;
-      const minNoteHeight = 0;
-      const fadeZoneHeight = 50;
       const baseOpacity = (noteOpacity || 80) / 100;
       let lastTime = 0;
-      let frameCount = 0;
+      
+      // 고정 240Hz - 최고 성능 타겟
+      const TARGET_FPS = 240;
+      const frameInterval = 1000 / TARGET_FPS;
+      
+      // DOM 요소 직접 생성 (React 우회)
+      const createNoteElement = (note) => {
+        const element = document.createElement('div');
+        element.style.cssText = `
+          position: absolute;
+          left: 0;
+          width: 100%;
+          background-color: ${noteColor || '#ffffff'};
+          border-radius: 2px;
+          will-change: transform;
+          backface-visibility: hidden;
+          contain: strict;
+          transform-origin: bottom;
+        `;
+        noteElementsRef.current.set(note.id, element);
+        if (trackRef.current) {
+          trackRef.current.appendChild(element);
+        }
+        return element;
+      };
 
-      // 동적 프레임 레이트 감지 (모니터 주사율에 자동 대응)
-      let detectedRefreshRate = 144; // 기본값을 144Hz로 설정
-      let frameTimeSum = 0;
-      let lastFrameTime = 0;
+      const animate = (currentTime) => {
+        // 중복 실행 방지
+        if (isAnimatingRef.current) return;
+        
+        // 고정 프레임 제한
+        if (currentTime - lastTime < frameInterval) {
+          if (notes.length > 0) {
+            animationRef.current = requestAnimationFrame(animate);
+          }
+          return;
+        }
+        
+        isAnimatingRef.current = true;
+        lastTime = currentTime;
 
-      // 객체 풀링으로 메모리 할당 최소화
-      const updatePool = Array.from({ length: 50 }, () => ({}));
-      let poolIndex = 0;
-
-      // 모니터 주사율 자동 감지 (최적화된 버전)
-      const detectRefreshRate = (currentTime) => {
-        if (lastFrameTime > 0) {
-          const frameDelta = currentTime - lastFrameTime;
-          frameTimeSum += frameDelta;
-          frameCount++;
-
-          // 30프레임마다 주사율 재계산
-          if (frameCount >= 30) {
-            const avgFrameTime = frameTimeSum / frameCount;
-            const newRefreshRate = Math.round(1000 / avgFrameTime);
-
-            // 일반적인 주사율 범위로 제한하고 300Hz 상한 적용
-            if (newRefreshRate >= 60 && newRefreshRate <= 300) {
-              detectedRefreshRate = newRefreshRate;
-            }
-
-            frameTimeSum = 0;
-            frameCount = 0;
+        // 현재 노트 ID 집합
+        const currentNoteIds = new Set(notes.map(note => note.id));
+        
+        // 제거된 노트 정리
+        for (const [noteId, element] of noteElementsRef.current) {
+          if (!currentNoteIds.has(noteId)) {
+            element.remove();
+            noteElementsRef.current.delete(noteId);
           }
         }
-        lastFrameTime = currentTime;
-      }; // 트랙에 페이드 마스크 적용 (한 번만)
+
+        // 노트 업데이트 (최적화된 루프)
+        for (let i = 0; i < notes.length; i++) {
+          const note = notes[i];
+          let element = noteElementsRef.current.get(note.id);
+          
+          if (!element) {
+            element = createNoteElement(note);
+          }
+
+          // Transform만 사용 (레이아웃 리플로우 없음)
+          if (note.isActive) {
+            const pressDuration = currentTime - note.startTime;
+            const noteLength = Math.max(2, (pressDuration * flowSpeed) / 1000);
+            
+            element.style.transform = `translateY(${-noteLength}px) translateZ(0)`;
+            element.style.height = `${noteLength}px`;
+            element.style.opacity = baseOpacity;
+          } else {
+            const noteDuration = note.endTime - note.startTime;
+            const noteLength = Math.max(2, (noteDuration * flowSpeed) / 1000);
+            const timeSinceCompletion = currentTime - note.endTime;
+            const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
+            
+            let opacity = baseOpacity;
+            if (yPosition > height) {
+              const fadeProgress = Math.min((yPosition - height) / 50, 1);
+              opacity = baseOpacity * (1 - fadeProgress);
+            }
+            
+            element.style.transform = `translateY(${yPosition}px) translateZ(0)`;
+            element.style.height = `${noteLength}px`;
+            element.style.opacity = opacity;
+          }
+        }
+
+        isAnimatingRef.current = false;
+        
+        if (notes.length > 0) {
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      };
+
+      // 애니메이션 시작
+      if (notes.length > 0 && !animationRef.current) {
+        animationRef.current = requestAnimationFrame(animate);
+      }
+
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
+        }
+        
+        // 모든 노트 요소 정리
+        for (const element of noteElementsRef.current.values()) {
+          element.remove();
+        }
+        noteElementsRef.current.clear();
+        isAnimatingRef.current = false;
+      };
+    }, [notes, height, noteColor, noteOpacity]);
+
+    const trackStyle = {
+      position: "absolute",
+      left: `${position.dx}px`,
+      top: `${position.dy - height}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+      overflow: "hidden",
+      pointerEvents: "none",
+      willChange: "transform",
+      backfaceVisibility: "hidden",
+      transform: "translateZ(0)",
+      contain: "layout style paint",
+    };
+
+    // React 컴포넌트 제거, DOM 직접 조작만 사용
+    return <div ref={trackRef} style={trackStyle} />;
+  }
+);
+
+Track.displayName = "Track";// 트랙에 페이드 마스크 적용 (한 번만)
       if (trackRef.current && !trackRef.current.maskApplied) {
         const fadeStartFromBottom = height - fadeZoneHeight;
         const trackMask = `linear-gradient(to top, 
@@ -58,16 +155,16 @@ export const Track = memo(
 
         trackRef.current.style.mask = trackMask;
         trackRef.current.maskApplied = true;
-      }
-
-      const animate = (currentTime) => {
+      }      const animate = (currentTime) => {
+        const frameStart = performance.now();
+        
         // 애니메이션이 이미 실행 중이면 중복 실행 방지
         if (isAnimatingRef.current) return;
         isAnimatingRef.current = true;
 
         // 동적 주사율 감지
-        detectRefreshRate(currentTime);
-        const frameInterval = 1000 / (detectedRefreshRate + 10); // 약간의 여유 추가
+        updateRefreshRate(currentTime);
+        const frameInterval = 1000 / detectedRefreshRate;
 
         // 적응형 프레임 레이트 제한
         if (currentTime - lastTime < frameInterval) {
@@ -79,97 +176,79 @@ export const Track = memo(
         }
         lastTime = currentTime;
 
-        // 객체 풀 초기화
-        poolIndex = 0;
-        const notesToUpdate = [];
-
-        // 고성능 루프로 노트 처리
+        const calcStart = performance.now();
+        
+        // 노트 업데이트 - 더 간단한 접근
+        const updates = new Map();
+        
         for (let i = 0; i < notes.length; i++) {
           const note = notes[i];
           const noteElement = noteRefsRef.current.get(note.id);
           if (!noteElement) continue;
 
-          const lastData = lastFrameDataRef.current.get(note.id) || {};
-
-          // 객체 풀에서 재사용
-          let updates =
-            poolIndex < updatePool.length ? updatePool[poolIndex++] : {};
-
-          // 객체 초기화
-          for (let key in updates) {
-            delete updates[key];
-          }
+          const lastData = lastFrameDataRef.current.get(note.id);
+          let needsUpdate = false;
+          const newStyle = {};
 
           if (note.isActive) {
-            // 활성 노트 - 계산 최적화
+            // 활성 노트
             const pressDuration = currentTime - note.startTime;
-            const noteLength = Math.max(
-              minNoteHeight,
-              (pressDuration * flowSpeed) / 1000
-            );
-            const roundedLength = Math.round(noteLength * 10) / 10;
+            const noteLength = Math.max(minNoteHeight, (pressDuration * flowSpeed) / 1000);
+            const roundedLength = Math.round(noteLength);
 
-            // 변경된 값만 추적
-            if (Math.abs(lastData.height - roundedLength) > 0.05) {
-              updates.height = `${roundedLength}px`;
+            if (!lastData || Math.abs(lastData.height - roundedLength) > 0) {
+              newStyle.height = `${roundedLength}px`;
+              needsUpdate = true;
             }
-            if (lastData.bottom !== "0px") {
-              updates.bottom = "0px";
+            if (!lastData || lastData.bottom !== 0) {
+              newStyle.bottom = "0px";
+              needsUpdate = true;
             }
-            if (Math.abs(lastData.opacity - baseOpacity) > 0.01) {
-              updates.opacity = baseOpacity;
+            if (!lastData || Math.abs(lastData.opacity - baseOpacity) > 0.01) {
+              newStyle.opacity = baseOpacity;
+              needsUpdate = true;
             }
-            if (lastData.backgroundColor !== noteColor) {
-              updates.backgroundColor = noteColor || "#FFFFFF";
+            if (!lastData || lastData.backgroundColor !== noteColor) {
+              newStyle.backgroundColor = noteColor || "#FFFFFF";
+              needsUpdate = true;
             }
 
-            if (Object.keys(updates).length > 0) {
-              notesToUpdate.push({ element: noteElement, updates });
-
-              // 캐시 업데이트
+            if (needsUpdate) {
+              updates.set(noteElement, newStyle);
               lastFrameDataRef.current.set(note.id, {
                 height: roundedLength,
-                bottom: "0px",
+                bottom: 0,
                 opacity: baseOpacity,
                 backgroundColor: noteColor || "#FFFFFF",
               });
             }
           } else {
-            // 완성된 노트 - 계산 최적화
+            // 완성된 노트
             const noteDuration = note.endTime - note.startTime;
-            const noteLength = Math.max(
-              minNoteHeight,
-              (noteDuration * flowSpeed) / 1000
-            );
+            const noteLength = Math.max(minNoteHeight, (noteDuration * flowSpeed) / 1000);
             const timeSinceCompletion = currentTime - note.endTime;
             const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
 
-            const roundedLength = Math.round(noteLength * 10) / 10;
-            const roundedPosition = Math.round(yPosition * 10) / 10;
+            const roundedLength = Math.round(noteLength);
+            const roundedPosition = Math.round(yPosition);
 
-            // 화면 밖으로 나가는 추가 페이드아웃
+            // 페이드아웃 계산
             let opacity = baseOpacity;
-            const screenFadeStart = height;
-            if (yPosition > screenFadeStart) {
-              const fadeProgress = (yPosition - screenFadeStart) / 50;
+            if (yPosition > height) {
+              const fadeProgress = (yPosition - height) / 50;
               opacity = baseOpacity * (1 - Math.min(fadeProgress, 1));
             }
 
-            // 변경된 값만 추적
-            if (Math.abs(lastData.height - roundedLength) > 0.05) {
-              updates.height = `${roundedLength}px`;
-            }
-            if (Math.abs(lastData.bottom - roundedPosition) > 0.05) {
-              updates.bottom = `${roundedPosition}px`;
-            }
-            if (Math.abs(lastData.opacity - opacity) > 0.01) {
-              updates.opacity = opacity;
-            }
-
-            if (Object.keys(updates).length > 0) {
-              notesToUpdate.push({ element: noteElement, updates });
-
-              // 캐시 업데이트
+            if (!lastData || 
+                Math.abs(lastData.height - roundedLength) > 0 ||
+                Math.abs(lastData.bottom - roundedPosition) > 0 ||
+                Math.abs(lastData.opacity - opacity) > 0.01) {
+              
+              newStyle.height = `${roundedLength}px`;
+              newStyle.bottom = `${roundedPosition}px`;
+              newStyle.opacity = opacity;
+              
+              updates.set(noteElement, newStyle);
               lastFrameDataRef.current.set(note.id, {
                 height: roundedLength,
                 bottom: roundedPosition,
@@ -179,12 +258,26 @@ export const Track = memo(
           }
         }
 
-        // 배치 DOM 업데이트 실행 - Object.assign 사용으로 최적화
-        if (notesToUpdate.length > 0) {
-          for (let i = 0; i < notesToUpdate.length; i++) {
-            const { element, updates } = notesToUpdate[i];
-            Object.assign(element.style, updates);
-          }
+        const calcEnd = performance.now();
+
+        // 배치 DOM 업데이트
+        const domStart = performance.now();
+        if (updates.size > 0) {
+          updates.forEach((style, element) => {
+            Object.assign(element.style, style);
+          });
+        }
+        const domEnd = performance.now();
+
+        const frameEnd = performance.now();
+        
+        // 성능 로깅 (100프레임마다)
+        if (logCount++ % 100 === 0) {
+          const totalTime = frameEnd - frameStart;
+          const calcTime = calcEnd - calcStart;
+          const domTime = domEnd - domStart;
+          
+          console.log(`Frame: ${totalTime.toFixed(2)}ms (calc: ${calcTime.toFixed(2)}ms, dom: ${domTime.toFixed(2)}ms), FPS: ${detectedRefreshRate}, Updates: ${updates.size}`);
         }
 
         isAnimatingRef.current = false;
@@ -192,7 +285,7 @@ export const Track = memo(
         if (notes.length > 0) {
           animationRef.current = requestAnimationFrame(animate);
         }
-      }; // 노트가 있을 때만 애니메이션 시작
+      };// 노트가 있을 때만 애니메이션 시작
       if (notes.length > 0 && !animationRef.current) {
         animationRef.current = requestAnimationFrame(animate);
       }
