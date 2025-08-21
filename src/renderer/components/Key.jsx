@@ -19,31 +19,47 @@ export default function DraggableKey({
   });
 
   const handleClick = (e) => {
-    if (!draggable.wasMoved) {
-      // 위치가 변경되지 않았을 때만 onClick 실행
-      onClick(e);
-    }
+    if (!draggable.wasMoved) onClick(e);
   };
+
+  // 드래그 중에는 훅의 dx/dy 사용 (부모 리렌더 최소화)
+  const renderDx = draggable.dx;
+  const renderDy = draggable.dy;
+
+  const keyStyle = useMemo(
+    () => ({
+      width: `${width}px`,
+      height: `${height}px`,
+      transform: `translate3d(${renderDx}px, ${renderDy}px, 0)`,
+      backgroundImage: inactiveImage ? `url(${inactiveImage})` : "none",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundColor: inactiveImage ? "transparent" : "white",
+      willChange: "transform",
+      backfaceVisibility: "hidden",
+      transformStyle: "preserve-3d",
+      contain: "layout style paint",
+      imageRendering: "auto",
+      isolation: "isolate",
+      WebkitFontSmoothing: "antialiased",
+      MozOsxFontSmoothing: "grayscale",
+    }),
+    [renderDx, renderDy, width, height, inactiveImage]
+  );
 
   return (
     <div
       ref={draggable.ref}
       className="absolute rounded-[6px] cursor-pointer"
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate3d(${dx}px, ${dy}px, 0)`, // GPU 가속
-        backgroundImage: inactiveImage ? `url(${inactiveImage})` : "none",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundColor: inactiveImage ? "transparent" : "white",
-        willChange: "transform", // GPU 힌트
-        backfaceVisibility: "hidden", // GPU 가속
-      }}
+      style={keyStyle}
       onClick={handleClick}
+      onDragStart={(e) => e.preventDefault()}
     >
       {!inactiveImage && (
-        <div className="flex items-center justify-center h-full font-semibold">
+        <div
+          className="flex items-center justify-center h-full font-semibold"
+          style={{ willChange: "auto", contain: "layout style paint" }}
+        >
           {displayName}
         </div>
       )}
@@ -67,12 +83,8 @@ export const Key = memo(
             ? "#575757"
             : "white",
         borderRadius: active
-          ? activeImage
-            ? "0"
-            : "6px"
-          : inactiveImage
-          ? "0"
-          : "6px",
+          ? activeImage ? "0" : "6px"
+          : inactiveImage ? "0" : "6px",
         color: active && !activeImage ? "white" : "black",
         backgroundImage:
           active && activeImage
@@ -82,11 +94,16 @@ export const Key = memo(
             : "none",
         backgroundSize: "cover",
         backgroundPosition: "center",
-        // 고주사율 최적화
+        // GPU 가속 최적화 강화
         willChange: "transform, background-color, background-image",
         backfaceVisibility: "hidden",
         transformStyle: "preserve-3d",
         contain: "layout style paint",
+        // 이미지 렌더링 최적화
+        imageRendering: "auto",
+        isolation: "isolate",
+        WebkitFontSmoothing: "antialiased",
+        MozOsxFontSmoothing: "grayscale",
       }),
       [active, activeImage, inactiveImage, dx, dy, width, height]
     );
@@ -94,7 +111,13 @@ export const Key = memo(
     return (
       <div className="image-rendering absolute rounded-[6px]" style={keyStyle}>
         {(!active && !inactiveImage) || (active && !activeImage) ? (
-          <div className="flex items-center justify-center h-full font-semibold">
+          <div 
+            className="flex items-center justify-center h-full font-semibold"
+            style={{
+              willChange: "auto",
+              contain: "layout style paint",
+            }}
+          >
             {keyName}
           </div>
         ) : null}
