@@ -13,6 +13,8 @@ export const useDraggable = ({
 
   // 마지막 스냅 좌표를 ref로 보관 (mouseup 시 커밋)
   const lastSnappedRef = useRef({ dx: initialX, dy: initialY });
+  // 드래그 감지를 위한 최소 거리 임계값
+  const dragThresholdRef = useRef(5);
 
   // initialX, initialY 변경 시 동기화
   useEffect(() => {
@@ -35,13 +37,14 @@ export const useDraggable = ({
   const handleMouseDown = useCallback(
     (e) => {
       if (!node) return;
+      
+      // 마우스 다운 시점의 위치 저장
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
+      let actuallyDragging = false;
+
       setIsDragging(true);
       setWasMoved(false);
-      node.style.cursor = "grabbing";
-
-      // 드래그 중 성능 최적화
-      node.style.pointerEvents = "none";
-      node.style.userSelect = "none";
 
       // bounds를 시작 시점에 1회 계산해서 캐시
       const parentNode = node.parentElement;
@@ -59,6 +62,20 @@ export const useDraggable = ({
       let rafId = null;
 
       const handleMouseMove = (moveEvent) => {
+        // 드래그 임계값 체크
+        const deltaX = Math.abs(moveEvent.clientX - startClientX);
+        const deltaY = Math.abs(moveEvent.clientY - startClientY);
+        
+        if (!actuallyDragging && (deltaX > dragThresholdRef.current || deltaY > dragThresholdRef.current)) {
+          actuallyDragging = true;
+          node.style.cursor = "grabbing";
+          // 실제 드래그가 시작될 때만 최적화 적용
+          node.style.pointerEvents = "none";
+          node.style.userSelect = "none";
+        }
+
+        if (!actuallyDragging) return;
+
         if (rafId) return;
         rafId = requestAnimationFrame(() => {
           rafId = null;
@@ -83,26 +100,32 @@ export const useDraggable = ({
           }
 
           lastSnappedRef.current = { dx: snappedX, dy: snappedY };
-          setOffset({ dx: snappedX, dy: snappedY }); // 자기 자신만 리렌더
+          setOffset({ dx: snappedX, dy: snappedY });
         });
       };
 
       const handleMouseUp = () => {
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
+        
         setIsDragging(false);
-        node.style.cursor = "grab";
-        node.style.pointerEvents = "auto";
-        node.style.userSelect = "auto";
-
-        // 최종 위치만 부모에 커밋
-        const { dx: finalDx, dy: finalDy } = lastSnappedRef.current;
-        onPositionChange?.(finalDx, finalDy);
+        
+        // 실제 드래그가 발생했을 때만 복구
+        if (actuallyDragging) {
+          node.style.cursor = "grab";
+          node.style.pointerEvents = "auto";
+          node.style.userSelect = "auto";
+          
+          // 최종 위치만 부모에 커밋
+          const { dx: finalDx, dy: finalDy } = lastSnappedRef.current;
+          onPositionChange?.(finalDx, finalDy);
+        } else {
+          // 클릭만 했을 경우 커서만 복구
+          node.style.cursor = "grab";
+        }
       };
 
-      document.addEventListener("mousemove", handleMouseMove, {
-        passive: true,
-      });
+      document.addEventListener("mousemove", handleMouseMove, { passive: true });
       document.addEventListener("mouseup", handleMouseUp, { once: true });
     },
     [node, dx, dy, gridSize, onPositionChange]
