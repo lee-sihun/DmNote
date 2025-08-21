@@ -31,34 +31,59 @@ export default function DraggableKey({
       width: `${width}px`,
       height: `${height}px`,
       transform: `translate3d(${renderDx}px, ${renderDy}px, 0)`,
-      backgroundImage: inactiveImage ? `url(${inactiveImage})` : "none",
-      backgroundSize: "cover",
-      backgroundPosition: "center",
       backgroundColor: inactiveImage ? "transparent" : "white",
+      borderRadius: inactiveImage ? "0" : "6px", 
+      overflow: inactiveImage ? "visible" : "hidden", 
       willChange: "transform",
       backfaceVisibility: "hidden",
       transformStyle: "preserve-3d",
       contain: "layout style paint",
       imageRendering: "auto",
       isolation: "isolate",
-      WebkitFontSmoothing: "antialiased",
-      MozOsxFontSmoothing: "grayscale",
+      boxSizing: "border-box",
     }),
     [renderDx, renderDy, width, height, inactiveImage]
+  );
+
+  const imageStyle = useMemo(
+    () => ({
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+      display: "block",
+      pointerEvents: "none",
+      userSelect: "none",
+    }),
+    []
+  );
+
+  const textStyle = useMemo(
+    () => ({
+      willChange: "auto",
+      contain: "layout style paint",
+    }),
+    []
   );
 
   return (
     <div
       ref={draggable.ref}
-      className="absolute rounded-[6px] cursor-pointer"
+      className="absolute cursor-pointer"
       style={keyStyle}
       onClick={handleClick}
       onDragStart={(e) => e.preventDefault()}
     >
-      {!inactiveImage && (
+      {inactiveImage ? (
+        <img
+          src={inactiveImage}
+          alt=""
+          style={imageStyle}
+          draggable={false}
+        />
+      ) : (
         <div
           className="flex items-center justify-center h-full font-semibold"
-          style={{ willChange: "auto", contain: "layout style paint" }}
+          style={textStyle}
         >
           {displayName}
         </div>
@@ -70,6 +95,12 @@ export default function DraggableKey({
 export const Key = memo(
   ({ keyName, active, position }) => {
     const { dx, dy, width, height = 60, activeImage, inactiveImage } = position;
+
+    const currentImage = active && activeImage 
+      ? activeImage 
+      : !active && inactiveImage 
+      ? inactiveImage 
+      : null;
 
     const keyStyle = useMemo(
       () => ({
@@ -83,40 +114,62 @@ export const Key = memo(
             ? "#575757"
             : "white",
         borderRadius: active
-          ? activeImage ? "0" : "6px"
-          : inactiveImage ? "0" : "6px",
+          ? activeImage ? "0" : "6px" 
+          : inactiveImage ? "0" : "6px", 
         color: active && !activeImage ? "white" : "black",
-        backgroundImage:
-          active && activeImage
-            ? `url(${activeImage})`
-            : !active && inactiveImage
-            ? `url(${inactiveImage})`
-            : "none",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        overflow: currentImage ? "visible" : "hidden", 
         // GPU 가속 최적화 강화
-        willChange: "transform, background-color, background-image",
+        willChange: "transform, background-color",
         backfaceVisibility: "hidden",
         transformStyle: "preserve-3d",
         contain: "layout style paint",
         // 이미지 렌더링 최적화
         imageRendering: "auto",
         isolation: "isolate",
-        WebkitFontSmoothing: "antialiased",
-        MozOsxFontSmoothing: "grayscale",
+        boxSizing: "border-box",
       }),
-      [active, activeImage, inactiveImage, dx, dy, width, height]
+      [active, activeImage, inactiveImage, dx, dy, width, height, currentImage]
     );
 
+    const imageStyle = useMemo(
+      () => ({
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        display: "block",
+        pointerEvents: "none",
+        userSelect: "none",
+      }),
+      []
+    );
+
+    const textStyle = useMemo(
+      () => ({
+        willChange: "auto",
+        contain: "layout style paint",
+      }),
+      []
+    );
+
+    // 텍스트 표시 조건
+    const showText = (!active && !inactiveImage) || (active && !activeImage);
+
     return (
-      <div className="image-rendering absolute rounded-[6px]" style={keyStyle}>
-        {(!active && !inactiveImage) || (active && !activeImage) ? (
+      <div 
+        className="absolute" 
+        style={keyStyle}
+      >
+        {currentImage ? (
+          <img
+            src={currentImage}
+            alt=""
+            style={imageStyle}
+            draggable={false}
+          />
+        ) : showText ? (
           <div 
             className="flex items-center justify-center h-full font-semibold"
-            style={{
-              willChange: "auto",
-              contain: "layout style paint",
-            }}
+            style={textStyle}
           >
             {keyName}
           </div>
