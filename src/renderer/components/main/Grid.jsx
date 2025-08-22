@@ -6,6 +6,7 @@ import Palette from "./Palette";
 import KeySettingModal from "./KeySettingModal";
 import { ReactComponent as ResetIcon } from "@assets/svgs/reset.svg";
 import { ReactComponent as PaletteIcon } from "@assets/svgs/palette.svg";
+import { ReactComponent as PlusIcon } from "@assets/svgs/plus.svg";
 import { useKeyStore } from "@stores/useKeyStore.js";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
@@ -20,6 +21,8 @@ export default function Grid() {
     handlePositionChange,
     handleReset,
     handleKeyUpdate,
+    handleAddKey,
+    handleDeleteKey
   } = useKeyManager();
   const {
     color,
@@ -108,11 +111,17 @@ export default function Grid() {
           </p>
           <div
             className="absolute left-0 right-0 h-[1px] bg-red-500"
-            style={{ top: "150px" }}  
+            style={{ top: "150px" }}
           />
         </>
       )}
       {renderKeys()}
+      <button
+        onClick={handleAddKey}
+        className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[96px] left-[18px]"
+      >
+        <PlusIcon />
+      </button>
       <button
         className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[57px] left-[18px]"
         onClick={() => setPalette(!palette)}
@@ -147,6 +156,7 @@ export default function Grid() {
           }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}
+          onDelete={() => handleDeleteKey(selectedKey.index)}
         />
       )}
     </div>

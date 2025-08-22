@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useRef } from "react";
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+import { ReactComponent as TrashIcon } from "@assets/svgs/trash.svg";
 
-export default function KeySettingModal({ keyData, onClose, onSave }) {
+export default function KeySettingModal({
+  keyData,
+  onClose,
+  onSave,
+  onDelete,
+}) {
   const [key, setKey] = useState(keyData.key);
   const [displayKey, setDisplayKey] = useState(
     getKeyInfoByGlobalKey(key).displayName
@@ -206,9 +212,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
               }}
               className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-bold mt-[2px]">
-              X
-            </p>
+            <p className="text-[#989BA6] text-[13.5px] font-bold mt-[2px]">X</p>
             <input
               type="number"
               value={height}
@@ -283,7 +287,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
           </div>
         </div>
 
-        <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[15px]">
+        <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">
           <button
             onClick={handleSubmit}
             className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
@@ -295,6 +299,12 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
           >
             취소
+          </button>
+          <button
+            onClick={onDelete}
+            className="flex justify-center items-center w-[42px] bg-[#271213] border border-[#4D3F40] rounded-[6px]"
+          >
+            <TrashIcon />
           </button>
         </div>
       </div>

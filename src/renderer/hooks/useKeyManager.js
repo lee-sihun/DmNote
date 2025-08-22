@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useKeyStore } from '@stores/useKeyStore';
+import { useState, useEffect } from "react";
+import { useKeyStore } from "@stores/useKeyStore";
 
 export function useKeyManager() {
   const { selectedKeyType } = useKeyStore();
@@ -19,25 +19,25 @@ export function useKeyManager() {
       setPositions(data.positions);
     };
 
-    ipcRenderer.send('getKeyMappings');
-    ipcRenderer.send('getKeyPositions');
+    ipcRenderer.send("getKeyMappings");
+    ipcRenderer.send("getKeyPositions");
     // ipcRenderer.send('getCurrentMode');
 
-    ipcRenderer.on('updateKeyMappings', handleKeyMappings);
-    ipcRenderer.on('updateKeyPositions', handleKeyPositions);
+    ipcRenderer.on("updateKeyMappings", handleKeyMappings);
+    ipcRenderer.on("updateKeyPositions", handleKeyPositions);
     // ipcRenderer.on('keyModeChanged', handleKeyModeChanged);
-    ipcRenderer.on('resetComplete', handleReset);
+    ipcRenderer.on("resetComplete", handleReset);
 
     return () => {
-      ipcRenderer.removeAllListeners('updateKeyMappings');
-      ipcRenderer.removeAllListeners('updateKeyPositions');
+      ipcRenderer.removeAllListeners("updateKeyMappings");
+      ipcRenderer.removeAllListeners("updateKeyPositions");
       // ipcRenderer.removeAllListeners('keyModeChanged');
-      ipcRenderer.removeAllListeners('resetComplete');
+      ipcRenderer.removeAllListeners("resetComplete");
     };
   }, []);
 
   const handlePositionChange = (index, dx, dy) => {
-    setPositions(prevPositions => {
+    setPositions((prevPositions) => {
       const newPositions = {
         ...prevPositions,
         [selectedKeyType]: prevPositions[selectedKeyType].map((pos, i) => {
@@ -45,10 +45,10 @@ export function useKeyManager() {
             return { ...pos, dx, dy };
           }
           return pos;
-        })
+        }),
       };
 
-      ipcRenderer.send('update-key-positions', newPositions);
+      ipcRenderer.send("update-key-positions", newPositions);
       return newPositions;
     });
   };
@@ -59,14 +59,22 @@ export function useKeyManager() {
 
   const handleReset = () => {
     if (ipcRenderer) {
-      ipcRenderer.send('reset-keys');
+      ipcRenderer.send("reset-keys");
     } else {
-      console.error('ipcRenderer not available');
+      console.error("ipcRenderer not available");
     }
   };
 
   const handleKeyUpdate = (keyData) => {
-    const { key, activeImage, inactiveImage, width, height, noteColor, noteOpacity } = keyData;
+    const {
+      key,
+      activeImage,
+      inactiveImage,
+      width,
+      height,
+      noteColor,
+      noteOpacity,
+    } = keyData;
     const updatedMappings = { ...keyMappings };
     const updatedPositions = { ...positions };
 
@@ -86,9 +94,63 @@ export function useKeyManager() {
     setKeyMappings(updatedMappings);
     setPositions(updatedPositions);
 
-    ipcRenderer.send('update-key-mapping', updatedMappings);
-    ipcRenderer.send('update-key-positions', updatedPositions);
+    ipcRenderer.send("update-key-mapping", updatedMappings);
+    ipcRenderer.send("update-key-positions", updatedPositions);
     setSelectedKey(null);
+  };
+
+  const handleAddKey = () => {
+    const newKeyName = "";
+    const newKeyPosition = {
+      dx: 0,
+      dy: 0,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    };
+
+    const updatedMappings = {
+      ...keyMappings,
+      [selectedKeyType]: [...keyMappings[selectedKeyType], newKeyName],
+    };
+
+    const updatedPositions = {
+      ...positions,
+      [selectedKeyType]: [...positions[selectedKeyType], newKeyPosition],
+    };
+
+    setKeyMappings(updatedMappings);
+    setPositions(updatedPositions);
+
+    ipcRenderer.send("update-key-mapping", updatedMappings);
+    ipcRenderer.send("update-key-positions", updatedPositions);
+  };
+
+  const handleDeleteKey = (indexToDelete) => {
+    const updatedMappings = {
+      ...keyMappings,
+      [selectedKeyType]: keyMappings[selectedKeyType].filter(
+        (_, index) => index !== indexToDelete
+      ),
+    };
+
+    const updatedPositions = {
+      ...positions,
+      [selectedKeyType]: positions[selectedKeyType].filter(
+        (_, index) => index !== indexToDelete
+      ),
+    };
+
+    setKeyMappings(updatedMappings);
+    setPositions(updatedPositions);
+
+    ipcRenderer.send("update-key-mapping", updatedMappings);
+    ipcRenderer.send("update-key-positions", updatedPositions);
+    setSelectedKey(null); // 모달 닫기
   };
 
   return {
@@ -99,5 +161,7 @@ export function useKeyManager() {
     handlePositionChange,
     handleReset,
     handleKeyUpdate,
+    handleAddKey,
+    handleDeleteKey,
   };
 }
