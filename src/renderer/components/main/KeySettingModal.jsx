@@ -122,19 +122,19 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full align-center">
-          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
             키 매핑
           </p>
           <button
             onClick={() => setIsListening(true)}
-            className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-extrabold"
+            className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-bold"
           >
             {isListening ? "Press any key" : displayKey || "Click to set key"}
           </button>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
           <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+            <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
               대기 상태
             </p>
             <input
@@ -158,7 +158,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
             ></button>
           </div>
           <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+            <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
               입력 상태
             </p>
             <input
@@ -181,7 +181,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
           </div>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
             키 사이즈
           </p>
           <div className="flex items-center gap-[10px]">
@@ -206,7 +206,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
               }}
               className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-extrabold mt-[2px]">
+            <p className="text-[#989BA6] text-[13.5px] font-bold mt-[2px]">
               X
             </p>
             <input
@@ -233,7 +233,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
           </div>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
             노트 색상
           </p>
           <div className="flex items-center gap-[10px]">
@@ -254,7 +254,7 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
 
         {/* 노트 투명도 설정 추가 */}
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-extrabold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
             노트 투명도
           </p>
           <div className="flex items-center gap-[10px]">
@@ -279,20 +279,20 @@ export default function KeySettingModal({ keyData, onClose, onSave }) {
               }}
               className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-extrabold">%</p>
+            <p className="text-[#989BA6] text-[13.5px] font-bold">%</p>
           </div>
         </div>
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[15px]">
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
           >
             저장
           </button>
           <button
             onClick={onClose}
-            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
           >
             취소
           </button>

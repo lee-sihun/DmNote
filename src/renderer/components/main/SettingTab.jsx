@@ -151,7 +151,7 @@ export default function SettingTab() {
     <div className="flex flex-col w-full h-full p-[18px] gap-[18px]">
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             오버레이 창 고정
           </p>
           <Checkbox
@@ -161,14 +161,14 @@ export default function SettingTab() {
         </div>
         <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             항상 위에 표시
           </p>
           <Checkbox checked={alwaysOnTop} onChange={handleAlwaysOnTopChange} />
         </div>
         <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             하드웨어 가속 활성화
           </p>
           <Checkbox
@@ -178,14 +178,14 @@ export default function SettingTab() {
         </div>
         <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             노트 효과 표시
           </p>
           <Checkbox checked={noteEffect} onChange={handleNoteEffectChange} />
         </div>
         {/* <div className="w-full h-[0.75px] bg-[#3C4049]" />
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[180px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             키 입력 카운트 표시
             <a 
               className="text-[#419DFF] cursor-pointer "
@@ -200,7 +200,7 @@ export default function SettingTab() {
       </div>
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[26px]">
-          <p className="text-center font-medium w-[153px] text-white text-[13.5px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
             그래픽 렌더링 옵션
           </p>
           <div className="flex items-center gap-[40px]">
@@ -240,7 +240,7 @@ function Footer() {
           className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31px] bg-[#1C1E25] rounded-[6px]"
         >
           <Github className="flex-shrink-0 mb-[3px]" />
-          <p className="text-white text-[15px] leading-[16.5px] truncate">
+          <p className="text-white text-[15px] leading-[16.5px] truncate font-light">
             Github
           </p>
         </button>
@@ -251,17 +251,17 @@ function Footer() {
           className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[31.5px] bg-[#1C1E25] rounded-[6px]"
         >
           <Bug className="flex-shrink-0 mb-[2px]" />
-          <p className="text-white text-[15px] leading-[16.5px] truncate">
+          <p className="text-white text-[15px] leading-[16.5px] truncate font-light">
             Bug Report
           </p>
         </button>
       </div>
       <div className="flex-col w-full gap-[4px] justify-center items-center">
-        <p className="text-[#D8DADF] text-[10.5px] text-center">
+        <p className="text-[#D8DADF] text-[10.5px] text-center font-light">
           본 프로그램은 NEOWIZ 또는 DJMAX RESPECT V 공식 개발사와 아무런 관련이
           없습니다.
         </p>
-        <p className="text-[#989BA6] text-[10.5px] text-center">(Ver 1.0.5)</p>
+        <p className="text-[#989BA6] text-[10.5px] text-center font-light">(Ver 1.0.5)</p>
       </div>
     </div>
   );

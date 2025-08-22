@@ -108,7 +108,7 @@ export default function Grid() {
           </p>
           <div
             className="absolute left-0 right-0 h-[1px] bg-red-500"
-            style={{ top: "150px" }}
+            style={{ top: "150px" }}  
           />
         </>
       )}

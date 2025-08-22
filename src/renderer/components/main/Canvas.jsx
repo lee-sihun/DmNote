@@ -32,10 +32,10 @@ export function KeyMenu() {
                 ? "bg-[#14161B] text-[#414249] border-none"
                 : "bg-[#272B33] text-[#989BA6] border-[rgba(255,255,255,0.1)]"
             }
-            border text-[15px] font-bold
+            border text-[15px] font-semibold
           `}
         >
-          {keyType.replace("key", "키")}
+          {keyType.replace("key", "B")}
         </button>
       ))}
     </div>
@@ -67,13 +67,13 @@ export function SaveMenu() {
     <div className="flex gap-[13.5px]">
       <button
         onClick={handleLoadPreset}
-        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-medium text-center text-white"
+        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"
       >
         프리셋 불러오기
       </button>
       <button
         onClick={handleSavePreset}
-        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-medium text-center text-white"
+        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"
       >
         프리셋 내보내기
       </button>

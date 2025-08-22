@@ -37,7 +37,7 @@ export default function Palette({ color, onColorChange }) {
         placeholder="#FFFFFF"
         value={color}
         onChange={(e) => handleColorChange(e.target.value)}
-        className="h-[34.5px] rounded-[6px] bg-[#272B33] border-[#101216] border-[1px] px-[10px] flex items-center text-[17px] text-white font-normal"
+        className="h-[34.5px] rounded-[6px] bg-[#272B33] border-[#101216] border-[1px] px-[10px] flex items-center text-[17px] text-white font-light"
       />
     </div>
   );

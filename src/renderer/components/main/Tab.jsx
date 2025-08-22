@@ -75,7 +75,7 @@ export default function Tab() {
           <div className="flex flex-col items-center justify-between h-full">
             <button
               onClick={toggleOverlay}
-              className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 text-[#989BA6]`}
+              className={`text-[13.5px] leading-[17px] font-normal hover:text-white transition-colors duration-150 text-[#989BA6]`}
             >
               {isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
             </button>
@@ -95,7 +95,7 @@ function Button({ children, isActive, onClick }) {
     <div className="flex flex-col items-center justify-between h-full">
       <button
         onClick={onClick}
-        className={`text-[13.5px] leading-[17px] font-medium hover:text-white transition-colors duration-150 ${
+        className={`text-[13.5px] leading-[17px] font-normal hover:text-white transition-colors duration-150 ${
           isActive ? "text-white" : "text-[#989BA6]"
         }`}
       >

@@ -26,7 +26,7 @@ const Radio = ({ value, name, checked, onChange, children }: RadioProps) => {
           }`}
         />
       </span>
-      <span className="text-[13.5px] font-medium text-white leading-[15px] text-center">
+      <span className="text-[13.5px] font-normal text-white leading-[15px] text-center">
         {children}
       </span>
     </label>
