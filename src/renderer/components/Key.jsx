@@ -118,7 +118,9 @@ export const Key = memo(
           ? "0"
           : "10px",
         border:
-          active && !activeImage
+          activeImage || inactiveImage
+            ? "none" 
+            : active
             ? "3px solid rgba(255, 255, 255, 0.9)"
             : "3px solid rgba(113, 113, 113, 0.9)",
         color: active && !activeImage ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)",
