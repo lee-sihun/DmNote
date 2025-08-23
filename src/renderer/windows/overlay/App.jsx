@@ -1,8 +1,15 @@
 import { Key } from "@components/Key";
 import { Track } from "@components/overlay/Track";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { useNoteSystem } from "@hooks/useNoteSystem";
+import { LatencyDisplay } from "@components/overlay/LatencyDisplay";
 // import { useSettingsStore } from "@stores/useSettingsStore";
 // import CountDisplay from "@components/CountDisplay";
 
@@ -16,20 +23,27 @@ export default function App() {
   // const { setShowKeyCount } = useSettingsStore();
 
   // 노트 시스템
-  const {
-    notes,
-    handleKeyDown,
-    handleKeyUp,
-  } = useNoteSystem();
+  const { notes, handleKeyDown, handleKeyUp } = useNoteSystem();
   const [trackHeight] = useState(150); // 트랙 높이 설정
 
   // 기존 키 상태와 노트 시스템 키 상태 병합
   const [originalKeyStates, setOriginalKeyStates] = useState({});
 
+  // Latency 측정 상태
+  const lastPressTimestamp = useRef(0);
+  const [isMeasuring, setIsMeasuring] = useState(true);
+  const [latencies, setLatencies] = useState([]);
+  const [recentLatencies, setRecentLatencies] = useState([]);
+  const [stats, setStats] = useState({ avg: 0, min: 0, max: 0, count: 0 });
+
   // 키 상태 변경 리스너
   const keyStateListener = useCallback(
-    (e, { key, state }) => {
+    (e, { key, state, timestamp }) => {
       const isDown = state === "DOWN";
+
+      if (isDown) {
+        lastPressTimestamp.current = timestamp; // 키를 눌렀을 때의 타임스탬프 저장
+      }
 
       // 원본 키 상태 업데이트
       setOriginalKeyStates((prev) => {
@@ -65,6 +79,58 @@ export default function App() {
 
     return Math.min(...currentPositions.map((pos) => pos.dy));
   }, [currentPositions]);
+
+  // 성능 측정
+  useEffect(() => {
+    // 렌더링 후 latency 측정
+    if (lastPressTimestamp.current > 0 && isMeasuring) {
+      requestAnimationFrame(() => {
+        const paintTimestamp = Date.now();
+        const latency = paintTimestamp - lastPressTimestamp.current;
+        lastPressTimestamp.current = 0; // 타임스탬프를 사용한 직후 초기화
+
+        // 비정상적인 값 (1초 초과)은 무시
+        if (latency > 1000) {
+          return;
+        }
+
+        // 최근 100개 데이터만 유지
+        setLatencies((prev) => [
+          ...prev.slice(prev.length >= 100 ? 1 : 0),
+          latency,
+        ]);
+        setRecentLatencies((prev) => [latency, ...prev.slice(0, 4)]); // 최근 5개 유지
+      });
+    } else if (lastPressTimestamp.current > 0) {
+      // 측정이 중단되었어도 timestamp는 초기화해야 함
+      lastPressTimestamp.current = 0;
+    }
+  }, [originalKeyStates, isMeasuring]);
+
+  // Latency 통계 계산
+  useEffect(() => {
+    if (latencies.length === 0) {
+      setStats({ avg: 0, min: 0, max: 0, count: 0 });
+      return;
+    }
+
+    const sum = latencies.reduce((a, b) => a + b, 0);
+    const avg = (sum / latencies.length).toFixed(2);
+    const min = Math.min(...latencies);
+    const max = Math.max(...latencies);
+    const count = latencies.length;
+
+    setStats({ avg, min, max, count });
+  }, [latencies]);
+
+  const handleToggleMeasurement = () => {
+    setIsMeasuring((prev) => !prev);
+  };
+
+  const handleResetStats = () => {
+    setLatencies([]);
+    setRecentLatencies([]);
+  };
 
   useEffect(() => {
     // 초기 데이터 요청
@@ -149,6 +215,15 @@ export default function App() {
         contain: "layout style paint",
       }}
     >
+      {/* 성능 측정  */}
+      <LatencyDisplay
+        stats={stats}
+        recentLatencies={recentLatencies}
+        isMeasuring={isMeasuring}
+        onToggle={handleToggleMeasurement}
+        onReset={handleResetStats}
+      />
+
       {currentKeys.map((key, index) => {
         const position = currentPositions[index] || {
           dx: 0,

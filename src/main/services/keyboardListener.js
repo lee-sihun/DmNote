@@ -53,6 +53,7 @@ class KeyboardService {
   }
 
   handleKeyPress(e) {
+    const timestamp = Date.now();
     let key = e.name || e.vKey.toString();
     const state = e.state;
     const location = KeyboardUtils.getKeyLocation(e);
@@ -69,7 +70,7 @@ class KeyboardService {
       return;
     }
 
-    this.sendKeyStateToOverlay(key, state);
+    this.sendKeyStateToOverlay(key, state, timestamp);
   }
 
   updateValidKeySet() {
@@ -91,12 +92,13 @@ class KeyboardService {
     return this.keys;
   }
 
-  sendKeyStateToOverlay(key, state) {
+  sendKeyStateToOverlay(key, state, timestamp) {
     if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
       this.overlayWindow.webContents.send('keyState', {
         key,
         state,
-        mode: this.currentMode
+        mode: this.currentMode,
+        timestamp,
       });
     }
   }
