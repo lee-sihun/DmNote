@@ -98,6 +98,7 @@ module.exports = {
       '@assets': path.resolve(__dirname, 'src/renderer/assets'),
       '@utils': path.resolve(__dirname, 'src/renderer/utils'),
       '@stores': path.resolve(__dirname, 'src/renderer/stores'),
+      '@constants': path.resolve(__dirname, 'src/renderer/constants'),
     }
   }
 };

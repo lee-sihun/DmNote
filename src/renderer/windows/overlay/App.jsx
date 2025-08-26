@@ -8,6 +8,7 @@ import React, {
   // useRef,
 } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+import { TRACK_HEIGHT } from "@constants/overlayConfig";
 import { useNoteSystem } from "@hooks/useNoteSystem";
 // import { LatencyDisplay } from "@components/overlay/LatencyDisplay";
 // import { useSettingsStore } from "@stores/useSettingsStore";
@@ -24,7 +25,7 @@ export default function App() {
 
   // 노트 시스템
   const { notes, handleKeyDown, handleKeyUp } = useNoteSystem();
-  const [trackHeight] = useState(150); // 트랙 높이 설정
+  const [trackHeight] = useState(TRACK_HEIGHT); // 트랙 높이 설정
 
   // 기존 키 상태와 노트 시스템 키 상태 병합
   const [originalKeyStates, setOriginalKeyStates] = useState({});
@@ -73,12 +74,64 @@ export default function App() {
     [positions, keyMode]
   );
 
-  // 모든 키 중 가장 위에 있는 키의 Y 위치 계산
-  const topMostY = useMemo(() => {
-    if (!currentPositions.length) return 0;
+  // 동적 리사이즈 & 좌표 변환
+  const PADDING = 30; // 상하좌우 여백
+  const TRACK_RESERVE = TRACK_HEIGHT;
+  const [noteEffectEnabled, setNoteEffectEnabled] = useState(false);
 
-    return Math.min(...currentPositions.map((pos) => pos.dy));
+  useEffect(() => {
+    ipcRenderer.send("get-note-effect");
+    const handler = (_, value) => setNoteEffectEnabled(value);
+    ipcRenderer.on("update-note-effect", handler);
+    return () => ipcRenderer.removeAllListeners("update-note-effect");
+  }, []);
+
+  // 원본 좌표 기준 경계 박스 계산
+  const bounds = useMemo(() => {
+    if (!currentPositions.length) return null;
+    const minX = Math.min(...currentPositions.map((p) => p.dx));
+    const minY = Math.min(...currentPositions.map((p) => p.dy));
+    const maxX = Math.max(
+      ...currentPositions.map((p) => p.dx + (p.width || 60))
+    );
+    const maxY = Math.max(
+      ...currentPositions.map((p) => p.dy + (p.height || 60))
+    );
+    return { minX, minY, maxX, maxY };
   }, [currentPositions]);
+
+  // 렌더링용 변환 좌표
+  const displayPositions = useMemo(() => {
+    if (!bounds) return currentPositions;
+    const topOffset = (noteEffectEnabled ? TRACK_RESERVE : 0) + PADDING;
+    const offsetX = PADDING - bounds.minX;
+    const offsetY = topOffset - bounds.minY;
+    return currentPositions.map((pos) => ({
+      ...pos,
+      dx: pos.dx + offsetX,
+      dy: pos.dy + offsetY,
+    }));
+  }, [currentPositions, bounds, noteEffectEnabled]);
+
+  // 윈도우 크기 계산 및 메인 프로세스에 전달
+  useEffect(() => {
+    if (!bounds) return;
+    const keyAreaWidth = bounds.maxX - bounds.minX;
+    const keyAreaHeight = bounds.maxY - bounds.minY;
+    const extraTop = noteEffectEnabled ? TRACK_RESERVE : 0;
+    const totalWidth = keyAreaWidth + PADDING * 2;
+    const totalHeight = keyAreaHeight + PADDING * 2 + extraTop;
+    ipcRenderer.send("resize-overlay", {
+      width: totalWidth,
+      height: totalHeight,
+    });
+  }, [bounds, noteEffectEnabled]);
+
+  // 가장 위 키 (변환 후) Y 위치
+  const topMostY = useMemo(() => {
+    if (!displayPositions.length) return 0;
+    return Math.min(...displayPositions.map((pos) => pos.dy));
+  }, [displayPositions]);
 
   // 성능 측정
   // useEffect(() => {
@@ -225,7 +278,7 @@ export default function App() {
       /> */}
 
       {currentKeys.map((key, index) => {
-        const position = currentPositions[index] || {
+        const originalPos = currentPositions[index] || {
           dx: 0,
           dy: 0,
           width: 60,
@@ -234,13 +287,13 @@ export default function App() {
           noteOpacity: 80,
         };
 
-        const keyNotes = notes[key] || [];
+        const position = displayPositions[index] || originalPos;
 
-        // 트랙 위치를 가장 위쪽 키 기준으로 통일
-        const trackPosition = {
-          ...position,
-          dy: topMostY, // 모든 트랙이 동일한 Y 위치에서 시작
-        };
+        const keyNotes = notes[key] || [];
+        const trackStartY = noteEffectEnabled
+          ? PADDING + TRACK_RESERVE
+          : topMostY;
+        const trackPosition = { ...position, dy: trackStartY };
 
         return (
           <Track
@@ -258,12 +311,13 @@ export default function App() {
 
       {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
-        const position = currentPositions[index] || {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-        };
+        const position = displayPositions[index] ||
+          currentPositions[index] || {
+            dx: 0,
+            dy: 0,
+            width: 60,
+            height: 60,
+          };
 
         return (
           // <React.Fragment key={index}>

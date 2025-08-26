@@ -23,14 +23,10 @@
       "@hooks/*": ["src/renderer/hooks/*"],
       "@assets/*": ["src/renderer/assets/*"],
       "@utils/*": ["src/renderer/utils/*"],
-      "@stores/*": ["src/renderer/stores/*"]
+      "@stores/*": ["src/renderer/stores/*"],
+      "@constants/*": ["src/renderer/constants/*"]
     }
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

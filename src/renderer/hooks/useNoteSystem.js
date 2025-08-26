@@ -1,5 +1,6 @@
 // src/renderer/hooks/useNoteSystem.js
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { TRACK_HEIGHT } from "@constants/overlayConfig";
 
 export const FLOW_SPEED = 180;
 
@@ -40,7 +41,7 @@ export function useNoteSystem() {
       isActive: true,
     };
 
-    setNotes(prev => ({
+    setNotes((prev) => ({
       ...prev,
       [keyName]: [...(prev[keyName] || []), newNote],
     }));
@@ -51,11 +52,11 @@ export function useNoteSystem() {
   const finalizeNote = useCallback((keyName, noteId) => {
     const endTime = performance.now();
 
-    setNotes(prev => {
+    setNotes((prev) => {
       if (!prev[keyName]) return prev;
       return {
         ...prev,
-        [keyName]: prev[keyName].map(note => {
+        [keyName]: prev[keyName].map((note) => {
           if (note.id === noteId) {
             return { ...note, endTime, isActive: false };
           }
@@ -66,42 +67,48 @@ export function useNoteSystem() {
   }, []);
 
   // 노트 생성/완료
-  const handleKeyDown = useCallback((keyName) => {
-    if (!noteEffectEnabled.current) return;
+  const handleKeyDown = useCallback(
+    (keyName) => {
+      if (!noteEffectEnabled.current) return;
 
-    // 활성화된 노트가 있는지 체크
-    if (activeNotes.current.has(keyName)) return;
+      // 활성화된 노트가 있는지 체크
+      if (activeNotes.current.has(keyName)) return;
 
-    const noteId = createNote(keyName);
-    activeNotes.current.set(keyName, { noteId });
-  }, [createNote]);
+      const noteId = createNote(keyName);
+      activeNotes.current.set(keyName, { noteId });
+    },
+    [createNote]
+  );
 
-  const handleKeyUp = useCallback((keyName) => {
-    if (!noteEffectEnabled.current) return;
+  const handleKeyUp = useCallback(
+    (keyName) => {
+      if (!noteEffectEnabled.current) return;
 
-    const activeNote = activeNotes.current.get(keyName);
-    if (activeNote) {
-      finalizeNote(keyName, activeNote.noteId);
-      activeNotes.current.delete(keyName);
-    }
-  }, [finalizeNote]);
+      const activeNote = activeNotes.current.get(keyName);
+      if (activeNote) {
+        finalizeNote(keyName, activeNote.noteId);
+        activeNotes.current.delete(keyName);
+      }
+    },
+    [finalizeNote]
+  );
 
-  // 화면 밖으로 나간 노트 제거 
+  // 화면 밖으로 나간 노트 제거
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const currentTime = performance.now();
       const flowSpeed = FLOW_SPEED;
-      const trackHeight = 150;
+      const trackHeight = TRACK_HEIGHT;
 
-      setNotes(prev => {
+      setNotes((prev) => {
         let hasChanges = false;
         const updated = {};
 
         Object.entries(prev).forEach(([keyName, keyNotes]) => {
-          const filtered = keyNotes.filter(note => {
+          const filtered = keyNotes.filter((note) => {
             // 활성화된 노트는 유지
             if (note.isActive) return true;
-            
+
             // 완료된 노트가 화면 밖으로 나갔는지 확인
             const timeSinceCompletion = currentTime - note.endTime;
             const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
