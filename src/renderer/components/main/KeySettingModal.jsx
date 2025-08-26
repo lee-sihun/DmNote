@@ -331,6 +331,7 @@ export default function KeySettingModal({
                 클래스 이름 (대기 상태)
               </p>
               <input
+                key="classNameInactive"
                 type="text"
                 value={classNameInactive}
                 onChange={(e) => setClassNameInactive(e.target.value)}
@@ -344,6 +345,7 @@ export default function KeySettingModal({
                 클래스 이름 (입력 상태)
               </p>
               <input
+                key="classNameActive"
                 type="text"
                 value={classNameActive}
                 onChange={(e) => setClassNameActive(e.target.value)}
