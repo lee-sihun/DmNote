@@ -154,6 +154,10 @@ class Application {
       const defaultPositions = resetKeyPositions();
       const defaultColor = resetBackgroundColor();
 
+      // CSS 관련 상태들 초기화
+      store.set("useCustomCSS", false);
+      store.set("customCSS", { path: null, content: "" });
+
       keyboardService.updateKeyMapping(defaultKeys);
 
       this.overlayWindow.webContents.send("updateKeyMappings", defaultKeys);
@@ -165,6 +169,10 @@ class Application {
         "updateBackgroundColor",
         defaultColor
       );
+
+      // CSS 초기화 알림
+      this.overlayWindow.webContents.send("update-use-custom-css", false);
+      this.overlayWindow.webContents.send("update-custom-css", "");
 
       // 모든 데이터를 한 번에 보내는 새로운 이벤트
       e.reply("resetComplete", {

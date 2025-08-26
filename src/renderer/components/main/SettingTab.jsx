@@ -64,6 +64,13 @@ export default function SettingTab() {
       setNoteEffect(value);
     };
 
+    // CSS 초기화 핸들러
+    const resetCompleteHandler = () => {
+      setUseCustomCSS(false);
+      setCustomCSSContent("");
+      setCustomCSSPath("");
+    };
+
     ipcRenderer.send("get-hardware-acceleration");
     ipcRenderer.on("update-hardware-acceleration", updateHandler);
 
@@ -78,6 +85,9 @@ export default function SettingTab() {
 
     ipcRenderer.send("get-note-effect");
     ipcRenderer.on("update-note-effect", noteEffectHandler);
+
+    // CSS 초기화 이벤트 리스너 추가
+    ipcRenderer.on("resetComplete", resetCompleteHandler);
 
     ipcRenderer.invoke("get-angle-mode").then((mode) => {
       setAngleMode(mode);
@@ -104,6 +114,7 @@ export default function SettingTab() {
       // ipcRenderer.removeAllListeners('update-show-key-count');
       ipcRenderer.removeAllListeners("update-overlay-lock");
       ipcRenderer.removeAllListeners("update-note-effect");
+      ipcRenderer.removeAllListeners("resetComplete");
     };
   }, []);
 
@@ -151,6 +162,10 @@ export default function SettingTab() {
     const newState = !useCustomCSS;
     setUseCustomCSS(newState);
     ipcRenderer.send("toggle-custom-css", newState);
+    // 경로/내용 비어있을 때 활성화하면 안내 유지
+    if (newState && (!customCSSPath || customCSSPath.length === 0)) {
+      // 내용이 없으면 초기 문자열 유지 (별도 처리 불필요)
+    }
   };
 
   const handleLoadCustomCSS = async () => {
@@ -160,7 +175,7 @@ export default function SettingTab() {
       if (result.path) setCustomCSSPath(result.path);
       ipcRenderer.send("update-custom-css", result.content);
       if (!useCustomCSS) handleToggleCustomCSS();
-      window.alert("커스텀 CSS 파일이 불러와졌습니다.");
+      window.alert("CSS 파일이 로드되었습니다.");
     } else if (result && result.error) {
       window.alert("CSS 파일 로드 실패: " + result.error);
     }
@@ -253,7 +268,7 @@ export default function SettingTab() {
                 <p className="text-[#989BA6] text-[12px] truncate w-[300px] text-center">
                   {customCSSPath && customCSSPath.length > 0
                     ? customCSSPath
-                    : "(...)"}
+                    : "(CSS 파일이 선택되지 않았습니다)"}
                 </p>
               </div>
               <div className="flex w-[50%] justify-end pr-[134px]">

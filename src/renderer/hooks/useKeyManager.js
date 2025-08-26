@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 export function useKeyManager() {
   const { selectedKeyType } = useKeyStore();
@@ -7,6 +8,9 @@ export function useKeyManager() {
   const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
   const ipcRenderer = window.electron.ipcRenderer;
+  // settings store (for early CSS sync before visiting SettingTab)
+  const { setUseCustomCSS, setCustomCSSContent, setCustomCSSPath } =
+    useSettingsStore();
 
   useEffect(() => {
     if (!ipcRenderer) return;
@@ -17,10 +21,30 @@ export function useKeyManager() {
     const handleReset = (e, data) => {
       setKeyMappings(data.keys);
       setPositions(data.positions);
+      // CSS 관련 상태도 초기화 (SettingTab 방문 전이라도 UI 일관성 유지)
+      setUseCustomCSS(false);
+      setCustomCSSContent("");
+      setCustomCSSPath("");
     };
 
     ipcRenderer.send("getKeyMappings");
     ipcRenderer.send("getKeyPositions");
+    // --- Early custom CSS sync: KeySettingModal / Grid 등이 먼저 뜰 때 반영되도록 ---
+    ipcRenderer
+      .invoke("get-use-custom-css")
+      .then((enabled) => {
+        if (typeof enabled === "boolean") setUseCustomCSS(enabled);
+      })
+      .catch(() => {});
+    ipcRenderer
+      .invoke("get-custom-css")
+      .then((data) => {
+        if (data) {
+          if (data.content) setCustomCSSContent(data.content);
+          if (data.path) setCustomCSSPath(data.path);
+        }
+      })
+      .catch(() => {});
     // ipcRenderer.send('getCurrentMode');
 
     ipcRenderer.on("updateKeyMappings", handleKeyMappings);

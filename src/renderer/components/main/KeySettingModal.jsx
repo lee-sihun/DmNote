@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { ReactComponent as TrashIcon } from "@assets/svgs/trash.svg";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function KeySettingModal({
   keyData,
@@ -8,6 +9,12 @@ export default function KeySettingModal({
   onSave,
   onDelete,
 }) {
+  const {
+    useCustomCSS,
+    setUseCustomCSS,
+    setCustomCSSContent,
+    setCustomCSSPath,
+  } = useSettingsStore();
   const [key, setKey] = useState(keyData.key);
   const [displayKey, setDisplayKey] = useState(
     getKeyInfoByGlobalKey(key).displayName
@@ -46,9 +53,29 @@ export default function KeySettingModal({
       }
     };
 
+    // Early CSS sync (모달이 SettingTab 방문 전에 열릴 경우)
+    const ipcRenderer = window.electron?.ipcRenderer;
+    if (ipcRenderer) {
+      ipcRenderer
+        .invoke("get-use-custom-css")
+        .then((enabled) => {
+          if (typeof enabled === "boolean") setUseCustomCSS(enabled);
+        })
+        .catch(() => {});
+      ipcRenderer
+        .invoke("get-custom-css")
+        .then((data) => {
+          if (data) {
+            if (data.content) setCustomCSSContent(data.content);
+            if (data.path) setCustomCSSPath(data.path);
+          }
+        })
+        .catch(() => {});
+    }
+
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [isListening]);
+  }, [isListening, setUseCustomCSS, setCustomCSSContent, setCustomCSSPath]);
 
   const handleSubmit = () => {
     onSave({
@@ -296,32 +323,36 @@ export default function KeySettingModal({
           </div>
         </div>
 
-        {/* 클래스 이름 */}
-        <div className="flex justify-between w-full mt-[18px] items-center">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
-            클래스 이름 (대기 상태)
-          </p>
-          <input
-            type="text"
-            value={classNameInactive}
-            onChange={(e) => setClassNameInactive(e.target.value)}
-            placeholder="key-inactive"
-            className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
-          />
-        </div>
+        {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
+        {useCustomCSS && (
+          <>
+            <div className="flex justify-between w-full mt-[18px] items-center">
+              <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+                클래스 이름 (대기 상태)
+              </p>
+              <input
+                type="text"
+                value={classNameInactive}
+                onChange={(e) => setClassNameInactive(e.target.value)}
+                placeholder="key-inactive"
+                className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+              />
+            </div>
 
-        <div className="flex justify-between w-full mt-[12px] items-center">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
-            클래스 이름 (입력 상태)
-          </p>
-          <input
-            type="text"
-            value={classNameActive}
-            onChange={(e) => setClassNameActive(e.target.value)}
-            placeholder="key-active"
-            className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
-          />
-        </div>
+            <div className="flex justify-between w-full mt-[12px] items-center">
+              <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+                클래스 이름 (입력 상태)
+              </p>
+              <input
+                type="text"
+                value={classNameActive}
+                onChange={(e) => setClassNameActive(e.target.value)}
+                placeholder="key-active"
+                className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">
           <button
