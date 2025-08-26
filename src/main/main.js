@@ -57,6 +57,11 @@ class Application {
       store.set("noteEffect", false);
     }
 
+    // 선택된 키 모드 초기 설정
+    if (store.get("selectedKeyType") === undefined) {
+      store.set("selectedKeyType", "4key");
+    }
+
     // ANGLE 모드 초기 설정
     if (store.get("angleMode") === undefined) {
       store.set("angleMode", "d3d11");
@@ -107,6 +112,8 @@ class Application {
     // 키 모드 변경
     ipcMain.on("setKeyMode", (e, mode) => {
       if (keyboardService.setKeyMode(mode)) {
+        // 저장
+        store.set("selectedKeyType", mode);
         this.overlayWindow.webContents.send("keyModeChanged", mode);
         e.reply("keyModeUpdated", true);
       } else {
@@ -116,6 +123,10 @@ class Application {
 
     ipcMain.on("getCurrentMode", (e) => {
       e.reply("currentMode", keyboardService.getCurrentMode());
+    });
+
+    ipcMain.handle("get-selected-key-type", () => {
+      return store.get("selectedKeyType", "4key");
     });
 
     // 키매핑 요청 처리
@@ -439,6 +450,21 @@ class Application {
   }
 
   createWindows() {
+    // 미리 저장된 키 모드를 키보드 서비스에 적용(렌더러 로드 전, 초기 동기화 보장)
+    try {
+      const savedMode = store.get("selectedKeyType", "4key");
+      const mappings = keyboardService.getKeyMappings
+        ? keyboardService.getKeyMappings()
+        : {};
+      const validModes = Object.keys(mappings || {});
+      const initialMode = validModes.includes(savedMode) ? savedMode : "4key";
+      keyboardService.setKeyMode(initialMode);
+      // 정규화된 값을 다시 저장
+      store.set("selectedKeyType", initialMode);
+    } catch (err) {
+      console.error("Failed to pre-apply key mode:", err);
+    }
+
     const mainWindowInstance = new MainWindow();
     const overlayWindowInstance = new OverlayWindow();
 
@@ -446,6 +472,34 @@ class Application {
     this.overlayWindow = overlayWindowInstance.create();
 
     global.mainWindow = this.mainWindow;
+
+    // 오버레이가 로드 완료되면 현재 모드 및 상태를 즉시 푸시하여 초기 동기화 보장
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.webContents.on("did-finish-load", () => {
+        try {
+          const mode = keyboardService.getCurrentMode();
+          this.overlayWindow.webContents.send("keyModeChanged", mode);
+          // overlay App은 'currentMode' 채널도 수신하도록 되어 있으므로 함께 전송
+          this.overlayWindow.webContents.send("currentMode", mode);
+
+          // 안전하게 현재 상태도 함께 동기화
+          this.overlayWindow.webContents.send(
+            "updateKeyMappings",
+            keyboardService.getKeyMappings()
+          );
+          this.overlayWindow.webContents.send(
+            "updateKeyPositions",
+            loadKeyPositions()
+          );
+          this.overlayWindow.webContents.send(
+            "updateBackgroundColor",
+            loadBackgroundColor()
+          );
+        } catch (err) {
+          console.error("Failed to sync overlay initial state:", err);
+        }
+      });
+    }
 
     this.mainWindow.on("closed", () => {
       mainWindowInstance.cleanup();
@@ -456,6 +510,25 @@ class Application {
 
     keyboardService.setOverlayWindow(this.overlayWindow);
     keyboardService.startListening();
+
+    // 앱 시작 시 저장된 키 모드 적용
+    try {
+      const savedMode = store.get("selectedKeyType", "4key");
+      const mappings = keyboardService.getKeyMappings
+        ? keyboardService.getKeyMappings()
+        : {};
+      const validModes = Object.keys(mappings || {});
+      const initialMode = validModes.includes(savedMode) ? savedMode : "4key";
+      keyboardService.setKeyMode(initialMode);
+      // 정규화된 값을 다시 저장
+      store.set("selectedKeyType", initialMode);
+
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.webContents.send("keyModeChanged", initialMode);
+      }
+    } catch (err) {
+      console.error("Failed to apply initial key mode:", err);
+    }
   }
 
   handleWindowsClosed() {

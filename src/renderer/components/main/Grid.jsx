@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useKeyManager } from "@hooks/useKeyManager";
 import { usePalette } from "@hooks/usePalette";
 import DraggableKey from "@components/Key";
@@ -11,7 +11,7 @@ import { useKeyStore } from "@stores/useKeyStore.js";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Grid() {
-  const { selectedKeyType } = useKeyStore();
+  const { selectedKeyType, setSelectedKeyType } = useKeyStore();
   const { noteEffect, setNoteEffect } = useSettingsStore();
   const {
     selectedKey,
@@ -33,10 +33,25 @@ export default function Grid() {
     handleResetColor,
   } = usePalette();
   const ipcRenderer = window.electron.ipcRenderer;
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   useEffect(() => {
+    if (!initialLoaded) return;
     ipcRenderer.send("setKeyMode", selectedKeyType);
-  }, [selectedKeyType]);
+  }, [selectedKeyType, initialLoaded]);
+
+  // 저장된 키 모드 로드
+  useEffect(() => {
+    ipcRenderer
+      .invoke("get-selected-key-type")
+      .then((mode) => {
+        const valid = ["4key", "5key", "6key", "8key"];
+        if (valid.includes(mode)) {
+          setSelectedKeyType(mode);
+        }
+      })
+      .finally(() => setInitialLoaded(true));
+  }, []);
 
   useEffect(() => {
     ipcRenderer.send("get-note-effect");

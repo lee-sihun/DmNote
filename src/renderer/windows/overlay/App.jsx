@@ -230,41 +230,12 @@ export default function App() {
   // };
 
   useEffect(() => {
-    // 초기 데이터 요청
-    ipcRenderer.send("getKeyMappings");
-    ipcRenderer.send("getKeyPositions");
-    ipcRenderer.send("getCurrentMode");
-    ipcRenderer.send("getBackgroundColor");
-    // ipcRenderer.send('get-show-key-count');
-
-    // const keyStateListener = (e, { key, state }) => {
-    //   if (state === 'DOWN') {
-    //     // 이전 상태가 false일 때만 카운트 증가
-    //     setKeyStates(prev => {
-    //       // const wasKeyPressed = prev[key];
-    //       // if (!wasKeyPressed) {
-    //       //   setPositions(currentPos => {
-    //       //     const newPositions = { ...currentPos };
-    //       //     const currentMode = keyMode;
-    //       //     const keyIndex = keyMappings[currentMode]?.indexOf(key);
-
-    //       //     if (keyIndex !== -1 && newPositions[currentMode]) {
-    //       //       newPositions[currentMode][keyIndex] = {
-    //       //         ...newPositions[currentMode][keyIndex],
-    //       //         count: (newPositions[currentMode][keyIndex].count || 0) + 1
-    //       //       };
-    //       //       ipcRenderer.send('update-key-positions', newPositions);
-    //       //     }
-    //       //     return newPositions;
-    //       //   });
-    //       // }
-    //       return { ...prev, [key]: true };
-    //     });
-    //   } else {
-    //     setKeyStates(prev => ({ ...prev, [key]: false }));
-    //   }
-    // };
     const keyModeListener = (e, mode) => {
+      setKeyMode(mode);
+    };
+
+    // getCurrentMode 응답 처리 (최초 동기화 보장)
+    const currentModeListener = (e, mode) => {
       setKeyMode(mode);
     };
 
@@ -287,14 +258,23 @@ export default function App() {
     // 이벤트 리스너 등록
     ipcRenderer.on("keyState", keyStateListener);
     ipcRenderer.on("keyModeChanged", keyModeListener);
+    ipcRenderer.on("currentMode", currentModeListener);
     ipcRenderer.on("updateKeyMappings", keyMappingsListener);
     ipcRenderer.on("updateKeyPositions", positionsListener);
     ipcRenderer.on("updateBackgroundColor", backgroundColorListener);
     // ipcRenderer.on('update-show-key-count', showKeyCountListener);
 
+    // 초기 데이터 요청 (리스너 등록 후 요청하여 레이스 방지)
+    ipcRenderer.send("getCurrentMode");
+    ipcRenderer.send("getKeyMappings");
+    ipcRenderer.send("getKeyPositions");
+    ipcRenderer.send("getBackgroundColor");
+    // ipcRenderer.send('get-show-key-count');
+
     return () => {
       ipcRenderer.removeAllListeners("keyState");
       ipcRenderer.removeAllListeners("keyModeChanged");
+      ipcRenderer.removeAllListeners("currentMode");
       ipcRenderer.removeAllListeners("updateKeyMappings");
       ipcRenderer.removeAllListeners("updateKeyPositions");
       ipcRenderer.removeAllListeners("updateBackgroundColor");
