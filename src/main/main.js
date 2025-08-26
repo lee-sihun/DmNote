@@ -350,6 +350,53 @@ class Application {
       return false;
     });
 
+    // 커스텀 CSS 핸들러 ---
+    ipcMain.handle("load-custom-css", async () => {
+      const { dialog } = require("electron");
+      const fs = require("fs");
+
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ["openFile"],
+        filters: [{ name: "CSS", extensions: ["css"] }],
+      });
+
+      if (canceled || !filePaths || filePaths.length === 0) {
+        return { success: false };
+      }
+
+      try {
+        const content = fs.readFileSync(filePaths[0], "utf8");
+        store.set("customCSS", { path: filePaths[0], content });
+        // forward to overlay window
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("update-custom-css", content);
+        }
+        return { success: true, content };
+      } catch (err) {
+        console.error("Failed to read custom css:", err);
+        return { success: false, error: err.message };
+      }
+    });
+
+    ipcMain.handle("get-custom-css", () => {
+      return store.get("customCSS", { path: null, content: "" });
+    });
+
+    ipcMain.on("toggle-custom-css", (_, enabled) => {
+      store.set("useCustomCSS", enabled);
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.webContents.send("update-use-custom-css", enabled);
+        if (enabled) {
+          const css = store.get("customCSS", { content: "" }).content || "";
+          this.overlayWindow.webContents.send("update-custom-css", css);
+        }
+      }
+    });
+
+    ipcMain.handle("get-use-custom-css", () => {
+      return store.get("useCustomCSS", false);
+    });
+
     // URL 열기 요청 처리
     ipcMain.on("open-external", (_, url) => {
       shell.openExternal(url);

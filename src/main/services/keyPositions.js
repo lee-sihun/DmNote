@@ -72,6 +72,17 @@ function loadKeyPositions() {
           hasUpdates = true;
         }
 
+        // classNameActive / classNameInactive 호환성 처리
+        if (!updatedKey.hasOwnProperty('classNameActive')) {
+          updatedKey.classNameActive = '';
+          hasUpdates = true;
+        }
+
+        if (!updatedKey.hasOwnProperty('classNameInactive')) {
+          updatedKey.classNameInactive = '';
+          hasUpdates = true;
+        }
+
         return updatedKey;
       });
     });
