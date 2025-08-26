@@ -100,7 +100,7 @@ export default function Grid() {
       style={{ backgroundColor: color === "transparent" ? "#393A3F" : color }}
       onClick={handlePaletteClose}
     >
-      {noteEffect && (
+      {/* {noteEffect && (
         <>
           <p
             className="absolute leading-relaxed text-center text-white transform -translate-x-1/2 left-1/2"
@@ -114,7 +114,7 @@ export default function Grid() {
             style={{ top: "150px" }}
           />
         </>
-      )}
+      )} */}
       {renderKeys()}
       <button
         onClick={handleAddKey}
