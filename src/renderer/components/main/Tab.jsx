@@ -85,7 +85,9 @@ export default function Tab() {
           </div>
         </div>
       </div>
-      <div className="flex h-full">{renderTabContent()}</div>
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {renderTabContent()}
+      </div>
     </div>
   );
 }

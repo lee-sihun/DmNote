@@ -76,7 +76,7 @@ export default function App() {
 
   // 동적 리사이즈 & 좌표 변환
   const PADDING = 30; // 상하좌우 여백
-  const TRACK_RESERVE = TRACK_HEIGHT; 
+  const TRACK_RESERVE = TRACK_HEIGHT;
   const [noteEffectEnabled, setNoteEffectEnabled] = useState(false);
 
   useEffect(() => {
@@ -84,6 +84,48 @@ export default function App() {
     const handler = (_, value) => setNoteEffectEnabled(value);
     ipcRenderer.on("update-note-effect", handler);
     return () => ipcRenderer.removeAllListeners("update-note-effect");
+  }, []);
+
+  // 커스텀 CSS 인젝션 
+  useEffect(() => {
+    let styleEl = document.getElementById("djmv-custom-css");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "djmv-custom-css";
+      document.head.appendChild(styleEl);
+    }
+
+    const cssContentHandler = (_, content) => {
+      styleEl.textContent = content || "";
+    };
+
+    const useCssHandler = (_, enabled) => {
+      if (!styleEl) return;
+      styleEl.disabled = !enabled;
+    };
+
+    ipcRenderer.on("update-custom-css", cssContentHandler);
+    ipcRenderer.on("update-use-custom-css", useCssHandler);
+
+    // request stored css on mount
+    ipcRenderer
+      .invoke("get-custom-css")
+      .then((data) => {
+        if (data && data.content) styleEl.textContent = data.content;
+      })
+      .catch(() => {});
+
+    ipcRenderer
+      .invoke("get-use-custom-css")
+      .then((enabled) => {
+        styleEl.disabled = !enabled;
+      })
+      .catch(() => {});
+
+    return () => {
+      ipcRenderer.removeAllListeners("update-custom-css");
+      ipcRenderer.removeAllListeners("update-use-custom-css");
+    };
   }, []);
 
   // 원본 좌표 기준 경계 박스 계산

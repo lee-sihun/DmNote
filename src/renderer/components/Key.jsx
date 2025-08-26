@@ -10,7 +10,16 @@ export default function DraggableKey({
   onClick,
 }) {
   const { displayName } = getKeyInfoByGlobalKey(keyName);
-  const { dx, dy, width, height = 60, activeImage, inactiveImage } = position;
+  const {
+    dx,
+    dy,
+    width,
+    height = 60,
+    activeImage,
+    inactiveImage,
+    classNameActive,
+    classNameInactive,
+  } = position;
   const draggable = useDraggable({
     gridSize: 5,
     initialX: dx,
@@ -69,7 +78,9 @@ export default function DraggableKey({
   return (
     <div
       ref={draggable.ref}
-      className="absolute cursor-pointer"
+      className={`absolute cursor-pointer ${
+        draggable && draggable.wasMoved ? "" : ""
+      } ${classNameInactive || ""}`}
       style={keyStyle}
       onClick={handleClick}
       onDragStart={(e) => e.preventDefault()}
@@ -90,7 +101,16 @@ export default function DraggableKey({
 
 export const Key = memo(
   ({ keyName, active, position }) => {
-    const { dx, dy, width, height = 60, activeImage, inactiveImage } = position;
+    const {
+      dx,
+      dy,
+      width,
+      height = 60,
+      activeImage,
+      inactiveImage,
+      classNameActive,
+      classNameInactive,
+    } = position;
 
     const currentImage =
       active && activeImage
@@ -119,7 +139,7 @@ export const Key = memo(
           : "10px",
         border:
           activeImage || inactiveImage
-            ? "none" 
+            ? "none"
             : active
             ? "3px solid rgba(255, 255, 255, 0.9)"
             : "3px solid rgba(113, 113, 113, 0.9)",
@@ -162,7 +182,12 @@ export const Key = memo(
     const showText = (!active && !inactiveImage) || (active && !activeImage);
 
     return (
-      <div className="absolute" style={keyStyle}>
+      <div
+        className={`absolute ${
+          active ? classNameActive || "" : classNameInactive || ""
+        }`}
+        style={keyStyle}
+      >
         {currentImage ? (
           <img src={currentImage} alt="" style={imageStyle} draggable={false} />
         ) : showText ? (
@@ -186,7 +211,11 @@ export const Key = memo(
       prevProps.position.width === nextProps.position.width &&
       prevProps.position.height === nextProps.position.height &&
       prevProps.position.activeImage === nextProps.position.activeImage &&
-      prevProps.position.inactiveImage === nextProps.position.inactiveImage
+      prevProps.position.inactiveImage === nextProps.position.inactiveImage &&
+      prevProps.position.classNameActive ===
+        nextProps.position.classNameActive &&
+      prevProps.position.classNameInactive ===
+        nextProps.position.classNameInactive
     );
   }
 );

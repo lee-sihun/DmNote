@@ -371,7 +371,7 @@ class Application {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayWindow.webContents.send("update-custom-css", content);
         }
-        return { success: true, content };
+        return { success: true, content, path: filePaths[0] };
       } catch (err) {
         console.error("Failed to read custom css:", err);
         return { success: false, error: err.message };

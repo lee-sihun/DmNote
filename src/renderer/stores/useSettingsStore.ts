@@ -10,10 +10,12 @@ interface SettingsState {
   // custom css
   useCustomCSS: boolean;
   customCSSContent: string;
+  customCSSPath: string;
   setHardwareAcceleration: (value: boolean) => void;
   setAlwaysOnTop: (value: boolean) => void;
   setUseCustomCSS: (value: boolean) => void;
   setCustomCSSContent: (value: string) => void;
+  setCustomCSSPath: (value: string) => void;
   // setShowKeyCount: (value: boolean) => void;
   setOverlayLocked: (value: boolean) => void;
   setAngleMode: (value: string) => void;
@@ -29,11 +31,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   noteEffect: false,
   useCustomCSS: false,
   customCSSContent: "",
+  customCSSPath: "",
   setHardwareAcceleration: (value: boolean) =>
     set({ hardwareAcceleration: value }),
   setAlwaysOnTop: (value: boolean) => set({ alwaysOnTop: value }),
   setUseCustomCSS: (value: boolean) => set({ useCustomCSS: value }),
   setCustomCSSContent: (value: string) => set({ customCSSContent: value }),
+  setCustomCSSPath: (value: string) => set({ customCSSPath: value }),
   // setShowKeyCount: (value: boolean) => set({ showKeyCount: value }),
   setOverlayLocked: (value: boolean) => set({ overlayLocked: value }),
   setAngleMode: (value: string) => set({ angleMode: value }),

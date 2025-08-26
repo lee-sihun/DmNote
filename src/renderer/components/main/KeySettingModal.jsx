@@ -22,6 +22,13 @@ export default function KeySettingModal({
   const [noteColor, setNoteColor] = useState(keyData.noteColor || "#FFFFFF");
   const [noteOpacity, setNoteOpacity] = useState(keyData.noteOpacity || 80);
 
+  const [classNameActive, setClassNameActive] = useState(
+    keyData.classNameActive || ""
+  );
+  const [classNameInactive, setClassNameInactive] = useState(
+    keyData.classNameInactive || ""
+  );
+
   const activeInputRef = useRef(null);
   const inactiveInputRef = useRef(null);
 
@@ -52,6 +59,8 @@ export default function KeySettingModal({
       height: parseInt(height),
       noteColor,
       noteOpacity: parseInt(noteOpacity),
+      classNameActive,
+      classNameInactive,
     });
   };
 
@@ -285,6 +294,33 @@ export default function KeySettingModal({
             />
             <p className="text-[#989BA6] text-[13.5px] font-bold">%</p>
           </div>
+        </div>
+
+        {/* 클래스 이름 */}
+        <div className="flex justify-between w-full mt-[18px] items-center">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+            클래스 이름 (대기 상태)
+          </p>
+          <input
+            type="text"
+            value={classNameInactive}
+            onChange={(e) => setClassNameInactive(e.target.value)}
+            placeholder="key-inactive"
+            className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+          />
+        </div>
+
+        <div className="flex justify-between w-full mt-[12px] items-center">
+          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+            클래스 이름 (입력 상태)
+          </p>
+          <input
+            type="text"
+            value={classNameActive}
+            onChange={(e) => setClassNameActive(e.target.value)}
+            placeholder="key-active"
+            className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+          />
         </div>
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">

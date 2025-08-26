@@ -22,7 +22,7 @@ export default function Grid() {
     handleReset,
     handleKeyUpdate,
     handleAddKey,
-    handleDeleteKey
+    handleDeleteKey,
   } = useKeyManager();
   const {
     color,
@@ -153,6 +153,12 @@ export default function Grid() {
               "#FFFFFF",
             noteOpacity:
               positions[selectedKeyType][selectedKey.index].noteOpacity || 80,
+            classNameActive:
+              positions[selectedKeyType][selectedKey.index].classNameActive ||
+              "",
+            classNameInactive:
+              positions[selectedKeyType][selectedKey.index].classNameInactive ||
+              "",
           }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}

@@ -12,7 +12,7 @@ export default function TitleBar() {
   };
 
   return (
-    <div className="w-full h-[40px] flex justify-between items-center bg-[#18191F] rounded-t-[6px] [app-region:drag]">
+    <div className="w-full h-[40px] min-h-[40px] flex justify-between items-center bg-[#18191F] rounded-t-[6px] [app-region:drag]">
       <div className="text-[15px] font-extrabold text-[#989BA6] ml-[18px]">
         DM NOTE
       </div>
