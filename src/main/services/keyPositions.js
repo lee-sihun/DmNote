@@ -31,10 +31,10 @@ const DEFAULT_POSITIONS = {
     { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
   ],
   "8key": [
-    { dx: 240, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
-    { dx: 435, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
     { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
     { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
+    { dx: 240, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
+    { dx: 435, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
     { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
     { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },

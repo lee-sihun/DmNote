@@ -5,7 +5,7 @@ const DEFAULT_KEYS = {
   '4key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'DOT', 'FORWARD SLASH'],
   '5key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
   '6key': ['LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
-  '8key': ['LEFT CTRL', '25', 'LEFT SHIFT', 'RIGHT SHIFT', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
+  '8key': ['LEFT SHIFT', 'RIGHT SHIFT', 'LEFT CTRL', '25', 'Z', 'X', 'C', 'COMMA', 'DOT', 'FORWARD SLASH'],
 };
 
 function loadKeys() {

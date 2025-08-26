@@ -347,7 +347,7 @@ function Footer() {
           없습니다.
         </p>
         <p className="text-[#989BA6] text-[10.5px] text-center font-light">
-          (Ver 1.0.5)
+          (Ver 1.0.6)
         </p>
       </div>
     </div>
