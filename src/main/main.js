@@ -191,7 +191,7 @@ class Application {
     ipcMain.on("toggle-always-on-top", (_, enabled) => {
       store.set("alwaysOnTop", enabled);
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-        this.overlayWindow.setAlwaysOnTop(enabled, "screen-saver", 1);
+        this.overlayWindow.setAlwaysOnTop(enabled, "normal", 1);
       }
     });
 

@@ -76,7 +76,7 @@ export default function App() {
 
   // 동적 리사이즈 & 좌표 변환
   const PADDING = 30; // 상하좌우 여백
-  const TRACK_RESERVE = TRACK_HEIGHT;
+  const TRACK_RESERVE = TRACK_HEIGHT; 
   const [noteEffectEnabled, setNoteEffectEnabled] = useState(false);
 
   useEffect(() => {
@@ -103,7 +103,8 @@ export default function App() {
   // 렌더링용 변환 좌표
   const displayPositions = useMemo(() => {
     if (!bounds) return currentPositions;
-    const topOffset = (noteEffectEnabled ? TRACK_RESERVE : 0) + PADDING;
+    // const topOffset = (noteEffectEnabled ? TRACK_RESERVE : 0) + PADDING;
+    const topOffset = TRACK_RESERVE + PADDING;
     const offsetX = PADDING - bounds.minX;
     const offsetY = topOffset - bounds.minY;
     return currentPositions.map((pos) => ({
@@ -118,7 +119,8 @@ export default function App() {
     if (!bounds) return;
     const keyAreaWidth = bounds.maxX - bounds.minX;
     const keyAreaHeight = bounds.maxY - bounds.minY;
-    const extraTop = noteEffectEnabled ? TRACK_RESERVE : 0;
+    // const extraTop = noteEffectEnabled ? TRACK_RESERVE : 0;
+    const extraTop = TRACK_RESERVE;
     const totalWidth = keyAreaWidth + PADDING * 2;
     const totalHeight = keyAreaHeight + PADDING * 2 + extraTop;
     ipcRenderer.send("resize-overlay", {
@@ -277,6 +279,20 @@ export default function App() {
         onReset={handleResetStats}
       /> */}
 
+      {/* 노트 효과 공간 시각화 (투명 영역 확보) */}
+      {/* {noteEffectEnabled && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "100%",
+            height: `${TRACK_RESERVE + PADDING}px`,
+            pointerEvents: "none",
+          }}
+        />
+      )} */}
+
       {currentKeys.map((key, index) => {
         const originalPos = currentPositions[index] || {
           dx: 0,
@@ -290,6 +306,7 @@ export default function App() {
         const position = displayPositions[index] || originalPos;
 
         const keyNotes = notes[key] || [];
+        // 트랙 시작 Y (노트 효과 시 확보 공간 바로 아래 / 아니면 최상단 위치)
         const trackStartY = noteEffectEnabled
           ? PADDING + TRACK_RESERVE
           : topMostY;
