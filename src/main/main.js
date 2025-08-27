@@ -182,8 +182,12 @@ class Application {
       );
 
       // CSS 초기화 알림
-      this.overlayWindow.webContents.send("update-use-custom-css", false);
-      this.overlayWindow.webContents.send("update-custom-css", "");
+      [this.mainWindow, this.overlayWindow].forEach((window) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send("update-use-custom-css", false);
+          window.webContents.send("update-custom-css", "");
+        }
+      });
 
       // 모든 데이터를 한 번에 보내는 새로운 이벤트
       e.reply("resetComplete", {
@@ -386,10 +390,12 @@ class Application {
       try {
         const content = fs.readFileSync(filePaths[0], "utf8");
         store.set("customCSS", { path: filePaths[0], content });
-        // forward to overlay window
-        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-          this.overlayWindow.webContents.send("update-custom-css", content);
-        }
+        // forward to both windows
+        [this.mainWindow, this.overlayWindow].forEach((window) => {
+          if (window && !window.isDestroyed()) {
+            window.webContents.send("update-custom-css", content);
+          }
+        });
         return { success: true, content, path: filePaths[0] };
       } catch (err) {
         console.error("Failed to read custom css:", err);
@@ -403,13 +409,15 @@ class Application {
 
     ipcMain.on("toggle-custom-css", (_, enabled) => {
       store.set("useCustomCSS", enabled);
-      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-        this.overlayWindow.webContents.send("update-use-custom-css", enabled);
-        if (enabled) {
-          const css = store.get("customCSS", { content: "" }).content || "";
-          this.overlayWindow.webContents.send("update-custom-css", css);
+      [this.mainWindow, this.overlayWindow].forEach((window) => {
+        if (window && !window.isDestroyed()) {
+          window.webContents.send("update-use-custom-css", enabled);
+          if (enabled) {
+            const css = store.get("customCSS", { content: "" }).content || "";
+            window.webContents.send("update-custom-css", css);
+          }
         }
-      }
+      });
     });
 
     ipcMain.handle("get-use-custom-css", () => {
