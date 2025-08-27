@@ -40,9 +40,13 @@ export default function DraggableKey({
       width: `${width}px`,
       height: `${height}px`,
       transform: `translate3d(${renderDx}px, ${renderDy}px, 0)`,
-      backgroundColor: inactiveImage ? "transparent" : "rgba(46, 46, 47, 0.9)",
-      borderRadius: inactiveImage ? "0" : "10px",
-      border: inactiveImage ? "none" : "3px solid rgba(113, 113, 113, 0.9)",
+      backgroundColor: `var(--key-bg, ${
+        inactiveImage ? "transparent" : "rgba(46, 46, 47, 0.9)"
+      })`,
+      borderRadius: `var(--key-radius, ${inactiveImage ? "0" : "10px"})`,
+      border: `var(--key-border, ${
+        inactiveImage ? "none" : "3px solid rgba(113, 113, 113, 0.9)"
+      })`,
       overflow: inactiveImage ? "visible" : "hidden",
       willChange: "transform",
       backfaceVisibility: "hidden",
@@ -71,6 +75,7 @@ export default function DraggableKey({
     () => ({
       willChange: "auto",
       contain: "layout style paint",
+      color: "var(--key-text-color, #717171)",
     }),
     []
   );
@@ -82,6 +87,7 @@ export default function DraggableKey({
         draggable && draggable.wasMoved ? "" : ""
       } ${classNameInactive || ""}`}
       style={keyStyle}
+      data-state="inactive"
       onClick={handleClick}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -89,7 +95,7 @@ export default function DraggableKey({
         <img src={inactiveImage} alt="" style={imageStyle} draggable={false} />
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold text-[#717171]"
+          className="flex items-center justify-center h-full font-bold"
           style={textStyle}
         >
           {displayName}
@@ -124,26 +130,26 @@ export const Key = memo(
         width: `${width}px`,
         height: `${height}px`,
         transform: `translate3d(${dx}px, ${dy}px, 0)`,
-        backgroundColor:
+        backgroundColor: `var(--key-bg, ${
           (active && activeImage) || (!active && inactiveImage)
             ? "transparent"
             : active
             ? "rgba(121, 121, 121, 0.9)"
-            : "rgba(46, 46, 47, 0.9)",
-        borderRadius: active
-          ? activeImage
-            ? "0"
-            : "10px"
-          : inactiveImage
-          ? "0"
-          : "10px",
-        border:
+            : "rgba(46, 46, 47, 0.9)"
+        })`,
+        borderRadius: `var(--key-radius, ${
+          active ? (activeImage ? "0" : "10px") : inactiveImage ? "0" : "10px"
+        })`,
+        border: `var(--key-border, ${
           activeImage || inactiveImage
             ? "none"
             : active
             ? "3px solid rgba(255, 255, 255, 0.9)"
-            : "3px solid rgba(113, 113, 113, 0.9)",
-        color: active && !activeImage ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)",
+            : "3px solid rgba(113, 113, 113, 0.9)"
+        })`,
+        color: `var(--key-text-color, ${
+          active && !activeImage ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)"
+        })`,
         overflow: currentImage ? "visible" : "hidden",
         // GPU 가속 최적화 강화
         willChange: "transform, background-color",
@@ -187,6 +193,7 @@ export const Key = memo(
           active ? classNameActive || "" : classNameInactive || ""
         }`}
         style={keyStyle}
+        data-state={active ? "active" : "inactive"}
       >
         {currentImage ? (
           <img src={currentImage} alt="" style={imageStyle} draggable={false} />

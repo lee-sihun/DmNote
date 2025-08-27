@@ -1,5 +1,4 @@
 /* eslint-disable no-undef */
-// useCustomCssInjection.js
 import { useEffect } from "react";
 
 /**
