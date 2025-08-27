@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Grid from "./Grid";
 import { useKeyStore } from "@stores/useKeyStore";
 import CustomAlert from "@components/CustomAlert";
@@ -9,13 +9,27 @@ export default function Canvas() {
     isOpen: false,
     message: "",
     confirmText: "확인",
+    type: "alert",
   });
+  const confirmCallbackRef = useRef(null);
 
   const showAlert = (message, confirmText = "확인") => {
     setAlertState({
       isOpen: true,
       message,
       confirmText,
+      type: "alert",
+    });
+  };
+
+  const showConfirm = (message, onConfirm, confirmText = "확인") => {
+    confirmCallbackRef.current =
+      typeof onConfirm === "function" ? onConfirm : null;
+    setAlertState({
+      isOpen: true,
+      message,
+      confirmText,
+      type: "confirm",
     });
   };
 
@@ -24,7 +38,9 @@ export default function Canvas() {
       isOpen: false,
       message: "",
       confirmText: "확인",
+      type: "alert",
     });
+    confirmCallbackRef.current = null;
   };
 
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
@@ -38,7 +54,7 @@ export default function Canvas() {
           onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
         />
       </div>
-      <Grid showAlert={showAlert} />
+      <Grid showAlert={showAlert} showConfirm={showConfirm} />
 
       {isNoteSettingOpen && (
         <NoteSettingModal onClose={() => setIsNoteSettingOpen(false)} />
@@ -47,9 +63,22 @@ export default function Canvas() {
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}
+        type={alertState.type}
         confirmText={alertState.confirmText}
-        onConfirm={closeAlert}
-        onCancel={closeAlert}
+        onConfirm={() => {
+          if (alertState.type === "confirm" && confirmCallbackRef.current) {
+            const cb = confirmCallbackRef.current;
+            confirmCallbackRef.current = null;
+            try {
+              cb();
+            } catch (_) {}
+          }
+          closeAlert();
+        }}
+        onCancel={() => {
+          confirmCallbackRef.current = null;
+          closeAlert();
+        }}
       />
     </div>
   );

@@ -10,7 +10,7 @@ import { ReactComponent as PlusIcon } from "@assets/svgs/plus.svg";
 import { useKeyStore } from "@stores/useKeyStore.js";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
-export default function Grid() {
+export default function Grid({ showConfirm }) {
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
   const { noteEffect, setNoteEffect } = useSettingsStore();
   const {
@@ -146,8 +146,19 @@ export default function Grid() {
       <button
         className="absolute flex items-center justify-center w-[30px] h-[30px] bg-[#101216] rounded-[6px] bottom-[18px] left-[18px]"
         onClick={() => {
-          handleReset();
-          handleResetColor();
+          if (showConfirm) {
+            showConfirm(
+              "모든 설정을 초기화하시겠습니까?",
+              () => {
+                handleReset();
+                handleResetColor();
+              },
+              "초기화"
+            );
+          } else {
+            handleReset();
+            handleResetColor();
+          }
         }}
       >
         <ResetIcon />

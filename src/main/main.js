@@ -176,12 +176,20 @@ class Application {
       const defaultPositions = resetKeyPositions();
       const defaultColor = resetBackgroundColor();
 
+      // 노트 관련 기본값
+      const defaultNoteSettings = { borderRadius: 2, speed: 180 };
+
       // CSS 관련 상태들 초기화
       store.set("useCustomCSS", false);
       store.set("customCSS", { path: null, content: "" });
 
+      // 노트 관련 설정 초기화
+      store.set("noteEffect", false);
+      store.set("noteSettings", defaultNoteSettings);
+
       keyboardService.updateKeyMapping(defaultKeys);
 
+      // Overlay에 최신 상태 브로드캐스트
       this.overlayWindow.webContents.send("updateKeyMappings", defaultKeys);
       this.overlayWindow.webContents.send(
         "updateKeyPositions",
@@ -190,6 +198,11 @@ class Application {
       this.overlayWindow.webContents.send(
         "updateBackgroundColor",
         defaultColor
+      );
+      this.overlayWindow.webContents.send("update-note-effect", false);
+      this.overlayWindow.webContents.send(
+        "update-note-settings",
+        defaultNoteSettings
       );
 
       // CSS 초기화 알림
@@ -205,6 +218,8 @@ class Application {
         keys: defaultKeys,
         positions: defaultPositions,
         color: defaultColor,
+        noteSettings: defaultNoteSettings,
+        noteEffect: false,
       });
     });
 
@@ -317,19 +332,18 @@ class Application {
     ipcMain.handle("update-note-settings", (_, newSettings) => {
       try {
         const defaults = { borderRadius: 2, speed: 180 };
+        const br = parseInt(newSettings?.borderRadius ?? defaults.borderRadius);
+        const sp = parseInt(newSettings?.speed ?? defaults.speed);
         const normalized = {
           ...defaults,
           ...newSettings,
           borderRadius: Math.max(
-            0,
-            Math.min(
-              parseInt(newSettings?.borderRadius ?? defaults.borderRadius),
-              100
-            )
+            1,
+            Math.min(Number.isFinite(br) ? br : defaults.borderRadius, 100)
           ),
           speed: Math.max(
-            1,
-            Math.min(parseInt(newSettings?.speed ?? defaults.speed), 2000)
+            70,
+            Math.min(Number.isFinite(sp) ? sp : defaults.speed, 1000)
           ),
         };
         store.set("noteSettings", normalized);
@@ -364,7 +378,10 @@ class Application {
         keys: store.get("keys"),
         keyPositions: store.get("keyPositions"),
         backgroundColor: store.get("backgroundColor"),
-        noteSettings: store.get("noteSettings", { borderRadius: 2, speed: 180 }),
+        noteSettings: store.get("noteSettings", {
+          borderRadius: 2,
+          speed: 180,
+        }),
       };
 
       const { filePath } = await dialog.showSaveDialog({
@@ -406,25 +423,23 @@ class Application {
           store.set("keys", preset.keys);
           store.set("keyPositions", preset.keyPositions);
           store.set("backgroundColor", preset.backgroundColor);
-          if (preset.noteSettings) {
-            const defaults = { borderRadius: 2, speed: 180 };
-            const normalized = {
-              ...defaults,
-              ...preset.noteSettings,
-              borderRadius: Math.max(
-                0,
-                Math.min(
-                  parseInt(preset.noteSettings.borderRadius ?? defaults.borderRadius),
-                  100
-                )
-              ),
-              speed: Math.max(
-                1,
-                Math.min(parseInt(preset.noteSettings.speed ?? defaults.speed), 2000)
-              ),
-            };
-            store.set("noteSettings", normalized);
-          }
+          // 노트 설정 적용 (호환 범위로 정규화)
+          const defaults = { borderRadius: 2, speed: 180 };
+          const incoming = preset.noteSettings || {};
+          const br = parseInt(incoming.borderRadius ?? defaults.borderRadius);
+          const sp = parseInt(incoming.speed ?? defaults.speed);
+          const normalized = {
+            borderRadius: Math.max(
+              1,
+              Math.min(Number.isFinite(br) ? br : defaults.borderRadius, 100)
+            ),
+            speed: Math.max(
+              70,
+              Math.min(Number.isFinite(sp) ? sp : defaults.speed, 1000)
+            ),
+          };
+          store.set("noteSettings", normalized);
+          // noteSettings normalized above; legacy branch removed
 
           keyboardService.updateKeyMapping(preset.keys);
 

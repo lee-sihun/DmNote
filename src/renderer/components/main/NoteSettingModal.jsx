@@ -29,8 +29,8 @@ export default function NoteSettingModal({ onClose }) {
   const handleSave = async () => {
     if (!ipcRenderer) return onClose?.();
     const normalized = {
-      borderRadius: Math.max(0, Math.min(parseInt(borderRadius || 0), 100)),
-      speed: Math.max(1, Math.min(parseInt(speed || 1), 2000)),
+      borderRadius: Math.max(1, Math.min(parseInt(borderRadius || 1), 100)),
+      speed: Math.max(70, Math.min(parseInt(speed || 70), 1000)),
     };
     try {
       const ok = await ipcRenderer.invoke("update-note-settings", normalized);
@@ -58,6 +58,8 @@ export default function NoteSettingModal({ onClose }) {
           <div className="flex items-center gap-[10px]">
             <input
               type="number"
+              min={1}
+              max={100}
               value={borderRadius}
               onChange={(e) => {
                 const v = e.target.value;
@@ -66,13 +68,16 @@ export default function NoteSettingModal({ onClose }) {
                 } else {
                   const num = parseInt(v);
                   if (!Number.isNaN(num)) {
-                    setBorderRadius(Math.min(Math.max(num, 0), 100));
+                    setBorderRadius(Math.min(Math.max(num, 1), 100));
                   }
                 }
               }}
               onBlur={(e) => {
                 if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
                   setBorderRadius(2);
+                } else {
+                  const num = parseInt(e.target.value);
+                  setBorderRadius(Math.min(Math.max(num, 1), 100));
                 }
               }}
               className="text-center w-[60px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
@@ -88,6 +93,8 @@ export default function NoteSettingModal({ onClose }) {
           <div className="flex items-center gap-[10px]">
             <input
               type="number"
+              min={70}
+              max={1000}
               value={speed}
               onChange={(e) => {
                 const v = e.target.value;
@@ -96,13 +103,16 @@ export default function NoteSettingModal({ onClose }) {
                 } else {
                   const num = parseInt(v);
                   if (!Number.isNaN(num)) {
-                    setSpeed(Math.min(Math.max(num, 1), 2000));
+                    setSpeed(Math.min(Math.max(num, 70), 1000));
                   }
                 }
               }}
               onBlur={(e) => {
                 if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
                   setSpeed(180);
+                } else {
+                  const num = parseInt(e.target.value);
+                  setSpeed(Math.min(Math.max(num, 70), 1000));
                 }
               }}
               className="text-center w-[60px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
