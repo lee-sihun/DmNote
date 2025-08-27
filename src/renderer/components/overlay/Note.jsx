@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useRef } from "react";
 
 export const Note = memo(
-  ({ note, registerRef, noteColor, noteOpacity, borderRadius }) => {
+  ({ note, registerRef, noteColor, noteOpacity, borderRadius, className }) => {
     const noteRef = useRef();
 
     // ref 등록
@@ -26,8 +26,8 @@ export const Note = memo(
       transform: "translateX(-50%) translateZ(0)",
       width: "100%",
       height: "0px",
-      backgroundColor: noteColor || "#ffffff",
-      borderRadius: `${br}px`,
+      backgroundColor: `var(--note-bg, ${noteColor || "#ffffff"})`,
+      borderRadius: `var(--note-radius, ${br}px)`,
       opacity: (noteOpacity || 80) / 100,
       zIndex: 10,
       // GPU 가속 설정
@@ -35,6 +35,13 @@ export const Note = memo(
       backfaceVisibility: "hidden",
     };
 
-    return <div ref={noteRef} style={initialStyle} />;
+    return (
+      <div
+        ref={noteRef}
+        style={initialStyle}
+        className={className || ""}
+        data-state="note"
+      />
+    );
   }
 );

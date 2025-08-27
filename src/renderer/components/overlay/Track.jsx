@@ -22,15 +22,12 @@ export const Track = memo(
       const minNoteHeight = 0; // 최소 노트 높이
       const fadeZoneHeight = 50; // 페이드 아웃 시작 높이
 
-      // 트랙에 페이드 마스크 적용
+      // 트랙에 페이드 마스크 적용 (CSS 변수로 오버라이드 가능)
       if (trackRef.current) {
         const fadeStartFromBottom = height - fadeZoneHeight;
-        const trackMask = `linear-gradient(to top, 
-        rgba(0,0,0,1) 0%, 
-        rgba(0,0,0,1) ${fadeStartFromBottom}px, 
-        rgba(0,0,0,0) ${height}px)`;
-
-        trackRef.current.style.mask = trackMask;
+        const defaultMask = `linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) ${fadeStartFromBottom}px, rgba(0,0,0,0) ${height}px)`;
+        trackRef.current.style.mask = `var(--track-mask, ${defaultMask})`;
+        trackRef.current.style.webkitMaskImage = `var(--track-mask, ${defaultMask})`;
       }
 
       const animate = (currentTime) => {
@@ -54,8 +51,12 @@ export const Track = memo(
             noteElement.style.height = `${Math.round(noteLength)}px`;
             noteElement.style.bottom = "0px";
             noteElement.style.opacity = baseOpacity;
-            noteElement.style.borderRadius = `${borderRadius ?? 2}px`;
-            noteElement.style.backgroundColor = noteColor || "#FFFFFF";
+            noteElement.style.borderRadius = `var(--note-radius, ${
+              borderRadius ?? 2
+            }px)`;
+            noteElement.style.backgroundColor = `var(--note-bg, ${
+              noteColor || "#FFFFFF"
+            })`;
             // 개별 노트 마스크 제거 (트랙 마스크 사용)
             noteElement.style.mask = "none";
           } else {
@@ -83,7 +84,12 @@ export const Track = memo(
 
             noteElement.style.opacity = opacity;
             noteElement.style.mask = "none";
-            noteElement.style.borderRadius = `${borderRadius ?? 2}px`;
+            noteElement.style.borderRadius = `var(--note-radius, ${
+              borderRadius ?? 2
+            }px)`;
+            noteElement.style.backgroundColor = `var(--note-bg, ${
+              noteColor || "#FFFFFF"
+            })`;
           }
         });
 
@@ -119,18 +125,24 @@ export const Track = memo(
       top: `${position.dy - height}px`,
       width: `${width}px`,
       height: `${height}px`,
-      // backgroundColor: "rgba(255, 255, 255, 0.05)",
-      // border: "1px solid rgba(255, 255, 255, 0.1)",
-      // borderRadius: "4px",
-      overflow: "hidden",
-      pointerEvents: "none",
+      backgroundColor: `var(--track-bg, transparent)`,
+      border: `var(--track-border, none)`,
+      borderRadius: `var(--track-radius, 0px)`,
+      overflow: `var(--track-overflow, hidden)`,
+      pointerEvents: `var(--track-pointer-events, none)`,
+      boxShadow: `var(--track-shadow, none)`,
       willChange: "contents",
       backfaceVisibility: "hidden",
       transform: "translateZ(0)",
     };
 
     return (
-      <div ref={trackRef} style={trackStyle}>
+      <div
+        ref={trackRef}
+        style={trackStyle}
+        className={position?.className || ""}
+        data-state="track"
+      >
         {notes.map((note) => (
           <Note
             key={note.id}
@@ -140,6 +152,7 @@ export const Track = memo(
             noteColor={noteColor}
             noteOpacity={noteOpacity}
             borderRadius={borderRadius}
+            className={position?.className || ""}
           />
         ))}
       </div>

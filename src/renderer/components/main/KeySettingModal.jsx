@@ -320,7 +320,7 @@ export default function KeySettingModal({
         {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
         {useCustomCSS && (
           <div className="flex justify-between w-full mt-[18px] items-center">
-            <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
               클래스 이름
             </p>
             <input
@@ -329,7 +329,7 @@ export default function KeySettingModal({
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder="className"
-              className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+              className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
             />
           </div>
         )}
