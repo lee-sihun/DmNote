@@ -1,54 +1,374 @@
-const Store = require('electron-store');
+const Store = require("electron-store");
 const store = new Store();
 
 const DEFAULT_POSITIONS = {
   "4key": [
-    { dx: 180, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    {
+      dx: 180,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 565,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 305,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 370,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 435,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 500,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
   ],
   "5key": [
-    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    {
+      dx: 115,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 630,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 240,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 305,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 370,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 435,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 500,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 565,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
   ],
   "6key": [
-    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
+    {
+      dx: 115,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 630,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 240,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 305,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 370,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 435,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 500,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 565,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
   ],
   "8key": [
-    { dx: 115, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 630, dy: 150, width: 120, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#24BBB4', noteOpacity: 80 },
-    { dx: 240, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
-    { dx: 435, dy: 215, width: 190, height: 40, activeImage: '', inactiveImage: '', count: 0, noteColor: '#ED005C', noteOpacity: 80 },
-    { dx: 240, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 305, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 370, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 435, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 500, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-    { dx: 565, dy: 150, width: 60, height: 60, activeImage: '', inactiveImage: '', count: 0, noteColor: '#FFFFFF', noteOpacity: 80 },
-  ]
-}
+    {
+      dx: 115,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 630,
+      dy: 150,
+      width: 120,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#24BBB4",
+      noteOpacity: 80,
+    },
+    {
+      dx: 240,
+      dy: 215,
+      width: 190,
+      height: 40,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#ED005C",
+      noteOpacity: 80,
+    },
+    {
+      dx: 435,
+      dy: 215,
+      width: 190,
+      height: 40,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#ED005C",
+      noteOpacity: 80,
+    },
+    {
+      dx: 240,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 305,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 370,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 435,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 500,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+    {
+      dx: 565,
+      dy: 150,
+      width: 60,
+      height: 60,
+      activeImage: "",
+      inactiveImage: "",
+      count: 0,
+      noteColor: "#FFFFFF",
+      noteOpacity: 80,
+    },
+  ],
+};
 
 function loadKeyPositions() {
   try {
-    const positions = store.get('keyPositions');
+    const positions = store.get("keyPositions");
     if (!positions) {
-      store.set('keyPositions', DEFAULT_POSITIONS);
+      store.set("keyPositions", DEFAULT_POSITIONS);
       return DEFAULT_POSITIONS;
     }
 
@@ -56,30 +376,19 @@ function loadKeyPositions() {
     const updatedPositions = {};
     let hasUpdates = false;
 
-    Object.keys(positions).forEach(keyMode => {
-      updatedPositions[keyMode] = positions[keyMode].map(key => {
+    Object.keys(positions).forEach((keyMode) => {
+      updatedPositions[keyMode] = positions[keyMode].map((key) => {
         const updatedKey = { ...key };
 
         // noteColor가 없으면 기본값 추가
-        if (!updatedKey.hasOwnProperty('noteColor')) {
-          updatedKey.noteColor = '#FFFFFF';
+        if (!updatedKey.hasOwnProperty("noteColor")) {
+          updatedKey.noteColor = "#FFFFFF";
           hasUpdates = true;
         }
 
         // noteOpacity가 없으면 기본값 추가
-        if (!updatedKey.hasOwnProperty('noteOpacity')) {
+        if (!updatedKey.hasOwnProperty("noteOpacity")) {
           updatedKey.noteOpacity = 80;
-          hasUpdates = true;
-        }
-
-        // classNameActive / classNameInactive 호환성 처리
-        if (!updatedKey.hasOwnProperty('classNameActive')) {
-          updatedKey.classNameActive = '';
-          hasUpdates = true;
-        }
-
-        if (!updatedKey.hasOwnProperty('classNameInactive')) {
-          updatedKey.classNameInactive = '';
           hasUpdates = true;
         }
 
@@ -89,30 +398,31 @@ function loadKeyPositions() {
 
     // 업데이트가 있었다면 저장
     if (hasUpdates) {
-      store.set('keyPositions', updatedPositions);
+      store.set("keyPositions", updatedPositions);
     }
 
     return updatedPositions;
+    return positions;
   } catch (error) {
-    console.error('Failed to load key positions:', error);
+    console.error("Failed to load key positions:", error);
     return DEFAULT_POSITIONS;
   }
 }
 
 function saveKeyPositions(positions) {
   try {
-    store.set('keyPositions', positions);
+    store.set("keyPositions", positions);
   } catch (error) {
-    console.error('Failed to save key positions:', error);
+    console.error("Failed to save key positions:", error);
   }
 }
 
 function resetKeyPositions() {
   try {
-    store.set('keyPositions', DEFAULT_POSITIONS);
+    store.set("keyPositions", DEFAULT_POSITIONS);
     return DEFAULT_POSITIONS;
   } catch (error) {
-    console.error('Failed to reset key positions:', error);
+    console.error("Failed to reset key positions:", error);
     return DEFAULT_POSITIONS;
   }
 }
@@ -120,5 +430,5 @@ function resetKeyPositions() {
 module.exports = {
   saveKeyPositions,
   loadKeyPositions,
-  resetKeyPositions
+  resetKeyPositions,
 };

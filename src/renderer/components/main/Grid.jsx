@@ -168,12 +168,8 @@ export default function Grid() {
               "#FFFFFF",
             noteOpacity:
               positions[selectedKeyType][selectedKey.index].noteOpacity || 80,
-            classNameActive:
-              positions[selectedKeyType][selectedKey.index].classNameActive ||
-              "",
-            classNameInactive:
-              positions[selectedKeyType][selectedKey.index].classNameInactive ||
-              "",
+            className:
+              positions[selectedKeyType][selectedKey.index].className || "",
           }}
           onClose={() => setSelectedKey(null)}
           onSave={handleKeyUpdate}

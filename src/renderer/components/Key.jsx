@@ -17,8 +17,7 @@ export default function DraggableKey({
     height = 60,
     activeImage,
     inactiveImage,
-    classNameActive,
-    classNameInactive,
+    className, 
   } = position;
   const draggable = useDraggable({
     gridSize: 5,
@@ -85,7 +84,7 @@ export default function DraggableKey({
       ref={draggable.ref}
       className={`absolute cursor-pointer ${
         draggable && draggable.wasMoved ? "" : ""
-      } ${classNameInactive || ""}`}
+      } ${className || ""}`}
       style={keyStyle}
       data-state="inactive"
       onClick={handleClick}
@@ -114,8 +113,7 @@ export const Key = memo(
       height = 60,
       activeImage,
       inactiveImage,
-      classNameActive,
-      classNameInactive,
+      className, // 단일 클래스 네임으로 통일
     } = position;
 
     const currentImage =
@@ -189,9 +187,7 @@ export const Key = memo(
 
     return (
       <div
-        className={`absolute ${
-          active ? classNameActive || "" : classNameInactive || ""
-        }`}
+        className={`absolute ${className || ""}`}
         style={keyStyle}
         data-state={active ? "active" : "inactive"}
       >
@@ -219,10 +215,7 @@ export const Key = memo(
       prevProps.position.height === nextProps.position.height &&
       prevProps.position.activeImage === nextProps.position.activeImage &&
       prevProps.position.inactiveImage === nextProps.position.inactiveImage &&
-      prevProps.position.classNameActive ===
-        nextProps.position.classNameActive &&
-      prevProps.position.classNameInactive ===
-        nextProps.position.classNameInactive
+      prevProps.position.className === nextProps.position.className
     );
   }
 );

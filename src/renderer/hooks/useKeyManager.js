@@ -98,8 +98,7 @@ export function useKeyManager() {
       height,
       noteColor,
       noteOpacity,
-      classNameActive,
-      classNameInactive,
+      className,
     } = keyData;
     const updatedMappings = { ...keyMappings };
     const updatedPositions = { ...positions };
@@ -114,15 +113,9 @@ export function useKeyManager() {
         height,
         noteColor,
         noteOpacity,
-        classNameActive:
-          classNameActive ||
-          updatedPositions[selectedKeyType][selectedKey.index]
-            .classNameActive ||
-          "",
-        classNameInactive:
-          classNameInactive ||
-          updatedPositions[selectedKeyType][selectedKey.index]
-            .classNameInactive ||
+        className:
+          (className ??
+            updatedPositions[selectedKeyType][selectedKey.index].className) ||
           "",
       };
     }
@@ -147,6 +140,7 @@ export function useKeyManager() {
       count: 0,
       noteColor: "#FFFFFF",
       noteOpacity: 80,
+      className: "",
     };
 
     const updatedMappings = {
