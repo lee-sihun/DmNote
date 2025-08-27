@@ -1,0 +1,32 @@
+/* 공통 스타일 */
+[data-state="inactive"],
+[data-state="active"] {
+  --key-radius: 6px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* 공통 비활성 스타일 */
+[data-state="inactive"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #474244;
+  --key-text-color: #474244;
+}
+
+/* 공통 활성 스타일 */
+[data-state="active"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #ff2b80;
+  --key-text-color: #ff2b80;
+  text-shadow: 0px 0px 3px #ff2b80;
+  box-shadow: 0px 0px 4px #b3245d, 0px 0px 4px #b3245d;
+}
+
+/* 특정 키 활성 스타일 */
+.blue[data-state="active"] {
+  --key-bg: transparent;
+  --key-border: 3px solid #2ebef3;
+  --key-text-color: #2ebef3;
+  text-shadow: 0px 0px 3px #2ebef3;
+  box-shadow: 0px 0px 4px #2b8eff, 0px 0px 4px #2b8eff;
+}
