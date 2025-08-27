@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
 import SettingTab from "./SettingTab";
 import Canvas from "./Canvas";
+import CustomAlert from "@components/CustomAlert";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Tab() {
@@ -9,6 +10,52 @@ export default function Tab() {
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const overlayLocked = useSettingsStore((state) => state.overlayLocked);
   const ipcRenderer = window.electron.ipcRenderer;
+
+  // CustomAlert 상태 관리
+  const [alertState, setAlertState] = useState({
+    isOpen: false,
+    message: "",
+    type: "alert",
+    confirmText: "확인",
+    onConfirm: null,
+  });
+
+  const showAlert = (message, confirmText = "확인") => {
+    setAlertState({
+      isOpen: true,
+      message,
+      type: "alert",
+      confirmText,
+      onConfirm: null,
+    });
+  };
+
+  const showConfirm = (message, onConfirmCallback, confirmText = "확인") => {
+    setAlertState({
+      isOpen: true,
+      message,
+      type: "confirm",
+      confirmText,
+      onConfirm: onConfirmCallback,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState({
+      isOpen: false,
+      message: "",
+      type: "alert",
+      confirmText: "확인",
+      onConfirm: null,
+    });
+  };
+
+  const handleConfirm = () => {
+    if (alertState.onConfirm) {
+      alertState.onConfirm();
+    }
+    closeAlert();
+  };
 
   useEffect(() => {
     ipcRenderer.invoke("get-overlay-visibility").then((visible) => {
@@ -51,7 +98,7 @@ export default function Tab() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 0:
-        return <SettingTab />;
+        return <SettingTab showAlert={showAlert} showConfirm={showConfirm} />;
       case 1:
         return <Canvas />;
       default:
@@ -88,6 +135,15 @@ export default function Tab() {
       <div className="flex flex-1 overflow-hidden min-h-0">
         {renderTabContent()}
       </div>
+      
+      <CustomAlert
+        isOpen={alertState.isOpen}
+        message={alertState.message}
+        type={alertState.type}
+        confirmText={alertState.confirmText}
+        onConfirm={handleConfirm}
+        onCancel={closeAlert}
+      />
     </div>
   );
 }

@@ -1,15 +1,46 @@
-import React from "react";
+import React, { useState } from "react";
 import Grid from "./Grid";
 import { useKeyStore } from "@stores/useKeyStore";
+import CustomAlert from "@components/CustomAlert";
 
 export default function Canvas() {
+  const [alertState, setAlertState] = useState({
+    isOpen: false,
+    message: "",
+    confirmText: "확인",
+  });
+
+  const showAlert = (message, confirmText = "확인") => {
+    setAlertState({
+      isOpen: true,
+      message,
+      confirmText,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState({
+      isOpen: false,
+      message: "",
+      confirmText: "확인",
+    });
+  };
+
   return (
     <div className="flex flex-col w-full h-full p-[18px] justify-between">
       <div className="flex justify-between">
         <KeyMenu />
-        <SaveMenu />
+        <SaveMenu showAlert={showAlert} />
       </div>
-      <Grid />
+      <Grid showAlert={showAlert} />
+      
+      <CustomAlert
+        isOpen={alertState.isOpen}
+        message={alertState.message}
+        confirmText={alertState.confirmText}
+        onConfirm={closeAlert}
+        onCancel={closeAlert}
+      />
     </div>
   );
 }
@@ -42,24 +73,24 @@ export function KeyMenu() {
   );
 }
 
-export function SaveMenu() {
+export function SaveMenu({ showAlert }) {
   const ipcRenderer = window.electron.ipcRenderer;
 
   const handleSavePreset = async () => {
     const success = await ipcRenderer.invoke("save-preset");
     if (success) {
-      alert("프리셋이 저장되었습니다.");
+      showAlert("프리셋이 저장되었습니다.");
     } else {
-      alert("프리셋 저장에 실패했습니다.");
+      showAlert("프리셋 저장에 실패했습니다.");
     }
   };
 
   const handleLoadPreset = async () => {
     const success = await ipcRenderer.invoke("load-preset");
     if (success) {
-      alert("프리셋이 로드되었습니다.");
+      showAlert("프리셋이 로드되었습니다.");
     } else {
-      alert("프리셋 로드에 실패했습니다.");
+      showAlert("프리셋 로드에 실패했습니다.");
     }
   };
 

@@ -5,7 +5,7 @@ import { ReactComponent as Bug } from "@assets/svgs/bug.svg";
 import Checkbox from "@components/Checkbox";
 import Radio from "@components/Radio";
 
-export default function SettingTab() {
+export default function SettingTab({ showAlert, showConfirm }) {
   const {
     hardwareAcceleration,
     setHardwareAcceleration,
@@ -121,15 +121,14 @@ export default function SettingTab() {
   const handleHardwareAccelerationChange = async () => {
     const newState = !hardwareAcceleration;
 
-    if (
-      window.confirm(
-        "설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?"
-      )
-    ) {
-      setHardwareAcceleration(newState);
-      await ipcRenderer.invoke("toggle-hardware-acceleration", newState);
-      ipcRenderer.send("restart-app");
-    }
+    showConfirm(
+      "설정을 적용하려면 재시작해야 합니다. 지금 재시작하시겠습니까?",
+      async () => {
+        setHardwareAcceleration(newState);
+        await ipcRenderer.invoke("toggle-hardware-acceleration", newState);
+        ipcRenderer.send("restart-app");
+      }
+    );
   };
 
   const handleAlwaysOnTopChange = () => {
@@ -175,9 +174,9 @@ export default function SettingTab() {
       if (result.path) setCustomCSSPath(result.path);
       ipcRenderer.send("update-custom-css", result.content);
       if (!useCustomCSS) handleToggleCustomCSS();
-      window.alert("CSS 파일이 로드되었습니다.");
+      showAlert("CSS 파일이 로드되었습니다.");
     } else if (result && result.error) {
-      window.alert("CSS 파일 로드 실패: " + result.error);
+      showAlert("CSS 파일 로드 실패: " + result.error);
     }
   };
 
@@ -192,15 +191,14 @@ export default function SettingTab() {
   const handleAngleModeChange = async (e) => {
     const newMode = e.target.value;
 
-    if (
-      window.confirm(
-        "설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?"
-      )
-    ) {
-      setAngleMode(newMode);
-      ipcRenderer.send("set-angle-mode", newMode);
-      ipcRenderer.send("restart-app");
-    }
+    showConfirm(
+      "렌더링 설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?",
+      () => {
+        setAngleMode(newMode);
+        ipcRenderer.send("set-angle-mode", newMode);
+        ipcRenderer.send("restart-app");
+      }
+    );
   };
 
   return (
