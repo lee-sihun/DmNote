@@ -22,6 +22,10 @@ export default function App() {
   const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
   const [backgroundColor, setBackgroundColor] = useState("");
+  const [noteSettings, setNoteSettings] = useState({
+    borderRadius: 2,
+    speed: 180,
+  });
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
 
@@ -211,6 +215,10 @@ export default function App() {
       setBackgroundColor(color);
     };
 
+    const noteSettingsListener = (e, settings) => {
+      setNoteSettings(settings);
+    };
+
     // const showKeyCountListener = (_, value) => {
     //   setShowKeyCount(value);
     // };
@@ -222,6 +230,7 @@ export default function App() {
     ipcRenderer.on("updateKeyMappings", keyMappingsListener);
     ipcRenderer.on("updateKeyPositions", positionsListener);
     ipcRenderer.on("updateBackgroundColor", backgroundColorListener);
+    ipcRenderer.on("update-note-settings", noteSettingsListener);
     // ipcRenderer.on('update-show-key-count', showKeyCountListener);
 
     // 초기 데이터 요청 (리스너 등록 후 요청하여 레이스 방지)
@@ -229,6 +238,12 @@ export default function App() {
     ipcRenderer.send("getKeyMappings");
     ipcRenderer.send("getKeyPositions");
     ipcRenderer.send("getBackgroundColor");
+    ipcRenderer
+      .invoke("get-note-settings")
+      .then((settings) => {
+        setNoteSettings(settings);
+      })
+      .catch(() => {});
     // ipcRenderer.send('get-show-key-count');
 
     return () => {
@@ -238,6 +253,7 @@ export default function App() {
       ipcRenderer.removeAllListeners("updateKeyMappings");
       ipcRenderer.removeAllListeners("updateKeyPositions");
       ipcRenderer.removeAllListeners("updateBackgroundColor");
+      ipcRenderer.removeAllListeners("update-note-settings");
       // ipcRenderer.removeAllListeners('update-show-key-count');
     };
   }, [keyStateListener]);
@@ -304,6 +320,8 @@ export default function App() {
             position={trackPosition}
             noteColor={position.noteColor || "#FFFFFF"}
             noteOpacity={position.noteOpacity || 80}
+            flowSpeed={noteSettings.speed}
+            borderRadius={noteSettings.borderRadius}
           />
         );
       })}

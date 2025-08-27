@@ -57,6 +57,17 @@ class Application {
       store.set("noteEffect", false);
     }
 
+    // 노트 효과 상세 설정
+    if (store.get("noteSettings") === undefined) {
+      store.set("noteSettings", { borderRadius: 2, speed: 180 });
+    } else {
+      // 호환성 보정
+      const defaults = { borderRadius: 2, speed: 180 };
+      const existing = store.get("noteSettings") || {};
+      const normalized = { ...defaults, ...existing };
+      store.set("noteSettings", normalized);
+    }
+
     // 선택된 키 모드 초기 설정
     if (store.get("selectedKeyType") === undefined) {
       store.set("selectedKeyType", "4key");
@@ -292,6 +303,48 @@ class Application {
       e.reply("update-note-effect", store.get("noteEffect", true));
     });
 
+    // 노트 효과 상세 설정 IPC
+    ipcMain.handle("get-note-settings", () => {
+      const defaults = { borderRadius: 2, speed: 180 };
+      const settings = store.get("noteSettings", defaults) || defaults;
+      const normalized = { ...defaults, ...settings };
+      if (settings.borderRadius === undefined || settings.speed === undefined) {
+        store.set("noteSettings", normalized);
+      }
+      return normalized;
+    });
+
+    ipcMain.handle("update-note-settings", (_, newSettings) => {
+      try {
+        const defaults = { borderRadius: 2, speed: 180 };
+        const normalized = {
+          ...defaults,
+          ...newSettings,
+          borderRadius: Math.max(
+            0,
+            Math.min(
+              parseInt(newSettings?.borderRadius ?? defaults.borderRadius),
+              100
+            )
+          ),
+          speed: Math.max(
+            1,
+            Math.min(parseInt(newSettings?.speed ?? defaults.speed), 2000)
+          ),
+        };
+        store.set("noteSettings", normalized);
+        [this.mainWindow, this.overlayWindow].forEach((window) => {
+          if (window && !window.isDestroyed()) {
+            window.webContents.send("update-note-settings", normalized);
+          }
+        });
+        return true;
+      } catch (err) {
+        console.error("Failed to update note settings:", err);
+        return false;
+      }
+    });
+
     // ANGLE 모드 설정
     ipcMain.on("set-angle-mode", (_, mode) => {
       store.set("angleMode", mode);
@@ -311,6 +364,7 @@ class Application {
         keys: store.get("keys"),
         keyPositions: store.get("keyPositions"),
         backgroundColor: store.get("backgroundColor"),
+        noteSettings: store.get("noteSettings", { borderRadius: 2, speed: 180 }),
       };
 
       const { filePath } = await dialog.showSaveDialog({
@@ -352,6 +406,25 @@ class Application {
           store.set("keys", preset.keys);
           store.set("keyPositions", preset.keyPositions);
           store.set("backgroundColor", preset.backgroundColor);
+          if (preset.noteSettings) {
+            const defaults = { borderRadius: 2, speed: 180 };
+            const normalized = {
+              ...defaults,
+              ...preset.noteSettings,
+              borderRadius: Math.max(
+                0,
+                Math.min(
+                  parseInt(preset.noteSettings.borderRadius ?? defaults.borderRadius),
+                  100
+                )
+              ),
+              speed: Math.max(
+                1,
+                Math.min(parseInt(preset.noteSettings.speed ?? defaults.speed), 2000)
+              ),
+            };
+            store.set("noteSettings", normalized);
+          }
 
           keyboardService.updateKeyMapping(preset.keys);
 
@@ -361,6 +434,10 @@ class Application {
             window.webContents.send(
               "updateBackgroundColor",
               preset.backgroundColor
+            );
+            window.webContents.send(
+              "update-note-settings",
+              store.get("noteSettings", { borderRadius: 2, speed: 180 })
             );
           });
 
@@ -502,6 +579,10 @@ class Application {
           this.overlayWindow.webContents.send(
             "updateBackgroundColor",
             loadBackgroundColor()
+          );
+          this.overlayWindow.webContents.send(
+            "update-note-settings",
+            store.get("noteSettings", { borderRadius: 2, speed: 180 })
           );
         } catch (err) {
           console.error("Failed to sync overlay initial state:", err);

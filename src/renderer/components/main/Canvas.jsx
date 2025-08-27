@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Grid from "./Grid";
 import { useKeyStore } from "@stores/useKeyStore";
 import CustomAlert from "@components/CustomAlert";
+import NoteSettingModal from "./NoteSettingModal";
 
 export default function Canvas() {
   const [alertState, setAlertState] = useState({
@@ -26,14 +27,23 @@ export default function Canvas() {
     });
   };
 
+  const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
+
   return (
     <div className="flex flex-col w-full h-full p-[18px] justify-between">
       <div className="flex justify-between">
         <KeyMenu />
-        <SaveMenu showAlert={showAlert} />
+        <SaveMenu
+          showAlert={showAlert}
+          onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
+        />
       </div>
       <Grid showAlert={showAlert} />
-      
+
+      {isNoteSettingOpen && (
+        <NoteSettingModal onClose={() => setIsNoteSettingOpen(false)} />
+      )}
+
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}
@@ -73,7 +83,7 @@ export function KeyMenu() {
   );
 }
 
-export function SaveMenu({ showAlert }) {
+export function SaveMenu({ showAlert, onOpenNoteSetting }) {
   const ipcRenderer = window.electron.ipcRenderer;
 
   const handleSavePreset = async () => {
@@ -96,6 +106,12 @@ export function SaveMenu({ showAlert }) {
 
   return (
     <div className="flex gap-[13.5px]">
+      <button
+        onClick={onOpenNoteSetting}
+        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"
+      >
+        노트 설정
+      </button>
       <button
         onClick={handleLoadPreset}
         className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"

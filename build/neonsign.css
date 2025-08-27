@@ -1,4 +1,4 @@
-/* 공통 스타일 */
+/* 전역 키 스타일 */
 [data-state="inactive"],
 [data-state="active"] {
   --key-radius: 6px;
@@ -6,14 +6,14 @@
   font-weight: 700;
 }
 
-/* 공통 비활성 스타일 */
+/* 전역 키 비활성 스타일 */
 [data-state="inactive"] {
   --key-bg: transparent;
   --key-border: 3px solid #474244;
   --key-text-color: #474244;
 }
 
-/* 공통 활성 스타일 */
+/* 전역 키 활성 스타일 */
 [data-state="active"] {
   --key-bg: transparent;
   --key-border: 3px solid #ff2b80;

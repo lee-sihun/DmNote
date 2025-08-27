@@ -1,16 +1,24 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Note } from "./Note";
-import { FLOW_SPEED } from "@hooks/useNoteSystem";
 
 export const Track = memo(
-  ({ notes, width, height, position, noteColor, noteOpacity }) => {
+  ({
+    notes,
+    width,
+    height,
+    position,
+    noteColor,
+    noteOpacity,
+    flowSpeed,
+    borderRadius,
+  }) => {
     const trackRef = useRef();
     const animationRef = useRef();
     const noteRefsRef = useRef(new Map());
 
     // 트랙 전체의 노트들을 한 번에 애니메이션
     useEffect(() => {
-      const flowSpeed = FLOW_SPEED;
+      const currentSpeed = flowSpeed || 180;
       const minNoteHeight = 0; // 최소 노트 높이
       const fadeZoneHeight = 50; // 페이드 아웃 시작 높이
 
@@ -40,13 +48,13 @@ export const Track = memo(
             const pressDuration = currentTime - startTime;
             const noteLength = Math.max(
               minNoteHeight,
-              (pressDuration * flowSpeed) / 1000
+              (pressDuration * currentSpeed) / 1000
             );
 
             noteElement.style.height = `${Math.round(noteLength)}px`;
             noteElement.style.bottom = "0px";
             noteElement.style.opacity = baseOpacity;
-            noteElement.style.borderRadius = "2px";
+            noteElement.style.borderRadius = `${borderRadius ?? 2}px`;
             noteElement.style.backgroundColor = noteColor || "#FFFFFF";
             // 개별 노트 마스크 제거 (트랙 마스크 사용)
             noteElement.style.mask = "none";
@@ -55,11 +63,11 @@ export const Track = memo(
             const noteDuration = endTime - startTime;
             const noteLength = Math.max(
               minNoteHeight,
-              (noteDuration * flowSpeed) / 1000
+              (noteDuration * currentSpeed) / 1000
             );
 
             const timeSinceCompletion = currentTime - endTime;
-            const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
+            const yPosition = (timeSinceCompletion * currentSpeed) / 1000;
 
             noteElement.style.height = `${Math.round(noteLength)}px`;
             noteElement.style.bottom = `${Math.round(yPosition)}px`;
@@ -75,7 +83,7 @@ export const Track = memo(
 
             noteElement.style.opacity = opacity;
             noteElement.style.mask = "none";
-            noteElement.style.borderRadius = "2px";
+            noteElement.style.borderRadius = `${borderRadius ?? 2}px`;
           }
         });
 
@@ -94,7 +102,7 @@ export const Track = memo(
           cancelAnimationFrame(animationRef.current);
         }
       };
-    }, [notes, height, noteColor, noteOpacity]); // notes 배열이 변경될 때마다 재시작
+    }, [notes, height, noteColor, noteOpacity, flowSpeed, borderRadius]); // notes 배열이 변경될 때마다 재시작
 
     // 노트 ref 등록 함수
     const registerNoteRef = (noteId, element) => {
@@ -131,6 +139,7 @@ export const Track = memo(
             registerRef={registerNoteRef}
             noteColor={noteColor}
             noteOpacity={noteOpacity}
+            borderRadius={borderRadius}
           />
         ))}
       </div>

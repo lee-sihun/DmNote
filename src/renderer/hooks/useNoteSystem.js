@@ -8,6 +8,7 @@ export function useNoteSystem() {
   const [notes, setNotes] = useState({});
   const noteEffectEnabled = useRef(true);
   const activeNotes = useRef(new Map());
+  const flowSpeedRef = useRef(180);
 
   useEffect(() => {
     const { ipcRenderer } = window.require("electron");
@@ -25,8 +26,21 @@ export function useNoteSystem() {
 
     ipcRenderer.on("update-note-effect", noteEffectListener);
 
+    // 노트 설정(속도) 초기 로드 및 변경 반영
+    ipcRenderer
+      .invoke("get-note-settings")
+      .then((settings) => {
+        flowSpeedRef.current = Number(settings?.speed) || 180;
+      })
+      .catch(() => {});
+    const noteSettingsListener = (_, settings) => {
+      flowSpeedRef.current = Number(settings?.speed) || 180;
+    };
+    ipcRenderer.on("update-note-settings", noteSettingsListener);
+
     return () => {
       ipcRenderer.removeAllListeners("update-note-effect");
+      ipcRenderer.removeAllListeners("update-note-settings");
     };
   }, []);
 
@@ -97,7 +111,7 @@ export function useNoteSystem() {
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const currentTime = performance.now();
-      const flowSpeed = FLOW_SPEED;
+      const flowSpeed = flowSpeedRef.current;
       const trackHeight = TRACK_HEIGHT;
 
       setNotes((prev) => {
