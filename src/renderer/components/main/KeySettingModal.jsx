@@ -158,19 +158,19 @@ export default function KeySettingModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full align-center">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
             키 매핑
           </p>
           <button
             onClick={() => setIsListening(true)}
-            className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#989BA6] text-[13.5px] font-bold"
+            className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#fff] text-[13.5px] font-medium"
           >
             {isListening ? "Press any key" : displayKey || "Click to set key"}
           </button>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
           <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
               대기 상태
             </p>
             <input
@@ -194,7 +194,7 @@ export default function KeySettingModal({
             ></button>
           </div>
           <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
               입력 상태
             </p>
             <input
@@ -217,7 +217,7 @@ export default function KeySettingModal({
           </div>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
             키 사이즈
           </p>
           <div className="flex items-center gap-[10px]">
@@ -240,9 +240,9 @@ export default function KeySettingModal({
                   setWidth(60);
                 }
               }}
-              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-bold mt-[2px]">X</p>
+            <p className="text-[#989BA6] text-[13.5px] font-medium mt-[2px]">X</p>
             <input
               type="number"
               value={height}
@@ -262,12 +262,12 @@ export default function KeySettingModal({
                   setHeight(60);
                 }
               }}
-              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
           </div>
         </div>
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
             노트 색상
           </p>
           <div className="flex items-center gap-[10px]">
@@ -281,14 +281,14 @@ export default function KeySettingModal({
               onChange={handleColorChange}
               onBlur={handleColorBlur}
               placeholder="#FFFFFF"
-              className="text-center w-[80px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-semibold"
+              className="text-center w-[80px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
             />
           </div>
         </div>
 
         {/* 노트 투명도 설정 추가 */}
         <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-bold leading-[24.5px]">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
             노트 투명도
           </p>
           <div className="flex items-center gap-[10px]">
@@ -311,9 +311,9 @@ export default function KeySettingModal({
                   setNoteOpacity(80);
                 }
               }}
-              className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-semibold"
+              className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-bold">%</p>
+            <p className="text-[#989BA6] text-[13.5px] font-medium">%</p>
           </div>
         </div>
 
