@@ -366,7 +366,7 @@ function Footer({ showConfirm }) {
           없습니다.
         </p>
         <p className="text-[#989BA6] text-[10.5px] text-center font-light">
-          (Ver 1.0.6)
+          (Ver 1.1.0)
         </p>
       </div>
     </div>

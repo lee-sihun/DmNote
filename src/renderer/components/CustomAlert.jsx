@@ -22,7 +22,7 @@ export default function CustomAlert({
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 */}
-        <div className="text-white text-[19px] font-medium leading-[24px] text-center mb-[40px]">
+        <div className="text-white text-[19px] font-medium leading-[24px] text-center mb-[50px]">
           {message}
         </div>
 
