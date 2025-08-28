@@ -89,6 +89,14 @@ export function useKeyManager() {
     }
   };
 
+  const handleResetCurrentMode = () => {
+    if (ipcRenderer) {
+      ipcRenderer.send("reset-current-mode", selectedKeyType);
+    } else {
+      console.error("ipcRenderer not available");
+    }
+  };
+
   const handleKeyUpdate = (keyData) => {
     const {
       key,
@@ -190,6 +198,7 @@ export function useKeyManager() {
     setSelectedKey,
     handlePositionChange,
     handleReset,
+    handleResetCurrentMode,
     handleKeyUpdate,
     handleAddKey,
     handleDeleteKey,

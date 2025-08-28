@@ -4,6 +4,7 @@ import { ReactComponent as Github } from "@assets/svgs/github.svg";
 import { ReactComponent as Bug } from "@assets/svgs/bug.svg";
 import Checkbox from "@components/Checkbox";
 import Radio from "@components/Radio";
+import { ReactComponent as ResetIcon } from "@assets/svgs/sparkles.svg";
 
 export default function SettingTab({ showAlert, showConfirm }) {
   const {
@@ -301,16 +302,30 @@ export default function SettingTab({ showAlert, showConfirm }) {
           </div>
         </div>
       </div>
-      <Footer />
+      <Footer showConfirm={showConfirm} />
     </div>
   );
 }
 
-function Footer() {
+function Footer({ showConfirm }) {
   const ipcRenderer = window.electron.ipcRenderer;
 
   const handleClick = (link) => {
     ipcRenderer.send("open-external", link);
+  };
+
+  const handleResetAll = () => {
+    if (showConfirm) {
+      showConfirm(
+        "모든 설정을 초기화하시겠습니까?",
+        () => {
+          ipcRenderer.send("reset-keys");
+        },
+        "초기화"
+      );
+    } else {
+      ipcRenderer.send("reset-keys");
+    }
   };
 
   return (
@@ -337,6 +352,12 @@ function Footer() {
           <p className="text-white text-[15px] leading-[16.5px] truncate font-light">
             Bug Report
           </p>
+        </button>
+        <button
+          onClick={handleResetAll}
+          className="flex justify-center items-center w-[42px] bg-[#1C1E25]  rounded-[6px]"
+        >
+          <ResetIcon />
         </button>
       </div>
       <div className="flex-col w-full gap-[4px] justify-center items-center mt-[18px]">

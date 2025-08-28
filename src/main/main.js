@@ -2,11 +2,12 @@ const { app, ipcMain, shell } = require("electron/main");
 const MainWindow = require("./windows/mainWindow");
 const OverlayWindow = require("./windows/overlayWindow");
 const keyboardService = require("./services/keyboardListener");
-const { resetKeys } = require("./services/keyMappings");
+const { resetKeys, resetKeysForMode } = require("./services/keyMappings");
 const {
   loadKeyPositions,
   saveKeyPositions,
   resetKeyPositions,
+  resetKeyPositionsForMode,
 } = require("./services/keyPositions");
 const {
   saveBackgroundColor,
@@ -221,6 +222,40 @@ class Application {
         noteSettings: defaultNoteSettings,
         noteEffect: false,
       });
+    });
+
+    // 현재 탭(모드)만 초기화
+    ipcMain.on("reset-current-mode", (e, mode) => {
+      try {
+        const valid = ["4key", "5key", "6key", "8key"];
+        if (!valid.includes(mode)) {
+          e.reply("resetCurrentModeComplete", {
+            success: false,
+            error: "invalid mode",
+          });
+          return;
+        }
+
+        const updatedKeys = resetKeysForMode(mode);
+        const updatedPositions = resetKeyPositionsForMode(mode);
+
+        keyboardService.updateKeyMapping(updatedKeys);
+
+        [this.overlayWindow, this.mainWindow].forEach((window) => {
+          if (window && !window.isDestroyed()) {
+            window.webContents.send("updateKeyMappings", updatedKeys);
+            window.webContents.send("updateKeyPositions", updatedPositions);
+          }
+        });
+
+        e.reply("resetCurrentModeComplete", { success: true, mode });
+      } catch (err) {
+        console.error("Failed to reset current mode:", err);
+        e.reply("resetCurrentModeComplete", {
+          success: false,
+          error: err.message,
+        });
+      }
     });
 
     // 하드웨어 가속 토글

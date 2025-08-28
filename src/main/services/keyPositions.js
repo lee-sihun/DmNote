@@ -427,8 +427,24 @@ function resetKeyPositions() {
   }
 }
 
+function resetKeyPositionsForMode(mode) {
+  try {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_POSITIONS, mode)) {
+      return loadKeyPositions();
+    }
+    const current = loadKeyPositions();
+    const updated = { ...current, [mode]: DEFAULT_POSITIONS[mode] };
+    store.set("keyPositions", updated);
+    return updated;
+  } catch (error) {
+    console.error("Failed to reset key positions for mode:", error);
+    return loadKeyPositions();
+  }
+}
+
 module.exports = {
   saveKeyPositions,
   loadKeyPositions,
   resetKeyPositions,
+  resetKeyPositionsForMode,
 };

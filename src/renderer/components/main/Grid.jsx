@@ -19,10 +19,11 @@ export default function Grid({ showConfirm }) {
     keyMappings,
     positions,
     handlePositionChange,
-    handleReset,
+    handleReset, 
     handleKeyUpdate,
     handleAddKey,
     handleDeleteKey,
+    handleResetCurrentMode,
   } = useKeyManager();
   const {
     color,
@@ -148,16 +149,14 @@ export default function Grid({ showConfirm }) {
         onClick={() => {
           if (showConfirm) {
             showConfirm(
-              "모든 설정을 초기화하시겠습니까?",
+              "현재 탭의 설정을 초기화하시겠습니까?",
               () => {
-                handleReset();
-                handleResetColor();
+                handleResetCurrentMode();
               },
               "초기화"
             );
           } else {
-            handleReset();
-            handleResetColor();
+            handleResetCurrentMode();
           }
         }}
       >
