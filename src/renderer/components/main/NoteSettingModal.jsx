@@ -102,8 +102,8 @@ export default function NoteSettingModal({ onClose }) {
                   setSpeed("");
                 } else {
                   const num = parseInt(v);
-                  if (!Number.isNaN(num)) {
-                    setSpeed(Math.min(Math.max(num, 70), 1000));
+                  if (!Number.isNaN(num) && num >= 0) {
+                    setSpeed(num);
                   }
                 }
               }}
