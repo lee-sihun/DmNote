@@ -60,13 +60,15 @@ npm run start
 
 <img src="./images/2025-08-29_12-07-12.webp" alt="Note Effect" width="700">
 
-<!--img src="https://i.postimg.cc/L41mTJLR/key.gif" alt="키뷰어 데모 1" width="700"-->
+<!--img src="https://i.postimg.cc/L41mTJLR/key.gif" alt="키뷰어 데모 1" width="700">
 
 <img src="https://i.postimg.cc/RFGZxyCm/2.gif" alt="키뷰어 데모 1" width="700">
 
-<img src="https://i.postimg.cc/wv9jPgpF/3.gif" alt="키뷰어 데모 2" width="700">
+<img src="https://i.postimg.cc/wv9jPgpF/3.gif" alt="키뷰어 데모 2" width="700"-->
 
-<img src="./images/2025-08-29_13-38-24.webp" alt="키뷰어 데모 3" width="700">
+<img src="./images/2025-09-03_22-52-19.webp" alt="키뷰어 데모 1" width="700">
+
+<img src="./images/2025-08-29_13-38-24.webp" alt="키뷰어 데모 2" width="700">
 
 <!-- 
 ![Note Effect](./images/1748967984.gif)
@@ -86,5 +88,6 @@ npm run start
 - 기본 제공 프리셋은 resources > resources > presets 폴더에 있습니다.
 - 커스텀 CSS 예제 파일은 resources > resources 폴더에 있습니다.
 - 키 설정 기능에 클래스명 할당 시 선택자 없이 이름만 입력하면 됩니다.(blue -> o, .blue -> x)
+
 
 
