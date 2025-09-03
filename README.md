@@ -44,7 +44,8 @@ npm run start
   - 위치 저장
 - 키 사이즈 커스터마이징 
 - 노트 효과 표시 (Raining Effect)
-- 노트 효과 색상, 투명도 조정
+- 노트 효과 색상, 투명도, 라운딩, 속도 조정
+- 커스텀 CSS 기능 
 
 ## 🔜 업데이트 예정
 
@@ -55,13 +56,17 @@ npm run start
 
 ## 🖼️ 스크린샷
 
-<img src="./images/1748967984.gif" alt="Note Effect" width="700">
+<!--img src="./images/1748967984.gif" alt="Note Effect" width="700"-->
 
-<img src="https://i.postimg.cc/L41mTJLR/key.gif" alt="키뷰어 데모 1" width="700">
+<img src="./images/2025-08-29_12-07-12.webp" alt="Note Effect" width="700">
 
-<img src="https://i.postimg.cc/RFGZxyCm/2.gif" alt="키뷰어 데모 2" width="700">
+<!--img src="https://i.postimg.cc/L41mTJLR/key.gif" alt="키뷰어 데모 1" width="700"-->
 
-<img src="https://i.postimg.cc/wv9jPgpF/3.gif" alt="키뷰어 데모 3" width="700">
+<img src="https://i.postimg.cc/RFGZxyCm/2.gif" alt="키뷰어 데모 1" width="700">
+
+<img src="https://i.postimg.cc/wv9jPgpF/3.gif" alt="키뷰어 데모 2" width="700">
+
+<img src="./images/2025-08-29_13-38-24.webp" alt="키뷰어 데모 3" width="700">
 
 <!-- 
 ![Note Effect](./images/1748967984.gif)
@@ -76,9 +81,9 @@ npm run start
 ## 📝참고사항
 
 - 그래픽 문제 발생 시 설정에서 렌더링 옵션을 변경해주세요.
-- 키보드 후킹 라이브러리로 인해 바이러스 오진이 있을 수 있습니다. [(관련 이슈)](https://github.com/LaunchMenu/node-global-key-listener?tab=readme-ov-file#disadvantages-2)
-  - 1.0.5 버전부터 해당 라이브러리의 [포크 된 버전](https://github.com/lee-sihun/node-global-key-listener)을 사용합니다. 
 - OBS 윈도우 캡쳐로 크로마키 없이 배경을 투명하게 불러올 수 있습니다.
 - 게임 화면 위에 표시할 경우, **항상 위에 표시**로 배치한 뒤 **오버레이 창 고정**을 활성화해주세요.
 - 기본 제공 프리셋은 resources > resources > presets 폴더에 있습니다.
-- 노트 효과 기능 활성화 후 키 상단에 충분한 공간을 확보해주세요. 
+- 커스텀 CSS 예제 파일은 resources > resources 폴더에 있습니다.
+- 키 설정 기능에 클래스명 할당 시 선택자 없이 이름만 입력하면 됩니다.(blue -> o, .blue -> x)
+
