@@ -6,7 +6,7 @@ DJMAX에서 사용하기 위해 만들어진 실시간 키 입력 표시 프로�
 이외의 다른 리듬게임에서도 사용이 가능합니다.
 
 ## 🚀 실행 방법
-[DM NOTE v 1.0.5 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.0.5/DM.NOTE.v.1.0.5.zip) 
+[DM NOTE v 1.1.0 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.1.0/DM.NOTE.v.1.1.0.zip) 
 
 ```bash
 git clone https://github.com/lee-sihun/djmax-keyviewer.git
@@ -86,4 +86,5 @@ npm run start
 - 기본 제공 프리셋은 resources > resources > presets 폴더에 있습니다.
 - 커스텀 CSS 예제 파일은 resources > resources 폴더에 있습니다.
 - 키 설정 기능에 클래스명 할당 시 선택자 없이 이름만 입력하면 됩니다.(blue -> o, .blue -> x)
+
 
