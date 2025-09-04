@@ -30,7 +30,7 @@ export default function App() {
   // const { setShowKeyCount } = useSettingsStore();
 
   // 노트 시스템
-  const { notes, handleKeyDown, handleKeyUp } = useNoteSystem();
+  const { notesRef, subscribe, handleKeyDown, handleKeyUp } = useNoteSystem();
   const [trackHeight] = useState(TRACK_HEIGHT); // 트랙 높이 설정
 
   // 기존 키 상태와 노트 시스템 키 상태 병합
@@ -303,7 +303,6 @@ export default function App() {
 
         const position = displayPositions[index] || originalPos;
 
-        const keyNotes = notes[key] || [];
         // 트랙 시작 Y (노트 효과 시 확보 공간 바로 아래 / 아니면 최상단 위치)
         const trackStartY = noteEffectEnabled
           ? PADDING + TRACK_RESERVE
@@ -313,10 +312,11 @@ export default function App() {
         return (
           <Track
             key={`track-${keyMode}-${index}`}
-            notes={keyNotes}
+            trackKey={key}
+            notesRef={notesRef}
+            subscribe={subscribe}
             width={position.width}
             height={trackHeight}
-            // position={position}
             position={trackPosition}
             noteColor={position.noteColor || "#FFFFFF"}
             noteOpacity={position.noteOpacity || 80}

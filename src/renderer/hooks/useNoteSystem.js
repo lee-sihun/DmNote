@@ -5,10 +5,20 @@ import { TRACK_HEIGHT } from "@constants/overlayConfig";
 export const FLOW_SPEED = 180;
 
 export function useNoteSystem() {
-  const [notes, setNotes] = useState({});
+  const notesRef = useRef({});
   const noteEffectEnabled = useRef(true);
   const activeNotes = useRef(new Map());
   const flowSpeedRef = useRef(180);
+  const subscribers = useRef(new Set());
+
+  const notifySubscribers = useCallback(() => {
+    subscribers.current.forEach((callback) => callback());
+  }, []);
+
+  const subscribe = useCallback((callback) => {
+    subscribers.current.add(callback);
+    return () => subscribers.current.delete(callback);
+  }, []);
 
   useEffect(() => {
     const { ipcRenderer } = window.require("electron");
@@ -19,8 +29,9 @@ export function useNoteSystem() {
       noteEffectEnabled.current = enabled;
 
       if (!enabled) {
-        setNotes({});
+        notesRef.current = {};
         activeNotes.current.clear();
+        notifySubscribers();
       }
     };
 
@@ -42,42 +53,49 @@ export function useNoteSystem() {
       ipcRenderer.removeAllListeners("update-note-effect");
       ipcRenderer.removeAllListeners("update-note-settings");
     };
-  }, []);
+  }, [notifySubscribers]);
 
-  const createNote = useCallback((keyName) => {
-    const startTime = performance.now();
-    const noteId = `${keyName}_${startTime}`;
-    const newNote = {
-      id: noteId,
-      keyName,
-      startTime,
-      endTime: null,
-      isActive: true,
-    };
+  const createNote = useCallback(
+    (keyName) => {
+      const startTime = performance.now();
+      const noteId = `${keyName}_${startTime}`;
+      const newNote = {
+        id: noteId,
+        keyName,
+        startTime,
+        endTime: null,
+        isActive: true,
+      };
 
-    setNotes((prev) => ({
-      ...prev,
-      [keyName]: [...(prev[keyName] || []), newNote],
-    }));
+      const currentNotes = notesRef.current;
+      const keyNotes = currentNotes[keyName] || [];
+      notesRef.current = {
+        ...currentNotes,
+        [keyName]: [...keyNotes, newNote],
+      };
 
-    return noteId;
-  }, []);
+      notifySubscribers();
+      return noteId;
+    },
+    [notifySubscribers]
+  );
 
   const finalizeNote = useCallback((keyName, noteId) => {
     const endTime = performance.now();
+    const currentNotes = notesRef.current;
 
-    setNotes((prev) => {
-      if (!prev[keyName]) return prev;
-      return {
-        ...prev,
-        [keyName]: prev[keyName].map((note) => {
-          if (note.id === noteId) {
-            return { ...note, endTime, isActive: false };
-          }
-          return note;
-        }),
-      };
-    });
+    if (!currentNotes[keyName]) return;
+
+    notesRef.current = {
+      ...currentNotes,
+      [keyName]: currentNotes[keyName].map((note) => {
+        if (note.id === noteId) {
+          return { ...note, endTime, isActive: false };
+        }
+        return note;
+      }),
+    };
+    // 활성 상태만 변경되므로 notify 불필요
   }, []);
 
   // 노트 생성/완료
@@ -114,39 +132,42 @@ export function useNoteSystem() {
       const flowSpeed = flowSpeedRef.current;
       const trackHeight = TRACK_HEIGHT;
 
-      setNotes((prev) => {
-        let hasChanges = false;
-        const updated = {};
+      const currentNotes = notesRef.current;
+      let hasChanges = false;
+      const updated = {};
 
-        Object.entries(prev).forEach(([keyName, keyNotes]) => {
-          const filtered = keyNotes.filter((note) => {
-            // 활성화된 노트는 유지
-            if (note.isActive) return true;
+      Object.entries(currentNotes).forEach(([keyName, keyNotes]) => {
+        const filtered = keyNotes.filter((note) => {
+          // 활성화된 노트는 유지
+          if (note.isActive) return true;
 
-            // 완료된 노트가 화면 밖으로 나갔는지 확인
-            const timeSinceCompletion = currentTime - note.endTime;
-            const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-            return yPosition < trackHeight + 150; // 여유분
-          });
-
-          if (filtered.length !== keyNotes.length) {
-            hasChanges = true;
-          }
-
-          if (filtered.length > 0) {
-            updated[keyName] = filtered;
-          }
+          // 완료된 노트가 화면 밖으로 나갔는지 확인
+          const timeSinceCompletion = currentTime - note.endTime;
+          const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
+          return yPosition < trackHeight; // 여유분
         });
 
-        return hasChanges ? updated : prev;
+        if (filtered.length !== keyNotes.length) {
+          hasChanges = true;
+        }
+
+        if (filtered.length > 0) {
+          updated[keyName] = filtered;
+        }
       });
+
+      if (hasChanges) {
+        notesRef.current = updated;
+        notifySubscribers();
+      }
     }, 2000);
 
     return () => clearInterval(cleanupInterval);
-  }, []);
+  }, [notifySubscribers]);
 
   return {
-    notes,
+    notesRef,
+    subscribe,
     handleKeyDown,
     handleKeyUp,
   };
