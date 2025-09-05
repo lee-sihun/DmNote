@@ -11,8 +11,8 @@ export function useNoteSystem() {
   const flowSpeedRef = useRef(180);
   const subscribers = useRef(new Set());
 
-  const notifySubscribers = useCallback(() => {
-    subscribers.current.forEach((callback) => callback());
+  const notifySubscribers = useCallback((event) => {
+    subscribers.current.forEach((callback) => callback(event));
   }, []);
 
   const subscribe = useCallback((callback) => {
@@ -31,7 +31,7 @@ export function useNoteSystem() {
       if (!enabled) {
         notesRef.current = {};
         activeNotes.current.clear();
-        notifySubscribers();
+        notifySubscribers({ type: "clear" });
       }
     };
 
@@ -74,29 +74,40 @@ export function useNoteSystem() {
         [keyName]: [...keyNotes, newNote],
       };
 
-      notifySubscribers();
+      notifySubscribers({ type: "add", note: newNote });
       return noteId;
     },
     [notifySubscribers]
   );
 
-  const finalizeNote = useCallback((keyName, noteId) => {
-    const endTime = performance.now();
-    const currentNotes = notesRef.current;
+  const finalizeNote = useCallback(
+    (keyName, noteId) => {
+      const endTime = performance.now();
+      const currentNotes = notesRef.current;
 
-    if (!currentNotes[keyName]) return;
+      if (!currentNotes[keyName]) return;
 
-    notesRef.current = {
-      ...currentNotes,
-      [keyName]: currentNotes[keyName].map((note) => {
-        if (note.id === noteId) {
-          return { ...note, endTime, isActive: false };
+      let changed = false;
+      let finalizedNote = null;
+      const newKeyNotes = currentNotes[keyName].map((note) => {
+        if (note.id === noteId && note.isActive) {
+          changed = true;
+          finalizedNote = { ...note, endTime, isActive: false };
+          return finalizedNote;
         }
         return note;
-      }),
-    };
-    // 활성 상태만 변경되므로 notify 불필요
-  }, []);
+      });
+
+      if (changed) {
+        notesRef.current = {
+          ...currentNotes,
+          [keyName]: newKeyNotes,
+        };
+        notifySubscribers({ type: "finalize", note: finalizedNote });
+      }
+    },
+    [notifySubscribers]
+  );
 
   // 노트 생성/완료
   const handleKeyDown = useCallback(
@@ -135,6 +146,7 @@ export function useNoteSystem() {
       const currentNotes = notesRef.current;
       let hasChanges = false;
       const updated = {};
+      const removedNoteIds = [];
 
       Object.entries(currentNotes).forEach(([keyName, keyNotes]) => {
         const filtered = keyNotes.filter((note) => {
@@ -144,7 +156,11 @@ export function useNoteSystem() {
           // 완료된 노트가 화면 밖으로 나갔는지 확인
           const timeSinceCompletion = currentTime - note.endTime;
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-          return yPosition < trackHeight; // 여유분
+          const shouldKeep = yPosition < trackHeight + 200; // 화면 밖으로 완전히 나갈 때까지 여유분
+          if (!shouldKeep) {
+            removedNoteIds.push(note.id);
+          }
+          return shouldKeep;
         });
 
         if (filtered.length !== keyNotes.length) {
@@ -158,7 +174,7 @@ export function useNoteSystem() {
 
       if (hasChanges) {
         notesRef.current = updated;
-        notifySubscribers();
+        notifySubscribers({ type: "cleanup", note: { ids: removedNoteIds } });
       }
     }, 2000);
 

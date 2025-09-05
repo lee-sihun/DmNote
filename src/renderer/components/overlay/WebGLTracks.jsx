@@ -31,6 +31,13 @@ const vertexShader = `
     float trackBottomY = noteSize.y; // DOM 기준(위=0 아래=+)
     float noteWidth = noteSize.x;
 
+    // startTime이 0이면 제거된 노트이므로 렌더링하지 않음
+    if (startTime == 0.0) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
+      vColor = vec4(0.0);
+      return;
+    }
+
     bool isActive = endTime == 0.0;
     float rawNoteLength = 0.0;     // 원본 노트 길이
     float bottomCanvasY = 0.0;     // DOM 기준 바닥 y
@@ -158,6 +165,10 @@ export const WebGLTracks = memo(
     const trackMapRef = useRef(new Map());
     const attributesRef = useRef(null); // 속성 캐싱용
     const colorCacheRef = useRef(new Map()); // 색상 변환 캐싱
+    const isAnimating = useRef(false); // 애니메이션 루프 상태
+    const noteIndexMap = useRef(new Map()); // 노트 ID와 버퍼 인덱스 매핑
+    const freeIndices = useRef([]); // 재사용 가능한 인덱스 스택
+    const nextIndex = useRef(0); // 다음에 할당할 인덱스
 
     // 1. WebGL 씬 초기 설정 (단 한번만 실행)
     useEffect(() => {
@@ -242,22 +253,49 @@ export const WebGLTracks = memo(
         noteRadiusAttr,
       };
 
-      // 애니메이션 루프 등록 (가시 노트만 선별하여 CPU 안정화)
-      const draw = (currentTime) => {
+      // 애니메이션 루프: GPU에 시간만 전달하고 렌더링
+      const animate = (currentTime) => {
         if (
           !rendererRef.current ||
           !sceneRef.current ||
           !cameraRef.current ||
-          !meshRef.current ||
-          !materialRef.current ||
-          !attributesRef.current
+          !materialRef.current
         )
           return;
 
         materialRef.current.uniforms.uTime.value = currentTime;
-        const screenHeight = window.innerHeight; // 캔버스 전체 높이
-        const maxInstances = MAX_NOTES;
-        let writeIndex = 0; // 실제 가시 노트 인덱스
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      };
+
+      // 데이터 업데이트 로직을 이벤트 기반으로 변경
+      const handleNoteEvent = (event) => {
+        if (!meshRef.current || !attributesRef.current || !event) return;
+
+        const { type, note } = event;
+
+        if (type === "clear") {
+          // 모든 노트 클리어
+          noteIndexMap.current.clear();
+          freeIndices.current = [];
+          nextIndex.current = 0;
+          meshRef.current.count = 0;
+          if (isAnimating.current) {
+            animationScheduler.remove(animate);
+            isAnimating.current = false;
+            // 캔버스 클리어
+            requestAnimationFrame(() => {
+              if (!rendererRef.current) return;
+              const { width, height } = rendererRef.current.getSize(
+                new THREE.Vector2()
+              );
+              rendererRef.current.setScissor(0, 0, width, height);
+              rendererRef.current.clear();
+            });
+          }
+          return;
+        }
+
+        if (!note) return;
 
         const {
           noteInfoArray,
@@ -270,15 +308,23 @@ export const WebGLTracks = memo(
           noteRadiusAttr,
         } = attributesRef.current;
 
-        // 트랙별 순회 (가시성 판단 & 조기 컬링)
-        trackMapRef.current.forEach((track, trackKey) => {
-          const trackNotes = notesRef.current[trackKey];
-          if (!trackNotes || trackNotes.length === 0) return;
-          const baseX = track.position.dx;
-          const width = track.width;
-          const trackBottom = track.position.dy; // DOM 기준 키 위치
+        if (type === "add") {
+          const track = trackMapRef.current.get(note.keyName);
+          if (!track) return;
 
-          // 색상 캐싱 (Track.jsx와 동일한 방식으로 헥스 색상 파싱)
+          if (!isAnimating.current) {
+            animationScheduler.add(animate);
+            isAnimating.current = true;
+          }
+
+          const index = freeIndices.current.pop() ?? nextIndex.current++;
+          if (index >= MAX_NOTES) {
+            nextIndex.current--;
+            return; // 버퍼 꽉 참
+          }
+          noteIndexMap.current.set(note.id, index);
+
+          // 색상 데이터 가져오기
           let colorData = colorCacheRef.current.get(track.noteColor);
           if (!colorData) {
             const color = track.noteColor;
@@ -288,103 +334,86 @@ export const WebGLTracks = memo(
               const b = parseInt(color.slice(5, 7), 16) / 255;
               colorData = { r, g, b };
             } else {
-              // 기본값 (흰색)
               colorData = { r: 1, g: 1, b: 1 };
             }
             colorCacheRef.current.set(track.noteColor, colorData);
           }
 
-          for (let i = 0; i < trackNotes.length; i++) {
-            if (writeIndex >= maxInstances) break; // 용량 초과
-            const note = trackNotes[i];
-            const start = note.startTime;
-            const end = note.endTime || 0;
-            const isActive = note.isActive;
+          // 해당 인덱스에 데이터 쓰기
+          const base3 = index * 3;
+          const base2 = index * 2;
+          const base4 = index * 4;
 
-            // CPU 컬링을 위한 간단한 위치 계산 (버텍스 셰이더와 동일 로직 축약)
-            let noteLength;
-            let bottomY;
-            if (isActive) {
-              noteLength =
-                ((currentTime - start) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
-              if (noteLength < 0) continue;
-              bottomY = trackBottom;
-            } else {
-              noteLength =
-                ((end - start) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
-              if (noteLength < 0) continue;
-              const travel =
-                ((currentTime - end) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
-              bottomY = trackBottom - travel;
+          // --- 직접 부분 업데이트 (array.set) ---
+          noteInfoArray.set([note.startTime, 0, track.position.dx], base3);
+          noteSizeArray.set([track.width, track.position.dy], base2);
+          noteColorArray.set(
+            [colorData.r, colorData.g, colorData.b, track.noteOpacity / 100],
+            base4
+          );
+          noteRadiusArray.set([track.borderRadius || 0], index);
+
+          noteInfoAttr.needsUpdate = true;
+          noteSizeAttr.needsUpdate = true;
+          noteColorAttr.needsUpdate = true;
+          noteRadiusAttr.needsUpdate = true;
+          // ------------------------------------
+
+          meshRef.current.count = Math.max(meshRef.current.count, index + 1);
+        } else if (type === "finalize") {
+          const index = noteIndexMap.current.get(note.id);
+          if (index === undefined) return;
+
+          const base3 = index * 3;
+
+          // --- 직접 부분 업데이트 (array.set) ---
+          // endTime만 업데이트
+          noteInfoArray.set([note.endTime], base3 + 1);
+          noteInfoAttr.needsUpdate = true;
+          // ------------------------------------
+        } else if (type === "cleanup") {
+          // useNoteSystem에서 전달된 제거할 노트들 처리
+          for (const noteId of note.ids) {
+            const index = noteIndexMap.current.get(noteId);
+            if (index !== undefined) {
+              // 해당 인덱스를 0으로 만들어 셰이더에서 그리지 않도록 함
+              const base3 = index * 3;
+              noteInfoArray.set([0, 0], base3); // startTime, endTime을 0으로
+
+              noteIndexMap.current.delete(noteId);
+              freeIndices.current.push(index); // 인덱스 재사용
             }
-
-            // 화면 상단 완전 이탈 (노트 상단이 0보다 위) => skip
-            if (bottomY < -noteLength) continue;
-            // 화면 하단 지나친 (아직 생성 초기?) case 는 없음 (bottomY>=0 이면 그릴 수 있음)
-            if (bottomY > screenHeight + noteLength) continue; // 비정상적으로 아래 (안전)
-
-            const base3 = writeIndex * 3;
-            const base2 = writeIndex * 2;
-            const base4 = writeIndex * 4;
-            noteInfoArray[base3] = start;
-            noteInfoArray[base3 + 1] = end; // 0이면 active
-            noteInfoArray[base3 + 2] = baseX;
-            noteSizeArray[base2] = width;
-            noteSizeArray[base2 + 1] = trackBottom;
-            noteColorArray[base4] = colorData.r;
-            noteColorArray[base4 + 1] = colorData.g;
-            noteColorArray[base4 + 2] = colorData.b;
-            noteColorArray[base4 + 3] = track.noteOpacity / 100;
-            noteRadiusArray[writeIndex] = track.borderRadius || 0;
-            writeIndex++;
           }
-        });
+          // cleanup은 여러 데이터를 변경하므로 needsUpdate를 한번만 설정
+          noteInfoAttr.needsUpdate = true;
 
-        if (writeIndex === 0) {
-          meshRef.current.count = 0;
-          rendererRef.current.render(sceneRef.current, cameraRef.current);
-          // 다음 루프에서 스케줄러 해제 (안정성 위해 즉시 remove 하지 않음)
-          return;
+          // 활성 노트가 없으면 애니메이션 중지
+          if (noteIndexMap.current.size === 0 && isAnimating.current) {
+            animationScheduler.remove(animate);
+            isAnimating.current = false;
+            meshRef.current.count = 0;
+            // 캔버스 클리어
+            requestAnimationFrame(() => {
+              if (!rendererRef.current) return;
+              const { width, height } = rendererRef.current.getSize(
+                new THREE.Vector2()
+              );
+              rendererRef.current.setScissor(0, 0, width, height);
+              rendererRef.current.clear();
+            });
+          }
         }
 
-        // needsUpdate 플래그 (사용된 앞부분만 GPU에서 참조)
-        noteInfoAttr.needsUpdate = true;
-        noteSizeAttr.needsUpdate = true;
-        noteColorAttr.needsUpdate = true;
-        noteRadiusAttr.needsUpdate = true;
-
-        meshRef.current.count = writeIndex;
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
+        // needsUpdate 플래그는 각 이벤트 핸들러에서 개별적으로 설정됨
       };
 
-      const handleNotesChange = () => {
-        const noteCount = Object.values(notesRef.current).flat().length;
-        if (noteCount > 0) {
-          animationScheduler.add(draw);
-        } else {
-          animationScheduler.remove(draw);
-          // 노트가 없을 때 한번 더 그려서 캔버스 클리어
-          requestAnimationFrame(() => {
-            const { width, height } = rendererRef.current.getSize(
-              new THREE.Vector2()
-            );
-            rendererRef.current.setScissor(0, 0, width, height);
-            rendererRef.current.clear();
-          });
-        }
-      };
-
-      const unsubscribe = subscribe(handleNotesChange);
+      const unsubscribe = subscribe(handleNoteEvent);
 
       return () => {
         unsubscribe();
-        animationScheduler.remove(draw);
+        if (isAnimating.current) {
+          animationScheduler.remove(animate);
+        }
         renderer.dispose();
       };
     }, []); // 의존성 배열 비워서 마운트 시 한 번만 실행
