@@ -254,10 +254,22 @@ export const WebGLTracks = memo(
         )
           return;
 
+        // 조기 종료: 노트가 전혀 없으면 렌더링하지 않음
+        const totalNotes = Object.values(notesRef.current).reduce((sum, notes) => sum + notes.length, 0);
+        if (totalNotes === 0) {
+          if (meshRef.current.count > 0) {
+            meshRef.current.count = 0;
+            rendererRef.current.render(sceneRef.current, cameraRef.current);
+          }
+          return;
+        }
+
         materialRef.current.uniforms.uTime.value = currentTime;
-        const screenHeight = window.innerHeight; // 캔버스 전체 높이
+        const screenHeight = window.innerHeight;
         const maxInstances = MAX_NOTES;
-        let writeIndex = 0; // 실제 가시 노트 인덱스
+        const flowSpeed = materialRef.current.uniforms.uFlowSpeed.value; // 캐시
+        const trackHeight = 150; // 상수 캐시
+        let writeIndex = 0;
 
         const {
           noteInfoArray,
@@ -271,14 +283,15 @@ export const WebGLTracks = memo(
         } = attributesRef.current;
 
         // 트랙별 순회 (가시성 판단 & 조기 컬링)
-        trackMapRef.current.forEach((track, trackKey) => {
+        for (const [trackKey, track] of trackMapRef.current) {
           const trackNotes = notesRef.current[trackKey];
-          if (!trackNotes || trackNotes.length === 0) return;
+          if (!trackNotes || trackNotes.length === 0) continue;
+          
           const baseX = track.position.dx;
           const width = track.width;
-          const trackBottom = track.position.dy; // DOM 기준 키 위치
+          const trackBottom = track.position.dy;
 
-          // 색상 캐싱 (Track.jsx와 동일한 방식으로 헥스 색상 파싱)
+          // 색상 캐싱 최적화
           let colorData = colorCacheRef.current.get(track.noteColor);
           if (!colorData) {
             const color = track.noteColor;
@@ -288,76 +301,82 @@ export const WebGLTracks = memo(
               const b = parseInt(color.slice(5, 7), 16) / 255;
               colorData = { r, g, b };
             } else {
-              // 기본값 (흰색)
               colorData = { r: 1, g: 1, b: 1 };
             }
             colorCacheRef.current.set(track.noteColor, colorData);
           }
 
+          // 트랙별 조기 종료: 트랙이 화면 밖에 있으면 스킵
+          if (trackBottom < -trackHeight || baseX > window.innerWidth || baseX + width < 0) {
+            continue;
+          }
+
+          const noteOpacity = track.noteOpacity / 100;
+          const borderRadius = track.borderRadius || 0;
+
           for (let i = 0; i < trackNotes.length; i++) {
-            if (writeIndex >= maxInstances) break; // 용량 초과
+            if (writeIndex >= maxInstances) break;
+            
             const note = trackNotes[i];
             const start = note.startTime;
             const end = note.endTime || 0;
             const isActive = note.isActive;
 
-            // CPU 컬링을 위한 간단한 위치 계산 (버텍스 셰이더와 동일 로직 축약)
-            let noteLength;
-            let bottomY;
+            // 최적화된 위치 계산
+            let noteLength, bottomY;
             if (isActive) {
-              noteLength =
-                ((currentTime - start) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
-              if (noteLength < 0) continue;
+              noteLength = Math.max(0, (currentTime - start) * flowSpeed / 1000);
+              if (noteLength < 1) continue; // 너무 짧은 노트 스킵
               bottomY = trackBottom;
             } else {
-              noteLength =
-                ((end - start) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
-              if (noteLength < 0) continue;
-              const travel =
-                ((currentTime - end) *
-                  materialRef.current.uniforms.uFlowSpeed.value) /
-                1000.0;
+              noteLength = Math.max(0, (end - start) * flowSpeed / 1000);
+              if (noteLength < 1) continue;
+              const travel = (currentTime - end) * flowSpeed / 1000;
               bottomY = trackBottom - travel;
             }
 
-            // 화면 상단 완전 이탈 (노트 상단이 0보다 위) => skip
-            if (bottomY < -noteLength) continue;
-            // 화면 하단 지나친 (아직 생성 초기?) case 는 없음 (bottomY>=0 이면 그릴 수 있음)
-            if (bottomY > screenHeight + noteLength) continue; // 비정상적으로 아래 (안전)
+            // 강화된 컬링: 화면 밖 노트 제거
+            if (bottomY < -noteLength - 50 || bottomY > screenHeight + 50) continue;
 
+            // 인덱스 계산 최적화
             const base3 = writeIndex * 3;
             const base2 = writeIndex * 2;
             const base4 = writeIndex * 4;
+            
             noteInfoArray[base3] = start;
-            noteInfoArray[base3 + 1] = end; // 0이면 active
+            noteInfoArray[base3 + 1] = end;
             noteInfoArray[base3 + 2] = baseX;
             noteSizeArray[base2] = width;
             noteSizeArray[base2 + 1] = trackBottom;
             noteColorArray[base4] = colorData.r;
             noteColorArray[base4 + 1] = colorData.g;
             noteColorArray[base4 + 2] = colorData.b;
-            noteColorArray[base4 + 3] = track.noteOpacity / 100;
-            noteRadiusArray[writeIndex] = track.borderRadius || 0;
+            noteColorArray[base4 + 3] = noteOpacity;
+            noteRadiusArray[writeIndex] = borderRadius;
             writeIndex++;
           }
-        });
+        }
 
+        // 렌더링 최적화: count가 변경되지 않았으면 GPU 업데이트만
+        const prevCount = meshRef.current.count;
         if (writeIndex === 0) {
-          meshRef.current.count = 0;
-          rendererRef.current.render(sceneRef.current, cameraRef.current);
-          // 다음 루프에서 스케줄러 해제 (안정성 위해 즉시 remove 하지 않음)
+          if (prevCount > 0) {
+            meshRef.current.count = 0;
+            rendererRef.current.render(sceneRef.current, cameraRef.current);
+          }
           return;
         }
 
-        // needsUpdate 플래그 (사용된 앞부분만 GPU에서 참조)
-        noteInfoAttr.needsUpdate = true;
-        noteSizeAttr.needsUpdate = true;
-        noteColorAttr.needsUpdate = true;
-        noteRadiusAttr.needsUpdate = true;
+        // 효율적인 업데이트: 실제 사용된 부분만 업데이트
+        if (writeIndex !== prevCount) {
+          noteInfoAttr.needsUpdate = true;
+          noteSizeAttr.needsUpdate = true;
+          noteColorAttr.needsUpdate = true;
+          noteRadiusAttr.needsUpdate = true;
+        } else {
+          // count가 같으면 위치만 업데이트
+          noteInfoAttr.needsUpdate = true;
+        }
 
         meshRef.current.count = writeIndex;
         rendererRef.current.render(sceneRef.current, cameraRef.current);

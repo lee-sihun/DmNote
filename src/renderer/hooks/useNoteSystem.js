@@ -125,26 +125,47 @@ export function useNoteSystem() {
     [finalizeNote]
   );
 
-  // 화면 밖으로 나간 노트 제거
+  // 화면 밖으로 나간 노트 제거 (최적화된 버전)
   useEffect(() => {
-    const cleanupInterval = setInterval(() => {
+    let cleanupTimeoutId = null;
+    let lastCleanupTime = 0;
+
+    const scheduleCleanup = () => {
+      const now = performance.now();
+      // 최소 1초 간격으로 cleanup 실행
+      if (now - lastCleanupTime < 1000) {
+        if (cleanupTimeoutId) clearTimeout(cleanupTimeoutId);
+        cleanupTimeoutId = setTimeout(scheduleCleanup, 1000 - (now - lastCleanupTime));
+        return;
+      }
+
       const currentTime = performance.now();
       const flowSpeed = flowSpeedRef.current;
-      const trackHeight = TRACK_HEIGHT;
+      const trackHeight = TRACK_HEIGHT + 0; // 여유분 추가
 
       const currentNotes = notesRef.current;
       let hasChanges = false;
       const updated = {};
 
-      Object.entries(currentNotes).forEach(([keyName, keyNotes]) => {
+      // 최적화: 빈 객체면 바로 스킵
+      const noteEntries = Object.entries(currentNotes);
+      if (noteEntries.length === 0) {
+        lastCleanupTime = currentTime;
+        cleanupTimeoutId = setTimeout(scheduleCleanup, 3000); // 노트가 없으면 더 긴 간격
+        return;
+      }
+
+      for (const [keyName, keyNotes] of noteEntries) {
+        if (!keyNotes || keyNotes.length === 0) continue;
+
         const filtered = keyNotes.filter((note) => {
-          // 활성화된 노트는 유지
+          // 활성화된 노트는 항상 유지
           if (note.isActive) return true;
 
-          // 완료된 노트가 화면 밖으로 나갔는지 확인
+          // 완료된 노트가 화면 밖으로 나갔는지 확인 (여유분 포함)
           const timeSinceCompletion = currentTime - note.endTime;
           const yPosition = (timeSinceCompletion * flowSpeed) / 1000;
-          return yPosition < trackHeight; // 여유분
+          return yPosition < trackHeight;
         });
 
         if (filtered.length !== keyNotes.length) {
@@ -154,15 +175,26 @@ export function useNoteSystem() {
         if (filtered.length > 0) {
           updated[keyName] = filtered;
         }
-      });
+      }
 
       if (hasChanges) {
         notesRef.current = updated;
         notifySubscribers();
       }
-    }, 2000);
 
-    return () => clearInterval(cleanupInterval);
+      lastCleanupTime = currentTime;
+      // 적응형 간격: 노트가 많으면 더 자주, 적으면 덜 자주
+      const totalNotes = Object.values(updated).reduce((sum, notes) => sum + notes.length, 0);
+      const nextInterval = totalNotes > 10 ? 1500 : totalNotes > 0 ? 2500 : 4000;
+      cleanupTimeoutId = setTimeout(scheduleCleanup, nextInterval);
+    };
+
+    // 초기 cleanup 스케줄링
+    cleanupTimeoutId = setTimeout(scheduleCleanup, 2000);
+
+    return () => {
+      if (cleanupTimeoutId) clearTimeout(cleanupTimeoutId);
+    };
   }, [notifySubscribers]);
 
   return {
