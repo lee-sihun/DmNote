@@ -1,5 +1,5 @@
 import { Key } from "@components/Key";
-import { Track } from "@components/overlay/Track";
+import { WebGLTracks } from "@components/overlay/WebGLTracks";
 import React, {
   useState,
   useEffect,
@@ -140,6 +140,42 @@ export default function App() {
     if (!displayPositions.length) return 0;
     return Math.min(...displayPositions.map((pos) => pos.dy));
   }, [displayPositions]);
+
+  // WebGL 트랙 데이터 (항상 계산하되 noteEffectEnabled일 때만 사용)
+  const webglTracks = useMemo(
+    () =>
+      currentKeys.map((key, index) => {
+        const originalPos = currentPositions[index] || {
+          dx: 0,
+          dy: 0,
+          width: 60,
+          height: 60,
+          noteColor: "#FFFFFF",
+          noteOpacity: 80,
+        };
+        const position = displayPositions[index] || originalPos;
+        const trackStartY = position.dy; // 키 위치를 트랙 시작점으로 사용
+
+        return {
+          trackKey: key,
+          position: { ...position, dy: trackStartY },
+          width: position.width,
+          height: trackHeight,
+          noteColor: position.noteColor || "#FFFFFF",
+          noteOpacity: position.noteOpacity || 80,
+          flowSpeed: noteSettings.speed,
+          borderRadius: noteSettings.borderRadius,
+        };
+      }),
+    [
+      currentKeys,
+      currentPositions,
+      displayPositions,
+      trackHeight,
+      noteSettings.speed,
+      noteSettings.borderRadius,
+    ]
+  );
 
   // 성능 측정
   // useEffect(() => {
@@ -291,40 +327,15 @@ export default function App() {
         />
       )} */}
 
-      {currentKeys.map((key, index) => {
-        const originalPos = currentPositions[index] || {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-          noteColor: "#FFFFFF",
-          noteOpacity: 80,
-        };
-
-        const position = displayPositions[index] || originalPos;
-
-        // 트랙 시작 Y (노트 효과 시 확보 공간 바로 아래 / 아니면 최상단 위치)
-        const trackStartY = noteEffectEnabled
-          ? PADDING + TRACK_RESERVE
-          : topMostY;
-        const trackPosition = { ...position, dy: trackStartY };
-
-        return (
-          <Track
-            key={`track-${keyMode}-${index}`}
-            trackKey={key}
-            notesRef={notesRef}
-            subscribe={subscribe}
-            width={position.width}
-            height={trackHeight}
-            position={trackPosition}
-            noteColor={position.noteColor || "#FFFFFF"}
-            noteOpacity={position.noteOpacity || 80}
-            flowSpeed={noteSettings.speed}
-            borderRadius={noteSettings.borderRadius}
-          />
-        );
-      })}
+      {/* WebGL 노트 렌더링 */}
+      {noteEffectEnabled && (
+        <WebGLTracks
+          tracks={webglTracks}
+          notesRef={notesRef}
+          subscribe={subscribe}
+          noteSettings={noteSettings}
+        />
+      )}
 
       {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
