@@ -154,7 +154,8 @@ export default function App() {
           noteOpacity: 80,
         };
         const position = displayPositions[index] || originalPos;
-        const trackStartY = position.dy; // 키 위치를 트랙 시작점으로 사용
+        // const trackStartY = position.dy; // 키 위치를 트랙 시작점으로 사용
+        const trackStartY = topMostY; // 가장 위 키의 Y 위치를 트랙 시작점으로 사용
 
         return {
           trackKey: key,
