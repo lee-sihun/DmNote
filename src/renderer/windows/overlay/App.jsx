@@ -159,6 +159,7 @@ export default function App() {
 
         return {
           trackKey: key,
+          trackIndex: index, // 키 순서 정보 추가
           position: { ...position, dy: trackStartY },
           width: position.width,
           height: trackHeight,
@@ -172,6 +173,7 @@ export default function App() {
       currentKeys,
       currentPositions,
       displayPositions,
+      topMostY,
       trackHeight,
       noteSettings.speed,
       noteSettings.borderRadius,
