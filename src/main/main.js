@@ -58,16 +58,22 @@ class Application {
       store.set("noteEffect", false);
     }
 
-    // 노트 효과 상세 설정 (borderRadius, speed, trackHeight)
+    // 노트 효과 상세 설정 (borderRadius, speed, trackHeight, reverse)
     if (store.get("noteSettings") === undefined) {
       store.set("noteSettings", {
         borderRadius: 2,
         speed: 180,
         trackHeight: 150,
+        reverse: false,
       });
     } else {
       // 호환성 보정
-      const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
+      const defaults = {
+        borderRadius: 2,
+        speed: 180,
+        trackHeight: 150,
+        reverse: false,
+      };
       const existing = store.get("noteSettings") || {};
       const normalized = { ...defaults, ...existing };
       store.set("noteSettings", normalized);
@@ -186,6 +192,7 @@ class Application {
         borderRadius: 2,
         speed: 180,
         trackHeight: 150,
+        reverse: false,
       };
 
       // CSS 관련 상태들 초기화
@@ -363,13 +370,19 @@ class Application {
 
     // 노트 효과 상세 설정 IPC
     ipcMain.handle("get-note-settings", () => {
-      const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
+      const defaults = {
+        borderRadius: 2,
+        speed: 180,
+        trackHeight: 150,
+        reverse: false,
+      };
       const settings = store.get("noteSettings", defaults) || defaults;
       const normalized = { ...defaults, ...settings };
       if (
         settings.borderRadius === undefined ||
         settings.speed === undefined ||
-        settings.trackHeight === undefined
+        settings.trackHeight === undefined ||
+        settings.reverse === undefined
       ) {
         store.set("noteSettings", normalized);
       }
@@ -378,10 +391,19 @@ class Application {
 
     ipcMain.handle("update-note-settings", (_, newSettings) => {
       try {
-        const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
+        const defaults = {
+          borderRadius: 2,
+          speed: 180,
+          trackHeight: 150,
+          reverse: false,
+        };
         const br = parseInt(newSettings?.borderRadius ?? defaults.borderRadius);
         const sp = parseInt(newSettings?.speed ?? defaults.speed);
         const th = parseInt(newSettings?.trackHeight ?? defaults.trackHeight);
+        const rv =
+          newSettings?.reverse === undefined
+            ? defaults.reverse
+            : !!newSettings.reverse;
         const normalized = {
           ...defaults,
           ...newSettings,
@@ -397,6 +419,7 @@ class Application {
             20,
             Math.min(Number.isFinite(th) ? th : defaults.trackHeight, 2000)
           ),
+          reverse: rv,
         };
         store.set("noteSettings", normalized);
         [this.mainWindow, this.overlayWindow].forEach((window) => {
@@ -433,6 +456,8 @@ class Application {
         noteSettings: store.get("noteSettings", {
           borderRadius: 2,
           speed: 180,
+          trackHeight: 150,
+          reverse: false,
         }),
       };
 
@@ -649,7 +674,12 @@ class Application {
           );
           this.overlayWindow.webContents.send(
             "update-note-settings",
-            store.get("noteSettings", { borderRadius: 2, speed: 180 })
+            store.get("noteSettings", {
+              borderRadius: 2,
+              speed: 180,
+              trackHeight: 150,
+              reverse: false,
+            })
           );
         } catch (err) {
           console.error("Failed to sync overlay initial state:", err);

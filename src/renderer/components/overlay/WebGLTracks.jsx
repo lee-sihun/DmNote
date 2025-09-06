@@ -11,6 +11,7 @@ const vertexShader = `
   uniform float uFlowSpeed;
   uniform float uScreenHeight; // 전체 화면 높이 (캔버스 y -> WebGL y 변환용)
   uniform float uTrackHeight; // 트랙 높이 (px, runtime 설정)
+  uniform float uReverse; // 0.0 = normal (bottom->up), 1.0 = reversed (top->down)
 
   attribute vec3 noteInfo; // x: startTime, y: endTime, z: trackX (왼쪽 X px, DOM 기준)
   attribute vec2 noteSize; // x: width, y: trackBottomY (DOM 기준; 키 위치)
@@ -24,6 +25,7 @@ const vertexShader = `
   varying float vRadius;      // 라운드 반경(px)
   varying float vTrackTopY;   // 트랙 상단 Y 좌표 (DOM 기준)
   varying float vTrackBottomY; // 트랙 하단 Y 좌표 (DOM 기준)
+  varying float vReverse;     // 리버스 모드 플래그
 
   void main() {
     float startTime = noteInfo.x;
@@ -48,8 +50,15 @@ const vertexShader = `
       bottomCanvasY = trackBottomY; // 활성 중엔 바닥 고정
     } else {
       rawNoteLength = max(0.0, (endTime - startTime) * uFlowSpeed / 1000.0);
-      float travel = (uTime - endTime) * uFlowSpeed / 1000.0; // 위로 이동 거리 (DOM 좌표에서 감소 방향)
-      bottomCanvasY = trackBottomY - travel; // 위로(작아지는 방향) 이동
+      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+      // normal: bottom->up (trackBottomY - travel)
+      // reverse: top->down (trackTopY + travel) => noteBottomY will be below top
+      float trackTopY_local = trackBottomY - uTrackHeight;
+      if (uReverse < 0.5) {
+        bottomCanvasY = trackBottomY - travel;
+      } else {
+        bottomCanvasY = trackTopY_local + travel;
+      }
     }
 
     // 노트 길이를 트랙 높이로 제한 (원본 Track.jsx와 동일한 동작)
@@ -61,14 +70,28 @@ const vertexShader = `
     float noteTopY, noteBottomY;
     
     if (isActive) {
-      // 활성 노트: 트랙 바닥부터 위로 자라남
-      noteBottomY = trackBottomY;
-      noteTopY = trackBottomY - noteLength;
+      // 활성 노트: 트랙 바닥부터 위로 자라남 (normal)
+      // 활성 노트 in reverse mode should grow from trackTop downward
+      if (uReverse < 0.5) {
+        noteBottomY = trackBottomY;
+        noteTopY = trackBottomY - noteLength;
+      } else {
+        float trackTopY_local = trackBottomY - uTrackHeight;
+        noteTopY = trackTopY_local;
+        noteBottomY = trackTopY_local + noteLength;
+      }
     } else {
-      // 비활성 노트: 위로 이동
-      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-      noteBottomY = trackBottomY - travel;
-      noteTopY = noteBottomY - noteLength;
+      // 비활성 노트: 이동
+      if (uReverse < 0.5) {
+        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+        noteBottomY = trackBottomY - travel;
+        noteTopY = noteBottomY - noteLength;
+      } else {
+        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+        float trackTopY_local = trackBottomY - uTrackHeight;
+        noteTopY = trackTopY_local + travel;
+        noteBottomY = noteTopY + noteLength;
+      }
     }
     
     // 트랙 영역을 벗어나는 경우 클리핑
@@ -109,6 +132,7 @@ const vertexShader = `
     vRadius = noteRadius;
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
+    vReverse = uReverse;
   }
 `;
 
@@ -122,6 +146,7 @@ const fragmentShader = `
   varying float vRadius;
   varying float vTrackTopY;
   varying float vTrackBottomY;
+  varying float vReverse;
 
   void main() {
     // 현재 픽셀의 DOM Y 좌표 계산
@@ -130,7 +155,12 @@ const fragmentShader = `
     // 트랙 내에서의 상대적 위치 계산 (0.0 = 트랙 상단, 1.0 = 트랙 하단)
     float trackRelativeY = (currentDOMY - vTrackTopY) / (vTrackBottomY - vTrackTopY);
     
-    float fadeZone = 50.0; // 트랙 상단에서 50px
+    // 리버스 모드일 때 상대적 위치 반전 (하단 페이드)
+    if (vReverse > 0.5) {
+      trackRelativeY = 1.0 - trackRelativeY;
+    }
+    
+    float fadeZone = 50.0; // 페이드 영역 50px
     float trackHeight = vTrackBottomY - vTrackTopY;
     float fadeRatio = fadeZone / trackHeight; // 트랙 높이 대비 페이드 영역 비율
     
@@ -149,7 +179,7 @@ const fragmentShader = `
       alpha *= smoothAlpha;
     }
     
-    // 트랙 상단 페이드 영역 적용 (트랙 내 상대적 위치 기준)
+    // 트랙 페이드 영역 적용 (상단 또는 하단)
     if (trackRelativeY < fadeRatio) {
       alpha *= clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
     }
@@ -213,6 +243,7 @@ export const WebGLTracks = memo(
           uFlowSpeed: { value: noteSettings.speed || 180 },
           uScreenHeight: { value: window.innerHeight },
           uTrackHeight: { value: noteSettings.trackHeight || 150 },
+          uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
         },
         vertexShader,
         fragmentShader,
@@ -541,8 +572,11 @@ export const WebGLTracks = memo(
           noteSettings.speed || 180;
         materialRef.current.uniforms.uTrackHeight.value =
           noteSettings.trackHeight || 150;
+        materialRef.current.uniforms.uReverse.value = noteSettings.reverse
+          ? 1.0
+          : 0.0;
       }
-    }, [noteSettings.speed, noteSettings.trackHeight]);
+    }, [noteSettings.speed, noteSettings.trackHeight, noteSettings.reverse]);
 
     // 4. 윈도우 리사이즈 처리
     useEffect(() => {

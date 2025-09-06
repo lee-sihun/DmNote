@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
+import Checkbox from "@components/Checkbox";
 
 export default function NoteSettingModal({ onClose }) {
   const ipcRenderer = window.electron?.ipcRenderer;
   const [borderRadius, setBorderRadius] = useState(2);
   const [speed, setSpeed] = useState(180);
   const [trackHeight, setTrackHeight] = useState("150");
+  const [reverse, setReverse] = useState(false);
 
   useEffect(() => {
     if (!ipcRenderer) return;
@@ -27,6 +29,7 @@ export default function NoteSettingModal({ onClose }) {
               ? String(settings.trackHeight)
               : "150"
           );
+          setReverse(Boolean(settings.reverse || false));
         }
       })
       .catch(() => {});
@@ -43,6 +46,7 @@ export default function NoteSettingModal({ onClose }) {
       borderRadius: Math.max(1, Math.min(parseInt(borderRadius || 1), 100)),
       speed: Math.max(70, Math.min(parseInt(speed || 70), 1000)),
       trackHeight: clientTrack,
+      reverse: reverse,
     };
     try {
       const ok = await ipcRenderer.invoke("update-note-settings", normalized);
@@ -158,6 +162,13 @@ export default function NoteSettingModal({ onClose }) {
               className="text-center w-[60px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
           </div>
+        </div>
+
+        <div className="flex justify-between w-full mt-[18px] items-center">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
+            노트 효과 리버스 
+          </p>
+          <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
         </div>
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">
