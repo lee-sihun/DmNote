@@ -10,7 +10,7 @@ const vertexShader = `
   uniform float uTime;
   uniform float uFlowSpeed;
   uniform float uScreenHeight; // 전체 화면 높이 (캔버스 y -> WebGL y 변환용)
-  uniform float uTrackHeight; // 트랙 높이 (150px)
+  uniform float uTrackHeight; // 트랙 높이 (px, runtime 설정)
 
   attribute vec3 noteInfo; // x: startTime, y: endTime, z: trackX (왼쪽 X px, DOM 기준)
   attribute vec2 noteSize; // x: width, y: trackBottomY (DOM 기준; 키 위치)
@@ -212,7 +212,7 @@ export const WebGLTracks = memo(
           uTime: { value: 0 },
           uFlowSpeed: { value: noteSettings.speed || 180 },
           uScreenHeight: { value: window.innerHeight },
-          uTrackHeight: { value: 150 }, // 트랙 높이 150px로 고정
+          uTrackHeight: { value: noteSettings.trackHeight || 150 },
         },
         vertexShader,
         fragmentShader,
@@ -226,7 +226,11 @@ export const WebGLTracks = memo(
       // 트랙 엔트리 생성기
       const createTrackEntry = (track) => {
         const geo = geometryRef.current.clone();
-        const mesh = new THREE.InstancedMesh(geo, materialRef.current, MAX_NOTES);
+        const mesh = new THREE.InstancedMesh(
+          geo,
+          materialRef.current,
+          MAX_NOTES
+        );
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         // 키 순서 고정 레이어링: 첫 번째 키가 가장 뒤 (작은 renderOrder가 먼저 그려짐)
         mesh.renderOrder = track.trackIndex ?? 0;
@@ -239,11 +243,26 @@ export const WebGLTracks = memo(
         const noteRadiusArray = new Float32Array(MAX_NOTES);
         const trackIndexArray = new Float32Array(MAX_NOTES);
 
-        const noteInfoAttr = new THREE.InstancedBufferAttribute(noteInfoArray, 3);
-        const noteSizeAttr = new THREE.InstancedBufferAttribute(noteSizeArray, 2);
-        const noteColorAttr = new THREE.InstancedBufferAttribute(noteColorArray, 4);
-        const noteRadiusAttr = new THREE.InstancedBufferAttribute(noteRadiusArray, 1);
-        const trackIndexAttr = new THREE.InstancedBufferAttribute(trackIndexArray, 1);
+        const noteInfoAttr = new THREE.InstancedBufferAttribute(
+          noteInfoArray,
+          3
+        );
+        const noteSizeAttr = new THREE.InstancedBufferAttribute(
+          noteSizeArray,
+          2
+        );
+        const noteColorAttr = new THREE.InstancedBufferAttribute(
+          noteColorArray,
+          4
+        );
+        const noteRadiusAttr = new THREE.InstancedBufferAttribute(
+          noteRadiusArray,
+          1
+        );
+        const trackIndexAttr = new THREE.InstancedBufferAttribute(
+          trackIndexArray,
+          1
+        );
 
         mesh.geometry.setAttribute("noteInfo", noteInfoAttr);
         mesh.geometry.setAttribute("noteSize", noteSizeAttr);
@@ -273,9 +292,16 @@ export const WebGLTracks = memo(
       };
 
       const ensureTrackEntry = (trackKey) => {
-        if (meshMapRef.current.has(trackKey)) return meshMapRef.current.get(trackKey);
+        if (meshMapRef.current.has(trackKey))
+          return meshMapRef.current.get(trackKey);
         const track = trackMapRef.current.get(trackKey);
-        if (!track || !geometryRef.current || !materialRef.current || !sceneRef.current) return null;
+        if (
+          !track ||
+          !geometryRef.current ||
+          !materialRef.current ||
+          !sceneRef.current
+        )
+          return null;
         createTrackEntry(track);
         return meshMapRef.current.get(trackKey);
       };
@@ -339,12 +365,7 @@ export const WebGLTracks = memo(
             isAnimating.current = true;
           }
 
-          const {
-            mesh,
-            noteIndexMap,
-            freeIndices,
-            nextIndex,
-          } = entry;
+          const { mesh, noteIndexMap, freeIndices, nextIndex } = entry;
 
           const attrs = attributesMapRef.current.get(note.keyName);
           if (!attrs) return;
@@ -353,7 +374,11 @@ export const WebGLTracks = memo(
           let colorData = colorCacheRef.current.get(track.noteColor);
           if (!colorData) {
             const color = track.noteColor;
-            if (typeof color === "string" && color.startsWith("#") && color.length >= 7) {
+            if (
+              typeof color === "string" &&
+              color.startsWith("#") &&
+              color.length >= 7
+            ) {
               const r = parseInt(color.slice(1, 3), 16) / 255;
               const g = parseInt(color.slice(3, 5), 16) / 255;
               const b = parseInt(color.slice(5, 7), 16) / 255;
@@ -378,7 +403,10 @@ export const WebGLTracks = memo(
           const base2 = index * 2;
           const base4 = index * 4;
 
-          attrs.noteInfoArray.set([note.startTime, 0, track.position.dx], base3);
+          attrs.noteInfoArray.set(
+            [note.startTime, 0, track.position.dx],
+            base3
+          );
           attrs.noteSizeArray.set([track.width, track.position.dy], base2);
           attrs.noteColorArray.set(
             [colorData.r, colorData.g, colorData.b, track.noteOpacity / 100],
@@ -511,8 +539,10 @@ export const WebGLTracks = memo(
       if (materialRef.current) {
         materialRef.current.uniforms.uFlowSpeed.value =
           noteSettings.speed || 180;
+        materialRef.current.uniforms.uTrackHeight.value =
+          noteSettings.trackHeight || 150;
       }
-    }, [noteSettings.speed]);
+    }, [noteSettings.speed, noteSettings.trackHeight]);
 
     // 4. 윈도우 리사이즈 처리
     useEffect(() => {

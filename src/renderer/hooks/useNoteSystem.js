@@ -1,6 +1,6 @@
 // src/renderer/hooks/useNoteSystem.js
 import { useState, useCallback, useRef, useEffect } from "react";
-import { TRACK_HEIGHT } from "@constants/overlayConfig";
+import { DEFAULT_NOTE_SETTINGS } from "@constants/overlayConfig";
 
 export const FLOW_SPEED = 180;
 
@@ -9,6 +9,7 @@ export function useNoteSystem() {
   const noteEffectEnabled = useRef(true);
   const activeNotes = useRef(new Map());
   const flowSpeedRef = useRef(180);
+  const trackHeightRef = useRef(DEFAULT_NOTE_SETTINGS.trackHeight || 150);
   const subscribers = useRef(new Set());
 
   const notifySubscribers = useCallback((event) => {
@@ -42,10 +43,14 @@ export function useNoteSystem() {
       .invoke("get-note-settings")
       .then((settings) => {
         flowSpeedRef.current = Number(settings?.speed) || 180;
+        trackHeightRef.current =
+          Number(settings?.trackHeight) || DEFAULT_NOTE_SETTINGS.trackHeight;
       })
       .catch(() => {});
     const noteSettingsListener = (_, settings) => {
       flowSpeedRef.current = Number(settings?.speed) || 180;
+      trackHeightRef.current =
+        Number(settings?.trackHeight) || DEFAULT_NOTE_SETTINGS.trackHeight;
     };
     ipcRenderer.on("update-note-settings", noteSettingsListener);
 
@@ -141,7 +146,8 @@ export function useNoteSystem() {
     const cleanupInterval = setInterval(() => {
       const currentTime = performance.now();
       const flowSpeed = flowSpeedRef.current;
-      const trackHeight = TRACK_HEIGHT;
+      const trackHeight =
+        trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
 
       const currentNotes = notesRef.current;
       let hasChanges = false;

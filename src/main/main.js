@@ -58,12 +58,16 @@ class Application {
       store.set("noteEffect", false);
     }
 
-    // 노트 효과 상세 설정
+    // 노트 효과 상세 설정 (borderRadius, speed, trackHeight)
     if (store.get("noteSettings") === undefined) {
-      store.set("noteSettings", { borderRadius: 2, speed: 180 });
+      store.set("noteSettings", {
+        borderRadius: 2,
+        speed: 180,
+        trackHeight: 150,
+      });
     } else {
       // 호환성 보정
-      const defaults = { borderRadius: 2, speed: 180 };
+      const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
       const existing = store.get("noteSettings") || {};
       const normalized = { ...defaults, ...existing };
       store.set("noteSettings", normalized);
@@ -178,7 +182,11 @@ class Application {
       const defaultColor = resetBackgroundColor();
 
       // 노트 관련 기본값
-      const defaultNoteSettings = { borderRadius: 2, speed: 180 };
+      const defaultNoteSettings = {
+        borderRadius: 2,
+        speed: 180,
+        trackHeight: 150,
+      };
 
       // CSS 관련 상태들 초기화
       store.set("useCustomCSS", false);
@@ -355,10 +363,14 @@ class Application {
 
     // 노트 효과 상세 설정 IPC
     ipcMain.handle("get-note-settings", () => {
-      const defaults = { borderRadius: 2, speed: 180 };
+      const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
       const settings = store.get("noteSettings", defaults) || defaults;
       const normalized = { ...defaults, ...settings };
-      if (settings.borderRadius === undefined || settings.speed === undefined) {
+      if (
+        settings.borderRadius === undefined ||
+        settings.speed === undefined ||
+        settings.trackHeight === undefined
+      ) {
         store.set("noteSettings", normalized);
       }
       return normalized;
@@ -366,9 +378,10 @@ class Application {
 
     ipcMain.handle("update-note-settings", (_, newSettings) => {
       try {
-        const defaults = { borderRadius: 2, speed: 180 };
+        const defaults = { borderRadius: 2, speed: 180, trackHeight: 150 };
         const br = parseInt(newSettings?.borderRadius ?? defaults.borderRadius);
         const sp = parseInt(newSettings?.speed ?? defaults.speed);
+        const th = parseInt(newSettings?.trackHeight ?? defaults.trackHeight);
         const normalized = {
           ...defaults,
           ...newSettings,
@@ -379,6 +392,10 @@ class Application {
           speed: Math.max(
             70,
             Math.min(Number.isFinite(sp) ? sp : defaults.speed, 1000)
+          ),
+          trackHeight: Math.max(
+            20,
+            Math.min(Number.isFinite(th) ? th : defaults.trackHeight, 2000)
           ),
         };
         store.set("noteSettings", normalized);
