@@ -1,5 +1,5 @@
 import { Key } from "@components/Key";
-import { Track } from "@components/overlay/Track";
+import { WebGLTracks } from "@components/overlay/WebGLTracks";
 import React, {
   useState,
   useEffect,
@@ -8,7 +8,7 @@ import React, {
   // useRef,
 } from "react";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { TRACK_HEIGHT } from "@constants/overlayConfig";
+import { DEFAULT_NOTE_SETTINGS } from "@constants/overlayConfig";
 import { useNoteSystem } from "@hooks/useNoteSystem";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 // import { LatencyDisplay } from "@components/overlay/LatencyDisplay";
@@ -22,16 +22,14 @@ export default function App() {
   const [keyMappings, setKeyMappings] = useState({});
   const [positions, setPositions] = useState({});
   const [backgroundColor, setBackgroundColor] = useState("");
-  const [noteSettings, setNoteSettings] = useState({
-    borderRadius: 2,
-    speed: 180,
-  });
+  const [noteSettings, setNoteSettings] = useState(DEFAULT_NOTE_SETTINGS);
   // const showKeyCount = useSettingsStore(state => state.showKeyCount);
   // const { setShowKeyCount } = useSettingsStore();
 
   // 노트 시스템
-  const { notes, handleKeyDown, handleKeyUp } = useNoteSystem();
-  const [trackHeight] = useState(TRACK_HEIGHT); // 트랙 높이 설정
+  const { notesRef, subscribe, handleKeyDown, handleKeyUp } = useNoteSystem();
+  const trackHeight =
+    noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight;
 
   // 기존 키 상태와 노트 시스템 키 상태 병합
   const [originalKeyStates, setOriginalKeyStates] = useState({});
@@ -82,14 +80,20 @@ export default function App() {
 
   // 동적 리사이즈 & 좌표 변환
   const PADDING = 30; // 상하좌우 여백
-  const TRACK_RESERVE = TRACK_HEIGHT;
+  const TRACK_RESERVE = trackHeight;
   const [noteEffectEnabled, setNoteEffectEnabled] = useState(false);
+  const [layoutVersion, setLayoutVersion] = useState(0);
 
   useEffect(() => {
     ipcRenderer.send("get-note-effect");
     const handler = (_, value) => setNoteEffectEnabled(value);
     ipcRenderer.on("update-note-effect", handler);
-    return () => ipcRenderer.removeAllListeners("update-note-effect");
+    const onResize = () => setLayoutVersion((v) => v + 1);
+    window.addEventListener("resize", onResize);
+    return () => {
+      ipcRenderer.removeAllListeners("update-note-effect");
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   // 원본 좌표 기준 경계 박스 계산
@@ -118,7 +122,7 @@ export default function App() {
       dx: pos.dx + offsetX,
       dy: pos.dy + offsetY,
     }));
-  }, [currentPositions, bounds, noteEffectEnabled]);
+  }, [currentPositions, bounds, noteEffectEnabled, trackHeight, layoutVersion]);
 
   // 윈도우 크기 계산 및 메인 프로세스에 전달
   useEffect(() => {
@@ -133,13 +137,52 @@ export default function App() {
       width: totalWidth,
       height: totalHeight,
     });
-  }, [bounds, noteEffectEnabled]);
+  }, [bounds, noteEffectEnabled, noteSettings.trackHeight]);
 
   // 가장 위 키 (변환 후) Y 위치
   const topMostY = useMemo(() => {
     if (!displayPositions.length) return 0;
     return Math.min(...displayPositions.map((pos) => pos.dy));
   }, [displayPositions]);
+
+  // WebGL 트랙 데이터 (항상 계산하되 noteEffectEnabled일 때만 사용)
+  const webglTracks = useMemo(
+    () =>
+      currentKeys.map((key, index) => {
+        const originalPos = currentPositions[index] || {
+          dx: 0,
+          dy: 0,
+          width: 60,
+          height: 60,
+          noteColor: "#FFFFFF",
+          noteOpacity: 80,
+        };
+        const position = displayPositions[index] || originalPos;
+        // const trackStartY = position.dy; // 키 위치를 트랙 시작점으로 사용
+        const trackStartY = topMostY; // 가장 위 키의 Y 위치를 트랙 시작점으로 사용
+
+        return {
+          trackKey: key,
+          trackIndex: index, // 키 순서 정보 추가
+          position: { ...position, dy: trackStartY },
+          width: position.width,
+          height: trackHeight,
+          noteColor: position.noteColor || "#FFFFFF",
+          noteOpacity: position.noteOpacity || 80,
+          flowSpeed: noteSettings.speed,
+          borderRadius: noteSettings.borderRadius,
+        };
+      }),
+    [
+      currentKeys,
+      currentPositions,
+      displayPositions,
+      topMostY,
+      trackHeight,
+      noteSettings.speed,
+      noteSettings.borderRadius,
+    ]
+  );
 
   // 성능 측정
   // useEffect(() => {
@@ -217,6 +260,18 @@ export default function App() {
 
     const noteSettingsListener = (e, settings) => {
       setNoteSettings(settings);
+      setLayoutVersion((v) => v + 1);
+      if (bounds) {
+        const keyAreaWidth = bounds.maxX - bounds.minX;
+        const keyAreaHeight = bounds.maxY - bounds.minY;
+        const extraTop = settings?.trackHeight || trackHeight;
+        const totalWidth = keyAreaWidth + PADDING * 2;
+        const totalHeight = keyAreaHeight + PADDING * 2 + extraTop;
+        ipcRenderer.send("resize-overlay", {
+          width: totalWidth,
+          height: totalHeight,
+        });
+      }
     };
 
     // const showKeyCountListener = (_, value) => {
@@ -291,40 +346,15 @@ export default function App() {
         />
       )} */}
 
-      {currentKeys.map((key, index) => {
-        const originalPos = currentPositions[index] || {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-          noteColor: "#FFFFFF",
-          noteOpacity: 80,
-        };
-
-        const position = displayPositions[index] || originalPos;
-
-        const keyNotes = notes[key] || [];
-        // 트랙 시작 Y (노트 효과 시 확보 공간 바로 아래 / 아니면 최상단 위치)
-        const trackStartY = noteEffectEnabled
-          ? PADDING + TRACK_RESERVE
-          : topMostY;
-        const trackPosition = { ...position, dy: trackStartY };
-
-        return (
-          <Track
-            key={`track-${keyMode}-${index}`}
-            notes={keyNotes}
-            width={position.width}
-            height={trackHeight}
-            // position={position}
-            position={trackPosition}
-            noteColor={position.noteColor || "#FFFFFF"}
-            noteOpacity={position.noteOpacity || 80}
-            flowSpeed={noteSettings.speed}
-            borderRadius={noteSettings.borderRadius}
-          />
-        );
-      })}
+      {/* WebGL 노트 렌더링 */}
+      {noteEffectEnabled && (
+        <WebGLTracks
+          tracks={webglTracks}
+          notesRef={notesRef}
+          subscribe={subscribe}
+          noteSettings={noteSettings}
+        />
+      )}
 
       {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);

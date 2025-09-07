@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import Grid from "./Grid";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useSettingsStore } from "@stores/useSettingsStore";
 import CustomAlert from "@components/CustomAlert";
 import NoteSettingModal from "./NoteSettingModal";
 
@@ -12,6 +13,7 @@ export default function Canvas() {
     type: "alert",
   });
   const confirmCallbackRef = useRef(null);
+  const { noteEffect } = useSettingsStore();
 
   const showAlert = (message, confirmText = "확인") => {
     setAlertState({
@@ -56,7 +58,7 @@ export default function Canvas() {
       </div>
       <Grid showAlert={showAlert} showConfirm={showConfirm} />
 
-      {isNoteSettingOpen && (
+      {noteEffect && isNoteSettingOpen && (
         <NoteSettingModal onClose={() => setIsNoteSettingOpen(false)} />
       )}
 
@@ -114,6 +116,7 @@ export function KeyMenu() {
 
 export function SaveMenu({ showAlert, onOpenNoteSetting }) {
   const ipcRenderer = window.electron.ipcRenderer;
+  const { noteEffect } = useSettingsStore();
 
   const handleSavePreset = async () => {
     const success = await ipcRenderer.invoke("save-preset");
@@ -135,12 +138,14 @@ export function SaveMenu({ showAlert, onOpenNoteSetting }) {
 
   return (
     <div className="flex gap-[13.5px]">
-      <button
-        onClick={onOpenNoteSetting}
-        className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"
-      >
-        노트 설정
-      </button>
+      {noteEffect && (
+        <button
+          onClick={onOpenNoteSetting}
+          className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"
+        >
+          노트 설정
+        </button>
+      )}
       <button
         onClick={handleLoadPreset}
         className="flex items-center h-[31.5px] px-[16px] rounded-[6px] bg-[#272B33] border border-[rgba(255,255,255,0.1)] text-[15px] font-normal text-center text-white"

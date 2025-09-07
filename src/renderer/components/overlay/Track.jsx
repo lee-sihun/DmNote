@@ -1,9 +1,11 @@
 import React, { memo, useEffect, useRef } from "react";
-import { Note } from "./Note";
+import { animationScheduler } from "../../utils/animationScheduler";
 
 export const Track = memo(
   ({
-    notes,
+    trackKey,
+    notesRef,
+    subscribe,
     width,
     height,
     position,
@@ -12,112 +14,123 @@ export const Track = memo(
     flowSpeed,
     borderRadius,
   }) => {
+    const canvasRef = useRef();
     const trackRef = useRef();
-    const animationRef = useRef();
-    const noteRefsRef = useRef(new Map());
 
-    // 트랙 전체의 노트들을 한 번에 애니메이션
+    // 트랙 상단 글로벌 마스크 
     useEffect(() => {
-      const currentSpeed = flowSpeed || 180;
-      const minNoteHeight = 0; // 최소 노트 높이
-      const fadeZoneHeight = 50; // 페이드 아웃 시작 높이
+      if (!trackRef.current) return;
+      const fadeZoneHeight = 50; // 고정 상단 페이드 영역
+      const fadeStartFromBottom = height - fadeZoneHeight; // px 위치
+      const defaultMask = `linear-gradient(to top, rgba(0,0,0,1) 0px, rgba(0,0,0,1) ${fadeStartFromBottom}px, rgba(0,0,0,0) ${height}px)`;
+      trackRef.current.style.maskImage = `var(--track-mask, ${defaultMask})`;
+      trackRef.current.style.webkitMaskImage = `var(--track-mask, ${defaultMask})`;
+    }, [height]);
 
-      // 트랙에 페이드 마스크 적용 (CSS 변수로 오버라이드 가능)
-      if (trackRef.current) {
-        const fadeStartFromBottom = height - fadeZoneHeight;
-        const defaultMask = `linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) ${fadeStartFromBottom}px, rgba(0,0,0,0) ${height}px)`;
-        trackRef.current.style.mask = `var(--track-mask, ${defaultMask})`;
-        trackRef.current.style.webkitMaskImage = `var(--track-mask, ${defaultMask})`;
+    // 노트
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const currentSpeed = flowSpeed || 180;
+      const minNoteHeight = 0;
+      const baseOpacity = (noteOpacity || 80) / 100;
+      const color = noteColor || "#FFFFFF";
+      const noteRadius = borderRadius ?? 2;
+
+      // roundRect 폴리필
+      if (!ctx.roundRect) {
+        ctx.roundRect = function (x, y, w, h, r) {
+          this.beginPath();
+          this.moveTo(x + r, y);
+          this.lineTo(x + w - r, y);
+          this.quadraticCurveTo(x + w, y, x + w, y + r);
+          this.lineTo(x + w, y + h - r);
+          this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+          this.lineTo(x + r, y + h);
+          this.quadraticCurveTo(x, y + h, x, y + h - r);
+          this.lineTo(x, y + r);
+          this.quadraticCurveTo(x, y, x + r, y);
+          this.closePath();
+        };
       }
 
-      const animate = (currentTime) => {
-        notes.forEach((note) => {
-          const noteElement = noteRefsRef.current.get(note.id);
-          if (!noteElement) return;
+      let rgbaColor = color;
+      if (color.startsWith("#")) {
+        const r = parseInt(color.slice(1, 3), 16);
+        const g = parseInt(color.slice(3, 5), 16);
+        const b = parseInt(color.slice(5, 7), 16);
+        rgbaColor = `rgba(${r},${g},${b},${baseOpacity})`;
+      }
 
+      const draw = (currentTime) => {
+        ctx.clearRect(0, 0, width, height);
+        const notes = notesRef.current[trackKey] || [];
+
+        ctx.fillStyle = rgbaColor; 
+
+        for (let i = 0; i < notes.length; i++) {
+          const note = notes[i];
           const startTime = note.startTime;
           const endTime = note.isActive ? currentTime : note.endTime;
 
-          const baseOpacity = (noteOpacity || 80) / 100;
-
+          let noteLength, yPosition;
           if (note.isActive) {
-            // 활성 노트
             const pressDuration = currentTime - startTime;
-            const noteLength = Math.max(
+            noteLength = Math.max(
               minNoteHeight,
               (pressDuration * currentSpeed) / 1000
             );
-
-            noteElement.style.height = `${Math.round(noteLength)}px`;
-            noteElement.style.bottom = "0px";
-            noteElement.style.opacity = baseOpacity;
-            noteElement.style.borderRadius = `var(--note-radius, ${
-              borderRadius ?? 2
-            }px)`;
-            noteElement.style.backgroundColor = `var(--note-bg, ${
-              noteColor || "#FFFFFF"
-            })`;
-            // 개별 노트 마스크 제거 (트랙 마스크 사용)
-            noteElement.style.mask = "none";
+            yPosition = height - noteLength;
           } else {
-            // 완성된 노트
             const noteDuration = endTime - startTime;
-            const noteLength = Math.max(
+            noteLength = Math.max(
               minNoteHeight,
               (noteDuration * currentSpeed) / 1000
             );
-
             const timeSinceCompletion = currentTime - endTime;
-            const yPosition = (timeSinceCompletion * currentSpeed) / 1000;
-
-            noteElement.style.height = `${Math.round(noteLength)}px`;
-            noteElement.style.bottom = `${Math.round(yPosition)}px`;
-
-            // 화면 밖으로 나가는 추가 페이드아웃만 적용
-            const screenFadeStart = height;
-            let opacity = baseOpacity;
-
-            if (yPosition > screenFadeStart) {
-              const fadeProgress = (yPosition - screenFadeStart) / 50;
-              opacity = baseOpacity * (1 - Math.min(fadeProgress, 1));
-            }
-
-            noteElement.style.opacity = opacity;
-            noteElement.style.mask = "none";
-            noteElement.style.borderRadius = `var(--note-radius, ${
-              borderRadius ?? 2
-            }px)`;
-            noteElement.style.backgroundColor = `var(--note-bg, ${
-              noteColor || "#FFFFFF"
-            })`;
+            const moveDistance = (timeSinceCompletion * currentSpeed) / 1000;
+            yPosition = height - noteLength - moveDistance;
+            if (yPosition + noteLength < 0) continue; // 위로 완전히 사라짐
           }
-        });
+          if (noteLength <= 0) continue;
 
-        if (notes.length > 0) {
-          animationRef.current = requestAnimationFrame(animate);
+          if (noteRadius > 0) {
+            ctx.beginPath();
+            ctx.roundRect(0, yPosition, width, noteLength, noteRadius);
+            ctx.fill();
+          } else {
+            ctx.fillRect(0, yPosition, width, noteLength);
+          }
         }
       };
 
-      // 노트가 있을 때만 애니메이션 시작
-      if (notes.length > 0) {
-        animationRef.current = requestAnimationFrame(animate);
-      }
+      const handleNotesChange = () => {
+        const currentNotes = notesRef.current[trackKey] || [];
+        if (currentNotes.length > 0) {
+          animationScheduler.add(draw);
+        } else {
+          animationScheduler.remove(draw);
+        }
+      };
 
+      handleNotesChange();
+      const unsubscribe = subscribe(handleNotesChange);
       return () => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
+        unsubscribe();
+        animationScheduler.remove(draw); // 컴포넌트 언마운트 시 반드시 제거
       };
-    }, [notes, height, noteColor, noteOpacity, flowSpeed, borderRadius]); // notes 배열이 변경될 때마다 재시작
-
-    // 노트 ref 등록 함수
-    const registerNoteRef = (noteId, element) => {
-      if (element) {
-        noteRefsRef.current.set(noteId, element);
-      } else {
-        noteRefsRef.current.delete(noteId);
-      }
-    };
+    }, [
+      trackKey,
+      notesRef,
+      subscribe,
+      width,
+      height,
+      noteColor,
+      noteOpacity,
+      flowSpeed,
+      borderRadius,
+    ]);
 
     const trackStyle = {
       position: "absolute",
@@ -131,7 +144,7 @@ export const Track = memo(
       overflow: `var(--track-overflow, hidden)`,
       pointerEvents: `var(--track-pointer-events, none)`,
       boxShadow: `var(--track-shadow, none)`,
-      willChange: "contents",
+      willChange: "transform",
       backfaceVisibility: "hidden",
       transform: "translateZ(0)",
     };
@@ -141,20 +154,14 @@ export const Track = memo(
         ref={trackRef}
         style={trackStyle}
         className={position?.className || ""}
-        data-state="track"
+        data-state="track-canvas"
       >
-        {notes.map((note) => (
-          <Note
-            key={note.id}
-            note={note}
-            trackHeight={height}
-            registerRef={registerNoteRef}
-            noteColor={noteColor}
-            noteOpacity={noteOpacity}
-            borderRadius={borderRadius}
-            className={position?.className || ""}
-          />
-        ))}
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          style={{ width: "100%", height: "100%", display: "block" }}
+        />
       </div>
     );
   }

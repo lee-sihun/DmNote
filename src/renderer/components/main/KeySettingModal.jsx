@@ -14,6 +14,7 @@ export default function KeySettingModal({
     setUseCustomCSS,
     setCustomCSSContent,
     setCustomCSSPath,
+    noteEffect,
   } = useSettingsStore();
   const [key, setKey] = useState(keyData.key);
   const [displayKey, setDisplayKey] = useState(
@@ -242,7 +243,9 @@ export default function KeySettingModal({
               }}
               className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
-            <p className="text-[#989BA6] text-[13.5px] font-medium mt-[2px]">X</p>
+            <p className="text-[#989BA6] text-[13.5px] font-medium mt-[2px]">
+              X
+            </p>
             <input
               type="number"
               value={height}
@@ -266,57 +269,63 @@ export default function KeySettingModal({
             />
           </div>
         </div>
-        <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-            노트 색상
-          </p>
-          <div className="flex items-center gap-[10px]">
-            <div
-              className="w-[24px] h-[24px] border border-[#3B4049] rounded-[4px]"
-              style={{ backgroundColor: noteColor }}
-            ></div>
-            <input
-              type="text"
-              value={noteColor}
-              onChange={handleColorChange}
-              onBlur={handleColorBlur}
-              placeholder="#FFFFFF"
-              className="text-center w-[80px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
-            />
-          </div>
-        </div>
-
-        {/* 노트 투명도 설정 추가 */}
-        <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-            노트 투명도
-          </p>
-          <div className="flex items-center gap-[10px]">
-            <input
-              type="number"
-              value={noteOpacity}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                if (newValue === "") {
-                  setNoteOpacity("");
-                } else {
-                  const numValue = parseInt(newValue);
-                  if (!isNaN(numValue)) {
-                    setNoteOpacity(Math.min(Math.max(numValue, 0), 100));
-                  }
-                }
-              }}
-              onBlur={(e) => {
-                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
-                  setNoteOpacity(80);
-                }
-              }}
-              className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
-            />
-            <p className="text-[#989BA6] text-[13.5px] font-medium">%</p>
-          </div>
-        </div>
-
+        {/* 노트 관련 UI: noteEffect가 true일 때만 렌더링 */}
+        {noteEffect && (
+          <>
+            <div className="flex justify-between w-full mt-[18px]">
+              <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
+                노트 색상
+              </p>
+              <div className="flex items-center gap-[10px]">
+                <div
+                  className="w-[24px] h-[24px] border border-[#3B4049] rounded-[4px]"
+                  style={{ backgroundColor: noteColor }}
+                ></div>
+                <input
+                  type="text"
+                  value={noteColor}
+                  onChange={handleColorChange}
+                  onBlur={handleColorBlur}
+                  placeholder="#FFFFFF"
+                  className="text-center w-[80px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
+                />
+              </div>
+            </div>
+            {/* 노트 투명도 설정 추가 */}
+            <div className="flex justify-between w-full mt-[18px]">
+              <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
+                노트 투명도
+              </p>
+              <div className="flex items-center gap-[10px]">
+                <input
+                  type="number"
+                  value={noteOpacity}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    if (newValue === "") {
+                      setNoteOpacity("");
+                    } else {
+                      const numValue = parseInt(newValue);
+                      if (!isNaN(numValue)) {
+                        setNoteOpacity(Math.min(Math.max(numValue, 0), 100));
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (
+                      e.target.value === "" ||
+                      isNaN(parseInt(e.target.value))
+                    ) {
+                      setNoteOpacity(80);
+                    }
+                  }}
+                  className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
+                />
+                <p className="text-[#989BA6] text-[13.5px] font-medium">%</p>
+              </div>
+            </div>
+          </>
+        )}
         {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
         {useCustomCSS && (
           <div className="flex justify-between w-full mt-[18px] items-center">
@@ -333,7 +342,6 @@ export default function KeySettingModal({
             />
           </div>
         )}
-
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">
           <button
             onClick={handleSubmit}
