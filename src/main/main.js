@@ -375,6 +375,7 @@ class Application {
         speed: 180,
         trackHeight: 150,
         reverse: false,
+        fadePosition: "auto",
       };
       const settings = store.get("noteSettings", defaults) || defaults;
       const normalized = { ...defaults, ...settings };
@@ -382,7 +383,8 @@ class Application {
         settings.borderRadius === undefined ||
         settings.speed === undefined ||
         settings.trackHeight === undefined ||
-        settings.reverse === undefined
+        settings.reverse === undefined ||
+        settings.fadePosition === undefined
       ) {
         store.set("noteSettings", normalized);
       }
@@ -397,6 +399,7 @@ class Application {
           trackHeight: 150,
           reverse: false,
         };
+        const fadeDefault = "auto";
         const br = parseInt(newSettings?.borderRadius ?? defaults.borderRadius);
         const sp = parseInt(newSettings?.speed ?? defaults.speed);
         const th = parseInt(newSettings?.trackHeight ?? defaults.trackHeight);
@@ -404,6 +407,12 @@ class Application {
           newSettings?.reverse === undefined
             ? defaults.reverse
             : !!newSettings.reverse;
+        // fadePosition: 'auto' | 'top' | 'bottom'
+        const incomingFade =
+          (newSettings && newSettings.fadePosition) || fadeDefault;
+        const validFade = ["auto", "top", "bottom"].includes(incomingFade)
+          ? incomingFade
+          : fadeDefault;
         const normalized = {
           ...defaults,
           ...newSettings,
@@ -420,6 +429,7 @@ class Application {
             Math.min(Number.isFinite(th) ? th : defaults.trackHeight, 2000)
           ),
           reverse: rv,
+          fadePosition: validFade,
         };
         store.set("noteSettings", normalized);
         [this.mainWindow, this.overlayWindow].forEach((window) => {
@@ -593,6 +603,24 @@ class Application {
       return store.get("useCustomCSS", false);
     });
 
+    // 오버레이 리사이즈 기준점 저장/조회
+    ipcMain.handle("set-overlay-resize-anchor", (_, anchor) => {
+      const valid = [
+        "top-left",
+        "bottom-left",
+        "top-right",
+        "bottom-right",
+        "center",
+      ];
+      const value = valid.includes(anchor) ? anchor : "top-left";
+      store.set("overlayResizeAnchor", value);
+      return value;
+    });
+
+    ipcMain.handle("get-overlay-resize-anchor", () => {
+      return store.get("overlayResizeAnchor", "top-left");
+    });
+
     // URL 열기 요청 처리
     ipcMain.on("open-external", (_, url) => {
       shell.openExternal(url);
@@ -605,20 +633,96 @@ class Application {
     });
 
     // 오버레이 동적 리사이즈
-    ipcMain.on("resize-overlay", (_, { width, height }) => {
+    // 기존 호출은 {width, height} 만 보내도 동작하도록 유지합니다.
+    ipcMain.on("resize-overlay", (_, payload) => {
       try {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          const width = payload?.width;
+          const height = payload?.height;
+          const anchor =
+            payload?.anchor || store.get("overlayResizeAnchor", "top-left");
+
           // 최소/최대 값 가드 (이상치 방지)
           const safeWidth = Math.max(100, Math.min(Math.round(width), 2000));
           const safeHeight = Math.max(100, Math.min(Math.round(height), 2000));
-          const [currentW, currentH] = this.overlayWindow.getSize();
-          if (currentW !== safeWidth || currentH !== safeHeight) {
-            // Windows에서 resizable:false 상태에서는 축소가 제한될 수 있으므로 임시로 활성화
-            const wasResizable = this.overlayWindow.isResizable();
-            if (!wasResizable) this.overlayWindow.setResizable(true);
-            this.overlayWindow.setSize(safeWidth, safeHeight);
-            if (!wasResizable) this.overlayWindow.setResizable(false);
+
+          const bounds = this.overlayWindow.getBounds();
+          const oldX = bounds.x;
+          const oldY = bounds.y;
+          const oldW = bounds.width;
+          const oldH = bounds.height;
+
+          // 변경이 없으면 바로 리턴
+          if (oldW === safeWidth && oldH === safeHeight) return;
+
+          // Windows에서 resizable:false 상태에서는 축소가 제한될 수 있으므로 임시로 활성화
+          const wasResizable = this.overlayWindow.isResizable();
+          if (!wasResizable) this.overlayWindow.setResizable(true);
+
+          // anchor 기준으로 새로운 좌표 계산
+          let newX = oldX;
+          let newY = oldY;
+          switch ((anchor || "top-left").toString()) {
+            case "bottom-left":
+              newY = oldY + oldH - safeHeight;
+              break;
+            case "top-right":
+              newX = oldX + oldW - safeWidth;
+              break;
+            case "bottom-right":
+              newX = oldX + oldW - safeWidth;
+              newY = oldY + oldH - safeHeight;
+              break;
+            case "center":
+              newX = oldX + Math.round((oldW - safeWidth) / 2);
+              newY = oldY + Math.round((oldH - safeHeight) / 2);
+              break;
+            case "top-left":
+            default:
+              // 기본: 좌상단 고정 (기존 동작)
+              break;
           }
+
+          // 경계값 정수로 보정
+          newX = Math.round(newX);
+          newY = Math.round(newY);
+
+          // 위치 + 크기 동시 적용
+          this.overlayWindow.setBounds({
+            x: newX,
+            y: newY,
+            width: safeWidth,
+            height: safeHeight,
+          });
+
+          if (!wasResizable) this.overlayWindow.setResizable(false);
+
+          // obs 포커스 이슈 대응
+          setTimeout(() => {
+            if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+              try {
+                this.overlayWindow.setBounds({
+                  x: newX,
+                  y: newY,
+                  width: safeWidth + 1,
+                  height: safeHeight + 1,
+                });
+              } catch {}
+            }
+          }, 10);
+
+          setTimeout(() => {
+            if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+              try {
+                this.overlayWindow.setBounds({
+                  x: newX,
+                  y: newY,
+                  width: safeWidth,
+                  height: safeHeight,
+                });
+              } catch {}
+            }
+          }, 26);
         }
       } catch (err) {
         console.error("Failed to resize overlay window:", err);

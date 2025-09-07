@@ -94,9 +94,18 @@ const vertexShader = `
       }
     }
     
-    // 트랙 영역을 벗어나는 경우 클리핑
+    // 트랙 영역을 벗어나는 경우 클리핑 (트랙 내부로 강제 제한)
     float trackTopY = trackBottomY - uTrackHeight;
+    // 노트가 트랙 범위를 넘어 확장되는 것을 방지하기 위해 상/하 경계를 모두 클램프
     noteTopY = max(noteTopY, trackTopY);
+    noteBottomY = min(noteBottomY, trackBottomY);
+
+    // 노트가 트랙 범위 밖에 완전히 벗어난 경우 렌더링하지 않음
+    if (noteBottomY <= trackTopY) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
+      vColor = vec4(0.0);
+      return;
+    }
     
     // 완전히 화면 위로 사라진 경우: 투명 처리
     if (noteBottomY < 0.0) {
@@ -140,6 +149,7 @@ const vertexShader = `
 // gl_FragCoord.y 는 하단=0, 상단=screenHeight 이므로 distanceFromTop = uScreenHeight - gl_FragCoord.y
 const fragmentShader = `
   uniform float uScreenHeight;
+  uniform float uFadePosition; // 0 = auto, 1 = top, 2 = bottom
   varying vec4 vColor;
   varying vec2 vLocalPos;
   varying vec2 vHalfSize;
@@ -155,8 +165,21 @@ const fragmentShader = `
     // 트랙 내에서의 상대적 위치 계산 (0.0 = 트랙 상단, 1.0 = 트랙 하단)
     float trackRelativeY = (currentDOMY - vTrackTopY) / (vTrackBottomY - vTrackTopY);
     
-    // 리버스 모드일 때 상대적 위치 반전 (하단 페이드)
-    if (vReverse > 0.5) {
+    // fadePosition: 0 = auto (기존 동작: reverse에 따라 반전), 1 = top, 2 = bottom
+    // vReverse: 0 = normal, 1 = reversed
+    float fadePosFlag = uFadePosition;
+    bool invertForFade = false;
+    if (fadePosFlag < 0.5) {
+      // auto
+      invertForFade = (vReverse > 0.5);
+    } else if (abs(fadePosFlag - 1.0) < 0.1) {
+      // top
+      invertForFade = false;
+    } else {
+      // bottom
+      invertForFade = true;
+    }
+    if (invertForFade) {
       trackRelativeY = 1.0 - trackRelativeY;
     }
     
@@ -244,6 +267,15 @@ export const WebGLTracks = memo(
           uScreenHeight: { value: window.innerHeight },
           uTrackHeight: { value: noteSettings.trackHeight || 150 },
           uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
+          // fadePosition: 'auto' | 'top' | 'bottom' -> 0 | 1 | 2
+          uFadePosition: {
+            value:
+              noteSettings.fadePosition === "top"
+                ? 1.0
+                : noteSettings.fadePosition === "bottom"
+                ? 2.0
+                : 0.0,
+          },
         },
         vertexShader,
         fragmentShader,
@@ -575,8 +607,19 @@ export const WebGLTracks = memo(
         materialRef.current.uniforms.uReverse.value = noteSettings.reverse
           ? 1.0
           : 0.0;
+        materialRef.current.uniforms.uFadePosition.value =
+          noteSettings.fadePosition === "top"
+            ? 1.0
+            : noteSettings.fadePosition === "bottom"
+            ? 2.0
+            : 0.0;
       }
-    }, [noteSettings.speed, noteSettings.trackHeight, noteSettings.reverse]);
+    }, [
+      noteSettings.speed,
+      noteSettings.trackHeight,
+      noteSettings.reverse,
+      noteSettings.fadePosition,
+    ]);
 
     // 4. 윈도우 리사이즈 처리
     useEffect(() => {

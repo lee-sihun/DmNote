@@ -7,6 +7,7 @@ export default function NoteSettingModal({ onClose }) {
   const [speed, setSpeed] = useState(180);
   const [trackHeight, setTrackHeight] = useState("150");
   const [reverse, setReverse] = useState(false);
+  const [fadePosition, setFadePosition] = useState("auto");
 
   useEffect(() => {
     if (!ipcRenderer) return;
@@ -30,6 +31,7 @@ export default function NoteSettingModal({ onClose }) {
               : "150"
           );
           setReverse(Boolean(settings.reverse || false));
+          setFadePosition(settings.fadePosition || "auto");
         }
       })
       .catch(() => {});
@@ -47,6 +49,7 @@ export default function NoteSettingModal({ onClose }) {
       speed: Math.max(70, Math.min(parseInt(speed || 70), 1000)),
       trackHeight: clientTrack,
       reverse: reverse,
+      fadePosition: fadePosition,
     };
     try {
       const ok = await ipcRenderer.invoke("update-note-settings", normalized);
@@ -166,9 +169,28 @@ export default function NoteSettingModal({ onClose }) {
 
         <div className="flex justify-between w-full mt-[18px] items-center">
           <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-            노트 효과 리버스 
+            페이드 위치
           </p>
+          <div className="flex items-center gap-[10px]">
+            <select
+              value={fadePosition}
+              onChange={(e) => setFadePosition(e.target.value)}
+              className="bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] pl-[8px] py-1 w-[60px]"
+            >
+              <option value="auto">자동</option>
+              <option value="top">상단</option>
+              <option value="bottom">하단</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-between w-full mt-[18px] items-center">
+          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
+            노트 효과 리버스
+          </p>
+          <div className="mr-[16.5px]"> 
           <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
+            </div>
         </div>
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">

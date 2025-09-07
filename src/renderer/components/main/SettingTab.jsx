@@ -29,6 +29,9 @@ export default function SettingTab({ showAlert, showConfirm }) {
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
+  const [overlayResizeAnchor, setOverlayResizeAnchor] =
+    React.useState("top-left");
+
   const ANGLE_OPTIONS = [
     {
       value: "d3d11",
@@ -109,6 +112,14 @@ export default function SettingTab({ showAlert, showConfirm }) {
       })
       .catch(() => {});
 
+    // overlay resize anchor 초기값
+    ipcRenderer
+      .invoke("get-overlay-resize-anchor")
+      .then((val) => {
+        if (val) setOverlayResizeAnchor(val);
+      })
+      .catch(() => {});
+
     return () => {
       ipcRenderer.removeAllListeners("update-hardware-acceleration");
       ipcRenderer.removeAllListeners("update-always-on-top");
@@ -130,6 +141,16 @@ export default function SettingTab({ showAlert, showConfirm }) {
         ipcRenderer.send("restart-app");
       }
     );
+  };
+
+  const handleOverlayResizeAnchorChange = async (e) => {
+    const val = e.target.value;
+    setOverlayResizeAnchor(val);
+    try {
+      await ipcRenderer.invoke("set-overlay-resize-anchor", val);
+    } catch (err) {
+      // ignore
+    }
   };
 
   const handleAlwaysOnTopChange = () => {
@@ -281,6 +302,25 @@ export default function SettingTab({ showAlert, showConfirm }) {
             </div>
           </>
         )}
+        <div className="w-full h-[0.75px] bg-[#3C4049]" />
+        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[155px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
+            리사이즈 기준점
+          </p>
+          <div className="flex items-center">
+            <select
+              value={overlayResizeAnchor}
+              onChange={handleOverlayResizeAnchorChange}
+              className="bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md text-white text-sm px-2 py-1"
+            >
+              <option value="top-left">좌상단</option>
+              <option value="bottom-left">좌하단</option>
+              <option value="top-right">우상단</option>
+              <option value="bottom-right">우하단</option>
+              <option value="center">가운데</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px]">
         <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[26px]">
