@@ -1,5 +1,6 @@
 import { Key } from "@components/Key";
 import { WebGLTracks } from "@components/overlay/WebGLTracks";
+import { KpsGraph } from "@components/overlay/KpsGraph";
 import React, {
   useState,
   useEffect,
@@ -10,6 +11,7 @@ import React, {
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { DEFAULT_NOTE_SETTINGS } from "@constants/overlayConfig";
 import { useNoteSystem } from "@hooks/useNoteSystem";
+import { useKps } from "@hooks/useKps";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 // import { LatencyDisplay } from "@components/overlay/LatencyDisplay";
 // import { useSettingsStore } from "@stores/useSettingsStore";
@@ -28,6 +30,11 @@ export default function App() {
 
   // 노트 시스템
   const { notesRef, subscribe, handleKeyDown, handleKeyUp } = useNoteSystem();
+  // KPS 측정 훅 (3초 윈도우, 30Hz 샘플)
+  const { recordKeyDown, instantKpsRef, avgKpsRef, peakKpsRef } = useKps({
+    windowMs: 3000,
+    sampleHz: 30,
+  });
   const trackHeight =
     noteSettings.trackHeight || DEFAULT_NOTE_SETTINGS.trackHeight;
 
@@ -59,13 +66,14 @@ export default function App() {
       // 노트 시스템 업데이트
       requestAnimationFrame(() => {
         if (isDown) {
+          recordKeyDown(); // 키다운 수집
           handleKeyDown(key);
         } else {
           handleKeyUp(key);
         }
       });
     },
-    [handleKeyDown, handleKeyUp]
+    [handleKeyDown, handleKeyUp, recordKeyDown]
   );
 
   // 현재 모드의 키 목록 메모이제이션
@@ -355,6 +363,26 @@ export default function App() {
           noteSettings={noteSettings}
         />
       )}
+
+      {/* KPS 그래프 (항상 표시하거나 필요 시 조건부 렌더) */}
+      <div
+        style={{
+          position: "absolute",
+          left: 8,
+          bottom: 8,
+          zIndex: 50,
+          pointerEvents: "none",
+        }}
+      >
+        <KpsGraph
+          instantKpsRef={instantKpsRef}
+          avgKpsRef={avgKpsRef}
+          peakKpsRef={peakKpsRef}
+          width={240}
+          height={60}
+          baseMax={20}
+        />
+      </div>
 
       {currentKeys.map((key, index) => {
         const { displayName } = getKeyInfoByGlobalKey(key);
