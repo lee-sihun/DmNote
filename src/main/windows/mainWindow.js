@@ -18,6 +18,8 @@ class MainWindow {
       }
     })
 
+    this.window.setTitle('DJMax KeyViewer - Settings')
+    
     // 윈도우 종료 이벤트 처리 추가
     this.window.on('close', () => {
       global.isAppQuitting = true;

@@ -10,12 +10,14 @@ const vertexShader = `
   uniform float uTime;
   uniform float uFlowSpeed;
   uniform float uScreenHeight; // 전체 화면 높이 (캔버스 y -> WebGL y 변환용)
-  uniform float uTrackHeight; // 트랙 높이 (150px)
+  uniform float uTrackHeight; // 트랙 높이 (px, runtime 설정)
+  uniform float uReverse; // 0.0 = normal (bottom->up), 1.0 = reversed (top->down)
 
   attribute vec3 noteInfo; // x: startTime, y: endTime, z: trackX (왼쪽 X px, DOM 기준)
   attribute vec2 noteSize; // x: width, y: trackBottomY (DOM 기준; 키 위치)
   attribute vec4 noteColor;
   attribute float noteRadius; // 픽셀 단위 라운드 반경
+  attribute float trackIndex; // 키 순서 (첫 번째 키 = 0, 두 번째 키 = 1, ...)
 
   varying vec4 vColor;
   varying vec2 vLocalPos;     // 노트 중심 기준 로컬 좌표(px)
@@ -23,6 +25,7 @@ const vertexShader = `
   varying float vRadius;      // 라운드 반경(px)
   varying float vTrackTopY;   // 트랙 상단 Y 좌표 (DOM 기준)
   varying float vTrackBottomY; // 트랙 하단 Y 좌표 (DOM 기준)
+  varying float vReverse;     // 리버스 모드 플래그
 
   void main() {
     float startTime = noteInfo.x;
@@ -30,6 +33,13 @@ const vertexShader = `
     float trackX = noteInfo.z;
     float trackBottomY = noteSize.y; // DOM 기준(위=0 아래=+)
     float noteWidth = noteSize.x;
+
+    // startTime이 0이면 제거된 노트이므로 렌더링하지 않음
+    if (startTime == 0.0) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
+      vColor = vec4(0.0);
+      return;
+    }
 
     bool isActive = endTime == 0.0;
     float rawNoteLength = 0.0;     // 원본 노트 길이
@@ -40,8 +50,15 @@ const vertexShader = `
       bottomCanvasY = trackBottomY; // 활성 중엔 바닥 고정
     } else {
       rawNoteLength = max(0.0, (endTime - startTime) * uFlowSpeed / 1000.0);
-      float travel = (uTime - endTime) * uFlowSpeed / 1000.0; // 위로 이동 거리 (DOM 좌표에서 감소 방향)
-      bottomCanvasY = trackBottomY - travel; // 위로(작아지는 방향) 이동
+      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+      // normal: bottom->up (trackBottomY - travel)
+      // reverse: top->down (trackTopY + travel) => noteBottomY will be below top
+      float trackTopY_local = trackBottomY - uTrackHeight;
+      if (uReverse < 0.5) {
+        bottomCanvasY = trackBottomY - travel;
+      } else {
+        bottomCanvasY = trackTopY_local + travel;
+      }
     }
 
     // 노트 길이를 트랙 높이로 제한 (원본 Track.jsx와 동일한 동작)
@@ -53,19 +70,42 @@ const vertexShader = `
     float noteTopY, noteBottomY;
     
     if (isActive) {
-      // 활성 노트: 트랙 바닥부터 위로 자라남
-      noteBottomY = trackBottomY;
-      noteTopY = trackBottomY - noteLength;
+      // 활성 노트: 트랙 바닥부터 위로 자라남 (normal)
+      // 활성 노트 in reverse mode should grow from trackTop downward
+      if (uReverse < 0.5) {
+        noteBottomY = trackBottomY;
+        noteTopY = trackBottomY - noteLength;
+      } else {
+        float trackTopY_local = trackBottomY - uTrackHeight;
+        noteTopY = trackTopY_local;
+        noteBottomY = trackTopY_local + noteLength;
+      }
     } else {
-      // 비활성 노트: 위로 이동
-      float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
-      noteBottomY = trackBottomY - travel;
-      noteTopY = noteBottomY - noteLength;
+      // 비활성 노트: 이동
+      if (uReverse < 0.5) {
+        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+        noteBottomY = trackBottomY - travel;
+        noteTopY = noteBottomY - noteLength;
+      } else {
+        float travel = (uTime - endTime) * uFlowSpeed / 1000.0;
+        float trackTopY_local = trackBottomY - uTrackHeight;
+        noteTopY = trackTopY_local + travel;
+        noteBottomY = noteTopY + noteLength;
+      }
     }
     
-    // 트랙 영역을 벗어나는 경우 클리핑
+    // 트랙 영역을 벗어나는 경우 클리핑 (트랙 내부로 강제 제한)
     float trackTopY = trackBottomY - uTrackHeight;
+    // 노트가 트랙 범위를 넘어 확장되는 것을 방지하기 위해 상/하 경계를 모두 클램프
     noteTopY = max(noteTopY, trackTopY);
+    noteBottomY = min(noteBottomY, trackBottomY);
+
+    // 노트가 트랙 범위 밖에 완전히 벗어난 경우 렌더링하지 않음
+    if (noteBottomY <= trackTopY) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
+      vColor = vec4(0.0);
+      return;
+    }
     
     // 완전히 화면 위로 사라진 경우: 투명 처리
     if (noteBottomY < 0.0) {
@@ -89,6 +129,9 @@ const vertexShader = `
     // 위치 이동 (x는 왼쪽 정렬, y는 중심 위치로 보정)
     transformed.x += trackX + noteWidth / 2.0;
     transformed.y += centerWorldY;
+    
+    // Z는 0으로 고정 (키 레이어 순서는 mesh.renderOrder로 제어)
+    transformed.z = 0.0;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
 
@@ -98,6 +141,7 @@ const vertexShader = `
     vRadius = noteRadius;
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
+    vReverse = uReverse;
   }
 `;
 
@@ -105,12 +149,14 @@ const vertexShader = `
 // gl_FragCoord.y 는 하단=0, 상단=screenHeight 이므로 distanceFromTop = uScreenHeight - gl_FragCoord.y
 const fragmentShader = `
   uniform float uScreenHeight;
+  uniform float uFadePosition; // 0 = auto, 1 = top, 2 = bottom
   varying vec4 vColor;
   varying vec2 vLocalPos;
   varying vec2 vHalfSize;
   varying float vRadius;
   varying float vTrackTopY;
   varying float vTrackBottomY;
+  varying float vReverse;
 
   void main() {
     // 현재 픽셀의 DOM Y 좌표 계산
@@ -119,7 +165,25 @@ const fragmentShader = `
     // 트랙 내에서의 상대적 위치 계산 (0.0 = 트랙 상단, 1.0 = 트랙 하단)
     float trackRelativeY = (currentDOMY - vTrackTopY) / (vTrackBottomY - vTrackTopY);
     
-    float fadeZone = 50.0; // 트랙 상단에서 50px
+    // fadePosition: 0 = auto (기존 동작: reverse에 따라 반전), 1 = top, 2 = bottom
+    // vReverse: 0 = normal, 1 = reversed
+    float fadePosFlag = uFadePosition;
+    bool invertForFade = false;
+    if (fadePosFlag < 0.5) {
+      // auto
+      invertForFade = (vReverse > 0.5);
+    } else if (abs(fadePosFlag - 1.0) < 0.1) {
+      // top
+      invertForFade = false;
+    } else {
+      // bottom
+      invertForFade = true;
+    }
+    if (invertForFade) {
+      trackRelativeY = 1.0 - trackRelativeY;
+    }
+    
+    float fadeZone = 50.0; // 페이드 영역 50px
     float trackHeight = vTrackBottomY - vTrackTopY;
     float fadeRatio = fadeZone / trackHeight; // 트랙 높이 대비 페이드 영역 비율
     
@@ -138,7 +202,7 @@ const fragmentShader = `
       alpha *= smoothAlpha;
     }
     
-    // 트랙 상단 페이드 영역 적용 (트랙 내 상대적 위치 기준)
+    // 트랙 페이드 영역 적용 (상단 또는 하단)
     if (trackRelativeY < fadeRatio) {
       alpha *= clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
     }
@@ -153,11 +217,14 @@ export const WebGLTracks = memo(
     const rendererRef = useRef();
     const sceneRef = useRef();
     const cameraRef = useRef();
-    const meshRef = useRef();
+    const geometryRef = useRef();
     const materialRef = useRef();
+    const meshMapRef = useRef(new Map()); // 트랙별 InstancedMesh
     const trackMapRef = useRef(new Map());
-    const attributesRef = useRef(null); // 속성 캐싱용
+    const attributesMapRef = useRef(new Map()); // 트랙별 속성 캐싱용
     const colorCacheRef = useRef(new Map()); // 색상 변환 캐싱
+    const isAnimating = useRef(false); // 애니메이션 루프 상태
+    const noteTrackMapRef = useRef(new Map()); // noteId -> trackKey 매핑
 
     // 1. WebGL 씬 초기 설정 (단 한번만 실행)
     useEffect(() => {
@@ -169,6 +236,7 @@ export const WebGLTracks = memo(
         powerPreference: "high-performance",
       });
       renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.sortObjects = true; // 투명 객체 정렬 활성화
 
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
@@ -188,69 +256,126 @@ export const WebGLTracks = memo(
       camera.position.z = 5;
       cameraRef.current = camera;
 
+      // 공유 지오메트리/머티리얼
       const geometry = new THREE.PlaneGeometry(1, 1).toNonIndexed();
+      geometryRef.current = geometry;
 
       const material = new THREE.ShaderMaterial({
         uniforms: {
           uTime: { value: 0 },
           uFlowSpeed: { value: noteSettings.speed || 180 },
           uScreenHeight: { value: window.innerHeight },
-          uTrackHeight: { value: 150 }, // 트랙 높이 150px로 고정
+          uTrackHeight: { value: noteSettings.trackHeight || 150 },
+          uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
+          // fadePosition: 'auto' | 'top' | 'bottom' -> 0 | 1 | 2
+          uFadePosition: {
+            value:
+              noteSettings.fadePosition === "top"
+                ? 1.0
+                : noteSettings.fadePosition === "bottom"
+                ? 2.0
+                : 0.0,
+          },
         },
         vertexShader,
         fragmentShader,
         transparent: true,
         blending: THREE.NormalBlending,
+        depthTest: false, // 투명 객체는 페인터스 알고리즘 사용
+        depthWrite: false,
       });
       materialRef.current = material;
 
-      const mesh = new THREE.InstancedMesh(geometry, material, MAX_NOTES);
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // 매 프레임 업데이트 명시
-      scene.add(mesh);
-      meshRef.current = mesh;
+      // 트랙 엔트리 생성기
+      const createTrackEntry = (track) => {
+        const geo = geometryRef.current.clone();
+        const mesh = new THREE.InstancedMesh(
+          geo,
+          materialRef.current,
+          MAX_NOTES
+        );
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        // 키 순서 고정 레이어링: 첫 번째 키가 가장 뒤 (작은 renderOrder가 먼저 그려짐)
+        mesh.renderOrder = track.trackIndex ?? 0;
+        sceneRef.current.add(mesh);
 
-      // 속성 미리 생성 및 캐싱 (성능 최적화)
-      const noteInfoArray = new Float32Array(MAX_NOTES * 3);
-      const noteSizeArray = new Float32Array(MAX_NOTES * 2);
-      const noteColorArray = new Float32Array(MAX_NOTES * 4);
-      const noteRadiusArray = new Float32Array(MAX_NOTES);
+        // 트랙별 버퍼
+        const noteInfoArray = new Float32Array(MAX_NOTES * 3);
+        const noteSizeArray = new Float32Array(MAX_NOTES * 2);
+        const noteColorArray = new Float32Array(MAX_NOTES * 4);
+        const noteRadiusArray = new Float32Array(MAX_NOTES);
+        const trackIndexArray = new Float32Array(MAX_NOTES);
 
-      const noteInfoAttr = new THREE.InstancedBufferAttribute(noteInfoArray, 3);
-      const noteSizeAttr = new THREE.InstancedBufferAttribute(noteSizeArray, 2);
-      const noteColorAttr = new THREE.InstancedBufferAttribute(
-        noteColorArray,
-        4
-      );
+        const noteInfoAttr = new THREE.InstancedBufferAttribute(
+          noteInfoArray,
+          3
+        );
+        const noteSizeAttr = new THREE.InstancedBufferAttribute(
+          noteSizeArray,
+          2
+        );
+        const noteColorAttr = new THREE.InstancedBufferAttribute(
+          noteColorArray,
+          4
+        );
+        const noteRadiusAttr = new THREE.InstancedBufferAttribute(
+          noteRadiusArray,
+          1
+        );
+        const trackIndexAttr = new THREE.InstancedBufferAttribute(
+          trackIndexArray,
+          1
+        );
 
-      mesh.geometry.setAttribute("noteInfo", noteInfoAttr);
-      mesh.geometry.setAttribute("noteSize", noteSizeAttr);
-      mesh.geometry.setAttribute("noteColor", noteColorAttr);
-      const noteRadiusAttr = new THREE.InstancedBufferAttribute(
-        noteRadiusArray,
-        1
-      );
-      mesh.geometry.setAttribute("noteRadius", noteRadiusAttr);
+        mesh.geometry.setAttribute("noteInfo", noteInfoAttr);
+        mesh.geometry.setAttribute("noteSize", noteSizeAttr);
+        mesh.geometry.setAttribute("noteColor", noteColorAttr);
+        mesh.geometry.setAttribute("noteRadius", noteRadiusAttr);
+        mesh.geometry.setAttribute("trackIndex", trackIndexAttr);
 
-      attributesRef.current = {
-        noteInfoArray,
-        noteSizeArray,
-        noteColorArray,
-        noteInfoAttr,
-        noteSizeAttr,
-        noteColorAttr,
-        noteRadiusArray,
-        noteRadiusAttr,
+        attributesMapRef.current.set(track.trackKey, {
+          noteInfoArray,
+          noteSizeArray,
+          noteColorArray,
+          noteInfoAttr,
+          noteSizeAttr,
+          noteColorAttr,
+          noteRadiusArray,
+          noteRadiusAttr,
+          trackIndexArray,
+          trackIndexAttr,
+        });
+
+        meshMapRef.current.set(track.trackKey, {
+          mesh,
+          noteIndexMap: new Map(),
+          freeIndices: [],
+          nextIndex: 0,
+        });
       };
 
-      // 애니메이션 루프 등록 (가시 노트만 선별하여 CPU 안정화)
-      const draw = (currentTime) => {
+      const ensureTrackEntry = (trackKey) => {
+        if (meshMapRef.current.has(trackKey))
+          return meshMapRef.current.get(trackKey);
+        const track = trackMapRef.current.get(trackKey);
+        if (
+          !track ||
+          !geometryRef.current ||
+          !materialRef.current ||
+          !sceneRef.current
+        )
+          return null;
+        createTrackEntry(track);
+        return meshMapRef.current.get(trackKey);
+      };
+
+      // 애니메이션 루프: GPU에 시간만 전달하고 렌더링
+      const animate = (currentTime) => {
         if (
           !rendererRef.current ||
           !sceneRef.current ||
           !cameraRef.current ||
-          !meshRef.current ||
-          !materialRef.current ||
-          !attributesRef.current
+          !materialRef.current
         )
           return;
 
@@ -265,37 +390,68 @@ export const WebGLTracks = memo(
         }
 
         materialRef.current.uniforms.uTime.value = currentTime;
-        const screenHeight = window.innerHeight;
-        const maxInstances = MAX_NOTES;
-        const flowSpeed = materialRef.current.uniforms.uFlowSpeed.value; // 캐시
-        const trackHeight = 150; // 상수 캐시
-        let writeIndex = 0;
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      };
 
-        const {
-          noteInfoArray,
-          noteSizeArray,
-          noteColorArray,
-          noteRadiusArray,
-          noteInfoAttr,
-          noteSizeAttr,
-          noteColorAttr,
-          noteRadiusAttr,
-        } = attributesRef.current;
+      // 데이터 업데이트 로직을 이벤트 기반으로 변경
+      const handleNoteEvent = (event) => {
+        if (!event) return;
 
-        // 트랙별 순회 (가시성 판단 & 조기 컬링)
-        for (const [trackKey, track] of trackMapRef.current) {
-          const trackNotes = notesRef.current[trackKey];
-          if (!trackNotes || trackNotes.length === 0) continue;
-          
-          const baseX = track.position.dx;
-          const width = track.width;
-          const trackBottom = track.position.dy;
+        const { type, note } = event;
 
-          // 색상 캐싱 최적화
+        if (type === "clear") {
+          // 모든 노트 클리어
+          for (const [, entry] of meshMapRef.current) {
+            entry.noteIndexMap.clear();
+            entry.freeIndices.length = 0;
+            entry.nextIndex = 0;
+            entry.mesh.count = 0;
+          }
+          noteTrackMapRef.current.clear();
+          if (isAnimating.current) {
+            animationScheduler.remove(animate);
+            isAnimating.current = false;
+            // 캔버스 클리어
+            requestAnimationFrame(() => {
+              if (!rendererRef.current) return;
+              const { width, height } = rendererRef.current.getSize(
+                new THREE.Vector2()
+              );
+              rendererRef.current.setScissor(0, 0, width, height);
+              rendererRef.current.clear();
+            });
+          }
+          return;
+        }
+
+        if (!note) return;
+
+        if (type === "add") {
+          const track = trackMapRef.current.get(note.keyName);
+          if (!track) return;
+
+          const entry = ensureTrackEntry(note.keyName);
+          if (!entry) return;
+
+          if (!isAnimating.current) {
+            animationScheduler.add(animate);
+            isAnimating.current = true;
+          }
+
+          const { mesh, noteIndexMap, freeIndices, nextIndex } = entry;
+
+          const attrs = attributesMapRef.current.get(note.keyName);
+          if (!attrs) return;
+
+          // 색상 데이터 가져오기
           let colorData = colorCacheRef.current.get(track.noteColor);
           if (!colorData) {
             const color = track.noteColor;
-            if (color.startsWith("#")) {
+            if (
+              typeof color === "string" &&
+              color.startsWith("#") &&
+              color.length >= 7
+            ) {
               const r = parseInt(color.slice(1, 3), 16) / 255;
               const g = parseInt(color.slice(3, 5), 16) / 255;
               const b = parseInt(color.slice(5, 7), 16) / 255;
@@ -306,104 +462,130 @@ export const WebGLTracks = memo(
             colorCacheRef.current.set(track.noteColor, colorData);
           }
 
-          // 트랙별 조기 종료: 트랙이 화면 밖에 있으면 스킵
-          if (trackBottom < -trackHeight || baseX > window.innerWidth || baseX + width < 0) {
-            continue;
+          // 인덱스 할당
+          const index = freeIndices.pop() ?? entry.nextIndex++;
+          if (index >= MAX_NOTES) {
+            entry.nextIndex--;
+            return; // 버퍼 꽉 참
           }
+          noteIndexMap.set(note.id, index);
+          noteTrackMapRef.current.set(note.id, note.keyName);
 
-          const noteOpacity = track.noteOpacity / 100;
-          const borderRadius = track.borderRadius || 0;
+          // 해당 인덱스에 데이터 쓰기
+          const base3 = index * 3;
+          const base2 = index * 2;
+          const base4 = index * 4;
 
-          for (let i = 0; i < trackNotes.length; i++) {
-            if (writeIndex >= maxInstances) break;
-            
-            const note = trackNotes[i];
-            const start = note.startTime;
-            const end = note.endTime || 0;
-            const isActive = note.isActive;
+          attrs.noteInfoArray.set(
+            [note.startTime, 0, track.position.dx],
+            base3
+          );
+          attrs.noteSizeArray.set([track.width, track.position.dy], base2);
+          attrs.noteColorArray.set(
+            [colorData.r, colorData.g, colorData.b, track.noteOpacity / 100],
+            base4
+          );
+          attrs.noteRadiusArray.set([track.borderRadius || 0], index);
+          attrs.trackIndexArray.set([track.trackIndex], index); // 키 순서 설정
 
-            // 최적화된 위치 계산
-            let noteLength, bottomY;
-            if (isActive) {
-              noteLength = Math.max(0, (currentTime - start) * flowSpeed / 1000);
-              if (noteLength < 1) continue; // 너무 짧은 노트 스킵
-              bottomY = trackBottom;
-            } else {
-              noteLength = Math.max(0, (end - start) * flowSpeed / 1000);
-              if (noteLength < 1) continue;
-              const travel = (currentTime - end) * flowSpeed / 1000;
-              bottomY = trackBottom - travel;
+          attrs.noteInfoAttr.needsUpdate = true;
+          attrs.noteSizeAttr.needsUpdate = true;
+          attrs.noteColorAttr.needsUpdate = true;
+          attrs.noteRadiusAttr.needsUpdate = true;
+          attrs.trackIndexAttr.needsUpdate = true;
+
+          mesh.count = Math.max(mesh.count, index + 1);
+        } else if (type === "finalize") {
+          const trackKey = noteTrackMapRef.current.get(note.id);
+          if (!trackKey) return;
+
+          const entry = meshMapRef.current.get(trackKey);
+          if (!entry) return;
+
+          const index = entry.noteIndexMap.get(note.id);
+          if (index === undefined) return;
+
+          const attrs = attributesMapRef.current.get(trackKey);
+          if (!attrs) return;
+
+          const base3 = index * 3;
+          // endTime만 업데이트
+          attrs.noteInfoArray.set([note.endTime], base3 + 1);
+          attrs.noteInfoAttr.needsUpdate = true;
+        } else if (type === "cleanup") {
+          // useNoteSystem에서 전달된 제거할 노트들 처리
+          for (const noteId of note.ids) {
+            const trackKey = noteTrackMapRef.current.get(noteId);
+            if (!trackKey) continue;
+
+            const entry = meshMapRef.current.get(trackKey);
+            if (!entry) {
+              noteTrackMapRef.current.delete(noteId);
+              continue;
             }
 
-            // 강화된 컬링: 화면 밖 노트 제거
-            if (bottomY < -noteLength - 50 || bottomY > screenHeight + 50) continue;
+            const index = entry.noteIndexMap.get(noteId);
+            if (index !== undefined) {
+              const attrs = attributesMapRef.current.get(trackKey);
+              if (!attrs) continue;
 
-            // 인덱스 계산 최적화
-            const base3 = writeIndex * 3;
-            const base2 = writeIndex * 2;
-            const base4 = writeIndex * 4;
-            
-            noteInfoArray[base3] = start;
-            noteInfoArray[base3 + 1] = end;
-            noteInfoArray[base3 + 2] = baseX;
-            noteSizeArray[base2] = width;
-            noteSizeArray[base2 + 1] = trackBottom;
-            noteColorArray[base4] = colorData.r;
-            noteColorArray[base4 + 1] = colorData.g;
-            noteColorArray[base4 + 2] = colorData.b;
-            noteColorArray[base4 + 3] = noteOpacity;
-            noteRadiusArray[writeIndex] = borderRadius;
-            writeIndex++;
+              const base3 = index * 3;
+              // 해당 인덱스를 0으로 만들어 셰이더에서 그리지 않도록 함
+              attrs.noteInfoArray.set([0, 0], base3); // startTime, endTime을 0으로
+
+              entry.noteIndexMap.delete(noteId);
+              entry.freeIndices.push(index); // 인덱스 재사용
+              noteTrackMapRef.current.delete(noteId);
+            }
+          }
+          // cleanup은 여러 데이터를 변경하므로 needsUpdate를 한번만 설정
+          for (const attrs of attributesMapRef.current.values()) {
+            attrs.noteInfoAttr.needsUpdate = true;
+          }
+
+          // 활성 노트가 없으면 애니메이션 중지
+          if (noteTrackMapRef.current.size === 0 && isAnimating.current) {
+            animationScheduler.remove(animate);
+            isAnimating.current = false;
+            // 캔버스 클리어
+            requestAnimationFrame(() => {
+              if (!rendererRef.current) return;
+              const { width, height } = rendererRef.current.getSize(
+                new THREE.Vector2()
+              );
+              rendererRef.current.setScissor(0, 0, width, height);
+              rendererRef.current.clear();
+            });
           }
         }
 
-        // 렌더링 최적화: count가 변경되지 않았으면 GPU 업데이트만
-        const prevCount = meshRef.current.count;
-        if (writeIndex === 0) {
-          if (prevCount > 0) {
-            meshRef.current.count = 0;
-            rendererRef.current.render(sceneRef.current, cameraRef.current);
-          }
-          return;
-        }
-
-        // 효율적인 업데이트: 실제 사용된 부분만 업데이트
-        if (writeIndex !== prevCount) {
-          noteInfoAttr.needsUpdate = true;
-          noteSizeAttr.needsUpdate = true;
-          noteColorAttr.needsUpdate = true;
-          noteRadiusAttr.needsUpdate = true;
-        } else {
-          // count가 같으면 위치만 업데이트
-          noteInfoAttr.needsUpdate = true;
-        }
-
-        meshRef.current.count = writeIndex;
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
+        // needsUpdate 플래그는 각 이벤트 핸들러에서 개별적으로 설정됨
       };
 
-      const handleNotesChange = () => {
-        const noteCount = Object.values(notesRef.current).flat().length;
-        if (noteCount > 0) {
-          animationScheduler.add(draw);
-        } else {
-          animationScheduler.remove(draw);
-          // 노트가 없을 때 한번 더 그려서 캔버스 클리어
-          requestAnimationFrame(() => {
-            const { width, height } = rendererRef.current.getSize(
-              new THREE.Vector2()
-            );
-            rendererRef.current.setScissor(0, 0, width, height);
-            rendererRef.current.clear();
-          });
-        }
-      };
-
-      const unsubscribe = subscribe(handleNotesChange);
+      const unsubscribe = subscribe(handleNoteEvent);
 
       return () => {
         unsubscribe();
-        animationScheduler.remove(draw);
+        if (isAnimating.current) {
+          animationScheduler.remove(animate);
+        }
+        // 트랙 메쉬 정리
+        for (const [, entry] of meshMapRef.current) {
+          sceneRef.current?.remove(entry.mesh);
+          try {
+            entry.mesh.geometry.deleteAttribute?.("noteInfo");
+            entry.mesh.geometry.deleteAttribute?.("noteSize");
+            entry.mesh.geometry.deleteAttribute?.("noteColor");
+            entry.mesh.geometry.deleteAttribute?.("noteRadius");
+            entry.mesh.geometry.deleteAttribute?.("trackIndex");
+          } catch {}
+          entry.mesh.dispose();
+        }
+        meshMapRef.current.clear();
+        attributesMapRef.current.clear();
+
+        geometryRef.current?.dispose();
+        materialRef.current?.dispose();
         renderer.dispose();
       };
     }, []); // 의존성 배열 비워서 마운트 시 한 번만 실행
@@ -415,6 +597,14 @@ export const WebGLTracks = memo(
         newTrackMap.set(track.trackKey, track);
       });
       trackMapRef.current = newTrackMap;
+
+      // 기존 트랙 메쉬의 renderOrder 갱신 (키 순서 변화 반영)
+      tracks.forEach((track) => {
+        const entry = meshMapRef.current.get(track.trackKey);
+        if (entry?.mesh) {
+          entry.mesh.renderOrder = track.trackIndex ?? 0;
+        }
+      });
     }, [tracks]);
 
     // 3. 노트 설정(속도) 업데이트
@@ -422,8 +612,24 @@ export const WebGLTracks = memo(
       if (materialRef.current) {
         materialRef.current.uniforms.uFlowSpeed.value =
           noteSettings.speed || 180;
+        materialRef.current.uniforms.uTrackHeight.value =
+          noteSettings.trackHeight || 150;
+        materialRef.current.uniforms.uReverse.value = noteSettings.reverse
+          ? 1.0
+          : 0.0;
+        materialRef.current.uniforms.uFadePosition.value =
+          noteSettings.fadePosition === "top"
+            ? 1.0
+            : noteSettings.fadePosition === "bottom"
+            ? 2.0
+            : 0.0;
       }
-    }, [noteSettings.speed]);
+    }, [
+      noteSettings.speed,
+      noteSettings.trackHeight,
+      noteSettings.reverse,
+      noteSettings.fadePosition,
+    ]);
 
     // 4. 윈도우 리사이즈 처리
     useEffect(() => {

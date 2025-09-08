@@ -13,6 +13,7 @@ class OverlayWindow {
 
   create() {
     this.window = new BrowserWindow(windowConfig.overlay)
+    this.window.setTitle('DJMax KeyViewer - Overlay')
     this.restorePosition()
     this.disableContextMenu()
     this.loadContent()
