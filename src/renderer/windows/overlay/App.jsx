@@ -33,6 +33,11 @@ export default function App() {
 
   // 기존 키 상태와 노트 시스템 키 상태 병합
   const [originalKeyStates, setOriginalKeyStates] = useState({});
+  // 녹화 상태 및 데이터
+  const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = React.useRef(false);
+  const recordingStartRef = React.useRef(0);
+  const recordedEventsRef = React.useRef([]);
 
   // Latency 측정 상태
   // const lastPressTimestamp = useRef(0);
@@ -45,6 +50,17 @@ export default function App() {
   const keyStateListener = useCallback(
     (e, { key, state }) => {
       const isDown = state === "DOWN";
+
+      // 녹화 중이면 이벤트 기록
+      if (isRecordingRef.current) {
+        const now = performance.now();
+        if (!recordingStartRef.current) recordingStartRef.current = now;
+        recordedEventsRef.current.push({
+          key,
+          state: isDown ? "down" : "up",
+          timestamp: now - recordingStartRef.current,
+        });
+      }
 
       // if (isDown) {
       //   lastPressTimestamp.current = timestamp; // 키를 눌렀을 때의 타임스탬프 저장
@@ -286,6 +302,25 @@ export default function App() {
     ipcRenderer.on("updateKeyPositions", positionsListener);
     ipcRenderer.on("updateBackgroundColor", backgroundColorListener);
     ipcRenderer.on("update-note-settings", noteSettingsListener);
+    // 녹화 제어 수신
+    const recordingControlListener = (_, action) => {
+      if (action === "start") {
+        recordedEventsRef.current = [];
+        recordingStartRef.current = performance.now();
+        isRecordingRef.current = true;
+        setIsRecording(true);
+      } else if (action === "stop") {
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        const payload = {
+          startedAt: new Date().toISOString(),
+          duration: performance.now() - recordingStartRef.current,
+          events: recordedEventsRef.current,
+        };
+        ipcRenderer.send("recording-data", payload);
+      }
+    };
+    ipcRenderer.on("recording-control", recordingControlListener);
     // ipcRenderer.on('update-show-key-count', showKeyCountListener);
 
     // 초기 데이터 요청 (리스너 등록 후 요청하여 레이스 방지)
@@ -309,6 +344,7 @@ export default function App() {
       ipcRenderer.removeAllListeners("updateKeyPositions");
       ipcRenderer.removeAllListeners("updateBackgroundColor");
       ipcRenderer.removeAllListeners("update-note-settings");
+      ipcRenderer.removeAllListeners("recording-control");
       // ipcRenderer.removeAllListeners('update-show-key-count');
     };
   }, [keyStateListener]);
@@ -379,6 +415,8 @@ export default function App() {
             keyName={displayName}
             active={originalKeyStates[key] || false}
             position={position}
+            // 녹화 중 여부 data-attribute (디버깅/스타일 확장 용도)
+            data-recording={isRecording ? "true" : "false"}
           />
           // </React.Fragment>
         );

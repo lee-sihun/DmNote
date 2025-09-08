@@ -8,6 +8,7 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 export default function Tab() {
   const [activeTab, setActiveTab] = useState(1);
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const [isRecording, setIsRecording] = useState(false);
   const overlayLocked = useSettingsStore((state) => state.overlayLocked);
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -90,6 +91,12 @@ export default function Tab() {
     ipcRenderer.send("toggle-overlay", newState);
   };
 
+  const toggleRecording = () => {
+    const next = !isRecording;
+    setIsRecording(next);
+    ipcRenderer.send("recording-control", next ? "start" : "stop");
+  };
+
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
     { id: 1, label: "레이아웃" },
@@ -130,12 +137,27 @@ export default function Tab() {
               className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}
             />
           </div>
+          <div className="flex flex-col items-center justify-between h-full">
+            <button
+              onClick={toggleRecording}
+              className={`text-[13.5px] leading-[17px] font-normal transition-colors duration-150 ${
+                isRecording
+                  ? "text-red-400 hover:text-red-300"
+                  : "text-[#989BA6] hover:text-white"
+              }`}
+            >
+              {isRecording ? "녹화 중지" : "녹화 시작"}
+            </button>
+            <div
+              className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}
+            />
+          </div>
         </div>
       </div>
       <div className="flex flex-1 overflow-hidden min-h-0">
         {renderTabContent()}
       </div>
-      
+
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}

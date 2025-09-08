@@ -368,6 +368,61 @@ class Application {
       e.reply("update-note-effect", store.get("noteEffect", true));
     });
 
+    // 녹화 상태 제어
+    ipcMain.on("recording-control", (_, action) => {
+      if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+      if (action === "start" || action === "stop") {
+        this.overlayWindow.webContents.send("recording-control", action);
+      }
+    });
+
+    // 오버레이에서 전송한 녹화 데이터 저장
+    ipcMain.on("recording-data", async (e, payload) => {
+      try {
+        const { dialog } = require("electron");
+        const fs = require("fs");
+        const path = require("path");
+        const defaultFilename = `key-recording-${new Date()
+          .toISOString()
+          .replace(/[:]/g, "-")}.json`;
+        const { filePath } = await dialog.showSaveDialog({
+          defaultPath: path.join(app.getPath("documents"), defaultFilename),
+          filters: [{ name: "JSON", extensions: ["json"] }],
+        });
+        if (filePath) {
+          fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+          [this.mainWindow, this.overlayWindow].forEach((win) => {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send("recording-saved", {
+                success: true,
+                path: filePath,
+                count: payload?.events?.length || 0,
+              });
+            }
+          });
+        } else {
+          [this.mainWindow, this.overlayWindow].forEach((win) => {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send("recording-saved", {
+                success: false,
+                canceled: true,
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Failed to save recording:", err);
+        [this.mainWindow, this.overlayWindow].forEach((win) => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send("recording-saved", {
+              success: false,
+              error: err.message,
+            });
+          }
+        });
+      }
+    });
+
     // 노트 효과 상세 설정 IPC
     ipcMain.handle("get-note-settings", () => {
       const defaults = {
