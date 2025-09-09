@@ -84,6 +84,7 @@
   },
   "dependencies": {
     "electron-store": "^8.2.0",
+    "ffmpeg-static": "^5.2.0",
     "node-global-key-listener-extended": "github:lee-sihun/node-global-key-listener",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

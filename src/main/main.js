@@ -1,4 +1,4 @@
-const { app, ipcMain, shell } = require("electron/main");
+const { app, ipcMain, shell, screen } = require("electron/main");
 const MainWindow = require("./windows/mainWindow");
 const OverlayWindow = require("./windows/overlayWindow");
 const keyboardService = require("./services/keyboardListener");
@@ -16,6 +16,7 @@ const {
 } = require("./services/backgroundColor");
 const Store = require("electron-store");
 const store = new Store();
+const roiRecorder = require("./services/roiRecorder");
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === "development") {
@@ -376,9 +377,116 @@ class Application {
       }
     });
 
+    // ROI 녹화 시작
+    ipcMain.handle("roi-recording:start", async (_, roi) => {
+      try {
+        const defaults = store.get("roiRect", {
+          x: 0,
+          y: 0,
+          width: 1280,
+          height: 720,
+        });
+        const incoming = roi || {};
+        // 정수/가드 처리
+        const toInt = (v, d) => {
+          const n = parseInt(v);
+          return Number.isFinite(n) ? n : d;
+        };
+        const merged = {
+          x: Math.max(0, toInt(incoming.x ?? defaults.x, defaults.x)),
+          y: Math.max(0, toInt(incoming.y ?? defaults.y, defaults.y)),
+          width: Math.max(
+            1,
+            toInt(incoming.width ?? defaults.width, defaults.width)
+          ),
+          height: Math.max(
+            1,
+            toInt(incoming.height ?? defaults.height, defaults.height)
+          ),
+        };
+        // 최신 ROI를 저장하여 재사용 가능
+        store.set("roiRect", merged);
+
+        const res = roiRecorder.startRecording(merged);
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("recording-control", "start");
+        }
+        return { success: true, session: res };
+      } catch (err) {
+        console.error("Failed to start ROI recording:", err);
+        return { success: false, error: err?.message || String(err) };
+      }
+    });
+
+    // ROI 디버그 정보
+    ipcMain.handle("roi-recording:debug-info", () => {
+      try {
+        if (roiRecorder.debugInfo)
+          return { success: true, data: roiRecorder.debugInfo() };
+        return { success: false, error: "no-debug-info" };
+      } catch (err) {
+        return { success: false, error: err?.message || String(err) };
+      }
+    });
+
+    // ROI 녹화 종료
+    ipcMain.handle("roi-recording:stop", async () => {
+      try {
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("recording-control", "stop");
+        }
+        const result = await roiRecorder.stopRecording();
+        return { success: true, result };
+      } catch (err) {
+        console.error("Failed to stop ROI recording:", err);
+        return { success: false, error: err?.message || String(err) };
+      }
+    });
+
     // 오버레이에서 전송한 녹화 데이터 저장
     ipcMain.on("recording-data", async (e, payload) => {
       try {
+        // ROI 녹화 세션이 있으면 동일 폴더에 자동 저장(메타 병합)
+        const active = roiRecorder.getSession && roiRecorder.getSession();
+        if (active && active.outDir) {
+          const fs = require("fs");
+          const path = require("path");
+          const metaPath = path.join(active.outDir, "meta.json");
+          const eventsPath = path.join(active.outDir, "events.json");
+
+          // events.json 저장
+          fs.writeFileSync(
+            eventsPath,
+            JSON.stringify(payload, null, 2),
+            "utf8"
+          );
+
+          // meta.json 병합(가능하면)
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+            meta.events = payload?.events || [];
+            meta.recording = {
+              startedAt: payload?.startedAt,
+              durationMs: payload?.duration,
+            };
+            fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf8");
+          } catch {
+            // meta가 없거나 읽기 실패 시 무시
+          }
+
+          [this.mainWindow, this.overlayWindow].forEach((win) => {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send("recording-saved", {
+                success: true,
+                path: metaPath,
+                count: payload?.events?.length || 0,
+              });
+            }
+          });
+          return;
+        }
+
+        // ROI 세션이 없으면 기존 동작: 사용자가 저장 위치 선택
         const { dialog } = require("electron");
         const fs = require("fs");
         const path = require("path");
@@ -674,6 +782,65 @@ class Application {
 
     ipcMain.handle("get-overlay-resize-anchor", () => {
       return store.get("overlayResizeAnchor", "top-left");
+    });
+
+    // ROI 좌표 저장/조회 (Windows 가상 데스크탑 물리 픽셀 기준)
+    ipcMain.handle("get-roi-settings", () => {
+      const defaults = { x: 0, y: 0, width: 1280, height: 720 };
+      const roi = store.get("roiRect", defaults) || defaults;
+      const toInt = (v, d) => {
+        const n = parseInt(v);
+        return Number.isFinite(n) ? n : d;
+      };
+      const normalized = {
+        x: Math.max(0, toInt(roi.x, 0)),
+        y: Math.max(0, toInt(roi.y, 0)),
+        width: Math.max(1, toInt(roi.width, 1280)),
+        height: Math.max(1, toInt(roi.height, 720)),
+      };
+      if (
+        normalized.x !== roi.x ||
+        normalized.y !== roi.y ||
+        normalized.width !== roi.width ||
+        normalized.height !== roi.height
+      ) {
+        store.set("roiRect", normalized);
+      }
+      return normalized;
+    });
+
+    ipcMain.handle("update-roi-settings", (_, incoming) => {
+      try {
+        const current =
+          store.get("roiRect", { x: 0, y: 0, width: 1280, height: 720 }) || {};
+        const toInt = (v, d) => {
+          const n = parseInt(v);
+          return Number.isFinite(n) ? n : d;
+        };
+        const next = {
+          x: Math.max(0, toInt(incoming?.x ?? current.x ?? 0, current.x ?? 0)),
+          y: Math.max(0, toInt(incoming?.y ?? current.y ?? 0, current.y ?? 0)),
+          width: Math.max(
+            1,
+            toInt(
+              incoming?.width ?? current.width ?? 1280,
+              current.width ?? 1280
+            )
+          ),
+          height: Math.max(
+            1,
+            toInt(
+              incoming?.height ?? current.height ?? 720,
+              current.height ?? 720
+            )
+          ),
+        };
+        store.set("roiRect", next);
+        return next;
+      } catch (err) {
+        console.error("Failed to update ROI settings:", err);
+        return store.get("roiRect", { x: 0, y: 0, width: 1280, height: 720 });
+      }
     });
 
     // URL 열기 요청 처리

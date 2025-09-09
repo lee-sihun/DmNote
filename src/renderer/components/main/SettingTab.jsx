@@ -32,6 +32,10 @@ export default function SettingTab({ showAlert, showConfirm }) {
   const [overlayResizeAnchor, setOverlayResizeAnchor] =
     React.useState("top-left");
 
+  // ROI settings (Windows 가상 데스크탑 물리 픽셀 기준)
+  const [roi, setRoi] = React.useState({ x: 0, y: 0, width: 1280, height: 720 });
+  const [isRoiRecording, setIsRoiRecording] = React.useState(false);
+
   const ANGLE_OPTIONS = [
     {
       value: "d3d11",
@@ -119,6 +123,25 @@ export default function SettingTab({ showAlert, showConfirm }) {
         if (val) setOverlayResizeAnchor(val);
       })
       .catch(() => {});
+    
+    // ROI 초기값 로드
+    ipcRenderer
+      .invoke("get-roi-settings")
+      .then((val) => {
+        if (val) setRoi(val);
+      })
+      .catch(() => {});
+    
+    // 녹화 저장 알림 수신 시 상태 업데이트
+    const onRecordingSaved = (_, payload) => {
+      // 저장/취소/에러 어느 경우든 녹화 종료 상태로 전환
+      setIsRoiRecording(false);
+      if (payload?.success && showAlert) {
+        const count = typeof payload.count === "number" ? payload.count : 0;
+        showAlert(`녹화가 저장되었습니다. (events: ${count})`);
+      }
+    };
+    ipcRenderer.on("recording-saved", onRecordingSaved);
 
     return () => {
       ipcRenderer.removeAllListeners("update-hardware-acceleration");
@@ -127,6 +150,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
       ipcRenderer.removeAllListeners("update-overlay-lock");
       ipcRenderer.removeAllListeners("update-note-effect");
       ipcRenderer.removeAllListeners("resetComplete");
+      ipcRenderer.removeAllListeners("recording-saved");
     };
   }, []);
 
@@ -150,6 +174,54 @@ export default function SettingTab({ showAlert, showConfirm }) {
       await ipcRenderer.invoke("set-overlay-resize-anchor", val);
     } catch (err) {
       // ignore
+    }
+  };
+
+  // ROI handlers
+  const handleRoiFieldChange = (field) => (e) => {
+    const v = parseInt(e.target.value);
+    setRoi((prev) => ({
+      ...prev,
+      [field]: Number.isFinite(v) ? v : prev[field],
+    }));
+  };
+
+  const handleSaveRoi = async () => {
+    try {
+      const normalized = await ipcRenderer.invoke("update-roi-settings", roi);
+      setRoi(normalized);
+      if (showAlert) showAlert("ROI가 저장되었습니다.");
+    } catch (err) {
+      if (showAlert) showAlert("ROI 저장 실패: " + (err?.message || String(err)));
+    }
+  };
+
+  const handleStartRoiRecording = async () => {
+    try {
+      const res = await ipcRenderer.invoke("roi-recording:start", roi);
+      if (res?.success) {
+        setIsRoiRecording(true);
+        if (showAlert) showAlert("ROI 녹화를 시작했습니다.");
+      } else {
+        if (showAlert) showAlert("녹화 시작 실패: " + (res?.error || "unknown"));
+      }
+    } catch (err) {
+      if (showAlert) showAlert("녹화 시작 실패: " + (err?.message || String(err)));
+    }
+  };
+
+  const handleStopRoiRecording = async () => {
+    try {
+      const res = await ipcRenderer.invoke("roi-recording:stop");
+      setIsRoiRecording(false);
+      if (res?.success) {
+        if (showAlert) showAlert("녹화를 종료했습니다.");
+      } else {
+        if (showAlert) showAlert("녹화 종료 실패: " + (res?.error || "unknown"));
+      }
+    } catch (err) {
+      setIsRoiRecording(false);
+      if (showAlert) showAlert("녹화 종료 실패: " + (err?.message || String(err)));
     }
   };
 
@@ -342,6 +414,72 @@ export default function SettingTab({ showAlert, showConfirm }) {
           </div>
         </div>
       </div>
+
+      {/* ROI 영역 녹화 컨트롤 */}
+      <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px] py-[10px] mt-[18px]">
+        <div className="flex items-center justify-between h-[51px] w-full pl-[117px] pr-[26px]">
+          <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
+            화면 ROI (픽셀)
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-[#989BA6] text-[12px]">x</label>
+            <input
+              type="number"
+              className="w-[78px] bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md text-white text-sm px-2 py-1 text-right"
+              value={roi.x}
+              onChange={handleRoiFieldChange('x')}
+            />
+            <label className="text-[#989BA6] text-[12px]">y</label>
+            <input
+              type="number"
+              className="w-[78px] bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md text-white text-sm px-2 py-1 text-right"
+              value={roi.y}
+              onChange={handleRoiFieldChange('y')}
+            />
+            <label className="text-[#989BA6] text-[12px]">w</label>
+            <input
+              type="number"
+              className="w-[88px] bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md text-white text-sm px-2 py-1 text-right"
+              value={roi.width}
+              onChange={handleRoiFieldChange('width')}
+            />
+            <label className="text-[#989BA6] text-[12px]">h</label>
+            <input
+              type="number"
+              className="w-[88px] bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md text-white text-sm px-2 py-1 text-right"
+              value={roi.height}
+              onChange={handleRoiFieldChange('height')}
+            />
+            <button
+              onClick={handleSaveRoi}
+              className="h-[28px] px-3 ml-2 bg-[#272B33] border border-[rgba(255,255,255,0.1)] rounded-md text-white text-xs"
+            >
+              ROI 저장
+            </button>
+          </div>
+        </div>
+
+        <div className="w-full h-[0.75px] bg-[#3C4049]" />
+
+        <div className="flex items-center justify-end gap-2 w-full pr-[26px] pb-[12px]">
+          <button
+            onClick={handleStartRoiRecording}
+            disabled={isRoiRecording}
+            className={`h-[28px] px-3 rounded-md text-white text-xs ${isRoiRecording ? 'bg-[#2A2D34] border border-[rgba(255,255,255,0.06)]' : 'bg-[#2E7D32] border border-[rgba(255,255,255,0.1)]'}`}
+            title="현재 보이는 화면의 ROI 영역을 720p 30fps로 녹화 시작"
+          >
+            녹화 시작
+          </button>
+          <button
+            onClick={handleStopRoiRecording}
+            disabled={!isRoiRecording}
+            className={`h-[28px] px-3 rounded-md text-white text-xs ${!isRoiRecording ? 'bg-[#2A2D34] border border-[rgba(255,255,255,0.06)]' : 'bg-[#C62828] border border-[rgba(255,255,255,0.1)]'}`}
+          >
+            녹화 종료
+          </button>
+        </div>
+      </div>
+
       <Footer showConfirm={showConfirm} />
     </div>
   );
