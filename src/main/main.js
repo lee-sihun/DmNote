@@ -17,6 +17,7 @@ const {
 const Store = require("electron-store");
 const store = new Store();
 const roiRecorder = require("./services/roiRecorder");
+const frameExtractor = require("./services/frameExtractor");
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === "development") {
@@ -377,6 +378,90 @@ class Application {
       }
     });
 
+    // 프레임 추출: events.json 생성 시점과 영상 파일 완료 시점을 모두 만족한 뒤 실행되도록 폴링 기반 스케줄러
+    const extractionsScheduled = new Set();
+    const runExtractionWhenReady = (outDir, videoPath) => {
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        const maxWaitMs = 20000; // 최대 20초 대기
+        const intervalMs = 250;
+        let waited = 0;
+
+        const attempt = async () => {
+          try {
+            // 1) events.json 존재 체크
+            const eventsPath = path.join(outDir, "events.json");
+            const hasEvents = fs.existsSync(eventsPath);
+            // 2) 영상 파일 존재/사이즈 체크(0바이트 회피)
+            const hasVideo =
+              typeof videoPath === "string" &&
+              fs.existsSync(videoPath) &&
+              (fs.statSync(videoPath).size || 0) > 0;
+
+            if (!hasEvents || !hasVideo) {
+              if (waited >= maxWaitMs) {
+                [this.mainWindow, this.overlayWindow].forEach((win) => {
+                  if (win && !win.isDestroyed()) {
+                    win.webContents.send("frames-extracted", {
+                      success: false,
+                      outDir,
+                      error: !hasEvents
+                        ? "events.json not found within timeout"
+                        : "video not ready within timeout",
+                    });
+                  }
+                });
+                return;
+              }
+              waited += intervalMs;
+              setTimeout(attempt, intervalMs);
+              return;
+            }
+
+            const res = await frameExtractor.extractFramesForOutDir({
+              outDir,
+              videoPath,
+              onlyDown: true,
+            });
+
+            [this.mainWindow, this.overlayWindow].forEach((win) => {
+              if (win && !win.isDestroyed()) {
+                win.webContents.send("frames-extracted", {
+                  success: true,
+                  outDir,
+                  shotsDir: res?.shotsDir || null,
+                  count: res?.count ?? 0,
+                });
+              }
+            });
+          } catch (err) {
+            [this.mainWindow, this.overlayWindow].forEach((win) => {
+              if (win && !win.isDestroyed()) {
+                win.webContents.send("frames-extracted", {
+                  success: false,
+                  outDir,
+                  error: err?.message || String(err),
+                });
+              }
+            });
+          }
+        };
+
+        attempt();
+      } catch (e) {
+        [this.mainWindow, this.overlayWindow].forEach((win) => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send("frames-extracted", {
+              success: false,
+              outDir,
+              error: e?.message || String(e),
+            });
+          }
+        });
+      }
+    };
+
     // ROI 녹화 시작
     ipcMain.handle("roi-recording:start", async (_, roi) => {
       try {
@@ -436,6 +521,19 @@ class Application {
           this.overlayWindow.webContents.send("recording-control", "stop");
         }
         const result = await roiRecorder.stopRecording();
+
+        // 영상 파일 완료 이후, events.json 생성을 기다린 뒤 프레임 추출 스케줄
+        try {
+          const outDir = result?.session?.outDir;
+          const videoPath = result?.session?.videoPath;
+          if (outDir && videoPath) {
+            if (!extractionsScheduled.has(outDir)) {
+              extractionsScheduled.add(outDir);
+              runExtractionWhenReady(outDir, videoPath);
+            }
+          }
+        } catch {}
+
         return { success: true, result };
       } catch (err) {
         console.error("Failed to stop ROI recording:", err);
@@ -483,6 +581,17 @@ class Application {
               });
             }
           });
+
+          // 보강: events.json을 막 작성한 직후에도 스케줄 시도(중복 방지 가드)
+          try {
+            if (active && active.outDir && active.videoPath) {
+              if (!extractionsScheduled.has(active.outDir)) {
+                extractionsScheduled.add(active.outDir);
+                runExtractionWhenReady(active.outDir, active.videoPath);
+              }
+            }
+          } catch {}
+
           return;
         }
 
