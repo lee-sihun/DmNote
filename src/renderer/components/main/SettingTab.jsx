@@ -36,6 +36,31 @@ export default function SettingTab({ showAlert, showConfirm }) {
   const [roi, setRoi] = React.useState({ x: 0, y: 0, width: 1280, height: 720 });
   const [isRoiRecording, setIsRoiRecording] = React.useState(false);
 
+  // 프레임 추출 진행 상태
+  const [extractState, setExtractState] = React.useState({
+    active: false,
+    total: 0,
+    completed: 0,
+    outDir: null,
+    shotsDir: null,
+    success: null, // true | false | null
+    error: null,
+  });
+
+  // OCR 진행 상태
+  const [ocrState, setOcrState] = React.useState({
+    active: false,
+    total: 0,
+    completed: 0,
+    outDir: null,
+    shotsDir: null,
+    success: null, // true | false | null
+    error: null,
+    ocrPath: null,
+    analysisPath: null,
+    pairs: 0,
+  });
+
   const ANGLE_OPTIONS = [
     {
       value: "d3d11",
@@ -143,6 +168,77 @@ export default function SettingTab({ showAlert, showConfirm }) {
     };
     ipcRenderer.on("recording-saved", onRecordingSaved);
 
+    // 프레임 추출 진행 이벤트 수신
+    const onExtractStart = (_, payload) => {
+      setExtractState({
+        active: true,
+        total: payload?.total || 0,
+        completed: 0,
+        outDir: payload?.outDir || null,
+        shotsDir: payload?.shotsDir || null,
+        success: null,
+        error: null,
+      });
+    };
+    const onExtractProgress = (_, payload) => {
+      setExtractState((prev) => ({
+        ...prev,
+        total: payload?.total ?? prev.total,
+        completed: payload?.completed ?? prev.completed,
+      }));
+    };
+    const onExtractFinished = (_, payload) => {
+      setExtractState((prev) => ({
+        ...prev,
+        active: false,
+        success: !!payload?.success,
+        error: payload?.error || null,
+        // count는 성공 시 최종 개수, 없으면 기존 completed 유지
+        completed: typeof payload?.count === "number" ? payload.count : prev.completed,
+      }));
+    };
+    ipcRenderer.on("frames-extract:started", onExtractStart);
+    ipcRenderer.on("frames-extract:progress", onExtractProgress);
+    ipcRenderer.on("frames-extract:finished", onExtractFinished);
+
+    // OCR 진행 이벤트 수신
+    const onOCRStart = (_, payload) => {
+      setOcrState({
+        active: true,
+        total: payload?.total || 0,
+        completed: 0,
+        outDir: payload?.outDir || null,
+        shotsDir: payload?.shotsDir || null,
+        success: null,
+        error: null,
+        ocrPath: null,
+        analysisPath: null,
+        pairs: 0,
+      });
+    };
+    const onOCRProgress = (_, payload) => {
+      setOcrState((prev) => ({
+        ...prev,
+        total: payload?.total ?? prev.total,
+        completed: payload?.completed ?? prev.completed,
+      }));
+    };
+    const onOCRFinished = (_, payload) => {
+      setOcrState((prev) => ({
+        ...prev,
+        active: false,
+        success: !!payload?.success,
+        error: payload?.error || null,
+        completed: typeof payload?.count === "number" ? payload.count : prev.completed,
+        ocrPath: payload?.ocrPath || prev.ocrPath,
+        analysisPath: payload?.analysisPath || prev.analysisPath,
+        pairs: typeof payload?.pairs === "number" ? payload.pairs : prev.pairs,
+      }));
+    };
+    ipcRenderer.on("ocr:started", onOCRStart);
+    ipcRenderer.on("ocr:progress", onOCRProgress);
+    ipcRenderer.on("ocr:finished", onOCRFinished);
+
     return () => {
       ipcRenderer.removeAllListeners("update-hardware-acceleration");
       ipcRenderer.removeAllListeners("update-always-on-top");
@@ -151,6 +247,12 @@ export default function SettingTab({ showAlert, showConfirm }) {
       ipcRenderer.removeAllListeners("update-note-effect");
       ipcRenderer.removeAllListeners("resetComplete");
       ipcRenderer.removeAllListeners("recording-saved");
+      ipcRenderer.removeAllListeners("frames-extract:started");
+      ipcRenderer.removeAllListeners("frames-extract:progress");
+      ipcRenderer.removeAllListeners("frames-extract:finished");
+      ipcRenderer.removeAllListeners("ocr:started");
+      ipcRenderer.removeAllListeners("ocr:progress");
+      ipcRenderer.removeAllListeners("ocr:finished");
     };
   }, []);
 
@@ -479,6 +581,79 @@ export default function SettingTab({ showAlert, showConfirm }) {
           </button>
         </div>
       </div>
+
+      {/* 프레임 추출 진행 상태 표시 */}
+      {(extractState.active || extractState.success !== null) && (
+        <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px] py-[10px] mt-[10px]">
+          <div className="flex items-center justify-between h-[24px] w-full pl-[117px] pr-[26px]">
+            <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
+              프레임 추출 상태
+            </p>
+            <div className="flex flex-col gap-[6px] w-full pl-[12px] pr-[0px]">
+              <div className="flex items-center justify-between text-[11px] text-[#989BA6]">
+                <span>{extractState.active ? "진행 중..." : (extractState.success ? "완료" : "실패")}</span>
+                <span>
+                  {extractState.completed} / {extractState.total} (
+                  {Math.min(100, Math.round((extractState.completed / Math.max(1, extractState.total)) * 100))}%)
+                </span>
+              </div>
+              <div className="w-full bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md h-[8px] overflow-hidden">
+                <div
+                  className={`${extractState.active
+                    ? "bg-[#419DFF]"
+                    : (extractState.success ? "bg-[#2E7D32]" : "bg-[#C62828]")
+                    } h-full transition-[width] duration-200`}
+                  style={{
+                    width: `${Math.min(100, Math.round((extractState.completed / Math.max(1, extractState.total)) * 100))}%`,
+                  }}
+                />
+              </div>
+              {extractState.error && (
+                <div className="text-[11px] text-[#FF6B6B] mt-[2px]">에러: {extractState.error}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OCR 진행 상태 표시 */}
+      {(ocrState.active || ocrState.success !== null) && (
+        <div className="w-full bg-[#1C1E25] rounded-[6px] px-[18px] py-[10px] mt-[10px]">
+          <div className="flex items-center justify-between h-[24px] w-full pl-[117px] pr-[26px]">
+            <p className="text-center font-normal w-[153px] text-white text-[13.5px]">
+              OCR 상태
+            </p>
+            <div className="flex flex-col gap-[6px] w-full pl-[12px] pr-[0px]">
+              <div className="flex items-center justify-between text-[11px] text-[#989BA6]">
+                <span>{ocrState.active ? "진행 중..." : (ocrState.success ? "완료" : "실패")}</span>
+                <span>
+                  {ocrState.completed} / {ocrState.total} (
+                  {Math.min(100, Math.round((ocrState.completed / Math.max(1, ocrState.total)) * 100))}%)
+                </span>
+              </div>
+              <div className="w-full bg-[#272B33] border border-[rgba(255,255,255,0.06)] rounded-md h-[8px] overflow-hidden">
+                <div
+                  className={`${ocrState.active
+                    ? "bg-[#419DFF]"
+                    : (ocrState.success ? "bg-[#2E7D32]" : "bg-[#C62828]")
+                    } h-full transition-[width] duration-200`}
+                  style={{
+                    width: `${Math.min(100, Math.round((ocrState.completed / Math.max(1, ocrState.total)) * 100))}%`,
+                  }}
+                />
+              </div>
+              {ocrState.success && (
+                <div className="text-[11px] text-[#8BC34A] mt-[2px]">
+                  결과: pairs={ocrState.pairs}{ocrState.analysisPath ? `, analysis.json: ${ocrState.analysisPath}` : ""}
+                </div>
+              )}
+              {ocrState.error && (
+                <div className="text-[11px] text-[#FF6B6B] mt-[2px]">에러: {ocrState.error}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer showConfirm={showConfirm} />
     </div>

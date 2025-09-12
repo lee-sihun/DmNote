@@ -18,6 +18,7 @@ const Store = require("electron-store");
 const store = new Store();
 const roiRecorder = require("./services/roiRecorder");
 const frameExtractor = require("./services/frameExtractor");
+const ocrProcessor = require("./services/ocrProcessor");
 
 // main 코드 변경 시 자동 재시작
 if (process.env.NODE_ENV === "development") {
@@ -423,6 +424,29 @@ class Application {
               outDir,
               videoPath,
               onlyDown: true,
+              onStart: ({ total, shotsDir }) => {
+                [this.mainWindow, this.overlayWindow].forEach((win) => {
+                  if (win && !win.isDestroyed()) {
+                    win.webContents.send("frames-extract:started", {
+                      outDir,
+                      shotsDir,
+                      total,
+                    });
+                  }
+                });
+              },
+              onProgress: ({ completed, total, outDir: _od, shotsDir: _sd }) => {
+                [this.mainWindow, this.overlayWindow].forEach((win) => {
+                  if (win && !win.isDestroyed()) {
+                    win.webContents.send("frames-extract:progress", {
+                      outDir: _od || outDir,
+                      shotsDir: _sd || null,
+                      completed,
+                      total,
+                    });
+                  }
+                });
+              },
             });
 
             [this.mainWindow, this.overlayWindow].forEach((win) => {
@@ -433,12 +457,79 @@ class Application {
                   shotsDir: res?.shotsDir || null,
                   count: res?.count ?? 0,
                 });
+                win.webContents.send("frames-extract:finished", {
+                  success: true,
+                  outDir,
+                  shotsDir: res?.shotsDir || null,
+                  count: res?.count ?? 0,
+                });
               }
             });
+
+            // 이어서 OCR 파이프라인 실행
+            try {
+              const ocrRes = await ocrProcessor.processFramesAndPair({
+                outDir,
+                shotsDir: res?.shotsDir || null,
+                // concurrency는 기본(자동) 또는 설정 노출 시 조정 가능
+                onStart: ({ total, shotsDir }) => {
+                  [this.mainWindow, this.overlayWindow].forEach((win) => {
+                    if (win && !win.isDestroyed()) {
+                      win.webContents.send("ocr:started", {
+                        outDir,
+                        shotsDir,
+                        total,
+                      });
+                    }
+                  });
+                },
+                onProgress: ({ completed, total, outDir: _od, shotsDir: _sd }) => {
+                  [this.mainWindow, this.overlayWindow].forEach((win) => {
+                    if (win && !win.isDestroyed()) {
+                      win.webContents.send("ocr:progress", {
+                        outDir: _od || outDir,
+                        shotsDir: _sd || (res?.shotsDir || null),
+                        completed,
+                        total,
+                      });
+                    }
+                  });
+                },
+              });
+
+              [this.mainWindow, this.overlayWindow].forEach((win) => {
+                if (win && !win.isDestroyed()) {
+                  win.webContents.send("ocr:finished", {
+                    success: true,
+                    outDir,
+                    shotsDir: res?.shotsDir || null,
+                    ocrPath: ocrRes?.ocrPath || null,
+                    analysisPath: ocrRes?.analysisPath || null,
+                    pairs: Array.isArray(ocrRes?.pairs) ? ocrRes.pairs.length : 0,
+                  });
+                }
+              });
+            } catch (err) {
+              [this.mainWindow, this.overlayWindow].forEach((win) => {
+                if (win && !win.isDestroyed()) {
+                  win.webContents.send("ocr:finished", {
+                    success: false,
+                    outDir,
+                    shotsDir: res?.shotsDir || null,
+                    error: err?.message || String(err),
+                  });
+                }
+              });
+            }
           } catch (err) {
             [this.mainWindow, this.overlayWindow].forEach((win) => {
               if (win && !win.isDestroyed()) {
                 win.webContents.send("frames-extracted", {
+                  success: false,
+                  outDir,
+                  error: err?.message || String(err),
+                });
+                win.webContents.send("frames-extract:finished", {
                   success: false,
                   outDir,
                   error: err?.message || String(err),

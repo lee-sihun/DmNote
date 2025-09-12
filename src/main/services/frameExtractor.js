@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const ffmpegPath = require("ffmpeg-static");
+const os = require("node:os");
 
 const DEBUG = true;
 
@@ -79,7 +80,7 @@ function ffmpegExtractSingle({ videoPath, tsMs, outPath }) {
  * events.json 또는 meta.json(events 포함) 기반으로 프레임 추출
  * @param {{ outDir: string, videoPath?: string, onlyDown?: boolean }} param0
  */
-async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true }) {
+async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true, concurrency, onStart, onProgress }) {
   if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
     throw new Error(`ffmpeg not found: ${ffmpegPath}`);
   }
@@ -143,21 +144,31 @@ async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true }) {
   }
   const targets = filtered.length > 0 ? filtered : events;
 
-  const index = [];
-  let i = 0;
+  // 병렬 제한: 기본 CPU-1, 2~8 사이 클램프
+  const cpu = (os.cpus && os.cpus()) ? os.cpus().length : 4;
+  const limit = Math.max(2, Math.min(8, Number.isFinite(concurrency) ? concurrency : Math.max(2, cpu - 1)));
 
-  for (const ev of targets) {
+  // 시작 알림
+  try {
+    onStart && onStart({ total: targets.length, shotsDir, outDir });
+  } catch {}
+
+  // 태스크 생성(안정된 파일명/인덱스 유지)
+  const tasks = targets.map((ev, i) => ({ ev, i }));
+
+  async function worker(task) {
+    const ev = task.ev;
+    const idx = task.i;
+
     const ts = Number(ev?.timestamp ?? ev?.ts ?? 0);
-    // 비정상 값 가드
     let safeTs = Math.max(0, ts);
     if (durationMs > 0) {
-      // 마지막 프레임 근처 클램프
       safeTs = Math.min(safeTs, Math.max(0, durationMs - 1));
     }
 
     const fileName = [
       "frame",
-      String(i + 1).padStart(4, "0"),
+      String(idx + 1).padStart(4, "0"),
       sanitizeName(ev?.key ?? "key"),
       sanitizeName(ev?.state ?? "down"),
       `${Math.round(safeTs)}ms`,
@@ -166,35 +177,74 @@ async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true }) {
     const outPath = path.join(shotsDir, fileName);
 
     try {
-      // 순차 처리(간단/안전). 후속 최적화 여지 있음.
       await ffmpegExtractSingle({ videoPath: vPath, tsMs: safeTs, outPath });
-      index.push({
-        index: i + 1,
+      return {
+        index: idx + 1,
         key: ev?.key ?? null,
         state: ev?.state ?? null,
         timestampMs: Math.round(safeTs),
         file: fileName,
-      });
-      if (DEBUG && (i + 1) % 20 === 0) {
-        console.log(`[frames] progress ${i + 1}/${targets.length}...`);
-      }
+      };
     } catch (err) {
       if (DEBUG) {
-        console.error("[frames] extract failed", { i, event: ev, err: err?.message });
+        console.error("[frames] extract failed", { i: idx, event: ev, err: err?.message });
       }
-      // 실패 케이스도 인덱스에 기록(파일 없음)
-      index.push({
-        index: i + 1,
+      return {
+        index: idx + 1,
         key: ev?.key ?? null,
         state: ev?.state ?? null,
         timestampMs: Math.round(safeTs),
         file: fileName,
         error: err?.message || String(err),
-      });
+      };
     }
-
-    i++;
   }
+
+  async function runQueue(items, limit) {
+    const results = new Array(items.length);
+    let next = 0;
+    let active = 0;
+    let completed = 0;
+
+    return new Promise((resolve) => {
+      const launch = () => {
+        while (active < limit && next < items.length) {
+          const current = next++;
+          active++;
+          worker(items[current])
+            .then((res) => {
+              results[current] = res;
+              completed++;
+              try {
+                onProgress && onProgress({ completed, total: items.length, outDir, shotsDir });
+              } catch {}
+            })
+            .catch((err) => {
+              results[current] = {
+                index: items[current].i + 1,
+                key: items[current].ev?.key ?? null,
+                state: items[current].ev?.state ?? null,
+                timestampMs: Number(items[current].ev?.timestamp ?? items[current].ev?.ts ?? 0),
+                file: null,
+                error: err?.message || String(err),
+              };
+              completed++;
+              try {
+                onProgress && onProgress({ completed, total: items.length, outDir, shotsDir });
+              } catch {}
+            })
+            .finally(() => {
+              active--;
+              if (next < items.length) launch();
+              else if (active === 0) resolve(results);
+            });
+        }
+      };
+      launch();
+    });
+  }
+
+  const results = await runQueue(tasks, limit);
 
   // 인덱스 저장
   try {
@@ -203,12 +253,12 @@ async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true }) {
       JSON.stringify(
         {
           version: 1,
-          count: index.length,
+          count: results.length,
           video: path.basename(vPath),
           meta: path.basename(metaPath),
           events: path.basename(eventsPath),
           framesDir: path.basename(shotsDir),
-          frames: index,
+          frames: results,
         },
         null,
         2
@@ -218,9 +268,9 @@ async function extractFramesForOutDir({ outDir, videoPath, onlyDown = true }) {
   } catch {}
 
   if (DEBUG) {
-    console.log("[frames] done", { outDir, shotsDir, count: index.length });
+    console.log("[frames] done", { outDir, shotsDir, count: results.length, limit });
   }
-  return { shotsDir, count: index.length };
+  return { shotsDir, count: results.length };
 }
 
 module.exports = {
