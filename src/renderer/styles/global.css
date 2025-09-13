@@ -61,7 +61,6 @@ input[type="number"]::-webkit-outer-spin-button {
 
 /* SettingsTab custom scrollbar */
 .settings-scroll {
-  scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain;
 }
 

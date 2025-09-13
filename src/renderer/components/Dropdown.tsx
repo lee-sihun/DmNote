@@ -42,9 +42,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div
       ref={ref}
-      className={`relative w-[220px] ${
-        disabled ? "opacity-50 pointer-events-none" : ""
-      }`}
+      className={`relative ${disabled ? "opacity-50 pointer-events-none" : ""}`}
     >
       <button
         type="button"
