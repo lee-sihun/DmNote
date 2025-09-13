@@ -66,22 +66,34 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .settings-scroll::-webkit-scrollbar {
   width: 6px;
-  background: #24262d;
+  background: transparent;
 }
 
 .settings-scroll::-webkit-scrollbar-track {
-  background: #24262d;
+  background: transparent;
 }
 
 .settings-scroll::-webkit-scrollbar-thumb {
-  background: #989ba6;
+  background: transparent;
   border-radius: 0px;
 }
 
-.settings-scroll::-webkit-scrollbar-thumb:hover {
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb,
+.settings-scroll:hover::-webkit-scrollbar-thumb {
+  background: #989ba6;
+}
+
+.settings-scroll.show-scrollbar::-webkit-scrollbar-track,
+.settings-scroll:hover::-webkit-scrollbar-track {
+  background: #24262d;
+}
+
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover,
+.settings-scroll:hover::-webkit-scrollbar-thumb:hover {
   background: #b1b4bd;
 }
 
-.settings-scroll::-webkit-scrollbar-thumb:active {
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
+.settings-scroll:hover::-webkit-scrollbar-thumb:active {
   background: #d0d3d9;
 }

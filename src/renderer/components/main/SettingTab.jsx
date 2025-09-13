@@ -264,127 +264,134 @@ export default function SettingTab({ showAlert, showConfirm }) {
   };
 
   return (
-    <div className="settings-scroll w-full h-full flex flex-col py-[19px] px-[19px] gap-[19px] overflow-y-auto bg-[#101013]">
-      {/* 설정 */}
-      <div className="flex flex-row gap-[19px]">
-        <div className="flex flex-col gap-[21px] w-[348px]">
-          {/* 키뷰어 설정 */}
-          <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">오버레이 창 고정</p>
-              <Checkbox
-                checked={overlayLocked}
-                onChange={handleOverlayLockChange}
-              />
+    <div className="relative w-full h-full">
+      <div className="settings-scroll w-full h-full flex flex-col py-[19px] px-[19px] gap-[19px] overflow-y-auto bg-[#101013]">
+        {/* 설정 */}
+        <div className="flex flex-row gap-[19px]">
+          <div className="flex flex-col gap-[21px] w-[348px]">
+            {/* 키뷰어 설정 */}
+            <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">오버레이 창 고정</p>
+                <Checkbox
+                  checked={overlayLocked}
+                  onChange={handleOverlayLockChange}
+                />
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">항상 위에 표시</p>
+                <Checkbox
+                  checked={alwaysOnTop}
+                  onChange={handleAlwaysOnTopChange}
+                />
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">노트 효과 표시</p>
+                <Checkbox
+                  checked={noteEffect}
+                  onChange={handleNoteEffectChange}
+                />
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">커스텀 CSS 활성화</p>
+                <Checkbox
+                  checked={useCustomCSS}
+                  onChange={handleToggleCustomCSS}
+                />
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p
+                  className={
+                    "text-[12px] truncate max-w-[150px] " +
+                    (useCustomCSS ? "text-[#989BA6]" : "text-[#44464E]")
+                  }
+                >
+                  {customCSSPath && customCSSPath.length > 0
+                    ? customCSSPath
+                    : "(CSS 파일이 선택되지 않았습니다)"}
+                </p>
+                <button
+                  onClick={handleLoadCustomCSS}
+                  disabled={!useCustomCSS}
+                  className={
+                    "py-[2px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-1 " +
+                    (useCustomCSS
+                      ? "text-[#DBDEE8]"
+                      : "text-[#44464E] cursor-not-allowe1d bg-[#222228] border-[#31303C]")
+                  }
+                >
+                  CSS 파일 불러오기
+                </button>
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">리사이즈 기준점</p>
+                <Dropdown
+                  options={RESIZE_ANCHOR_OPTIONS}
+                  value={overlayResizeAnchor}
+                  onChange={async (val) => {
+                    setOverlayResizeAnchor(val);
+                    try {
+                      await ipcRenderer.invoke(
+                        "set-overlay-resize-anchor",
+                        val
+                      );
+                    } catch (err) {}
+                  }}
+                  placeholder="기준점 선택"
+                />
+              </div>
             </div>
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">항상 위에 표시</p>
-              <Checkbox
-                checked={alwaysOnTop}
-                onChange={handleAlwaysOnTopChange}
-              />
+            {/* 기타 설정 */}
+            <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">
+                  그래픽 렌더링 옵션
+                </p>
+                <Dropdown
+                  options={ANGLE_OPTIONS}
+                  value={angleMode}
+                  onChange={handleAngleModeChangeSelect}
+                  placeholder="렌더링 모드 선택"
+                />
+              </div>
+              {/* 버전 및 설정 초기화 */}
+              <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px]">
+                <p className="text-style-3 text-[#FFFFFF]">Ver 1.1.0</p>
+                <button
+                  className="bg-[#401C1D] rounded-[7px] py-[3px] px-[9px] text-style-1 text-[#E8DBDB]"
+                  onClick={handleResetAll}
+                >
+                  데이터 초기화
+                </button>
+              </div>
             </div>
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">노트 효과 표시</p>
-              <Checkbox
-                checked={noteEffect}
-                onChange={handleNoteEffectChange}
-              />
-            </div>
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">커스텀 CSS 활성화</p>
-              <Checkbox
-                checked={useCustomCSS}
-                onChange={handleToggleCustomCSS}
-              />
-            </div>
-            <div className="flex flex-row justify-between items-center">
-              <p
-                className={
-                  "text-[12px] truncate max-w-[150px] " +
-                  (useCustomCSS ? "text-[#989BA6]" : "text-[#44464E]")
-                }
-              >
-                {customCSSPath && customCSSPath.length > 0
-                  ? customCSSPath
-                  : "(CSS 파일이 선택되지 않았습니다)"}
-              </p>
+            {/* 기타 정보 */}
+            <div className="flex justify-between items-center mb-[37px] gap-[19.5px]">
               <button
-                onClick={handleLoadCustomCSS}
-                disabled={!useCustomCSS}
-                className={
-                  "py-[2px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-1 " +
-                  (useCustomCSS
-                    ? "text-[#DBDEE8]"
-                    : "text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]")
+                onClick={() =>
+                  handleClick("https://github.com/lee-sihun/djmax-keyviewer")
                 }
+                className="flex items-center justify-center gap-[7.5px] w-[200px] h-[37px] bg-[#1A191E] rounded-[7px]"
               >
-                CSS 파일 불러오기
+                <Github className="flex-shrink-0 mb-[3px]" />
+                <p className="text-style-3 text-[#DBDEE8] truncate">Github</p>
+              </button>
+              <button
+                onClick={() =>
+                  handleClick(
+                    "https://github.com/lee-sihun/djmax-keyviewer/issues"
+                  )
+                }
+                className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[37px] bg-[#1A191E] rounded-[7px]"
+              >
+                <Bug className="flex-shrink-0 mb-[2px]" />
+                <p className="text-style-3 text-[#DBDEE8] truncate">Report</p>
               </button>
             </div>
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">리사이즈 기준점</p>
-              <Dropdown
-                options={RESIZE_ANCHOR_OPTIONS}
-                value={overlayResizeAnchor}
-                onChange={async (val) => {
-                  setOverlayResizeAnchor(val);
-                  try {
-                    await ipcRenderer.invoke("set-overlay-resize-anchor", val);
-                  } catch (err) {}
-                }}
-                placeholder="기준점 선택"
-              />
-            </div>
-          </div>
-          {/* 기타 설정 */}
-          <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
-            <div className="flex flex-row justify-between items-center">
-              <p className="text-style-3 text-[#FFFFFF]">그래픽 렌더링 옵션</p>
-              <Dropdown
-                options={ANGLE_OPTIONS}
-                value={angleMode}
-                onChange={handleAngleModeChangeSelect}
-                placeholder="렌더링 모드 선택"
-              />
-            </div>
-            {/* 버전 및 설정 초기화 */}
-            <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px]">
-              <p className="text-style-3 text-[#FFFFFF]">Ver 1.1.0</p>
-              <button
-                className="bg-[#401C1D] rounded-[7px] py-[3px] px-[9px] text-style-1 text-[#E8DBDB]"
-                onClick={handleResetAll}
-              >
-                데이터 초기화
-              </button>
-            </div>
-          </div>
-          {/* 기타 정보 */}
-          <div className="flex justify-between items-center mb-[37px] gap-[19.5px]">
-            <button
-              onClick={() =>
-                handleClick("https://github.com/lee-sihun/djmax-keyviewer")
-              }
-              className="flex items-center justify-center gap-[7.5px] w-[200px] h-[37px] bg-[#1A191E] rounded-[7px]"
-            >
-              <Github className="flex-shrink-0 mb-[3px]" />
-              <p className="text-style-3 text-[#DBDEE8] truncate">Github</p>
-            </button>
-            <button
-              onClick={() =>
-                handleClick(
-                  "https://github.com/lee-sihun/djmax-keyviewer/issues"
-                )
-              }
-              className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[37px] bg-[#1A191E] rounded-[7px]"
-            >
-              <Bug className="flex-shrink-0 mb-[2px]" />
-              <p className="text-style-3 text-[#DBDEE8] truncate">Report</p>
-            </button>
           </div>
         </div>
-        <div>test</div>
       </div>
+      <div className="absolute top-[19px] right-[19px] w-[calc(100%-405px)] h-[366px] bg-white rounded-[7px] pointer-events-none"></div>
     </div>
   );
 }
