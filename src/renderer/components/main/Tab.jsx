@@ -7,9 +7,7 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Tab() {
   const [activeTab, setActiveTab] = useState(1);
-  const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const overlayLocked = useSettingsStore((state) => state.overlayLocked);
-  const ipcRenderer = window.electron.ipcRenderer;
 
   // CustomAlert 상태 관리
   const [alertState, setAlertState] = useState({
@@ -57,38 +55,7 @@ export default function Tab() {
     closeAlert();
   };
 
-  useEffect(() => {
-    ipcRenderer.invoke("get-overlay-visibility").then((visible) => {
-      setIsOverlayVisible(visible);
-    });
-
-    // 오버레이 상태 변경 이벤트 리스너
-    const handleVisibilityChange = (_, visible) => {
-      setIsOverlayVisible(visible);
-    };
-
-    ipcRenderer.on("overlay-visibility-changed", handleVisibilityChange);
-
-    return () => {
-      ipcRenderer.removeListener(
-        "overlay-visibility-changed",
-        handleVisibilityChange
-      );
-    };
-  }, []);
-
-  // overlayLocked 상태가 변경될 때마다 visibility 상태 동기화
-  useEffect(() => {
-    if (isOverlayVisible) {
-      ipcRenderer.send("toggle-overlay", true);
-    }
-  }, [overlayLocked]);
-
-  const toggleOverlay = () => {
-    const newState = !isOverlayVisible;
-    setIsOverlayVisible(newState);
-    ipcRenderer.send("toggle-overlay", newState);
-  };
+  useEffect(() => {}, []);
 
   const tabs = [
     { id: 0, icon: <Setting />, label: null },
@@ -120,12 +87,6 @@ export default function Tab() {
             </Button>
           ))}
           <div className="flex flex-col items-center justify-between h-full">
-            <button
-              onClick={toggleOverlay}
-              className={`text-[13.5px] leading-[17px] font-normal hover:text-white transition-colors duration-150 text-[#989BA6]`}
-            >
-              {isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
-            </button>
             <div
               className={`w-[18px] h-[3px] rounded-t-[6px] bg-transparent`}
             />
@@ -135,7 +96,7 @@ export default function Tab() {
       <div className="flex flex-1 overflow-hidden min-h-0">
         {renderTabContent()}
       </div>
-      
+
       <CustomAlert
         isOpen={alertState.isOpen}
         message={alertState.message}

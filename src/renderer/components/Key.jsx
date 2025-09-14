@@ -88,23 +88,23 @@ export default function DraggableKey({
   return (
     <div
       ref={draggable.ref}
-      className={`absolute ${
-        activeTool === "eraser" ? "cursor-pointer" : "cursor-grab"
+      className={`absolute cursor-pointer ${
+        draggable && draggable.wasMoved ? "" : ""
       } ${className || ""}`}
       style={keyStyle}
       data-state="inactive"
       onClick={handleClick}
       onDragStart={(e) => e.preventDefault()}
-      onMouseOver={(e) => {
-        if (activeTool === "eraser" && e.currentTarget) {
-          e.currentTarget.style.cursor = "pointer";
-        }
-      }}
-      onMouseOut={(e) => {
-        if (activeTool === "eraser" && e.currentTarget) {
-          e.currentTarget.style.cursor = "default";
-        }
-      }}
+      // onMouseOver={(e) => {
+      //   if (activeTool === "eraser" && e.currentTarget) {
+      //     // e.currentTarget.style.cursor = "pointer";
+      //   }
+      // }}
+      // onMouseOut={(e) => {
+      //   if (activeTool === "eraser" && e.currentTarget) {
+      //     // e.currentTarget.style.cursor = "default";
+      //   }
+      // }}
     >
       {inactiveImage ? (
         <img src={inactiveImage} alt="" style={imageStyle} draggable={false} />

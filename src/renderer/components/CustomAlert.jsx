@@ -14,7 +14,7 @@ export default function CustomAlert({
 
   return (
     <div
-      className="fixed top-[41px] left-[1px] flex items-center justify-center w-[896px] h-[451px] bg-[#000000] bg-opacity-[0.31] backdrop-blur-[37.5px] rounded-b-[6px] z-50"
+      className="fixed top-[40px] left-[1px] flex items-center justify-center w-[900px] h-[387px] bg-[#000000] bg-opacity-[0.31] backdrop-blur-[37.5px] z-50"
       onClick={onCancel}
     >
       <div

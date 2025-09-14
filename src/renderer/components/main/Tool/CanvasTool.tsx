@@ -28,7 +28,7 @@ const CanvasTool = ({
     (activeTool as SelectableTool) || "move"
   );
 
-  // 상태 동기화 
+  // 상태 동기화
   useEffect(() => {
     if (activeTool === "move" || activeTool === "eraser") {
       setSelectedTool(activeTool as SelectableTool);
@@ -73,7 +73,7 @@ const CanvasTool = ({
       label: "Eraser",
       selected: selectedTool === "eraser",
     },
-    // 액션 버튼 모음 
+    // 액션 버튼 모음
     { key: "layer", icon: <LayerIcon />, label: "Add Key" },
     {
       key: "primary",
@@ -120,7 +120,7 @@ const IconButton = ({
       type="button"
       aria-label={ariaLabel}
       aria-pressed={isSelected}
-      className={`flex items-center h-[30px] px-[8px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
+      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
         isSelected
           ? selectedVariant === "hover"
             ? "bg-[#1E1E22]"

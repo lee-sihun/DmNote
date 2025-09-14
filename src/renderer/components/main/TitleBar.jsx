@@ -13,7 +13,7 @@ export default function TitleBar() {
 
   return (
     <div className="w-full h-[39px] min-h-[39px] flex justify-between items-center bg-[#1A191E] rounded-t-[6px] [app-region:drag]">
-      <div className="text-[15px] font-bold tracking-[0.05em] text-[#DBDEE8] ml-[16px]">
+      <div className="text-[15px] font-semibold tracking-[0.05em] text-[#DBDEE8] ml-[16px]">
         DM NOTE
       </div>
       <div className="flex h-full [app-region:no-drag]">

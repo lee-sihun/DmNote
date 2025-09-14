@@ -24,7 +24,7 @@ export const typography = {
     // 14px sb
     4: {
       fontSize: "14px",
-      fontWeight: "600",
+      fontWeight: "500",
       lineHeight: "14px",
       letterSpacing: "0px",
     },

@@ -265,7 +265,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
 
   return (
     <div className="relative w-full h-full">
-      <div className="settings-scroll w-full h-full flex flex-col py-[19px] px-[19px] gap-[19px] overflow-y-auto bg-[#101013]">
+      <div className="settings-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#101013]">
         {/* 설정 */}
         <div className="flex flex-row gap-[19px]">
           <div className="flex flex-col gap-[21px] w-[348px]">
@@ -391,7 +391,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
           </div>
         </div>
       </div>
-      <div className="absolute top-[19px] right-[19px] w-[calc(100%-405px)] h-[366px] bg-white rounded-[7px] pointer-events-none"></div>
+      <div className="absolute top-[10px] right-[10px] w-[522px] h-[366px] bg-white rounded-[7px] pointer-events-none"></div>
     </div>
   );
 }

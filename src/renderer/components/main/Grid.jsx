@@ -103,7 +103,7 @@ export default function Grid({
           const displayName =
             getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
           showConfirm(
-            `${displayName} 키를 제거하시겠습니까?`,
+            `[${displayName}] 키를 제거하시겠습니까?`,
             () => onKeyDelete(index),
             "제거하기"
           );
