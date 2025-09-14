@@ -4,28 +4,28 @@ export const typography = {
     1: {
       fontSize: "12px",
       fontWeight: "500",
-      lineHeight: "15px",
+      lineHeight: "12px",
       letterSpacing: "0px",
     },
     // 13px m
     2: {
       fontSize: "13px",
       fontWeight: "500",
-      lineHeight: "16px",
+      lineHeight: "13px",
       letterSpacing: "0px",
     },
     // 14px m
     3: {
       fontSize: "14px",
       fontWeight: "500",
-      lineHeight: "15.5px",
+      lineHeight: "14px",
       letterSpacing: "0px",
     },
     // 14px sb
     4: {
       fontSize: "14px",
       fontWeight: "600",
-      lineHeight: "17px",
+      lineHeight: "14px",
       letterSpacing: "0px",
     },
   },
