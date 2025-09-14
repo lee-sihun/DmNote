@@ -8,6 +8,8 @@ export default function DraggableKey({
   keyName,
   onPositionChange,
   onClick,
+  activeTool,
+  onEraserClick,
 }) {
   const { displayName } = getKeyInfoByGlobalKey(keyName);
   const {
@@ -17,7 +19,7 @@ export default function DraggableKey({
     height = 60,
     activeImage,
     inactiveImage,
-    className, 
+    className,
   } = position;
   const draggable = useDraggable({
     gridSize: 5,
@@ -27,6 +29,10 @@ export default function DraggableKey({
   });
 
   const handleClick = (e) => {
+    if (activeTool === "eraser") {
+      onEraserClick?.();
+      return;
+    }
     if (!draggable.wasMoved) onClick(e);
   };
 
@@ -82,13 +88,23 @@ export default function DraggableKey({
   return (
     <div
       ref={draggable.ref}
-      className={`absolute cursor-pointer ${
-        draggable && draggable.wasMoved ? "" : ""
+      className={`absolute ${
+        activeTool === "eraser" ? "cursor-pointer" : "cursor-grab"
       } ${className || ""}`}
       style={keyStyle}
       data-state="inactive"
       onClick={handleClick}
       onDragStart={(e) => e.preventDefault()}
+      onMouseOver={(e) => {
+        if (activeTool === "eraser" && e.currentTarget) {
+          e.currentTarget.style.cursor = "pointer";
+        }
+      }}
+      onMouseOut={(e) => {
+        if (activeTool === "eraser" && e.currentTarget) {
+          e.currentTarget.style.cursor = "default";
+        }
+      }}
     >
       {inactiveImage ? (
         <img src={inactiveImage} alt="" style={imageStyle} draggable={false} />

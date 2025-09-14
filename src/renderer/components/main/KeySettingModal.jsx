@@ -3,12 +3,7 @@ import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { ReactComponent as TrashIcon } from "@assets/svgs/trash.svg";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
-export default function KeySettingModal({
-  keyData,
-  onClose,
-  onSave,
-  onDelete,
-}) {
+export default function KeySettingModal({ keyData, onClose, onSave }) {
   const {
     useCustomCSS,
     setUseCustomCSS,
@@ -354,12 +349,6 @@ export default function KeySettingModal({
             className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
           >
             취소
-          </button>
-          <button
-            onClick={onDelete}
-            className="flex justify-center items-center w-[42px] bg-[#271213] border border-[#4D3F40] rounded-[6px]"
-          >
-            <TrashIcon />
           </button>
         </div>
       </div>
