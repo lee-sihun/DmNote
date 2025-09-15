@@ -1,0 +1,52 @@
+import React from "react";
+import FloatingPopup from "./FloatingPopup";
+
+export type ListItem = {
+  id: string;
+  label: string;
+};
+
+type ListPopupProps = {
+  open: boolean;
+  referenceRef?: React.RefObject<HTMLElement>;
+  onClose?: () => void;
+  items: ListItem[];
+  onSelect?: (id: string) => void;
+  className?: string;
+};
+
+const ListPopup = ({
+  open,
+  referenceRef,
+  onClose,
+  items,
+  onSelect,
+  className = "z-30 bg-[#1A191E] rounded-[7px] p-[8px] flex flex-col gap-[8px]",
+}: ListPopupProps) => {
+  return (
+    <FloatingPopup
+      open={open}
+      referenceRef={referenceRef}
+      placement="top"
+      offset={20}
+      onClose={onClose}
+      className={className}
+    >
+      {items.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          onClick={() => {
+            onSelect(it.id);
+            onClose?.();
+          }}
+          className="min-w-[108px] h-[22px] px-[24px] rounded-[7px] hover:bg-[#202025] active:bg-[#2A2A31] flex items-center justify-center"
+        >
+          <span className="text-style-1 text-[#DBDEE8]">{it.label}</span>
+        </button>
+      ))}
+    </FloatingPopup>
+  );
+};
+
+export default ListPopup;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ReactComponent as FolderIcon } from "@assets/svgs/folder.svg";
 import { ReactComponent as SettingIcon } from "@assets/svgs/setting.svg";
 import { ReactComponent as CloseEyeIcon } from "@assets/svgs/close_eye.svg";
@@ -6,6 +6,8 @@ import { ReactComponent as OpenEyeIcon } from "@assets/svgs/open_eye.svg";
 import { ReactComponent as ChevronDownIcon } from "@assets/svgs/chevron-down.svg";
 import { ReactComponent as TurnIcon } from "@assets/svgs/turn_arrow.svg";
 import FloatingTooltip from "../Modal/FloatingTooltip";
+import ListPopup, { ListItem } from "../Modal/ListPopup";
+import { TooltipGroup } from "../Modal/TooltipGroup";
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;
@@ -19,6 +21,10 @@ const SettingTool = ({
   onCloseSettings,
 }: SettingToolProps) => {
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const [isNoteSettingsOpen, setIsNoteSettingsOpen] = useState(false);
+  const [isExportImportOpen, setIsExportImportOpen] = useState(false);
+  const noteSettingsRef = useRef<HTMLButtonElement | null>(null);
+  const exportImportRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const ipc = window.electron.ipcRenderer;
@@ -46,36 +52,67 @@ const SettingTool = ({
   return (
     <div className="flex gap-[10px]">
       {!isSettingsOpen && (
-        <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[0px]">
-          <FloatingTooltip content="내보내기">
-            <Button icon={<FolderIcon />} />
-          </FloatingTooltip>
-          <FloatingTooltip content="내보내기/불러오기">
-            <ChevronButton />
-          </FloatingTooltip>
-        </div>
+        <TooltipGroup>
+          <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[0px]">
+            <FloatingTooltip content="내보내기">
+              <Button icon={<FolderIcon />} />
+            </FloatingTooltip>
+
+            <FloatingTooltip content="불러오기/내보내기">
+              <ChevronButton
+                ref={exportImportRef}
+                onClick={() => setIsExportImportOpen((prev) => !prev)}
+              />
+            </FloatingTooltip>
+            <div className="relative">
+              <ListPopup
+                open={isExportImportOpen}
+                referenceRef={exportImportRef}
+                onClose={() => setIsExportImportOpen(false)}
+                items={[
+                  { id: "import", label: "불러오기" },
+                  { id: "export", label: "내보내기" },
+                ]}
+              />
+            </div>
+          </div>
+        </TooltipGroup>
       )}
-      <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
-        <FloatingTooltip
-          content={isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
-        >
-          <Button
-            icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
-            onClick={toggleOverlay}
-          />
-        </FloatingTooltip>
-        <div className="flex items-center">
-          <FloatingTooltip content={isSettingsOpen ? "돌아가기" : "설정"}>
+      <TooltipGroup>
+        <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
+          <FloatingTooltip
+            content={isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
+          >
             <Button
-              icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
-              onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
+              icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
+              onClick={toggleOverlay}
             />
           </FloatingTooltip>
-          <FloatingTooltip content="노트 설정">
-            <ChevronButton />
-          </FloatingTooltip>
+          <div className="flex items-center">
+            <FloatingTooltip content={isSettingsOpen ? "돌아가기" : "설정"}>
+              <Button
+                icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
+                onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
+              />
+            </FloatingTooltip>
+
+            <FloatingTooltip content="기타 설정">
+              <ChevronButton
+                ref={noteSettingsRef}
+                onClick={() => setIsNoteSettingsOpen((prev) => !prev)}
+              />
+            </FloatingTooltip>
+            <div className="relative">
+              <ListPopup
+                open={isNoteSettingsOpen}
+                referenceRef={noteSettingsRef}
+                onClose={() => setIsNoteSettingsOpen(false)}
+                items={[{ id: "note", label: "노트 설정" }]}
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </TooltipGroup>
     </div>
   );
 };
@@ -105,18 +142,21 @@ interface ChevronButtonProps {
   onClick?: () => void;
 }
 
-const ChevronButton = ({ isSelected = false, onClick }: ChevronButtonProps) => {
-  return (
-    <button
-      type="button"
-      className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
-        isSelected ? "bg-[#2A2A31]" : "bg-[#0E0E11] hover:bg-[#1E1E22]"
-      }`}
-      onClick={onClick}
-    >
-      <ChevronDownIcon />
-    </button>
-  );
-};
+const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
+  ({ isSelected = false, onClick }, ref) => {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
+          isSelected ? "bg-[#2A2A31]" : "bg-[#0E0E11] hover:bg-[#1E1E22]"
+        }`}
+        onClick={onClick}
+      >
+        <ChevronDownIcon />
+      </button>
+    );
+  }
+);
 
 export default SettingTool;
