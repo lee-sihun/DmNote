@@ -97,3 +97,18 @@ input[type="number"]::-webkit-outer-spin-button {
 .settings-scroll:hover::-webkit-scrollbar-thumb:active {
   background: #d0d3d9;
 }
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tooltip-fade-in {
+  animation: tooltipFadeIn 120ms ease-out;
+}

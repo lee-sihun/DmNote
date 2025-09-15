@@ -42,6 +42,9 @@ const FloatingTooltip = ({
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
+  // track whether this open should animate (first in group)
+  const shouldAnimateOpenRef = useRef<boolean>(false);
+
   // timer ref for hover delay
   const openTimerRef = useRef<number | null>(null);
 
@@ -51,12 +54,22 @@ const FloatingTooltip = ({
       openTimerRef.current = null;
     }
     const effectiveDelay = group?.getEffectiveDelay(delay) ?? delay;
-    if (effectiveDelay <= 0) {
+    // decide animation for this upcoming open
+    shouldAnimateOpenRef.current = !!group?.shouldAnimate?.();
+
+    const finalizeOpen = () => {
+      if (shouldAnimateOpenRef.current) {
+        group?.consumeAnimation?.();
+      }
       handleOpen();
+    };
+
+    if (effectiveDelay <= 0) {
+      finalizeOpen();
       return;
     }
     openTimerRef.current = window.setTimeout(() => {
-      handleOpen();
+      finalizeOpen();
       openTimerRef.current = null;
     }, effectiveDelay) as unknown as number;
   };
@@ -66,6 +79,8 @@ const FloatingTooltip = ({
       window.clearTimeout(openTimerRef.current);
       openTimerRef.current = null;
     }
+    // reset pending animation flag
+    shouldAnimateOpenRef.current = false;
   };
 
   const handlePointerDown = () => {
@@ -138,6 +153,9 @@ const FloatingTooltip = ({
             left: x ?? 0,
             zIndex: 50,
           }}
+          className={
+            shouldAnimateOpenRef.current ? "tooltip-fade-in" : undefined
+          }
         >
           <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm">
             {content}
