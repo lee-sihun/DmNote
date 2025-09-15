@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import Checkbox from "@components/Checkbox";
+import Checkbox from "@components/main/common/Checkbox";
 
 export default function NoteSettingModal({ onClose }) {
   const ipcRenderer = window.electron?.ipcRenderer;
@@ -188,9 +188,9 @@ export default function NoteSettingModal({ onClose }) {
           <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
             노트 효과 리버스
           </p>
-          <div className="mr-[16.5px]"> 
-          <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
-            </div>
+          <div className="mr-[16.5px]">
+            <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
+          </div>
         </div>
 
         <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">

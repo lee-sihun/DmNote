@@ -4,8 +4,8 @@ import { ReactComponent as EraserIcon } from "@assets/svgs/eraser.svg";
 import { ReactComponent as LayerIcon } from "@assets/svgs/layer.svg";
 import { ReactComponent as PrimaryIcon } from "@assets/svgs/primary.svg";
 import { ReactComponent as BroomIcon } from "@assets/svgs/broom.svg";
-import FloatingTooltip from "../Modal/FloatingTooltip";
-import { TooltipGroup } from "../Modal/TooltipGroup";
+import FloatingTooltip from "../modal/FloatingTooltip";
+import { TooltipGroup } from "../modal/TooltipGroup";
 
 type SelectableTool = "move" | "eraser";
 

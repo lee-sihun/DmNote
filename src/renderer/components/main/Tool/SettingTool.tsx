@@ -5,9 +5,9 @@ import { ReactComponent as CloseEyeIcon } from "@assets/svgs/close_eye.svg";
 import { ReactComponent as OpenEyeIcon } from "@assets/svgs/open_eye.svg";
 import { ReactComponent as ChevronDownIcon } from "@assets/svgs/chevron-down.svg";
 import { ReactComponent as TurnIcon } from "@assets/svgs/turn_arrow.svg";
-import FloatingTooltip from "../Modal/FloatingTooltip";
-import ListPopup, { ListItem } from "../Modal/ListPopup";
-import { TooltipGroup } from "../Modal/TooltipGroup";
+import FloatingTooltip from "../modal/FloatingTooltip";
+import ListPopup, { ListItem } from "../modal/ListPopup";
+import { TooltipGroup } from "../modal/TooltipGroup";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 type SettingToolProps = {

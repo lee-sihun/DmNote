@@ -2,9 +2,9 @@ import React, { useEffect } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { ReactComponent as Github } from "@assets/svgs/github.svg";
 import { ReactComponent as Bug } from "@assets/svgs/code.svg";
-import Checkbox from "@components/Checkbox";
-import Radio from "@components/Radio";
-import Dropdown from "@components/Dropdown";
+import Checkbox from "@components/main/common/Checkbox";
+import Radio from "@components/main/common/Radio";
+import Dropdown from "@components/main/common/Dropdown";
 import { ReactComponent as ResetIcon } from "@assets/svgs/sparkles.svg";
 
 export default function SettingTab({ showAlert, showConfirm }) {
