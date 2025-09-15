@@ -8,23 +8,29 @@ import { ReactComponent as TurnIcon } from "@assets/svgs/turn_arrow.svg";
 import FloatingTooltip from "../Modal/FloatingTooltip";
 import ListPopup, { ListItem } from "../Modal/ListPopup";
 import { TooltipGroup } from "../Modal/TooltipGroup";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;
   onOpenSettings?: () => void;
   onCloseSettings?: () => void;
+  showAlert?: (message: string) => void;
+  onOpenNoteSetting?: () => void;
 };
 
 const SettingTool = ({
   isSettingsOpen = false,
   onOpenSettings,
   onCloseSettings,
+  showAlert,
+  onOpenNoteSetting,
 }: SettingToolProps) => {
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [isNoteSettingsOpen, setIsNoteSettingsOpen] = useState(false);
   const [isExportImportOpen, setIsExportImportOpen] = useState(false);
   const noteSettingsRef = useRef<HTMLButtonElement | null>(null);
   const exportImportRef = useRef<HTMLButtonElement | null>(null);
+  const { noteEffect } = useSettingsStore();
 
   useEffect(() => {
     const ipc = window.electron.ipcRenderer;
@@ -54,13 +60,35 @@ const SettingTool = ({
       {!isSettingsOpen && (
         <TooltipGroup>
           <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[0px]">
-            <FloatingTooltip content="내보내기">
-              <Button icon={<FolderIcon />} />
+            <FloatingTooltip content="프리셋 내보내기">
+              <Button
+                icon={<FolderIcon />}
+                onClick={async () => {
+                  try {
+                    const ok = await window.electron.ipcRenderer.invoke(
+                      "save-preset"
+                    );
+                    if (showAlert) {
+                      showAlert(
+                        ok
+                          ? "프리셋이 저장되었습니다."
+                          : "프리셋 저장에 실패했습니다."
+                      );
+                    }
+                  } catch {
+                    showAlert?.("프리셋 저장에 실패했습니다.");
+                  }
+                }}
+              />
             </FloatingTooltip>
 
-            <FloatingTooltip content="불러오기/내보내기">
+            <FloatingTooltip
+              content="불러오기/내보내기"
+              disabled={isExportImportOpen}
+            >
               <ChevronButton
                 ref={exportImportRef}
+                isSelected={isExportImportOpen}
                 onClick={() => setIsExportImportOpen((prev) => !prev)}
               />
             </FloatingTooltip>
@@ -73,6 +101,35 @@ const SettingTool = ({
                   { id: "import", label: "불러오기" },
                   { id: "export", label: "내보내기" },
                 ]}
+                onSelect={async (id) => {
+                  try {
+                    if (id === "import") {
+                      const ok = await window.electron.ipcRenderer.invoke(
+                        "load-preset"
+                      );
+                      showAlert?.(
+                        ok
+                          ? "프리셋이 로드되었습니다."
+                          : "프리셋 로드에 실패했습니다."
+                      );
+                    } else if (id === "export") {
+                      const ok = await window.electron.ipcRenderer.invoke(
+                        "save-preset"
+                      );
+                      showAlert?.(
+                        ok
+                          ? "프리셋이 저장되었습니다."
+                          : "프리셋 저장에 실패했습니다."
+                      );
+                    }
+                  } catch {
+                    if (id === "import") {
+                      showAlert?.("프리셋 로드에 실패했습니다.");
+                    } else if (id === "export") {
+                      showAlert?.("프리셋 저장에 실패했습니다.");
+                    }
+                  }
+                }}
               />
             </div>
           </div>
@@ -95,21 +152,33 @@ const SettingTool = ({
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
               />
             </FloatingTooltip>
-
-            <FloatingTooltip content="기타 설정">
-              <ChevronButton
-                ref={noteSettingsRef}
-                onClick={() => setIsNoteSettingsOpen((prev) => !prev)}
-              />
-            </FloatingTooltip>
-            <div className="relative">
-              <ListPopup
-                open={isNoteSettingsOpen}
-                referenceRef={noteSettingsRef}
-                onClose={() => setIsNoteSettingsOpen(false)}
-                items={[{ id: "note", label: "노트 설정" }]}
-              />
-            </div>
+            {noteEffect && (
+              <>
+                <FloatingTooltip
+                  content="기타 설정"
+                  disabled={isNoteSettingsOpen}
+                >
+                  <ChevronButton
+                    ref={noteSettingsRef}
+                    isSelected={isNoteSettingsOpen}
+                    onClick={() => setIsNoteSettingsOpen((prev) => !prev)}
+                  />
+                </FloatingTooltip>
+                <div className="relative">
+                  <ListPopup
+                    open={isNoteSettingsOpen}
+                    referenceRef={noteSettingsRef}
+                    onClose={() => setIsNoteSettingsOpen(false)}
+                    items={[{ id: "note", label: "노트 설정" }]}
+                    onSelect={(id) => {
+                      if (id === "note") {
+                        onOpenNoteSetting?.();
+                      }
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </TooltipGroup>
@@ -149,7 +218,9 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
         ref={ref}
         type="button"
         className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
-          isSelected ? "bg-[#2A2A31]" : "bg-[#0E0E11] hover:bg-[#1E1E22]"
+          isSelected
+            ? "bg-[#2A2A31] hover:bg-[#2A2A31]"
+            : "bg-[#0E0E11] hover:bg-[#1E1E22]"
         }`}
         onClick={onClick}
       >

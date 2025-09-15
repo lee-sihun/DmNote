@@ -14,6 +14,7 @@ type FloatingTooltipProps = {
   children: React.ReactElement;
   placement?: "top" | "bottom" | "left" | "right";
   delay?: number; // ms to wait before showing tooltip on hover
+  disabled?: boolean; // when true, tooltip won't show
 };
 
 const FloatingTooltip = ({
@@ -21,6 +22,7 @@ const FloatingTooltip = ({
   children,
   placement = "top",
   delay = 500,
+  disabled = false,
 }: FloatingTooltipProps) => {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<HTMLDivElement | null>(null);
@@ -39,7 +41,10 @@ const FloatingTooltip = ({
   // to ignore the next focus event if it was caused by a pointer interaction.
   const ignoreFocusRef = useRef(false);
 
-  const handleOpen = () => setOpen(true);
+  const handleOpen = () => {
+    if (disabled) return;
+    setOpen(true);
+  };
   const handleClose = () => setOpen(false);
 
   // track whether this open should animate (first in group)
@@ -49,6 +54,7 @@ const FloatingTooltip = ({
   const openTimerRef = useRef<number | null>(null);
 
   const startOpenTimer = () => {
+    if (disabled) return;
     if (openTimerRef.current) {
       window.clearTimeout(openTimerRef.current);
       openTimerRef.current = null;
@@ -142,7 +148,7 @@ const FloatingTooltip = ({
       >
         {children}
       </div>
-      {open && (
+      {open && !disabled && (
         <div
           id={id}
           ref={refs.setFloating}

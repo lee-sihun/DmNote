@@ -12,6 +12,8 @@ type Props = {
   isSettingsOpen?: boolean;
   onOpenSettings?: () => void;
   onCloseSettings?: () => void;
+  showAlert?: (message: string) => void;
+  onOpenNoteSetting?: () => void;
 };
 
 const ToolBar = ({
@@ -24,6 +26,8 @@ const ToolBar = ({
   isSettingsOpen = false,
   onOpenSettings,
   onCloseSettings,
+  showAlert,
+  onOpenNoteSetting,
 }: Props) => {
   return (
     <div
@@ -47,6 +51,8 @@ const ToolBar = ({
           isSettingsOpen={isSettingsOpen}
           onOpenSettings={onOpenSettings}
           onCloseSettings={onCloseSettings}
+          showAlert={showAlert}
+          onOpenNoteSetting={onOpenNoteSetting}
         />
       </div>
     </div>
