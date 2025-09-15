@@ -4,6 +4,7 @@ import { ReactComponent as EraserIcon } from "@assets/svgs/eraser.svg";
 import { ReactComponent as LayerIcon } from "@assets/svgs/layer.svg";
 import { ReactComponent as PrimaryIcon } from "@assets/svgs/primary.svg";
 import { ReactComponent as BroomIcon } from "@assets/svgs/broom.svg";
+import FloatingTooltip from "../Modal/FloatingTooltip";
 
 type SelectableTool = "move" | "eraser";
 
@@ -87,14 +88,28 @@ const CanvasTool = ({
   return (
     <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
       {tools.map((t) => (
-        <IconButton
+        <FloatingTooltip
           key={t.key}
-          icon={t.icon}
-          isSelected={!!t.selected}
-          selectedVariant={t.key === "primary" ? "hover" : "default"}
-          onClick={() => handleClick(t.key)}
-          ariaLabel={t.label}
-        />
+          content={
+            t.key === "move"
+              ? "키 이동"
+              : t.key === "eraser"
+              ? "키 삭제"
+              : t.key === "layer"
+              ? "키 추가"
+              : t.key === "primary"
+              ? "캔버스 색상"
+              : "초기화"
+          }
+        >
+          <IconButton
+            icon={t.icon}
+            isSelected={!!t.selected}
+            selectedVariant={t.key === "primary" ? "hover" : "default"}
+            onClick={() => handleClick(t.key)}
+            ariaLabel={t.label}
+          />
+        </FloatingTooltip>
       ))}
     </div>
   );

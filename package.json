@@ -83,6 +83,7 @@
     "webpack-dev-server": "^5.2.0"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.16",
     "electron-store": "^8.2.0",
     "node-global-key-listener-extended": "github:lee-sihun/node-global-key-listener",
     "react": "^19.0.0",

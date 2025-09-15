@@ -334,12 +334,26 @@ class Application {
     ipcMain.on("toggle-overlay", (_, show) => {
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         if (show) {
-          this.overlayWindow.show();
+          this.overlayWindow.showInactive();
           // 오버레이가 표시될 때 현재 lock 상태 적용
           const isLocked = store.get("overlayLocked", false);
           this.overlayWindow.setIgnoreMouseEvents(isLocked, { forward: true });
+          // 메인 윈도우에 상태 변경 알림
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send(
+              "overlay-visibility-changed",
+              true
+            );
+          }
         } else {
           this.overlayWindow.hide();
+          // 메인 윈도우에 상태 변경 알림
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send(
+              "overlay-visibility-changed",
+              false
+            );
+          }
         }
       }
     });

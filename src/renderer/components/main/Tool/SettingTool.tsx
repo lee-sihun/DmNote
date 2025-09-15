@@ -5,6 +5,7 @@ import { ReactComponent as CloseEyeIcon } from "@assets/svgs/close_eye.svg";
 import { ReactComponent as OpenEyeIcon } from "@assets/svgs/open_eye.svg";
 import { ReactComponent as ChevronDownIcon } from "@assets/svgs/chevron-down.svg";
 import { ReactComponent as TurnIcon } from "@assets/svgs/turn_arrow.svg";
+import FloatingTooltip from "../Modal/FloatingTooltip";
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;
@@ -46,21 +47,33 @@ const SettingTool = ({
     <div className="flex gap-[10px]">
       {!isSettingsOpen && (
         <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[0px]">
-          <Button icon={<FolderIcon />} />
-          <ChevronButton />
+          <FloatingTooltip content="내보내기">
+            <Button icon={<FolderIcon />} />
+          </FloatingTooltip>
+          <FloatingTooltip content="내보내기/불러오기">
+            <ChevronButton />
+          </FloatingTooltip>
         </div>
       )}
       <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
-        <Button
-          icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
-          onClick={toggleOverlay}
-        />
-        <div className="flex items-center">
+        <FloatingTooltip
+          content={isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
+        >
           <Button
-            icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
-            onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
+            icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
+            onClick={toggleOverlay}
           />
-          <ChevronButton />
+        </FloatingTooltip>
+        <div className="flex items-center">
+          <FloatingTooltip content={isSettingsOpen ? "돌아가기" : "설정"}>
+            <Button
+              icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
+              onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
+            />
+          </FloatingTooltip>
+          <FloatingTooltip content="노트 설정">
+            <ChevronButton />
+          </FloatingTooltip>
         </div>
       </div>
     </div>
