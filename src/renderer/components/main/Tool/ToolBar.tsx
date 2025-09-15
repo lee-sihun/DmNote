@@ -31,7 +31,7 @@ const ToolBar = ({
 }: Props) => {
   return (
     <div
-      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-[#1A191E] border-b border-b-[#2A2A31] ${
+      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-primary ${
         isSettingsOpen ? "justify-end" : "justify-between"
       }`}
     >

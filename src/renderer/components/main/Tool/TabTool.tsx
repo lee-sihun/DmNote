@@ -5,7 +5,7 @@ const TabTool = () => {
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
 
   return (
-    <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
+    <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
       {keyTypes.map((keyType) => (
         <Button
           key={keyType}
@@ -29,7 +29,9 @@ const Button = ({ text, isSelected = false, onClick }: ButtonProps) => {
     <button
       type="button"
       className={`flex items-center h-[30px] px-[8px] rounded-[7px] transition-colors ${
-        isSelected ? "bg-[#2A2A31]" : "bg-[#0E0E11] hover:bg-[#1E1E22]"
+        isSelected
+          ? "bg-button-active"
+          : "bg-button-primary hover:bg-button-hover"
       }`}
       onClick={onClick}
     >

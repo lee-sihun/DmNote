@@ -1,10 +1,17 @@
 /** @type {import('tailwindcss').Config} */
 const { typography } = require("./src/renderer/styles/typography");
+const { colors } = require("./src/renderer/styles/colors");
 
 module.exports = {
   content: ["./src/**/*.{js,jsx,tsx,html}"],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        primary: colors.primary,
+        button: colors.button,
+        text: colors.text,
+      },
+    },
   },
   plugins: [
     function ({ addUtilities }) {

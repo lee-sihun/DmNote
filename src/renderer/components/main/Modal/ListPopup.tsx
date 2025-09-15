@@ -21,7 +21,7 @@ const ListPopup = ({
   onClose,
   items,
   onSelect,
-  className = "z-30 bg-[#1A191E] rounded-[7px] p-[8px] flex flex-col gap-[8px]",
+  className = "z-30 bg-[#1A191E] rounded-[7px] p-[5px] flex flex-col gap-[5px]",
 }: ListPopupProps) => {
   return (
     <FloatingPopup
@@ -40,9 +40,9 @@ const ListPopup = ({
             onSelect(it.id);
             onClose?.();
           }}
-          className="min-w-[108px] h-[22px] px-[24px] rounded-[7px] hover:bg-[#202025] active:bg-[#2A2A31] flex items-center justify-center"
+          className="min-w-[108px] h-[24px] px-[24px] rounded-[7px] hover:bg-[#26262C] active:bg-[#2A2A31] flex items-center justify-center"
         >
-          <span className="text-style-1 text-[#DBDEE8]">{it.label}</span>
+          <span className="text-style-2 text-[#DBDEE8]">{it.label}</span>
         </button>
       ))}
     </FloatingPopup>

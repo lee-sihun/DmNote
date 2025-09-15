@@ -29,10 +29,10 @@ body,
 .grid-bg {
   background-image: linear-gradient(
       to right,
-      rgb(66, 66, 66) 1px,
+      rgb(25, 25, 28 ) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, rgb(66, 66, 66) 1px, transparent 1px);
+    linear-gradient(to bottom, rgb(25, 25, 28 ) 1px, transparent 1px);
   background-size: 5px 5px;
 }
 

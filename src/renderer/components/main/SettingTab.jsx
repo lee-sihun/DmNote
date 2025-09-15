@@ -265,10 +265,10 @@ export default function SettingTab({ showAlert, showConfirm }) {
 
   return (
     <div className="relative w-full h-full">
-      <div className="settings-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#101013]">
+      <div className="settings-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#0B0B0D]">
         {/* 설정 */}
         <div className="flex flex-row gap-[19px]">
-          <div className="flex flex-col gap-[21px] w-[348px]">
+          <div className="flex flex-col gap-[10px] w-[348px]">
             {/* 키뷰어 설정 */}
             <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
@@ -314,7 +314,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
                   onClick={handleLoadCustomCSS}
                   disabled={!useCustomCSS}
                   className={
-                    "py-[2px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-1 " +
+                    "py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 " +
                     (useCustomCSS
                       ? "text-[#DBDEE8]"
                       : "text-[#44464E] cursor-not-allowe1d bg-[#222228] border-[#31303C]")
@@ -358,7 +358,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
               <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px]">
                 <p className="text-style-3 text-[#FFFFFF]">Ver 1.1.0</p>
                 <button
-                  className="bg-[#401C1D] rounded-[7px] py-[3px] px-[9px] text-style-1 text-[#E8DBDB]"
+                  className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
                   onClick={handleResetAll}
                 >
                   데이터 초기화

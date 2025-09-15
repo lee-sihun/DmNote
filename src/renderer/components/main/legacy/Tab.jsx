@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ReactComponent as Setting } from "@assets/svgs/setting.svg";
-import SettingTab from "./SettingTab";
+import SettingTab from "../SettingTab";
 import Canvas from "./Canvas";
 import CustomAlert from "@components/CustomAlert";
 import { useSettingsStore } from "@stores/useSettingsStore";

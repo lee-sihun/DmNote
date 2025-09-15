@@ -114,8 +114,8 @@ export default function Grid({
 
   return (
     <div
-      className="grid-bg relative w-full h-full bg-[#2A2A31] rounded-[0px]"
-      style={{ backgroundColor: color === "transparent" ? "#2A2A31" : color }}
+      className="grid-bg relative w-full h-full bg-[#000000 ] rounded-[0px]"
+      style={{ backgroundColor: color === "transparent" ? "#000000 " : color }}
       onClick={onPaletteClose}
     >
       {renderKeys()}

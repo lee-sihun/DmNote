@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { ReactComponent as TrashIcon } from "@assets/svgs/trash.svg";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function KeySettingModal({ keyData, onClose, onSave }) {

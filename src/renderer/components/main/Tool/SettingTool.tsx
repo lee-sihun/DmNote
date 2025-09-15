@@ -59,7 +59,7 @@ const SettingTool = ({
     <div className="flex gap-[10px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[0px]">
             <FloatingTooltip content="프리셋 내보내기">
               <Button
                 icon={<FolderIcon />}
@@ -136,7 +136,7 @@ const SettingTool = ({
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-[#0E0E11] rounded-[7px] gap-[5px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
           <FloatingTooltip
             content={isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
           >
@@ -196,8 +196,10 @@ const Button = ({ icon, isSelected = false, onClick }: ButtonProps) => {
   return (
     <button
       type="button"
-      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
-        isSelected ? "bg-[#2A2A31]" : "bg-[#0E0E11] hover:bg-[#1E1E22]"
+      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
+        isSelected
+          ? "bg-button-active"
+          : "bg-button-primary hover:bg-button-hover"
       }`}
       onClick={onClick}
     >
@@ -217,10 +219,10 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
       <button
         ref={ref}
         type="button"
-        className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-[#2A2A31] ${
+        className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-button-active ${
           isSelected
-            ? "bg-[#2A2A31] hover:bg-[#2A2A31]"
-            : "bg-[#0E0E11] hover:bg-[#1E1E22]"
+            ? "bg-button-active hover:bg-button-active"
+            : "bg-button-primary hover:bg-button-hover"
         }`}
         onClick={onClick}
       >

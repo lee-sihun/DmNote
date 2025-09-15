@@ -46,7 +46,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     >
       <button
         type="button"
-        className="flex box-border items-center justify-between py-[2px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-1 outline-none"
+        className="flex box-border items-center justify-between py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none"
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
       >
@@ -82,7 +82,7 @@ const Dropdown: React.FC<DropdownProps> = ({
               <button
                 key={opt.value}
                 type="button"
-                className={`text-left px-[13px] py-[2px] rounded-[7px] text-style-1 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] ${
+                className={`text-left px-[13px] py-[4px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
                   value === opt.value ? "bg-[#1A191E]" : ""
                 }`}
                 onClick={() => {
