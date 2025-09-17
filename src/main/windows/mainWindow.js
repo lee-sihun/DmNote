@@ -18,7 +18,7 @@ class MainWindow {
       },
     });
 
-    this.window.setTitle("DJMax KeyViewer - Settings");
+    this.window.setTitle("DM Note - Settings");
 
     if (process.env.NODE_ENV === "development") {
       this.window.webContents.openDevTools({ mode: "detach" });

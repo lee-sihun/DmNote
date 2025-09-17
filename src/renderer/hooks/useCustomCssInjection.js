@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 
 /**
- * Injects a single <style id="djmv-custom-css"> element into the current window
+ * Injects a single <style id="dmn-custom-css"> element into the current window
  * and keeps it synchronized with the main process via IPC.
  * - Always appended as the last child of <head> to maximize precedence.
  * - Listens to:
@@ -32,10 +32,10 @@ export function useCustomCssInjection() {
     }
 
     // Ensure single style element with stable id
-    let styleEl = document.getElementById("djmv-custom-css");
+    let styleEl = document.getElementById("dmn-custom-css");
     if (!styleEl) {
       styleEl = document.createElement("style");
-      styleEl.id = "djmv-custom-css";
+      styleEl.id = "dmn-custom-css";
       document.head.appendChild(styleEl);
     } else {
       // Move to the end to ensure it's last (highest precedence among normal styles)

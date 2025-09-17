@@ -21,8 +21,12 @@ const ListPopup = ({
   onClose,
   items,
   onSelect,
-  className = "z-30 bg-[#1A191E] rounded-[7px] p-[5px] flex flex-col gap-[5px]",
+  className = "",
 }: ListPopupProps) => {
+  const defaultClassName =
+    "z-30 bg-[#1A191E] rounded-[7px] p-[5px] flex flex-col gap-[5px]";
+  const effectiveClassName = `${defaultClassName} ${className}`.trim();
+
   return (
     <FloatingPopup
       open={open}
@@ -30,7 +34,7 @@ const ListPopup = ({
       placement="top"
       offset={20}
       onClose={onClose}
-      className={className}
+      className={effectiveClassName}
     >
       {items.map((it) => (
         <button

@@ -1,12 +1,9 @@
 import React, { useEffect } from "react";
 import { useSettingsStore } from "@stores/useSettingsStore";
-import Github from "@assets/svgs/github.svg";
-import Bug from "@assets/svgs/code.svg";
 import Checkbox from "@components/main/common/Checkbox";
-import Radio from "@components/main/common/Radio";
 import Dropdown from "@components/main/common/Dropdown";
 
-export default function SettingTab({ showAlert, showConfirm }) {
+export default function Settings({ showAlert, showConfirm }) {
   const {
     hardwareAcceleration,
     setHardwareAcceleration,
@@ -269,7 +266,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
         <div className="flex flex-row gap-[19px]">
           <div className="flex flex-col gap-[10px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
+            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
                 <p className="text-style-3 text-[#FFFFFF]">오버레이 창 고정</p>
                 <Checkbox
@@ -341,7 +338,7 @@ export default function SettingTab({ showAlert, showConfirm }) {
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col p-[19px] bg-[#1A191E] rounded-[7px] gap-[24px]">
+            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
                 <p className="text-style-3 text-[#FFFFFF]">
                   그래픽 렌더링 옵션
@@ -363,29 +360,6 @@ export default function SettingTab({ showAlert, showConfirm }) {
                   데이터 초기화
                 </button>
               </div>
-            </div>
-            {/* 기타 정보 */}
-            <div className="flex justify-between items-center mb-[37px] gap-[19.5px]">
-              <button
-                onClick={() =>
-                  handleClick("https://github.com/lee-sihun/djmax-keyviewer")
-                }
-                className="flex items-center justify-center gap-[7.5px] w-[200px] h-[37px] bg-[#1A191E] rounded-[7px]"
-              >
-                <Github className="flex-shrink-0 mb-[3px]" />
-                <p className="text-style-3 text-[#DBDEE8] truncate">Github</p>
-              </button>
-              <button
-                onClick={() =>
-                  handleClick(
-                    "https://github.com/lee-sihun/djmax-keyviewer/issues"
-                  )
-                }
-                className="flex flex-1 items-center justify-center gap-[7.5px] w-full h-[37px] bg-[#1A191E] rounded-[7px]"
-              >
-                <Bug className="flex-shrink-0 mb-[2px]" />
-                <p className="text-style-3 text-[#DBDEE8] truncate">Report</p>
-              </button>
             </div>
           </div>
         </div>

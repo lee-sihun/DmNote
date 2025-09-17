@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import Checkbox from "@components/main/common/Checkbox";
+import Modal from "../Modal";
 
-export default function NoteSettingModal({ onClose }) {
+export default function NoteSetting({ onClose }) {
   const ipcRenderer = window.electron?.ipcRenderer;
   const [borderRadius, setBorderRadius] = useState(2);
   const [speed, setSpeed] = useState(180);
@@ -62,10 +63,7 @@ export default function NoteSettingModal({ onClose }) {
   };
 
   return (
-    <div
-      className="fixed top-[41px] left-[1px] flex items-center justify-center w-[896px] h-[451px] bg-[#000000] bg-opacity-[0.31] backdrop-blur-[37.5px] rounded-b-[6px]"
-      onClick={onClose}
-    >
+    <Modal onClick={onClose}>
       <div
         className="flex flex-col items-center justify-center w-[334.5px] p-[25px] bg-[#1C1E25] border border-[#3B4049] rounded-[6px]"
         onClick={(e) => e.stopPropagation()}
@@ -208,6 +206,6 @@ export default function NoteSettingModal({ onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

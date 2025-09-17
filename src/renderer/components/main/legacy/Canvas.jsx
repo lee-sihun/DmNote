@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import Grid from "./Grid";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
-import CustomAlert from "@components/CustomAlert";
+import CustomAlert from "@components/main/modal/content/Alert";
 import NoteSettingModal from "./NoteSettingModal";
 
 export default function Canvas() {

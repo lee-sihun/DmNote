@@ -21,21 +21,13 @@ export default function TitleBar() {
           onClick={handleMinimize}
           className="w-[50px] h-full flex justify-center items-center hover:bg-[#21232B] active:bg-[#282B35] transition-colors"
         >
-          <object
-            type="image/svg+xml"
-            data={Minimize}
-            className="scale-[0.9] pointer-events-none"
-          />
+          <Minimize className="scale-[0.9] pointer-events-none" />
         </button>
         <button
           onClick={handleClose}
           className="w-[50px] h-full flex justify-center items-center hover:bg-[#501D1E] active:bg-[#5A2829] transition-colors rounded-tr-[6px]"
         >
-          <object
-            type="image/svg+xml"
-            data={Close}
-            className="scale-[0.8] pointer-events-none"
-          />
+          <Close className="scale-[0.8] pointer-events-none" />
         </button>
       </div>
     </div>

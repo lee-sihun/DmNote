@@ -1,6 +1,7 @@
 import React from "react";
+import Modal from "../Modal";
 
-export default function CustomAlert({
+export default function Alert({
   isOpen,
   message,
   type = "alert", // "alert" or "confirm"
@@ -13,10 +14,7 @@ export default function CustomAlert({
   const isConfirm = type === "confirm";
 
   return (
-    <div
-      className="fixed top-[40px] left-[1px] flex items-center justify-center w-[900px] h-[387px] bg-[#000000] bg-opacity-[0.31] backdrop-blur-[37.5px] z-50"
-      onClick={onCancel}
-    >
+    <Modal onClick={onCancel} width="900px" height="387px" top="40px">
       <div
         className="flex flex-col justify-between w-[423px] h-auto p-[56px] pb-[50px] bg-[#1C1E25] border border-[#3B4049] rounded-[9px]"
         onClick={(e) => e.stopPropagation()}
@@ -44,6 +42,6 @@ export default function CustomAlert({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,7 +5,7 @@ module.exports = {
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
     transparent: false,
-    backgroundColor: "rgba(0,0,0,0)",
+    backgroundColor: "#1A191E",
     hasShadow: true,
     resizable: false,
     maximizable: false,

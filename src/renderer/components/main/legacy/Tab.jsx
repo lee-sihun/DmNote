@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Setting from "@assets/svgs/setting.svg";
-import SettingTab from "../SettingTab";
+import SettingTab from "../Settings";
 import Canvas from "./Canvas";
-import CustomAlert from "@components/CustomAlert";
+import CustomAlert from "@components/main/modal/content/Alert";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function Tab() {

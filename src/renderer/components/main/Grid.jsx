@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import DraggableKey from "@components/Key";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import Palette from "./Palette";
-import KeySettingModal from "./KeySettingModal";
+import KeySettingModal from "./modal/content/KeySetting";
 import { useKeyStore } from "@stores/useKeyStore.js";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
@@ -62,7 +62,7 @@ export default function Grid({
   useEffect(() => {
     const handleReset = (e, data) => {
       // if (data.positions) {
-        
+
       // }
       if (data.color) {
         onColorChange(data.color);

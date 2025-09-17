@@ -3,11 +3,11 @@ import TitleBar from "@components/main/TitleBar";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 import ToolBar from "@components/main/tool/ToolBar";
 import Grid from "@components/main/Grid";
-import SettingTab from "@components/main/SettingTab";
+import SettingTab from "@components/main/Settings";
 import { useKeyManager } from "@hooks/useKeyManager";
 import { usePalette } from "@hooks/usePalette";
-import CustomAlert from "@components/CustomAlert";
-import NoteSettingModal from "@components/main/NoteSettingModal";
+import CustomAlert from "@components/main/modal/content/Alert";
+import NoteSettingModal from "@components/main/modal/content/NoteSetting";
 import { useSettingsStore } from "@stores/useSettingsStore";
 
 export default function App() {
