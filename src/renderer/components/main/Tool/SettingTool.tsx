@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ReactComponent as FolderIcon } from "@assets/svgs/folder.svg";
-import { ReactComponent as SettingIcon } from "@assets/svgs/setting.svg";
-import { ReactComponent as CloseEyeIcon } from "@assets/svgs/close_eye.svg";
-import { ReactComponent as OpenEyeIcon } from "@assets/svgs/open_eye.svg";
-import { ReactComponent as ChevronDownIcon } from "@assets/svgs/chevron-down.svg";
-import { ReactComponent as TurnIcon } from "@assets/svgs/turn_arrow.svg";
+import FolderIcon from "@assets/svgs/folder.svg";
+import SettingIcon from "@assets/svgs/setting.svg";
+import CloseEyeIcon from "@assets/svgs/close_eye.svg";
+import OpenEyeIcon from "@assets/svgs/open_eye.svg";
+import ChevronDownIcon from "@assets/svgs/chevron-down.svg";
+import TurnIcon from "@assets/svgs/turn_arrow.svg";
 import FloatingTooltip from "../modal/FloatingTooltip";
 import ListPopup, { ListItem } from "../modal/ListPopup";
 import { TooltipGroup } from "../modal/TooltipGroup";

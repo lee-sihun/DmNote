@@ -59,10 +59,10 @@ class MainWindow {
   loadContent() {
     const isDev = process.env.NODE_ENV === "development";
     if (isDev) {
-      this.window.loadURL("http://localhost:3000/index.html");
+      this.window.loadURL("http://localhost:3000/main/index.html");
     } else {
       this.window.loadFile(
-        path.join(__dirname, "..", "..", "..", "dist", "renderer", "index.html")
+        path.join(__dirname, "..", "..", "..", "dist", "renderer", "main", "index.html")
       );
     }
   }

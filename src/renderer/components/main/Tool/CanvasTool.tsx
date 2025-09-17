@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { ReactComponent as MoveIcon } from "@assets/svgs/move.svg";
-import { ReactComponent as EraserIcon } from "@assets/svgs/eraser.svg";
-import { ReactComponent as LayerIcon } from "@assets/svgs/layer.svg";
-import { ReactComponent as PrimaryIcon } from "@assets/svgs/primary.svg";
-import { ReactComponent as BroomIcon } from "@assets/svgs/broom.svg";
+import MoveIcon from "@assets/svgs/move.svg";
+import EraserIcon from "@assets/svgs/eraser.svg";
+import LayerIcon from "@assets/svgs/layer.svg";
+import PrimaryIcon from "@assets/svgs/primary.svg";
+import BroomIcon from "@assets/svgs/broom.svg";
 import FloatingTooltip from "../modal/FloatingTooltip";
 import { TooltipGroup } from "../modal/TooltipGroup";
 
