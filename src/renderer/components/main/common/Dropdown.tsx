@@ -54,8 +54,8 @@ const Dropdown: React.FC<DropdownProps> = ({
           {selected ? selected.label : placeholder}
         </span>
         <svg
-          width="7"
-          height="4"
+          width="8"
+          height="5"
           viewBox="0 0 14 8"
           fill="none"
           className={`ml-[5px] transition-transform duration-200 ${
@@ -82,8 +82,8 @@ const Dropdown: React.FC<DropdownProps> = ({
               <button
                 key={opt.value}
                 type="button"
-                className={`text-left px-[13px] py-[4px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
-                  value === opt.value ? "bg-[#1A191E]" : ""
+                className={`text-left w-full px-[13px] py-[4px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
+                  value === opt.value ? "bg-[#24232A] pointer-events-none" : ""
                 }`}
                 onClick={() => {
                   onChange(opt.value);

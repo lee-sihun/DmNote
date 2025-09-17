@@ -14,28 +14,28 @@ export default function Alert({
   const isConfirm = type === "confirm";
 
   return (
-    <Modal onClick={onCancel} width="900px" height="387px" top="40px">
+    <Modal onClick={onCancel}>
       <div
-        className="flex flex-col justify-between w-[423px] h-auto p-[56px] pb-[50px] bg-[#1C1E25] border border-[#3B4049] rounded-[9px]"
+        className="flex flex-col justify-between p-[20px] gap-[19px] bg-[#1A191E] rounded-[7px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 */}
-        <div className="text-white text-[19px] font-medium leading-[24px] text-center mb-[50px]">
+        <div className="max-w-[235.5px] text-center text-[#FFFFFF] text-style-3 !leading-[20px]">
           {message}
         </div>
 
         {/* 버튼들 */}
-        <div className="flex gap-[16.5px]">
+        <div className="flex gap-[10.5px]">
           <button
             onClick={onConfirm}
-            className="flex-1 h-[31.5px] px-[24px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
+            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
             {confirmText}
           </button>
           {isConfirm && (
             <button
               onClick={onCancel}
-              className="flex-1 h-[31.5px] px-[24px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
+              className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             >
               취소
             </button>

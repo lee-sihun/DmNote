@@ -1,45 +1,30 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Checkbox from "@components/main/common/Checkbox";
 import Modal from "../Modal";
 
-export default function NoteSetting({ onClose }) {
-  const ipcRenderer = window.electron?.ipcRenderer;
-  const [borderRadius, setBorderRadius] = useState(2);
-  const [speed, setSpeed] = useState(180);
-  const [trackHeight, setTrackHeight] = useState("150");
-  const [reverse, setReverse] = useState(false);
-  const [fadePosition, setFadePosition] = useState("auto");
-
-  useEffect(() => {
-    if (!ipcRenderer) return;
-    ipcRenderer
-      .invoke("get-note-settings")
-      .then((settings) => {
-        if (settings) {
-          setBorderRadius(
-            Number.isFinite(Number(settings.borderRadius))
-              ? Number(settings.borderRadius)
-              : 2
-          );
-          setSpeed(
-            Number.isFinite(Number(settings.speed))
-              ? Number(settings.speed)
-              : 180
-          );
-          setTrackHeight(
-            Number.isFinite(Number(settings.trackHeight))
-              ? String(settings.trackHeight)
-              : "150"
-          );
-          setReverse(Boolean(settings.reverse || false));
-          setFadePosition(settings.fadePosition || "auto");
-        }
-      })
-      .catch(() => {});
-  }, [ipcRenderer]);
+export default function NoteSetting({ onClose, settings, onSave }) {
+  const initial = settings || {};
+  const [borderRadius, setBorderRadius] = useState(
+    Number.isFinite(Number(initial.borderRadius))
+      ? Number(initial.borderRadius)
+      : 2
+  );
+  const [speed, setSpeed] = useState(
+    Number.isFinite(Number(initial.speed)) ? Number(initial.speed) : 180
+  );
+  const [trackHeight, setTrackHeight] = useState(
+    String(
+      Number.isFinite(Number(initial.trackHeight))
+        ? Number(initial.trackHeight)
+        : 150
+    )
+  );
+  const [reverse, setReverse] = useState(Boolean(initial.reverse || false));
+  const [fadePosition, setFadePosition] = useState(
+    initial.fadePosition || "auto"
+  );
 
   const handleSave = async () => {
-    if (!ipcRenderer) return onClose?.();
     const parsedTrack = parseInt(trackHeight);
     const clientTrack = Number.isFinite(parsedTrack)
       ? Math.min(Math.max(parsedTrack, 50), 500)
@@ -49,14 +34,12 @@ export default function NoteSetting({ onClose }) {
       borderRadius: Math.max(1, Math.min(parseInt(borderRadius || 1), 100)),
       speed: Math.max(70, Math.min(parseInt(speed || 70), 1000)),
       trackHeight: clientTrack,
-      reverse: reverse,
-      fadePosition: fadePosition,
+      reverse,
+      fadePosition,
     };
     try {
-      const ok = await ipcRenderer.invoke("update-note-settings", normalized);
-      if (ok) {
-        onClose?.();
-      }
+      await onSave?.(normalized);
+      onClose?.();
     } catch (e) {
       onClose?.();
     }
@@ -99,7 +82,6 @@ export default function NoteSetting({ onClose }) {
               }}
               className="text-center w-[60px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
-            {/* <p className="text-[#989BA6] text-[13.5px] font-bold">px</p> */}
           </div>
         </div>
 
@@ -134,7 +116,6 @@ export default function NoteSetting({ onClose }) {
               }}
               className="text-center w-[60px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
             />
-            {/* <p className="text-[#989BA6] text-[13.5px] font-bold">px/s</p> */}
           </div>
         </div>
 
@@ -187,7 +168,11 @@ export default function NoteSetting({ onClose }) {
             노트 효과 리버스
           </p>
           <div className="mr-[16.5px]">
-            <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
+            <Checkbox
+              checked={reverse}
+              onChange={() => setReverse(!reverse)}
+              // suppressInitialAnimation
+            />
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import TitleBar from "@components/main/TitleBar";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 import ToolBar from "@components/main/tool/ToolBar";
@@ -30,6 +30,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState("move");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
+  const [noteSettings, setNoteSettings] = useState(null);
   const { noteEffect } = useSettingsStore();
   const confirmCallbackRef = useRef(null);
   const [alertState, setAlertState] = useState({
@@ -38,6 +39,28 @@ export default function App() {
     confirmText: "확인",
     type: "alert",
   });
+
+  useEffect(() => {
+    const ipcRenderer = window.electron?.ipcRenderer;
+    if (!ipcRenderer) return;
+
+    ipcRenderer
+      .invoke("get-note-settings")
+      .then((settings) => {
+        setNoteSettings(settings);
+      })
+      .catch(() => {});
+
+    ipcRenderer.send("get-hardware-acceleration");
+    ipcRenderer.send("get-always-on-top");
+    ipcRenderer.send("get-overlay-lock");
+    ipcRenderer.send("get-note-effect");
+
+    ipcRenderer.invoke("get-angle-mode").then((mode) => {});
+    ipcRenderer.invoke("get-use-custom-css").then((enabled) => {});
+    ipcRenderer.invoke("get-custom-css").then((data) => {});
+    ipcRenderer.invoke("get-overlay-resize-anchor").then((val) => {});
+  }, []);
 
   const showAlert = (message) =>
     setAlertState({
@@ -66,7 +89,6 @@ export default function App() {
   return (
     <div className="bg-[#111012] w-full h-full flex flex-col overflow-hidden rounded-[7px] border border-[rgba(255,255,255,0.1)]">
       <TitleBar />
-      {/* <Tab /> */}
       <div className="flex-1 bg-[#2A2A31] overflow-hidden">
         {isSettingsOpen ? (
           <div className="h-full overflow-y-auto">
@@ -120,8 +142,25 @@ export default function App() {
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
       />
-      {noteEffect && isNoteSettingOpen && (
-        <NoteSettingModal onClose={() => setIsNoteSettingOpen(false)} />
+      {noteEffect && isNoteSettingOpen && noteSettings && (
+        <NoteSettingModal
+          settings={noteSettings}
+          onClose={() => setIsNoteSettingOpen(false)}
+          onSave={async (normalized) => {
+            const ipcRenderer = window.electron?.ipcRenderer;
+            if (ipcRenderer) {
+              try {
+                const ok = await ipcRenderer.invoke(
+                  "update-note-settings",
+                  normalized
+                );
+                if (ok) {
+                  setNoteSettings(normalized);
+                }
+              } catch (e) {}
+            }
+          }}
+        />
       )}
       <CustomAlert
         isOpen={alertState.isOpen}
