@@ -12,6 +12,8 @@ type FloatingPopupProps = {
   referenceRef?: React.RefObject<HTMLElement>;
   placement?: any;
   offset?: number;
+  offsetX?: number;
+  offsetY?: number;
   onClose?: () => void;
   className?: string;
   children?: React.ReactNode;
@@ -22,6 +24,8 @@ const FloatingPopup = ({
   referenceRef,
   placement = "top",
   offset = 20,
+  offsetX = 0,
+  offsetY = 0,
   onClose,
   className = "",
   children,
@@ -74,8 +78,12 @@ const FloatingPopup = ({
   return (
     <div
       ref={refs.setFloating as any}
-      style={{ position: strategy, left: x ?? 0, top: y ?? 0 }}
-      className={className}
+      style={{
+        position: strategy,
+        left: (x ?? 0) + offsetX,
+        top: (y ?? 0) + offsetY,
+      }}
+      className={`${className} tooltip-fade-in`}
       role="dialog"
       aria-modal="false"
     >

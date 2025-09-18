@@ -13,6 +13,8 @@ type ListPopupProps = {
   items: ListItem[];
   onSelect?: (id: string) => void;
   className?: string;
+  offsetX?: number;
+  offsetY?: number;
 };
 
 const ListPopup = ({
@@ -22,6 +24,8 @@ const ListPopup = ({
   items,
   onSelect,
   className = "",
+  offsetX = 0,
+  offsetY = 0,
 }: ListPopupProps) => {
   const defaultClassName =
     "z-30 bg-[#1A191E] rounded-[7px] p-[5px] flex flex-col gap-[5px]";
@@ -33,6 +37,8 @@ const ListPopup = ({
       referenceRef={referenceRef}
       placement="top"
       offset={25}
+      offsetX={offsetX}
+      offsetY={offsetY}
       onClose={onClose}
       className={effectiveClassName}
     >

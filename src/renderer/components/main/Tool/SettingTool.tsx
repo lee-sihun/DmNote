@@ -175,7 +175,7 @@ const SettingTool = ({
                         onOpenNoteSetting?.();
                       }
                     }}
-                    className="translate-x-[-10px]"
+                    offsetX={-10}
                   />
                 </div>
               </>

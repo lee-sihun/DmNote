@@ -29,10 +29,10 @@ body,
 .grid-bg {
   background-image: linear-gradient(
       to right,
-      rgb(25, 25, 28 ) 1px,
+      rgb(25, 25, 28) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, rgb(25, 25, 28 ) 1px, transparent 1px);
+    linear-gradient(to bottom, rgb(25, 25, 28) 1px, transparent 1px);
   background-size: 5px 5px;
 }
 
@@ -111,4 +111,27 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .tooltip-fade-in {
   animation: tooltipFadeIn 120ms ease-out;
+}
+
+@keyframes modalScale {
+  from {
+    transform: scale(0.95);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.animate-modal-scale {
+  animation: modalScale 120ms ease-out forwards;
+}
+
+@keyframes modalFade {
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-modal-fade {
+  animation: modalFade 60ms ease-out forwards;
 }
