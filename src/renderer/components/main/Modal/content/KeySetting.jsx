@@ -2,8 +2,10 @@ import React, { useEffect, useState, useRef } from "react";
 import { getKeyInfo, getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import Modal from "../Modal";
+import { useTranslation } from "react-i18next";
 
 export default function KeySetting({ keyData, onClose, onSave }) {
+  const { t } = useTranslation();
   const {
     useCustomCSS,
     setUseCustomCSS,
@@ -163,16 +165,20 @@ export default function KeySetting({ keyData, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">키 매핑</p>
+          <p className="text-white text-style-2">
+            {t("keySetting.keyMapping")}
+          </p>
           <button
             onClick={() => setIsListening(true)}
             className="flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-2"
           >
-            {isListening ? "Press any key" : displayKey || "Click to set key"}
+            {isListening
+              ? t("keySetting.pressAnyKey")
+              : displayKey || t("keySetting.clickToSet")}
           </button>
         </div>
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">키 사이즈</p>
+          <p className="text-white text-style-2">{t("keySetting.keySize")}</p>
           <div className="flex items-center gap-[10.5px]">
             <div className="relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
               <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
@@ -238,7 +244,9 @@ export default function KeySetting({ keyData, onClose, onSave }) {
         {noteEffect && (
           <>
             <div className="flex justify-between w-full items-center">
-              <p className="text-white text-style-2">노트 색상</p>
+              <p className="text-white text-style-2">
+                {t("keySetting.noteColor")}
+              </p>
               <div className="relative w-[76px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
                 <div
                   className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
@@ -256,7 +264,9 @@ export default function KeySetting({ keyData, onClose, onSave }) {
             </div>
             {/* 노트 투명도 설정 추가 */}
             <div className="flex justify-between w-full items-center">
-              <p className="text-white text-style-2">노트 투명도</p>
+              <p className="text-white text-style-2">
+                {t("keySetting.noteOpacity")}
+              </p>
               <input
                 type="text"
                 value={displayNoteOpacity}
@@ -293,7 +303,9 @@ export default function KeySetting({ keyData, onClose, onSave }) {
         {/* 입력/대기 이미지 */}
         <div className="flex justify-between w-full items-center">
           <div className="flex items-center justify-between gap-[20px]">
-            <p className="text-white text-style-2">대기 상태</p>
+            <p className="text-white text-style-2">
+              {t("keySetting.inactiveState")}
+            </p>
             <input
               type="file"
               accept="image/*"
@@ -315,7 +327,9 @@ export default function KeySetting({ keyData, onClose, onSave }) {
             ></button>
           </div>
           <div className="flex items-center justify-between gap-[20px]">
-            <p className="text-white text-style-2">입력 상태</p>
+            <p className="text-white text-style-2">
+              {t("keySetting.activeState")}
+            </p>
             <input
               type="file"
               accept="image/*"
@@ -338,7 +352,9 @@ export default function KeySetting({ keyData, onClose, onSave }) {
         {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
         {useCustomCSS && (
           <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">클래스 이름</p>
+            <p className="text-white text-style-2">
+              {t("keySetting.className")}
+            </p>
             <input
               key="classNameUnified"
               type="text"
@@ -355,13 +371,13 @@ export default function KeySetting({ keyData, onClose, onSave }) {
             onClick={handleSubmit}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            저장
+            {t("keySetting.save")}
           </button>
           <button
             onClick={onClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            취소
+            {t("keySetting.cancel")}
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import TabTool from "./TabTool";
 import Github from "@assets/svgs/github.svg";
 import Bug from "@assets/svgs/code.svg";
 import { TooltipGroup } from "../modal/TooltipGroup";
+import { useTranslation } from "react-i18next";
 import FloatingTooltip from "../modal/FloatingTooltip";
 
 type Props = {
@@ -35,6 +36,7 @@ const ToolBar = ({
   onOpenNoteSetting,
   primaryButtonRef,
 }: Props) => {
+  const { t } = useTranslation();
   const handleClick = (link: string) => {
     window.electron.ipcRenderer.send("open-external", link);
   };
@@ -46,7 +48,7 @@ const ToolBar = ({
       {isSettingsOpen ? (
         <TooltipGroup>
           <div className="flex gap-[10px]">
-            <FloatingTooltip content="깃허브">
+            <FloatingTooltip content={t("tooltip.github")}>
               <button
                 onClick={() =>
                   handleClick("https://github.com/lee-sihun/DmNote")
@@ -58,7 +60,7 @@ const ToolBar = ({
                 </div>
               </button>
             </FloatingTooltip>
-            <FloatingTooltip content="이슈 신고">
+            <FloatingTooltip content={t("tooltip.issue")}>
               <button
                 onClick={() =>
                   handleClick("https://github.com/lee-sihun/DmNote/issues")
@@ -67,7 +69,10 @@ const ToolBar = ({
               >
                 <div className="flex h-full w-full items-center justify-center gap-[8px] rounded-[7px] hover:bg-button-hover active:bg-button-active">
                   <Bug className="flex-shrink-0" />
-                  <p className="text-style-3 text-[#DBDEE8] truncate">Report</p>
+                  <p className="text-style-3 text-[#DBDEE8] truncate">
+                    {/* {t("tooltip.issue")} */}
+                    Report
+                  </p>
                 </div>
               </button>
             </FloatingTooltip>

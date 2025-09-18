@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import TitleBar from "@components/main/TitleBar";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 import ToolBar from "@components/main/tool/ToolBar";
@@ -35,7 +36,13 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
   const [noteSettings, setNoteSettings] = useState(null);
-  const { noteEffect } = useSettingsStore();
+  const {
+    noteEffect,
+    angleMode,
+    setAngleMode,
+    language: storeLanguage,
+    setLanguage,
+  } = useSettingsStore();
   const confirmCallbackRef = useRef(null);
   const [alertState, setAlertState] = useState({
     isOpen: false,
@@ -43,6 +50,7 @@ export default function App() {
     confirmText: "확인",
     type: "alert",
   });
+  const { t } = useTranslation();
 
   useEffect(() => {
     const ipcRenderer = window.electron?.ipcRenderer;
@@ -60,10 +68,28 @@ export default function App() {
     ipcRenderer.send("get-overlay-lock");
     ipcRenderer.send("get-note-effect");
 
-    ipcRenderer.invoke("get-angle-mode").then((mode) => {});
+    ipcRenderer.invoke("get-angle-mode").then((mode) => {
+      if (mode && mode !== angleMode) {
+        setAngleMode(mode);
+      }
+    });
     ipcRenderer.invoke("get-use-custom-css").then((enabled) => {});
     ipcRenderer.invoke("get-custom-css").then((data) => {});
     ipcRenderer.invoke("get-overlay-resize-anchor").then((val) => {});
+    ipcRenderer.invoke("get-language").then((lng) => {
+      if (lng && lng !== storeLanguage) {
+        setLanguage(lng);
+      }
+    });
+
+    const languageUpdateHandler = (_, lng) => {
+      if (lng && lng !== storeLanguage) setLanguage(lng);
+    };
+    ipcRenderer.on("update-language", languageUpdateHandler);
+
+    return () => {
+      ipcRenderer.removeListener("update-language", languageUpdateHandler);
+    };
   }, []);
 
   const showAlert = (message) =>
@@ -71,10 +97,14 @@ export default function App() {
       isOpen: true,
       message,
       type: "alert",
-      confirmText: "확인",
+      confirmText: t("common.confirm"),
     });
 
-  const showConfirm = (message, onConfirm, confirmText = "확인") => {
+  const showConfirm = (
+    message,
+    onConfirm,
+    confirmText = t("common.confirm")
+  ) => {
     confirmCallbackRef.current =
       typeof onConfirm === "function" ? onConfirm : null;
     setAlertState({ isOpen: true, message, confirmText, type: "confirm" });
@@ -84,7 +114,7 @@ export default function App() {
     setAlertState({
       isOpen: false,
       message: "",
-      confirmText: "확인",
+      confirmText: t("common.confirm"),
       type: "alert",
     });
     confirmCallbackRef.current = null;
@@ -129,9 +159,9 @@ export default function App() {
         isPaletteOpen={palette}
         onResetCurrentMode={() =>
           showConfirm(
-            "현재 탭의 설정을 초기화하시겠습니까?",
+            t("confirm.resetCurrentTab"),
             handleResetCurrentMode,
-            "초기화"
+            t("confirm.reset")
           )
         }
         activeTool={activeTool}

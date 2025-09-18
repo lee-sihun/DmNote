@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import DraggableKey from "@components/Key";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import KeySettingModal from "./modal/content/KeySetting";
@@ -19,6 +20,7 @@ export default function Grid({
 }) {
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
   const { noteEffect, setNoteEffect } = useSettingsStore();
+  const { t } = useTranslation();
   const ipcRenderer = window.electron.ipcRenderer;
   const [initialLoaded, setInitialLoaded] = useState(false);
 
@@ -97,9 +99,9 @@ export default function Grid({
           const displayName =
             getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
           showConfirm(
-            `[${displayName}] 키를 제거하시겠습니까?`,
+            t("confirm.removeKey", { name: displayName }),
             () => onKeyDelete(index),
-            "제거하기"
+            t("confirm.remove")
           );
         }}
       />

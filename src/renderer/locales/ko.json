@@ -1,0 +1,94 @@
+{
+  "settings": {
+    "overlayLock": "오버레이 창 고정",
+    "alwaysOnTop": "항상 위에 표시",
+    "noteEffect": "노트 효과 표시",
+    "customCSS": "커스텀 CSS 활성화",
+    "noCssFile": "(CSS 파일이 선택되지 않았습니다)",
+    "loadCss": "CSS 파일 불러오기",
+    "resizeAnchor": "리사이즈 기준점",
+    "topLeft": "좌상단",
+    "bottomLeft": "좌하단",
+    "topRight": "우상단",
+    "bottomRight": "우하단",
+    "center": "가운데",
+    "graphicsOption": "그래픽 렌더링 옵션",
+    "renderMode": "렌더링 모드 선택",
+    "resetData": "데이터 초기화",
+    "restartConfirm": "설정을 적용하려면 재시작해야 합니다. 지금 재시작하시겠습니까?",
+    "resetAllConfirm": "모든 설정을 초기화하시겠습니까?",
+    "initialize": "초기화",
+    "cssLoaded": "CSS 파일이 로드되었습니다.",
+    "cssLoadFailed": "CSS 파일 로드 실패: ",
+    "language": "언어 설정",
+    "selectLanguage": "언어 선택",
+    "selectAnchor": "기준점 선택"
+  },
+  "keySetting": {
+    "keyMapping": "키 매핑",
+    "pressAnyKey": "Press any key",
+    "clickToSet": "Click to set key",
+    "keySize": "키 사이즈",
+    "noteColor": "노트 색상",
+    "noteOpacity": "노트 투명도",
+    "inactiveState": "대기 상태",
+    "activeState": "입력 상태",
+    "className": "클래스 이름",
+    "save": "저장",
+    "cancel": "취소"
+  },
+  "noteSetting": {
+    "borderRadius": "라운딩",
+    "speed": "속도",
+    "trackHeight": "트랙 높이",
+    "fadePosition": "페이드 위치",
+    "auto": "자동",
+    "top": "상단",
+    "bottom": "하단",
+    "reverseEffect": "리버스 효과",
+    "save": "저장",
+    "cancel": "취소"
+  },
+  "common": {
+    "confirm": "확인",
+    "cancel": "취소",
+    "ok": "확인"
+  },
+  "tooltip": {
+    "github": "깃허브",
+    "issue": "이슈 신고",
+    "move": "키 이동",
+    "eraser": "키 삭제",
+    "addKey": "키 추가",
+    "palette": "캔버스 색상",
+    "resetCurrentTab": "초기화",
+    "exportPreset": "프리셋 내보내기",
+    "importExport": "불러오기/내보내기",
+    "overlayClose": "오버레이 닫기",
+    "overlayOpen": "오버레이 열기",
+    "back": "돌아가기",
+    "settings": "설정",
+    "etcSettings": "기타 설정",
+    "noteSettings": "노트 설정"
+  },
+  "preset": {
+    "import": "불러오기",
+    "export": "내보내기",
+    "saveSuccess": "프리셋이 저장되었습니다.",
+    "saveFail": "프리셋 저장에 실패했습니다.",
+    "loadSuccess": "프리셋이 로드되었습니다.",
+    "loadFail": "프리셋 로드에 실패했습니다."
+  },
+  "mode": {
+    "button4": "4버튼",
+    "button5": "5버튼",
+    "button6": "6버튼",
+    "button8": "8버튼"
+  },
+  "confirm": {
+    "resetCurrentTab": "현재 탭의 설정을 초기화하시겠습니까?",
+    "reset": "초기화",
+    "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
+    "remove": "제거하기"
+  }
+}

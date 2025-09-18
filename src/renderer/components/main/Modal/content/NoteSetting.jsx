@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
 import Modal from "../Modal";
+import { useTranslation } from "react-i18next";
 
 export default function NoteSetting({ onClose, settings, onSave }) {
+  const { t } = useTranslation();
   const initial = settings || {};
   const [borderRadius, setBorderRadius] = useState(
     Number.isFinite(Number(initial.borderRadius))
@@ -24,9 +26,9 @@ export default function NoteSetting({ onClose, settings, onSave }) {
   );
 
   const fadeOptions = [
-    { label: "자동", value: "auto" },
-    { label: "상단", value: "top" },
-    { label: "하단", value: "bottom" },
+    { label: t("noteSetting.auto"), value: "auto" },
+    { label: t("noteSetting.top"), value: "top" },
+    { label: t("noteSetting.bottom"), value: "bottom" },
   ];
 
   const handleSave = async () => {
@@ -52,7 +54,9 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">라운딩</p>
+          <p className="text-white text-style-2">
+            {t("noteSetting.borderRadius")}
+          </p>
           <input
             type="number"
             min={1}
@@ -82,7 +86,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">속도</p>
+          <p className="text-white text-style-2">{t("noteSetting.speed")}</p>
           <input
             type="number"
             min={70}
@@ -112,7 +116,9 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">트랙 높이</p>
+          <p className="text-white text-style-2">
+            {t("noteSetting.trackHeight")}
+          </p>
           <input
             type="number"
             min={50}
@@ -142,17 +148,21 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">페이드 위치</p>
+          <p className="text-white text-style-2">
+            {t("noteSetting.fadePosition")}
+          </p>
           <Dropdown
             options={fadeOptions}
             value={fadePosition}
             onChange={setFadePosition}
-            placeholder="선택"
+            placeholder={t("noteSetting.select")}
           />
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">리버스 효과</p>
+          <p className="text-white text-style-2">
+            {t("noteSetting.reverseEffect")}
+          </p>
           <Checkbox checked={reverse} onChange={() => setReverse(!reverse)} />
         </div>
 
@@ -161,13 +171,13 @@ export default function NoteSetting({ onClose, settings, onSave }) {
             onClick={handleSave}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            저장
+            {t("noteSetting.save")}
           </button>
           <button
             onClick={onClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            취소
+            {t("noteSetting.cancel")}
           </button>
         </div>
       </div>

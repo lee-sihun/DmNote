@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import FolderIcon from "@assets/svgs/folder.svg";
 import SettingIcon from "@assets/svgs/setting.svg";
 import CloseEyeIcon from "@assets/svgs/close_eye.svg";
@@ -25,6 +26,7 @@ const SettingTool = ({
   showAlert,
   onOpenNoteSetting,
 }: SettingToolProps) => {
+  const { t } = useTranslation();
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [isNoteSettingsOpen, setIsNoteSettingsOpen] = useState(false);
   const [isExportImportOpen, setIsExportImportOpen] = useState(false);
@@ -60,7 +62,7 @@ const SettingTool = ({
       {!isSettingsOpen && (
         <TooltipGroup>
           <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[0px]">
-            <FloatingTooltip content="프리셋 내보내기">
+            <FloatingTooltip content={t("tooltip.exportPreset")}>
               <Button
                 icon={<FolderIcon />}
                 onClick={async () => {
@@ -83,7 +85,7 @@ const SettingTool = ({
             </FloatingTooltip>
 
             <FloatingTooltip
-              content="불러오기/내보내기"
+              content={t("tooltip.importExport")}
               disabled={isExportImportOpen}
             >
               <ChevronButton
@@ -98,8 +100,8 @@ const SettingTool = ({
                 referenceRef={exportImportRef}
                 onClose={() => setIsExportImportOpen(false)}
                 items={[
-                  { id: "import", label: "불러오기" },
-                  { id: "export", label: "내보내기" },
+                  { id: "import", label: t("preset.import") },
+                  { id: "export", label: t("preset.export") },
                 ]}
                 onSelect={async (id) => {
                   try {
@@ -108,26 +110,19 @@ const SettingTool = ({
                         "load-preset"
                       );
                       showAlert?.(
-                        ok
-                          ? "프리셋이 로드되었습니다."
-                          : "프리셋 로드에 실패했습니다."
+                        ok ? t("preset.loadSuccess") : t("preset.loadFail")
                       );
                     } else if (id === "export") {
                       const ok = await window.electron.ipcRenderer.invoke(
                         "save-preset"
                       );
                       showAlert?.(
-                        ok
-                          ? "프리셋이 저장되었습니다."
-                          : "프리셋 저장에 실패했습니다."
+                        ok ? t("preset.saveSuccess") : t("preset.saveFail")
                       );
                     }
                   } catch {
-                    if (id === "import") {
-                      showAlert?.("프리셋 로드에 실패했습니다.");
-                    } else if (id === "export") {
-                      showAlert?.("프리셋 저장에 실패했습니다.");
-                    }
+                    if (id === "import") showAlert?.(t("preset.loadFail"));
+                    else if (id === "export") showAlert?.(t("preset.saveFail"));
                   }
                 }}
               />
@@ -138,7 +133,11 @@ const SettingTool = ({
       <TooltipGroup>
         <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
           <FloatingTooltip
-            content={isOverlayVisible ? "오버레이 닫기" : "오버레이 열기"}
+            content={
+              isOverlayVisible
+                ? t("tooltip.overlayClose")
+                : t("tooltip.overlayOpen")
+            }
           >
             <Button
               icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
@@ -146,7 +145,11 @@ const SettingTool = ({
             />
           </FloatingTooltip>
           <div className="flex items-center">
-            <FloatingTooltip content={isSettingsOpen ? "돌아가기" : "설정"}>
+            <FloatingTooltip
+              content={
+                isSettingsOpen ? t("tooltip.back") : t("tooltip.settings")
+              }
+            >
               <Button
                 icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
@@ -155,7 +158,7 @@ const SettingTool = ({
             {noteEffect && (
               <>
                 <FloatingTooltip
-                  content="기타 설정"
+                  content={t("tooltip.etcSettings")}
                   disabled={isNoteSettingsOpen}
                 >
                   <ChevronButton
@@ -169,7 +172,7 @@ const SettingTool = ({
                     open={isNoteSettingsOpen}
                     referenceRef={noteSettingsRef}
                     onClose={() => setIsNoteSettingsOpen(false)}
-                    items={[{ id: "note", label: "노트 설정" }]}
+                    items={[{ id: "note", label: t("tooltip.noteSettings") }]}
                     onSelect={(id) => {
                       if (id === "note") {
                         onOpenNoteSetting?.();

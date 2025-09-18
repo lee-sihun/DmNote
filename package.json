@@ -73,9 +73,11 @@
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
     "electron-store": "^8.2.0",
+    "i18next": "^25.5.2",
     "node-global-key-listener-extended": "github:lee-sihun/node-global-key-listener",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-i18next": "^15.7.3",
     "three": "^0.180.0",
     "zustand": "^5.0.3"
   }

@@ -1,19 +1,25 @@
 import { useKeyStore } from "@stores/useKeyStore";
+import { useTranslation } from "react-i18next";
 
 const TabTool = () => {
   const keyTypes = ["4key", "5key", "6key", "8key"];
+  const { t } = useTranslation();
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
 
   return (
     <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
-      {keyTypes.map((keyType) => (
-        <Button
-          key={keyType}
-          text={keyType.replace("key", "버튼")}
-          isSelected={selectedKeyType === keyType}
-          onClick={() => setSelectedKeyType(keyType)}
-        />
-      ))}
+      {keyTypes.map((keyType) => {
+        const num = keyType.replace("key", "");
+        const label = t(`mode.button${num}`);
+        return (
+          <Button
+            key={keyType}
+            text={label}
+            isSelected={selectedKeyType === keyType}
+            onClick={() => setSelectedKeyType(keyType)}
+          />
+        );
+      })}
     </div>
   );
 };

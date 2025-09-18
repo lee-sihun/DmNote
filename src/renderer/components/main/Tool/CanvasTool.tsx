@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import MoveIcon from "@assets/svgs/move.svg";
 import EraserIcon from "@assets/svgs/eraser.svg";
 import LayerIcon from "@assets/svgs/layer.svg";
@@ -28,6 +29,7 @@ const CanvasTool = ({
   setActiveTool,
   primaryButtonRef,
 }: CanvasToolProps) => {
+  const { t } = useTranslation();
   const [selectedTool, setSelectedTool] = useState<SelectableTool | null>(
     (activeTool as SelectableTool) || "move"
   );
@@ -91,28 +93,28 @@ const CanvasTool = ({
   return (
     <TooltipGroup>
       <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
-        {tools.map((t) => (
+        {tools.map((toolItem) => (
           <FloatingTooltip
-            key={t.key}
+            key={toolItem.key}
             content={
-              t.key === "move"
-                ? "키 이동"
-                : t.key === "eraser"
-                ? "키 삭제"
-                : t.key === "layer"
-                ? "키 추가"
-                : t.key === "primary"
-                ? "캔버스 색상"
-                : "초기화"
+              toolItem.key === "move"
+                ? t("tooltip.move")
+                : toolItem.key === "eraser"
+                ? t("tooltip.eraser")
+                : toolItem.key === "layer"
+                ? t("tooltip.addKey")
+                : toolItem.key === "primary"
+                ? t("tooltip.palette")
+                : t("tooltip.resetCurrentTab")
             }
           >
             <IconButton
-              ref={t.key === "primary" ? primaryButtonRef : undefined}
-              icon={t.icon}
-              isSelected={!!t.selected}
-              selectedVariant={t.key === "primary" ? "hover" : "default"}
-              onClick={() => handleClick(t.key)}
-              ariaLabel={t.label}
+              ref={toolItem.key === "primary" ? primaryButtonRef : undefined}
+              icon={toolItem.icon}
+              isSelected={!!toolItem.selected}
+              selectedVariant={toolItem.key === "primary" ? "hover" : "default"}
+              onClick={() => handleClick(toolItem.key)}
+              ariaLabel={toolItem.label}
             />
           </FloatingTooltip>
         ))}

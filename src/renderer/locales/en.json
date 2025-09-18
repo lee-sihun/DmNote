@@ -1,0 +1,94 @@
+{
+  "settings": {
+    "overlayLock": "Lock Overlay Window",
+    "alwaysOnTop": "Always on Top",
+    "noteEffect": "Show Note Effect",
+    "customCSS": "Enable Custom CSS",
+    "noCssFile": "(No CSS file selected)",
+    "loadCss": "Load CSS File",
+    "resizeAnchor": "Resize Anchor",
+    "topLeft": "Top-Left",
+    "bottomLeft": "Bottom-Left",
+    "topRight": "Top-Right",
+    "bottomRight": "Bottom-Right",
+    "center": "Center",
+    "graphicsOption": "Graphics API",
+    "renderMode": "Select Rendering Mode",
+    "resetData": "Reset Data",
+    "restartConfirm": "Restart is required to apply settings. Restart now?",
+    "resetAllConfirm": "Are you sure you want to reset all settings?",
+    "initialize": "Initialize",
+    "cssLoaded": "CSS file loaded.",
+    "cssLoadFailed": "CSS file load failed: ",
+    "language": "Language",
+    "selectLanguage": "Select Language",
+    "selectAnchor": "Select Anchor"
+  },
+  "keySetting": {
+    "keyMapping": "Key Binding",
+    "pressAnyKey": "Press any key",
+    "clickToSet": "Click to set key",
+    "keySize": "Key Size",
+    "noteColor": "Note Color",
+    "noteOpacity": "Note Opacity",
+    "inactiveState": "Idle",
+    "activeState": "Pressed",
+    "className": "Class Name",
+    "save": "Apply",
+    "cancel": "Cancel"
+  },
+  "noteSetting": {
+    "borderRadius": "Corner Radius",
+    "speed": "Speed",
+    "trackHeight": "Track Height",
+    "fadePosition": "Fade Position",
+    "auto": "Auto",
+    "top": "Top",
+    "bottom": "Bottom",
+    "reverseEffect": "Reverse Effect",
+    "save": "Apply",
+    "cancel": "Cancel"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "ok": "OK"
+  },
+  "tooltip": {
+    "github": "GitHub",
+    "issue": "Report Issue",
+    "move": "Move Keys",
+    "eraser": "Delete Key",
+    "addKey": "Add Key",
+    "palette": "Canvas",
+    "resetCurrentTab": "Reset",
+    "exportPreset": "Export Preset",
+    "importExport": "Import/Export",
+    "overlayClose": "Close Overlay",
+    "overlayOpen": "Open Overlay",
+    "back": "Back",
+    "settings": "Settings",
+    "etcSettings": "Other Settings",
+    "noteSettings": "Note Settings"
+  },
+  "preset": {
+    "import": "Import",
+    "export": "Export",
+    "saveSuccess": "Preset saved.",
+    "saveFail": "Failed to save preset.",
+    "loadSuccess": "Preset loaded.",
+    "loadFail": "Failed to load preset."
+  },
+  "mode": {
+    "button4": "Button 4",
+    "button5": "Button 5",
+    "button6": "Button 6",
+    "button8": "Button 8"
+  },
+  "confirm": {
+    "resetCurrentTab": "Reset settings for this tab?",
+    "reset": "Reset",
+    "removeKey": "Remove key [{{name}}]?",
+    "remove": "Remove"
+  }
+}

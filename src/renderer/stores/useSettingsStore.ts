@@ -11,6 +11,7 @@ interface SettingsState {
   useCustomCSS: boolean;
   customCSSContent: string;
   customCSSPath: string;
+  language: string;
   setHardwareAcceleration: (value: boolean) => void;
   setAlwaysOnTop: (value: boolean) => void;
   setUseCustomCSS: (value: boolean) => void;
@@ -20,6 +21,7 @@ interface SettingsState {
   setOverlayLocked: (value: boolean) => void;
   setAngleMode: (value: string) => void;
   setNoteEffect: (value: boolean) => void;
+  setLanguage: (value: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -32,6 +34,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   useCustomCSS: false,
   customCSSContent: "",
   customCSSPath: "",
+  language: "ko",
   setHardwareAcceleration: (value: boolean) =>
     set({ hardwareAcceleration: value }),
   setAlwaysOnTop: (value: boolean) => set({ alwaysOnTop: value }),
@@ -42,4 +45,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setOverlayLocked: (value: boolean) => set({ overlayLocked: value }),
   setAngleMode: (value: string) => set({ angleMode: value }),
   setNoteEffect: (value: boolean) => set({ noteEffect: value }),
+  setLanguage: (value: string) => set({ language: value }),
 }));

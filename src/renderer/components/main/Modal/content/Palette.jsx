@@ -36,7 +36,7 @@ export default function Palette({ color, onColorChange }) {
         type="text"
         placeholder="#FFFFFF"
         value={color}
-        onChange={(e) => handleColorChange(e.target.value)}
+        onChange={(e) => onColorChange(e.target.value)}
         className="w-[142px] h-[22px] mt-[10px] rounded-[7px] bg-[#2A2A30] border-[#3A3943] border-[1px] px-[10px] flex items-center text-style-3 text-[#DBDEE8]"
       />
     </div>

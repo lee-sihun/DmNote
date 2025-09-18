@@ -1,15 +1,19 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import Modal from "../Modal";
 
 export default function Alert({
   isOpen,
   message,
   type = "alert", // "alert" or "confirm"
-  confirmText = "확인",
+  confirmText,
   onConfirm,
   onCancel,
 }) {
   if (!isOpen) return null;
+
+  const { t } = useTranslation();
+  const confirmLabel = confirmText || t("common.confirm");
 
   const isConfirm = type === "confirm";
 
@@ -30,14 +34,14 @@ export default function Alert({
             onClick={onConfirm}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {confirmText}
+            {confirmLabel}
           </button>
           {isConfirm && (
             <button
               onClick={onCancel}
               className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             >
-              취소
+              {t("common.cancel")}
             </button>
           )}
         </div>

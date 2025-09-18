@@ -93,6 +93,11 @@ class Application {
     const angleMode = store.get("angleMode");
     app.commandLine.appendSwitch("use-angle", angleMode);
 
+    // 언어 설정 초기화 (기본: ko)
+    if (store.get("language") === undefined) {
+      store.set("language", "ko");
+    }
+
     this.mainWindow = null;
     this.overlayWindow = null;
     global.isAppQuitting = false;
@@ -465,6 +470,20 @@ class Application {
 
     ipcMain.handle("get-angle-mode", () => {
       return store.get("angleMode", "d3d11");
+    });
+
+    // 언어 설정 IPC
+    ipcMain.handle("get-language", () => {
+      return store.get("language", "ko");
+    });
+    ipcMain.on("set-language", (_, lng) => {
+      const supported = ["ko", "en"]; // 지원 언어 목록
+      const lang = supported.includes(lng) ? lng : "ko";
+      store.set("language", lang);
+      // 필요 시 다른 창에 브로드캐스트 (현재는 메인 창만 사용)
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send("update-language", lang);
+      }
     });
 
     // 프리셋 저장하기

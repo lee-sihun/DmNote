@@ -1,9 +1,11 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
 
 export default function Settings({ showAlert, showConfirm }) {
+  const { t, i18n } = useTranslation();
   const {
     hardwareAcceleration,
     setHardwareAcceleration,
@@ -23,6 +25,8 @@ export default function Settings({ showAlert, showConfirm }) {
     setCustomCSSContent,
     customCSSPath,
     setCustomCSSPath,
+    language,
+    setLanguage,
   } = useSettingsStore();
   const ipcRenderer = window.electron.ipcRenderer;
 
@@ -30,26 +34,22 @@ export default function Settings({ showAlert, showConfirm }) {
     React.useState("top-left");
 
   const RESIZE_ANCHOR_OPTIONS = [
-    { value: "top-left", label: "좌상단" },
-    { value: "bottom-left", label: "좌하단" },
-    { value: "top-right", label: "우상단" },
-    { value: "bottom-right", label: "우하단" },
-    { value: "center", label: "가운데" },
+    { value: "top-left", key: "topLeft" },
+    { value: "bottom-left", key: "bottomLeft" },
+    { value: "top-right", key: "topRight" },
+    { value: "bottom-right", key: "bottomRight" },
+    { value: "center", key: "center" },
   ];
 
   const ANGLE_OPTIONS = [
-    {
-      value: "d3d11",
-      label: "Direct3D 11",
-    },
-    {
-      value: "d3d9",
-      label: "Direct3D 9",
-    },
-    {
-      value: "gl",
-      label: "OpenGL",
-    },
+    { value: "d3d11", label: "Direct3D 11" },
+    { value: "d3d9", label: "Direct3D 9" },
+    { value: "gl", label: "OpenGL" },
+  ];
+
+  const LANGUAGE_OPTIONS = [
+    { value: "ko", label: "한국어" },
+    { value: "en", label: "English" },
   ];
 
   useEffect(() => {
@@ -109,14 +109,11 @@ export default function Settings({ showAlert, showConfirm }) {
   const handleHardwareAccelerationChange = async () => {
     const newState = !hardwareAcceleration;
 
-    showConfirm(
-      "설정을 적용하려면 재시작해야 합니다. 지금 재시작하시겠습니까?",
-      async () => {
-        setHardwareAcceleration(newState);
-        await ipcRenderer.invoke("toggle-hardware-acceleration", newState);
-        ipcRenderer.send("restart-app");
-      }
-    );
+    showConfirm(t("settings.restartConfirm"), async () => {
+      setHardwareAcceleration(newState);
+      await ipcRenderer.invoke("toggle-hardware-acceleration", newState);
+      ipcRenderer.send("restart-app");
+    });
   };
 
   const handleOverlayResizeAnchorChange = async (e) => {
@@ -173,9 +170,9 @@ export default function Settings({ showAlert, showConfirm }) {
       if (result.path) setCustomCSSPath(result.path);
       ipcRenderer.send("update-custom-css", result.content);
       if (!useCustomCSS) handleToggleCustomCSS();
-      showAlert("CSS 파일이 로드되었습니다.");
+      showAlert(t("settings.cssLoaded"));
     } else if (result && result.error) {
-      showAlert("CSS 파일 로드 실패: " + result.error);
+      showAlert(t("settings.cssLoadFailed") + result.error);
     }
   };
 
@@ -202,14 +199,11 @@ export default function Settings({ showAlert, showConfirm }) {
 
   // 그래픽 렌더링 모드 변경 핸들러
   const handleAngleModeChangeSelect = (val) => {
-    showConfirm(
-      "렌더링 설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?",
-      () => {
-        setAngleMode(val);
-        ipcRenderer.send("set-angle-mode", val);
-        ipcRenderer.send("restart-app");
-      }
-    );
+    showConfirm(t("settings.restartConfirm"), () => {
+      setAngleMode(val);
+      ipcRenderer.send("set-angle-mode", val);
+      ipcRenderer.send("restart-app");
+    });
   };
 
   const handleClick = (link) => {
@@ -219,15 +213,23 @@ export default function Settings({ showAlert, showConfirm }) {
   const handleResetAll = () => {
     if (showConfirm) {
       showConfirm(
-        "모든 설정을 초기화하시겠습니까?",
+        t("settings.resetAllConfirm"),
         () => {
           ipcRenderer.send("reset-keys");
         },
-        "초기화"
+        t("settings.initialize")
       );
     } else {
       ipcRenderer.send("reset-keys");
     }
+  };
+
+  const handleLanguageChange = (val) => {
+    setLanguage(val);
+    i18n.changeLanguage(val);
+    try {
+      ipcRenderer.send("set-language", val);
+    } catch {}
   };
 
   return (
@@ -236,31 +238,53 @@ export default function Settings({ showAlert, showConfirm }) {
         {/* 설정 */}
         <div className="flex flex-row gap-[19px]">
           <div className="flex flex-col gap-[10px] w-[348px]">
+            {/* 언어 설정 */}
+            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.language")}
+                </p>
+                <Dropdown
+                  options={LANGUAGE_OPTIONS}
+                  value={language}
+                  onChange={handleLanguageChange}
+                  placeholder={t("settings.selectLanguage")}
+                />
+              </div>
+            </div>
             {/* 키뷰어 설정 */}
             <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">오버레이 창 고정</p>
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.overlayLock")}
+                </p>
                 <Checkbox
                   checked={overlayLocked}
                   onChange={handleOverlayLockChange}
                 />
               </div>
               <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">항상 위에 표시</p>
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.alwaysOnTop")}
+                </p>
                 <Checkbox
                   checked={alwaysOnTop}
                   onChange={handleAlwaysOnTopChange}
                 />
               </div>
               <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">노트 효과 표시</p>
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.noteEffect")}
+                </p>
                 <Checkbox
                   checked={noteEffect}
                   onChange={handleNoteEffectChange}
                 />
               </div>
               <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">커스텀 CSS 활성화</p>
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.customCSS")}
+                </p>
                 <Checkbox
                   checked={useCustomCSS}
                   onChange={handleToggleCustomCSS}
@@ -275,7 +299,7 @@ export default function Settings({ showAlert, showConfirm }) {
                 >
                   {customCSSPath && customCSSPath.length > 0
                     ? customCSSPath
-                    : "(CSS 파일이 선택되지 않았습니다)"}
+                    : t("settings.noCssFile")}
                 </p>
                 <button
                   onClick={handleLoadCustomCSS}
@@ -284,16 +308,21 @@ export default function Settings({ showAlert, showConfirm }) {
                     "py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 " +
                     (useCustomCSS
                       ? "text-[#DBDEE8]"
-                      : "text-[#44464E] cursor-not-allowe1d bg-[#222228] border-[#31303C]")
+                      : "text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]")
                   }
                 >
-                  CSS 파일 불러오기
+                  {t("settings.loadCss")}
                 </button>
               </div>
               <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">리사이즈 기준점</p>
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.resizeAnchor")}
+                </p>
                 <Dropdown
-                  options={RESIZE_ANCHOR_OPTIONS}
+                  options={RESIZE_ANCHOR_OPTIONS.map((opt) => ({
+                    value: opt.value,
+                    label: t(`settings.${opt.key}`),
+                  }))}
                   value={overlayResizeAnchor}
                   onChange={async (val) => {
                     setOverlayResizeAnchor(val);
@@ -304,7 +333,7 @@ export default function Settings({ showAlert, showConfirm }) {
                       );
                     } catch (err) {}
                   }}
-                  placeholder="기준점 선택"
+                  placeholder={t("settings.selectAnchor")}
                 />
               </div>
             </div>
@@ -312,13 +341,13 @@ export default function Settings({ showAlert, showConfirm }) {
             <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
                 <p className="text-style-3 text-[#FFFFFF]">
-                  그래픽 렌더링 옵션
+                  {t("settings.graphicsOption")}
                 </p>
                 <Dropdown
                   options={ANGLE_OPTIONS}
                   value={angleMode}
                   onChange={handleAngleModeChangeSelect}
-                  placeholder="렌더링 모드 선택"
+                  placeholder={t("settings.renderMode")}
                 />
               </div>
               {/* 버전 및 설정 초기화 */}
@@ -328,7 +357,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
                   onClick={handleResetAll}
                 >
-                  데이터 초기화
+                  {t("settings.resetData")}
                 </button>
               </div>
             </div>
