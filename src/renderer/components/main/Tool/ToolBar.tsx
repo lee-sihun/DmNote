@@ -18,6 +18,7 @@ type Props = {
   onCloseSettings?: () => void;
   showAlert?: (message: string) => void;
   onOpenNoteSetting?: () => void;
+  primaryButtonRef?: React.RefObject<HTMLButtonElement>;
 };
 
 const ToolBar = ({
@@ -32,6 +33,7 @@ const ToolBar = ({
   onCloseSettings,
   showAlert,
   onOpenNoteSetting,
+  primaryButtonRef,
 }: Props) => {
   const handleClick = (link: string) => {
     window.electron.ipcRenderer.send("open-external", link);
@@ -83,6 +85,7 @@ const ToolBar = ({
             onResetCurrentMode={onResetCurrentMode}
             activeTool={activeTool}
             setActiveTool={setActiveTool}
+            primaryButtonRef={primaryButtonRef}
           />
         )}
         <SettingTool

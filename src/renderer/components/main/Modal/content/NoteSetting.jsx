@@ -48,7 +48,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px] border-[1px] border-[#2A2A30]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">

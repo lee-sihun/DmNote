@@ -32,7 +32,7 @@ const ListPopup = ({
       open={open}
       referenceRef={referenceRef}
       placement="top"
-      offset={20}
+      offset={25}
       onClose={onClose}
       className={effectiveClassName}
     >

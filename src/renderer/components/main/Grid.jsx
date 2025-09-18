@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import DraggableKey from "@components/Key";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import Palette from "./Palette";
 import KeySettingModal from "./modal/content/KeySetting";
 import { useKeyStore } from "@stores/useKeyStore.js";
 import { useSettingsStore } from "@stores/useSettingsStore";
@@ -16,10 +15,6 @@ export default function Grid({
   onKeyUpdate,
   onKeyDelete,
   color,
-  palette,
-  setPalette,
-  onColorChange,
-  onPaletteClose,
   activeTool,
 }) {
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
@@ -65,7 +60,7 @@ export default function Grid({
 
       // }
       if (data.color) {
-        onColorChange(data.color);
+        // onColorChange(data.color); // 이제 App에서 처리
       }
     };
 
@@ -78,9 +73,8 @@ export default function Grid({
 
   // cleanup
   useEffect(() => {
-    setPalette(false);
     return () => {
-      setPalette(false);
+      // setPalette(false); // 이제 App에서 처리
     };
   }, []);
 
@@ -114,12 +108,10 @@ export default function Grid({
 
   return (
     <div
-      className="grid-bg relative w-full h-full bg-[#000000 ] rounded-[0px]"
-      style={{ backgroundColor: color === "transparent" ? "#000000 " : color }}
-      onClick={onPaletteClose}
+      className="grid-bg relative w-full h-full bg-[#3A3943] rounded-[0px]"
+      style={{ backgroundColor: color === "transparent" ? "#3A3943" : color }}
     >
       {renderKeys()}
-      {palette && <Palette color={color} onColorChange={onColorChange} />}
       {selectedKey && (
         <KeySettingModal
           keyData={{

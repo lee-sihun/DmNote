@@ -16,6 +16,7 @@ type CanvasToolProps = {
   onResetCurrentMode: () => void;
   activeTool?: string;
   setActiveTool?: (tool: string) => void;
+  primaryButtonRef?: React.RefObject<HTMLButtonElement>;
 };
 
 const CanvasTool = ({
@@ -25,6 +26,7 @@ const CanvasTool = ({
   onResetCurrentMode,
   activeTool,
   setActiveTool,
+  primaryButtonRef,
 }: CanvasToolProps) => {
   const [selectedTool, setSelectedTool] = useState<SelectableTool | null>(
     (activeTool as SelectableTool) || "move"
@@ -105,6 +107,7 @@ const CanvasTool = ({
             }
           >
             <IconButton
+              ref={t.key === "primary" ? primaryButtonRef : undefined}
               icon={t.icon}
               isSelected={!!t.selected}
               selectedVariant={t.key === "primary" ? "hover" : "default"}
@@ -119,6 +122,7 @@ const CanvasTool = ({
 };
 
 interface IconButtonProps {
+  ref?: React.Ref<HTMLButtonElement>;
   icon: React.ReactNode;
   isSelected?: boolean;
   onClick?: () => void;
@@ -126,30 +130,41 @@ interface IconButtonProps {
   selectedVariant?: "default" | "hover";
 }
 
-const IconButton = ({
-  icon,
-  isSelected = false,
-  onClick,
-  ariaLabel,
-  selectedVariant = "default",
-}: IconButtonProps) => {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      aria-pressed={isSelected}
-      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
-        isSelected
-          ? selectedVariant === "hover"
-            ? "bg-button-hover"
-            : "bg-button-active"
-          : "bg-button-primary hover:bg-button-hover"
-      }`}
-      onClick={onClick}
-    >
-      {icon}
-    </button>
-  );
-};
+const IconButton = React.forwardRef<
+  HTMLButtonElement,
+  Omit<IconButtonProps, "ref">
+>(
+  (
+    {
+      icon,
+      isSelected = false,
+      onClick,
+      ariaLabel,
+      selectedVariant = "default",
+    },
+    ref
+  ) => {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        aria-label={ariaLabel}
+        aria-pressed={isSelected}
+        className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
+          isSelected
+            ? selectedVariant === "hover"
+              ? "bg-button-hover"
+              : "bg-button-active"
+            : "bg-button-primary hover:bg-button-hover"
+        }`}
+        onClick={onClick}
+      >
+        {icon}
+      </button>
+    );
+  }
+);
+
+IconButton.displayName = "IconButton";
 
 export default CanvasTool;

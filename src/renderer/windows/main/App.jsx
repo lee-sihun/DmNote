@@ -9,9 +9,13 @@ import { usePalette } from "@hooks/usePalette";
 import CustomAlert from "@components/main/modal/content/Alert";
 import NoteSettingModal from "@components/main/modal/content/NoteSetting";
 import { useSettingsStore } from "@stores/useSettingsStore";
+import FloatingPopup from "@components/main/modal/FloatingPopup";
+import Palette from "@components/main/modal/content/Palette";
 
 export default function App() {
   useCustomCssInjection();
+
+  const primaryButtonRef = useRef(null);
 
   const {
     selectedKey,
@@ -114,10 +118,6 @@ export default function App() {
             onKeyUpdate={handleKeyUpdate}
             onKeyDelete={handleDeleteKey}
             color={color}
-            palette={palette}
-            setPalette={setPalette}
-            onColorChange={handleColorChange}
-            onPaletteClose={handlePaletteClose}
             activeTool={activeTool}
             showConfirm={showConfirm}
           />
@@ -141,7 +141,20 @@ export default function App() {
         onCloseSettings={() => setIsSettingsOpen(false)}
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
+        primaryButtonRef={primaryButtonRef}
       />
+      {palette && (
+        <FloatingPopup
+          open={palette}
+          referenceRef={primaryButtonRef}
+          placement="top"
+          offset={25}
+          onClose={handlePaletteClose}
+          className="z-50"
+        >
+          <Palette color={color} onColorChange={handleColorChange} />
+        </FloatingPopup>
+      )}
       {noteEffect && isNoteSettingOpen && noteSettings && (
         <NoteSettingModal
           settings={noteSettings}
