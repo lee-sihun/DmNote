@@ -83,7 +83,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                 key={opt.value}
                 type="button"
                 className={`text-left w-full px-[13px] py-[4px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
-                  value === opt.value ? "bg-[#24232A] pointer-events-none" : ""
+                  value === opt.value ? "bg-[#222127] pointer-events-none" : ""
                 }`}
                 onClick={() => {
                   onChange(opt.value);

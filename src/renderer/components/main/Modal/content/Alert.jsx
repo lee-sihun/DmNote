@@ -16,7 +16,7 @@ export default function Alert({
   return (
     <Modal onClick={onCancel}>
       <div
-        className="flex flex-col justify-between p-[20px] gap-[19px] bg-[#1A191E] rounded-[7px]"
+        className="flex flex-col justify-between p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 */}

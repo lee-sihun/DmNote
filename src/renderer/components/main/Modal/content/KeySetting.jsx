@@ -27,6 +27,11 @@ export default function KeySetting({ keyData, onClose, onSave }) {
 
   const [className, setClassName] = useState(keyData.className || "");
 
+  const [isFocused, setIsFocused] = useState(false);
+  const [displayNoteOpacity, setDisplayNoteOpacity] = useState(
+    keyData.noteOpacity ? `${keyData.noteOpacity}%` : "80%"
+  );
+
   const activeInputRef = useRef(null);
   const inactiveInputRef = useRef(null);
 
@@ -68,6 +73,12 @@ export default function KeySetting({ keyData, onClose, onSave }) {
     return () => window.removeEventListener("keydown", handleKeyPress);
   }, [isListening, setUseCustomCSS, setCustomCSSContent, setCustomCSSPath]);
 
+  useEffect(() => {
+    if (!isFocused) {
+      setDisplayNoteOpacity(`${noteOpacity}%`);
+    }
+  }, [noteOpacity, isFocused]);
+
   const handleSubmit = () => {
     onSave({
       key,
@@ -76,7 +87,7 @@ export default function KeySetting({ keyData, onClose, onSave }) {
       width: parseInt(width),
       height: parseInt(height),
       noteColor,
-      noteOpacity: parseInt(noteOpacity),
+      noteOpacity,
       className,
     });
   };
@@ -133,13 +144,14 @@ export default function KeySetting({ keyData, onClose, onSave }) {
   };
 
   const handleColorChange = (e) => {
-    const value = e.target.value;
-    setNoteColor(value);
+    const value = e.target.value.toUpperCase();
+    setNoteColor("#" + value);
   };
 
   const handleColorBlur = (e) => {
-    const value = e.target.value;
-    if (!isValidColor(value)) {
+    const inputValue = e.target.value.toUpperCase();
+    const fullColor = "#" + inputValue;
+    if (!isValidColor(fullColor)) {
       setNoteColor("#FFFFFF"); // 잘못된 값이면 기본값으로 복원
     }
   };
@@ -147,25 +159,141 @@ export default function KeySetting({ keyData, onClose, onSave }) {
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col items-center justify-center w-[334.5px] p-[25px] bg-[#1C1E25] border border-[#3B4049] rounded-[6px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between w-full align-center">
-          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-            키 매핑
-          </p>
+        <div className="flex justify-between w-full items-center">
+          <p className="text-white text-style-2">키 매핑</p>
           <button
             onClick={() => setIsListening(true)}
-            className="flex items-center h-[24.6px] px-[9px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#fff] text-[13.5px] font-medium"
+            className="flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-2"
           >
             {isListening ? "Press any key" : displayKey || "Click to set key"}
           </button>
         </div>
-        <div className="flex justify-between w-full mt-[18px]">
-          <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-              대기 상태
-            </p>
+        <div className="flex justify-between w-full items-center">
+          <p className="text-white text-style-2">키 사이즈</p>
+          <div className="flex items-center gap-[10.5px]">
+            <div className="relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+                X
+              </span>
+              <input
+                type="number"
+                value={width}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  if (newValue === "") {
+                    setWidth("");
+                  } else {
+                    const numValue = parseInt(newValue);
+                    if (!isNaN(numValue)) {
+                      setWidth(Math.min(Math.max(numValue, 1), 999));
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  if (
+                    e.target.value === "" ||
+                    isNaN(parseInt(e.target.value))
+                  ) {
+                    setWidth(60);
+                  }
+                }}
+                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
+              />
+            </div>
+            <div className="relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+                Y
+              </span>
+              <input
+                type="number"
+                value={height}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  if (newValue === "") {
+                    setHeight("");
+                  } else {
+                    const numValue = parseInt(newValue);
+                    if (!isNaN(numValue)) {
+                      setHeight(Math.min(Math.max(numValue, 1), 999));
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  if (
+                    e.target.value === "" ||
+                    isNaN(parseInt(e.target.value))
+                  ) {
+                    setHeight(60);
+                  }
+                }}
+                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
+              />
+            </div>
+          </div>
+        </div>
+        {/* 노트 관련 UI: noteEffect가 true일 때만 렌더링 */}
+        {noteEffect && (
+          <>
+            <div className="flex justify-between w-full items-center">
+              <p className="text-white text-style-2">노트 색상</p>
+              <div className="relative w-[76px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+                <div
+                  className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+                  style={{ backgroundColor: noteColor }}
+                ></div>
+                <input
+                  type="text"
+                  value={noteColor.replace(/^#/, "")}
+                  onChange={handleColorChange}
+                  onBlur={handleColorBlur}
+                  placeholder="FFF"
+                  className="absolute left-[20px] top-[-1px] h-[23px] w-[50px] bg-transparent text-style-1 text-[#DBDEE8] text-center"
+                />
+              </div>
+            </div>
+            {/* 노트 투명도 설정 추가 */}
+            <div className="flex justify-between w-full items-center">
+              <p className="text-white text-style-2">노트 투명도</p>
+              <input
+                type="text"
+                value={displayNoteOpacity}
+                onChange={(e) => {
+                  const newValue = e.target.value.replace(/[^0-9]/g, "");
+                  if (newValue === "") {
+                    setDisplayNoteOpacity("");
+                  } else {
+                    const numValue = parseInt(newValue);
+                    if (!isNaN(numValue)) {
+                      setDisplayNoteOpacity(newValue);
+                    }
+                  }
+                }}
+                onFocus={() => {
+                  setIsFocused(true);
+                  setDisplayNoteOpacity(noteOpacity.toString());
+                }}
+                onBlur={(e) => {
+                  setIsFocused(false);
+                  const inputValue = e.target.value.replace(/[^0-9]/g, "");
+                  if (inputValue === "" || isNaN(parseInt(inputValue))) {
+                    setNoteOpacity(80);
+                  } else {
+                    const numValue = parseInt(inputValue);
+                    setNoteOpacity(Math.min(Math.max(numValue, 0), 100));
+                  }
+                }}
+                className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+              />
+            </div>
+          </>
+        )}
+        {/* 입력/대기 이미지 */}
+        <div className="flex justify-between w-full items-center">
+          <div className="flex items-center justify-between gap-[20px]">
+            <p className="text-white text-style-2">대기 상태</p>
             <input
               type="file"
               accept="image/*"
@@ -174,22 +302,20 @@ export default function KeySetting({ keyData, onClose, onSave }) {
               onChange={(e) => handleImageSelect(e, false)}
             />
             <button
-              className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+              className="key-bg flex w-[30px] h-[30px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]"
               onClick={() => inactiveInputRef.current.click()}
               style={{
                 backgroundImage: inactiveImage
                   ? `url(${inactiveImage})`
                   : "none",
                 backgroundSize: "cover",
-                width: "39px",
-                height: "39px",
+                width: "30px",
+                height: "30px",
               }}
             ></button>
           </div>
-          <div className="flex items-center justify-between w-[122px]">
-            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-              입력 상태
-            </p>
+          <div className="flex items-center justify-between gap-[20px]">
+            <p className="text-white text-style-2">입력 상태</p>
             <input
               type="file"
               accept="image/*"
@@ -198,152 +324,42 @@ export default function KeySetting({ keyData, onClose, onSave }) {
               onChange={(e) => handleImageSelect(e, true)}
             />
             <button
-              className="key-bg flex w-[39px] h-[39px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049]"
+              className="key-bg flex w-[30px] h-[30px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]"
               onClick={() => activeInputRef.current.click()}
               style={{
                 backgroundImage: activeImage ? `url(${activeImage})` : "none",
                 backgroundSize: "cover",
-                width: "39px",
-                height: "39px",
+                width: "30px",
+                height: "30px",
               }}
             ></button>
           </div>
         </div>
-        <div className="flex justify-between w-full mt-[18px]">
-          <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-            키 사이즈
-          </p>
-          <div className="flex items-center gap-[10px]">
-            <input
-              type="number"
-              value={width}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                if (newValue === "") {
-                  setWidth("");
-                } else {
-                  const numValue = parseInt(newValue);
-                  if (!isNaN(numValue)) {
-                    setWidth(Math.min(Math.max(numValue, 1), 999));
-                  }
-                }
-              }}
-              onBlur={(e) => {
-                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
-                  setWidth(60);
-                }
-              }}
-              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
-            />
-            <p className="text-[#989BA6] text-[13.5px] font-medium mt-[2px]">
-              X
-            </p>
-            <input
-              type="number"
-              value={height}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                if (newValue === "") {
-                  setHeight("");
-                } else {
-                  const numValue = parseInt(newValue);
-                  if (!isNaN(numValue)) {
-                    setHeight(Math.min(Math.max(numValue, 1), 999));
-                  }
-                }
-              }}
-              onBlur={(e) => {
-                if (e.target.value === "" || isNaN(parseInt(e.target.value))) {
-                  setHeight(60);
-                }
-              }}
-              className="text-center w-[40px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
-            />
-          </div>
-        </div>
-        {/* 노트 관련 UI: noteEffect가 true일 때만 렌더링 */}
-        {noteEffect && (
-          <>
-            <div className="flex justify-between w-full mt-[18px]">
-              <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-                노트 색상
-              </p>
-              <div className="flex items-center gap-[10px]">
-                <div
-                  className="w-[24px] h-[24px] border border-[#3B4049] rounded-[4px]"
-                  style={{ backgroundColor: noteColor }}
-                ></div>
-                <input
-                  type="text"
-                  value={noteColor}
-                  onChange={handleColorChange}
-                  onBlur={handleColorBlur}
-                  placeholder="#FFFFFF"
-                  className="text-center w-[80px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
-                />
-              </div>
-            </div>
-            {/* 노트 투명도 설정 추가 */}
-            <div className="flex justify-between w-full mt-[18px]">
-              <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-                노트 투명도
-              </p>
-              <div className="flex items-center gap-[10px]">
-                <input
-                  type="number"
-                  value={noteOpacity}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    if (newValue === "") {
-                      setNoteOpacity("");
-                    } else {
-                      const numValue = parseInt(newValue);
-                      if (!isNaN(numValue)) {
-                        setNoteOpacity(Math.min(Math.max(numValue, 0), 100));
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (
-                      e.target.value === "" ||
-                      isNaN(parseInt(e.target.value))
-                    ) {
-                      setNoteOpacity(80);
-                    }
-                  }}
-                  className="text-center w-[50px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
-                />
-                <p className="text-[#989BA6] text-[13.5px] font-medium">%</p>
-              </div>
-            </div>
-          </>
-        )}
         {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
         {useCustomCSS && (
-          <div className="flex justify-between w-full mt-[18px] items-center">
-            <p className="text-white text-[13.5px] font-medium leading-[24.5px]">
-              클래스 이름
-            </p>
+          <div className="flex justify-between w-full items-center">
+            <p className="text-white text-style-2">클래스 이름</p>
             <input
               key="classNameUnified"
               type="text"
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder="className"
-              className="text-center w-[114px] h-[24.6px] p-[6px] bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[13px] font-medium"
+              className="text-center w-[90px] h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
             />
           </div>
         )}
-        <div className="flex w-full justify-between h-[31.5px] mt-[30.25px] gap-[8px]">
+        {/* 저장/취소 버튼 */}
+        <div className="flex gap-[10.5px]">
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
+            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
             저장
           </button>
           <button
             onClick={onClose}
-            className="flex-1 bg-[#101216] rounded-[6px] border-[0.5px] border-[#3B4049] text-[#FFFFFF] text-[15px] font-medium"
+            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
             취소
           </button>
