@@ -35,6 +35,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState("move");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
+  const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] = useState(false);
   const [noteSettings, setNoteSettings] = useState(null);
   const {
     noteEffect,
@@ -150,6 +151,8 @@ export default function App() {
             color={color}
             activeTool={activeTool}
             showConfirm={showConfirm}
+            shouldSkipModalAnimation={skipModalAnimationOnReturn}
+            onModalAnimationConsumed={() => setSkipModalAnimationOnReturn(false)}
           />
         )}
       </div>
@@ -167,7 +170,10 @@ export default function App() {
         activeTool={activeTool}
         setActiveTool={setActiveTool}
         isSettingsOpen={isSettingsOpen}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => {
+          if (selectedKey) setSkipModalAnimationOnReturn(true);
+          setIsSettingsOpen(true);
+        }}
         onCloseSettings={() => setIsSettingsOpen(false)}
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}

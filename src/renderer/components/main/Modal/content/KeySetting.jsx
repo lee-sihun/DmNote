@@ -4,7 +4,7 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 import Modal from "../Modal";
 import { useTranslation } from "react-i18next";
 
-export default function KeySetting({ keyData, onClose, onSave }) {
+export default function KeySetting({ keyData, onClose, onSave, skipAnimation = false }) {
   const { t } = useTranslation();
   const {
     useCustomCSS,
@@ -36,6 +36,7 @@ export default function KeySetting({ keyData, onClose, onSave }) {
 
   const activeInputRef = useRef(null);
   const inactiveInputRef = useRef(null);
+  const initialSkipRef = useRef(skipAnimation);
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -159,7 +160,7 @@ export default function KeySetting({ keyData, onClose, onSave }) {
   };
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} animate={!initialSkipRef.current}>
       <div
         className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px] border-[1px] border-[#2A2A30]"
         onClick={(e) => e.stopPropagation()}

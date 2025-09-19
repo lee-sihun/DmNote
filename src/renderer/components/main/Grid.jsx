@@ -17,6 +17,8 @@ export default function Grid({
   onKeyDelete,
   color,
   activeTool,
+  shouldSkipModalAnimation,
+  onModalAnimationConsumed,
 }) {
   const { selectedKeyType, setSelectedKeyType } = useKeyStore();
   const { noteEffect, setNoteEffect } = useSettingsStore();
@@ -80,6 +82,13 @@ export default function Grid({
     };
   }, []);
 
+  // Settings에서 돌아온 직후 Grid가 표시될 때 모달의 첫 진입 애니메이션을 건너뛰도록 플래그를 1회성으로 소비
+  useEffect(() => {
+    if (shouldSkipModalAnimation && selectedKey && typeof onModalAnimationConsumed === "function") {
+      onModalAnimationConsumed();
+    }
+  }, [shouldSkipModalAnimation, selectedKey, onModalAnimationConsumed]);
+
   const renderKeys = () => {
     if (!positions[selectedKeyType]) return null;
 
@@ -134,6 +143,7 @@ export default function Grid({
           }}
           onClose={() => setSelectedKey(null)}
           onSave={onKeyUpdate}
+          skipAnimation={shouldSkipModalAnimation}
         />
       )}
     </div>
