@@ -388,7 +388,7 @@ export default function Settings({ showAlert, showConfirm }) {
               </div>
               {/* 버전 및 설정 초기화 */}
               <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px]">
-                <p className="text-style-3 text-[#FFFFFF]">Ver 1.1.0</p>
+                <p className="text-style-3 text-[#FFFFFF]">Ver 1.2.0</p>
                 <button
                   className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
                   onClick={handleResetAll}
@@ -402,15 +402,22 @@ export default function Settings({ showAlert, showConfirm }) {
       </div>
       <div className="absolute flex items-center justify-center top-[10px] right-[10px] w-[522px] h-[366px] bg-primary rounded-[7px] pointer-events-none overflow-hidden">
         {hoveredKey && VIDEO_SOURCES[hoveredKey] ? (
-          <video
-            key={hoveredKey}
-            src={VIDEO_SOURCES[hoveredKey]}
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-          />
+          <div className="relative w-full h-full">
+            <video
+              key={hoveredKey}
+              src={VIDEO_SOURCES[hoveredKey]}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
+              <span className="mb-[15px] text-white text-[15px] font-medium">
+                {t(`settings.${hoveredKey}Desc`)}
+              </span>
+            </div>
+          </div>
         ) : (
           <FlaskIcon />
         )}

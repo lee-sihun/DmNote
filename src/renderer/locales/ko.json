@@ -22,7 +22,12 @@
     "cssLoadFailed": "CSS 파일 로드 실패: ",
     "language": "언어 설정",
     "selectLanguage": "언어 선택",
-    "selectAnchor": "기준점 선택"
+    "selectAnchor": "기준점 선택",
+    "overlayLockDesc": "오버레이 창이 움직이지 않도록 고정시킵니다.",
+    "alwaysOnTopDesc": "오버레이 창을 항상 다른 창 위에 표시합니다.",
+    "noteEffectDesc": "키 입력 시 노트 효과를 표시합니다.",
+    "customCSSDesc": "커스텀 CSS 파일을 불러와 오버레이 스타일을 변경합니다.",
+    "resizeAnchorDesc": "오버레이 창의 리사이즈 기준점을 선택합니다."
   },
   "keySetting": {
     "keyMapping": "키 매핑",

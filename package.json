@@ -1,6 +1,6 @@
 {
-  "name": "djmax-keyviewer",
-  "version": "1.1.0",
+  "name": "dm-note",
+  "version": "1.2.0",
   "description": "DM NOTE",
   "main": "src/main/main.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "type-check:watch": "tsc --noEmit --watch"
   },
   "build": {
-    "appId": "com.djmax.keyviewer",
+    "appId": "com.dmnote.app",
     "productName": "DM NOTE",
     "win": {
       "target": "portable",

@@ -130,8 +130,8 @@ export default function NoteSetting({ onClose, settings, onSave }) {
                 setTrackHeight("");
               } else {
                 const num = parseInt(v);
-                if (!Number.isNaN(num)) {
-                  setTrackHeight(Math.min(Math.max(num, 50), 500));
+                if (!Number.isNaN(num) && num >= 0) {
+                  setTrackHeight(num);
                 }
               }
             }}

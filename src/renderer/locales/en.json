@@ -22,7 +22,12 @@
     "cssLoadFailed": "CSS file load failed: ",
     "language": "Language",
     "selectLanguage": "Select Language",
-    "selectAnchor": "Select Anchor"
+    "selectAnchor": "Select Anchor",
+    "overlayLockDesc": "Locks the overlay window so it doesn't move.",
+    "alwaysOnTopDesc": "Keeps the overlay window always on top of other windows.",
+    "noteEffectDesc": "Shows note effects when keys are pressed.",
+    "customCSSDesc": "Loads a custom CSS file to style the overlay.",
+    "resizeAnchorDesc": "Selects the resize anchor point for the overlay window."
   },
   "keySetting": {
     "keyMapping": "Key Binding",
