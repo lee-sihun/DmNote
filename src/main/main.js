@@ -674,6 +674,12 @@ class Application {
           const height = payload?.height;
           const anchor =
             payload?.anchor || store.get("overlayResizeAnchor", "top-left");
+          // 렌더러가 전달한 콘텐츠 상단 기준 오프셋(투명 상단 여백 포함)
+          const incomingTopOffset = Number(payload?.contentTopOffset);
+          // 이전 오프셋을 사용해 시각적 상단을 고정
+          const prevTopOffset = Number(
+            store.get("overlayLastContentTopOffset", NaN)
+          );
 
           // 최소/최대 값 가드 (이상치 방지)
           const safeWidth = Math.max(100, Math.min(Math.round(width), 2000));
@@ -716,6 +722,17 @@ class Application {
               break;
           }
 
+          // 만약 렌더러에서 콘텐츠 상단 오프셋을 제공했다면,
+          // 실제 화면에서 콘텐츠의 시각적 상단 위치가 유지되도록 Y를 보정한다.
+          if (
+            Number.isFinite(incomingTopOffset) &&
+            Number.isFinite(prevTopOffset)
+          ) {
+            const delta = incomingTopOffset - prevTopOffset;
+            // 오프셋이 커지면 창은 위로 올라가야 시각적 상단이 고정됨
+            newY = Math.round(newY - delta);
+          }
+
           // 경계값 정수로 보정
           newX = Math.round(newX);
           newY = Math.round(newY);
@@ -756,6 +773,11 @@ class Application {
               } catch {}
             }
           }, 26);
+
+          // 최신 contentTopOffset 저장 (다음 리사이즈/세션에서도 동일 기준 유지)
+          if (Number.isFinite(incomingTopOffset)) {
+            store.set("overlayLastContentTopOffset", incomingTopOffset);
+          }
         }
       } catch (err) {
         console.error("Failed to resize overlay window:", err);

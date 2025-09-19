@@ -136,6 +136,8 @@ export default function App() {
     ipcRenderer.send("resize-overlay", {
       width: totalWidth,
       height: totalHeight,
+      // 콘텐츠(키) 렌더링 시작점의 화면 상단으로부터 오프셋 (투명 상단 여백)
+      contentTopOffset: extraTop + PADDING,
     });
   }, [bounds, noteEffectEnabled, noteSettings.trackHeight]);
 
@@ -270,6 +272,7 @@ export default function App() {
         ipcRenderer.send("resize-overlay", {
           width: totalWidth,
           height: totalHeight,
+          contentTopOffset: extraTop + PADDING,
         });
       }
     };
