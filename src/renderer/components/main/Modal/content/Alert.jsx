@@ -29,10 +29,14 @@ export default function Alert({
         </div>
 
         {/* 버튼들 */}
-        <div className="flex gap-[10.5px]">
+        <div
+          className={`flex ${!isConfirm ? "justify-center" : ""} gap-[10.5px]`}
+        >
           <button
             onClick={onConfirm}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className={`w-${
+              isConfirm ? "[150px]" : "full"
+            } h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3`}
           >
             {confirmLabel}
           </button>

@@ -72,13 +72,11 @@ const SettingTool = ({
                     );
                     if (showAlert) {
                       showAlert(
-                        ok
-                          ? "프리셋이 저장되었습니다."
-                          : "프리셋 저장에 실패했습니다."
+                        ok ? t("preset.saveSuccess") : t("preset.saveFail")
                       );
                     }
                   } catch {
-                    showAlert?.("프리셋 저장에 실패했습니다.");
+                    showAlert?.(t("preset.saveFail"));
                   }
                 }}
               />

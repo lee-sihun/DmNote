@@ -5,7 +5,7 @@
     "noteEffect": "Show Note Effect",
     "customCSS": "Enable Custom CSS",
     "noCssFile": "(No CSS file selected)",
-    "loadCss": "Load CSS File",
+    "loadCss": "Import CSS File",
     "resizeAnchor": "Resize Anchor",
     "topLeft": "Top-Left",
     "bottomLeft": "Bottom-Left",
