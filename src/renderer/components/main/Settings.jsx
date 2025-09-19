@@ -3,6 +3,12 @@ import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
+import FlaskIcon from "@assets/svgs/flask.svg";
+import overlayLockVideo from "@assets/webm/오버레이 고정.webm";
+import alwaysOnTopVideo from "@assets/webm/항상 위에.webm";
+import noteEffectVideo from "@assets/webm/노트 효과.webm";
+import customCSSVideo from "@assets/webm/커스텀 CSS.webm";
+import resizeVideo from "@assets/webm/리사이징.webm";
 
 export default function Settings({ showAlert, showConfirm }) {
   const { t, i18n } = useTranslation();
@@ -32,6 +38,15 @@ export default function Settings({ showAlert, showConfirm }) {
 
   const [overlayResizeAnchor, setOverlayResizeAnchor] =
     React.useState("top-left");
+  const [hoveredKey, setHoveredKey] = React.useState(null);
+
+  const VIDEO_SOURCES = {
+    overlayLock: overlayLockVideo,
+    alwaysOnTop: alwaysOnTopVideo,
+    noteEffect: noteEffectVideo,
+    customCSS: customCSSVideo,
+    resizeAnchor: resizeVideo,
+  };
 
   const RESIZE_ANCHOR_OPTIONS = [
     { value: "top-left", key: "topLeft" },
@@ -186,7 +201,7 @@ export default function Settings({ showAlert, showConfirm }) {
   // 그래픽 렌더링 모드 변경 핸들러
   // const handleAngleModeChange = async (e) => {
   //   const newMode = e.target.value;
-
+  //
   //   showConfirm(
   //     "렌더링 설정을 적용하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?",
   //     () => {
@@ -238,23 +253,13 @@ export default function Settings({ showAlert, showConfirm }) {
         {/* 설정 */}
         <div className="flex flex-row gap-[19px]">
           <div className="flex flex-col gap-[10px] w-[348px]">
-            {/* 언어 설정 */}
-            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
-              <div className="flex flex-row justify-between items-center">
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.language")}
-                </p>
-                <Dropdown
-                  options={LANGUAGE_OPTIONS}
-                  value={language}
-                  onChange={handleLanguageChange}
-                  placeholder={t("settings.selectLanguage")}
-                />
-              </div>
-            </div>
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
-              <div className="flex flex-row justify-between items-center">
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("overlayLock")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.overlayLock")}
                 </p>
@@ -263,7 +268,11 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleOverlayLockChange}
                 />
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("alwaysOnTop")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.alwaysOnTop")}
                 </p>
@@ -272,7 +281,11 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleAlwaysOnTopChange}
                 />
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("noteEffect")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.noteEffect")}
                 </p>
@@ -281,7 +294,11 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleNoteEffectChange}
                 />
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("customCSS")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.customCSS")}
                 </p>
@@ -290,7 +307,11 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleToggleCustomCSS}
                 />
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("customCSS")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p
                   className={
                     "text-[12px] truncate max-w-[150px] " +
@@ -314,7 +335,11 @@ export default function Settings({ showAlert, showConfirm }) {
                   {t("settings.loadCss")}
                 </button>
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey("resizeAnchor")}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.resizeAnchor")}
                 </p>
@@ -341,6 +366,17 @@ export default function Settings({ showAlert, showConfirm }) {
             <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
               <div className="flex flex-row justify-between items-center">
                 <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.language")}
+                </p>
+                <Dropdown
+                  options={LANGUAGE_OPTIONS}
+                  value={language}
+                  onChange={handleLanguageChange}
+                  placeholder={t("settings.selectLanguage")}
+                />
+              </div>
+              <div className="flex flex-row justify-between items-center">
+                <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.graphicsOption")}
                 </p>
                 <Dropdown
@@ -364,7 +400,21 @@ export default function Settings({ showAlert, showConfirm }) {
           </div>
         </div>
       </div>
-      <div className="absolute top-[10px] right-[10px] w-[522px] h-[366px] bg-white rounded-[7px] pointer-events-none"></div>
+      <div className="absolute flex items-center justify-center top-[10px] right-[10px] w-[522px] h-[366px] bg-primary rounded-[7px] pointer-events-none overflow-hidden">
+        {hoveredKey && VIDEO_SOURCES[hoveredKey] ? (
+          <video
+            key={hoveredKey}
+            src={VIDEO_SOURCES[hoveredKey]}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <FlaskIcon />
+        )}
+      </div>
     </div>
   );
 }
