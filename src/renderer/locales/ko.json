@@ -4,7 +4,7 @@
     "alwaysOnTop": "항상 위에 표시",
     "noteEffect": "노트 효과 표시",
     "customCSS": "커스텀 CSS 활성화",
-    "noCssFile": "(CSS 파일이 선택되지 않았습니다)",
+    "noCssFile": "(선택된 CSS 파일 없음)",
     "loadCss": "CSS 파일 불러오기",
     "resizeAnchor": "리사이즈 기준점",
     "topLeft": "좌상단",
@@ -26,7 +26,7 @@
     "overlayLockDesc": "오버레이 창이 움직이지 않도록 고정시킵니다.",
     "alwaysOnTopDesc": "오버레이 창을 항상 다른 창 위에 표시합니다.",
     "noteEffectDesc": "키 입력 시 노트 효과를 표시합니다.",
-    "customCSSDesc": "커스텀 CSS 파일을 불러와 오버레이 스타일을 변경합니다.",
+    "customCSSDesc": "커스텀 CSS 파일을 불러와 오버레이의 스타일을 변경합니다.",
     "resizeAnchorDesc": "오버레이 창의 리사이즈 기준점을 선택합니다."
   },
   "keySetting": {

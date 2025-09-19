@@ -32,6 +32,7 @@ module.exports = {
       contextIsolation: false,
       enableBlinkFeatures: "CSSContainment",
       disableBlinkFeatures: "VSync", // VSync 비활성화로 지연 최소화 (테어링 문제 체크 필요)
+      backgroundThrottling: false, // 백그라운드에서 실행 시에도 CPU 사용량 제한 해제
     },
   },
 };

@@ -4,11 +4,11 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
 import FlaskIcon from "@assets/svgs/flask.svg";
-import overlayLockVideo from "@assets/webm/오버레이 고정.webm";
-import alwaysOnTopVideo from "@assets/webm/항상 위에.webm";
-import noteEffectVideo from "@assets/webm/노트 효과.webm";
-import customCSSVideo from "@assets/webm/커스텀 CSS.webm";
-import resizeVideo from "@assets/webm/리사이징.webm";
+import overlayLockVideo from "@assets/mp4/overlay-lock.mp4";
+import alwaysOnTopVideo from "@assets/mp4/alwaysontop.mp4";
+import noteEffectVideo from "@assets/mp4/noteeffect.mp4";
+import customCSSVideo from "@assets/mp4/css.mp4";
+import resizeVideo from "@assets/mp4/resize.mp4";
 
 export default function Settings({ showAlert, showConfirm }) {
   const { t, i18n } = useTranslation();
@@ -256,9 +256,10 @@ export default function Settings({ showAlert, showConfirm }) {
             {/* 키뷰어 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div
-                className="flex flex-row justify-between items-center h-[40px]"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey("overlayLock")}
                 onMouseLeave={() => setHoveredKey(null)}
+                onClick={handleOverlayLockChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.overlayLock")}
@@ -269,9 +270,10 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               <div
-                className="flex flex-row justify-between items-center h-[40px]"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey("alwaysOnTop")}
                 onMouseLeave={() => setHoveredKey(null)}
+                onClick={handleAlwaysOnTopChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.alwaysOnTop")}
@@ -282,9 +284,10 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               <div
-                className="flex flex-row justify-between items-center h-[40px]"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey("noteEffect")}
                 onMouseLeave={() => setHoveredKey(null)}
+                onClick={handleNoteEffectChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.noteEffect")}
@@ -295,9 +298,10 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               <div
-                className="flex flex-row justify-between items-center h-[40px]"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey("customCSS")}
                 onMouseLeave={() => setHoveredKey(null)}
+                onClick={handleToggleCustomCSS}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.customCSS")}
