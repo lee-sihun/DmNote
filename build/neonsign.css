@@ -30,31 +30,3 @@
   text-shadow: 0px 0px 3px #2ebef3;
   box-shadow: 0px 0px 4px #2b8eff, 0px 0px 4px #2b8eff;
 }
-
-/* ==============================  */
-
-/* 전역 노트 스타일 */
-[data-state="note"] {
-  --note-bg: #ff2b80;
-  opacity: 0.8 !important;
-  box-shadow: 0px 0px 4px #b3245d, 0px 0px 4px #b3245d;
-}
-
-/* 특정 키 노트 스타일 */
-.blue[data-state="note"] {
-  --note-bg: #2ebef3;
-  opacity: 0.8 !important;
-  box-shadow: 0px 0px 4px #2b8eff, 0px 0px 4px #2b8eff;
-}
-
-/* ==============================  */
-
-/* 전역 트랙 스타일 */
-/* [data-state="track"] {
-  --track-bg: transparent;
-  --track-border: none;
-  --track-radius: 0px;
-  --track-shadow: none;
-  --track-overflow: none;
-  --track-mask: none;
-} */
