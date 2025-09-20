@@ -84,6 +84,11 @@ class Application {
       store.set("selectedKeyType", "4key");
     }
 
+    // 커스텀 탭 초기화
+    if (store.get("customTabs") === undefined) {
+      store.set("customTabs", []); // [{ id: string, name: string }]
+    }
+
     // ANGLE 모드 초기 설정
     if (store.get("angleMode") === undefined) {
       store.set("angleMode", "d3d11");
@@ -154,6 +159,142 @@ class Application {
 
     ipcMain.handle("get-selected-key-type", () => {
       return store.get("selectedKeyType", "4key");
+    });
+
+    // 커스텀 탭 IPC
+    ipcMain.handle("custom-tabs:list", () => {
+      return store.get("customTabs", []);
+    });
+
+    ipcMain.handle("custom-tabs:create", (_, name) => {
+      try {
+        const tabs = store.get("customTabs", []);
+        if (!name || typeof name !== "string") throw new Error("invalid-name");
+        if (tabs.length >= 5) throw new Error("max-reached");
+        const exists = tabs.some((t) => t.name === name);
+        if (exists) throw new Error("duplicate-name");
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const newTabs = [...tabs, { id, name }];
+        store.set("customTabs", newTabs);
+
+        // 키/포지션 오브젝트에 비어있는 모드 추가
+        const keys = store.get("keys") || {};
+        const positions = store.get("keyPositions") || {};
+        keys[id] = [];
+        positions[id] = [];
+        store.set("keys", keys);
+        store.set("keyPositions", positions);
+
+        // 키보드 서비스 갱신
+        try {
+          keyboardService.updateKeyMapping(keys);
+        } catch {}
+
+        // 렌더러에 브로드캐스트
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("updateKeyMappings", keys);
+          this.overlayWindow.webContents.send("updateKeyPositions", positions);
+        }
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send("updateKeyMappings", keys);
+          this.mainWindow.webContents.send("updateKeyPositions", positions);
+        }
+
+        // 새 탭을 현재 선택으로 세팅
+        store.set("selectedKeyType", id);
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send("currentMode", id);
+        }
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("currentMode", id);
+        }
+        try {
+          keyboardService.setKeyMode(id);
+        } catch {}
+        return { id, name };
+      } catch (err) {
+        return { error: err.message };
+      }
+    });
+
+    ipcMain.handle("custom-tabs:delete", (_, id) => {
+      try {
+        const tabs = store.get("customTabs", []);
+        const index = tabs.findIndex((t) => t.id === id);
+        if (index === -1) throw new Error("not-found");
+        const selected = store.get("selectedKeyType", "4key");
+        const newTabs = tabs.filter((t) => t.id !== id);
+        store.set("customTabs", newTabs);
+
+        // 키/포지션에서 제거
+        const keys = store.get("keys") || {};
+        const positions = store.get("keyPositions") || {};
+        if (keys[id]) delete keys[id];
+        if (positions[id]) delete positions[id];
+        store.set("keys", keys);
+        store.set("keyPositions", positions);
+
+        // 삭제 후 선택 이동: 현재 삭제한 탭이 선택 중이었다면
+        if (selected === id) {
+          let nextSelected = "8key"; // 기본 폴백
+          if (newTabs.length > 0) {
+            // 표시 순서는 역순(최신 -> 오래됨). 삭제된 항목의 '아래'는 원본 배열 기준 이전 항목(index-1).
+            const pickIndex = index - 1;
+            const next = newTabs[pickIndex >= 0 ? pickIndex : 0];
+            nextSelected = next.id;
+          }
+          store.set("selectedKeyType", nextSelected);
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send("currentMode", nextSelected);
+          }
+          if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+            this.overlayWindow.webContents.send("currentMode", nextSelected);
+          }
+          try {
+            keyboardService.setKeyMode(nextSelected);
+          } catch {}
+        }
+
+        // 변경 브로드캐스트
+        // 키보드 서비스 갱신
+        try {
+          keyboardService.updateKeyMapping(keys);
+        } catch {}
+
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("updateKeyMappings", keys);
+          this.overlayWindow.webContents.send("updateKeyPositions", positions);
+        }
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send("updateKeyMappings", keys);
+          this.mainWindow.webContents.send("updateKeyPositions", positions);
+        }
+        return { ok: true };
+      } catch (err) {
+        return { error: err.message };
+      }
+    });
+
+    ipcMain.handle("custom-tabs:select", (_, id) => {
+      try {
+        const tabs = store.get("customTabs", []);
+        const isDefault = ["4key", "5key", "6key", "8key"].includes(id);
+        const exists = isDefault || tabs.some((t) => t.id === id);
+        if (!exists) throw new Error("not-found");
+        store.set("selectedKeyType", id);
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send("currentMode", id);
+        }
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send("currentMode", id);
+        }
+        try {
+          keyboardService.setKeyMode(id);
+        } catch {}
+        return { ok: true };
+      } catch (err) {
+        return { error: err.message };
+      }
     });
 
     // 키매핑 요청 처리

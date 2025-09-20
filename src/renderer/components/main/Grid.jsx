@@ -36,8 +36,7 @@ export default function Grid({
     ipcRenderer
       .invoke("get-selected-key-type")
       .then((mode) => {
-        const valid = ["4key", "5key", "6key", "8key"];
-        if (valid.includes(mode)) {
+        if (typeof mode === "string" && mode.length > 0) {
           setSelectedKeyType(mode);
         }
       })
@@ -84,7 +83,11 @@ export default function Grid({
 
   // Settings에서 돌아온 직후 Grid가 표시될 때 모달의 첫 진입 애니메이션을 건너뛰도록 플래그를 1회성으로 소비
   useEffect(() => {
-    if (shouldSkipModalAnimation && selectedKey && typeof onModalAnimationConsumed === "function") {
+    if (
+      shouldSkipModalAnimation &&
+      selectedKey &&
+      typeof onModalAnimationConsumed === "function"
+    ) {
       onModalAnimationConsumed();
     }
   }, [shouldSkipModalAnimation, selectedKey, onModalAnimationConsumed]);
