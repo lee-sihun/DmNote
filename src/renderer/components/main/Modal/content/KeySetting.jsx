@@ -4,7 +4,12 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 import Modal from "../Modal";
 import { useTranslation } from "react-i18next";
 
-export default function KeySetting({ keyData, onClose, onSave, skipAnimation = false }) {
+export default function KeySetting({
+  keyData,
+  onClose,
+  onSave,
+  skipAnimation = false,
+}) {
   const { t } = useTranslation();
   const {
     useCustomCSS,
@@ -33,6 +38,10 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
   const [displayNoteOpacity, setDisplayNoteOpacity] = useState(
     keyData.noteOpacity ? `${keyData.noteOpacity}%` : "80%"
   );
+
+  const [widthFocused, setWidthFocused] = useState(false);
+  const [heightFocused, setHeightFocused] = useState(false);
+  const [colorFocused, setColorFocused] = useState(false);
 
   const activeInputRef = useRef(null);
   const inactiveInputRef = useRef(null);
@@ -171,7 +180,9 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
           </p>
           <button
             onClick={() => setIsListening(true)}
-            className="flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-2"
+            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+              isListening ? "border-[#459BF8]" : "border-[#3A3943]"
+            } text-[#DBDEE8] text-style-2`}
           >
             {isListening
               ? t("keySetting.pressAnyKey")
@@ -181,7 +192,11 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">{t("keySetting.keySize")}</p>
           <div className="flex items-center gap-[10.5px]">
-            <div className="relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+            <div
+              className={`relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                widthFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+              }`}
+            >
               <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
                 X
               </span>
@@ -199,7 +214,9 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
                     }
                   }
                 }}
+                onFocus={() => setWidthFocused(true)}
                 onBlur={(e) => {
+                  setWidthFocused(false);
                   if (
                     e.target.value === "" ||
                     isNaN(parseInt(e.target.value))
@@ -210,7 +227,11 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
                 className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
               />
             </div>
-            <div className="relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+            <div
+              className={`relative w-[48px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                heightFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+              }`}
+            >
               <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
                 Y
               </span>
@@ -228,7 +249,9 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
                     }
                   }
                 }}
+                onFocus={() => setHeightFocused(true)}
                 onBlur={(e) => {
+                  setHeightFocused(false);
                   if (
                     e.target.value === "" ||
                     isNaN(parseInt(e.target.value))
@@ -248,7 +271,11 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
               <p className="text-white text-style-2">
                 {t("keySetting.noteColor")}
               </p>
-              <div className="relative w-[76px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]">
+              <div
+                className={`relative w-[76px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                  colorFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+                }`}
+              >
                 <div
                   className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
                   style={{ backgroundColor: noteColor }}
@@ -257,7 +284,11 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
                   type="text"
                   value={noteColor.replace(/^#/, "")}
                   onChange={handleColorChange}
-                  onBlur={handleColorBlur}
+                  onFocus={() => setColorFocused(true)}
+                  onBlur={(e) => {
+                    setColorFocused(false);
+                    handleColorBlur(e);
+                  }}
                   placeholder="FFF"
                   className="absolute left-[20px] top-[-1px] h-[23px] w-[50px] bg-transparent text-style-1 text-[#DBDEE8] text-center"
                 />
@@ -296,7 +327,7 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
                     setNoteOpacity(Math.min(Math.max(numValue, 0), 100));
                   }
                 }}
-                className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+                className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
               />
             </div>
           </>
@@ -362,7 +393,7 @@ export default function KeySetting({ keyData, onClose, onSave, skipAnimation = f
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder="className"
-              className="text-center w-[90px] h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[90px] h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
             />
           </div>
         )}

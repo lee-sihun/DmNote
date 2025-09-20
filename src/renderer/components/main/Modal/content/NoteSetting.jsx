@@ -81,7 +81,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
                 setBorderRadius(Math.min(Math.max(num, 1), 100));
               }
             }}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
           />
         </div>
 
@@ -111,7 +111,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
                 setSpeed(Math.min(Math.max(num, 70), 1000));
               }
             }}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
           />
         </div>
 
@@ -143,7 +143,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
                 setTrackHeight(Math.min(Math.max(num, 50), 500));
               }
             }}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
           />
         </div>
 
