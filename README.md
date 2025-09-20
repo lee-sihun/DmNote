@@ -11,7 +11,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.1.0/DM.NOTE.v.1.1.0.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.2.0/DM.NOTE.v.1.2.0.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -23,7 +23,7 @@
 
 현재는 windows 환경에서만 사용이 가능하며, 리듬게임 이외의 다른 게임에서도 사용이 가능합니다.
  
-[DM NOTE v1.1.0 다운로드](https://github.com/lee-sihun/djmax-keyviewer/releases/download/1.1.0/DM.NOTE.v.1.1.0.zip) 
+[DM NOTE v1.2.0 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.2.0/DM.NOTE.v.1.2.0.zip) 
 
 
 ## ✨ 주요 기능
@@ -119,6 +119,7 @@ npm run start
 - 기본 제공 프리셋은 resources > resources > presets 폴더에 있습니다.
 - 커스텀 CSS 예제 파일은 resources > resources 폴더에 있습니다.
 - 키 설정 기능에 클래스명 할당 시 선택자 없이 이름만 입력하면 됩니다.(blue -> o, .blue -> x)
+
 
 
 
