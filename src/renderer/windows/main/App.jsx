@@ -12,8 +12,10 @@ import NoteSettingModal from "@components/main/modal/content/NoteSetting";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import FloatingPopup from "@components/main/modal/FloatingPopup";
 import Palette from "@components/main/modal/content/Palette";
+import { useKeyStore } from "@stores/useKeyStore";
 
 export default function App() {
+  const { selectedKeyType, setSelectedKeyType } = useKeyStore();
   useCustomCssInjection();
 
   const primaryButtonRef = useRef(null);
@@ -35,7 +37,8 @@ export default function App() {
   const [activeTool, setActiveTool] = useState("move");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
-  const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] = useState(false);
+  const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
+    useState(false);
   const [noteSettings, setNoteSettings] = useState(null);
   const {
     noteEffect,
@@ -92,6 +95,28 @@ export default function App() {
       ipcRenderer.removeListener("update-language", languageUpdateHandler);
     };
   }, []);
+
+  // Tab 키로 기본 탭(4/5/6/8key) 순환
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Tab" || e.shiftKey) return;
+      const active = document.activeElement;
+      if (active) {
+        const tag = (active.tagName || "").toLowerCase();
+        const editable = active.isContentEditable;
+        if (tag === "input" || tag === "textarea" || editable) return;
+      }
+      const defaults = ["4key", "5key", "6key", "8key"];
+      if (!defaults.includes(selectedKeyType)) return; // 커스텀 탭일 땐 미적용
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = defaults.indexOf(selectedKeyType);
+      const next = defaults[(idx + 1) % defaults.length];
+      setSelectedKeyType(next);
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [selectedKeyType, setSelectedKeyType]);
 
   const showAlert = (message) =>
     setAlertState({
@@ -152,7 +177,9 @@ export default function App() {
             activeTool={activeTool}
             showConfirm={showConfirm}
             shouldSkipModalAnimation={skipModalAnimationOnReturn}
-            onModalAnimationConsumed={() => setSkipModalAnimationOnReturn(false)}
+            onModalAnimationConsumed={() =>
+              setSkipModalAnimationOnReturn(false)
+            }
           />
         )}
       </div>

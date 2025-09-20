@@ -33,7 +33,7 @@ const TabTool = () => {
         ref={gridButtonRef}
         className="flex items-center justify-center w-[40px] h-[40px] bg-button-primary rounded-[7px]"
         onClick={() => {
-          setIsPopupOpen(true);
+          setIsPopupOpen((prev) => !prev);
         }}
       >
         <div
