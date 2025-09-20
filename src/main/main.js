@@ -643,6 +643,8 @@ class Application {
           trackHeight: 150,
           reverse: false,
         }),
+        customTabs: store.get("customTabs", []),
+        selectedKeyType: store.get("selectedKeyType", "4key"),
       };
 
       const { filePath } = await dialog.showSaveDialog({
@@ -674,59 +676,94 @@ class Application {
         filters: [{ name: "DM NOTE Preset", extensions: ["json"] }],
       });
 
-      if (filePaths.length > 0) {
-        try {
-          const preset = JSON.parse(
-            require("fs").readFileSync(filePaths[0], "utf8")
+      if (!filePaths || filePaths.length === 0) return false;
+
+      try {
+        const preset = JSON.parse(
+          require("fs").readFileSync(filePaths[0], "utf8")
+        );
+
+        // 기본 구조 추출
+        const incomingKeys = preset.keys || {};
+        const incomingPositions = preset.keyPositions || {};
+        const bgColor = preset.backgroundColor;
+
+        // 저장
+        store.set("keys", incomingKeys);
+        store.set("keyPositions", incomingPositions);
+        if (bgColor !== undefined) store.set("backgroundColor", bgColor);
+
+        // 커스텀 탭 메타 (v2) 및 역호환
+        const defaultModes = ["4key", "5key", "6key", "8key"];
+        if (Array.isArray(preset.customTabs)) {
+          const validated = preset.customTabs.filter(
+            (t) =>
+              t &&
+              t.id &&
+              Object.prototype.hasOwnProperty.call(incomingKeys, t.id)
           );
+          store.set("customTabs", validated);
+        } else {
+          const synthesized = Object.keys(incomingKeys)
+            .filter((k) => !defaultModes.includes(k))
+            .map((id, idx) => ({ id, name: `Custom ${idx + 1}` }));
+          store.set("customTabs", synthesized);
+        }
 
-          // 설정 적용
-          store.set("keys", preset.keys);
-          store.set("keyPositions", preset.keyPositions);
-          store.set("backgroundColor", preset.backgroundColor);
-          // 노트 설정 적용 (호환 범위로 정규화)
-          const defaults = { borderRadius: 2, speed: 180 };
-          const incoming = preset.noteSettings || {};
-          const br = parseInt(incoming.borderRadius ?? defaults.borderRadius);
-          const sp = parseInt(incoming.speed ?? defaults.speed);
-          const normalized = {
-            borderRadius: Math.max(
-              1,
-              Math.min(Number.isFinite(br) ? br : defaults.borderRadius, 100)
-            ),
-            speed: Math.max(
-              70,
-              Math.min(Number.isFinite(sp) ? sp : defaults.speed, 1000)
-            ),
-          };
-          store.set("noteSettings", normalized);
-          // noteSettings normalized above; legacy branch removed
+        // 노트 설정 정규화
+        const nsDefaults = { borderRadius: 2, speed: 180 };
+        const incomingNS = preset.noteSettings || {};
+        const br = parseInt(incomingNS.borderRadius ?? nsDefaults.borderRadius);
+        const sp = parseInt(incomingNS.speed ?? nsDefaults.speed);
+        const normalizedNS = {
+          borderRadius: Math.max(
+            1,
+            Math.min(Number.isFinite(br) ? br : nsDefaults.borderRadius, 100)
+          ),
+          speed: Math.max(
+            70,
+            Math.min(Number.isFinite(sp) ? sp : nsDefaults.speed, 1000)
+          ),
+        };
+        store.set("noteSettings", normalizedNS);
 
-          keyboardService.updateKeyMapping(preset.keys);
+        // 선택 모드 결정 및 적용
+        const savedSelected = preset.selectedKeyType;
+        const availableModes = Object.keys(incomingKeys || {});
+        const nextMode = availableModes.includes(savedSelected)
+          ? savedSelected
+          : availableModes.includes(store.get("selectedKeyType", "4key"))
+          ? store.get("selectedKeyType", "4key")
+          : "4key";
+        store.set("selectedKeyType", nextMode);
 
-          [this.overlayWindow, this.mainWindow].forEach((window) => {
-            window.webContents.send("updateKeyMappings", preset.keys);
-            window.webContents.send("updateKeyPositions", preset.keyPositions);
-            window.webContents.send(
-              "updateBackgroundColor",
-              preset.backgroundColor
-            );
+        keyboardService.updateKeyMapping(incomingKeys);
+        try {
+          keyboardService.setKeyMode(nextMode);
+        } catch {}
+
+        // 브로드캐스트
+        [this.overlayWindow, this.mainWindow].forEach((window) => {
+          if (window && !window.isDestroyed()) {
+            window.webContents.send("updateKeyMappings", incomingKeys);
+            window.webContents.send("updateKeyPositions", incomingPositions);
+            if (bgColor !== undefined) {
+              window.webContents.send("updateBackgroundColor", bgColor);
+            }
             window.webContents.send(
               "update-note-settings",
               store.get("noteSettings", { borderRadius: 2, speed: 180 })
             );
-          });
+            window.webContents.send("currentMode", nextMode);
+          }
+        });
 
-          return true;
-        } catch (err) {
-          console.error("Failed to load preset:", err);
-          return false;
-        }
+        return true;
+      } catch (err) {
+        console.error("Failed to load preset:", err);
+        return false;
       }
-      return false;
     });
-
-    // 커스텀 CSS 핸들러 ---
     ipcMain.handle("load-custom-css", async () => {
       const { dialog } = require("electron");
       const fs = require("fs");
@@ -735,6 +772,10 @@ class Application {
         properties: ["openFile"],
         filters: [{ name: "CSS", extensions: ["css"] }],
       });
+      window.webContents.send(
+        "currentMode",
+        store.get("selectedKeyType", "4key")
+      );
 
       if (canceled || !filePaths || filePaths.length === 0) {
         return { success: false };

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "../Modal";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export default function TabNameModal({
   onSubmit,
   existingNames = [],
 }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -26,11 +28,11 @@ export default function TabNameModal({
 
   const validate = useMemo(() => {
     return (v: string) => {
-      if (!v || !v.trim()) return "이름을 입력하세요";
-      if (v.length > 10) return "10자 이하로 입력하세요";
+      if (!v || !v.trim()) return t("tabs.name.required");
+      if (v.length > 10) return t("tabs.name.max");
       if (["4key", "5key", "6key", "8key"].includes(v))
-        return "기본 탭 이름은 사용할 수 없습니다";
-      if (existingNames.includes(v)) return "이미 존재하는 이름입니다";
+        return t("tabs.name.reserved");
+      if (existingNames.includes(v)) return t("tabs.name.duplicate");
       return null;
     };
   }, [existingNames]);
@@ -44,11 +46,11 @@ export default function TabNameModal({
     const res = await onSubmit(name.trim());
     if (res?.error) {
       const map: Record<string, string> = {
-        "max-reached": "추가 탭은 최대 5개까지입니다",
-        "duplicate-name": "이미 존재하는 이름입니다",
-        "invalid-name": "올바르지 않은 이름입니다",
+        "max-reached": t("tabs.errors.max"),
+        "duplicate-name": t("tabs.name.duplicate"),
+        "invalid-name": t("tabs.errors.invalid"),
       };
-      setError(map[res.error] || "생성에 실패했습니다");
+      setError(map[res.error] || t("tabs.errors.createFail"));
       return;
     }
     onClose();
@@ -62,7 +64,9 @@ export default function TabNameModal({
         className="flex flex-col justify-between p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-style-3 text-[#FFFFFF]">탭 생성</div>
+        <div className="text-style-3 text-[#FFFFFF]">
+          {t("tabs.createTitle")}
+        </div>
         <input
           autoFocus
           value={name}
@@ -71,7 +75,7 @@ export default function TabNameModal({
             if (e.key === "Enter") handleSubmit();
           }}
           className="w-full h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
-          placeholder="예: 내 커스텀"
+          placeholder={t("tabs.name.placeholder")}
         />
         {error && (
           <div className="text-[#ED6A5E] text-style-1 my-[-12px]">{error}</div>
@@ -81,13 +85,13 @@ export default function TabNameModal({
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
             onClick={handleSubmit}
           >
-            생성하기
+            {t("tabs.create")}
           </button>
           <button
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             onClick={onClose}
           >
-            취소
+            {t("common.cancel")}
           </button>
         </div>
       </div>

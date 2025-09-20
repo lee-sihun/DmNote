@@ -4,6 +4,7 @@ import MinusIcon from "@assets/svgs/minus.svg";
 import { useKeyStore } from "@stores/useKeyStore";
 import Alert from "./Alert.jsx";
 import TabNameModal from "./TabNameModal";
+import { useTranslation } from "react-i18next";
 
 type TabListProps = {
   onClose?: () => void;
@@ -18,6 +19,7 @@ const TabList = ({ onClose }: TabListProps) => {
     addCustomTab,
     deleteSelectedCustomTab,
   } = useKeyStore();
+  const { t } = useTranslation();
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
@@ -50,9 +52,7 @@ const TabList = ({ onClose }: TabListProps) => {
     <div className="flex flex-col items-center justify-center max-w-[154px] bg-[#1A191E] rounded-[7px] border border-[#2A2A30]">
       <div className="min-h-[39px] w-full border-b-[1px] border-[#2A2A30] flex flex-col items-center justify-center p-[8px] gap-[8px]">
         {customTabs.length === 0 ? (
-          <span className="text-style-2 text-[#DBDEE8]">
-            추가 탭이 없습니다
-          </span>
+          <span className="text-style-2 text-[#DBDEE8]">{t("tabs.empty")}</span>
         ) : (
           <div className="flex flex-col w-[154px] gap-[6px] items-center">
             {[...customTabs]
@@ -108,10 +108,10 @@ const TabList = ({ onClose }: TabListProps) => {
       <Alert
         isOpen={askDelete}
         type="confirm"
-        message={`${
-          customTabs.find((t) => t.id === selectedKeyType)?.name || ""
-        } 탭을 제거 하시겠습니까?`}
-        confirmText="삭제"
+        message={t("tabs.deleteConfirm", {
+          name: customTabs.find((t) => t.id === selectedKeyType)?.name || "",
+        })}
+        confirmText={t("tabs.delete")}
         onConfirm={async () => {
           setAskDelete(false);
           await deleteSelectedCustomTab();

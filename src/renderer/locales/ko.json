@@ -95,5 +95,24 @@
     "reset": "초기화",
     "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
     "remove": "제거하기"
+  },
+  "tabs": {
+    "empty": "추가 탭이 없습니다",
+    "createTitle": "탭 생성",
+    "create": "생성하기",
+    "delete": "삭제",
+    "deleteConfirm": "{{name}} 탭을 제거 하시겠습니까?",
+    "name": {
+      "placeholder": "예: 내 커스텀",
+      "required": "이름을 입력하세요",
+      "max": "10자 이하로 입력하세요",
+      "reserved": "기본 탭 이름은 사용할 수 없습니다",
+      "duplicate": "이미 존재하는 이름입니다"
+    },
+    "errors": {
+      "max": "추가 탭은 최대 5개까지 만들 수 있습니다",
+      "invalid": "올바르지 않은 이름입니다",
+      "createFail": "생성에 실패했습니다"
+    }
   }
 }

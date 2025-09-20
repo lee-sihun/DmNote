@@ -95,5 +95,24 @@
     "reset": "Reset",
     "removeKey": "Remove key [{{name}}]?",
     "remove": "Remove"
+  },
+  "tabs": {
+    "empty": "No additional tabs",
+    "createTitle": "Create Tab",
+    "create": "Create",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the '{{name}}' tab?",
+    "name": {
+      "placeholder": "e.g. My Custom",
+      "required": "Please enter a name",
+      "max": "Please enter up to 10 characters",
+      "reserved": "You cannot use a default tab name",
+      "duplicate": "Name already exists"
+    },
+    "errors": {
+      "max": "You can add up to 5 tabs",
+      "invalid": "Invalid name",
+      "createFail": "Failed to create"
+    }
   }
 }
