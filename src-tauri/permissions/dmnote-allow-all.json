@@ -68,7 +68,9 @@
           "plugin_storage_clear",
           "plugin_storage_keys",
           "plugin_storage_has_data",
-          "plugin_storage_clear_by_prefix"
+          "plugin_storage_clear_by_prefix",
+          "stat_positions_get",
+          "stat_positions_update"
         ],
         "deny": []
       }

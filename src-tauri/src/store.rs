@@ -387,6 +387,18 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
         {
             data.key_positions = v;
         }
+        if let Some(v) = obj
+            .get("statPositions")
+            .and_then(|v| serde_json::from_value::<StatPositions>(v.clone()).ok())
+        {
+            data.stat_positions = v;
+        }
+        if let Some(v) = obj
+            .get("keyCounters")
+            .and_then(|v| serde_json::from_value::<KeyCounters>(v.clone()).ok())
+        {
+            data.key_counters = v;
+        }
         if let Some(v) = obj.get("backgroundColor").and_then(Value::as_str) {
             data.background_color = v.to_string();
         }

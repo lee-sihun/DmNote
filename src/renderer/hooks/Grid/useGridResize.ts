@@ -90,10 +90,11 @@ export function useGridResize({
     const currentPositions = useKeyStore.getState().positions;
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
+    const currentStatPositions = useStatItemStore.getState().positions as any;
     const { keyMappings } = useKeyStore.getState();
     useHistoryStore
       .getState()
-      .pushState(keyMappings, currentPositions, currentPluginElements);
+      .pushState(keyMappings, currentPositions, currentStatPositions, currentPluginElements);
   }, []);
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)

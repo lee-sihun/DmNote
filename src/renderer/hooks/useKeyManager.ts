@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
@@ -62,6 +63,7 @@ export function useKeyManager() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
+  const statPositions = useStatItemStore((state) => state.positions);
   const setKeyMappings = useKeyStore((state) => state.setKeyMappings);
   const setPositions = useKeyStore((state) => state.setPositions);
   const setLocalUpdateInProgress = useKeyStore(
@@ -86,8 +88,8 @@ export function useKeyManager() {
 
   // 히스토리에 현재 상태 저장 (플러그인 요소 포함)
   const saveToHistory = useCallback(() => {
-    pushState(keyMappings, positions, pluginElements);
-  }, [keyMappings, positions, pluginElements, pushState]);
+    pushState(keyMappings, positions, statPositions, pluginElements);
+  }, [keyMappings, positions, statPositions, pluginElements, pushState]);
 
   const handlePositionChange = (index: number, dx: number, dy: number) => {
     const current = positions[selectedKeyType] || [];
@@ -1061,11 +1063,17 @@ export function useKeyManager() {
       // 현재 상태를 가져와서 undo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
-      const previousState = undo(keyMappings, positions, currentPluginElements);
+      const previousState = undo(
+        keyMappings,
+        positions,
+        statPositions,
+        currentPluginElements
+      );
 
       if (previousState) {
         setKeyMappings(previousState.keyMappings);
         setPositions(previousState.positions);
+        useStatItemStore.getState().setPositions(previousState.statPositions);
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (previousState.keyCounters) {
@@ -1152,8 +1160,22 @@ export function useKeyManager() {
               console.error("Failed to apply undo positions", error);
             });
 
+          window.api.statItems
+            .updatePositions(previousState.statPositions as any)
+            .catch((error) => {
+              console.error("Failed to apply undo stat positions", error);
+            });
+
           if (previousState.keyCounters) {
             await window.api.keys.setCounters(previousState.keyCounters);
+          }
+
+          try {
+            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+              positions: previousState.statPositions,
+            });
+          } catch {
+            // ignore
           }
         } catch (error) {
           console.error("Failed to apply undo", error);
@@ -1166,6 +1188,7 @@ export function useKeyManager() {
     undo,
     keyMappings,
     positions,
+    statPositions,
     setKeyMappings,
     setPositions,
     setPluginElements,
@@ -1177,11 +1200,17 @@ export function useKeyManager() {
       // 현재 상태를 가져와서 redo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
-      const nextState = redo(keyMappings, positions, currentPluginElements);
+      const nextState = redo(
+        keyMappings,
+        positions,
+        statPositions,
+        currentPluginElements
+      );
 
       if (nextState) {
         setKeyMappings(nextState.keyMappings);
         setPositions(nextState.positions);
+        useStatItemStore.getState().setPositions(nextState.statPositions);
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (nextState.keyCounters) {
@@ -1259,8 +1288,22 @@ export function useKeyManager() {
               console.error("Failed to apply redo positions", error);
             });
 
+          window.api.statItems
+            .updatePositions(nextState.statPositions as any)
+            .catch((error) => {
+              console.error("Failed to apply redo stat positions", error);
+            });
+
           if (nextState.keyCounters) {
             await window.api.keys.setCounters(nextState.keyCounters);
+          }
+
+          try {
+            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+              positions: nextState.statPositions,
+            });
+          } catch {
+            // ignore
           }
         } catch (error) {
           console.error("Failed to apply redo", error);
@@ -1273,6 +1316,7 @@ export function useKeyManager() {
     redo,
     keyMappings,
     positions,
+    statPositions,
     setKeyMappings,
     setPositions,
     setPluginElements,

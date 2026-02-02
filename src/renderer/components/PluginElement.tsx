@@ -15,6 +15,7 @@ import {
 import { useDraggable } from "@hooks/Grid";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { useKeyStore as useKeyStoreForHistory } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { useSmartGuidesElements } from "@hooks/Grid";
 import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
@@ -400,10 +401,11 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     if (windowType !== "main") return;
 
     const { keyMappings, positions } = useKeyStoreForHistory.getState();
+    const statPositions = useStatItemStore.getState().positions;
     const pluginElements = usePluginDisplayElementStore.getState().elements;
     useHistoryStore
       .getState()
-      .pushState(keyMappings, positions, pluginElements);
+      .pushState(keyMappings, positions, statPositions, pluginElements);
   }, [windowType]);
 
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { getCounterSnapshot } from "@stores/keyCounterSignals";
 import type { KeyCounters, KeyMappings, KeyPositions } from "@src/types/keys";
 import type { PluginDisplayElementInternal } from "@src/types/api";
+import type { StatItemPositions } from "@src/types/statItems";
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)
 type SerializablePluginElement = Omit<
@@ -12,6 +13,7 @@ type SerializablePluginElement = Omit<
 interface HistoryState {
   keyMappings: KeyMappings;
   positions: KeyPositions;
+  statPositions: StatItemPositions;
   pluginElements?: SerializablePluginElement[];
   keyCounters: KeyCounters;
 }
@@ -24,16 +26,19 @@ interface HistoryStore {
   pushState: (
     keyMappings: KeyMappings,
     positions: KeyPositions,
+    statPositions: StatItemPositions,
     pluginElements?: PluginDisplayElementInternal[]
   ) => void;
   undo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
+    currentStatPositions: StatItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => HistoryState | null;
   redo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
+    currentStatPositions: StatItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => HistoryState | null;
   clear: () => void;
@@ -72,12 +77,14 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   pushState: (
     keyMappings: KeyMappings,
     positions: KeyPositions,
+    statPositions: StatItemPositions,
     pluginElements?: PluginDisplayElementInternal[]
   ) => {
     set((state) => {
       const newState: HistoryState = {
         keyMappings: JSON.parse(JSON.stringify(keyMappings)),
         positions: JSON.parse(JSON.stringify(positions)),
+        statPositions: JSON.parse(JSON.stringify(statPositions)),
         pluginElements: pluginElements
           ? serializePluginElements(pluginElements)
           : undefined,
@@ -100,6 +107,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   undo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
+    currentStatPositions: StatItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => {
     const state = get();
@@ -112,6 +120,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const currentState: HistoryState = {
       keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
       positions: JSON.parse(JSON.stringify(currentPositions)),
+      statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
         : undefined,
@@ -129,6 +138,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   redo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
+    currentStatPositions: StatItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => {
     const state = get();
@@ -141,6 +151,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const currentState: HistoryState = {
       keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
       positions: JSON.parse(JSON.stringify(currentPositions)),
+      statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
         : undefined,

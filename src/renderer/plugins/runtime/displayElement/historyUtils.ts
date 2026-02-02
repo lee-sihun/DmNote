@@ -4,6 +4,7 @@
  */
 
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 
@@ -25,8 +26,11 @@ export const saveToHistory = (): void => {
   if ((window as any).__dmn_window_type !== "main") return;
 
   const { keyMappings, positions } = useKeyStore.getState();
+  const statPositions = useStatItemStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
-  useHistoryStore.getState().pushState(keyMappings, positions, pluginElements);
+  useHistoryStore
+    .getState()
+    .pushState(keyMappings, positions, statPositions, pluginElements);
 };
 
 /**

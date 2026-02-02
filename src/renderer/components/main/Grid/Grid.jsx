@@ -204,6 +204,15 @@ export default function Grid({
       const tabPositions = current[selectedKeyType] || [];
       const target = tabPositions[selected.index];
       if (!target) return;
+
+      // 히스토리 저장
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore
+        .getState()
+        .pushState(km, currentPositions, current, currentPluginElements);
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
@@ -247,6 +256,15 @@ export default function Grid({
       const tabPositions = current[selectedKeyType] || [];
       const target = tabPositions[selected.index];
       if (!target) return;
+
+      // 히스토리 저장
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore
+        .getState()
+        .pushState(km, currentPositions, current, currentPluginElements);
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
@@ -521,7 +539,12 @@ export default function Grid({
           const { keyMappings: km } = useKeyStore.getState();
           useHistoryStore
             .getState()
-            .pushState(km, currentPositions, currentPluginElements);
+            .pushState(
+              km,
+              currentPositions,
+              useStatItemStore.getState().positions,
+              currentPluginElements
+            );
         }}
         activeTool={activeTool}
         onEraserClick={() => {
@@ -571,6 +594,16 @@ export default function Grid({
       const tabPositions = current[selectedKeyType] || [];
       const prev = tabPositions[index];
       if (!prev) return;
+      if (prev.dx === dx && prev.dy === dy) return;
+
+      // 히스토리 저장 (키/플러그인과 동일한 스냅샷 기준)
+      const currentKeyPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore
+        .getState()
+        .pushState(km, currentKeyPositions, current, currentPluginElements);
 
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos
@@ -581,6 +614,13 @@ export default function Grid({
       window.api.statItems.updatePositions(nextPositions).catch((error) => {
         console.error("Failed to update stat item positions", error);
       });
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
     };
 
     return items.map((position, index) => (
@@ -622,7 +662,12 @@ export default function Grid({
           const { keyMappings: km } = useKeyStore.getState();
           useHistoryStore
             .getState()
-            .pushState(km, currentPositions, currentPluginElements);
+            .pushState(
+              km,
+              currentPositions,
+              useStatItemStore.getState().positions,
+              currentPluginElements
+            );
         }}
         activeTool={activeTool}
         zoom={zoom}
@@ -841,7 +886,12 @@ export default function Grid({
             const { keyMappings: km } = useKeyStore.getState();
             useHistoryStore
               .getState()
-              .pushState(km, currentPositions, currentPluginElements);
+              .pushState(
+                km,
+                currentPositions,
+                useStatItemStore.getState().positions,
+                currentPluginElements
+              );
           }}
         />
       </div>
@@ -1223,10 +1273,23 @@ export default function Grid({
               onAddKeyAt(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === "addStat" && gridAddLocalPos) {
               const current = useStatItemStore.getState().positions;
+              // 히스토리 저장
+              const currentPositions = useKeyStore.getState().positions;
+              const currentPluginElements =
+                usePluginDisplayElementStore.getState().elements;
+              const { keyMappings: km } = useKeyStore.getState();
+              useHistoryStore
+                .getState()
+                .pushState(
+                  km,
+                  currentPositions,
+                  current,
+                  currentPluginElements
+                );
+
               const list = [...(current[selectedKeyType] || [])];
               list.push({
                 statType: "kps",
-                displayText: "KPS",
                 dx: gridAddLocalPos.dx,
                 dy: gridAddLocalPos.dy,
                 width: 60,
@@ -1258,6 +1321,13 @@ export default function Grid({
                 .catch((error) => {
                   console.error("Failed to add stat item", error);
                 });
+              try {
+                window.api.bridge.sendTo("overlay", "statPositions:sync", {
+                  positions: nextPositions,
+                });
+              } catch {
+                // ignore
+              }
             } else if (id === "tabCss") {
               setIsTabCssModalOpen(true);
             }

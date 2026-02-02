@@ -441,9 +441,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       onSelectionFromPanel?.();
 
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
-      useHistoryStore.getState().pushState(km, pos, currentPluginElements);
+      useHistoryStore
+        .getState()
+        .pushState(km, pos, currentStatPositions as any, currentPluginElements);
 
       if (item.type === "key" && item.index !== undefined) {
         const currentPositions = pos[selectedKeyType] || [];
@@ -493,6 +496,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           console.error("Failed to toggle stat item visibility", error);
         } finally {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
+        }
+
+        try {
+          window.api.bridge.sendTo("overlay", "statPositions:sync", {
+            positions: updatedPositions,
+          });
+        } catch {
+          // ignore
         }
 
         return;
@@ -585,9 +596,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           pluginsToDelete.length > 0
         ) {
           const { keyMappings: km, positions: pos } = useKeyStore.getState();
+          const currentStatPositions = useStatItemStore.getState().positions;
           const currentPluginElements =
             usePluginDisplayElementStore.getState().elements;
-          useHistoryStore.getState().pushState(km, pos, currentPluginElements);
+          useHistoryStore
+            .getState()
+            .pushState(km, pos, currentStatPositions as any, currentPluginElements);
         }
 
         // 선택 해제
@@ -651,6 +665,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           } finally {
             useStatItemStore.getState().setLocalUpdateInProgress(false);
           }
+
+          try {
+            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+              positions: updatedPositions,
+            });
+          } catch {
+            // ignore
+          }
         }
 
         // 플러그인 요소 배치 삭제
@@ -672,7 +694,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 드롭 처리
   const performDrop = useCallback(
-    (fromIndex: number, toIndex: number) => {
+    async (fromIndex: number, toIndex: number) => {
       if (fromIndex === toIndex) return;
 
       const items = [...layerItemsRef.current];
@@ -681,12 +703,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 히스토리 저장
       const currentPositions = useKeyStore.getState().positions;
+      const currentStatPositions = useStatItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
       useHistoryStore
         .getState()
-        .pushState(km, currentPositions, currentPluginElements);
+        .pushState(km, currentPositions, currentStatPositions as any, currentPluginElements);
 
       // 아이템 재정렬
       const [removed] = items.splice(fromIndex, 1);
@@ -740,6 +763,45 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 통계 positions 일괄 업데이트
       updatedStatPositions[selectedKeyType] = currentStatModePositions;
       useStatItemStore.getState().setPositions(updatedStatPositions);
+
+      // 백엔드/오버레이 동기화 (레이어 정렬 결과 즉시 반영)
+      useKeyStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      try {
+        await window.api.keys.updatePositions(updatedPositions);
+        await window.api.statItems.updatePositions(updatedStatPositions);
+      } catch (error) {
+        console.error("Failed to reorder layers", error);
+      } finally {
+        useKeyStore.getState().setLocalUpdateInProgress(false);
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+      }
+
+      try {
+        window.api.bridge.sendTo("overlay", "positions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: updatedStatPositions,
+        });
+      } catch {
+        // ignore
+      }
+
+      try {
+        const currentPluginElements =
+          usePluginDisplayElementStore.getState().elements;
+        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+          elements: currentPluginElements,
+        });
+      } catch {
+        // ignore
+      }
     },
     [selectedKeyType],
   );

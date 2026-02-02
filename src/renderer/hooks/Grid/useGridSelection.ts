@@ -115,9 +115,10 @@ export function useGridSelection({
       // 히스토리 저장 (옵션)
       if (saveHistory) {
         const { keyMappings: km } = useKeyStore.getState();
+        const currentStatPositions = useStatItemStore.getState().positions;
         useHistoryStore
           .getState()
-          .pushState(km, currentPositions, currentPluginElements);
+          .pushState(km, currentPositions, currentStatPositions as any, currentPluginElements);
       }
 
       // 키 위치 배치 업데이트
@@ -232,11 +233,18 @@ export function useGridSelection({
       .map((el) => el.id);
 
     // 히스토리 저장
-    if (keysToDelete.length > 0 || statsToDelete.length > 0 || pluginsToDelete.length > 0) {
+    if (
+      keysToDelete.length > 0 ||
+      statsToDelete.length > 0 ||
+      pluginsToDelete.length > 0
+    ) {
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
-      useHistoryStore.getState().pushState(km, pos, currentPluginElements);
+      useHistoryStore
+        .getState()
+        .pushState(km, pos, currentStatPositions as any, currentPluginElements);
     }
 
     // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
@@ -310,6 +318,15 @@ export function useGridSelection({
       } finally {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       }
+
+      // 오버레이 동기화 (이벤트 레이스/누락 대비)
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
     }
   }, [selectedElements, selectedKeyType, clearSelection]);
 
@@ -380,7 +397,12 @@ export function useGridSelection({
 
     // 히스토리 저장
     const historyStore = useHistoryStore.getState();
-    historyStore.pushState({ ...km }, { ...pos }, [...currentPluginElements]);
+    historyStore.pushState(
+      { ...km },
+      { ...pos },
+      { ...(useStatItemStore.getState().positions as any) },
+      [...currentPluginElements]
+    );
 
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
     const statsToAdd: { position: any }[] = [];
@@ -456,6 +478,14 @@ export function useGridSelection({
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
       }
+
+      try {
+        window.api.bridge.sendTo("overlay", "positions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
     }
 
     // 통계 요소 추가
@@ -485,6 +515,14 @@ export function useGridSelection({
       } finally {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       }
+
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
     }
 
     // 플러그인 요소 추가
@@ -509,6 +547,14 @@ export function useGridSelection({
       }
 
       usePluginDisplayElementStore.getState().setElements(newElements);
+
+      try {
+        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+          elements: newElements,
+        });
+      } catch {
+        // ignore
+      }
     }
 
     // 붙여넣기된 요소들 선택

@@ -686,11 +686,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, pluginElements);
+    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
     pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
+    statItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -701,11 +702,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, pluginElements);
+    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
     pluginTransformHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
+    statItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -890,37 +892,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const current = useStatItemStore.getState().positions;
       const list = current[mode] || [];
       if (!list[index]) return;
-      const prev = list[index] as StatItemPosition;
-
-      // statType 변경 시 displayText는 기본 레이블(기존 값이 기본 레이블이거나 비어있을 때만) 함께 갱신
-      const labelForStat = (statType?: StatItemType | null) => {
-        if (statType === "total") return "Total";
-        return "KPS";
-      };
-
-      let effectiveUpdates = updates as Partial<StatItemPosition>;
-      if (
-        "statType" in updates &&
-        !("displayText" in updates) &&
-        updates.statType
-      ) {
-        const prevLabel = labelForStat(prev.statType ?? null);
-        const nextLabel = labelForStat(updates.statType as any);
-        const currentLabel = (prev.displayText || "").trim();
-        if (!currentLabel || currentLabel === prevLabel) {
-          effectiveUpdates = { ...effectiveUpdates, displayText: nextLabel };
-        }
-      }
 
       // 히스토리 저장 (키/플러그인과 동일한 스냅샷 기준)
       const currentPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, currentPluginElements);
+      pushHistoryState(km, currentPositions, current, currentPluginElements);
 
       const nextList = list.map((pos, i) =>
-        i === index ? ({ ...pos, ...effectiveUpdates } as StatItemPosition) : pos,
+        i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
       );
       const nextPositions = { ...current, [mode]: nextList };
 
@@ -1003,7 +984,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, currentPluginElements);
+      pushHistoryState(km, currentPositions, current, currentPluginElements);
 
       const nextList = list.map((pos, i) => {
         const update = updateMap.get(i);
@@ -2167,7 +2148,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     : singleKeyInfo?.displayName || singleKeyCode || "Key";
 
   const keyLikeCode = isSingleStat ? null : singleKeyCode;
-  const keyLikeInfo = isSingleStat ? null : singleKeyInfo;
+  const keyLikeInfo = isSingleStat
+    ? ({ browserKey: statTitle, globalKey: statTitle, displayName: statTitle } as any)
+    : singleKeyInfo;
 
   const handleKeyLikePositionChange = isSingleStat
     ? (index: number, dx: number, dy: number) =>
@@ -2178,6 +2161,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ? ((data: Partial<KeyPosition> & { index: number }) =>
         handleStatUpdate(data as any))
     : onKeyUpdate;
+
+  const handleKeyLikePreview = isSingleStat
+    ? ((index: number, updates: Partial<KeyPosition>) =>
+        handleStatPreview(index, updates as any))
+    : onKeyPreview;
 
   const mappingControl = isSingleStat ? (
     <Dropdown
@@ -2249,12 +2237,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                  keyPosition={keyLikePosition}
                  keyCode={keyLikeCode}
                  keyInfo={keyLikeInfo}
-              onPositionChange={handleKeyLikePositionChange}
-              onKeyUpdate={handleKeyLikeUpdate}
-              onKeyPreview={isSingleStat ? undefined : onKeyPreview}
-              onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
-              isListening={isListening}
-              onKeyListen={isSingleStat ? undefined : handleKeyListen}
+                 onPositionChange={handleKeyLikePositionChange}
+                 onKeyUpdate={handleKeyLikeUpdate}
+                 onKeyPreview={handleKeyLikePreview}
+                 onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
+                 isListening={isListening}
+                 onKeyListen={isSingleStat ? undefined : handleKeyListen}
               mappingControl={mappingControl}
                mappingLabel={
                  isSingleStat
