@@ -1,6 +1,6 @@
 <meta name="google-site-verification" content="tw5pjIDYKCrq1QKYBrD5iyV7DXIM4rsHN9d11WlJFe4" />
 
-[한국어](../README.md) | **English**
+[한국어](../README.md) | **English** | [中文](docs/readme_zh-cn.md)
 
 <div align="center">
   <img src="../src-tauri/icons/icon.ico" alt="dmnote Logo" width="120" height="120">

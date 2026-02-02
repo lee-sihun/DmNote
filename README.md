@@ -1,6 +1,6 @@
 <meta name="google-site-verification" content="tw5pjIDYKCrq1QKYBrD5iyV7DXIM4rsHN9d11WlJFe4" />
 
-**한국어** | [English](docs/readme_en.md)
+**한국어** | [English](docs/readme_en.md) | [中文](docs/readme_zh-cn.md)
 
 <div align="center">
   <img src="src-tauri/icons/icon.ico" alt="dmnote Logo" width="120" height="120">
@@ -173,3 +173,4 @@ npm run tauri:dev
 - 동시 입력 간격 밀리초(ms) 표시
 - 입력 통계 분석 기능
  -->
+
