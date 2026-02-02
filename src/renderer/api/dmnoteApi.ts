@@ -12,6 +12,7 @@ import {
 import { setupPluginDropdownInteractions } from "@utils/pluginDropdownManager";
 import { displayElementApi } from "./pluginDisplayElements";
 import { rawKeyEventBus } from "@utils/rawKeyEventBus";
+import { keyStatsService } from "@utils/keyStatsService";
 
 import type {
   CssLoadResult,
@@ -52,6 +53,7 @@ import type {
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
   RawInputPayload,
+  KeyStatsPayload,
 } from "@src/types/api";
 import type { BootstrapPayload } from "@src/types/app";
 import type { CustomCss } from "@src/types/css";
@@ -430,6 +432,18 @@ const api: DMNoteAPI = {
       return () => {
         i18nListeners.delete(listener);
       };
+    },
+  },
+  stats: {
+    subscribe: (listener: (stats: KeyStatsPayload) => void): Unsubscribe => {
+      // 동기적으로 unsubscribe 함수 반환
+      return keyStatsService.subscribe(listener);
+    },
+    get: (): KeyStatsPayload => {
+      return keyStatsService.getStats();
+    },
+    reset: (): void => {
+      keyStatsService.reset();
     },
   },
   plugin: {

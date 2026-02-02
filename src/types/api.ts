@@ -26,6 +26,21 @@ export type RawInputPayload = {
   labels: string[];
   state: string;
 };
+
+/**
+ * 키 입력 통계 데이터
+ */
+export type KeyStatsPayload = {
+  /** 현재 KPS (Keys Per Second) */
+  kps: number;
+  /** 평균 KPS */
+  kpsAvg: number;
+  /** 최대 KPS */
+  kpsMax: number;
+  /** 현재 탭의 전체 키 카운트 합계 */
+  total: number;
+};
+
 export type OverlayBounds = {
   x: number;
   y: number;
@@ -236,14 +251,14 @@ export type PluginI18nParams = Record<string, string | number>;
 export type PluginTranslateFn = (
   key: string,
   params?: PluginI18nParams,
-  fallback?: string
+  fallback?: string,
 ) => string;
 
 export interface PluginDefinitionContextMenuItem {
   label: string;
   action?: string; // name of the exposed action to call
   onClick?: (
-    context: PluginDisplayElementActionContext
+    context: PluginDisplayElementActionContext,
   ) => void | Promise<void>;
   disabled?:
     | boolean
@@ -326,8 +341,8 @@ export interface PluginDefinitionHookContext {
   onSettingsChange: (
     listener: (
       newSettings: Record<string, any>,
-      oldSettings: Record<string, any>
-    ) => void
+      oldSettings: Record<string, any>,
+    ) => void,
   ) => void;
 }
 
@@ -376,7 +391,7 @@ export interface PluginDefinition {
   template: (
     state: Record<string, any>,
     settings: Record<string, any>,
-    helpers: DisplayElementTemplateHelpers
+    helpers: DisplayElementTemplateHelpers,
   ) => DisplayElementTemplateResult | string;
   previewState?: Record<string, any>;
   onMount?: (context: PluginDefinitionHookContext) => void | (() => void);
@@ -406,7 +421,7 @@ export interface PluginSettingsDefinition {
   /** 설정 변경 시 호출되는 콜백 */
   onChange?: (
     newSettings: Record<string, any>,
-    oldSettings: Record<string, any>
+    oldSettings: Record<string, any>,
   ) => void;
 }
 
@@ -430,8 +445,8 @@ export interface PluginSettingsInstance {
   subscribe(
     listener: (
       newSettings: Record<string, any>,
-      oldSettings: Record<string, any>
-    ) => void
+      oldSettings: Record<string, any>,
+    ) => void,
   ): Unsubscribe;
 }
 
@@ -464,7 +479,7 @@ export interface DisplayElementTemplateHelpers {
     ...values: unknown[]
   ): DisplayElementTemplateResult;
   styleMap(
-    styles: Record<string, string | number | undefined | null>
+    styles: Record<string, string | number | undefined | null>,
   ): Record<string, string | number | undefined | null>;
   css(
     strings: TemplateStringsArray,
@@ -476,12 +491,12 @@ export interface DisplayElementTemplateHelpers {
 
 export type DisplayElementTemplateFunction = (
   state: Record<string, any>,
-  helpers?: DisplayElementTemplateHelpers
+  helpers?: DisplayElementTemplateHelpers,
 ) => string | DisplayElementTemplateResult;
 
 export type DisplayElementTemplateValueResolver = (
   state: Record<string, any>,
-  helpers: DisplayElementTemplateHelpers
+  helpers: DisplayElementTemplateHelpers,
 ) => unknown;
 
 export type DisplayElementTemplateFactoryValue =
@@ -586,7 +601,7 @@ export interface DMNoteAPI {
     setCounters(counters: KeyCounters): Promise<KeyCounters>;
     onChanged(listener: (keys: KeyMappings) => void): Unsubscribe;
     onPositionsChanged(
-      listener: (positions: KeyPositions) => void
+      listener: (positions: KeyPositions) => void,
     ): Unsubscribe;
     onModeChanged(listener: (payload: ModeChangePayload) => void): Unsubscribe;
     onKeyState(listener: (payload: KeyStatePayload) => void): Unsubscribe;
@@ -595,7 +610,7 @@ export interface DMNoteAPI {
     resetCountersMode(mode: string): Promise<KeyCounters>;
     resetSingleCounter(mode: string, key: string): Promise<KeyCounters>;
     onCounterChanged(
-      listener: (payload: KeyCounterUpdate) => void
+      listener: (payload: KeyCounterUpdate) => void,
     ): Unsubscribe;
     onCountersChanged(listener: (payload: KeyCounters) => void): Unsubscribe;
     customTabs: {
@@ -604,7 +619,7 @@ export interface DMNoteAPI {
       delete(id: string): Promise<CustomTabDeleteResult>;
       select(id: string): Promise<CustomTabDeleteResult>;
       onChanged(
-        listener: (payload: CustomTabsChangePayload) => void
+        listener: (payload: CustomTabsChangePayload) => void,
       ): Unsubscribe;
     };
   };
@@ -620,7 +635,7 @@ export interface DMNoteAPI {
       contentTopOffset?: number;
     }): Promise<OverlayBounds>;
     onVisibility(
-      listener: (payload: OverlayVisibilityPayload) => void
+      listener: (payload: OverlayVisibilityPayload) => void,
     ): Unsubscribe;
     onLock(listener: (payload: OverlayLockPayload) => void): Unsubscribe;
     onAnchor(listener: (payload: OverlayAnchorPayload) => void): Unsubscribe;
@@ -643,7 +658,7 @@ export interface DMNoteAPI {
       clear(tabId: string): Promise<TabCssClearResult>;
       set(
         tabId: string,
-        css: import("@src/types/css").TabCss | null
+        css: import("@src/types/css").TabCss | null,
       ): Promise<TabCssSetResult>;
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
@@ -658,7 +673,7 @@ export interface DMNoteAPI {
     remove(id: string): Promise<JsRemoveResult>;
     setPluginEnabled(
       id: string,
-      enabled: boolean
+      enabled: boolean,
     ): Promise<JsPluginUpdateResult>;
     setContent(content: string): Promise<JsSetContentResult>;
     reset(): Promise<void>;
@@ -675,7 +690,7 @@ export interface DMNoteAPI {
     on<T = any>(type: string, listener: BridgeMessageListener<T>): Unsubscribe;
     once<T = any>(
       type: string,
-      listener: BridgeMessageListener<T>
+      listener: BridgeMessageListener<T>,
     ): Unsubscribe;
     onAny(listener: BridgeAnyListener): Unsubscribe;
     off(type: string, listener?: BridgeMessageListener): void;
@@ -683,6 +698,25 @@ export interface DMNoteAPI {
   i18n: {
     getLocale(): Promise<string>;
     onLocaleChange(listener: (locale: string) => void): Unsubscribe;
+  };
+  stats: {
+    /**
+     * 키 입력 통계를 구독합니다.
+     * 50ms 간격으로 콜백이 호출됩니다.
+     * @param listener - 통계 데이터를 받을 콜백 함수
+     * @returns 구독 해제 함수
+     */
+    subscribe(listener: (stats: KeyStatsPayload) => void): Unsubscribe;
+    /**
+     * 현재 통계값을 즉시 조회합니다.
+     * @returns 현재 통계 데이터
+     */
+    get(): KeyStatsPayload;
+    /**
+     * KPS 관련 통계를 초기화합니다.
+     * total은 카운터 기반이므로 초기화되지 않습니다.
+     */
+    reset(): void;
   };
   plugin: {
     storage: {
@@ -697,7 +731,7 @@ export interface DMNoteAPI {
     registerCleanup(cleanup: () => void): void;
     defineElement(definition: PluginDefinition): void;
     defineSettings(
-      definition: PluginSettingsDefinition
+      definition: PluginSettingsDefinition,
     ): PluginSettingsInstance;
   };
   ui: {
@@ -707,7 +741,7 @@ export interface DMNoteAPI {
       removeMenuItem(fullId: string): void;
       updateMenuItem(
         fullId: string,
-        updates: Partial<PluginMenuItem<any>>
+        updates: Partial<PluginMenuItem<any>>,
       ): void;
       clearMyMenuItems(): void;
     };
@@ -721,26 +755,26 @@ export interface DMNoteAPI {
       get(fullId: string): DisplayElementInstance | undefined;
       setState(
         target: string | DisplayElementInstance,
-        updates: Record<string, any>
+        updates: Record<string, any>,
       ): void;
       setData(
         target: string | DisplayElementInstance,
-        updates: Record<string, any>
+        updates: Record<string, any>,
       ): void;
       setText(
         target: string | DisplayElementInstance,
         selector: string,
-        text: string
+        text: string,
       ): void;
       setHTML(
         target: string | DisplayElementInstance,
         selector: string,
-        html: string
+        html: string,
       ): void;
       setStyle(
         target: string | DisplayElementInstance,
         selector: string,
-        styles: Record<string, string>
+        styles: Record<string, string>,
       ): void;
       addClass(
         target: string | DisplayElementInstance,
@@ -755,15 +789,15 @@ export interface DMNoteAPI {
       toggleClass(
         target: string | DisplayElementInstance,
         selector: string,
-        className: string
+        className: string,
       ): void;
       query(
         target: string | DisplayElementInstance,
-        selector: string
+        selector: string,
       ): Element | ShadowRoot | null;
       update(
         target: string | DisplayElementInstance,
-        updates: Partial<PluginDisplayElement>
+        updates: Partial<PluginDisplayElement>,
       ): void;
       remove(target: string | DisplayElementInstance): void;
       clearMyElements(): void;
@@ -776,7 +810,7 @@ export interface DMNoteAPI {
           confirmText?: string;
           cancelText?: string;
           danger?: boolean;
-        }
+        },
       ): Promise<boolean>;
       custom(
         html: string,
@@ -784,7 +818,7 @@ export interface DMNoteAPI {
           confirmText?: string;
           cancelText?: string;
           showCancel?: boolean;
-        }
+        },
       ): Promise<boolean>;
     };
     components: {

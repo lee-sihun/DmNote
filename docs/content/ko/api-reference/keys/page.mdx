@@ -280,6 +280,61 @@ await dmn.keys.customTabs.select("custom-123");
 const unsub = dmn.keys.customTabs.onChanged(
   ({ customTabs, selectedKeyType }) => {
     console.log("선택된 탭:", selectedKeyType);
-  }
+  },
 );
 ```
+
+## 통계 (stats)
+
+키 입력 통계를 실시간으로 제공하는 API입니다. KPS(Keys Per Second)와 현재 탭의 전체 키 카운트를 조회할 수 있습니다.
+
+<Callout type="info">
+  구독자가 없으면 통계 계산이 수행되지 않아 성능 오버헤드가 없습니다.
+</Callout>
+
+### subscribe(listener)
+
+키 입력 통계를 실시간으로 구독합니다.
+
+- KPS 관련 값(kps, kpsAvg, kpsMax): 약 50ms 간격으로 업데이트
+- total: 키 카운터 변경 시 즉시 업데이트
+
+```typescript
+interface KeyStatsPayload {
+  kps: number; // 현재 KPS (초당 키 입력 수)
+  kpsAvg: number; // 평균 KPS
+  kpsMax: number; // 최대 KPS
+  total: number; // 현재 탭의 전체 키 카운트 합계
+}
+```
+
+```javascript
+const unsub = dmn.stats.subscribe(({ kps, kpsAvg, kpsMax, total }) => {
+  console.log(`KPS: ${kps}, AVG: ${kpsAvg}, MAX: ${kpsMax}, TOTAL: ${total}`);
+});
+
+// 구독 해제
+unsub();
+```
+
+### get()
+
+현재 통계값을 즉시 조회합니다.
+
+```javascript
+const stats = dmn.stats.get();
+console.log(`현재 KPS: ${stats.kps}`);
+```
+
+### reset()
+
+KPS 관련 통계(kps, kpsAvg, kpsMax)를 초기화합니다. `total`은 키 카운터 기반이므로 초기화되지 않습니다.
+
+```javascript
+dmn.stats.reset();
+```
+
+<Callout type="warning">
+  `total`을 초기화하려면 `dmn.keys.resetCounters()` 또는
+  `dmn.keys.resetCountersMode(mode)`를 사용하세요.
+</Callout>

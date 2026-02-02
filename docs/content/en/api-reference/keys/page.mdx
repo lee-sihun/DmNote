@@ -147,35 +147,79 @@ const unsub = dmn.keys.registerCustomTab({
 
 ---
 
+## Stats API
+
+Real-time key input statistics API. Provides KPS (Keys Per Second) and total key count for the current tab.
+
+<Callout type="info">
+  No performance overhead when there are no subscribers - statistics calculation
+  is only performed when subscribed.
+</Callout>
+
+### `dmn.stats.subscribe(callback): Unsubscribe`
+
+Subscribes to real-time key input statistics.
+
+- KPS values (kps, kpsAvg, kpsMax): Updated approximately every 50ms
+- total: Updated immediately when key counter changes
+
+```typescript
+interface KeyStatsPayload {
+  kps: number; // Current KPS (keys per second)
+  kpsAvg: number; // Average KPS
+  kpsMax: number; // Maximum KPS
+  total: number; // Total key count for current tab
+}
+
+const unsub = dmn.stats.subscribe(({ kps, kpsAvg, kpsMax, total }) => {
+  console.log(`KPS: ${kps}, AVG: ${kpsAvg}, MAX: ${kpsMax}, TOTAL: ${total}`);
+});
+
+// Unsubscribe
+unsub();
+```
+
+### `dmn.stats.get(): KeyStatsPayload`
+
+Gets current statistics immediately.
+
+```javascript
+const stats = dmn.stats.get();
+console.log(`Current KPS: ${stats.kps}`);
+```
+
+### `dmn.stats.reset(): void`
+
+Resets KPS-related statistics (kps, kpsAvg, kpsMax). `total` is not reset as it's based on key counters.
+
+```javascript
+dmn.stats.reset();
+```
+
+<Callout type="warning">
+  To reset `total`, use `dmn.keys.resetCounters()` or
+  `dmn.keys.resetCountersMode(mode)`.
+</Callout>
+
+---
+
 ## Example Usage
 
 ```javascript
-// KPS counter
+// KPS counter using stats API
 dmn.plugin.defineElement({
   name: "KPS Counter",
   maxInstances: 1,
 
   template: (state, settings, { html }) => html`
     <div style="font-size: 24px; font-weight: bold;">
-      KPS: ${(state.kps ?? 0).toFixed(1)}
+      KPS: ${state.kps ?? 0} | MAX: ${state.kpsMax ?? 0}
     </div>
   `,
 
   onMount: ({ setState }) => {
-    const keyTimes = [];
-
-    const unsub = dmn.keys.onKeyState(({ state }) => {
-      if (state !== "DOWN") return;
-
-      const now = Date.now();
-      keyTimes.push(now);
-
-      // Keep only last 1 second
-      while (keyTimes.length && keyTimes[0] < now - 1000) {
-        keyTimes.shift();
-      }
-
-      setState({ kps: keyTimes.length });
+    const unsub = dmn.stats.subscribe(({ kps, kpsMax }) => {
+      setState({ kps, kpsMax });
     });
 
     return () => unsub();
