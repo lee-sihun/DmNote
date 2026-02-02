@@ -35,7 +35,6 @@ fn main() {
 
         // GPU/하드웨어 가속 강제 활성화 및 렌더링 최적화 플래그
         let gpu_flags = [
-            "--disable-blink-features=VSync",           // VSync 비활성화 (입력 지연 감소)
             "--enable-gpu-rasterization",               // GPU 래스터화 강제 활성화
             "--enable-zero-copy",                       // 제로 카피 래스터라이저 활성화
             "--ignore-gpu-blocklist",                   // GPU 블랙리스트 무시 (강제 GPU 사용)
