@@ -26,6 +26,7 @@ interface PluginElementPosition {
 
 interface GridMinimapProps {
   positions: Position[];
+  statPositions?: Position[];
   zoom: number;
   panX: number;
   panY: number;
@@ -43,6 +44,7 @@ const MINIMAP_PADDING = 10;
 
 export default function GridMinimap({
   positions,
+  statPositions = [],
   zoom,
   panX,
   panY,
@@ -117,7 +119,7 @@ export default function GridMinimap({
 
   // 모든 키 + 플러그인 요소의 바운딩 박스 계산
   const contentBounds = useMemo(() => {
-    if (positions.length === 0 && pluginPositions.length === 0) {
+    if (positions.length === 0 && statPositions.length === 0 && pluginPositions.length === 0) {
       return { minX: 0, minY: 0, maxX: 100, maxY: 100 };
     }
 
@@ -140,6 +142,20 @@ export default function GridMinimap({
       maxY = Math.max(maxY, y + h);
     });
 
+    // ?듦퀎 ?붿냼 諛붿슫??諛뺤뒪 怨꾩궛
+    statPositions.forEach((pos) => {
+      if (pos.hidden) return;
+      const x = pos.dx || 0;
+      const y = pos.dy || 0;
+      const w = pos.width || 60;
+      const h = pos.height || 60;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + w);
+      maxY = Math.max(maxY, y + h);
+    });
+
     // 플러그인 요소들의 바운딩 박스 계산
     pluginPositions.forEach((pos) => {
       minX = Math.min(minX, pos.x);
@@ -149,7 +165,7 @@ export default function GridMinimap({
     });
 
     return { minX, minY, maxX, maxY };
-  }, [positions, pluginPositions]);
+  }, [positions, statPositions, pluginPositions]);
 
   // 초기 뷰포트(panX=0, panY=0, zoom=1)와 컨텐츠를 합친 고정 바운딩 박스
   // panX/panY에 의존하지 않아 드래그 중에도 크기가 변하지 않음
@@ -417,6 +433,26 @@ export default function GridMinimap({
             );
           })}
           {/* 플러그인 요소 표시 (다른 색상으로 구분) */}
+          {/* ?듦퀎 ?붿냼 ?쒖떆 */}
+          {statPositions.map((pos, index) => {
+            if (pos.hidden) return null;
+            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
+            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
+            const w = (pos.width || 60) * minimapScale;
+            const h = (pos.height || 60) * minimapScale;
+
+            return (
+              <rect
+                key={`stat-${index}`}
+                x={x}
+                y={y}
+                width={Math.max(w, 2)}
+                height={Math.max(h, 2)}
+                fill="rgba(34, 211, 238, 0.65)"
+                rx={1}
+              />
+            );
+          })}
           {pluginPositions.map((pos, index) => {
             const x = (pos.x - bounds.minX) * minimapScale + offsetX;
             const y = (pos.y - bounds.minY) * minimapScale + offsetY;

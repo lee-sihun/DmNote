@@ -1801,6 +1801,7 @@ export default function Grid({
       {minimapEnabled && (
         <GridMinimap
           positions={positions[selectedKeyType] || []}
+          statPositions={statPositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}
