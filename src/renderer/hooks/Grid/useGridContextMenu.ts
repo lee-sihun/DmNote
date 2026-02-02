@@ -38,6 +38,7 @@ interface UseGridContextMenuParams {
 
 interface UseGridContextMenuReturn {
   getKeyMenuItems: (contextIndex: number | null) => MenuItem[];
+  getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null
   ) => MenuItem[];
@@ -151,6 +152,16 @@ export function useGridContextMenu({
   );
 
   // 그리드 메뉴 아이템 생성 (기본 + 플러그인)
+  const getStatMenuItems = useCallback(
+    (_contextIndex: number | null): MenuItem[] => [
+      { id: "delete", label: t("contextMenu.deleteStat") },
+      { id: "duplicate", label: t("contextMenu.duplicateStat") },
+      { id: "bringToFront", label: t("contextMenu.bringToFront") },
+      { id: "sendToBack", label: t("contextMenu.sendToBack") },
+    ],
+    [t]
+  );
+
   const getGridMenuItems = useCallback(
     (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
@@ -208,6 +219,7 @@ export function useGridContextMenu({
 
   return {
     getKeyMenuItems,
+    getStatMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,

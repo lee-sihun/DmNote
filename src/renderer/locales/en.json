@@ -203,6 +203,7 @@
     "resetKeyCounter": "Reset counter for [{{name}}] key?",
     "reset": "Reset",
     "removeKey": "Remove key [{{name}}]?",
+    "removeStat": "Remove stat [{{name}}]?",
     "remove": "Remove"
   },
   "tabs": {
@@ -243,6 +244,8 @@
   "contextMenu": {
     "duplicateKey": "Duplicate Key",
     "deleteKey": "Delete Key",
+    "duplicateStat": "Duplicate Stat",
+    "deleteStat": "Delete Stat",
     "noteSetting": "Note Setting",
     "counterSetting": "Counter Setting",
     "counterReset": "Reset Counter",

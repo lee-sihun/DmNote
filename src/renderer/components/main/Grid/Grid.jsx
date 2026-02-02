@@ -41,6 +41,12 @@ import {
 } from "@hooks/Grid";
 import { createDefaultCounterSettings } from "@src/types/keys";
 
+function getStatTypeLabel(type) {
+  if (type === "kps") return "KPS";
+  if (type === "total") return "Total";
+  return String(type || "");
+}
+
 export default function Grid({
   showConfirm,
   showAlert,
@@ -103,6 +109,7 @@ export default function Grid({
   // 컨텍스트 메뉴 훅 사용
   const {
     getKeyMenuItems,
+    getStatMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
@@ -311,9 +318,11 @@ export default function Grid({
   // 키 컨텍스트 메뉴
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [contextIndex, setContextIndex] = useState(null);
+  const [contextType, setContextType] = useState("key");
   const contextRef = useRef(null);
   const [contextPosition, setContextPosition] = useState(null);
   const keyRefs = useRef([]);
+  const statRefs = useRef([]);
   const gridRef = useRef(null);
   const [duplicateState, setDuplicateState] = useState(null);
   const [duplicateCursor, setDuplicateCursor] = useState(null);
@@ -330,6 +339,215 @@ export default function Grid({
   );
 
   // 원본 데이터 저장 (미리보기 롤백용)
+  const pushHistorySnapshot = useCallback((currentStatPositions) => {
+    const currentKeyPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km } = useKeyStore.getState();
+    useHistoryStore
+      .getState()
+      .pushState(
+        km,
+        currentKeyPositions,
+        currentStatPositions,
+        currentPluginElements
+      );
+  }, []);
+
+  const persistStatPositions = useCallback(async (nextPositions, errorMessage) => {
+    const store = useStatItemStore.getState();
+    store.setLocalUpdateInProgress(true);
+    store.setPositions(nextPositions);
+    try {
+      await window.api.statItems.updatePositions(nextPositions);
+    } catch (error) {
+      console.error(errorMessage || "Failed to update stat items", error);
+    } finally {
+      store.setLocalUpdateInProgress(false);
+    }
+
+    try {
+      window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const deleteStatAtIndex = useCallback(
+    (indexToDelete) => {
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+      if (!tabPositions[indexToDelete]) return;
+
+      pushHistorySnapshot(current);
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
+      };
+
+      persistStatPositions(nextPositions, "Failed to delete stat item");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+  );
+
+  const moveStatToFront = useCallback(
+    (index) => {
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const target = tabPositions[index];
+      if (!target) return;
+
+      pushHistorySnapshot(current);
+
+      const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
+      const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
+      const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
+
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+      const pluginZIndexes = pluginEls
+        .filter((el) => !el.tabId || el.tabId === selectedKeyType)
+        .map((el) => el.zIndex ?? 0);
+
+      const maxZIndex = Math.max(
+        0,
+        ...keyZIndexes,
+        ...statZIndexes,
+        ...pluginZIndexes
+      );
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.map((p, i) =>
+          i === index ? { ...p, zIndex: maxZIndex + 1 } : p
+        ),
+      };
+
+      persistStatPositions(nextPositions, "Failed to move stat item to front");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+  );
+
+  const moveStatToBack = useCallback(
+    (index) => {
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const target = tabPositions[index];
+      if (!target) return;
+
+      pushHistorySnapshot(current);
+
+      const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
+      const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
+      const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
+
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+      const pluginZIndexes = pluginEls
+        .filter((el) => !el.tabId || el.tabId === selectedKeyType)
+        .map((el) => el.zIndex ?? 0);
+
+      const minZIndex = Math.min(
+        0,
+        ...keyZIndexes,
+        ...statZIndexes,
+        ...pluginZIndexes
+      );
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.map((p, i) =>
+          i === index ? { ...p, zIndex: minZIndex - 1 } : p
+        ),
+      };
+
+      persistStatPositions(nextPositions, "Failed to move stat item to back");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+  );
+
+  const beginDuplicateStat = useCallback(
+    (sourceIndex) => {
+      const current = useStatItemStore.getState().positions;
+      const position = current?.[selectedKeyType]?.[sourceIndex] || null;
+      if (!position) return;
+
+      const clonedNoteColor =
+        position.noteColor &&
+        typeof position.noteColor === "object" &&
+        position.noteColor !== null
+          ? { ...position.noteColor }
+          : position.noteColor;
+      const clonedCounter = position.counter
+        ? {
+            ...position.counter,
+            fill: { ...position.counter.fill },
+            stroke: { ...position.counter.stroke },
+          }
+        : null;
+
+      setDuplicateState({
+        elementType: "stat",
+        sourceIndex,
+        keyName: getStatTypeLabel(position.statType),
+        position: {
+          ...position,
+          noteColor: clonedNoteColor,
+          counter: clonedCounter,
+        },
+      });
+      setDuplicateCursor(null);
+    },
+    [selectedKeyType]
+  );
+
+  const placeDuplicateStat = useCallback(
+    (templatePosition, dx, dy) => {
+      if (!templatePosition) return;
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+
+      pushHistorySnapshot(current);
+
+      const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
+      const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
+      const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
+
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+      const pluginZIndexes = pluginEls
+        .filter((el) => !el.tabId || el.tabId === selectedKeyType)
+        .map((el) => el.zIndex ?? 0);
+
+      const maxZIndex = Math.max(
+        0,
+        ...keyZIndexes,
+        ...statZIndexes,
+        ...pluginZIndexes
+      );
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: [
+          ...tabPositions,
+          {
+            ...templatePosition,
+            dx,
+            dy,
+            zIndex: maxZIndex + 1,
+          },
+        ],
+      };
+
+      persistStatPositions(nextPositions, "Failed to duplicate stat item");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+  );
+
   const [originalKeyData, setOriginalKeyData] = useState(null);
 
   // 탭 CSS 모달 상태
@@ -562,6 +780,7 @@ export default function Grid({
             setDuplicateState(null);
             setDuplicateCursor(null);
           }
+          setContextType("key");
           setContextIndex(index);
           contextRef.current = keyRefs.current[index] || null;
           setContextPosition({ x: e.clientX, y: e.clientY });
@@ -582,12 +801,6 @@ export default function Grid({
   const renderStatItems = () => {
     const items = statPositions?.[selectedKeyType] || [];
     if (!items.length) return null;
-
-    const labelForType = (type) => {
-      if (type === "kps") return "KPS";
-      if (type === "total") return "Total";
-      return String(type || "");
-    };
 
     const handleStatPositionChange = (index, dx, dy) => {
       const current = useStatItemStore.getState().positions;
@@ -629,7 +842,7 @@ export default function Grid({
         index={index}
         elementId={`stat-${index}`}
         position={position}
-        keyName={labelForType(position.statType)}
+        keyName={getStatTypeLabel(position.statType)}
         onPositionChange={handleStatPositionChange}
         zIndex={position.zIndex ?? index}
         onClick={() => {
@@ -670,12 +883,25 @@ export default function Grid({
             );
         }}
         activeTool={activeTool}
+        onContextMenu={(e) => {
+          if (duplicateState) {
+            setDuplicateState(null);
+            setDuplicateCursor(null);
+          }
+          setContextType("stat");
+          setContextIndex(index);
+          contextRef.current = statRefs.current[index] || null;
+          setContextPosition({ x: e.clientX, y: e.clientY });
+          setIsContextOpen(true);
+        }}
         zoom={zoom}
         panX={panX}
         panY={panY}
         counterEnabled={true}
         counterPreviewValue={0}
-        setReferenceRef={() => {}}
+        setReferenceRef={(node) => {
+          statRefs.current[index] = node;
+        }}
       />
     ));
   };
@@ -825,15 +1051,25 @@ export default function Grid({
         e.preventDefault();
         e.stopPropagation();
         const snapped = computeSnappedCursorFromClient(e.clientX, e.clientY);
-        if (snapped && typeof onKeyDuplicate === "function") {
+        if (snapped) {
           // 마우스 위치에서 키의 중심이 배치되도록 조정
           const width = duplicateState.position.width || 60;
           const height = duplicateState.position.height || 60;
-          onKeyDuplicate(
-            duplicateState.sourceIndex,
-            snapped.x - width / 2,
-            snapped.y - height / 2
-          );
+          const type = duplicateState.elementType || "key";
+
+          if (type === "key" && typeof onKeyDuplicate === "function") {
+            onKeyDuplicate(
+              duplicateState.sourceIndex,
+              snapped.x - width / 2,
+              snapped.y - height / 2
+            );
+          } else if (type === "stat") {
+            placeDuplicateStat(
+              duplicateState.position,
+              snapped.x - width / 2,
+              snapped.y - height / 2
+            );
+          }
         }
         setDuplicateState(null);
         setDuplicateCursor(null);
@@ -1078,9 +1314,39 @@ export default function Grid({
             setIsContextOpen(false);
             setContextPosition(null);
           }}
-          items={getKeyMenuItems(contextIndex)}
+          items={
+            contextType === "stat"
+              ? getStatMenuItems(contextIndex)
+              : getKeyMenuItems(contextIndex)
+          }
           onSelect={(id) => {
             if (contextIndex == null) return;
+
+            if (contextType === "stat") {
+              const pos =
+                useStatItemStore.getState().positions?.[selectedKeyType]?.[
+                  contextIndex
+                ] || null;
+              const displayName = pos ? getStatTypeLabel(pos.statType) : "";
+
+              if (id === "delete") {
+                showConfirm(
+                  t("confirm.removeStat", { name: displayName }),
+                  () => deleteStatAtIndex(contextIndex),
+                  t("confirm.remove")
+                );
+              } else if (id === "duplicate") {
+                beginDuplicateStat(contextIndex);
+              } else if (id === "bringToFront") {
+                moveStatToFront(contextIndex);
+              } else if (id === "sendToBack") {
+                moveStatToBack(contextIndex);
+              }
+
+              setIsContextOpen(false);
+              setContextPosition(null);
+              return;
+            }
 
             // 플러그인 메뉴 처리
             const pluginItem = pluginKeyMenuItems.find(
@@ -1154,6 +1420,7 @@ export default function Grid({
                   currentMousePos.y
                 );
                 setDuplicateState({
+                  elementType: "key",
                   sourceIndex: contextIndex,
                   keyName: keyCode,
                   position: {

@@ -203,6 +203,8 @@
 		"resetKeyCounter": "重置 [{{name}}] 鍵的計數器?",
 		"reset": "重置",
 		"removeKey": "移除 [{{name}}] 鍵?",
+
+		"removeStat": "移除 [{{name}}] 統計?",
 		"remove": "移除"
 	},
 	"tabs": {
@@ -243,6 +245,10 @@
 	"contextMenu": {
 		"duplicateKey": "複製按鍵",
 		"deleteKey": "刪除按鍵",
+
+		"duplicateStat": "複製統計",
+
+		"deleteStat": "刪除統計",
 		"noteSetting": "音符設定",
 		"counterSetting": "計數器設定",
 		"counterReset": "重置計數器",

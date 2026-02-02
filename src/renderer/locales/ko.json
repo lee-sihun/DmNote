@@ -203,6 +203,8 @@
     "resetKeyCounter": "[{{name}}] 키의 카운터를 초기화하시겠습니까?",
     "reset": "초기화",
     "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
+
+    "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
     "remove": "제거하기"
   },
   "tabs": {
@@ -243,6 +245,8 @@
   "contextMenu": {
     "duplicateKey": "키 복제",
     "deleteKey": "키 삭제",
+    "duplicateStat": "통계 복제",
+    "deleteStat": "통계 삭제",
     "noteSetting": "노트 설정",
     "counterSetting": "카운터 설정",
     "counterReset": "카운터 초기화",
