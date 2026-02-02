@@ -490,9 +490,7 @@ export default function Grid({
     const backgroundColor = inactiveImage
       ? "transparent"
       : "rgba(46, 46, 47, 0.9)";
-    const borderStyle = inactiveImage
-      ? "none"
-      : "3px solid rgba(113, 113, 113, 0.9)";
+    const borderStyle = "3px solid rgba(113, 113, 113, 0.9)";
     const displayName =
       getKeyInfoByGlobalKey(keyName)?.displayName || keyName || "";
 
@@ -510,9 +508,9 @@ export default function Grid({
           height: `${height}px`,
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
-          borderRadius: inactiveImage ? "0" : "10px",
+          borderRadius: "10px",
           border: borderStyle,
-          overflow: inactiveImage ? "visible" : "hidden",
+          overflow: "hidden",
           opacity: 0.5,
           zIndex: 1000,
         }}

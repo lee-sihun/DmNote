@@ -471,11 +471,11 @@ export default function DraggableKey({
         : `var(--key-bg, ${inactiveImage ? "transparent" : (backgroundColor || "rgba(46, 46, 47, 0.9)")})`,
       borderRadius: useInline && borderRadius != null
         ? `${borderRadius}px`
-        : `var(--key-radius, ${inactiveImage ? "0" : (borderRadius != null ? `${borderRadius}px` : "10px")})`,
+        : `var(--key-radius, ${borderRadius != null ? `${borderRadius}px` : "10px"})`,
       border: useInline && (borderColor || borderWidth != null)
         ? `${borderWidth ?? 3}px solid ${borderColor || "rgba(113, 113, 113, 0.9)"}`
-        : `var(--key-border, ${inactiveImage ? "none" : `${borderWidth ?? 3}px solid ${borderColor || "rgba(113, 113, 113, 0.9)"}`})`,
-      overflow: inactiveImage ? "visible" : "hidden",
+        : `var(--key-border, ${borderWidth ?? 3}px solid ${borderColor || "rgba(113, 113, 113, 0.9)"})`,
+      overflow: "hidden",
       willChange: "transform",
       backfaceVisibility: "hidden",
       transformStyle: "preserve-3d",
@@ -734,17 +734,15 @@ export const Key = memo(
             : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
           borderRadius: useInline && borderRadius != null
             ? `${borderRadius}px`
-            : `var(--key-radius, ${currentImage ? "0" : (borderRadius != null ? `${borderRadius}px` : "10px")})`,
-          border: currentImage
-            ? "none"
-            : useInline && (stateBorderColor || borderWidth != null)
-              ? `${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor}`
-              : `var(--key-border, ${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor})`,
+            : `var(--key-radius, ${borderRadius != null ? `${borderRadius}px` : "10px"})`,
+          border: useInline && (stateBorderColor || borderWidth != null)
+            ? `${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor}`
+            : `var(--key-border, ${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor})`,
           color: useInline && stateFontColor
             ? stateFontColor
             : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
           fontSize: fontSize ? `${fontSize}px` : undefined,
-          overflow: currentImage ? "visible" : "hidden",
+          overflow: "hidden",
           // GPU 가속 최적화: active 상태 변경 시에만 willChange 적용
           willChange: active ? "transform, background-color" : "transform",
           backfaceVisibility: "hidden",
