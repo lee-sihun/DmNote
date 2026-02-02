@@ -65,6 +65,7 @@ export default function DraggableKey({
     borderRadius,
     fontSize,
     fontColor,
+    idleImageFit,
     imageFit,
     useInlineStyles,
     displayText,
@@ -488,16 +489,17 @@ export default function DraggableKey({
     [renderDx, renderDy, width, height, inactiveImage, zIndex, position.zIndex, useInline, backgroundColor, borderColor, borderWidth, borderRadius]
   );
 
+  const effectiveImageFit = idleImageFit || imageFit || "cover";
   const imageStyle = useMemo(
     () => ({
       width: "100%",
       height: "100%",
-      objectFit: imageFit || "cover",
+      objectFit: effectiveImageFit,
       display: "block",
       pointerEvents: "none",
       userSelect: "none",
     }),
-    [imageFit]
+    [effectiveImageFit]
   );
 
   const textStyle = useMemo(
@@ -668,6 +670,8 @@ export const Key = memo(
       fontSize,
       fontColor,
       activeFontColor,
+      idleImageFit,
+      activeImageFit,
       imageFit,
       useInlineStyles,
       displayText,
@@ -705,6 +709,10 @@ export const Key = memo(
         : inactiveImage
         ? inactiveImage
         : null;
+    const isUsingActiveImage = active && !!activeImage;
+    const effectiveImageFit = isUsingActiveImage
+      ? activeImageFit || imageFit || "cover"
+      : idleImageFit || imageFit || "cover";
 
     const keyStyle = useMemo(
       () => {
@@ -781,14 +789,14 @@ export const Key = memo(
       () => ({
         width: "100%",
         height: "100%",
-        objectFit: imageFit || "cover",
+        objectFit: effectiveImageFit,
         display: "block",
         pointerEvents: "none",
         userSelect: "none",
         position: "relative",
         zIndex: 0,
       }),
-      [imageFit]
+      [effectiveImageFit]
     );
 
     const textStyle = useMemo(
@@ -997,6 +1005,8 @@ export const Key = memo(
       prevProps.position.fontSize === nextProps.position.fontSize &&
       prevProps.position.fontColor === nextProps.position.fontColor &&
       prevProps.position.activeFontColor === nextProps.position.activeFontColor &&
+      prevProps.position.idleImageFit === nextProps.position.idleImageFit &&
+      prevProps.position.activeImageFit === nextProps.position.activeImageFit &&
       prevProps.position.imageFit === nextProps.position.imageFit &&
       prevProps.position.useInlineStyles === nextProps.position.useInlineStyles &&
       prevProps.position.displayText === nextProps.position.displayText &&

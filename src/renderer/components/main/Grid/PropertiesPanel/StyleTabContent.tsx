@@ -5,7 +5,6 @@ import {
   PropertyRow,
   NumberInput,
   TextInput,
-  SelectInput,
   FontStyleToggle,
   SectionDivider,
 } from "./PropertyInputs";
@@ -355,6 +354,22 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     onKeyUpdate({ index: keyIndex, activeImage: "" });
   }, [keyIndex, onKeyPreview, onKeyUpdate]);
 
+  const handleIdleImageFitChange = useCallback(
+    (fit: ImageFit) => {
+      onKeyPreview?.(keyIndex, { idleImageFit: fit });
+      onKeyUpdate({ index: keyIndex, idleImageFit: fit });
+    },
+    [keyIndex, onKeyPreview, onKeyUpdate]
+  );
+
+  const handleActiveImageFitChange = useCallback(
+    (fit: ImageFit) => {
+      onKeyPreview?.(keyIndex, { activeImageFit: fit });
+      onKeyUpdate({ index: keyIndex, activeImageFit: fit });
+    },
+    [keyIndex, onKeyPreview, onKeyUpdate]
+  );
+
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = useCallback(
     (value: string) => {
@@ -566,25 +581,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         />
       </PropertyRow>
 
-      {/* 이미지가 있을 때만 이미지 맞춤 옵션 표시 */}
-      {(keyPosition.activeImage || keyPosition.inactiveImage) && (
-        <>
-          <SectionDivider />
-          <PropertyRow label={t("propertiesPanel.imageFit") || "이미지 맞춤"}>
-            <SelectInput
-              value={keyPosition.imageFit || "cover"}
-              options={[
-                { value: "cover", label: t("propertiesPanel.imageFitCover") || "채우기" },
-                { value: "contain", label: t("propertiesPanel.imageFitContain") || "맞춤" },
-                { value: "fill", label: t("propertiesPanel.imageFitFill") || "늘리기" },
-                { value: "none", label: t("propertiesPanel.imageFitNone") || "원본" },
-              ]}
-              onChange={(value) => handleStyleChangeComplete("imageFit", value as ImageFit)}
-            />
-          </PropertyRow>
-        </>
-      )}
-
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
         <>
@@ -624,10 +620,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           activeImage={keyPosition.activeImage || ""}
           idleTransparent={keyPosition.idleTransparent ?? false}
           activeTransparent={keyPosition.activeTransparent ?? false}
+          idleImageFit={keyPosition.idleImageFit ?? keyPosition.imageFit ?? "cover"}
+          activeImageFit={keyPosition.activeImageFit ?? keyPosition.imageFit ?? "cover"}
           onIdleImageChange={handleIdleImageChange}
           onActiveImageChange={handleActiveImageChange}
           onIdleTransparentChange={handleIdleTransparentChange}
           onActiveTransparentChange={handleActiveTransparentChange}
+          onIdleImageFitChange={handleIdleImageFitChange}
+          onActiveImageFitChange={handleActiveImageFitChange}
           onIdleImageReset={handleIdleImageReset}
           onActiveImageReset={handleActiveImageReset}
           onClose={() => onToggleImagePicker()}

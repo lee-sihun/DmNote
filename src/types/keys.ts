@@ -231,6 +231,10 @@ export const keyPositionSchema = z.object({
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),
+  // 이미지 맞춤(대기/입력 개별 설정). 없으면 imageFit을 fallback으로 사용.
+  idleImageFit: imageFitSchema.optional(),
+  activeImageFit: imageFitSchema.optional(),
+  // 레거시(대기/입력 공통) 이미지 맞춤
   imageFit: imageFitSchema.optional(),
   // 인라인 스타일 우선 여부 (true: 속성 패널 스타일 우선, false: 커스텀 CSS 우선)
   useInlineStyles: z.boolean().optional(),

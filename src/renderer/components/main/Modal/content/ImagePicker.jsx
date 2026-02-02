@@ -2,6 +2,7 @@ import React, { useState, useRef, useLayoutEffect } from "react";
 import { useTranslation } from "@contexts/I18nContext";
 import FloatingPopup from "../FloatingPopup";
 import Checkbox from "@components/main/common/Checkbox";
+import Dropdown from "@components/main/common/Dropdown";
 
 const STATE_MODES = {
   idle: "idle",
@@ -16,10 +17,14 @@ export default function ImagePicker({
   activeImage,
   idleTransparent,
   activeTransparent,
+  idleImageFit = "cover",
+  activeImageFit = "cover",
   onIdleImageChange,
   onActiveImageChange,
   onIdleTransparentChange,
   onActiveTransparentChange,
+  onIdleImageFitChange = undefined,
+  onActiveImageFitChange = undefined,
   onIdleImageReset,
   onActiveImageReset,
   onClose,
@@ -64,11 +69,23 @@ export default function ImagePicker({
   const currentImage = mode === STATE_MODES.idle ? idleImage : activeImage;
   const currentTransparent =
     mode === STATE_MODES.idle ? idleTransparent : activeTransparent;
+  const currentImageFit = mode === STATE_MODES.idle ? idleImageFit : activeImageFit;
+  const showImageFit =
+    typeof onIdleImageFitChange === "function" ||
+    typeof onActiveImageFitChange === "function";
   const handleTransparentToggle = () => {
     if (mode === STATE_MODES.idle) {
       onIdleTransparentChange?.(!idleTransparent);
     } else {
       onActiveTransparentChange?.(!activeTransparent);
+    }
+  };
+
+  const handleImageFitChange = (value) => {
+    if (mode === STATE_MODES.idle) {
+      onIdleImageFitChange?.(value);
+    } else {
+      onActiveImageFitChange?.(value);
     }
   };
 
@@ -226,6 +243,25 @@ export default function ImagePicker({
             onChange={handleTransparentToggle}
           />
         </div>
+
+        {/* 이미지 맞춤 */}
+        {showImageFit && (
+          <div className="flex justify-between items-center w-full">
+            <p className="text-white text-style-2">
+              {t("propertiesPanel.imageFit") || "표시"}
+            </p>
+            <Dropdown
+              value={currentImageFit || "cover"}
+              options={[
+                { value: "cover", label: t("propertiesPanel.imageFitCover") || "채우기" },
+                { value: "contain", label: t("propertiesPanel.imageFitContain") || "맞춤" },
+                { value: "fill", label: t("propertiesPanel.imageFitFill") || "늘리기" },
+                { value: "none", label: t("propertiesPanel.imageFitNone") || "원본" },
+              ]}
+              onChange={handleImageFitChange}
+            />
+          </div>
+        )}
 
         {/* 구분선 */}
         <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />

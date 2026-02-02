@@ -451,6 +451,8 @@ export function useKeyManager() {
       fontSize: number;
       fontColor: string;
       activeFontColor: string;
+      idleImageFit: ImageFit;
+      activeImageFit: ImageFit;
       imageFit: ImageFit;
       useInlineStyles: boolean;
       displayText: string;
@@ -535,6 +537,14 @@ export function useKeyManager() {
                 updates.activeFontColor !== undefined
                   ? updates.activeFontColor
                   : pos.activeFontColor,
+              idleImageFit:
+                updates.idleImageFit !== undefined
+                  ? updates.idleImageFit
+                  : pos.idleImageFit,
+              activeImageFit:
+                updates.activeImageFit !== undefined
+                  ? updates.activeImageFit
+                  : pos.activeImageFit,
               imageFit:
                 updates.imageFit !== undefined
                   ? updates.imageFit
@@ -578,6 +588,8 @@ export function useKeyManager() {
       fontSize?: number;
       fontColor?: string;
       activeFontColor?: string;
+      idleImageFit?: ImageFit;
+      activeImageFit?: ImageFit;
       imageFit?: ImageFit;
       useInlineStyles?: boolean;
       displayText?: string;
@@ -670,6 +682,14 @@ export function useKeyManager() {
             update.activeFontColor !== undefined
               ? update.activeFontColor
               : pos.activeFontColor,
+          idleImageFit:
+            update.idleImageFit !== undefined
+              ? update.idleImageFit
+              : pos.idleImageFit,
+          activeImageFit:
+            update.activeImageFit !== undefined
+              ? update.activeImageFit
+              : pos.activeImageFit,
           imageFit:
             update.imageFit !== undefined ? update.imageFit : pos.imageFit,
           useInlineStyles:

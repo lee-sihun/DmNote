@@ -134,6 +134,11 @@ pub struct KeyPosition {
     pub active_font_color: Option<String>,
     #[serde(default)]
     pub image_fit: Option<ImageFit>,
+    /// 이미지 맞춤(대기/입력 개별). 없으면 image_fit을 fallback으로 사용.
+    #[serde(default)]
+    pub idle_image_fit: Option<ImageFit>,
+    #[serde(default)]
+    pub active_image_fit: Option<ImageFit>,
     /// 인라인 스타일 우선 여부 (true: 속성 패널 스타일 우선, false: 커스텀 CSS 우선)
     #[serde(default)]
     pub use_inline_styles: Option<bool>,

@@ -357,7 +357,7 @@
 		"fontSize": "字體大小",
 		"fontColor": "字體顏色",
 		"image": "圖像",
-		"imageFit": "圖像適應方式",
+		"imageFit": "顯示",
 		"imageFitCover": "覆蓋",
 		"imageFitContain": "包含",
 		"imageFitFill": "填充",

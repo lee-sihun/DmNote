@@ -357,7 +357,7 @@
     "fontSize": "폰트 크기",
     "fontColor": "폰트 색상",
     "image": "이미지",
-    "imageFit": "이미지 맞춤",
+    "imageFit": "표시",
     "imageFitCover": "채우기",
     "imageFitContain": "맞춤",
     "imageFitFill": "늘리기",
