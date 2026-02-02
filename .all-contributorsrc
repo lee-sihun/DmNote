@@ -5,7 +5,8 @@
   "repoHost": "https://github.com",
   "files": [
     "README.md",
-    "docs/readme_en.md"
+    "docs/readme_en.md",
+    "docs/readme_zh-cn.md"
   ],
   "imageSize": 100,
   "commit": true,
@@ -45,7 +46,8 @@
       "avatar_url": "https://avatars.githubusercontent.com/u/187824877?v=4",
       "profile": "https://github.com/LSVoiid",
       "contributions": [
-        "translation"
+        "translation",
+        "doc"
       ]
     }
   ],
