@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from "react";
 import type { SettingsDiff, SettingsState } from "@src/types/settings";
 
-export type SupportedLocale = "ko" | "en";
+export type SupportedLocale = "ko" | "en" | "zh-cn" | "zh-Hant";
 
 type Messages = Record<string, unknown>;
 
@@ -26,7 +26,9 @@ const DEFAULT_LOCALE: SupportedLocale = "ko";
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function isSupportedLocale(value: unknown): value is SupportedLocale {
-  return value === "ko" || value === "en";
+  return (
+    value === "ko" || value === "en" || value === "zh-cn" || value === "zh-Hant"
+  );
 }
 
 function safeLocalStorageGet(key: string) {
@@ -59,7 +61,7 @@ function getNestedValue(messages: Messages, path: string) {
 
 function interpolate(
   template: string,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ) {
   if (!params) return template;
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
@@ -87,8 +89,32 @@ function detectBrowserLocale(): SupportedLocale {
     .filter(Boolean)
     .map((value) => String(value).trim().toLowerCase());
 
-  const isKorean = normalized.some((value) => value === "ko" || value.startsWith("ko-"));
-  return isKorean ? "ko" : "en";
+  const isKorean = normalized.some(
+    (value) => value === "ko" || value.startsWith("ko-"),
+  );
+  if (isKorean) return "ko";
+
+  const isSimplifiedChinese = normalized.some(
+    (value) =>
+      value === "zh-cn" ||
+      value === "zh-hans" ||
+      value.startsWith("zh-cn") ||
+      value.startsWith("zh-hans"),
+  );
+  if (isSimplifiedChinese) return "zh-cn";
+
+  const isTraditionalChinese = normalized.some(
+    (value) =>
+      value === "zh-tw" ||
+      value === "zh-hk" ||
+      value === "zh-hant" ||
+      value.startsWith("zh-tw") ||
+      value.startsWith("zh-hk") ||
+      value.startsWith("zh-hant"),
+  );
+  if (isTraditionalChinese) return "zh-Hant";
+
+  return "en";
 }
 
 function loadInitialLocale(): SupportedLocale {
@@ -104,7 +130,7 @@ async function importLocaleMessages(locale: SupportedLocale) {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<SupportedLocale>(() =>
-    loadInitialLocale()
+    loadInitialLocale(),
   );
   const [messages, setMessages] = useState<Messages>({});
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -145,12 +171,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
         if (shouldAutoInitLocale) {
           safeLocalStorageSet(LOCALE_INIT_KEY, "1");
-          if (isSupportedLocale(settings.language) && settings.language !== detected) {
+          if (
+            isSupportedLocale(settings.language) &&
+            settings.language !== detected
+          ) {
             setLocaleState(detected);
             safeLocalStorageSet(STORAGE_KEY, detected);
-            window.api.settings.update({ language: detected }).catch((error) => {
-              console.error("Failed to update initial language", error);
-            });
+            window.api.settings
+              .update({ language: detected })
+              .catch((error) => {
+                console.error("Failed to update initial language", error);
+              });
             return;
           }
         }
@@ -199,7 +230,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () =>
       function translate(
         key: string,
-        params?: Record<string, string | number>
+        params?: Record<string, string | number>,
       ): string {
         const raw = getNestedValue(messages, key);
         if (typeof raw === "string") {
@@ -210,7 +241,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
         return key;
       },
-    [messages]
+    [messages],
   );
 
   const value = useMemo<I18nContextValue>(
@@ -219,7 +250,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLocale: changeLocale,
       t,
     }),
-    [locale, changeLocale, t]
+    [locale, changeLocale, t],
   );
 
   if (!hasInitialized) return null;

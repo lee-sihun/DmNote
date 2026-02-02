@@ -100,7 +100,7 @@ export default function Settings({ showAlert, showConfirm }) {
 
   const macAngleOptions = useMemo(
     () => [{ value: "metal", label: "Metal" }],
-    []
+    [],
   );
 
   useEffect(() => {
@@ -112,6 +112,8 @@ export default function Settings({ showAlert, showConfirm }) {
   const LANGUAGE_OPTIONS = [
     { value: "ko", label: "한국어" },
     { value: "en", label: "English" },
+    { value: "zh-cn", label: "简体中文" },
+    { value: "zh-Hant", label: "繁體中文" },
   ];
 
   const handleHardwareAccelerationChange = () => {
@@ -216,11 +218,11 @@ export default function Settings({ showAlert, showConfirm }) {
         showAlert?.(
           `${t("settings.jsReloadPartial", {
             count: updated.length,
-          })}\n${formatPluginErrors(errors)}`
+          })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
-          `${t("settings.jsReloadFailed")}\n${formatPluginErrors(errors)}`
+          `${t("settings.jsReloadFailed")}\n${formatPluginErrors(errors)}`,
         );
       } else if (updated.length) {
         showAlert?.(t("settings.jsReloadSuccess", { count: updated.length }));
@@ -236,7 +238,7 @@ export default function Settings({ showAlert, showConfirm }) {
       if (elapsed < MIN_SPINNER_MS) {
         setTimeout(
           () => setIsReloadingPlugins(false),
-          MIN_SPINNER_MS - elapsed
+          MIN_SPINNER_MS - elapsed,
         );
       } else {
         setIsReloadingPlugins(false);
@@ -265,11 +267,11 @@ export default function Settings({ showAlert, showConfirm }) {
         showAlert?.(
           `${t("settings.jsAddPartial", {
             count: added.length,
-          })}\n${formatPluginErrors(errors)}`
+          })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
-          `${t("settings.jsAddFailed")}\n${formatPluginErrors(errors)}`
+          `${t("settings.jsAddFailed")}\n${formatPluginErrors(errors)}`,
         );
       } else if (added.length) {
         showAlert?.(t("settings.jsAddSuccess", { count: added.length }));
@@ -315,7 +317,7 @@ export default function Settings({ showAlert, showConfirm }) {
         "[PluginRemove] namespace=",
         pluginNamespace,
         "hasData=",
-        hasData
+        hasData,
       );
 
       if (hasData) {
@@ -495,7 +497,7 @@ export default function Settings({ showAlert, showConfirm }) {
       showConfirm(
         t("settings.resetAllConfirm"),
         reset,
-        t("settings.initialize")
+        t("settings.initialize"),
       );
     } else {
       reset();
@@ -703,7 +705,7 @@ export default function Settings({ showAlert, showConfirm }) {
                       disabled={!canReloadPlugins || isReloadingPlugins}
                       className={
                         actionButtonClass(
-                          canReloadPlugins && !isReloadingPlugins
+                          canReloadPlugins && !isReloadingPlugins,
                         ) + " transition-none"
                       }
                       style={

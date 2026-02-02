@@ -70,7 +70,7 @@ import type {
 
 const LOCALE_STORAGE_KEY = "dmnote:locale";
 const DEFAULT_LOCALE = "ko";
-const SUPPORTED_LOCALES = new Set(["ko", "en"]);
+const SUPPORTED_LOCALES = new Set(["ko", "en", "zh-cn", "zh-Hant"]);
 
 let cachedLocale: string | null = null;
 const i18nListeners = new Set<(locale: string) => void>();
@@ -110,7 +110,7 @@ initializeCachedLocale();
 
 function subscribe<T>(
   event: string,
-  listener: (payload: T) => void
+  listener: (payload: T) => void,
 ): Unsubscribe {
   const registration = listen<T>(event, ({ payload }) => listener(payload));
   return () => {
@@ -261,11 +261,11 @@ const api: DMNoteAPI = {
           css,
         }),
       onChanged: (
-        listener: (payload: import("@src/types/api").TabCssResponse) => void
+        listener: (payload: import("@src/types/api").TabCssResponse) => void,
       ) =>
         subscribe<import("@src/types/api").TabCssResponse>(
           "tabCss:changed",
-          listener
+          listener,
         ),
     },
   },
@@ -321,7 +321,7 @@ const api: DMNoteAPI = {
           } catch (error) {
             console.error(
               `[Bridge] Error in once listener for '${type}':`,
-              error
+              error,
             );
           }
         });
@@ -454,17 +454,17 @@ const api: DMNoteAPI = {
     },
     registerCleanup: () => {
       console.warn(
-        "[Plugin API] registerCleanup is managed by useCustomJsInjection and should not be called directly from dmnoteApi"
+        "[Plugin API] registerCleanup is managed by useCustomJsInjection and should not be called directly from dmnoteApi",
       );
     },
     defineElement: () => {
       console.warn(
-        "[Plugin API] defineElement is managed by useCustomJsInjection and should not be called directly from dmnoteApi"
+        "[Plugin API] defineElement is managed by useCustomJsInjection and should not be called directly from dmnoteApi",
       );
     },
     defineSettings: () => {
       console.warn(
-        "[Plugin API] defineSettings is managed by useCustomJsInjection and should not be called directly from dmnoteApi"
+        "[Plugin API] defineSettings is managed by useCustomJsInjection and should not be called directly from dmnoteApi",
       );
       // 빈 인스턴스 반환 (타입 호환성)
       return {
@@ -524,7 +524,7 @@ const api: DMNoteAPI = {
         const pluginId = (window as any).__dmn_current_plugin_id;
         if (!pluginId) {
           console.warn(
-            "[UI API] clearMyMenuItems called outside plugin context"
+            "[UI API] clearMyMenuItems called outside plugin context",
           );
           return;
         }
@@ -556,7 +556,7 @@ const api: DMNoteAPI = {
           confirmText?: string;
           cancelText?: string;
           danger?: boolean;
-        }
+        },
       ) => {
         return new Promise<boolean>((resolve) => {
           const showConfirm = (window as any).__dmn_showConfirm;
@@ -569,7 +569,7 @@ const api: DMNoteAPI = {
             message,
             () => resolve(true),
             () => resolve(false),
-            options?.confirmText
+            options?.confirmText,
           );
         });
       },
@@ -580,13 +580,13 @@ const api: DMNoteAPI = {
           confirmText?: string;
           cancelText?: string;
           showCancel?: boolean;
-        }
+        },
       ) => {
         return new Promise<boolean>((resolve) => {
           const showCustomDialog = (window as any).__dmn_showCustomDialog;
           if (typeof showCustomDialog !== "function") {
             console.warn(
-              "[Dialog API] showCustomDialog function not available"
+              "[Dialog API] showCustomDialog function not available",
             );
             resolve(false);
             return;
@@ -611,7 +611,7 @@ const api: DMNoteAPI = {
           // 다음 틱에 이벤트 리스너 등록
           setTimeout(() => {
             const dialogContent = document.querySelector(
-              "[data-plugin-dialog-content]"
+              "[data-plugin-dialog-content]",
             );
             if (!dialogContent) return;
 
@@ -621,7 +621,7 @@ const api: DMNoteAPI = {
               const checkbox = target.closest("[data-checkbox-toggle]");
               if (checkbox) {
                 const input = checkbox.querySelector(
-                  "input[type=checkbox]"
+                  "input[type=checkbox]",
                 ) as HTMLInputElement;
                 const knob = checkbox.querySelector("div") as HTMLElement;
 
@@ -668,7 +668,7 @@ const api: DMNoteAPI = {
                   targetEl.value = String(defaultValue);
                   // change 이벤트 발생
                   targetEl.dispatchEvent(
-                    new Event("change", { bubbles: true })
+                    new Event("change", { bubbles: true }),
                   );
                   return;
                 }
@@ -689,7 +689,7 @@ const api: DMNoteAPI = {
                   targetEl.value = String(clampedValue);
                   // change 이벤트 발생
                   targetEl.dispatchEvent(
-                    new Event("change", { bubbles: true })
+                    new Event("change", { bubbles: true }),
                   );
                 }
               }
