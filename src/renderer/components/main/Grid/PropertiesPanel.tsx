@@ -254,7 +254,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (selectedKeyLikeElements.length === 0 || selectedPluginElements.length > 0) {
       return;
     }
-    const shouldHideNote = selectedStatElements.length > 0;
+    // 통계만 선택된 경우에만 NOTE 탭을 숨김
+    // (키가 함께 선택된 경우 NOTE 탭은 유지되며, NOTE 설정은 키에만 반영)
+    const shouldHideNote =
+      selectedStatElements.length > 0 && selectedKeyElements.length === 0;
     if (shouldHideNote && activeTab === TABS.NOTE) {
       setActiveTab(TABS.STYLE);
     }
@@ -263,6 +266,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyLikeElements.length,
     selectedPluginElements.length,
     selectedStatElements.length,
+    selectedKeyElements.length,
   ]);
 
   // 스크롤 훅 사용
@@ -1115,6 +1119,123 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onStatBatchPreview: handleStatBatchPreview,
   });
 
+  // NOTE 탭은 "키"에만 적용되어야 함 (통계 요소 포함 다중선택 시)
+  const getSelectedKeyOnlyPositions = useCallback(() => {
+    return selectedKeyElements
+      .map((el) => {
+        const index = el.index ?? -1;
+        const position = positions[selectedKeyType]?.[index];
+        return position ? { index, position } : null;
+      })
+      .filter(
+        (v): v is { index: number; position: KeyPosition } => v !== null,
+      );
+  }, [positions, selectedKeyElements, selectedKeyType]);
+
+  const getMixedValueKeysOnly = useCallback(
+    <T,>(
+      getter: (pos: KeyPosition) => T | undefined,
+      defaultValue: T,
+    ): { isMixed: boolean; value: T } => {
+      const data = getSelectedKeyOnlyPositions();
+      if (data.length === 0) return { isMixed: false, value: defaultValue };
+
+      const firstValue = getter(data[0].position) ?? defaultValue;
+      const isMixed = data.some(({ position }) => {
+        const val = getter(position) ?? defaultValue;
+        if (typeof val === "object" && typeof firstValue === "object") {
+          return JSON.stringify(val) !== JSON.stringify(firstValue);
+        }
+        return val !== firstValue;
+      });
+
+      return { isMixed, value: firstValue };
+    },
+    [getSelectedKeyOnlyPositions],
+  );
+
+  const dispatchKeyOnlyBatchUpdates = useCallback(
+    (
+      updates: Array<{ index: number } & Partial<KeyPosition>>,
+      kind: "preview" | "commit",
+    ) => {
+      if (updates.length === 0) return;
+      if (kind === "preview") {
+        if (onKeyBatchPreview) {
+          onKeyBatchPreview(updates);
+          return;
+        }
+        if (onKeyPreview) {
+          updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
+          return;
+        }
+        return;
+      }
+
+      if (onKeyBatchUpdate) {
+        onKeyBatchUpdate(updates);
+        return;
+      }
+      updates.forEach((update) => onKeyUpdate(update));
+    },
+    [onKeyBatchPreview, onKeyPreview, onKeyBatchUpdate, onKeyUpdate],
+  );
+
+  const handleBatchKeyOnlyStyleChangeComplete = useCallback(
+    (property: keyof KeyPosition, value: any) => {
+      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+        index,
+        [property]: value,
+      })) as Array<{ index: number } & Partial<KeyPosition>>;
+      dispatchKeyOnlyBatchUpdates(updates, "commit");
+    },
+    [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
+  const handleBatchNoteColorChangeKeysOnly = useCallback(
+    (value: NoteColor) => {
+      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+        index,
+        noteColor: value,
+      }));
+      dispatchKeyOnlyBatchUpdates(updates, "preview");
+    },
+    [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
+  const handleBatchNoteColorChangeCompleteKeysOnly = useCallback(
+    (value: NoteColor) => {
+      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+        index,
+        noteColor: value,
+      }));
+      dispatchKeyOnlyBatchUpdates(updates, "commit");
+    },
+    [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
+  const handleBatchGlowColorChangeKeysOnly = useCallback(
+    (value: NoteColor) => {
+      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+        index,
+        noteGlowColor: value,
+      }));
+      dispatchKeyOnlyBatchUpdates(updates, "preview");
+    },
+    [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
+  const handleBatchGlowColorChangeCompleteKeysOnly = useCallback(
+    (value: NoteColor) => {
+      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+        index,
+        noteGlowColor: value,
+      }));
+      dispatchKeyOnlyBatchUpdates(updates, "commit");
+    },
+    [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
   const renderPluginSettingsForm = useCallback(
     (
       schema: Record<string, PluginSettingSchema> | undefined,
@@ -1306,7 +1427,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (target && target !== batchPickerFor) {
         // 피커가 열릴 때 현재 색상값으로 로컬 상태 초기화
         const keysData = getSelectedKeysData();
-        const firstPos = keysData[0]?.position;
+        const keyOnly = getSelectedKeyOnlyPositions();
+        const firstPos =
+          (target === "noteColor" || target === "glowColor") && keyOnly.length > 0
+            ? keyOnly[0].position
+            : keysData[0]?.position;
         if (firstPos) {
           const counterSettings = normalizeCounterSettings(firstPos.counter);
           setBatchLocalColors({
@@ -1351,7 +1476,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
       setBatchPickerFor((prev) => (prev === target ? null : target));
     },
-    [batchPickerFor, getSelectedKeysData],
+    [batchPickerFor, getSelectedKeyOnlyPositions, getSelectedKeysData],
   );
 
   // 배치 피커 색상값 가져오기 (로컬 상태 사용)
@@ -1418,9 +1543,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       // 노트/글로우는 프리뷰도 함께 업데이트
       if (batchPickerFor === "noteColor") {
-        handleBatchNoteColorChange(newColor);
+        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+          handleBatchNoteColorChangeKeysOnly(newColor);
+        } else {
+          handleBatchNoteColorChange(newColor);
+        }
       } else if (batchPickerFor === "glowColor") {
-        handleBatchGlowColorChange(newColor);
+        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+          handleBatchGlowColorChangeKeysOnly(newColor);
+        } else {
+          handleBatchGlowColorChange(newColor);
+        }
       }
       // counter 색상은 preview 없이 complete에서만 처리
     },
@@ -1428,7 +1561,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       batchCounterColorState,
       batchPickerFor,
       handleBatchGlowColorChange,
+      handleBatchGlowColorChangeKeysOnly,
       handleBatchNoteColorChange,
+      handleBatchNoteColorChangeKeysOnly,
+      selectedKeyElements.length,
+      selectedStatElements.length,
     ],
   );
 
@@ -1463,9 +1600,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         : createDefaultCounterSettings();
 
       if (batchPickerFor === "noteColor") {
-        handleBatchNoteColorChangeComplete(newColor);
+        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+          handleBatchNoteColorChangeCompleteKeysOnly(newColor);
+        } else {
+          handleBatchNoteColorChangeComplete(newColor);
+        }
       } else if (batchPickerFor === "glowColor") {
-        handleBatchGlowColorChangeComplete(newColor);
+        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+          handleBatchGlowColorChangeCompleteKeysOnly(newColor);
+        } else {
+          handleBatchGlowColorChangeComplete(newColor);
+        }
       } else if (batchPickerFor === "fill") {
         if (batchCounterColorState === "active") {
           handleBatchCounterUpdate({
@@ -1493,8 +1638,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       batchPickerFor,
       getSelectedKeysData,
       handleBatchNoteColorChangeComplete,
+      handleBatchNoteColorChangeCompleteKeysOnly,
       handleBatchGlowColorChangeComplete,
+      handleBatchGlowColorChangeCompleteKeysOnly,
       handleBatchCounterUpdate,
+      selectedKeyElements.length,
+      selectedStatElements.length,
     ],
   );
 
@@ -1632,10 +1781,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         };
       }
 
-      const { isMixed, value } = getMixedValue(
-        (pos) => pos.noteColor,
-        "#FFFFFF",
-      );
+      const mixedFn =
+        selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+      const { isMixed, value } = mixedFn((pos) => pos.noteColor, "#FFFFFF");
       if (isMixed)
         return {
           style: { backgroundColor: "#666" },
@@ -1690,7 +1838,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         };
       }
 
-      const { isMixed, value } = getMixedValue(
+      const mixedFn =
+        selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+      const { isMixed, value } = mixedFn(
         (pos) => pos.noteGlowColor ?? pos.noteColor,
         "#FFFFFF",
       );
@@ -1797,9 +1947,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onTabChange={setActiveTab}
               t={t}
               availableTabs={
-                selectedStatElements.length > 0
-                  ? [TABS.STYLE, TABS.COUNTER]
-                  : [TABS.STYLE, TABS.NOTE, TABS.COUNTER]
+                selectedKeyElements.length > 0
+                  ? [TABS.STYLE, TABS.NOTE, TABS.COUNTER]
+                  : [TABS.STYLE, TABS.COUNTER]
               }
             />
           </div>
@@ -1842,16 +1992,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
             </div>
 
-            {/* NOTE 탭 viewport (통계 요소가 포함된 경우 숨김) */}
-            {selectedStatElements.length === 0 && (
+            {/* NOTE 탭 viewport (키 선택이 있을 때만 표시; 설정은 키에만 반영) */}
+            {selectedKeyElements.length > 0 && (
               <div
                 ref={batchScrollRefFor(TABS.NOTE)}
                 className={`properties-panel-overlay-viewport ${activeTab === TABS.NOTE ? "" : "hidden"}`}
               >
                 <div className="p-[12px] flex flex-col gap-[12px]">
                   <BatchNoteTabContent
-                    getMixedValue={getMixedValue}
-                    handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                    getMixedValue={getMixedValueKeysOnly}
+                    handleBatchStyleChangeComplete={handleBatchKeyOnlyStyleChangeComplete}
                     getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                     getBatchGlowColorDisplay={getBatchGlowColorDisplay}
                     onNoteColorPickerToggle={() =>
