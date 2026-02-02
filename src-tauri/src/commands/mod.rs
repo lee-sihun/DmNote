@@ -8,3 +8,4 @@ pub mod plugin_storage;
 pub mod preset;
 pub mod settings;
 pub mod system;
+pub mod stat_items;

@@ -149,6 +149,7 @@ impl AppState {
             },
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),
+            stat_positions: state.stat_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
             current_mode: self.keyboard.current_mode(),

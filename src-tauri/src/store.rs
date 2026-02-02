@@ -16,6 +16,7 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, KeyCounters, KeyMappings, KeyPositions, NoteSettings, OverlayBounds,
+        StatPositions,
         SettingsState,
     },
 };
@@ -109,6 +110,14 @@ impl AppStore {
         Ok(guard.key_positions.clone())
     }
 
+    pub fn update_stat_positions(&self, positions: StatPositions) -> Result<StatPositions> {
+        let mut guard = self.state.write();
+        guard.stat_positions = positions.clone();
+        *guard = normalize_state(guard.clone());
+        self.persist_locked(&guard)?;
+        Ok(guard.stat_positions.clone())
+    }
+
     pub fn set_key_counters(&self, counters: KeyCounters) -> Result<KeyCounters> {
         let mut guard = self.state.write();
         guard.key_counters = counters.clone();
@@ -193,6 +202,9 @@ impl AppStore {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("keyPositions") {
+                reorder(v);
+            }
+            if let Some(v) = obj.get_mut("statPositions") {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("keyCounters") {

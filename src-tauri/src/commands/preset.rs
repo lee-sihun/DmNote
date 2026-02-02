@@ -9,7 +9,7 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, KeyMappings, KeyPositions,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
     },
 };
 
@@ -25,6 +25,7 @@ pub struct PresetOperationResult {
 struct PresetFile {
     keys: Option<KeyMappings>,
     key_positions: Option<KeyPositions>,
+    stat_positions: Option<StatPositions>,
     background_color: Option<String>,
     note_settings: Option<NoteSettings>,
     note_effect: Option<bool>,
@@ -59,6 +60,7 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
     let preset = PresetFile {
         keys: Some(snapshot.keys),
         key_positions: Some(snapshot.key_positions),
+        stat_positions: Some(snapshot.stat_positions),
         background_color: Some(snapshot.background_color),
         note_settings: Some(snapshot.note_settings),
         note_effect: Some(snapshot.note_effect),
@@ -102,6 +104,7 @@ pub fn preset_load(
 
     let keys = preset.keys.unwrap_or_else(|| default_keys().clone());
     let positions = preset.key_positions.unwrap_or_else(|| default_positions().clone());
+    let stat_positions = preset.stat_positions.unwrap_or_default();
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -114,6 +117,7 @@ pub fn preset_load(
         .update(|store| {
             store.keys = keys.clone();
             store.key_positions = positions.clone();
+            store.stat_positions = stat_positions.clone();
             store.custom_tabs = custom_tabs.clone();
             store.selected_key_type = selected_key_type.clone();
         })
@@ -170,6 +174,8 @@ pub fn preset_load(
     app.emit("keys:changed", &keys)
         .map_err(|err| err.to_string())?;
     app.emit("positions:changed", &positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("statPositions:changed", &stat_positions)
         .map_err(|err| err.to_string())?;
     app.emit(
         "customTabs:changed",

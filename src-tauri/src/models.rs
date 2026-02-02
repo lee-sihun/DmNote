@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub type KeyMappings = HashMap<String, Vec<String>>;
 pub type KeyPositions = HashMap<String, Vec<KeyPosition>>;
 pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
+pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoteColor {
@@ -157,6 +158,21 @@ pub struct KeyPosition {
     /// 취소선 여부
     #[serde(default)]
     pub font_strikethrough: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum StatType {
+    Kps,
+    Total,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StatPosition {
+    pub stat_type: StatType,
+    #[serde(flatten)]
+    pub position: KeyPosition,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -561,6 +577,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub key_positions: KeyPositions,
     #[serde(default)]
+    pub stat_positions: StatPositions,
+    #[serde(default)]
     pub key_counters: KeyCounters,
     pub background_color: String,
     pub use_custom_css: bool,
@@ -611,6 +629,7 @@ impl Default for AppStoreData {
             developer_mode_enabled: false,
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
+            stat_positions: StatPositions::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
             use_custom_css: false,
@@ -837,6 +856,7 @@ pub struct BootstrapPayload {
     pub settings: SettingsState,
     pub keys: KeyMappings,
     pub positions: KeyPositions,
+    pub stat_positions: StatPositions,
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,

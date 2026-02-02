@@ -88,6 +88,8 @@ fn main() {
             commands::keys::positions_get,
             commands::keys::keys_update,
             commands::keys::positions_update,
+            commands::stat_items::stat_positions_get,
+            commands::stat_items::stat_positions_update,
             commands::keys::keys_set_mode,
             commands::keys::keys_reset_all,
             commands::keys::keys_reset_mode,
