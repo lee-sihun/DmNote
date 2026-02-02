@@ -145,11 +145,14 @@ function Handle({ handle, centerX, centerY, onMouseDown }) {
 function isElementResizable(
   element,
   positions,
+  statPositions,
   selectedKeyType,
   pluginElements
 ) {
   if (element.type === "key") {
     // 키 요소는 항상 리사이즈 가능
+    return true;
+  } else if (element.type === "stat") {
     return true;
   } else if (element.type === "plugin") {
     const pluginEl = pluginElements.find((p) => p.fullId === element.id);
@@ -168,9 +171,24 @@ function isElementResizable(
 /**
  * 요소의 bounds 가져오기
  */
-function getElementBounds(element, positions, selectedKeyType, pluginElements) {
+function getElementBounds(
+  element,
+  positions,
+  statPositions,
+  selectedKeyType,
+  pluginElements
+) {
   if (element.type === "key" && element.index !== undefined) {
     const pos = positions[selectedKeyType]?.[element.index];
+    if (!pos) return null;
+    return {
+      x: pos.dx,
+      y: pos.dy,
+      width: pos.width || 60,
+      height: pos.height || 60,
+    };
+  } else if (element.type === "stat" && element.index !== undefined) {
+    const pos = statPositions?.[selectedKeyType]?.[element.index];
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -197,6 +215,7 @@ function getElementBounds(element, positions, selectedKeyType, pluginElements) {
 function calculateGroupBounds(
   selectedElements,
   positions,
+  statPositions,
   selectedKeyType,
   pluginElements
 ) {
@@ -210,7 +229,13 @@ function calculateGroupBounds(
   for (const element of selectedElements) {
     // 리사이즈 가능한 요소만 그룹 bounds 계산에 포함
     if (
-      !isElementResizable(element, positions, selectedKeyType, pluginElements)
+      !isElementResizable(
+        element,
+        positions,
+        statPositions,
+        selectedKeyType,
+        pluginElements
+      )
     ) {
       continue;
     }
@@ -218,6 +243,7 @@ function calculateGroupBounds(
     const bounds = getElementBounds(
       element,
       positions,
+      statPositions,
       selectedKeyType,
       pluginElements
     );
@@ -245,6 +271,7 @@ function calculateGroupBounds(
 export default function GroupResizeHandles({
   selectedElements,
   positions,
+  statPositions,
   selectedKeyType,
   pluginElements,
   zoom = 1,
@@ -271,6 +298,7 @@ export default function GroupResizeHandles({
   const groupData = calculateGroupBounds(
     selectedElements,
     positions,
+    statPositions,
     selectedKeyType,
     pluginElements
   );
@@ -281,6 +309,7 @@ export default function GroupResizeHandles({
     isResizable: isElementResizable(
       element,
       positions,
+      statPositions,
       selectedKeyType,
       pluginElements
     ),
@@ -305,6 +334,7 @@ export default function GroupResizeHandles({
           isElementResizable(
             element,
             positions,
+            statPositions,
             selectedKeyType,
             pluginElements
           )
@@ -315,6 +345,7 @@ export default function GroupResizeHandles({
           !isElementResizable(
             element,
             positions,
+            statPositions,
             selectedKeyType,
             pluginElements
           )
@@ -854,13 +885,20 @@ export default function GroupResizeHandles({
 function getNonResizableElementIds(
   selectedElements,
   positions,
+  statPositions,
   selectedKeyType,
   pluginElements
 ) {
   return selectedElements
     .filter(
       (element) =>
-        !isElementResizable(element, positions, selectedKeyType, pluginElements)
+        !isElementResizable(
+          element,
+          positions,
+          statPositions,
+          selectedKeyType,
+          pluginElements
+        )
     )
     .map((element) => element.id);
 }

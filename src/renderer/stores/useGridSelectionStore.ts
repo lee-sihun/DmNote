@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import type { KeyPosition } from "@src/types/keys";
 import type { PluginDisplayElementInternal } from "@src/types/api";
+import type { StatItemPosition } from "@src/types/statItems";
 
-export type SelectableElementType = "key" | "plugin";
+export type SelectableElementType = "key" | "stat" | "plugin";
 
 export interface SelectedElement {
   type: SelectableElementType;
@@ -17,13 +18,19 @@ export interface ClipboardKeyData {
   position: KeyPosition;
 }
 
+// 클립보드에 저장되는 통계 요소 데이터
+export interface ClipboardStatData {
+  type: "stat";
+  position: StatItemPosition;
+}
+
 // 클립보드에 저장되는 플러그인 요소 데이터
 export interface ClipboardPluginData {
   type: "plugin";
   element: Omit<PluginDisplayElementInternal, "fullId">;
 }
 
-export type ClipboardItem = ClipboardKeyData | ClipboardPluginData;
+export type ClipboardItem = ClipboardKeyData | ClipboardStatData | ClipboardPluginData;
 
 interface GridSelectionState {
   // 선택된 요소들

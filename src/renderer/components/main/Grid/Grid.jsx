@@ -12,6 +12,7 @@ import UnifiedKeySetting from "../Modal/content/UnifiedKeySetting";
 import TabCssModal from "../Modal/content/TabCssModal";
 import ListPopup from "../Modal/ListPopup";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { useGridZoomPan } from "@hooks/Grid/useGridZoomPan";
@@ -23,6 +24,7 @@ import MarqueeSelectionOverlay from "./MarqueeSelectionOverlay";
 import ResizeHandles from "./ResizeHandles";
 import GroupResizeHandles, { isElementResizable } from "./GroupResizeHandles";
 import KeyCounterPreviewLayer from "./KeyCounterPreviewLayer";
+import StatCounterLayer from "./StatCounterLayer";
 import { useGridSelectionStore, isElementInMarquee } from "@stores/useGridSelectionStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { useUIStore } from "@stores/useUIStore";
@@ -37,6 +39,7 @@ import {
   useGridResize,
   useSmartGuidesElements,
 } from "@hooks/Grid";
+import { createDefaultCounterSettings } from "@src/types/keys";
 
 export default function Grid({
   showConfirm,
@@ -137,6 +140,9 @@ export default function Grid({
     (state) => state.elements
   );
 
+  // 내장 통계 요소(Stat Items) 위치 정보
+  const statPositions = useStatItemStore((state) => state.positions);
+
   // 선택 관련 로직 훅 사용
   const {
     moveSelectedElements,
@@ -154,6 +160,7 @@ export default function Grid({
   // 마퀴 선택 훅 사용
   const { isMarqueeSelecting, startMarqueeSelection } = useGridMarquee({
     positions,
+    statPositions,
     selectedKeyType,
     pluginElements,
     clientToGridCoords,
@@ -191,10 +198,38 @@ export default function Grid({
       } catch (error) {
         console.error("Failed to move selected key forward", error);
       }
+    } else if (selected.type === "stat") {
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const target = tabPositions[selected.index];
+      if (!target) return;
+      const currentZIndex = target.zIndex ?? selected.index;
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.map((p, i) =>
+          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p
+        ),
+      };
+      store.setLocalUpdateInProgress(true);
+      store.setPositions(updatedPositions);
+      try {
+        await window.api.statItems.updatePositions(updatedPositions);
+        syncSelectedElementsToOverlay();
+      } catch (error) {
+        console.error("Failed to move selected stat item forward", error);
+      } finally {
+        store.setLocalUpdateInProgress(false);
+      }
     } else if (selected.type === "plugin") {
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     }
-  }, [selectedElements, onMoveForward, syncSelectedElementsToOverlay]);
+  }, [
+    selectedElements,
+    selectedKeyType,
+    onMoveForward,
+    syncSelectedElementsToOverlay,
+  ]);
 
   const handleSelectedMoveBackward = useCallback(async () => {
     if (selectedElements.length !== 1) return;
@@ -206,10 +241,38 @@ export default function Grid({
       } catch (error) {
         console.error("Failed to move selected key backward", error);
       }
+    } else if (selected.type === "stat") {
+      const store = useStatItemStore.getState();
+      const current = store.positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const target = tabPositions[selected.index];
+      if (!target) return;
+      const currentZIndex = target.zIndex ?? selected.index;
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.map((p, i) =>
+          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p
+        ),
+      };
+      store.setLocalUpdateInProgress(true);
+      store.setPositions(updatedPositions);
+      try {
+        await window.api.statItems.updatePositions(updatedPositions);
+        syncSelectedElementsToOverlay();
+      } catch (error) {
+        console.error("Failed to move selected stat item backward", error);
+      } finally {
+        store.setLocalUpdateInProgress(false);
+      }
     } else if (selected.type === "plugin") {
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     }
-  }, [selectedElements, onMoveBackward, syncSelectedElementsToOverlay]);
+  }, [
+    selectedElements,
+    selectedKeyType,
+    onMoveBackward,
+    syncSelectedElementsToOverlay,
+  ]);
 
   // 키보드 단축키 훅 사용
   useGridKeyboard({
@@ -403,27 +466,45 @@ export default function Grid({
             }
           });
 
-          // 범위 내 플러그인 요소도 선택
-          pluginElements.forEach((el) => {
-            const belongsToCurrentTab = !el.tabId || el.tabId === selectedKeyType;
-            if (belongsToCurrentTab && el.measuredSize) {
-              const elementBounds = {
-                x: el.position.x,
-                y: el.position.y,
-                width: el.measuredSize.width,
-                height: el.measuredSize.height,
-              };
-              if (isElementInMarquee(elementBounds, rangeRect)) {
-                newSelectedElements.push({
-                  type: "plugin",
-                  id: el.fullId,
-                });
-              }
-            }
-          });
+           // 범위 내 플러그인 요소도 선택
+           pluginElements.forEach((el) => {
+             const belongsToCurrentTab = !el.tabId || el.tabId === selectedKeyType;
+             if (belongsToCurrentTab && el.measuredSize) {
+               const elementBounds = {
+                 x: el.position.x,
+                 y: el.position.y,
+                 width: el.measuredSize.width,
+                 height: el.measuredSize.height,
+               };
+               if (isElementInMarquee(elementBounds, rangeRect)) {
+                 newSelectedElements.push({
+                   type: "plugin",
+                   id: el.fullId,
+                 });
+               }
+             }
+           });
 
-          setSelectedElements(newSelectedElements);
-        }}
+           // 범위 내 통계 요소도 선택
+           (statPositions?.[selectedKeyType] || []).forEach((pos, i) => {
+             if (!pos || pos.hidden) return;
+             const elementBounds = {
+               x: pos.dx,
+               y: pos.dy,
+               width: pos.width || 60,
+               height: pos.height || 60,
+             };
+             if (isElementInMarquee(elementBounds, rangeRect)) {
+               newSelectedElements.push({
+                 type: "stat",
+                 id: `stat-${i}`,
+                 index: i,
+               });
+             }
+           });
+
+           setSelectedElements(newSelectedElements);
+         }}
         isSelected={selectedElements.some(
           (el) => el.type === "key" && el.index === index
         )}
@@ -471,6 +552,85 @@ export default function Grid({
         panY={panY}
         counterEnabled={keyCounterEnabled}
         counterPreviewValue={0}
+      />
+    ));
+  };
+
+  const renderStatItems = () => {
+    const items = statPositions?.[selectedKeyType] || [];
+    if (!items.length) return null;
+
+    const labelForType = (type) => {
+      if (type === "kps") return "KPS";
+      if (type === "total") return "Total";
+      return String(type || "");
+    };
+
+    const handleStatPositionChange = (index, dx, dy) => {
+      const current = useStatItemStore.getState().positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const prev = tabPositions[index];
+      if (!prev) return;
+
+      const nextTabPositions = tabPositions.map((pos, i) =>
+        i === index ? { ...pos, dx, dy } : pos
+      );
+      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
+
+      useStatItemStore.getState().setPositions(nextPositions);
+      window.api.statItems.updatePositions(nextPositions).catch((error) => {
+        console.error("Failed to update stat item positions", error);
+      });
+    };
+
+    return items.map((position, index) => (
+      <DraggableKey
+        key={`stat-${selectedKeyType}-${index}`}
+        index={index}
+        elementId={`stat-${index}`}
+        position={position}
+        keyName={labelForType(position.statType)}
+        onPositionChange={handleStatPositionChange}
+        zIndex={position.zIndex ?? index}
+        onClick={() => {
+          if (isContextOpen) {
+            setIsContextOpen(false);
+            setContextPosition(null);
+          }
+          clearSelection();
+          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+        }}
+        onCtrlClick={() => {
+          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+        }}
+        onShiftClick={() => {
+          // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
+          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+        }}
+        isSelected={selectedElements.some(
+          (el) => el.type === "stat" && el.index === index
+        )}
+        selectedElements={selectedElements}
+        onMultiDrag={(deltaX, deltaY) =>
+          moveSelectedElements(deltaX, deltaY, false, false)
+        }
+        onMultiDragEnd={syncSelectedElementsToOverlay}
+        onMultiDragStart={() => {
+          const currentPositions = useKeyStore.getState().positions;
+          const currentPluginElements =
+            usePluginDisplayElementStore.getState().elements;
+          const { keyMappings: km } = useKeyStore.getState();
+          useHistoryStore
+            .getState()
+            .pushState(km, currentPositions, currentPluginElements);
+        }}
+        activeTool={activeTool}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+        counterEnabled={true}
+        counterPreviewValue={0}
+        setReferenceRef={() => {}}
       />
     ));
   };
@@ -654,6 +814,7 @@ export default function Grid({
         }}
       >
         {renderKeys()}
+        {renderStatItems()}
         {/* Outside 카운터 미리보기 레이어 */}
         {keyCounterEnabled && (
           <KeyCounterPreviewLayer
@@ -661,6 +822,7 @@ export default function Grid({
             previewValue={0}
           />
         )}
+        <StatCounterLayer positions={statPositions?.[selectedKeyType] || []} />
         {renderDuplicateGhost()}
         <PluginElementsRenderer
           windowType="main"
@@ -699,6 +861,7 @@ export default function Grid({
           const isResizable = isElementResizable(
             el,
             positions,
+            statPositions,
             selectedKeyType,
             pluginElements
           );
@@ -710,6 +873,16 @@ export default function Grid({
         let bounds = null;
         if (el.type === "key" && el.index !== undefined) {
           const pos = positions[selectedKeyType]?.[el.index];
+          if (pos) {
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
+            };
+          }
+        } else if (el.type === "stat" && el.index !== undefined) {
+          const pos = statPositions?.[selectedKeyType]?.[el.index];
           if (pos) {
             bounds = {
               x: pos.dx,
@@ -773,6 +946,17 @@ export default function Grid({
               height: pos.height || 60,
             };
             elementId = `key-${el.index}`;
+          } else if (el.type === "stat" && el.index !== undefined) {
+            const pos = statPositions?.[selectedKeyType]?.[el.index];
+            if (!pos) return null;
+
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
+            };
+            elementId = `stat-${el.index}`;
           } else if (el.type === "plugin") {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
@@ -821,6 +1005,7 @@ export default function Grid({
         <GroupResizeHandles
           selectedElements={selectedElements}
           positions={positions}
+          statPositions={statPositions}
           selectedKeyType={selectedKeyType}
           pluginElements={pluginElements}
           zoom={zoom}
@@ -1036,6 +1221,43 @@ export default function Grid({
               typeof onAddKeyAt === "function"
             ) {
               onAddKeyAt(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            } else if (id === "addStat" && gridAddLocalPos) {
+              const current = useStatItemStore.getState().positions;
+              const list = [...(current[selectedKeyType] || [])];
+              list.push({
+                statType: "kps",
+                displayText: "KPS",
+                dx: gridAddLocalPos.dx,
+                dy: gridAddLocalPos.dy,
+                width: 60,
+                height: 60,
+                hidden: false,
+                activeImage: "",
+                inactiveImage: "",
+                activeTransparent: false,
+                idleTransparent: false,
+                count: 0,
+                noteColor: "#FFFFFF",
+                noteOpacity: 80,
+                noteEffectEnabled: true,
+                noteGlowEnabled: false,
+                noteGlowSize: 20,
+                noteGlowOpacity: 70,
+                noteGlowColor: "#FFFFFF",
+                noteAutoYCorrection: true,
+                className: "",
+                counter: createDefaultCounterSettings(),
+              });
+              const nextPositions = {
+                ...current,
+                [selectedKeyType]: list,
+              };
+              useStatItemStore.getState().setPositions(nextPositions);
+              window.api.statItems
+                .updatePositions(nextPositions)
+                .catch((error) => {
+                  console.error("Failed to add stat item", error);
+                });
             } else if (id === "tabCss") {
               setIsTabCssModalOpen(true);
             }

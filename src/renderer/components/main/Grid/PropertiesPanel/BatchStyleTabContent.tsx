@@ -20,6 +20,7 @@ interface KeyData {
 interface BatchStyleTabContentProps {
   // 다중 선택 정보
   selectedCount: number;
+  hideDisplayText?: boolean;
   // getMixedValue 함수
   getMixedValue: <T>(
     getter: (pos: KeyPosition) => T | undefined,
@@ -45,6 +46,7 @@ interface BatchStyleTabContentProps {
 
 const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   selectedCount,
+  hideDisplayText = false,
   getMixedValue,
   getSelectedKeysData,
   handleBatchAlign,
@@ -359,22 +361,24 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       <SectionDivider />
 
       {/* 표시 텍스트 */}
-      <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
-        {(() => {
-          const { isMixed, value } = getDisplayTextMixed();
-          const displayTextValue = getMixedValue((pos) => pos.displayText, "").value;
-          // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
-          return (
-            <TextInput
-              value={isMixed ? "" : displayTextValue}
-              onChange={(v) => handleBatchStyleChangeComplete("displayText", v)}
-              placeholder={isMixed ? "Mixed" : value}
-              width="54px"
-              isMixed={isMixed}
-            />
-          );
-        })()}
-      </PropertyRow>
+      {!hideDisplayText && (
+        <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
+          {(() => {
+            const { isMixed, value } = getDisplayTextMixed();
+            const displayTextValue = getMixedValue((pos) => pos.displayText, "").value;
+            // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
+            return (
+              <TextInput
+                value={isMixed ? "" : displayTextValue}
+                onChange={(v) => handleBatchStyleChangeComplete("displayText", v)}
+                placeholder={isMixed ? "Mixed" : value}
+                width="54px"
+                isMixed={isMixed}
+              />
+            );
+          })()}
+        </PropertyRow>
+      )}
 
       {/* 글꼴 크기 */}
       <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>

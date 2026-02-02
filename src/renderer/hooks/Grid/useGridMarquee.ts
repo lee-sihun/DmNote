@@ -13,6 +13,7 @@ import type { PluginDisplayElementInternal } from "@src/types/api";
 
 interface UseGridMarqueeParams {
   positions: Record<string, any[]>;
+  statPositions: Record<string, any[]>;
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
@@ -35,6 +36,7 @@ interface UseGridMarqueeReturn {
  */
 export function useGridMarquee({
   positions,
+  statPositions,
   selectedKeyType,
   pluginElements,
   clientToGridCoords,
@@ -100,6 +102,25 @@ export function useGridMarquee({
         }
       });
 
+      // 통계 요소 체크
+      const stats = statPositions[selectedKeyType] || [];
+      stats.forEach((pos, index) => {
+        if (!pos || pos.hidden) return;
+        const elementBounds = {
+          x: pos.dx,
+          y: pos.dy,
+          width: pos.width || 60,
+          height: pos.height || 60,
+        };
+        if (isElementInMarquee(elementBounds, rect)) {
+          newSelectedElements.push({
+            type: "stat",
+            id: `stat-${index}`,
+            index,
+          });
+        }
+      });
+
       // 플러그인 요소 체크 (현재 탭에 속하는 것만)
       pluginElements.forEach((el) => {
         if (el.hidden) return;
@@ -132,6 +153,7 @@ export function useGridMarquee({
     marqueeStart,
     marqueeEnd,
     positions,
+    statPositions,
     selectedKeyType,
     pluginElements,
     setSelectedElements,

@@ -7,6 +7,7 @@
 
 import { useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import {
@@ -68,6 +69,22 @@ export function useGridSelection({
     } catch (error) {
       console.error("Failed to broadcast key positions to overlay", error);
     }
+
+    // 통계 요소 위치 동기화
+    const currentStatPositions = useStatItemStore.getState().positions;
+    window.api.statItems
+      .updatePositions(currentStatPositions as any)
+      .catch((error: Error) => {
+        console.error("Failed to sync stat positions to overlay", error);
+      });
+    try {
+      window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        positions: currentStatPositions,
+      });
+    } catch (error) {
+      console.error("Failed to broadcast stat positions to overlay", error);
+    }
+
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
@@ -132,6 +149,39 @@ export function useGridSelection({
             .updatePositions(newPositions)
             .catch((error: Error) => {
               console.error("Failed to sync key positions to overlay", error);
+          });
+        }
+      }
+
+      // 통계 요소 배치 업데이트
+      const statUpdates = selectedElements.filter(
+        (el) => el.type === "stat" && el.index !== undefined
+      );
+      if (statUpdates.length > 0) {
+        const currentStatPositions = useStatItemStore.getState().positions;
+        const newStatPositions = { ...currentStatPositions };
+        const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
+
+        statUpdates.forEach((el) => {
+          if (el.index === undefined) return;
+          const currentPos = tabPositions[el.index];
+          if (currentPos) {
+            tabPositions[el.index] = {
+              ...currentPos,
+              dx: currentPos.dx + deltaX,
+              dy: currentPos.dy + deltaY,
+            };
+          }
+        });
+
+        newStatPositions[selectedKeyType] = tabPositions;
+        useStatItemStore.getState().setPositions(newStatPositions as any);
+
+        if (syncToOverlay) {
+          window.api.statItems
+            .updatePositions(newStatPositions as any)
+            .catch((error: Error) => {
+              console.error("Failed to sync stat positions to overlay", error);
             });
         }
       }
@@ -173,12 +223,16 @@ export function useGridSelection({
       .filter((el) => el.type === "key" && el.index !== undefined)
       .map((el) => el.index as number);
 
+    const statsToDelete = selectedElements
+      .filter((el) => el.type === "stat" && el.index !== undefined)
+      .map((el) => el.index as number);
+
     const pluginsToDelete = selectedElements
       .filter((el) => el.type === "plugin")
       .map((el) => el.id);
 
     // 히스토리 저장
-    if (keysToDelete.length > 0 || pluginsToDelete.length > 0) {
+    if (keysToDelete.length > 0 || statsToDelete.length > 0 || pluginsToDelete.length > 0) {
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -236,6 +290,27 @@ export function useGridSelection({
       );
       usePluginDisplayElementStore.getState().setElements(newElements);
     }
+
+    // 통계 요소 배치 삭제
+    if (statsToDelete.length > 0) {
+      const current = useStatItemStore.getState().positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const deleteSet = new Set(statsToDelete);
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
+      };
+
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setPositions(updatedPositions as any);
+      try {
+        await window.api.statItems.updatePositions(updatedPositions as any);
+      } catch (error) {
+        console.error("Failed to delete stat items", error);
+      } finally {
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+      }
+    }
   }, [selectedElements, selectedKeyType, clearSelection]);
 
   // 선택된 요소들 복사
@@ -246,6 +321,8 @@ export function useGridSelection({
     const { keyMappings: km, positions: pos } = useKeyStore.getState();
     const currentMappings = km[selectedKeyType] || [];
     const currentPositions = pos[selectedKeyType] || [];
+    const currentStatPositions =
+      useStatItemStore.getState().positions[selectedKeyType] || [];
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
@@ -259,6 +336,14 @@ export function useGridSelection({
           clipboardItems.push({
             type: "key",
             keyCode,
+            position: { ...position },
+          });
+        }
+      } else if (element.type === "stat" && element.index !== undefined) {
+        const position = currentStatPositions[element.index];
+        if (position) {
+          clipboardItems.push({
+            type: "stat",
             position: { ...position },
           });
         }
@@ -298,12 +383,21 @@ export function useGridSelection({
     historyStore.pushState({ ...km }, { ...pos }, [...currentPluginElements]);
 
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
+    const statsToAdd: { position: any }[] = [];
     const pluginsToAdd: any[] = [];
 
     for (const item of currentClipboard) {
       if (item.type === "key") {
         keysToAdd.push({
           keyCode: item.keyCode,
+          position: {
+            ...item.position,
+            dx: (item.position.dx || 0) + PASTE_OFFSET,
+            dy: (item.position.dy || 0) + PASTE_OFFSET,
+          },
+        });
+      } else if (item.type === "stat") {
+        statsToAdd.push({
           position: {
             ...item.position,
             dx: (item.position.dx || 0) + PASTE_OFFSET,
@@ -361,6 +455,35 @@ export function useGridSelection({
         console.error("Failed to paste keys", error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
+      }
+    }
+
+    // 통계 요소 추가
+    if (statsToAdd.length > 0) {
+      const current = useStatItemStore.getState().positions;
+      const posArray = [...(current[selectedKeyType] || [])];
+      const startIndex = posArray.length;
+
+      for (let i = 0; i < statsToAdd.length; i++) {
+        posArray.push(statsToAdd[i].position);
+        newSelectedElements.push({
+          type: "stat",
+          id: `stat-${startIndex + i}`,
+          index: startIndex + i,
+        });
+      }
+
+      const updatedPositions = { ...current, [selectedKeyType]: posArray };
+
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setPositions(updatedPositions as any);
+
+      try {
+        await window.api.statItems.updatePositions(updatedPositions as any);
+      } catch (error) {
+        console.error("Failed to paste stat items", error);
+      } finally {
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
       }
     }
 

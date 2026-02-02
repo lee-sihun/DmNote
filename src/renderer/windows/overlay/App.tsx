@@ -19,7 +19,9 @@ import { useCustomJsInjection } from "@hooks/useCustomJsInjection";
 import { useBlockBrowserShortcuts } from "@hooks/useBlockBrowserShortcuts";
 import { useNoteSystem } from "@hooks/useNoteSystem";
 import { useAppBootstrap } from "@hooks/useAppBootstrap";
+import { useBuiltinStatsSubscription } from "@hooks/useBuiltinStatsSubscription";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
@@ -33,6 +35,8 @@ import {
 import KeyCounterLayer from "@components/overlay/KeyCounterLayer";
 import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
+import StatItem from "@components/overlay/StatItem";
+import StatCounterLayer from "@components/overlay/StatCounterLayer";
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -60,6 +64,8 @@ const FALLBACK_POSITION: KeyPosition = {
 const PADDING = 30;
 
 const OverlayKey = Key as React.ComponentType<any>;
+const OverlayStatItem = StatItem as React.ComponentType<any>;
+const OverlayStatCounterLayer = StatCounterLayer as React.ComponentType<any>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -74,6 +80,7 @@ export default function App() {
   useCustomCssInjection();
   useCustomJsInjection();
   useAppBootstrap();
+  useBuiltinStatsSubscription();
   useBlockBrowserShortcuts();
   const macOS = isMac();
   const developerModeEnabled = useSettingsStore(
@@ -128,9 +135,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 메인에서 bridge를 통한 statPositions 동기화 수신
+  useEffect(() => {
+    const unsubscribe = window.api.bridge.on<{
+      positions: Record<string, any[]>;
+    }>("statPositions:sync", (data) => {
+      if (data?.positions) {
+        useStatItemStore.setState((state) => ({
+          ...state,
+          positions: data.positions,
+        }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
+  const statPositions = useStatItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements
   );
@@ -287,8 +310,18 @@ export default function App() {
     [positions, selectedKeyType]
   );
 
+  const currentStatPositions = useMemo<any[]>(
+    () => statPositions[selectedKeyType] ?? [],
+    [statPositions, selectedKeyType]
+  );
+
   const bounds = useMemo<Bounds | null>(() => {
-    if (!currentPositions.length && !pluginElements.length) return null;
+    if (
+      !currentPositions.length &&
+      !currentStatPositions.length &&
+      !pluginElements.length
+    )
+      return null;
 
     const xs: number[] = [];
     const ys: number[] = [];
@@ -302,6 +335,15 @@ export default function App() {
       ys.push(pos.dy);
       widths.push(pos.dx + pos.width);
       heights.push(pos.dy + pos.height);
+    });
+
+    // 통계 요소 위치
+    currentStatPositions.forEach((pos: any) => {
+      if (!pos || pos.hidden) return;
+      xs.push(pos.dx);
+      ys.push(pos.dy);
+      widths.push(pos.dx + (pos.width ?? 60));
+      heights.push(pos.dy + (pos.height ?? 60));
     });
 
     // 플러그인 요소 위치 (앵커 기반 계산 포함)
@@ -345,7 +387,13 @@ export default function App() {
       maxX: Math.max(...widths),
       maxY: Math.max(...heights),
     };
-  }, [currentPositions, pluginElements, selectedKeyType, currentKeys]);
+  }, [
+    currentPositions,
+    currentStatPositions,
+    pluginElements,
+    selectedKeyType,
+    currentKeys,
+  ]);
 
   const displayPositions = useMemo<KeyPosition[]>(() => {
     if (!bounds || !currentPositions.length) {
@@ -362,6 +410,22 @@ export default function App() {
       dy: position.dy + offsetY,
     }));
   }, [currentPositions, bounds, trackHeight, layoutVersion]);
+
+  const displayStatPositions = useMemo<any[]>(() => {
+    if (!bounds || !currentStatPositions.length) {
+      return currentStatPositions;
+    }
+
+    const topOffset = trackHeight + PADDING;
+    const offsetX = PADDING - bounds.minX;
+    const offsetY = topOffset - bounds.minY;
+
+    return currentStatPositions.map((position: any) => ({
+      ...position,
+      dx: position.dx + offsetX,
+      dy: position.dy + offsetY,
+    }));
+  }, [currentStatPositions, bounds, trackHeight, layoutVersion]);
 
   // 오버레이의 위치 오프셋 계산
   const positionOffset = useMemo(() => {
@@ -553,6 +617,23 @@ export default function App() {
           />
         );
       })}
+      {displayStatPositions.map((pos: any, index: number) => {
+        if (!pos || pos.hidden) return null;
+
+        const defaultLabel = pos.statType === "total" ? "Total" : "KPS";
+        const label = (pos.displayText || "").trim() || defaultLabel;
+        const position = { ...pos, zIndex: pos.zIndex ?? index };
+
+        return (
+          <OverlayStatItem
+            key={`stat-${selectedKeyType}-${index}`}
+            statType={pos.statType}
+            label={label}
+            position={position}
+            counterEnabled={true}
+          />
+        );
+      })}
       {keyCounterEnabled ? (
         <KeyCounterLayer
           keys={currentKeys}
@@ -562,6 +643,7 @@ export default function App() {
           mode={selectedKeyType}
         />
       ) : null}
+      <OverlayStatCounterLayer positions={displayStatPositions} />
       <PluginElementsRenderer
         windowType="overlay"
         positionOffset={positionOffset}

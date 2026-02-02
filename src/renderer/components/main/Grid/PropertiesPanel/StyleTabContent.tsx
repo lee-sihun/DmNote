@@ -51,6 +51,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   onKeyMappingChange,
   isListening = false,
   onKeyListen,
+  mappingControl,
+  mappingLabel,
+  hideDisplayText = false,
   showImagePicker = false,
   onToggleImagePicker,
   imageButtonRef,
@@ -407,8 +410,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   return (
     <>
-      {/* 키 매핑 - 단일 선택 모드에서만 표시 */}
-      {onKeyListen && (
+      {/* 키 매핑(또는 통계 종류 등 대체 컨트롤) - 단일 선택 모드에서만 표시 */}
+      {mappingControl ? (
+        <>
+          <PropertyRow
+            label={mappingLabel || t("propertiesPanel.keyMapping") || "키 매핑"}
+          >
+            {mappingControl}
+          </PropertyRow>
+          <SectionDivider />
+        </>
+      ) : onKeyListen ? (
         <>
           <PropertyRow label={t("propertiesPanel.keyMapping") || "키 매핑"}>
             <button
@@ -419,12 +431,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             >
               {isListening
                 ? t("propertiesPanel.pressAnyKey") || "Press any key"
-                : keyInfo?.displayName || t("propertiesPanel.clickToSet") || "Click to set"}
+                : keyInfo?.displayName ||
+                  t("propertiesPanel.clickToSet") ||
+                  "Click to set"}
             </button>
           </PropertyRow>
           <SectionDivider />
         </>
-      )}
+      ) : null}
       
       {/* 위치 */}
       <PropertyRow label={t("propertiesPanel.position") || "위치"}>
@@ -533,15 +547,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       <SectionDivider />
 
       {/* 표시 텍스트 */}
-      <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
-        <TextInput
-          value={keyPosition.displayText || ""}
-          onChange={handleDisplayTextChange}
-          onBlur={handleDisplayTextBlur}
-          placeholder={keyInfo?.displayName || ""}
-          width="54px"
-        />
-      </PropertyRow>
+      {!hideDisplayText && (
+        <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
+          <TextInput
+            value={keyPosition.displayText || ""}
+            onChange={handleDisplayTextChange}
+            onBlur={handleDisplayTextBlur}
+            placeholder={keyInfo?.displayName || ""}
+            width="54px"
+          />
+        </PropertyRow>
+      )}
 
       {/* 글꼴 크기 */}
       <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>

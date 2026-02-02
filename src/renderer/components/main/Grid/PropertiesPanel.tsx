@@ -8,6 +8,7 @@ import React, {
 import { useTranslation } from "@contexts/I18nContext";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
@@ -16,6 +17,7 @@ import { useUIStore } from "@stores/useUIStore";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { translatePluginMessage } from "@utils/pluginI18n";
 import type { KeyPosition, KeyCounterSettings } from "@src/types/keys";
+import type { StatItemPosition, StatItemType } from "@src/types/statItems";
 import type { PluginSettingSchema, PluginMessages } from "@src/types/api";
 import {
   createDefaultCounterSettings,
@@ -85,6 +87,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
+  const statItemPositions = useStatItemStore((state) => state.positions);
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore((state) => state.elements);
   const pluginDefinitions = usePluginDisplayElementStore(
@@ -113,6 +116,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 선택된 키 요소 필터링
   const selectedKeyElements = selectedElements.filter(
     (el) => el.type === "key",
+  );
+  const selectedStatElements = selectedElements.filter((el) => el.type === "stat");
+  const selectedKeyLikeElements = selectedElements.filter(
+    (el) => el.type === "key" || el.type === "stat",
   );
   const selectedPluginElements = selectedElements.filter(
     (el) => el.type === "plugin",
@@ -167,6 +174,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const singleKeyInfo = singleKeyCode
     ? getKeyInfoByGlobalKey(singleKeyCode)
     : null;
+
+  // 단일 통계 요소 선택인 경우의 데이터
+  const singleStatIndex =
+    selectedStatElements.length === 1 ? selectedStatElements[0].index : null;
+  const singleStatPosition: StatItemPosition | null =
+    singleStatIndex !== null
+      ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
+      : null;
 
   // 로컬 상태 (실시간 편집용)
   const [localState, setLocalState] = useState<
@@ -232,6 +247,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<TabType>(TABS.STYLE);
+
+  // 통계 요소 선택 시 NOTE 탭 숨김 처리
+  useEffect(() => {
+    // 키/통계 요소 선택이 있을 때만 탭 보정
+    if (selectedKeyLikeElements.length === 0 || selectedPluginElements.length > 0) {
+      return;
+    }
+    const shouldHideNote = selectedStatElements.length > 0;
+    if (shouldHideNote && activeTab === TABS.NOTE) {
+      setActiveTab(TABS.STYLE);
+    }
+  }, [
+    activeTab,
+    selectedKeyLikeElements.length,
+    selectedPluginElements.length,
+    selectedStatElements.length,
+  ]);
 
   // 스크롤 훅 사용
   const {
@@ -305,7 +337,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     const hasPluginPanel =
       !!pluginSettingsPanel ||
-      (selectedPluginElements.length > 0 && selectedKeyElements.length === 0);
+      (selectedPluginElements.length > 0 && selectedKeyLikeElements.length === 0);
 
     if (!hasPluginPanel) return;
 
@@ -323,7 +355,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     showModalHint,
     hasSinglePluginSelection,
     selectedPluginElements.length,
-    selectedKeyElements.length,
+    selectedKeyLikeElements.length,
     updatePluginThumbDOM,
   ]);
 
@@ -366,12 +398,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 선택이 변경되면 로컬 상태 초기화
   useEffect(() => {
-    if (singleKeyPosition) {
+    const targetPosition = singleKeyPosition || singleStatPosition;
+    if (targetPosition) {
       setLocalState({
-        dx: singleKeyPosition.dx,
-        dy: singleKeyPosition.dy,
-        width: singleKeyPosition.width || 60,
-        height: singleKeyPosition.height || 60,
+        dx: targetPosition.dx,
+        dy: targetPosition.dy,
+        width: targetPosition.width || 60,
+        height: targetPosition.height || 60,
       });
     } else {
       setLocalState({});
@@ -381,6 +414,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKeyPosition?.dy,
     singleKeyPosition?.width,
     singleKeyPosition?.height,
+    singleStatPosition?.dx,
+    singleStatPosition?.dy,
+    singleStatPosition?.width,
+    singleStatPosition?.height,
   ]);
 
   useEffect(() => {
@@ -459,11 +496,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 다중 선택 시 패널 자동 열기
   useEffect(() => {
-    if (selectedKeyElements.length > 1 && !isPanelVisible && !manuallyClosedRef.current) {
+    if (selectedKeyLikeElements.length > 1 && !isPanelVisible && !manuallyClosedRef.current) {
       setPanelMode("property");
       setIsPanelVisible(true);
     }
-  }, [selectedKeyElements.length, isPanelVisible]);
+  }, [selectedKeyLikeElements.length, isPanelVisible]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -512,7 +549,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return () => {
       document.removeEventListener("mousedown", handleGridClick);
     };
-  }, [isPanelVisible, selectedKeyElements.length, selectedElements.length, panelMode]);
+  }, [isPanelVisible, selectedKeyLikeElements.length, selectedElements.length, panelMode]);
 
   // 키 리스닝 상태를 전역으로 노출 (App.tsx의 Tab 단축키 등에서 체크)
   useEffect(() => {
@@ -846,32 +883,204 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setIsListening(true);
   }, []);
 
+  const handleStatUpdate = useCallback(
+    (data: Partial<StatItemPosition> & { index: number }) => {
+      const { index, ...updates } = data;
+      const mode = selectedKeyType;
+      const current = useStatItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (!list[index]) return;
+      const prev = list[index] as StatItemPosition;
+
+      // statType 변경 시 displayText는 기본 레이블(기존 값이 기본 레이블이거나 비어있을 때만) 함께 갱신
+      const labelForStat = (statType?: StatItemType | null) => {
+        if (statType === "total") return "Total";
+        return "KPS";
+      };
+
+      let effectiveUpdates = updates as Partial<StatItemPosition>;
+      if (
+        "statType" in updates &&
+        !("displayText" in updates) &&
+        updates.statType
+      ) {
+        const prevLabel = labelForStat(prev.statType ?? null);
+        const nextLabel = labelForStat(updates.statType as any);
+        const currentLabel = (prev.displayText || "").trim();
+        if (!currentLabel || currentLabel === prevLabel) {
+          effectiveUpdates = { ...effectiveUpdates, displayText: nextLabel };
+        }
+      }
+
+      // 히스토리 저장 (키/플러그인과 동일한 스냅샷 기준)
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(km, currentPositions, currentPluginElements);
+
+      const nextList = list.map((pos, i) =>
+        i === index ? ({ ...pos, ...effectiveUpdates } as StatItemPosition) : pos,
+      );
+      const nextPositions = { ...current, [mode]: nextList };
+
+      useStatItemStore.getState().setPositions(nextPositions);
+      window.api.statItems.updatePositions(nextPositions).catch((error) => {
+        console.error("Failed to update stat item", error);
+      });
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [pushHistoryState, selectedKeyType],
+  );
+
+  const handleStatPreview = useCallback(
+    (index: number, updates: Partial<StatItemPosition>) => {
+      const mode = selectedKeyType;
+      const current = useStatItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (!list[index]) return;
+
+      const nextList = list.map((pos, i) =>
+        i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
+      );
+      const nextPositions = { ...current, [mode]: nextList };
+      useStatItemStore.getState().setPositions(nextPositions);
+    },
+    [selectedKeyType],
+  );
+
+  const handleStatBatchPreview = useCallback(
+    (updates: Array<{ index: number } & Partial<StatItemPosition>>) => {
+      if (updates.length === 0) return;
+
+      const mode = selectedKeyType;
+      const current = useStatItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list.length === 0) return;
+
+      const updateMap = new Map<number, Partial<StatItemPosition>>();
+      for (const { index, ...rest } of updates) {
+        if (list[index]) {
+          updateMap.set(index, rest);
+        }
+      }
+      if (updateMap.size === 0) return;
+
+      const nextList = list.map((pos, i) => {
+        const update = updateMap.get(i);
+        return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+      });
+      const nextPositions = { ...current, [mode]: nextList };
+      useStatItemStore.getState().setPositions(nextPositions);
+    },
+    [selectedKeyType],
+  );
+
+  const handleStatBatchUpdate = useCallback(
+    (updates: Array<{ index: number } & Partial<StatItemPosition>>) => {
+      if (updates.length === 0) return;
+
+      const mode = selectedKeyType;
+      const current = useStatItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list.length === 0) return;
+
+      const updateMap = new Map<number, Partial<StatItemPosition>>();
+      for (const { index, ...rest } of updates) {
+        if (list[index]) {
+          updateMap.set(index, rest);
+        }
+      }
+      if (updateMap.size === 0) return;
+
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(km, currentPositions, currentPluginElements);
+
+      const nextList = list.map((pos, i) => {
+        const update = updateMap.get(i);
+        return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+      });
+      const nextPositions = { ...current, [mode]: nextList };
+
+      useStatItemStore.getState().setPositions(nextPositions);
+      window.api.statItems.updatePositions(nextPositions).catch((error) => {
+        console.error("Failed to batch update stat items", error);
+      });
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [pushHistoryState, selectedKeyType],
+  );
+
   // 크기 변경 완료 (blur 시 저장)
   const handleSizeBlur = useCallback(() => {
-    if (singleKeyIndex === null) return;
+    if (singleKeyIndex === null && singleStatIndex === null) return;
     const updates: Partial<KeyPosition> = {};
     if (localState.width !== undefined) updates.width = localState.width;
     if (localState.height !== undefined) updates.height = localState.height;
     if (Object.keys(updates).length > 0) {
-      onKeyUpdate({ index: singleKeyIndex, ...updates });
+      if (singleKeyIndex !== null) {
+        onKeyUpdate({ index: singleKeyIndex, ...updates });
+      } else if (singleStatIndex !== null) {
+        handleStatUpdate({ index: singleStatIndex, ...(updates as any) });
+      }
     }
-  }, [singleKeyIndex, localState.width, localState.height, onKeyUpdate]);
+  }, [
+    singleKeyIndex,
+    singleStatIndex,
+    localState.width,
+    localState.height,
+    onKeyUpdate,
+    handleStatUpdate,
+  ]);
 
   // ============================================================================
   // 다중 선택 헬퍼 함수들
   // ============================================================================
 
   const getSelectedKeysData = useCallback(() => {
-    return selectedKeyElements
+    const labelForStat = (statType?: StatItemType | null) => {
+      if (statType === "total") return "Total";
+      return "KPS";
+    };
+
+    return selectedKeyLikeElements
       .map((el) => {
-        const keyIndex = el.index!;
-        const position = positions[selectedKeyType]?.[keyIndex];
-        const keyCode = keyMappings[selectedKeyType]?.[keyIndex];
-        const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
-        return { index: keyIndex, position, keyCode, keyInfo };
+        const index = el.index!;
+        if (el.type === "key") {
+          const position = positions[selectedKeyType]?.[index];
+          const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
+          const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
+          return { index, position, keyCode, keyInfo };
+        }
+        // stat
+        const position = statItemPositions[selectedKeyType]?.[index];
+        const statLabel = (position?.displayText || "").trim() || labelForStat(position?.statType ?? null);
+        const keyInfo = { globalKey: statLabel, displayName: statLabel };
+        return { index, position, keyCode: null, keyInfo };
       })
       .filter((data) => data.position !== undefined);
-  }, [selectedKeyElements, positions, selectedKeyType, keyMappings]);
+  }, [
+    selectedKeyLikeElements,
+    positions,
+    selectedKeyType,
+    keyMappings,
+    statItemPositions,
+  ]);
 
   const getMixedValue = useCallback(
     <T,>(
@@ -911,13 +1120,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
-    selectedKeyElements,
-    positions,
+    selectedKeyLikeElements: selectedKeyLikeElements as any,
+    keyPositions: positions,
+    statPositions: statItemPositions,
     selectedKeyType,
     onKeyUpdate,
     onKeyBatchUpdate,
     onKeyPreview,
     onKeyBatchPreview,
+    onStatUpdate: handleStatUpdate,
+    onStatBatchUpdate: handleStatBatchUpdate,
+    onStatPreview: handleStatPreview,
+    onStatBatchPreview: handleStatBatchPreview,
   });
 
   const renderPluginSettingsForm = useCallback(
@@ -1409,8 +1623,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 다중 선택인 경우
-  if (selectedKeyElements.length > 1) {
+  // 다중 선택인 경우 (키 + 통계 요소)
+  if (selectedKeyLikeElements.length > 1 && selectedPluginElements.length === 0) {
     const getBatchNoteColorDisplay = () => {
       // 노트 피커가 열려있으면 로컬 상태 사용
       if (batchPickerFor === "noteColor") {
@@ -1572,7 +1786,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {t("propertiesPanel.multiSelection") || "다중 선택"}
               </span>
               <span className="text-[#6B6D75] text-style-4">
-                ({selectedKeyElements.length})
+                ({selectedKeyLikeElements.length})
               </span>
             </div>
             <div className="flex items-center gap-[4px]">
@@ -1597,7 +1811,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
           {/* 탭 */}
           <div className="px-[12px] pb-[12px]">
-            <Tabs activeTab={activeTab} onTabChange={setActiveTab} t={t} />
+            <Tabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              t={t}
+              availableTabs={
+                selectedStatElements.length > 0
+                  ? [TABS.STYLE, TABS.COUNTER]
+                  : [TABS.STYLE, TABS.NOTE, TABS.COUNTER]
+              }
+            />
           </div>
         </div>
 
@@ -1612,13 +1835,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               className={`properties-panel-overlay-viewport ${activeTab === TABS.STYLE ? "" : "hidden"}`}
             >
               <div className="p-[12px] flex flex-col gap-[12px]">
-                <BatchStyleTabContent
-                  selectedCount={selectedKeyElements.length}
-                  getMixedValue={getMixedValue}
-                  getSelectedKeysData={getSelectedKeysData}
-                  handleBatchAlign={handleBatchAlign}
-                  handleBatchDistribute={handleBatchDistribute}
-                  handleBatchResize={handleBatchResize}
+                  <BatchStyleTabContent
+                   selectedCount={selectedKeyLikeElements.length}
+                   getMixedValue={getMixedValue}
+                   getSelectedKeysData={getSelectedKeysData}
+                   handleBatchAlign={handleBatchAlign}
+                   handleBatchDistribute={handleBatchDistribute}
+                   handleBatchResize={handleBatchResize}
                   handleBatchStyleChange={handleBatchStyleChange}
                   handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
                   showBatchImagePicker={showBatchImagePicker}
@@ -1638,34 +1861,40 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
             </div>
 
-            {/* NOTE 탭 viewport */}
-            <div
-              ref={batchScrollRefFor(TABS.NOTE)}
-              className={`properties-panel-overlay-viewport ${activeTab === TABS.NOTE ? "" : "hidden"}`}
-            >
-              <div className="p-[12px] flex flex-col gap-[12px]">
-                <BatchNoteTabContent
-                  getMixedValue={getMixedValue}
-                  handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-                  getBatchNoteColorDisplay={getBatchNoteColorDisplay}
-                  getBatchGlowColorDisplay={getBatchGlowColorDisplay}
-                  onNoteColorPickerToggle={() => handleBatchPickerToggle("noteColor")}
-                  onGlowColorPickerToggle={() => handleBatchPickerToggle("glowColor")}
-                  isNoteColorPickerOpen={batchPickerFor === "noteColor"}
-                  isGlowColorPickerOpen={batchPickerFor === "glowColor"}
-                  batchNoteColorButtonRef={batchNoteColorButtonRef}
-                  batchGlowColorButtonRef={batchGlowColorButtonRef}
-                  t={t}
-                />
+            {/* NOTE 탭 viewport (통계 요소가 포함된 경우 숨김) */}
+            {selectedStatElements.length === 0 && (
+              <div
+                ref={batchScrollRefFor(TABS.NOTE)}
+                className={`properties-panel-overlay-viewport ${activeTab === TABS.NOTE ? "" : "hidden"}`}
+              >
+                <div className="p-[12px] flex flex-col gap-[12px]">
+                  <BatchNoteTabContent
+                    getMixedValue={getMixedValue}
+                    handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                    getBatchNoteColorDisplay={getBatchNoteColorDisplay}
+                    getBatchGlowColorDisplay={getBatchGlowColorDisplay}
+                    onNoteColorPickerToggle={() =>
+                      handleBatchPickerToggle("noteColor")
+                    }
+                    onGlowColorPickerToggle={() =>
+                      handleBatchPickerToggle("glowColor")
+                    }
+                    isNoteColorPickerOpen={batchPickerFor === "noteColor"}
+                    isGlowColorPickerOpen={batchPickerFor === "glowColor"}
+                    batchNoteColorButtonRef={batchNoteColorButtonRef}
+                    batchGlowColorButtonRef={batchGlowColorButtonRef}
+                    t={t}
+                  />
+                </div>
+                <div className="properties-panel-overlay-bar">
+                  <div
+                    ref={batchThumbRefFor(TABS.NOTE)}
+                    className="properties-panel-overlay-thumb"
+                    style={{ display: "none" }}
+                  />
+                </div>
               </div>
-              <div className="properties-panel-overlay-bar">
-                <div
-                  ref={batchThumbRefFor(TABS.NOTE)}
-                  className="properties-panel-overlay-thumb"
-                  style={{ display: 'none' }}
-                />
-              </div>
-            </div>
+            )}
 
             {/* COUNTER 탭 viewport */}
             <div
@@ -1800,8 +2029,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 플러그인 요소가 선택된 경우
-  if (selectedElements.length > 0 && selectedKeyElements.length === 0) {
+  // 플러그인 요소가 선택된 경우 (키/통계 요소가 없을 때만)
+  if (selectedPluginElements.length > 0 && selectedKeyLikeElements.length === 0) {
     const pluginTitle =
       selectedPluginDefinition?.name ||
       selectedPluginElement?.definitionId ||
@@ -1909,23 +2138,70 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 단일 키 선택인 경우
-  if (!singleKeyPosition) {
+  // 단일 키/통계 요소 선택인 경우
+  const isSingleStat = !singleKeyPosition && !!singleStatPosition;
+  const isSingleKey = !!singleKeyPosition;
+  if (!isSingleKey && !isSingleStat) {
     return null;
   }
 
+  const availableTabs = isSingleStat
+    ? [TABS.STYLE, TABS.COUNTER]
+    : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
+
+  const statTypeOptions = [
+    { label: "KPS", value: "kps" },
+    { label: "Total", value: "total" },
+  ];
+
+  const statTitle =
+    (singleStatPosition?.statType as StatItemType) === "total" ? "Total" : "KPS";
+
+  const keyLikeIndex = isSingleStat ? singleStatIndex! : singleKeyIndex!;
+  const keyLikePosition = (isSingleStat
+    ? singleStatPosition!
+    : singleKeyPosition!) as any;
+
+  const keyLikeTitle = isSingleStat
+    ? statTitle
+    : singleKeyInfo?.displayName || singleKeyCode || "Key";
+
+  const keyLikeCode = isSingleStat ? null : singleKeyCode;
+  const keyLikeInfo = isSingleStat ? null : singleKeyInfo;
+
+  const handleKeyLikePositionChange = isSingleStat
+    ? (index: number, dx: number, dy: number) =>
+        handleStatUpdate({ index, dx, dy } as any)
+    : onPositionChange;
+
+  const handleKeyLikeUpdate = isSingleStat
+    ? ((data: Partial<KeyPosition> & { index: number }) =>
+        handleStatUpdate(data as any))
+    : onKeyUpdate;
+
+  const mappingControl = isSingleStat ? (
+    <Dropdown
+      options={statTypeOptions}
+      value={(singleStatPosition?.statType as StatItemType) || "kps"}
+      onChange={(value) =>
+        handleStatUpdate({
+          index: singleStatIndex!,
+          statType: value as StatItemType,
+        })
+      }
+    />
+  ) : undefined;
+
   return (
-      <div
-        ref={setPanelElement}
-        className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
-      >
+    <div
+      ref={setPanelElement}
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+    >
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0 border-b border-[#3A3943]">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
-          <span className="text-[#DBDEE8] text-style-2">
-            {singleKeyInfo?.displayName || singleKeyCode || "Key"}
-          </span>
+          <span className="text-[#DBDEE8] text-style-2">{keyLikeTitle}</span>
 
           <div className="flex items-center gap-[4px]">
             {/* 레이어 모드로 전환 버튼 */}
@@ -1949,7 +2225,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
         {/* 탭 */}
         <div className="px-[12px] pb-[12px]">
-          <Tabs activeTab={activeTab} onTabChange={setActiveTab} t={t} />
+          <Tabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            t={t}
+            availableTabs={availableTabs}
+          />
         </div>
       </div>
 
@@ -1958,24 +2239,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         {/* STYLE 탭 viewport */}
         <div
           ref={singleScrollRefFor(TABS.STYLE)}
-          className={`properties-panel-overlay-viewport ${activeTab === TABS.STYLE ? "" : "hidden"}`}
+          className={`properties-panel-overlay-viewport ${
+            activeTab === TABS.STYLE ? "" : "hidden"
+          }`}
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
-            <StyleTabContent
-              keyIndex={singleKeyIndex!}
-              keyPosition={singleKeyPosition}
-              keyCode={singleKeyCode}
-              keyInfo={singleKeyInfo}
-              onPositionChange={onPositionChange}
-              onKeyUpdate={onKeyUpdate}
-              onKeyPreview={onKeyPreview}
-              onKeyMappingChange={onKeyMappingChange}
+               <StyleTabContent
+                 keyIndex={keyLikeIndex}
+                 keyPosition={keyLikePosition}
+                 keyCode={keyLikeCode}
+                 keyInfo={keyLikeInfo}
+              onPositionChange={handleKeyLikePositionChange}
+              onKeyUpdate={handleKeyLikeUpdate}
+              onKeyPreview={isSingleStat ? undefined : onKeyPreview}
+              onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
               isListening={isListening}
-              onKeyListen={handleKeyListen}
-              showImagePicker={showImagePicker}
-              onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
-              imageButtonRef={imageButtonRef}
-              panelElement={panelElement}
+              onKeyListen={isSingleStat ? undefined : handleKeyListen}
+              mappingControl={mappingControl}
+               mappingLabel={
+                 isSingleStat
+                   ? t("propertiesPanel.statType") || "Stat Type"
+                   : undefined
+               }
+               showImagePicker={showImagePicker}
+               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
+               imageButtonRef={imageButtonRef}
+               panelElement={panelElement}
               useCustomCSS={useCustomCSS}
               t={t}
               localDx={localState.dx}
@@ -2001,45 +2290,51 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={singleThumbRefFor(TABS.STYLE)}
               className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
+              style={{ display: "none" }}
             />
           </div>
         </div>
 
         {/* NOTE 탭 viewport */}
-        <div
-          ref={singleScrollRefFor(TABS.NOTE)}
-          className={`properties-panel-overlay-viewport ${activeTab === TABS.NOTE ? "" : "hidden"}`}
-        >
-          <div className="p-[12px] flex flex-col gap-[12px]">
-            <NoteTabContent
-              keyIndex={singleKeyIndex!}
-              keyPosition={singleKeyPosition}
-              onKeyUpdate={onKeyUpdate}
-              onKeyPreview={onKeyPreview}
-              panelElement={panelElement}
-              t={t}
-            />
+        {!isSingleStat && (
+          <div
+            ref={singleScrollRefFor(TABS.NOTE)}
+            className={`properties-panel-overlay-viewport ${
+              activeTab === TABS.NOTE ? "" : "hidden"
+            }`}
+          >
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <NoteTabContent
+                keyIndex={singleKeyIndex!}
+                keyPosition={singleKeyPosition!}
+                onKeyUpdate={onKeyUpdate}
+                onKeyPreview={onKeyPreview}
+                panelElement={panelElement}
+                t={t}
+              />
+            </div>
+            <div className="properties-panel-overlay-bar">
+              <div
+                ref={singleThumbRefFor(TABS.NOTE)}
+                className="properties-panel-overlay-thumb"
+                style={{ display: "none" }}
+              />
+            </div>
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.NOTE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
-        </div>
+        )}
 
         {/* COUNTER 탭 viewport */}
         <div
           ref={singleScrollRefFor(TABS.COUNTER)}
-          className={`properties-panel-overlay-viewport ${activeTab === TABS.COUNTER ? "" : "hidden"}`}
+          className={`properties-panel-overlay-viewport ${
+            activeTab === TABS.COUNTER ? "" : "hidden"
+          }`}
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
             <CounterTabContent
-              keyIndex={singleKeyIndex!}
-              keyPosition={singleKeyPosition}
-              onKeyUpdate={onKeyUpdate}
+              keyIndex={keyLikeIndex}
+              keyPosition={keyLikePosition}
+              onKeyUpdate={handleKeyLikeUpdate}
               panelElement={panelElement}
               t={t}
             />
@@ -2048,7 +2343,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={singleThumbRefFor(TABS.COUNTER)}
               className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
+              style={{ display: "none" }}
             />
           </div>
         </div>

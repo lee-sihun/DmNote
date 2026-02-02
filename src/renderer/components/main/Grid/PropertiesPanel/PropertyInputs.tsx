@@ -846,28 +846,45 @@ const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
   </button>
 );
 
-export const Tabs: React.FC<TabsProps> = ({ activeTab, onTabChange, t }) => (
-  <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
-    <TabButton
-      active={activeTab === TABS.STYLE}
-      onClick={() => onTabChange(TABS.STYLE)}
-    >
-      {t("propertiesPanel.tabStyle") || "키"}
-    </TabButton>
-    <TabButton
-      active={activeTab === TABS.NOTE}
-      onClick={() => onTabChange(TABS.NOTE)}
-    >
-      {t("propertiesPanel.tabNote") || "노트"}
-    </TabButton>
-    <TabButton
-      active={activeTab === TABS.COUNTER}
-      onClick={() => onTabChange(TABS.COUNTER)}
-    >
-      {t("propertiesPanel.tabCounter") || "카운터"}
-    </TabButton>
-  </div>
-);
+export const Tabs: React.FC<TabsProps> = ({
+  activeTab,
+  onTabChange,
+  t,
+  availableTabs,
+}) => {
+  const tabs = availableTabs?.length
+    ? availableTabs
+    : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
+
+  return (
+    <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
+      {tabs.includes(TABS.STYLE) && (
+        <TabButton
+          active={activeTab === TABS.STYLE}
+          onClick={() => onTabChange(TABS.STYLE)}
+        >
+          {t("propertiesPanel.tabStyle") || "키"}
+        </TabButton>
+      )}
+      {tabs.includes(TABS.NOTE) && (
+        <TabButton
+          active={activeTab === TABS.NOTE}
+          onClick={() => onTabChange(TABS.NOTE)}
+        >
+          {t("propertiesPanel.tabNote") || "노트"}
+        </TabButton>
+      )}
+      {tabs.includes(TABS.COUNTER) && (
+        <TabButton
+          active={activeTab === TABS.COUNTER}
+          onClick={() => onTabChange(TABS.COUNTER)}
+        >
+          {t("propertiesPanel.tabCounter") || "카운터"}
+        </TabButton>
+      )}
+    </div>
+  );
+};
 
 // ============================================================================
 // 아이콘 컴포넌트

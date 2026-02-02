@@ -3,6 +3,7 @@
  */
 import { useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { calculateBounds, type ElementBounds } from "@utils/smartGuides";
 
@@ -12,6 +13,7 @@ import { calculateBounds, type ElementBounds } from "@utils/smartGuides";
 export function useSmartGuidesElements() {
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+  const statPositions = useStatItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements
   );
@@ -33,6 +35,24 @@ export function useSmartGuidesElements() {
       keyPositions.forEach((pos, index) => {
         if (pos.hidden) return;
         const id = `key-${index}`;
+        if (!excludeSet.has(id)) {
+          bounds.push(
+            calculateBounds(
+              pos.dx,
+              pos.dy,
+              pos.width || 60,
+              pos.height || 60,
+              id
+            )
+          );
+        }
+      });
+
+      // 통계 요소 bounds
+      const stats = statPositions[selectedKeyType] || [];
+      stats.forEach((pos, index) => {
+        if (!pos || pos.hidden) return;
+        const id = `stat-${index}`;
         if (!excludeSet.has(id)) {
           bounds.push(
             calculateBounds(
@@ -72,7 +92,7 @@ export function useSmartGuidesElements() {
 
       return bounds;
     },
-    [positions, selectedKeyType, pluginElements]
+    [positions, statPositions, selectedKeyType, pluginElements]
   );
 
   return { getOtherElements };

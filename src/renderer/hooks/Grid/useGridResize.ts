@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
@@ -95,10 +96,10 @@ export function useGridResize({
       .pushState(keyMappings, currentPositions, currentPluginElements);
   }, []);
 
-  // 키 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
-  const handleKeyResizePreview = useCallback(
+  // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)
+  const handleElementResizePreview = useCallback(
     (
-      index: number,
+      elementId: string,
       newBounds: {
         x: number;
         y: number;
@@ -112,8 +113,6 @@ export function useGridResize({
       const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
       const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
       const sizeMatchGuidesEnabled = gridSettings?.sizeMatchGuides !== false;
-
-      const elementId = `key-${index}`;
 
       let finalX = newBounds.x;
       let finalY = newBounds.y;
@@ -408,6 +407,38 @@ export function useGridResize({
       finalBoundsRef.current = previewData;
     },
     [getOtherElements]
+  );
+
+  const handleKeyResizePreview = useCallback(
+    (
+      index: number,
+      newBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        handle?: ResizeHandle;
+      }
+    ) => {
+      handleElementResizePreview(`key-${index}`, newBounds);
+    },
+    [handleElementResizePreview]
+  );
+
+  const handleStatResizePreview = useCallback(
+    (
+      index: number,
+      newBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        handle?: ResizeHandle;
+      }
+    ) => {
+      handleElementResizePreview(`stat-${index}`, newBounds);
+    },
+    [handleElementResizePreview]
   );
 
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
@@ -729,11 +760,18 @@ export function useGridResize({
       const element = selectedElements[0];
       if (element.type === "key" && element.index !== undefined) {
         handleKeyResizePreview(element.index, newBounds);
+      } else if (element.type === "stat" && element.index !== undefined) {
+        handleStatResizePreview(element.index, newBounds);
       } else if (element.type === "plugin") {
         handlePluginResizePreview(element.id, newBounds);
       }
     },
-    [selectedElements, handleKeyResizePreview, handlePluginResizePreview]
+    [
+      selectedElements,
+      handleKeyResizePreview,
+      handleStatResizePreview,
+      handlePluginResizePreview,
+    ]
   );
 
   // 리사이즈 종료 처리 - 실제 요소에 최종 bounds 적용
@@ -748,10 +786,10 @@ export function useGridResize({
 
     // 최종 bounds를 실제 요소에 적용
     const finalBounds = finalBoundsRef.current;
-    if (finalBounds && selectedElements.length === 1) {
-      const element = selectedElements[0];
+      if (finalBounds && selectedElements.length === 1) {
+        const element = selectedElements[0];
 
-      if (element.type === "key" && element.index !== undefined) {
+        if (element.type === "key" && element.index !== undefined) {
         // 키 요소에 최종 크기 적용
         const positions = useKeyStore.getState().positions;
         const setPositions = useKeyStore.getState().setPositions;
@@ -773,21 +811,43 @@ export function useGridResize({
         setPositions(nextPositions);
 
         // 백엔드에 저장
-        window.api.keys.updatePositions(nextPositions).catch((error) => {
-          console.error("Failed to update key positions after resize", error);
-        });
-      } else if (element.type === "plugin") {
-        // 플러그인 요소에 최종 크기 적용
-        const pluginStore = usePluginDisplayElementStore.getState();
-        pluginStore.updateElement(element.id, {
-          position: { x: finalBounds.x, y: finalBounds.y },
-          measuredSize: {
-            width: finalBounds.width,
-            height: finalBounds.height,
-          },
-        });
+          window.api.keys.updatePositions(nextPositions).catch((error) => {
+            console.error("Failed to update key positions after resize", error);
+          });
+        } else if (element.type === "stat" && element.index !== undefined) {
+          const statStore = useStatItemStore.getState();
+          const statPositions = statStore.positions as any;
+          const current = statPositions[selectedKeyType] || [];
+          const nextPositions = {
+            ...statPositions,
+            [selectedKeyType]: current.map((pos: any, i: number) =>
+              i === element.index
+                ? {
+                    ...pos,
+                    dx: finalBounds.x,
+                    dy: finalBounds.y,
+                    width: finalBounds.width,
+                    height: finalBounds.height,
+                  }
+                : pos
+            ),
+          };
+          statStore.setPositions(nextPositions);
+          window.api.statItems.updatePositions(nextPositions).catch((error) => {
+            console.error("Failed to update stat positions after resize", error);
+          });
+        } else if (element.type === "plugin") {
+          // 플러그인 요소에 최종 크기 적용
+          const pluginStore = usePluginDisplayElementStore.getState();
+          pluginStore.updateElement(element.id, {
+            position: { x: finalBounds.x, y: finalBounds.y },
+            measuredSize: {
+              width: finalBounds.width,
+              height: finalBounds.height,
+            },
+          });
+        }
       }
-    }
 
     // 프리뷰 상태 클리어
     setPreviewBounds(null);
@@ -822,6 +882,9 @@ export function useGridResize({
       const setPositions = useKeyStore.getState().setPositions;
       const current = positions[selectedKeyType] || [];
       const pluginStore = usePluginDisplayElementStore.getState();
+      const statStore = useStatItemStore.getState();
+      const statPositions = statStore.positions as any;
+      const currentStats = statPositions[selectedKeyType] || [];
 
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
@@ -856,6 +919,38 @@ export function useGridResize({
         window.api.keys.updatePositions(nextPositions).catch((error) => {
           console.error(
             "Failed to update key positions after group resize",
+            error
+          );
+        });
+      }
+
+      // 통계 요소들 업데이트
+      const statUpdates = finalData.elementBounds.filter(
+        ({ element }) => element.type === "stat" && element.index !== undefined
+      );
+
+      if (statUpdates.length > 0) {
+        const nextStatPositions = {
+          ...statPositions,
+          [selectedKeyType]: currentStats.map((pos: any, i: number) => {
+            const update = statUpdates.find(({ element }) => element.index === i);
+            if (update) {
+              return {
+                ...pos,
+                dx: update.bounds.x,
+                dy: update.bounds.y,
+                width: update.bounds.width,
+                height: update.bounds.height,
+              };
+            }
+            return pos;
+          }),
+        };
+
+        statStore.setPositions(nextStatPositions);
+        window.api.statItems.updatePositions(nextStatPositions).catch((error) => {
+          console.error(
+            "Failed to update stat positions after group resize",
             error
           );
         });

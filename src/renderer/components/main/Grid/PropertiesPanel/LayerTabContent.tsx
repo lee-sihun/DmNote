@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "@contexts/I18nContext";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
@@ -22,9 +23,9 @@ import OpenEyeIcon from "@assets/svgs/open_eye.svg";
 // ============================================================================
 
 interface LayerItem {
-  type: "key" | "plugin";
+  type: "key" | "stat" | "plugin";
   id: string;
-  index?: number; // key인 경우
+  index?: number; // key/stat인 경우
   name: string;
   zIndex: number;
   hidden: boolean;
@@ -79,6 +80,22 @@ const PluginIcon: React.FC = () => (
 );
 
 // ============================================================================
+// 통계 아이콘 컴포넌트 (σ)
+// ============================================================================
+
+const StatIcon: React.FC = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M10.8 2H3.7c-.4 0-.7.3-.7.7 0 .2.1.4.2.5l3 3.8-3 3.8c-.1.1-.2.3-.2.5 0 .4.3.7.7.7h7.1"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// ============================================================================
 // 레이어 탭 콘텐츠 컴포넌트
 // ============================================================================
 
@@ -90,6 +107,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
+  const statPositions = useStatItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -210,6 +228,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       });
     });
 
+    // 통계 아이템 추가
+    const currentStatPositions = statPositions[selectedKeyType] || [];
+    currentStatPositions.forEach((pos, index) => {
+      const name = pos.statType === "total" ? "Total" : "KPS";
+      items.push({
+        type: "stat",
+        id: `stat-${index}`,
+        index,
+        name,
+        zIndex: pos.zIndex ?? index,
+        hidden: !!pos.hidden,
+      });
+    });
+
     // 플러그인 아이템 추가
     pluginElements.forEach((el) => {
       items.push({
@@ -225,7 +257,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     items.sort((a, b) => b.zIndex - a.zIndex);
 
     return items;
-  }, [positions, selectedKeyType, keyMappings, pluginElements]);
+  }, [positions, statPositions, selectedKeyType, keyMappings, pluginElements]);
 
   // layerItems를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const layerItemsRef = useRef(layerItems);
@@ -254,6 +286,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       clearSelection();
       if (item.type === "key" && item.index !== undefined) {
         toggleSelection({ type: "key", id: item.id, index: item.index });
+      } else if (item.type === "stat" && item.index !== undefined) {
+        toggleSelection({ type: "stat", id: item.id, index: item.index });
       } else if (item.type === "plugin") {
         toggleSelection({ type: "plugin", id: item.id });
       }
@@ -306,6 +340,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               id: rangeItem.id,
               index: rangeItem.index,
             });
+          } else if (rangeItem.type === "stat" && rangeItem.index !== undefined) {
+            rangeElements.push({
+              type: "stat",
+              id: rangeItem.id,
+              index: rangeItem.index,
+            });
           } else if (rangeItem.type === "plugin") {
             rangeElements.push({ type: "plugin", id: rangeItem.id });
           }
@@ -346,6 +386,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           } else {
             clearSelection();
             toggleSelection({ type: "key", id: item.id, index: item.index });
+          }
+        }
+      } else if (item.type === "stat" && item.index !== undefined) {
+        if (isPrimaryModifierPressed) {
+          toggleSelection({ type: "stat", id: item.id, index: item.index });
+        } else {
+          if (isAlreadySelected) {
+            pendingDeselectTimerRef.current = window.setTimeout(() => {
+              clearSelection();
+              pendingDeselectTimerRef.current = null;
+            }, 50);
+          } else {
+            clearSelection();
+            toggleSelection({ type: "stat", id: item.id, index: item.index });
           }
         }
       } else if (item.type === "plugin") {
@@ -417,6 +471,33 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
+      if (item.type === "stat" && item.index !== undefined) {
+        const current = useStatItemStore.getState().positions;
+        const currentPositions = current[selectedKeyType] || [];
+        const target = currentPositions[item.index];
+        if (!target) return;
+
+        const updatedPositions = { ...current };
+        const updatedModePositions = [...currentPositions];
+        updatedModePositions[item.index] = {
+          ...target,
+          hidden: !target.hidden,
+        };
+        updatedPositions[selectedKeyType] = updatedModePositions;
+
+        useStatItemStore.getState().setLocalUpdateInProgress(true);
+        useStatItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.statItems.updatePositions(updatedPositions);
+        } catch (error) {
+          console.error("Failed to toggle stat item visibility", error);
+        } finally {
+          useStatItemStore.getState().setLocalUpdateInProgress(false);
+        }
+
+        return;
+      }
+
       if (item.type === "plugin") {
         const el = currentPluginElements.find((p) => p.fullId === item.id);
         if (!el) return;
@@ -457,6 +538,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         clearSelection();
         if (item.type === "key" && item.index !== undefined) {
           toggleSelection({ type: "key", id: item.id, index: item.index });
+        } else if (item.type === "stat" && item.index !== undefined) {
+          toggleSelection({ type: "stat", id: item.id, index: item.index });
         } else if (item.type === "plugin") {
           toggleSelection({ type: "plugin", id: item.id });
         }
@@ -487,12 +570,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           .filter((el) => el.type === "key" && el.index !== undefined)
           .map((el) => el.index as number);
 
+        const statsToDelete = selectedElements
+          .filter((el) => el.type === "stat" && el.index !== undefined)
+          .map((el) => el.index as number);
+
         const pluginsToDelete = selectedElements
           .filter((el) => el.type === "plugin")
           .map((el) => el.id);
 
         // 히스토리 저장
-        if (keysToDelete.length > 0 || pluginsToDelete.length > 0) {
+        if (
+          keysToDelete.length > 0 ||
+          statsToDelete.length > 0 ||
+          pluginsToDelete.length > 0
+        ) {
           const { keyMappings: km, positions: pos } = useKeyStore.getState();
           const currentPluginElements =
             usePluginDisplayElementStore.getState().elements;
@@ -537,6 +628,28 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             console.error("Failed to delete keys", error);
           } finally {
             useKeyStore.getState().setLocalUpdateInProgress(false);
+          }
+        }
+
+        // 통계 요소 배치 삭제
+        if (statsToDelete.length > 0) {
+          const current = useStatItemStore.getState().positions;
+          const posArray = current[selectedKeyType] || [];
+          const deleteSet = new Set(statsToDelete);
+
+          const updatedPositions = {
+            ...current,
+            [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
+          };
+
+          useStatItemStore.getState().setLocalUpdateInProgress(true);
+          useStatItemStore.getState().setPositions(updatedPositions);
+          try {
+            await window.api.statItems.updatePositions(updatedPositions);
+          } catch (error) {
+            console.error("Failed to delete stat items", error);
+          } finally {
+            useStatItemStore.getState().setLocalUpdateInProgress(false);
           }
         }
 
@@ -588,6 +701,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         ...(updatedPositions[selectedKeyType] || []),
       ];
 
+      // 통계 positions 복사 및 업데이트
+      const updatedStatPositions = { ...useStatItemStore.getState().positions };
+      const currentStatModePositions = [
+        ...(updatedStatPositions[selectedKeyType] || []),
+      ];
+
       items.forEach((item, idx) => {
         const newZIndex = maxZIndex - idx; // 맨 위가 가장 높은 z-index
 
@@ -596,6 +715,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           if (currentModePositions[item.index]) {
             currentModePositions[item.index] = {
               ...currentModePositions[item.index],
+              zIndex: newZIndex,
+            };
+          }
+        } else if (item.type === "stat" && item.index !== undefined) {
+          if (currentStatModePositions[item.index]) {
+            currentStatModePositions[item.index] = {
+              ...currentStatModePositions[item.index],
               zIndex: newZIndex,
             };
           }
@@ -610,6 +736,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 키 positions 일괄 업데이트
       updatedPositions[selectedKeyType] = currentModePositions;
       useKeyStore.getState().setPositions(updatedPositions);
+
+      // 통계 positions 일괄 업데이트
+      updatedStatPositions[selectedKeyType] = currentStatModePositions;
+      useStatItemStore.getState().setPositions(updatedStatPositions);
     },
     [selectedKeyType],
   );
@@ -741,7 +871,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                 {/* 아이콘 */}
                 <div className="flex-shrink-0">
-                  {item.type === "key" ? <KeyIcon /> : <PluginIcon />}
+                  {item.type === "key" ? (
+                    <KeyIcon />
+                  ) : item.type === "stat" ? (
+                    <StatIcon />
+                  ) : (
+                    <PluginIcon />
+                  )}
                 </div>
 
                 {/* 이름 */}
