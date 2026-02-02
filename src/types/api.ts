@@ -7,6 +7,7 @@ import {
   KeyPositions,
   KeyCounters,
 } from "@src/types/keys";
+import type { StatItemPositions } from "@src/types/statItems";
 import {
   SettingsDiff,
   SettingsPatchInput,
@@ -622,6 +623,11 @@ export interface DMNoteAPI {
         listener: (payload: CustomTabsChangePayload) => void,
       ): Unsubscribe;
     };
+  };
+  statItems: {
+    getPositions(): Promise<StatItemPositions>;
+    updatePositions(positions: StatItemPositions): Promise<StatItemPositions>;
+    onPositionsChanged(listener: (positions: StatItemPositions) => void): Unsubscribe;
   };
   overlay: {
     get(): Promise<OverlayState>;

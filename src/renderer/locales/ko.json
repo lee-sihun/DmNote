@@ -250,7 +250,8 @@
     "sendToBack": "맨 아래로",
     "bringForward": "앞으로",
     "sendBackward": "뒤로",
-    "tabCssSetting": "현재 탭 CSS 설정"
+    "tabCssSetting": "현재 탭 CSS 설정",
+    "addStat": "통계 추가"
   },
   "noteColor": {
     "color": "색상",
@@ -370,6 +371,7 @@
     "useInlineStyles": "인라인 스타일 우선",
     "useInlineStylesHint": "활성화 시 커스텀 CSS보다 속성 패널 스타일이 우선 적용됩니다.",
     "keyMapping": "키 매핑",
+    "statType": "통계 종류",
     "pressAnyKey": "아무 키나 누르세요",
     "clickToSet": "클릭하여 설정",
     "customImage": "커스텀 이미지",

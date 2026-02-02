@@ -64,6 +64,7 @@ import type {
   KeyPositions,
   KeyCounters,
 } from "@src/types/keys";
+import type { StatItemPositions } from "@src/types/statItems";
 import type {
   SettingsState,
   SettingsPatchInput,
@@ -200,6 +201,13 @@ const api: DMNoteAPI = {
       onChanged: (listener: (payload: CustomTabsChangePayload) => void) =>
         subscribe<CustomTabsChangePayload>("customTabs:changed", listener),
     },
+  },
+  statItems: {
+    getPositions: () => invoke<StatItemPositions>("stat_positions_get"),
+    updatePositions: (positions: StatItemPositions) =>
+      invoke<StatItemPositions>("stat_positions_update", { positions }),
+    onPositionsChanged: (listener: (positions: StatItemPositions) => void) =>
+      subscribe<StatItemPositions>("statPositions:changed", listener),
   },
   overlay: {
     get: () => invoke<OverlayState>("overlay_get"),

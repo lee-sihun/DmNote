@@ -250,7 +250,8 @@
     "sendToBack": "Send to Back",
     "bringForward": "Bring Forward",
     "sendBackward": "Send Backward",
-    "tabCssSetting": "Tab CSS Settings"
+    "tabCssSetting": "Tab CSS Settings",
+    "addStat": "Add Stat"
   },
   "noteColor": {
     "color": "Color",
@@ -370,6 +371,7 @@
     "useInlineStyles": "Inline Styles Priority",
     "useInlineStylesHint": "When enabled, property panel styles take precedence over custom CSS.",
     "keyMapping": "Key Mapping",
+    "statType": "Stat Type",
     "pressAnyKey": "Press any key",
     "clickToSet": "Click to set",
     "customImage": "Custom Image",

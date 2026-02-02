@@ -23,6 +23,7 @@ import {
 
 export default function DraggableKey({
   index,
+  elementId,
   position,
   keyName,
   onPositionChange,
@@ -45,8 +46,11 @@ export default function DraggableKey({
   // 카운터 미리보기 props
   counterEnabled = false,
   counterPreviewValue = 0,
+  counterValueSignal,
 }) {
   if (position?.hidden) return null;
+  // Grid에서도 Signal 기반 업데이트가 필요한 경우가 있어 신호 구독을 활성화
+  useSignals();
 
   const macOS = isMac();
   const { displayName } = getKeyInfoByGlobalKey(keyName);
@@ -106,6 +110,7 @@ export default function DraggableKey({
   // 다중 선택 드래그 상태
   const multiDragRef = useRef({ isDragging: false, startX: 0, startY: 0 });
   const nodeRef = useRef(null);
+  const effectiveElementId = elementId || `key-${index}`;
 
   // 선택된 상태면 드래그 모드 활성화
   const isSelectionMode = isSelected;
@@ -124,7 +129,7 @@ export default function DraggableKey({
     panX,
     panY,
     // 스마트 가이드 옵션
-    elementId: `key-${index}`,
+    elementId: effectiveElementId,
     elementWidth: width || 60,
     elementHeight: height || 60,
     getOtherElements,
@@ -154,7 +159,7 @@ export default function DraggableKey({
       const startDy = dy;
       const currentWidth = width || 60;
       const currentHeight = height || 60;
-      const elementId = `key-${index}`;
+      const elementId = effectiveElementId;
 
       multiDragRef.current = {
         isDragging: true,
@@ -203,9 +208,7 @@ export default function DraggableKey({
           const nonSelectedElements = otherElements.filter(
             (el) =>
               !selectedElements.some(
-                (sel) =>
-                  sel.id === el.id ||
-                  (sel.type === "key" && el.id === `key-${sel.index}`)
+                (sel) => sel.id === el.id
               )
           );
 
@@ -232,9 +235,7 @@ export default function DraggableKey({
                 }
                 // 다른 선택된 요소들은 otherElements에서 찾아서 이동량 적용
                 const found = otherElements.find(
-                  (el) =>
-                    el.id === sel.id ||
-                    (sel.type === "key" && el.id === `key-${sel.index}`)
+                  (el) => el.id === sel.id
                 );
                 if (found) {
                   return calculateBounds(
@@ -536,7 +537,8 @@ export default function DraggableKey({
       return null;
     }
 
-    const displayValue = counterPreviewValue ?? 0;
+    const displayValue =
+      (counterValueSignal?.value ?? counterPreviewValue ?? 0) | 0;
     const strokeWidth = strokeColorCss.alpha > 0 ? "1px" : "0px";
 
     const counterDecorations = [];

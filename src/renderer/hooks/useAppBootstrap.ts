@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
 import {
   useSettingsStore,
   type SettingsStateSnapshot,
@@ -178,6 +179,10 @@ export function useAppBootstrap() {
         customTabs: bootstrap.customTabs,
         selectedKeyType: bootstrap.selectedKeyType,
       }));
+      useStatItemStore.setState((state) => ({
+        ...state,
+        positions: bootstrap.statPositions ?? {},
+      }));
       applyCounterSnapshot(bootstrap.keyCounters);
 
       // macOS 커서 시스템 초기화 (시스템 설정 반영)
@@ -202,6 +207,15 @@ export function useAppBootstrap() {
         if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
           return;
         useKeyStore.setState((state) => ({ ...state, positions }));
+      }),
+      window.api.statItems.onPositionsChanged((positions) => {
+        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        if (
+          !isOverlayWindow &&
+          useStatItemStore.getState().isLocalUpdateInProgress
+        )
+          return;
+        useStatItemStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));

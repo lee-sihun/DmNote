@@ -155,6 +155,7 @@ export function useGridContextMenu({
     (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
         { id: "add", label: t("tooltip.addKey") },
+        { id: "addStat", label: t("contextMenu.addStat") },
       ];
       const bottomBaseItems: MenuItem[] = [
         { id: "tabCss", label: t("contextMenu.tabCssSetting") },

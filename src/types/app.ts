@@ -5,11 +5,13 @@ import {
   KeyPositions,
   KeyCounters,
 } from "@src/types/keys";
+import type { StatItemPositions } from "@src/types/statItems";
 
 export interface BootstrapPayload {
   settings: SettingsState;
   keys: KeyMappings;
   positions: KeyPositions;
+  statPositions: StatItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   currentMode: string;

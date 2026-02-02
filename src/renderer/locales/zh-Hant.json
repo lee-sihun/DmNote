@@ -250,7 +250,8 @@
 		"sendToBack": "置於底層",
 		"bringForward": "上移一層",
 		"sendBackward": "下移一層",
-		"tabCssSetting": "標籤頁 CSS 設定"
+		"tabCssSetting": "標籤頁 CSS 設定",
+		"addStat": "新增統計"
 	},
 	"noteColor": {
 		"color": "顏色",
@@ -370,6 +371,7 @@
 		"useInlineStyles": "內聯樣式優先級",
 		"useInlineStylesHint": "啟用時, 屬性面板樣式將優先於自定義 CSS.",
 		"keyMapping": "按鍵映射",
+		"statType": "統計類型",
 		"pressAnyKey": "按下任意鍵",
 		"clickToSet": "單擊設定",
 		"customImage": "自定義圖像",

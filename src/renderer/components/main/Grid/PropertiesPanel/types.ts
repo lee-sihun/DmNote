@@ -110,6 +110,7 @@ export interface TabsProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   t: (key: string) => string;
+  availableTabs?: TabType[];
 }
 
 // 글꼴 스타일 토글 Props
@@ -175,6 +176,11 @@ export interface StyleTabContentProps {
   onKeyMappingChange?: (index: number, newKey: string) => void;
   isListening?: boolean;
   onKeyListen?: () => void;
+  // 키 매핑 UI를 대체하는 커스텀 컨트롤 (통계 요소 등)
+  mappingControl?: React.ReactNode;
+  mappingLabel?: string;
+  // 표시 텍스트 입력 숨김 (통계 요소는 statType이 displayText 역할)
+  hideDisplayText?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
