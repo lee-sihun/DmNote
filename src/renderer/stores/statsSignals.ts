@@ -18,6 +18,10 @@ export function applyStatsSnapshot(snapshot: KeyStatsPayload) {
 
 export function getStatValueSignal(statType: StatItemType): Signal<number> {
   switch (statType) {
+    case "kpsAvg":
+      return statsSignals.kpsAvg;
+    case "kpsMax":
+      return statsSignals.kpsMax;
     case "total":
       return statsSignals.total;
     case "kps":
@@ -34,4 +38,3 @@ export function getStatsSnapshot(): KeyStatsPayload {
     total: statsSignals.total.value,
   };
 }
-

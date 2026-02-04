@@ -43,6 +43,8 @@ import { createDefaultCounterSettings } from "@src/types/keys";
 
 function getStatTypeLabel(type) {
   if (type === "kps") return "KPS";
+  if (type === "kpsAvg") return "AVG";
+  if (type === "kpsMax") return "MAX";
   if (type === "total") return "Total";
   return String(type || "");
 }

@@ -376,6 +376,7 @@
     "useInlineStylesHint": "활성화 시 커스텀 CSS보다 속성 패널 스타일이 우선 적용됩니다.",
     "keyMapping": "키 매핑",
     "statType": "통계 종류",
+    "statKpsType": "KPS 종류",
     "pressAnyKey": "아무 키나 누르세요",
     "clickToSet": "클릭하여 설정",
     "customImage": "커스텀 이미지",

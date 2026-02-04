@@ -54,6 +54,20 @@ import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
 import type { NoteColor } from "@src/types/keys";
 
+const getStatTypeLabel = (statType?: StatItemType | null): string => {
+  switch (statType) {
+    case "kpsAvg":
+      return "AVG";
+    case "kpsMax":
+      return "MAX";
+    case "total":
+      return "Total";
+    case "kps":
+    default:
+      return "KPS";
+  }
+};
+
 // ============================================================================
 // 메인 컴포넌트 Props
 // ============================================================================
@@ -1038,11 +1052,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // ============================================================================
 
   const getSelectedKeysData = useCallback(() => {
-    const labelForStat = (statType?: StatItemType | null) => {
-      if (statType === "total") return "Total";
-      return "KPS";
-    };
-
     return selectedKeyLikeElements
       .map((el) => {
         const index = el.index!;
@@ -1054,7 +1063,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
         // stat
         const position = statItemPositions[selectedKeyType]?.[index];
-        const statLabel = (position?.displayText || "").trim() || labelForStat(position?.statType ?? null);
+        const statLabel =
+          (position?.displayText || "").trim() ||
+          getStatTypeLabel(position?.statType ?? null);
         const keyInfo = { globalKey: statLabel, displayName: statLabel };
         return { index, position, keyCode: null, keyInfo };
       })
@@ -2280,13 +2291,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ? [TABS.STYLE, TABS.COUNTER]
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
-  const statTypeOptions = [
+  const statBaseOptions = [
     { label: "KPS", value: "kps" },
     { label: "Total", value: "total" },
   ];
 
-  const statTitle =
-    (singleStatPosition?.statType as StatItemType) === "total" ? "Total" : "KPS";
+  const statKpsOptions = [
+    { label: "KPS", value: "kps" },
+    { label: "AVG", value: "kpsAvg" },
+    { label: "MAX", value: "kpsMax" },
+  ];
+
+  const resolvedStatType = (singleStatPosition?.statType as StatItemType) || "kps";
+  const statBaseValue = resolvedStatType === "total" ? "total" : "kps";
+  const statTitle = getStatTypeLabel(resolvedStatType);
 
   const keyLikeIndex = isSingleStat ? singleStatIndex! : singleKeyIndex!;
   const keyLikePosition = (isSingleStat
@@ -2317,17 +2335,42 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleStatPreview(index, updates as any))
     : onKeyPreview;
 
-  const mappingControl = isSingleStat ? (
-    <Dropdown
-      options={statTypeOptions}
-      value={(singleStatPosition?.statType as StatItemType) || "kps"}
-      onChange={(value) =>
-        handleStatUpdate({
-          index: singleStatIndex!,
-          statType: value as StatItemType,
-        })
-      }
-    />
+  const mappingControlLayout = isSingleStat ? (
+    <>
+      <PropertyRow label={t("propertiesPanel.statType") || "Stat Type"}>
+        <Dropdown
+          options={statBaseOptions}
+          value={statBaseValue}
+          onChange={(value) => {
+            if (value === "total") {
+              handleStatUpdate({
+                index: singleStatIndex!,
+                statType: "total",
+              });
+              return;
+            }
+            handleStatUpdate({
+              index: singleStatIndex!,
+              statType: resolvedStatType === "total" ? "kps" : resolvedStatType,
+            });
+          }}
+        />
+      </PropertyRow>
+      {statBaseValue === "kps" ? (
+        <PropertyRow label={t("propertiesPanel.statKpsType") || "KPS Type"}>
+          <Dropdown
+            options={statKpsOptions}
+            value={resolvedStatType}
+            onChange={(value) =>
+              handleStatUpdate({
+                index: singleStatIndex!,
+                statType: value as StatItemType,
+              })
+            }
+          />
+        </PropertyRow>
+      ) : null}
+    </>
   ) : undefined;
 
   return (
@@ -2382,7 +2425,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }`}
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
-               <StyleTabContent
+              <StyleTabContent
                  keyIndex={keyLikeIndex}
                  keyPosition={keyLikePosition}
                  keyCode={keyLikeCode}
@@ -2393,7 +2436,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                  onKeyMappingChange={isSingleStat ? undefined : onKeyMappingChange}
                  isListening={isListening}
                  onKeyListen={isSingleStat ? undefined : handleKeyListen}
-              mappingControl={mappingControl}
+              mappingControlLayout={mappingControlLayout}
                mappingLabel={
                  isSingleStat
                    ? t("propertiesPanel.statType") || "Stat Type"

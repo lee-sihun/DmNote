@@ -231,7 +231,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     // 통계 아이템 추가
     const currentStatPositions = statPositions[selectedKeyType] || [];
     currentStatPositions.forEach((pos, index) => {
-      const name = pos.statType === "total" ? "Total" : "KPS";
+      const name =
+        pos.statType === "kpsAvg"
+          ? "AVG"
+          : pos.statType === "kpsMax"
+          ? "MAX"
+          : pos.statType === "total"
+          ? "Total"
+          : "KPS";
       items.push({
         type: "stat",
         id: `stat-${index}`,

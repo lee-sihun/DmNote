@@ -178,6 +178,8 @@ export interface StyleTabContentProps {
   onKeyListen?: () => void;
   // 키 매핑 UI를 대체하는 커스텀 컨트롤 (통계 요소 등)
   mappingControl?: React.ReactNode;
+  // 키 매핑 영역을 통째로 대체하는 커스텀 레이아웃 (다중 라인 라벨 등)
+  mappingControlLayout?: React.ReactNode;
   mappingLabel?: string;
   // 표시 텍스트 입력 숨김 (통계 요소는 statType이 displayText 역할)
   hideDisplayText?: boolean;

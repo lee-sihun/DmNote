@@ -52,6 +52,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   isListening = false,
   onKeyListen,
   mappingControl,
+  mappingControlLayout,
   mappingLabel,
   hideDisplayText = false,
   showImagePicker = false,
@@ -411,7 +412,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   return (
     <>
       {/* 키 매핑(또는 통계 종류 등 대체 컨트롤) - 단일 선택 모드에서만 표시 */}
-      {mappingControl ? (
+      {mappingControlLayout ? (
+        <>
+          {mappingControlLayout}
+          <SectionDivider />
+        </>
+      ) : mappingControl ? (
         <>
           <PropertyRow
             label={mappingLabel || t("propertiesPanel.keyMapping") || "키 매핑"}

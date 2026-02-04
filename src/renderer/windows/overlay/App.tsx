@@ -620,7 +620,14 @@ export default function App() {
       {displayStatPositions.map((pos: any, index: number) => {
         if (!pos || pos.hidden) return null;
 
-        const defaultLabel = pos.statType === "total" ? "Total" : "KPS";
+        const defaultLabel =
+          pos.statType === "kpsAvg"
+            ? "AVG"
+            : pos.statType === "kpsMax"
+            ? "MAX"
+            : pos.statType === "total"
+            ? "Total"
+            : "KPS";
         const label = (pos.displayText || "").trim() || defaultLabel;
         const position = { ...pos, zIndex: pos.zIndex ?? index };
 

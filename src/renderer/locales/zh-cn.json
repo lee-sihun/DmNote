@@ -378,6 +378,7 @@
 		"useInlineStylesHint": "启用时, 属性面板样式将优先于自定义 CSS.",
 		"keyMapping": "按键映射",
 		"statType": "统计类型",
+		"statKpsType": "KPS 类型",
 		"pressAnyKey": "按下任意键",
 		"clickToSet": "点击设置",
 		"customImage": "自定义图像",
