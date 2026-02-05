@@ -178,7 +178,10 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        app.emit("settings:changed", diff)?;
+        // Avoid sending the full settings payload (can be large with embedded fonts).
+        let mut payload = diff.clone();
+        payload.full = None;
+        app.emit("settings:changed", payload)?;
         Ok(())
     }
 

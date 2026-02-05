@@ -37,6 +37,10 @@
     ],
     "security": {
       "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/fonts/**"]
+      },
       "capabilities": [
         "main",
         "dmnote-dev"

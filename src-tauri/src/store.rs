@@ -11,12 +11,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use tauri::path::PathResolver;
 use tauri::Runtime;
+use uuid::Uuid;
 
 use crate::{
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, KeyCounters, KeyMappings, KeyPositions, NoteSettings, OverlayBounds,
-        StatPositions,
+        FontType, StatPositions,
         SettingsState,
     },
 };
@@ -38,19 +39,22 @@ impl AppStore {
             .with_context(|| format!("failed to create data directory at {}", dir.display()))?;
 
         let default_path = dir.join("store.json");
-        let (path, state, needs_persist) = if default_path.exists() {
-            (
-                default_path.clone(),
-                load_store_from_path(&default_path)?,
-                false,
-            )
+        let (path, mut state, mut needs_persist) = if default_path.exists() {
+            let (state, migrated) = load_store_from_path(&default_path)?;
+            (default_path.clone(), state, migrated)
         } else if let Some(legacy_path) = find_legacy_store_file() {
             // 레거시 파일은 읽어와서 새 포맷으로 현재 앱 데이터 경로(default_path)에 저장
-            let legacy = load_store_from_path(&legacy_path)?;
+            let (legacy, _) = load_store_from_path(&legacy_path)?;
             (default_path.clone(), legacy, true)
         } else {
             (default_path, initialize_default_state(), true)
         };
+
+        // Migration: local fonts used to store base64(data URI) cssContent in store.json. Convert them
+        // to path-based fonts stored under the app data directory so settings updates stay fast.
+        if migrate_local_fonts_to_app_data(&dir, &mut state) {
+            needs_persist = true;
+        }
 
         let store = Self {
             path: path.clone(),
@@ -218,14 +222,28 @@ impl AppStore {
     }
 }
 
-fn load_store_from_path(path: &Path) -> Result<AppStoreData> {
+fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
-    let state = match serde_json::from_str::<AppStoreData>(&content) {
-        Ok(data) => normalize_state(data),
-        Err(_) => repair_legacy_state(&content),
+    let (state, needs_persist) = match serde_json::from_str::<AppStoreData>(&content) {
+        Ok(data) => {
+            let needs_persist = data.font_settings.custom_fonts.iter().any(|font| {
+                font.font_type == FontType::Local
+                    && font
+                        .css_content
+                        .as_ref()
+                        .map(|c| !c.trim().is_empty())
+                        .unwrap_or(false)
+            });
+            (normalize_state(data), needs_persist)
+        }
+        // Repair legacy/invalid store files and persist the normalized state.
+        Err(_) => (repair_legacy_state(&content), true),
     };
-    Ok(state)
+    if needs_persist {
+        log::info!("[Store] Persisting migrated store file at {}", path.display());
+    }
+    Ok((state, needs_persist))
 }
 
 fn find_legacy_store_file() -> Option<PathBuf> {
@@ -244,6 +262,88 @@ fn initialize_default_state() -> AppStoreData {
     data.keys = default_keys().clone();
     data.key_positions = default_positions().clone();
     normalize_state(data)
+}
+
+fn migrate_local_fonts_to_app_data(app_data_dir: &Path, data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+
+    let has_local_fonts = data
+        .font_settings
+        .custom_fonts
+        .iter()
+        .any(|font| font.font_type == FontType::Local);
+    if !has_local_fonts {
+        return false;
+    }
+
+    let fonts_dir = app_data_dir.join("fonts");
+    if let Err(err) = fs::create_dir_all(&fonts_dir) {
+        log::warn!(
+            "[Fonts] Failed to create fonts directory at {}: {err}",
+            fonts_dir.display()
+        );
+        return false;
+    }
+
+    for font in data.font_settings.custom_fonts.iter_mut() {
+        if font.font_type != FontType::Local {
+            continue;
+        }
+
+        let local_path = match font.local_path.as_ref() {
+            Some(path) if !path.trim().is_empty() => path.trim(),
+            _ => "",
+        };
+
+        if !local_path.is_empty() {
+            let source = PathBuf::from(local_path);
+
+            // If it's already inside the app data fonts directory, keep it and just drop cssContent.
+            if source.starts_with(&fonts_dir) && source.exists() {
+                if font.css_content.is_some() {
+                    font.css_content = None;
+                    changed = true;
+                }
+                continue;
+            }
+
+            if source.exists() {
+                let ext = source
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("ttf")
+                    .to_lowercase();
+                let dest = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
+                match fs::copy(&source, &dest) {
+                    Ok(_) => {
+                        font.local_path = Some(dest.to_string_lossy().to_string());
+                        font.css_content = None;
+                        changed = true;
+                        continue;
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            "[Fonts] Failed to import local font from {}: {err}",
+                            source.display()
+                        );
+                    }
+                }
+            }
+        }
+
+        // If we can't import the font file, disable it and remove any stored cssContent to avoid
+        // bloating the store (and slowing down unrelated settings updates).
+        if font.enabled {
+            font.enabled = false;
+            changed = true;
+        }
+        if font.css_content.is_some() {
+            font.css_content = None;
+            changed = true;
+        }
+    }
+
+    changed
 }
 
 fn normalize_state(mut data: AppStoreData) -> AppStoreData {

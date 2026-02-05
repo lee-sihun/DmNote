@@ -69,7 +69,6 @@ export type FontLoadResult = {
   error?: string;
   fontName?: string;
   fontPath?: string;
-  cssContent?: string;
 };
 
 // 탭별 CSS 타입

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::models::{
     CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, NoteSettings, NoteSettingsPatch,
-    SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
+    FontType, SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
 };
 use crate::store::AppStore;
 
@@ -51,7 +51,7 @@ impl SettingsService {
 
         Ok(SettingsDiff {
             changed: normalized,
-            full: next,
+            full: Some(next),
         })
     }
 }
@@ -103,7 +103,15 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
         normalized.custom_css = Some(apply_css_patch(current.custom_css.clone(), value));
     }
     if let Some(value) = patch.font_settings.as_ref() {
-        normalized.font_settings = Some(value.clone());
+        let mut next = value.clone();
+        // Do not persist base64(data URI) cssContent for local fonts; store only the path and
+        // generate @font-face in the renderer.
+        for font in next.custom_fonts.iter_mut() {
+            if font.font_type == FontType::Local {
+                font.css_content = None;
+            }
+        }
+        normalized.font_settings = Some(next);
     }
     if let Some(value) = patch.use_custom_js {
         normalized.use_custom_js = Some(value);

@@ -1,8 +1,8 @@
-use std::fs;
-
-use base64::{engine::general_purpose::STANDARD, Engine};
 use rfd::FileDialog;
 use serde::Serialize;
+use std::fs;
+use tauri::Manager;
+use uuid::Uuid;
 
 /// 폰트 로드 결과 응답 타입
 #[derive(Serialize)]
@@ -15,33 +15,12 @@ pub struct FontLoadResponse {
     pub font_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub css_content: Option<String>,
 }
 
-/// 폰트 파일 확장자에 따른 format 문자열 반환
-fn get_font_format(ext: &str) -> &'static str {
-    match ext.to_lowercase().as_str() {
-        "otf" => "opentype",
-        "woff" => "woff",
-        "woff2" => "woff2",
-        "ttf" | _ => "truetype",
-    }
-}
-
-/// 파일 확장자에 따른 MIME 타입 반환
-fn get_font_mime_type(ext: &str) -> &'static str {
-    match ext.to_lowercase().as_str() {
-        "otf" => "font/otf",
-        "woff" => "font/woff",
-        "woff2" => "font/woff2",
-        "ttf" | _ => "font/ttf",
-    }
-}
-
-/// 로컬 폰트 파일을 선택하고 base64로 인코딩된 CSS를 반환
+/// 로컬 폰트 파일을 선택하고 폰트 이름/경로를 반환
+/// 파일 경로만 저장하고, 프론트에서 `convertFileSrc` 기반으로 `@font-face`를 생성
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn font_load() -> Result<FontLoadResponse, String> {
+pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
     let picked = FileDialog::new()
         .add_filter("Fonts", &["ttf", "otf", "woff", "woff2"])
         .pick_file();
@@ -52,62 +31,40 @@ pub fn font_load() -> Result<FontLoadResponse, String> {
             error: None,
             font_name: None,
             font_path: None,
-            css_content: None,
         });
     };
 
-    let path_string = path.to_string_lossy().to_string();
-
-    // 파일명에서 폰트 이름 추출
-    let file_name = path
-        .file_name()
+    // 파일명(확장자 제외)을 폰트 이름으로 사용
+    let font_name = path
+        .file_stem()
         .and_then(|n| n.to_str())
-        .unwrap_or("Unknown Font");
+        .unwrap_or("Unknown Font")
+        .to_string();
 
+    // Copy into app data directory so it works with the asset protocol scope
+    // and survives if the user moves/deletes the original file.
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or("ttf");
+        .unwrap_or("ttf")
+        .to_lowercase();
 
-    let font_name = file_name
-        .trim_end_matches(&format!(".{}", ext))
-        .to_string();
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("앱 데이터 디렉토리 확인 실패: {e}"))?;
+    let fonts_dir = data_dir.join("fonts");
+    fs::create_dir_all(&fonts_dir)
+        .map_err(|e| format!("폰트 디렉토리 생성 실패: {e}"))?;
 
-    // 폰트 파일 바이너리 읽기
-    match fs::read(&path) {
-        Ok(bytes) => {
-            // Base64 인코딩
-            let base64_data = STANDARD.encode(&bytes);
+    let dest_path = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
+    fs::copy(&path, &dest_path).map_err(|e| format!("폰트 파일 복사 실패: {e}"))?;
+    let dest_string = dest_path.to_string_lossy().to_string();
 
-            // 폰트 포맷 결정
-            let format = get_font_format(ext);
-            let mime_type = get_font_mime_type(ext);
-
-            // @font-face CSS 생성
-            let css_content = format!(
-                r#"@font-face {{
-  font-family: '{}';
-  src: url(data:{};base64,{}) format('{}');
-  font-weight: normal;
-  font-style: normal;
-}}"#,
-                font_name, mime_type, base64_data, format
-            );
-
-            Ok(FontLoadResponse {
-                success: true,
-                error: None,
-                font_name: Some(font_name),
-                font_path: Some(path_string),
-                css_content: Some(css_content),
-            })
-        }
-        Err(err) => Ok(FontLoadResponse {
-            success: false,
-            error: Some(format!("폰트 파일 읽기 실패: {}", err)),
-            font_name: None,
-            font_path: None,
-            css_content: None,
-        }),
-    }
+    Ok(FontLoadResponse {
+        success: true,
+        error: None,
+        font_name: Some(font_name),
+        font_path: Some(dest_string),
+    })
 }

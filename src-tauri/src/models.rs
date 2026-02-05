@@ -33,9 +33,9 @@ pub struct CustomFont {
     pub name: String,
     pub display_name: String,
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_path: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub css_content: Option<String>,
 }
 
@@ -1106,7 +1106,8 @@ pub struct CustomJsPatch {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsDiff {
     pub changed: SettingsPatch,
-    pub full: SettingsState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full: Option<SettingsState>,
 }
 
 impl SettingsDiff {

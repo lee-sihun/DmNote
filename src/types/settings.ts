@@ -119,7 +119,7 @@ export type SettingsPatch = Partial<
 
 export interface SettingsDiff {
   changed: SettingsPatch;
-  full: SettingsState;
+  full?: SettingsState;
 }
 
 export function normalizeSettingsPatch(

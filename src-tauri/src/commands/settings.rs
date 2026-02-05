@@ -23,5 +23,5 @@ pub fn settings_update(
     state
         .emit_settings_changed(&diff, &app)
         .map_err(|err| err.to_string())?;
-    Ok(diff.full)
+    Ok(diff.full.unwrap_or_else(|| state.settings.snapshot()))
 }
