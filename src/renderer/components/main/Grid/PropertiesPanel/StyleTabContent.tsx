@@ -1,4 +1,10 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
 import type { StyleTabContentProps } from "./types";
 import type { ImageFit, KeyPosition } from "@src/types/keys";
 import {
@@ -10,13 +16,22 @@ import {
 } from "./PropertyInputs";
 import ImagePicker from "../../Modal/content/ImagePicker";
 import ColorPicker from "../../Modal/content/ColorPicker";
+import FontPicker from "../../Modal/content/FontPicker";
+import FontManagerModal from "../../Modal/content/FontManagerModal";
 import Checkbox from "../../common/Checkbox";
+import { useFontStore } from "@stores/useFontStore";
 
 // 피커 타겟 타입
-type PickerTarget = "backgroundColor" | "borderColor" | "fontColor" | "image" | null;
+type PickerTarget =
+  | "backgroundColor"
+  | "borderColor"
+  | "fontColor"
+  | "image"
+  | "font"
+  | null;
 
 type ColorState = "idle" | "active";
-type StyleColorTarget = Exclude<PickerTarget, "image" | null>;
+type StyleColorTarget = "backgroundColor" | "borderColor" | "fontColor";
 type ActiveStyleColorProperty =
   | "activeBackgroundColor"
   | "activeBorderColor"
@@ -85,16 +100,25 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 통합 피커 상태
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const [colorState, setColorState] = useState<ColorState>("idle");
-  
+
   // 컬러 버튼 refs
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
+  // 폰트 버튼 ref
+  const fontButtonRef = useRef<HTMLButtonElement>(null);
+  // 폰트 관리 모달 상태
+  const [showFontManager, setShowFontManager] = useState(false);
+  // 폰트 스토어
+  const { getAllFonts } = useFontStore();
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
-  
+
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
-  const [localColors, setLocalColors] = useState<Record<StyleColorProperty, string>>({
-    backgroundColor: keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
+  const [localColors, setLocalColors] = useState<
+    Record<StyleColorProperty, string>
+  >({
+    backgroundColor:
+      keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
     activeBackgroundColor:
       keyPosition.activeBackgroundColor ||
       keyPosition.backgroundColor ||
@@ -113,9 +137,15 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
   useEffect(() => {
-    if (!pickerFor || (pickerFor !== "backgroundColor" && pickerFor !== "borderColor" && pickerFor !== "fontColor")) {
+    if (
+      !pickerFor ||
+      (pickerFor !== "backgroundColor" &&
+        pickerFor !== "borderColor" &&
+        pickerFor !== "fontColor")
+    ) {
       setLocalColors({
-        backgroundColor: keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
+        backgroundColor:
+          keyPosition.backgroundColor || DEFAULT_KEY_BACKGROUND_COLOR,
         activeBackgroundColor:
           keyPosition.activeBackgroundColor ||
           keyPosition.backgroundColor ||
@@ -151,9 +181,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // interactiveRefs
   const colorPickerInteractiveRefs = useMemo(
     () => [bgColorBtnRef, borderColorBtnRef, fontColorBtnRef],
-    []
+    [],
   );
-  
+
   // 실제 사용할 이미지 버튼 ref (외부에서 제공되면 외부 것 사용)
   const actualImageButtonRef = imageButtonRef || internalImageButtonRef;
 
@@ -186,7 +216,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           return target;
       }
     },
-    [colorState]
+    [colorState],
   );
 
   const activeColorPropertyFor = useCallback(
@@ -200,7 +230,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           return "activeFontColor";
       }
     },
-    []
+    [],
   );
 
   const isNonEmptyString = (value: unknown): value is string =>
@@ -211,7 +241,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     (target: StyleColorTarget): string => {
       return localColors[resolveColorProperty(target)];
     },
-    [localColors, resolveColorProperty]
+    [localColors, resolveColorProperty],
   );
 
   // 드래그 중 로컬 상태만 업데이트
@@ -220,7 +250,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       const prop = resolveColorProperty(target);
       setLocalColors((prev) => ({ ...prev, [prop]: color }));
     },
-    [resolveColorProperty]
+    [resolveColorProperty],
   );
 
   // 드래그 완료 시 부모에게 전달
@@ -229,7 +259,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       const prop = resolveColorProperty(target);
       setLocalColors((prev) => ({ ...prev, [prop]: color }));
 
-      const updates: Partial<KeyPosition> = { [prop]: color } as Partial<KeyPosition>;
+      const updates: Partial<KeyPosition> = {
+        [prop]: color,
+      } as Partial<KeyPosition>;
 
       // "idle" 상태에서만 변경했을 때 active 값이 비어 있으면,
       // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
@@ -251,7 +283,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       localColors,
       onKeyUpdate,
       resolveColorProperty,
-    ]
+    ],
   );
 
   // 위치 변경 핸들러
@@ -262,7 +294,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
       onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
     },
-    [keyIndex, localDy, keyPosition.dy, onPositionChange, onLocalDxChange]
+    [keyIndex, localDy, keyPosition.dy, onPositionChange, onLocalDxChange],
   );
 
   const handlePositionYChange = useCallback(
@@ -272,7 +304,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
       onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
     },
-    [keyIndex, localDx, keyPosition.dx, onPositionChange, onLocalDyChange]
+    [keyIndex, localDx, keyPosition.dx, onPositionChange, onLocalDyChange],
   );
 
   // 크기 변경 핸들러
@@ -285,7 +317,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         onKeyUpdate({ index: keyIndex, width: value });
       }
     },
-    [keyIndex, onKeyPreview, onKeyUpdate, onLocalWidthChange]
+    [keyIndex, onKeyPreview, onKeyUpdate, onLocalWidthChange],
   );
 
   const handleHeightChange = useCallback(
@@ -297,7 +329,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         onKeyUpdate({ index: keyIndex, height: value });
       }
     },
-    [keyIndex, onKeyPreview, onKeyUpdate, onLocalHeightChange]
+    [keyIndex, onKeyPreview, onKeyUpdate, onLocalHeightChange],
   );
 
   // 스타일 변경 핸들러
@@ -305,14 +337,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     (property: keyof KeyPosition, value: any) => {
       onKeyPreview?.(keyIndex, { [property]: value });
     },
-    [keyIndex, onKeyPreview]
+    [keyIndex, onKeyPreview],
   );
 
   const handleStyleChangeComplete = useCallback(
     (property: keyof KeyPosition, value: any) => {
       onKeyUpdate({ index: keyIndex, [property]: value });
     },
-    [keyIndex, onKeyUpdate]
+    [keyIndex, onKeyUpdate],
   );
 
   // 이미지 변경 핸들러
@@ -321,7 +353,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
       onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   const handleActiveImageChange = useCallback(
@@ -329,7 +361,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { activeImage: imageUrl });
       onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   const handleIdleTransparentChange = useCallback(
@@ -337,7 +369,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { idleTransparent: checked });
       onKeyUpdate({ index: keyIndex, idleTransparent: checked });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   const handleActiveTransparentChange = useCallback(
@@ -345,7 +377,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { activeTransparent: checked });
       onKeyUpdate({ index: keyIndex, activeTransparent: checked });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   const handleIdleImageReset = useCallback(() => {
@@ -363,7 +395,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { idleImageFit: fit });
       onKeyUpdate({ index: keyIndex, idleImageFit: fit });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   const handleActiveImageFitChange = useCallback(
@@ -371,7 +403,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       onKeyPreview?.(keyIndex, { activeImageFit: fit });
       onKeyUpdate({ index: keyIndex, activeImageFit: fit });
     },
-    [keyIndex, onKeyPreview, onKeyUpdate]
+    [keyIndex, onKeyPreview, onKeyUpdate],
   );
 
   // 표시 텍스트 핸들러
@@ -379,11 +411,14 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     (value: string) => {
       onKeyPreview?.(keyIndex, { displayText: value });
     },
-    [keyIndex, onKeyPreview]
+    [keyIndex, onKeyPreview],
   );
 
   const handleDisplayTextBlur = useCallback(() => {
-    onKeyUpdate({ index: keyIndex, displayText: keyPosition.displayText || "" });
+    onKeyUpdate({
+      index: keyIndex,
+      displayText: keyPosition.displayText || "",
+    });
   }, [keyIndex, keyPosition.displayText, onKeyUpdate]);
 
   // 클래스명 핸들러
@@ -391,7 +426,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     (value: string) => {
       onKeyPreview?.(keyIndex, { className: value });
     },
-    [keyIndex, onKeyPreview]
+    [keyIndex, onKeyPreview],
   );
 
   const handleClassNameBlur = useCallback(() => {
@@ -399,7 +434,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   }, [keyIndex, keyPosition.className, onKeyUpdate]);
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
-  const isImagePickerOpen = onToggleImagePicker ? showImagePicker : pickerFor === "image";
+  const isImagePickerOpen = onToggleImagePicker
+    ? showImagePicker
+    : pickerFor === "image";
 
   // 색상 표시용 헬퍼 함수
   const getDisplayColor = (color: string): string => {
@@ -445,18 +482,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           <SectionDivider />
         </>
       ) : null}
-      
+
       {/* 위치 */}
       <PropertyRow label={t("propertiesPanel.position") || "위치"}>
         <NumberInput
-          value={isIndividualMode ? keyPosition.dx : (localDx ?? keyPosition.dx)}
+          value={isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx}
           onChange={handlePositionXChange}
           prefix="X"
           min={-9999}
           max={9999}
         />
         <NumberInput
-          value={isIndividualMode ? keyPosition.dy : (localDy ?? keyPosition.dy)}
+          value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
           onChange={handlePositionYChange}
           prefix="Y"
           min={-9999}
@@ -467,7 +504,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       {/* 크기 */}
       <PropertyRow label={t("propertiesPanel.size") || "크기"}>
         <NumberInput
-          value={isIndividualMode ? (keyPosition.width ?? 60) : (localWidth ?? keyPosition.width ?? 60)}
+          value={
+            isIndividualMode
+              ? keyPosition.width ?? 60
+              : localWidth ?? keyPosition.width ?? 60
+          }
           onChange={handleWidthChange}
           onBlur={onSizeBlur}
           prefix="W"
@@ -475,7 +516,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           max={999}
         />
         <NumberInput
-          value={isIndividualMode ? (keyPosition.height ?? 60) : (localHeight ?? keyPosition.height ?? 60)}
+          value={
+            isIndividualMode
+              ? keyPosition.height ?? 60
+              : localHeight ?? keyPosition.height ?? 60
+          }
           onChange={handleHeightChange}
           onBlur={onSizeBlur}
           prefix="H"
@@ -493,9 +538,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           type="button"
           onClick={() => handlePickerToggle("backgroundColor")}
           className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === "backgroundColor" ? "border-[#459BF8]" : "border-[#3A3943] hover:border-[#505058]"
+            pickerFor === "backgroundColor"
+              ? "border-[#459BF8]"
+              : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(colorValueFor("backgroundColor")) }}
+          style={{
+            backgroundColor: getDisplayColor(colorValueFor("backgroundColor")),
+          }}
         />
       </PropertyRow>
 
@@ -506,9 +555,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           type="button"
           onClick={() => handlePickerToggle("borderColor")}
           className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === "borderColor" ? "border-[#459BF8]" : "border-[#3A3943] hover:border-[#505058]"
+            pickerFor === "borderColor"
+              ? "border-[#459BF8]"
+              : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(colorValueFor("borderColor")) }}
+          style={{
+            backgroundColor: getDisplayColor(colorValueFor("borderColor")),
+          }}
         />
       </PropertyRow>
 
@@ -536,7 +589,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
       {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
       {onToggleImagePicker && imageButtonRef && (
-        <PropertyRow label={t("propertiesPanel.customImage") || "커스텀 이미지"}>
+        <PropertyRow
+          label={t("propertiesPanel.customImage") || "커스텀 이미지"}
+        >
           <button
             ref={imageButtonRef}
             type="button"
@@ -565,6 +620,20 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         </PropertyRow>
       )}
 
+      {/* 폰트 */}
+      <PropertyRow label={t("propertiesPanel.font") || "폰트"}>
+        <button
+          ref={fontButtonRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            pickerFor === "font" ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => handlePickerToggle("font")}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
+
       {/* 글꼴 크기 */}
       <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>
         <NumberInput
@@ -583,9 +652,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           type="button"
           onClick={() => handlePickerToggle("fontColor")}
           className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === "fontColor" ? "border-[#459BF8]" : "border-[#3A3943] hover:border-[#505058]"
+            pickerFor === "fontColor"
+              ? "border-[#459BF8]"
+              : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(colorValueFor("fontColor")) }}
+          style={{
+            backgroundColor: getDisplayColor(colorValueFor("fontColor")),
+          }}
         />
       </PropertyRow>
 
@@ -596,10 +669,18 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           isItalic={keyPosition.fontItalic ?? false}
           isUnderline={keyPosition.fontUnderline ?? false}
           isStrikethrough={keyPosition.fontStrikethrough ?? false}
-          onBoldChange={(value) => handleStyleChangeComplete("fontWeight", value ? 700 : 400)}
-          onItalicChange={(value) => handleStyleChangeComplete("fontItalic", value)}
-          onUnderlineChange={(value) => handleStyleChangeComplete("fontUnderline", value)}
-          onStrikethroughChange={(value) => handleStyleChangeComplete("fontStrikethrough", value)}
+          onBoldChange={(value) =>
+            handleStyleChangeComplete("fontWeight", value ? 700 : 400)
+          }
+          onItalicChange={(value) =>
+            handleStyleChangeComplete("fontItalic", value)
+          }
+          onUnderlineChange={(value) =>
+            handleStyleChangeComplete("fontUnderline", value)
+          }
+          onStrikethroughChange={(value) =>
+            handleStyleChangeComplete("fontStrikethrough", value)
+          }
         />
       </PropertyRow>
 
@@ -607,7 +688,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       {useCustomCSS && (
         <>
           <SectionDivider />
-          
+
           {/* CSS 우선순위 토글 */}
           <div className="flex justify-between items-center w-full h-[23px]">
             <p className="text-white text-style-2">
@@ -615,7 +696,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             </p>
             <Checkbox
               checked={keyPosition.useInlineStyles ?? false}
-              onChange={() => handleStyleChangeComplete("useInlineStyles", !(keyPosition.useInlineStyles ?? false))}
+              onChange={() =>
+                handleStyleChangeComplete(
+                  "useInlineStyles",
+                  !(keyPosition.useInlineStyles ?? false),
+                )
+              }
             />
           </div>
 
@@ -642,8 +728,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           activeImage={keyPosition.activeImage || ""}
           idleTransparent={keyPosition.idleTransparent ?? false}
           activeTransparent={keyPosition.activeTransparent ?? false}
-          idleImageFit={keyPosition.idleImageFit ?? keyPosition.imageFit ?? "cover"}
-          activeImageFit={keyPosition.activeImageFit ?? keyPosition.imageFit ?? "cover"}
+          idleImageFit={
+            keyPosition.idleImageFit ?? keyPosition.imageFit ?? "cover"
+          }
+          activeImageFit={
+            keyPosition.activeImageFit ?? keyPosition.imageFit ?? "cover"
+          }
           onIdleImageChange={handleIdleImageChange}
           onActiveImageChange={handleActiveImageChange}
           onIdleTransparentChange={handleIdleTransparentChange}
@@ -657,7 +747,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       )}
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      {pickerFor && pickerFor !== "image" && (
+      {pickerFor && pickerFor !== "image" && pickerFor !== "font" && (
         <ColorPicker
           open={!!pickerFor}
           referenceRef={
@@ -680,6 +770,34 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           stateMode={colorState}
           onStateModeChange={setColorState}
           interactiveRefs={colorPickerInteractiveRefs}
+        />
+      )}
+
+      {/* FontPicker */}
+      {pickerFor === "font" && (
+        <FontPicker
+          open={true}
+          referenceRef={fontButtonRef}
+          panelElement={panelElement}
+          selectedFont={keyPosition.fontFamily || null}
+          onFontSelect={(fontName) => {
+            handleStyleChangeComplete("fontFamily", fontName);
+          }}
+          onClose={() => setPickerFor(null)}
+          onOpenManager={() => {
+            setPickerFor(null);
+            setShowFontManager(true);
+          }}
+          interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* FontManagerModal */}
+      {showFontManager && (
+        <FontManagerModal
+          isOpen={showFontManager}
+          onClose={() => setShowFontManager(false)}
+          t={t}
         />
       )}
     </>

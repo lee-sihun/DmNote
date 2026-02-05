@@ -1,8 +1,15 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import type { KeyCounterSettings } from "@src/types/keys";
-import { PropertyRow, NumberInput, FontStyleToggle, SectionDivider } from "./index";
+import {
+  PropertyRow,
+  NumberInput,
+  FontStyleToggle,
+  SectionDivider,
+} from "./index";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
+import FontPicker from "@components/main/Modal/content/FontPicker";
+import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
 
 interface BatchCounterTabContentProps {
   // 카운터 설정 (첫 번째 선택 키 기준)
@@ -20,6 +27,8 @@ interface BatchCounterTabContentProps {
   batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement>;
   isFillPickerOpen: boolean;
   isStrokePickerOpen: boolean;
+  // 패널 요소 (FloatingPopup 위치용)
+  panelElement: HTMLElement | null;
   // 번역
   t: (key: string) => string;
 }
@@ -35,8 +44,13 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterStrokeButtonRef,
   isFillPickerOpen,
   isStrokePickerOpen,
+  panelElement,
   t,
 }) => {
+  const fontButtonRef = useRef<HTMLButtonElement>(null);
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showFontManager, setShowFontManager] = useState(false);
+
   const getDisplayColor = (color: string): string => {
     if (!color) return "#ffffff";
     if (color.startsWith("rgba") || color.startsWith("rgb")) return color;
@@ -134,8 +148,14 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               ? "border-[#459BF8]"
               : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(getCounterColorDisplay("fill")) }}
-          title={`${t("counterSetting.fill") || "채우기"} (${colorState === "active" ? t("counterSetting.active") || "입력" : t("counterSetting.idle") || "대기"})`}
+          style={{
+            backgroundColor: getDisplayColor(getCounterColorDisplay("fill")),
+          }}
+          title={`${t("counterSetting.fill") || "채우기"} (${
+            colorState === "active"
+              ? t("counterSetting.active") || "입력"
+              : t("counterSetting.idle") || "대기"
+          })`}
         />
       </PropertyRow>
 
@@ -150,12 +170,32 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
               ? "border-[#459BF8]"
               : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(getCounterColorDisplay("stroke")) }}
-          title={`${t("counterSetting.stroke") || "외곽선"} (${colorState === "active" ? t("counterSetting.active") || "입력" : t("counterSetting.idle") || "대기"})`}
+          style={{
+            backgroundColor: getDisplayColor(getCounterColorDisplay("stroke")),
+          }}
+          title={`${t("counterSetting.stroke") || "외곽선"} (${
+            colorState === "active"
+              ? t("counterSetting.active") || "입력"
+              : t("counterSetting.idle") || "대기"
+          })`}
         />
       </PropertyRow>
 
       <SectionDivider />
+
+      {/* 폰트 */}
+      <PropertyRow label={t("counterSetting.font") || "폰트"}>
+        <button
+          ref={fontButtonRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            showFontPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => setShowFontPicker((prev) => !prev)}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
 
       {/* 폰트 크기 */}
       <PropertyRow label={t("counterSetting.fontSize") || "폰트 크기"}>
@@ -179,7 +219,9 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           onBoldChange={(value) =>
             handleBatchCounterUpdate({ fontWeight: value ? 700 : 400 })
           }
-          onItalicChange={(value) => handleBatchCounterUpdate({ fontItalic: value })}
+          onItalicChange={(value) =>
+            handleBatchCounterUpdate({ fontItalic: value })
+          }
           onUnderlineChange={(value) =>
             handleBatchCounterUpdate({ fontUnderline: value })
           }
@@ -188,6 +230,34 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           }
         />
       </PropertyRow>
+
+      {/* FontPicker */}
+      {showFontPicker && (
+        <FontPicker
+          open={true}
+          referenceRef={fontButtonRef}
+          panelElement={panelElement}
+          selectedFont={batchCounterSettings.fontFamily || null}
+          onFontSelect={(fontFamily) => {
+            handleBatchCounterUpdate({ fontFamily });
+          }}
+          onClose={() => setShowFontPicker(false)}
+          onOpenManager={() => {
+            setShowFontPicker(false);
+            setShowFontManager(true);
+          }}
+          interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* FontManagerModal */}
+      {showFontManager && (
+        <FontManagerModal
+          isOpen={showFontManager}
+          onClose={() => setShowFontManager(false)}
+          t={t}
+        />
+      )}
     </>
   );
 };

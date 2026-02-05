@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { CounterTabContentProps } from "./types";
 import type { KeyCounterSettings } from "@src/types/keys";
 import { normalizeCounterSettings } from "@src/types/keys";
@@ -11,8 +17,10 @@ import {
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
 import ColorPicker from "@components/main/Modal/content/ColorPicker";
+import FontPicker from "@components/main/Modal/content/FontPicker";
+import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
 
-type PickerTarget = "fill" | "stroke" | null;
+type PickerTarget = "fill" | "stroke" | "font" | null;
 type ColorState = "idle" | "active";
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
@@ -24,10 +32,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 }) => {
   const fillBtnRef = useRef<HTMLButtonElement>(null);
   const strokeBtnRef = useRef<HTMLButtonElement>(null);
+  const fontBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
-  const pickerOpen = pickerFor !== null;
+  const pickerOpen = pickerFor !== null && pickerFor !== "font";
   const [colorState, setColorState] = useState<ColorState>("idle");
+  const [showFontManager, setShowFontManager] = useState(false);
 
   const counterSettings = normalizeCounterSettings(keyPosition.counter);
 
@@ -57,7 +67,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     counterSettings.stroke.active,
   ]);
 
-  const colorPickerInteractiveRefs = useMemo(() => [fillBtnRef, strokeBtnRef], []);
+  const colorPickerInteractiveRefs = useMemo(
+    () => [fillBtnRef, strokeBtnRef],
+    [],
+  );
 
   const handleCounterUpdate = useCallback(
     (updates: Partial<KeyCounterSettings>) => {
@@ -65,12 +78,15 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       const newSettings = { ...currentSettings, ...updates };
       onKeyUpdate({ index: keyIndex, counter: newSettings });
     },
-    [keyIndex, keyPosition.counter, onKeyUpdate]
+    [keyIndex, keyPosition.counter, onKeyUpdate],
   );
 
-  const handlePickerToggle = useCallback((target: Exclude<PickerTarget, null>) => {
-    setPickerFor((prev) => (prev === target ? null : target));
-  }, []);
+  const handlePickerToggle = useCallback(
+    (target: Exclude<PickerTarget, null>) => {
+      setPickerFor((prev) => (prev === target ? null : target));
+    },
+    [],
+  );
 
   const getDisplayColor = useCallback((color: string): string => {
     if (!color) return "#ffffff";
@@ -82,11 +98,20 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const activeColorFor = useCallback(
     (target: Exclude<PickerTarget, null>, state: ColorState): string => {
       if (target === "fill") {
-        return state === "active" ? localColors.fillActive : localColors.fillIdle;
+        return state === "active"
+          ? localColors.fillActive
+          : localColors.fillIdle;
       }
-      return state === "active" ? localColors.strokeActive : localColors.strokeIdle;
+      return state === "active"
+        ? localColors.strokeActive
+        : localColors.strokeIdle;
     },
-    [localColors.fillActive, localColors.fillIdle, localColors.strokeActive, localColors.strokeIdle]
+    [
+      localColors.fillActive,
+      localColors.fillIdle,
+      localColors.strokeActive,
+      localColors.strokeIdle,
+    ],
   );
 
   // 드래그 중 로컬 상태만 업데이트 (부모에게 전달 안함)
@@ -104,7 +129,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
       setLocalColors((prev) => ({ ...prev, [key]: color }));
     },
-    [colorState, pickerFor]
+    [colorState, pickerFor],
   );
 
   // 드래그 완료 시 부모에게 전달
@@ -125,9 +150,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
       if (pickerFor === "fill") {
         if (colorState === "active") {
-          handleCounterUpdate({ fill: { ...counterSettings.fill, active: color } });
+          handleCounterUpdate({
+            fill: { ...counterSettings.fill, active: color },
+          });
         } else {
-          handleCounterUpdate({ fill: { ...counterSettings.fill, idle: color } });
+          handleCounterUpdate({
+            fill: { ...counterSettings.fill, idle: color },
+          });
         }
         return;
       }
@@ -137,20 +166,32 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           stroke: { ...counterSettings.stroke, active: color },
         });
       } else {
-        handleCounterUpdate({ stroke: { ...counterSettings.stroke, idle: color } });
+        handleCounterUpdate({
+          stroke: { ...counterSettings.stroke, idle: color },
+        });
       }
     },
-    [colorState, counterSettings.fill, counterSettings.stroke, handleCounterUpdate, pickerFor]
+    [
+      colorState,
+      counterSettings.fill,
+      counterSettings.stroke,
+      handleCounterUpdate,
+      pickerFor,
+    ],
   );
 
   return (
     <>
       {/* 카운터 사용 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">{t("counterSetting.counterEnabled") || "카운터 표시"}</p>
+        <p className="text-white text-style-2">
+          {t("counterSetting.counterEnabled") || "카운터 표시"}
+        </p>
         <Checkbox
           checked={counterSettings.enabled}
-          onChange={() => handleCounterUpdate({ enabled: !counterSettings.enabled })}
+          onChange={() =>
+            handleCounterUpdate({ enabled: !counterSettings.enabled })
+          }
         />
       </div>
 
@@ -160,11 +201,19 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       <PropertyRow label={t("counterSetting.placementArea") || "배치 영역"}>
         <Dropdown
           options={[
-            { label: t("counterSetting.placementInside") || "내부", value: "inside" },
-            { label: t("counterSetting.placementOutside") || "외부", value: "outside" },
+            {
+              label: t("counterSetting.placementInside") || "내부",
+              value: "inside",
+            },
+            {
+              label: t("counterSetting.placementOutside") || "외부",
+              value: "outside",
+            },
           ]}
           value={counterSettings.placement}
-          onChange={(value) => handleCounterUpdate({ placement: value as "inside" | "outside" })}
+          onChange={(value) =>
+            handleCounterUpdate({ placement: value as "inside" | "outside" })
+          }
         />
       </PropertyRow>
 
@@ -173,12 +222,19 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <Dropdown
           options={[
             { label: t("counterSetting.alignTop") || "상단", value: "top" },
-            { label: t("counterSetting.alignBottom") || "하단", value: "bottom" },
+            {
+              label: t("counterSetting.alignBottom") || "하단",
+              value: "bottom",
+            },
             { label: t("counterSetting.alignLeft") || "좌측", value: "left" },
             { label: t("counterSetting.alignRight") || "우측", value: "right" },
           ]}
           value={counterSettings.align}
-          onChange={(value) => handleCounterUpdate({ align: value as "top" | "bottom" | "left" | "right" })}
+          onChange={(value) =>
+            handleCounterUpdate({
+              align: value as "top" | "bottom" | "left" | "right",
+            })
+          }
         />
       </PropertyRow>
 
@@ -203,9 +259,15 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           type="button"
           onClick={() => handlePickerToggle("fill")}
           className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === "fill" ? "border-[#459BF8]" : "border-[#3A3943] hover:border-[#505058]"
+            pickerFor === "fill"
+              ? "border-[#459BF8]"
+              : "border-[#3A3943] hover:border-[#505058]"
           }`}
-          style={{ backgroundColor: getDisplayColor(activeColorFor("fill", colorState)) }}
+          style={{
+            backgroundColor: getDisplayColor(
+              activeColorFor("fill", colorState),
+            ),
+          }}
         />
       </PropertyRow>
 
@@ -221,12 +283,28 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               : "border-[#3A3943] hover:border-[#505058]"
           }`}
           style={{
-            backgroundColor: getDisplayColor(activeColorFor("stroke", colorState)),
+            backgroundColor: getDisplayColor(
+              activeColorFor("stroke", colorState),
+            ),
           }}
         />
       </PropertyRow>
 
       <SectionDivider />
+
+      {/* 폰트 */}
+      <PropertyRow label={t("counterSetting.font") || "폰트"}>
+        <button
+          ref={fontBtnRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            pickerFor === "font" ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => handlePickerToggle("font")}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
 
       {/* 폰트 크기 */}
       <PropertyRow label={t("counterSetting.fontSize") || "폰트 크기"}>
@@ -236,6 +314,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           suffix="px"
           min={8}
           max={72}
+          width="54px"
         />
       </PropertyRow>
 
@@ -259,12 +338,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         />
       </PropertyRow>
 
-      {pickerFor && (
+      {pickerFor && pickerFor !== "font" && (
         <ColorPicker
           open={pickerOpen}
           referenceRef={pickerFor === "fill" ? fillBtnRef : strokeBtnRef}
           panelElement={panelElement}
-          color={activeColorFor(pickerFor, colorState)}
+          color={activeColorFor(pickerFor as "fill" | "stroke", colorState)}
           onColorChange={(c: string) => handleColorChange(c)}
           onColorChangeComplete={(c: string) => handleColorChangeComplete(c)}
           onClose={() => setPickerFor(null)}
@@ -272,6 +351,34 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           interactiveRefs={colorPickerInteractiveRefs}
           stateMode={colorState}
           onStateModeChange={setColorState}
+        />
+      )}
+
+      {/* FontPicker */}
+      {pickerFor === "font" && (
+        <FontPicker
+          open={true}
+          referenceRef={fontBtnRef}
+          panelElement={panelElement}
+          selectedFont={counterSettings.fontFamily || null}
+          onFontSelect={(fontName) => {
+            handleCounterUpdate({ fontFamily: fontName });
+          }}
+          onClose={() => setPickerFor(null)}
+          onOpenManager={() => {
+            setPickerFor(null);
+            setShowFontManager(true);
+          }}
+          interactiveRefs={[fontBtnRef]}
+        />
+      )}
+
+      {/* FontManagerModal */}
+      {showFontManager && (
+        <FontManagerModal
+          isOpen={showFontManager}
+          onClose={() => setShowFontManager(false)}
+          t={t}
         />
       )}
     </>

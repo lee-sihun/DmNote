@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import type { KeyPosition } from "@src/types/keys";
 import {
   PropertyRow,
@@ -9,6 +9,8 @@ import {
   FontStyleToggle,
 } from "./index";
 import Checkbox from "@components/main/common/Checkbox";
+import FontPicker from "@components/main/Modal/content/FontPicker";
+import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
 
 interface KeyData {
   index: number;
@@ -29,11 +31,16 @@ interface BatchStyleTabContentProps {
   // getSelectedKeysData 함수 (displayText Mixed 판단용)
   getSelectedKeysData: () => KeyData[];
   // 핸들러
-  handleBatchAlign: (direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom") => void;
+  handleBatchAlign: (
+    direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
+  ) => void;
   handleBatchDistribute: (direction: "horizontal" | "vertical") => void;
   handleBatchResize: (dimension: "width" | "height", value: number) => void;
   handleBatchStyleChange: (property: keyof KeyPosition, value: any) => void;
-  handleBatchStyleChangeComplete: (property: keyof KeyPosition, value: any) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: any,
+  ) => void;
   // 이미지 피커
   showBatchImagePicker: boolean;
   onToggleBatchImagePicker: () => void;
@@ -62,6 +69,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   t,
 }) => {
   const [colorState, setColorState] = useState<"idle" | "active">("idle");
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showFontManager, setShowFontManager] = useState(false);
+  const fontButtonRef = useRef<HTMLButtonElement>(null);
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
@@ -75,7 +85,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     };
 
     const firstValue = getEffectiveDisplayText(keysData[0]);
-    const isMixed = keysData.some((data) => getEffectiveDisplayText(data) !== firstValue);
+    const isMixed = keysData.some(
+      (data) => getEffectiveDisplayText(data) !== firstValue,
+    );
 
     return { isMixed, value: firstValue };
   };
@@ -94,9 +106,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignLeft") || "왼쪽 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M1 1V9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="2.5" y="2.5" width="6" height="1.5" rx="0.5" fill="#DBDEE8"/>
-                <rect x="2.5" y="6" width="4" height="1.5" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M1 1V9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="2.5"
+                  y="2.5"
+                  width="6"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="2.5"
+                  y="6"
+                  width="4"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
             <button
@@ -106,9 +137,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignCenterH") || "수평 중앙 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M5 1V9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="1.5" y="2.5" width="7" height="1.5" rx="0.5" fill="#DBDEE8"/>
-                <rect x="2.5" y="6" width="5" height="1.5" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M5 1V9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="1.5"
+                  y="2.5"
+                  width="7"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="2.5"
+                  y="6"
+                  width="5"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
             <button
@@ -118,9 +168,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignRight") || "오른쪽 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M9 1V9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="1.5" y="2.5" width="6" height="1.5" rx="0.5" fill="#DBDEE8"/>
-                <rect x="3.5" y="6" width="4" height="1.5" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M9 1V9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="1.5"
+                  y="2.5"
+                  width="6"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="3.5"
+                  y="6"
+                  width="4"
+                  height="1.5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
           </div>
@@ -133,9 +202,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignTop") || "위쪽 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M1 1H9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="2.5" y="2.5" width="1.5" height="6" rx="0.5" fill="#DBDEE8"/>
-                <rect x="6" y="2.5" width="1.5" height="4" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M1 1H9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="2.5"
+                  y="2.5"
+                  width="1.5"
+                  height="6"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="6"
+                  y="2.5"
+                  width="1.5"
+                  height="4"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
             <button
@@ -145,9 +233,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignCenterV") || "수직 중앙 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M1 5H9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="2.5" y="1.5" width="1.5" height="7" rx="0.5" fill="#DBDEE8"/>
-                <rect x="6" y="2.5" width="1.5" height="5" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M1 5H9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="2.5"
+                  y="1.5"
+                  width="1.5"
+                  height="7"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="6"
+                  y="2.5"
+                  width="1.5"
+                  height="5"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
             <button
@@ -157,9 +264,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               title={t("propertiesPanel.alignBottom") || "아래쪽 정렬"}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M1 9H9" stroke="#DBDEE8" strokeWidth="1.5" strokeLinecap="round"/>
-                <rect x="2.5" y="1.5" width="1.5" height="6" rx="0.5" fill="#DBDEE8"/>
-                <rect x="6" y="3.5" width="1.5" height="4" rx="0.5" fill="#DBDEE8"/>
+                <path
+                  d="M1 9H9"
+                  stroke="#DBDEE8"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="2.5"
+                  y="1.5"
+                  width="1.5"
+                  height="6"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
+                <rect
+                  x="6"
+                  y="3.5"
+                  width="1.5"
+                  height="4"
+                  rx="0.5"
+                  fill="#DBDEE8"
+                />
               </svg>
             </button>
           </div>
@@ -181,9 +307,30 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             title={t("propertiesPanel.distributeH") || "수평 분배"}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect x="0.5" y="2.5" width="1.5" height="5" rx="0.5" fill="#DBDEE8"/>
-              <rect x="4.25" y="2.5" width="1.5" height="5" rx="0.5" fill="#DBDEE8"/>
-              <rect x="8" y="2.5" width="1.5" height="5" rx="0.5" fill="#DBDEE8"/>
+              <rect
+                x="0.5"
+                y="2.5"
+                width="1.5"
+                height="5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
+              <rect
+                x="4.25"
+                y="2.5"
+                width="1.5"
+                height="5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
+              <rect
+                x="8"
+                y="2.5"
+                width="1.5"
+                height="5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
             </svg>
           </button>
           <button
@@ -198,9 +345,30 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             title={t("propertiesPanel.distributeV") || "수직 분배"}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect x="2.5" y="0.5" width="5" height="1.5" rx="0.5" fill="#DBDEE8"/>
-              <rect x="2.5" y="4.25" width="5" height="1.5" rx="0.5" fill="#DBDEE8"/>
-              <rect x="2.5" y="8" width="5" height="1.5" rx="0.5" fill="#DBDEE8"/>
+              <rect
+                x="2.5"
+                y="0.5"
+                width="5"
+                height="1.5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
+              <rect
+                x="2.5"
+                y="4.25"
+                width="5"
+                height="1.5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
+              <rect
+                x="2.5"
+                y="8"
+                width="5"
+                height="1.5"
+                rx="0.5"
+                fill="#DBDEE8"
+              />
             </svg>
           </button>
         </div>
@@ -230,28 +398,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
       {/* 배경색 */}
       <PropertyRow label={t("propertiesPanel.backgroundColor") || "배경색"}>
-        {(colorState === "active"
-          ? getMixedValue(
-              (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-              "rgba(121, 121, 121, 0.9)"
-            ).isMixed
-          : getMixedValue(
-              (pos) => pos.backgroundColor,
-              "rgba(46, 46, 47, 0.9)"
-            ).isMixed) ? (
+        {(
+          colorState === "active"
+            ? getMixedValue(
+                (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
+                "rgba(121, 121, 121, 0.9)",
+              ).isMixed
+            : getMixedValue(
+                (pos) => pos.backgroundColor,
+                "rgba(46, 46, 47, 0.9)",
+              ).isMixed
+        ) ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
-            getMixedValue(
-              (pos) => pos.backgroundColor,
-              "rgba(46, 46, 47, 0.9)"
-            ).value
+            getMixedValue((pos) => pos.backgroundColor, "rgba(46, 46, 47, 0.9)")
+              .value
           }
           activeValue={
             getMixedValue(
               (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-              "rgba(121, 121, 121, 0.9)"
+              "rgba(121, 121, 121, 0.9)",
             ).value
           }
           showStateTabs
@@ -273,28 +441,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
       {/* 테두리 색상 */}
       <PropertyRow label={t("propertiesPanel.borderColor") || "테두리 색상"}>
-        {(colorState === "active"
-          ? getMixedValue(
-              (pos) => pos.activeBorderColor ?? pos.borderColor,
-              "rgba(255, 255, 255, 0.9)"
-            ).isMixed
-          : getMixedValue(
-              (pos) => pos.borderColor,
-              "rgba(113, 113, 113, 0.9)"
-            ).isMixed) ? (
+        {(
+          colorState === "active"
+            ? getMixedValue(
+                (pos) => pos.activeBorderColor ?? pos.borderColor,
+                "rgba(255, 255, 255, 0.9)",
+              ).isMixed
+            : getMixedValue(
+                (pos) => pos.borderColor,
+                "rgba(113, 113, 113, 0.9)",
+              ).isMixed
+        ) ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
-            getMixedValue(
-              (pos) => pos.borderColor,
-              "rgba(113, 113, 113, 0.9)"
-            ).value
+            getMixedValue((pos) => pos.borderColor, "rgba(113, 113, 113, 0.9)")
+              .value
           }
           activeValue={
             getMixedValue(
               (pos) => pos.activeBorderColor ?? pos.borderColor,
-              "rgba(255, 255, 255, 0.9)"
+              "rgba(255, 255, 255, 0.9)",
             ).value
           }
           showStateTabs
@@ -304,7 +472,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           onChangeComplete={(color) =>
             handleBatchStyleChangeComplete("borderColor", color)
           }
-          onActiveChange={(color) => handleBatchStyleChange("activeBorderColor", color)}
+          onActiveChange={(color) =>
+            handleBatchStyleChange("activeBorderColor", color)
+          }
           onActiveChangeComplete={(color) =>
             handleBatchStyleChangeComplete("activeBorderColor", color)
           }
@@ -365,12 +535,17 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
           {(() => {
             const { isMixed, value } = getDisplayTextMixed();
-            const displayTextValue = getMixedValue((pos) => pos.displayText, "").value;
+            const displayTextValue = getMixedValue(
+              (pos) => pos.displayText,
+              "",
+            ).value;
             // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
             return (
               <TextInput
                 value={isMixed ? "" : displayTextValue}
-                onChange={(v) => handleBatchStyleChangeComplete("displayText", v)}
+                onChange={(v) =>
+                  handleBatchStyleChangeComplete("displayText", v)
+                }
                 placeholder={isMixed ? "Mixed" : value}
                 width="54px"
                 isMixed={isMixed}
@@ -379,6 +554,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           })()}
         </PropertyRow>
       )}
+
+      {/* 폰트 */}
+      <PropertyRow label={t("propertiesPanel.font") || "폰트"}>
+        {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
+          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+        ) : null}
+        <button
+          ref={fontButtonRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            showFontPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => setShowFontPicker(!showFontPicker)}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
 
       {/* 글꼴 크기 */}
       <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>
@@ -398,13 +590,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
       {/* 글꼴 색상 */}
       <PropertyRow label={t("propertiesPanel.fontColor") || "글꼴 색상"}>
-        {(colorState === "active"
-          ? getMixedValue(
-              (pos) => pos.activeFontColor ?? pos.fontColor,
-              "#FFFFFF"
-            ).isMixed
-          : getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
-              .isMixed) ? (
+        {(
+          colorState === "active"
+            ? getMixedValue(
+                (pos) => pos.activeFontColor ?? pos.fontColor,
+                "#FFFFFF",
+              ).isMixed
+            : getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
+                .isMixed
+        ) ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
@@ -415,7 +609,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           activeValue={
             getMixedValue(
               (pos) => pos.activeFontColor ?? pos.fontColor,
-              "#FFFFFF"
+              "#FFFFFF",
             ).value
           }
           showStateTabs
@@ -425,7 +619,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           onChangeComplete={(color) =>
             handleBatchStyleChangeComplete("fontColor", color)
           }
-          onActiveChange={(color) => handleBatchStyleChange("activeFontColor", color)}
+          onActiveChange={(color) =>
+            handleBatchStyleChange("activeFontColor", color)
+          }
           onActiveChangeComplete={(color) =>
             handleBatchStyleChangeComplete("activeFontColor", color)
           }
@@ -470,9 +666,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               {t("propertiesPanel.useInlineStyles") || "인라인 스타일 우선"}
             </p>
             <Checkbox
-              checked={
-                getMixedValue((pos) => pos.useInlineStyles, false).value
-              }
+              checked={getMixedValue((pos) => pos.useInlineStyles, false).value}
               onChange={() => {
                 const currentValue = getMixedValue(
                   (pos) => pos.useInlineStyles,
@@ -507,6 +701,34 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             />
           </PropertyRow>
         </>
+      )}
+
+      {/* FontPicker */}
+      {showFontPicker && (
+        <FontPicker
+          open={true}
+          referenceRef={fontButtonRef}
+          panelElement={panelElement}
+          selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
+          onFontSelect={(fontName) => {
+            handleBatchStyleChangeComplete("fontFamily", fontName);
+          }}
+          onClose={() => setShowFontPicker(false)}
+          onOpenManager={() => {
+            setShowFontPicker(false);
+            setShowFontManager(true);
+          }}
+          interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* FontManagerModal */}
+      {showFontManager && (
+        <FontManagerModal
+          isOpen={showFontManager}
+          onClose={() => setShowFontManager(false)}
+          t={t}
+        />
       )}
     </>
   );

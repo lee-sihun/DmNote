@@ -1,5 +1,9 @@
 import { useCallback } from "react";
-import type { KeyPosition, NoteColor, KeyCounterSettings } from "@src/types/keys";
+import type {
+  KeyPosition,
+  NoteColor,
+  KeyCounterSettings,
+} from "@src/types/keys";
 import { normalizeCounterSettings } from "@src/types/keys";
 import type { StatItemPosition } from "@src/types/statItems";
 
@@ -31,10 +35,7 @@ interface UseBatchHandlersProps {
   onStatBatchUpdate?: (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
   ) => void;
-  onStatPreview?: (
-    index: number,
-    updates: Partial<StatItemPosition>,
-  ) => void;
+  onStatPreview?: (index: number, updates: Partial<StatItemPosition>) => void;
   onStatBatchPreview?: (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
   ) => void;
@@ -54,7 +55,9 @@ export function useBatchHandlers({
   onStatPreview,
   onStatBatchPreview,
 }: UseBatchHandlersProps) {
-  const selectedKeys = selectedKeyLikeElements.filter((el) => el.type === "key");
+  const selectedKeys = selectedKeyLikeElements.filter(
+    (el) => el.type === "key",
+  );
   const selectedStats = selectedKeyLikeElements.filter(
     (el) => el.type === "stat",
   );
@@ -68,7 +71,10 @@ export function useBatchHandlers({
   );
 
   const dispatchKeyUpdates = useCallback(
-    (updates: Array<{ index: number } & Partial<KeyPosition>>, kind: "preview" | "commit") => {
+    (
+      updates: Array<{ index: number } & Partial<KeyPosition>>,
+      kind: "preview" | "commit",
+    ) => {
       if (updates.length === 0) return;
       if (kind === "preview") {
         if (onKeyBatchPreview) {
@@ -152,7 +158,10 @@ export function useBatchHandlers({
           const index = el.index!;
           const pos = currentKeys[index];
           if (pos) {
-            if (property === "backgroundColor" && pos.activeBackgroundColor == null) {
+            if (
+              property === "backgroundColor" &&
+              pos.activeBackgroundColor == null
+            ) {
               return {
                 index,
                 backgroundColor: value,
@@ -167,18 +176,25 @@ export function useBatchHandlers({
                 index,
                 borderColor: value,
                 activeBorderColor:
-                  pos.activeBorderColor ?? pos.borderColor ?? DEFAULT_ACTIVE_BORDER_COLOR,
+                  pos.activeBorderColor ??
+                  pos.borderColor ??
+                  DEFAULT_ACTIVE_BORDER_COLOR,
               };
             }
             if (property === "fontColor" && pos.activeFontColor == null) {
               return {
                 index,
                 fontColor: value,
-                activeFontColor: pos.activeFontColor ?? pos.fontColor ?? DEFAULT_ACTIVE_FONT_COLOR,
+                activeFontColor:
+                  pos.activeFontColor ??
+                  pos.fontColor ??
+                  DEFAULT_ACTIVE_FONT_COLOR,
               };
             }
           }
-          return { index, [property]: value } as { index: number } & Partial<KeyPosition>;
+          return { index, [property]: value } as {
+            index: number;
+          } & Partial<KeyPosition>;
         });
       dispatchKeyUpdates(keyUpdates, "commit");
 
@@ -188,7 +204,10 @@ export function useBatchHandlers({
           const index = el.index!;
           const pos = currentStats[index];
           if (pos) {
-            if (property === "backgroundColor" && pos.activeBackgroundColor == null) {
+            if (
+              property === "backgroundColor" &&
+              pos.activeBackgroundColor == null
+            ) {
               return {
                 index,
                 backgroundColor: value,
@@ -203,14 +222,19 @@ export function useBatchHandlers({
                 index,
                 borderColor: value,
                 activeBorderColor:
-                  pos.activeBorderColor ?? pos.borderColor ?? DEFAULT_ACTIVE_BORDER_COLOR,
+                  pos.activeBorderColor ??
+                  pos.borderColor ??
+                  DEFAULT_ACTIVE_BORDER_COLOR,
               } as any;
             }
             if (property === "fontColor" && pos.activeFontColor == null) {
               return {
                 index,
                 fontColor: value,
-                activeFontColor: pos.activeFontColor ?? pos.fontColor ?? DEFAULT_ACTIVE_FONT_COLOR,
+                activeFontColor:
+                  pos.activeFontColor ??
+                  pos.fontColor ??
+                  DEFAULT_ACTIVE_FONT_COLOR,
               } as any;
             }
           }
@@ -231,7 +255,9 @@ export function useBatchHandlers({
 
   // 정렬 핸들러
   const handleBatchAlign = useCallback(
-    (direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom") => {
+    (
+      direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
+    ) => {
       const elements = selectedKeyLikeElements
         .filter((el) => el.index !== undefined)
         .map((el) => {
@@ -247,8 +273,16 @@ export function useBatchHandlers({
           };
         })
         .filter(
-          (d): d is { type: KeyLikeType; index: number; x: number; y: number; width: number; height: number } =>
-            d !== null,
+          (
+            d,
+          ): d is {
+            type: KeyLikeType;
+            index: number;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          } => d !== null,
         );
 
       if (elements.length < 2) return;
@@ -258,11 +292,17 @@ export function useBatchHandlers({
       const minY = Math.min(...elements.map((k) => k.y));
       const maxY = Math.max(...elements.map((k) => k.y + k.height));
 
-      let updates: Array<{ type: KeyLikeType; index: number } & Partial<KeyPosition>> = [];
+      let updates: Array<
+        { type: KeyLikeType; index: number } & Partial<KeyPosition>
+      > = [];
 
       switch (direction) {
         case "left":
-          updates = elements.map((k) => ({ type: k.type, index: k.index, dx: minX }));
+          updates = elements.map((k) => ({
+            type: k.type,
+            index: k.index,
+            dx: minX,
+          }));
           break;
         case "centerH": {
           const centerX = (minX + maxX) / 2;
@@ -281,7 +321,11 @@ export function useBatchHandlers({
           }));
           break;
         case "top":
-          updates = elements.map((k) => ({ type: k.type, index: k.index, dy: minY }));
+          updates = elements.map((k) => ({
+            type: k.type,
+            index: k.index,
+            dy: minY,
+          }));
           break;
         case "centerV": {
           const centerY = (minY + maxY) / 2;
@@ -315,7 +359,12 @@ export function useBatchHandlers({
       dispatchKeyUpdates(keyUpdates, "commit");
       dispatchStatUpdates(statUpdates, "commit");
     },
-    [dispatchKeyUpdates, dispatchStatUpdates, getKeyLikePosition, selectedKeyLikeElements],
+    [
+      dispatchKeyUpdates,
+      dispatchStatUpdates,
+      getKeyLikePosition,
+      selectedKeyLikeElements,
+    ],
   );
 
   // 분배 핸들러
@@ -336,13 +385,23 @@ export function useBatchHandlers({
           };
         })
         .filter(
-          (d): d is { type: KeyLikeType; index: number; x: number; y: number; width: number; height: number } =>
-            d !== null,
+          (
+            d,
+          ): d is {
+            type: KeyLikeType;
+            index: number;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          } => d !== null,
         );
 
       if (elements.length < 3) return;
 
-      let updates: Array<{ type: KeyLikeType; index: number } & Partial<KeyPosition>> = [];
+      let updates: Array<
+        { type: KeyLikeType; index: number } & Partial<KeyPosition>
+      > = [];
 
       if (direction === "horizontal") {
         const sorted = [...elements].sort((a, b) => a.x - b.x);
@@ -388,7 +447,12 @@ export function useBatchHandlers({
       dispatchKeyUpdates(keyUpdates, "commit");
       dispatchStatUpdates(statUpdates, "commit");
     },
-    [dispatchKeyUpdates, dispatchStatUpdates, getKeyLikePosition, selectedKeyLikeElements],
+    [
+      dispatchKeyUpdates,
+      dispatchStatUpdates,
+      getKeyLikePosition,
+      selectedKeyLikeElements,
+    ],
   );
 
   // 일괄 크기 변경 핸들러
@@ -434,12 +498,17 @@ export function useBatchHandlers({
         .map((el) => {
           const pos = statPositions[selectedKeyType]?.[el.index!];
           if (!pos) return null;
-          const currentSettings = normalizeCounterSettings((pos as any).counter);
+          const currentSettings = normalizeCounterSettings(
+            (pos as any).counter,
+          );
           const newSettings = { ...currentSettings, ...updates };
           return { index: el.index!, counter: newSettings } as any;
         })
         .filter((update) => update !== null) as Array<
-        { index: number; counter: KeyCounterSettings } & Partial<StatItemPosition>
+        {
+          index: number;
+          counter: KeyCounterSettings;
+        } & Partial<StatItemPosition>
       >;
       dispatchStatUpdates(statUpdates as any, "commit");
     },
@@ -458,8 +527,16 @@ export function useBatchHandlers({
   const handleBatchNoteColorChange = useCallback(
     (newColor: any) => {
       let colorValue: NoteColor;
-      if (newColor && typeof newColor === "object" && newColor.type === "gradient") {
-        colorValue = { type: "gradient", top: newColor.top, bottom: newColor.bottom };
+      if (
+        newColor &&
+        typeof newColor === "object" &&
+        newColor.type === "gradient"
+      ) {
+        colorValue = {
+          type: "gradient",
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
       } else {
         colorValue = newColor;
       }
@@ -477,8 +554,16 @@ export function useBatchHandlers({
   const handleBatchNoteColorChangeComplete = useCallback(
     (newColor: any) => {
       let colorValue: NoteColor;
-      if (newColor && typeof newColor === "object" && newColor.type === "gradient") {
-        colorValue = { type: "gradient", top: newColor.top, bottom: newColor.bottom };
+      if (
+        newColor &&
+        typeof newColor === "object" &&
+        newColor.type === "gradient"
+      ) {
+        colorValue = {
+          type: "gradient",
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
       } else {
         colorValue = newColor;
       }
@@ -496,8 +581,16 @@ export function useBatchHandlers({
   const handleBatchGlowColorChange = useCallback(
     (newColor: any) => {
       let colorValue: NoteColor;
-      if (newColor && typeof newColor === "object" && newColor.type === "gradient") {
-        colorValue = { type: "gradient", top: newColor.top, bottom: newColor.bottom };
+      if (
+        newColor &&
+        typeof newColor === "object" &&
+        newColor.type === "gradient"
+      ) {
+        colorValue = {
+          type: "gradient",
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
       } else {
         colorValue = newColor;
       }
@@ -515,8 +608,16 @@ export function useBatchHandlers({
   const handleBatchGlowColorChangeComplete = useCallback(
     (newColor: any) => {
       let colorValue: NoteColor;
-      if (newColor && typeof newColor === "object" && newColor.type === "gradient") {
-        colorValue = { type: "gradient", top: newColor.top, bottom: newColor.bottom };
+      if (
+        newColor &&
+        typeof newColor === "object" &&
+        newColor.type === "gradient"
+      ) {
+        colorValue = {
+          type: "gradient",
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
       } else {
         colorValue = newColor;
       }
@@ -543,4 +644,3 @@ export function useBatchHandlers({
     handleBatchGlowColorChangeComplete,
   };
 }
-
