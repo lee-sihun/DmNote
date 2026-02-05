@@ -102,7 +102,9 @@ const StatCounter = memo(({ position, previewValue = 0 }) => {
         data-counter-state="inactive"
         style={{
           fontSize: `${counterSettings.fontSize ?? 16}px`,
-          fontFamily: counterSettings.fontFamily || undefined,
+          fontFamily: counterSettings.fontFamily
+            ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
+            : undefined,
           fontWeight: counterSettings.fontWeight ?? 400,
           fontStyle: counterSettings.fontItalic ? "italic" : "normal",
           textDecoration,

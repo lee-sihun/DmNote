@@ -82,7 +82,9 @@ export default function CountDisplay({
         transform: `scale(${scale})`,
         transformOrigin: "center bottom",
         fontSize: `${Number.isFinite(fontSize) ? fontSize : 16}px`,
-        fontFamily: fontFamily || undefined,
+        fontFamily: fontFamily
+          ? `"${fontFamily}", "SUIT-Regular", sans-serif`
+          : undefined,
         fontWeight: Number.isFinite(fontWeight) ? fontWeight : 400,
         fontStyle: fontItalic ? "italic" : "normal",
         textDecoration,

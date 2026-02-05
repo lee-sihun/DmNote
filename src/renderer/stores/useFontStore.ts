@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   BUILTIN_FONTS,
   DEFAULT_FONT_SETTINGS,
@@ -117,15 +118,49 @@ export function removeFontCSS(fontId: string): void {
   }
 }
 
+function escapeCssString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function getFontFormatFromPath(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "otf":
+      return "opentype";
+    case "woff":
+      return "woff";
+    case "woff2":
+      return "woff2";
+    case "ttf":
+    default:
+      return "truetype";
+  }
+}
+
+function buildLocalFontFaceCSS(fontFamily: string, localPath: string): string {
+  const safeFamily = escapeCssString(fontFamily);
+  const url = convertFileSrc(localPath);
+  const format = getFontFormatFromPath(localPath);
+  return `@font-face {\n  font-family: '${safeFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
+}
+
 // 활성화된 폰트 CSS를 DOM과 동기화 (추가/제거 모두)
 export function syncFontCSS(): void {
   if (typeof document === "undefined") return;
   const { getAllFonts } = useFontStore.getState();
-  const fonts = getAllFonts().filter((font) => font.enabled && font.cssContent);
+  const fonts = getAllFonts().filter((font) => {
+    if (!font.enabled) return false;
+    if (font.type === "local") return !!font.localPath;
+    return !!font.cssContent;
+  });
 
   const desiredIds = new Set<string>();
   fonts.forEach((font) => {
-    injectFontCSS(font.id, font.cssContent as string);
+    const css =
+      font.type === "local" && font.localPath
+        ? buildLocalFontFaceCSS(font.name, font.localPath)
+        : (font.cssContent as string);
+    injectFontCSS(font.id, css);
     desiredIds.add(font.id);
   });
 
@@ -135,6 +170,31 @@ export function syncFontCSS(): void {
       el.remove();
     }
   });
+
+  // Warm up font faces to minimize FOUT when opening the picker or applying fonts.
+  void preloadFontFaces(fonts.map((font) => font.name));
+}
+
+const loadedFontFamilies = new Set<string>();
+
+async function preloadFontFaces(families: Array<string | undefined | null>) {
+  if (typeof document === "undefined") return;
+  if (!("fonts" in document)) return;
+  const fontSet = (document as Document & { fonts: FontFaceSet }).fonts;
+  const pending = families
+    .filter((name): name is string => !!name && !loadedFontFamilies.has(name))
+    .map((name) =>
+      fontSet
+        .load(`16px "${name}"`)
+        .then(() => {
+          loadedFontFamilies.add(name);
+        })
+        .catch(() => {}),
+    );
+
+  if (pending.length) {
+    await Promise.all(pending);
+  }
 }
 
 // 모든 활성화된 폰트 CSS를 로드하는 함수

@@ -151,7 +151,9 @@ export default memo(function StatItem({
       willChange: "auto",
       contain: "layout style paint",
       fontSize: fontSize ? `${fontSize}px` : undefined,
-      fontFamily: fontFamily || undefined,
+      fontFamily: fontFamily
+        ? `"${fontFamily}", "SUIT-Regular", sans-serif`
+        : undefined,
       fontWeight: fontWeight ?? 700,
       fontStyle: fontItalic ? "italic" : "normal",
       textDecoration:
@@ -196,7 +198,9 @@ export default memo(function StatItem({
         data-counter-state="inactive"
         style={{
           fontSize: `${counterSettings.fontSize ?? 16}px`,
-          fontFamily: counterSettings.fontFamily || undefined,
+          fontFamily: counterSettings.fontFamily
+            ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
+            : undefined,
           fontWeight: counterSettings.fontWeight ?? 400,
           fontStyle: counterSettings.fontItalic ? "italic" : "normal",
           textDecoration: counterTextDecoration,
