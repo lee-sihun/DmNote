@@ -67,7 +67,7 @@ export function useKeyManager() {
   const setKeyMappings = useKeyStore((state) => state.setKeyMappings);
   const setPositions = useKeyStore((state) => state.setPositions);
   const setLocalUpdateInProgress = useKeyStore(
-    (state) => state.setLocalUpdateInProgress
+    (state) => state.setLocalUpdateInProgress,
   );
 
   const pushState = useHistoryStore((state) => state.pushState);
@@ -80,10 +80,10 @@ export function useKeyManager() {
 
   // 플러그인 요소 스토어
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
   const setPluginElements = usePluginDisplayElementStore(
-    (state) => state.setElements
+    (state) => state.setElements,
   );
 
   // 히스토리에 현재 상태 저장 (플러그인 요소 포함)
@@ -109,7 +109,7 @@ export function useKeyManager() {
               dx,
               dy,
             }
-          : pos
+          : pos,
       ),
     };
     setPositions(nextPositions);
@@ -129,7 +129,7 @@ export function useKeyManager() {
       const updatedMappings: KeyMappings = {
         ...keyMappings,
         [selectedKeyType]: mapping.map((value, idx) =>
-          idx === selectedKey.index ? keyData.key : value
+          idx === selectedKey.index ? keyData.key : value,
         ),
       };
 
@@ -163,7 +163,7 @@ export function useKeyManager() {
                   true,
                 className: keyData.className ?? value.className ?? "",
               }
-            : value
+            : value,
         ),
       };
 
@@ -354,7 +354,7 @@ export function useKeyManager() {
     noteGlowEnabled: boolean,
     noteGlowSize: number,
     noteGlowOpacity: number,
-    noteGlowColor: NoteColor | undefined
+    noteGlowColor: NoteColor | undefined,
   ) => {
     // 노트 색상 설정 모달에서 적용하기 클릭 시 호출됨
     saveToHistory();
@@ -378,7 +378,7 @@ export function useKeyManager() {
               noteGlowOpacity,
               noteGlowColor: noteGlowColor ?? noteColor,
             }
-          : pos
+          : pos,
       ),
     };
 
@@ -398,7 +398,7 @@ export function useKeyManager() {
     noteGlowOpacity: number,
     noteGlowColor: NoteColor | undefined,
     noteAutoYCorrection?: boolean,
-    noteEffectEnabled?: boolean
+    noteEffectEnabled?: boolean,
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
@@ -422,7 +422,7 @@ export function useKeyManager() {
                 noteAutoYCorrection ?? pos.noteAutoYCorrection,
               noteEffectEnabled: noteEffectEnabled ?? pos.noteEffectEnabled,
             }
-          : pos
+          : pos,
       ),
     };
 
@@ -458,7 +458,7 @@ export function useKeyManager() {
       imageFit: ImageFit;
       useInlineStyles: boolean;
       displayText: string;
-    }>
+    }>,
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
@@ -560,7 +560,7 @@ export function useKeyManager() {
                   ? updates.displayText
                   : pos.displayText,
             }
-          : pos
+          : pos,
       ),
     };
 
@@ -597,7 +597,7 @@ export function useKeyManager() {
       displayText?: string;
       noteColor?: NoteColor;
       noteGlowColor?: NoteColor;
-    }>
+    }>,
   ) => {
     if (updates.length === 0) return;
 
@@ -720,7 +720,7 @@ export function useKeyManager() {
 
   const handleCounterSettingsUpdate = (
     index: number,
-    payload: CounterUpdatePayload
+    payload: CounterUpdatePayload,
   ) => {
     // 카운터 설정 모달에서 적용하기 클릭 시 호출됨
     saveToHistory();
@@ -740,7 +740,7 @@ export function useKeyManager() {
               ...pos,
               counter: normalized,
             }
-          : pos
+          : pos,
       ),
     };
 
@@ -753,7 +753,7 @@ export function useKeyManager() {
   // 미리보기 전용: 오버레이 실시간 업데이트를 위해 로컬 스토어만 갱신, 영구 저장은 하지 않음
   const handleCounterSettingsPreview = (
     index: number,
-    payload: CounterUpdatePayload
+    payload: CounterUpdatePayload,
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
@@ -770,7 +770,7 @@ export function useKeyManager() {
               ...pos,
               counter: normalized,
             }
-          : pos
+          : pos,
       ),
     };
 
@@ -825,7 +825,7 @@ export function useKeyManager() {
     const updatedPositions: KeyPositions = {
       ...positions,
       [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZIndex + 1 } : p
+        i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
       ),
     };
 
@@ -861,7 +861,7 @@ export function useKeyManager() {
     const updatedPositions: KeyPositions = {
       ...positions,
       [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: minZIndex - 1 } : p
+        i === index ? { ...p, zIndex: minZIndex - 1 } : p,
       ),
     };
 
@@ -944,7 +944,7 @@ export function useKeyManager() {
     const updatedPositions: KeyPositions = {
       ...positions,
       [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: newZIndex } : p
+        i === index ? { ...p, zIndex: newZIndex } : p,
       ),
     };
 
@@ -1027,7 +1027,7 @@ export function useKeyManager() {
     const updatedPositions: KeyPositions = {
       ...positions,
       [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: newZIndex } : p
+        i === index ? { ...p, zIndex: newZIndex } : p,
       ),
     };
 
@@ -1067,7 +1067,7 @@ export function useKeyManager() {
         keyMappings,
         positions,
         statPositions,
-        currentPluginElements
+        currentPluginElements,
       );
 
       if (previousState) {
@@ -1095,7 +1095,7 @@ export function useKeyManager() {
             (savedEl) => {
               // 같은 fullId를 가진 현재 요소 찾기
               const currentEl = currentElements.find(
-                (el) => el.fullId === savedEl.fullId
+                (el) => el.fullId === savedEl.fullId,
               );
               if (currentEl) {
                 // 현재 요소의 핸들러 정보 유지, 저장된 위치/설정으로 복원
@@ -1123,17 +1123,17 @@ export function useKeyManager() {
 
               // 복원 함수가 없으면 그대로 반환 (핸들러 없이)
               return savedEl;
-            }
+            },
           );
 
           // 현재 있지만 저장된 상태에 없는 요소 제거 (추가된 요소 취소)
           const savedFullIds = new Set(
-            previousState.pluginElements.map((el) => el.fullId)
+            previousState.pluginElements.map((el) => el.fullId),
           );
           const finalElements = restoredElements.filter(
             (el) =>
               savedFullIds.has(el.fullId) ||
-              currentElements.some((cur) => cur.fullId === el.fullId)
+              currentElements.some((cur) => cur.fullId === el.fullId),
           );
 
           setPluginElements(finalElements as any);
@@ -1204,7 +1204,7 @@ export function useKeyManager() {
         keyMappings,
         positions,
         statPositions,
-        currentPluginElements
+        currentPluginElements,
       );
 
       if (nextState) {
@@ -1231,7 +1231,7 @@ export function useKeyManager() {
           const restoredElements = nextState.pluginElements.map((savedEl) => {
             // 같은 fullId를 가진 현재 요소 찾기
             const currentEl = currentElements.find(
-              (el) => el.fullId === savedEl.fullId
+              (el) => el.fullId === savedEl.fullId,
             );
             if (currentEl) {
               // 현재 요소의 핸들러 정보 유지, 저장된 위치/설정으로 복원
@@ -1263,10 +1263,10 @@ export function useKeyManager() {
 
           // 저장된 상태에 있는 요소만 유지
           const savedFullIds = new Set(
-            nextState.pluginElements.map((el) => el.fullId)
+            nextState.pluginElements.map((el) => el.fullId),
           );
           const finalElements = restoredElements.filter((el) =>
-            savedFullIds.has(el.fullId)
+            savedFullIds.has(el.fullId),
           );
 
           setPluginElements(finalElements as any);
@@ -1331,7 +1331,7 @@ export function useKeyManager() {
       const updatedMappings: KeyMappings = {
         ...keyMappings,
         [selectedKeyType]: mapping.map((key, i) =>
-          i === index ? newKey : key
+          i === index ? newKey : key,
         ),
       };
 
@@ -1340,7 +1340,7 @@ export function useKeyManager() {
         console.error("Failed to update key mapping", error);
       });
     },
-    [selectedKeyType, keyMappings, saveToHistory, setKeyMappings]
+    [selectedKeyType, keyMappings, saveToHistory, setKeyMappings],
   );
 
   // 속성 패널에서 인덱스로 키 속성 업데이트 (히스토리 포함)
@@ -1358,21 +1358,30 @@ export function useKeyManager() {
       const updatedPositions: KeyPositions = {
         ...currentPositions,
         [mode]: current.map((pos, i) =>
-          i === index ? { ...pos, ...updates } : pos
+          i === index ? { ...pos, ...updates } : pos,
         ),
       };
 
+      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
+      setLocalUpdateInProgress(true);
       setPositions(updatedPositions);
-      window.api.keys.updatePositions(updatedPositions).catch((error) => {
-        console.error("Failed to update key style", error);
-      });
+      window.api.keys
+        .updatePositions(updatedPositions)
+        .catch((error) => {
+          console.error("Failed to update key style", error);
+        })
+        .finally(() => {
+          setLocalUpdateInProgress(false);
+        });
     },
-    [selectedKeyType, saveToHistory, setPositions]
+    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
   );
 
   // 다중 선택 시 여러 키를 한 번에 업데이트 (배치 업데이트)
   const handleKeyBatchStyleUpdate = useCallback(
-    (updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>) => {
+    (
+      updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
+    ) => {
       if (updates.length === 0) return;
 
       const state = useKeyStore.getState();
@@ -1381,7 +1390,10 @@ export function useKeyManager() {
       const current = currentPositions[mode] || [];
 
       // 업데이트할 인덱스들을 Map으로 변환하여 O(1) 조회
-      const updateMap = new Map<number, Partial<KeyPositions[string][number]>>();
+      const updateMap = new Map<
+        number,
+        Partial<KeyPositions[string][number]>
+      >();
       for (const { index, ...rest } of updates) {
         if (current[index]) {
           updateMap.set(index, rest);
@@ -1401,12 +1413,19 @@ export function useKeyManager() {
         }),
       };
 
+      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
+      setLocalUpdateInProgress(true);
       setPositions(updatedPositions);
-      window.api.keys.updatePositions(updatedPositions).catch((error) => {
-        console.error("Failed to batch update key styles", error);
-      });
+      window.api.keys
+        .updatePositions(updatedPositions)
+        .catch((error) => {
+          console.error("Failed to batch update key styles", error);
+        })
+        .finally(() => {
+          setLocalUpdateInProgress(false);
+        });
     },
-    [selectedKeyType, saveToHistory, setPositions]
+    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
   );
 
   return {

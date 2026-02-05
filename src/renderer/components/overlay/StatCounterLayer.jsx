@@ -82,7 +82,7 @@ const StatCounter = memo(({ position, statType }) => {
     dy,
     width,
     height,
-    counterSettings.gap
+    counterSettings.gap,
   );
 
   const fillColor = counterSettings.fill.idle;
@@ -104,6 +104,7 @@ const StatCounter = memo(({ position, statType }) => {
         active={false}
         offsetY={offsetY}
         fontSize={counterSettings.fontSize}
+        fontFamily={counterSettings.fontFamily}
         fontWeight={counterSettings.fontWeight}
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}
@@ -119,7 +120,10 @@ export default function StatCounterLayer({ positions }) {
   }
 
   return (
-    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 12 }}>
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{ zIndex: 12 }}
+    >
       {positions.map((position, index) => {
         if (!position) return null;
         if (position.hidden) return null;
@@ -134,4 +138,3 @@ export default function StatCounterLayer({ positions }) {
     </div>
   );
 }
-

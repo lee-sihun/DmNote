@@ -30,6 +30,7 @@ export default memo(function StatItem({
     borderRadius,
     fontSize,
     fontColor,
+    fontFamily,
     idleImageFit,
     imageFit,
     useInlineStyles,
@@ -66,11 +67,13 @@ export default memo(function StatItem({
     counterSettings.placement === "inside";
 
   const counterValue = showInsideCounter
-    ? ((getStatValueSignal(statType).value ?? 0) | 0)
+    ? (getStatValueSignal(statType).value ?? 0) | 0
     : 0;
 
   const keyStyle = useMemo(() => {
-    const defaultBgColor = currentImage ? "transparent" : "rgba(46, 46, 47, 0.9)";
+    const defaultBgColor = currentImage
+      ? "transparent"
+      : "rgba(46, 46, 47, 0.9)";
     const defaultBorderColor = "rgba(113, 113, 113, 0.9)";
     const defaultTextColor = "rgba(121, 121, 121, 0.9)";
 
@@ -136,7 +139,7 @@ export default memo(function StatItem({
       position: "relative",
       zIndex: 0,
     }),
-    [effectiveImageFit]
+    [effectiveImageFit],
   );
 
   const textStyle = useMemo(() => {
@@ -148,16 +151,26 @@ export default memo(function StatItem({
       willChange: "auto",
       contain: "layout style paint",
       fontSize: fontSize ? `${fontSize}px` : undefined,
+      fontFamily: fontFamily || undefined,
       fontWeight: fontWeight ?? 700,
       fontStyle: fontItalic ? "italic" : "normal",
       textDecoration:
         textDecorations.length > 0 ? textDecorations.join(" ") : "none",
     };
-  }, [fontSize, fontWeight, fontItalic, fontUnderline, fontStrikethrough]);
+  }, [
+    fontSize,
+    fontFamily,
+    fontWeight,
+    fontItalic,
+    fontUnderline,
+    fontStrikethrough,
+  ]);
 
   const counterFillColor = counterSettings.fill.idle;
   const counterStrokeColor = counterSettings.stroke.idle;
-  const contentGap = Number.isFinite(counterSettings.gap) ? counterSettings.gap : 6;
+  const contentGap = Number.isFinite(counterSettings.gap)
+    ? counterSettings.gap
+    : 6;
   const fillColorCss = toCssRgba(counterFillColor, "#FFFFFF");
   const strokeColorCss = toCssRgba(counterStrokeColor, "transparent");
 
@@ -170,7 +183,8 @@ export default memo(function StatItem({
 
     const counterDecorations = [];
     if (counterSettings.fontUnderline) counterDecorations.push("underline");
-    if (counterSettings.fontStrikethrough) counterDecorations.push("line-through");
+    if (counterSettings.fontStrikethrough)
+      counterDecorations.push("line-through");
     const counterTextDecoration =
       counterDecorations.length > 0 ? counterDecorations.join(" ") : "none";
 
@@ -182,6 +196,7 @@ export default memo(function StatItem({
         data-counter-state="inactive"
         style={{
           fontSize: `${counterSettings.fontSize ?? 16}px`,
+          fontFamily: counterSettings.fontFamily || undefined,
           fontWeight: counterSettings.fontWeight ?? 400,
           fontStyle: counterSettings.fontItalic ? "italic" : "normal",
           textDecoration: counterTextDecoration,
@@ -221,20 +236,30 @@ export default memo(function StatItem({
     } w-full h-full items-center pointer-events-none select-none justify-center`;
 
     return (
-      <div className={containerClass} style={{ padding: "0px", gap: `${contentGap}px` }}>
+      <div
+        className={containerClass}
+        style={{ padding: "0px", gap: `${contentGap}px` }}
+      >
         {elements}
       </div>
     );
   };
 
   return (
-    <div className={`absolute cursor-pointer ${className || ""}`} style={keyStyle} data-state="inactive">
+    <div
+      className={`absolute cursor-pointer ${className || ""}`}
+      style={keyStyle}
+      data-state="inactive"
+    >
       {currentImage ? (
         <img src={currentImage} alt="" style={imageStyle} draggable={false} />
       ) : showInsideCounter ? (
         renderInsideLayout()
       ) : (
-        <div className="flex items-center justify-center h-full font-bold" style={textStyle}>
+        <div
+          className="flex items-center justify-center h-full font-bold"
+          style={textStyle}
+        >
           {labelText}
         </div>
       )}

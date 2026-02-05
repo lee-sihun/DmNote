@@ -63,6 +63,15 @@ export type CssLoadResult = {
   path?: string;
 };
 
+// 폰트 타입
+export type FontLoadResult = {
+  success: boolean;
+  error?: string;
+  fontName?: string;
+  fontPath?: string;
+  cssContent?: string;
+};
+
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
@@ -627,7 +636,9 @@ export interface DMNoteAPI {
   statItems: {
     getPositions(): Promise<StatItemPositions>;
     updatePositions(positions: StatItemPositions): Promise<StatItemPositions>;
-    onPositionsChanged(listener: (positions: StatItemPositions) => void): Unsubscribe;
+    onPositionsChanged(
+      listener: (positions: StatItemPositions) => void,
+    ): Unsubscribe;
   };
   overlay: {
     get(): Promise<OverlayState>;
@@ -669,6 +680,9 @@ export interface DMNoteAPI {
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
+  };
+  font: {
+    load(): Promise<FontLoadResult>;
   };
   js: {
     get(): Promise<CustomJs>;

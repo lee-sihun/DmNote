@@ -84,7 +84,7 @@ const KeyCounter = memo(({ globalKey, position, mode }) => {
     dy,
     width,
     height,
-    counterSettings.gap
+    counterSettings.gap,
   );
 
   const fillColor = active
@@ -110,6 +110,7 @@ const KeyCounter = memo(({ globalKey, position, mode }) => {
         active={active}
         offsetY={offsetY}
         fontSize={counterSettings.fontSize}
+        fontFamily={counterSettings.fontFamily}
         fontWeight={counterSettings.fontWeight}
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}

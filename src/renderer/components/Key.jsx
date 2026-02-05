@@ -69,6 +69,7 @@ export default function DraggableKey({
     borderRadius,
     fontSize,
     fontColor,
+    fontFamily,
     idleImageFit,
     imageFit,
     useInlineStyles,
@@ -87,9 +88,9 @@ export default function DraggableKey({
 
   // 카운터 설정 정규화
   const counterSettings = normalizeCounterSettings(
-    counter ?? createDefaultCounterSettings()
+    counter ?? createDefaultCounterSettings(),
   );
-  
+
   // 카운터 표시 조건: 전역 활성화 + 개별 키 활성화 + inside 배치
   const showInsideCounter =
     counterEnabled &&
@@ -100,11 +101,13 @@ export default function DraggableKey({
   const { getOtherElements } = useSmartGuidesElements();
 
   // 그리드 스냅 크기 가져오기
-  const gridSnapSize = useSettingsStore((state) => state.gridSettings?.gridSnapSize || 5);
+  const gridSnapSize = useSettingsStore(
+    (state) => state.gridSettings?.gridSnapSize || 5,
+  );
 
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용)
   const isDraggingOrResizing = useGridSelectionStore(
-    (state) => state.isDraggingOrResizing
+    (state) => state.isDraggingOrResizing,
   );
 
   // 다중 선택 드래그 상태
@@ -206,10 +209,7 @@ export default function DraggableKey({
 
           // 선택된 다른 요소들도 제외 (자기 자신만 기준)
           const nonSelectedElements = otherElements.filter(
-            (el) =>
-              !selectedElements.some(
-                (sel) => sel.id === el.id
-              )
+            (el) => !selectedElements.some((sel) => sel.id === el.id),
           );
 
           const draggedBounds = calculateBounds(
@@ -217,7 +217,7 @@ export default function DraggableKey({
             newY,
             currentWidth,
             currentHeight,
-            elementId
+            elementId,
           );
 
           // 다중 선택 시 그룹 전체의 bounds 계산 (캔버스 중앙 스냅용)
@@ -234,16 +234,14 @@ export default function DraggableKey({
                   return draggedBounds;
                 }
                 // 다른 선택된 요소들은 otherElements에서 찾아서 이동량 적용
-                const found = otherElements.find(
-                  (el) => el.id === sel.id
-                );
+                const found = otherElements.find((el) => el.id === sel.id);
                 if (found) {
                   return calculateBounds(
                     found.left + rawDeltaX,
                     found.top + rawDeltaY,
                     found.width,
                     found.height,
-                    found.id
+                    found.id,
                   );
                 }
                 return null;
@@ -266,7 +264,7 @@ export default function DraggableKey({
                 {
                   groupBounds,
                   disableSpacing: !spacingGuidesEnabled,
-                }
+                },
               )
             : null;
 
@@ -322,14 +320,14 @@ export default function DraggableKey({
                         : 0),
                     groupBounds.width,
                     groupBounds.height,
-                    "group"
+                    "group",
                   )
                 : calculateBounds(
                     finalX,
                     finalY,
                     currentWidth,
                     currentHeight,
-                    elementId
+                    elementId,
                   );
             smartGuidesStore.setDraggedBounds(displayBounds);
             smartGuidesStore.setActiveGuides(snapResult.guides);
@@ -402,14 +400,14 @@ export default function DraggableKey({
       index,
       getOtherElements,
       selectedElements,
-    ]
+    ],
   );
 
   const handleClick = (e) => {
     // 선택된 상태에서 Ctrl+클릭으로 선택 해제
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
-    
+
     if (isSelectionMode && isPrimaryModifierPressed && onCtrlClick) {
       e.stopPropagation();
       onCtrlClick(e);
@@ -468,15 +466,28 @@ export default function DraggableKey({
       width: `${width}px`,
       height: `${height}px`,
       transform: `translate3d(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)), 0)`,
-      backgroundColor: useInline && backgroundColor
-        ? backgroundColor
-        : `var(--key-bg, ${inactiveImage ? "transparent" : (backgroundColor || "rgba(46, 46, 47, 0.9)")})`,
-      borderRadius: useInline && borderRadius != null
-        ? `${borderRadius}px`
-        : `var(--key-radius, ${borderRadius != null ? `${borderRadius}px` : "10px"})`,
-      border: useInline && (borderColor || borderWidth != null)
-        ? `${borderWidth ?? 3}px solid ${borderColor || "rgba(113, 113, 113, 0.9)"}`
-        : `var(--key-border, ${borderWidth ?? 3}px solid ${borderColor || "rgba(113, 113, 113, 0.9)"})`,
+      backgroundColor:
+        useInline && backgroundColor
+          ? backgroundColor
+          : `var(--key-bg, ${
+              inactiveImage
+                ? "transparent"
+                : backgroundColor || "rgba(46, 46, 47, 0.9)"
+            })`,
+      borderRadius:
+        useInline && borderRadius != null
+          ? `${borderRadius}px`
+          : `var(--key-radius, ${
+              borderRadius != null ? `${borderRadius}px` : "10px"
+            })`,
+      border:
+        useInline && (borderColor || borderWidth != null)
+          ? `${borderWidth ?? 3}px solid ${
+              borderColor || "rgba(113, 113, 113, 0.9)"
+            }`
+          : `var(--key-border, ${borderWidth ?? 3}px solid ${
+              borderColor || "rgba(113, 113, 113, 0.9)"
+            })`,
       overflow: "hidden",
       willChange: "transform",
       backfaceVisibility: "hidden",
@@ -487,7 +498,20 @@ export default function DraggableKey({
       boxSizing: "border-box",
       zIndex: position.zIndex ?? zIndex,
     }),
-    [renderDx, renderDy, width, height, inactiveImage, zIndex, position.zIndex, useInline, backgroundColor, borderColor, borderWidth, borderRadius]
+    [
+      renderDx,
+      renderDy,
+      width,
+      height,
+      inactiveImage,
+      zIndex,
+      position.zIndex,
+      useInline,
+      backgroundColor,
+      borderColor,
+      borderWidth,
+      borderRadius,
+    ],
   );
 
   const effectiveImageFit = idleImageFit || imageFit || "cover";
@@ -500,35 +524,46 @@ export default function DraggableKey({
       pointerEvents: "none",
       userSelect: "none",
     }),
-    [effectiveImageFit]
+    [effectiveImageFit],
   );
 
-  const textStyle = useMemo(
-    () => {
-      // text-decoration 조합
-      const textDecorations = [];
-      if (fontUnderline) textDecorations.push("underline");
-      if (fontStrikethrough) textDecorations.push("line-through");
+  const textStyle = useMemo(() => {
+    // text-decoration 조합
+    const textDecorations = [];
+    if (fontUnderline) textDecorations.push("underline");
+    if (fontStrikethrough) textDecorations.push("line-through");
 
-      return {
-        willChange: "auto",
-        contain: "layout style paint",
-        color: useInline && fontColor
+    return {
+      willChange: "auto",
+      contain: "layout style paint",
+      color:
+        useInline && fontColor
           ? fontColor
           : `var(--key-text-color, ${fontColor || "rgba(121, 121, 121, 0.9)"})`,
-        fontSize: fontSize ? `${fontSize}px` : undefined,
-        fontWeight: fontWeight ?? 700,
-        fontStyle: fontItalic ? "italic" : "normal",
-        textDecoration: textDecorations.length > 0 ? textDecorations.join(" ") : "none",
-      };
-    },
-    [useInline, fontColor, fontSize, fontWeight, fontItalic, fontUnderline, fontStrikethrough]
-  );
+      fontSize: fontSize ? `${fontSize}px` : undefined,
+      fontFamily: fontFamily || undefined,
+      fontWeight: fontWeight ?? 700,
+      fontStyle: fontItalic ? "italic" : "normal",
+      textDecoration:
+        textDecorations.length > 0 ? textDecorations.join(" ") : "none",
+    };
+  }, [
+    useInline,
+    fontColor,
+    fontSize,
+    fontFamily,
+    fontWeight,
+    fontItalic,
+    fontUnderline,
+    fontStrikethrough,
+  ]);
 
   // 카운터 미리보기 렌더링 (Grid 편집용)
   const counterFillColor = counterSettings.fill.idle;
   const counterStrokeColor = counterSettings.stroke.idle;
-  const contentGap = Number.isFinite(counterSettings.gap) ? counterSettings.gap : 6;
+  const contentGap = Number.isFinite(counterSettings.gap)
+    ? counterSettings.gap
+    : 6;
   const fillColorCss = toCssRgba(counterFillColor, "#FFFFFF");
   const strokeColorCss = toCssRgba(counterStrokeColor, "transparent");
 
@@ -556,6 +591,7 @@ export default function DraggableKey({
         data-counter-state="inactive"
         style={{
           fontSize: `${counterSettings.fontSize ?? 16}px`,
+          fontFamily: counterSettings.fontFamily || undefined,
           fontWeight: counterSettings.fontWeight ?? 400,
           fontStyle: counterSettings.fontItalic ? "italic" : "normal",
           textDecoration: counterTextDecoration,
@@ -693,7 +729,9 @@ export const Key = memo(
     const stateBackgroundColor = active
       ? activeBackgroundColor ?? backgroundColor
       : backgroundColor;
-    const stateBorderColor = active ? activeBorderColor ?? borderColor : borderColor;
+    const stateBorderColor = active
+      ? activeBorderColor ?? borderColor
+      : borderColor;
     const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
 
     // 투명화 옵션 체크
@@ -716,76 +754,82 @@ export const Key = memo(
       ? activeImageFit || imageFit || "cover"
       : idleImageFit || imageFit || "cover";
 
-    const keyStyle = useMemo(
-      () => {
-        // 기본 배경색 계산
-        const defaultBgColor = currentImage
-          ? "transparent"
-          : active
-          ? "rgba(121, 121, 121, 0.9)"
-          : "rgba(46, 46, 47, 0.9)";
-        
-        // 기본 테두리색 계산
-        const defaultBorderColor = active
-          ? "rgba(255, 255, 255, 0.9)"
-          : "rgba(113, 113, 113, 0.9)";
-        
-        // 기본 텍스트 색상 계산
-        const defaultTextColor = active && !activeImage
-          ? "#FFFFFF"
-          : "rgba(121, 121, 121, 0.9)";
+    const keyStyle = useMemo(() => {
+      // 기본 배경색 계산
+      const defaultBgColor = currentImage
+        ? "transparent"
+        : active
+        ? "rgba(121, 121, 121, 0.9)"
+        : "rgba(46, 46, 47, 0.9)";
 
-        return {
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`,
-          backgroundColor: useInline && stateBackgroundColor
+      // 기본 테두리색 계산
+      const defaultBorderColor = active
+        ? "rgba(255, 255, 255, 0.9)"
+        : "rgba(113, 113, 113, 0.9)";
+
+      // 기본 텍스트 색상 계산
+      const defaultTextColor =
+        active && !activeImage ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
+
+      return {
+        width: `${width}px`,
+        height: `${height}px`,
+        transform: `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`,
+        backgroundColor:
+          useInline && stateBackgroundColor
             ? stateBackgroundColor
             : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
-          borderRadius: useInline && borderRadius != null
+        borderRadius:
+          useInline && borderRadius != null
             ? `${borderRadius}px`
-            : `var(--key-radius, ${borderRadius != null ? `${borderRadius}px` : "10px"})`,
-          border: useInline && (stateBorderColor || borderWidth != null)
-            ? `${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor}`
-            : `var(--key-border, ${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor})`,
-          color: useInline && stateFontColor
+            : `var(--key-radius, ${
+                borderRadius != null ? `${borderRadius}px` : "10px"
+              })`,
+        border:
+          useInline && (stateBorderColor || borderWidth != null)
+            ? `${borderWidth ?? 3}px solid ${
+                stateBorderColor || defaultBorderColor
+              }`
+            : `var(--key-border, ${borderWidth ?? 3}px solid ${
+                stateBorderColor || defaultBorderColor
+              })`,
+        color:
+          useInline && stateFontColor
             ? stateFontColor
             : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
-          fontSize: fontSize ? `${fontSize}px` : undefined,
-          overflow: "hidden",
-          // GPU 가속 최적화: active 상태 변경 시에만 willChange 적용
-          willChange: active ? "transform, background-color" : "transform",
-          backfaceVisibility: "hidden",
-          transformStyle: "preserve-3d",
-          contain: "layout style paint",
-          imageRendering: "auto",
-          isolation: "isolate",
-          boxSizing: "border-box",
-          zIndex: position.zIndex,
-        };
-      },
-      [
-        active,
-        activeImage,
-        inactiveImage,
-        dx,
-        dy,
-        width,
-        height,
-        currentImage,
-        position.zIndex,
-        useInline,
-        backgroundColor,
-        activeBackgroundColor,
-        borderColor,
-        activeBorderColor,
-        borderWidth,
-        borderRadius,
-        fontSize,
-        fontColor,
-        activeFontColor,
-      ]
-    );
+        fontSize: fontSize ? `${fontSize}px` : undefined,
+        overflow: "hidden",
+        // GPU 가속 최적화: active 상태 변경 시에만 willChange 적용
+        willChange: active ? "transform, background-color" : "transform",
+        backfaceVisibility: "hidden",
+        transformStyle: "preserve-3d",
+        contain: "layout style paint",
+        imageRendering: "auto",
+        isolation: "isolate",
+        boxSizing: "border-box",
+        zIndex: position.zIndex,
+      };
+    }, [
+      active,
+      activeImage,
+      inactiveImage,
+      dx,
+      dy,
+      width,
+      height,
+      currentImage,
+      position.zIndex,
+      useInline,
+      backgroundColor,
+      activeBackgroundColor,
+      borderColor,
+      activeBorderColor,
+      borderWidth,
+      borderRadius,
+      fontSize,
+      fontColor,
+      activeFontColor,
+    ]);
 
     const imageStyle = useMemo(
       () => ({
@@ -798,31 +842,29 @@ export const Key = memo(
         position: "relative",
         zIndex: 0,
       }),
-      [effectiveImageFit]
+      [effectiveImageFit],
     );
 
-    const textStyle = useMemo(
-      () => {
-        // text-decoration 조합
-        const textDecorations = [];
-        if (fontUnderline) textDecorations.push("underline");
-        if (fontStrikethrough) textDecorations.push("line-through");
+    const textStyle = useMemo(() => {
+      // text-decoration 조합
+      const textDecorations = [];
+      if (fontUnderline) textDecorations.push("underline");
+      if (fontStrikethrough) textDecorations.push("line-through");
 
-        return {
-          willChange: "auto",
-          contain: "layout style paint",
-          fontSize: fontSize ? `${fontSize}px` : undefined,
-          fontWeight: fontWeight ?? 700,
-          fontStyle: fontItalic ? "italic" : "normal",
-          textDecoration: textDecorations.length > 0 ? textDecorations.join(" ") : "none",
-        };
-      },
-      [fontSize, fontWeight, fontItalic, fontUnderline, fontStrikethrough]
-    );
+      return {
+        willChange: "auto",
+        contain: "layout style paint",
+        fontSize: fontSize ? `${fontSize}px` : undefined,
+        fontWeight: fontWeight ?? 700,
+        fontStyle: fontItalic ? "italic" : "normal",
+        textDecoration:
+          textDecorations.length > 0 ? textDecorations.join(" ") : "none",
+      };
+    }, [fontSize, fontWeight, fontItalic, fontUnderline, fontStrikethrough]);
 
     // 텍스트 표시 조건: 현재 상태에 사용할 이미지가 없을 때만 텍스트를 표시
     const counterSettings = normalizeCounterSettings(
-      position?.counter ?? createDefaultCounterSettings()
+      position?.counter ?? createDefaultCounterSettings(),
     );
     // 개별 키의 카운터 enabled와 전역 counterEnabled 모두 확인
     const showInsideCounter =
@@ -876,6 +918,7 @@ export const Key = memo(
           data-counter-state={active ? "active" : "inactive"}
           style={{
             fontSize: `${counterSettings.fontSize ?? 16}px`,
+            fontFamily: counterSettings.fontFamily || undefined,
             fontWeight: counterSettings.fontWeight ?? 400,
             fontStyle: counterSettings.fontItalic ? "italic" : "normal",
             textDecoration: counterTextDecoration,
@@ -998,25 +1041,32 @@ export const Key = memo(
       prevProps.position.zIndex === nextProps.position.zIndex &&
       prevProps.position.className === nextProps.position.className &&
       // 스타일 속성 비교
-      prevProps.position.backgroundColor === nextProps.position.backgroundColor &&
-      prevProps.position.activeBackgroundColor === nextProps.position.activeBackgroundColor &&
+      prevProps.position.backgroundColor ===
+        nextProps.position.backgroundColor &&
+      prevProps.position.activeBackgroundColor ===
+        nextProps.position.activeBackgroundColor &&
       prevProps.position.borderColor === nextProps.position.borderColor &&
-      prevProps.position.activeBorderColor === nextProps.position.activeBorderColor &&
+      prevProps.position.activeBorderColor ===
+        nextProps.position.activeBorderColor &&
       prevProps.position.borderWidth === nextProps.position.borderWidth &&
       prevProps.position.borderRadius === nextProps.position.borderRadius &&
       prevProps.position.fontSize === nextProps.position.fontSize &&
       prevProps.position.fontColor === nextProps.position.fontColor &&
-      prevProps.position.activeFontColor === nextProps.position.activeFontColor &&
+      prevProps.position.fontFamily === nextProps.position.fontFamily &&
+      prevProps.position.activeFontColor ===
+        nextProps.position.activeFontColor &&
       prevProps.position.idleImageFit === nextProps.position.idleImageFit &&
       prevProps.position.activeImageFit === nextProps.position.activeImageFit &&
       prevProps.position.imageFit === nextProps.position.imageFit &&
-      prevProps.position.useInlineStyles === nextProps.position.useInlineStyles &&
+      prevProps.position.useInlineStyles ===
+        nextProps.position.useInlineStyles &&
       prevProps.position.displayText === nextProps.position.displayText &&
       // 글꼴 스타일 속성 비교
       prevProps.position.fontWeight === nextProps.position.fontWeight &&
       prevProps.position.fontItalic === nextProps.position.fontItalic &&
       prevProps.position.fontUnderline === nextProps.position.fontUnderline &&
-      prevProps.position.fontStrikethrough === nextProps.position.fontStrikethrough &&
+      prevProps.position.fontStrikethrough ===
+        nextProps.position.fontStrikethrough &&
       // 카운터 설정 비교
       prevProps.position.counter?.enabled ===
         nextProps.position.counter?.enabled &&
@@ -1044,5 +1094,5 @@ export const Key = memo(
       (prevProps.position.counter?.fontStrikethrough ?? false) ===
         (nextProps.position.counter?.fontStrikethrough ?? false)
     );
-  }
+  },
 );

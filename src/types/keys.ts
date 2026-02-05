@@ -28,6 +28,7 @@ const keyCounterSettingsInputSchema = z
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
+    fontFamily: z.string().optional(),
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
@@ -47,6 +48,7 @@ export interface KeyCounterSettings {
   gap: number; // px 단위 간격
   fontSize: number; // px
   fontWeight: number; // CSS font-weight
+  fontFamily: string | null; // 커스텀 폰트
   fontItalic: boolean;
   fontUnderline: boolean;
   fontStrikethrough: boolean;
@@ -63,6 +65,7 @@ const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
   gap: 6,
   fontSize: 16,
   fontWeight: 700,
+  fontFamily: null,
   fontItalic: false,
   fontUnderline: false,
   fontStrikethrough: false,
@@ -84,6 +87,7 @@ export function createDefaultCounterSettings(): KeyCounterSettings {
     gap: COUNTER_DEFAULTS.gap,
     fontSize: COUNTER_DEFAULTS.fontSize,
     fontWeight: COUNTER_DEFAULTS.fontWeight,
+    fontFamily: COUNTER_DEFAULTS.fontFamily,
     fontItalic: COUNTER_DEFAULTS.fontItalic,
     fontUnderline: COUNTER_DEFAULTS.fontUnderline,
     fontStrikethrough: COUNTER_DEFAULTS.fontStrikethrough,
@@ -106,6 +110,7 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     gap,
     fontSize,
     fontWeight,
+    fontFamily,
     fontItalic,
     fontUnderline,
     fontStrikethrough,
@@ -134,6 +139,8 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       typeof fontWeight === "number" && Number.isFinite(fontWeight)
         ? fontWeight
         : fallback.fontWeight,
+    fontFamily:
+      typeof fontFamily === "string" ? fontFamily : fallback.fontFamily,
     fontItalic:
       typeof fontItalic === "boolean" ? fontItalic : fallback.fontItalic,
     fontUnderline:
@@ -231,6 +238,8 @@ export const keyPositionSchema = z.object({
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),
+  // 폰트 패밀리 (커스텀 폰트 이름)
+  fontFamily: z.string().optional(),
   // 이미지 맞춤(대기/입력 개별 설정). 없으면 imageFit을 fallback으로 사용.
   idleImageFit: imageFitSchema.optional(),
   activeImageFit: imageFitSchema.optional(),

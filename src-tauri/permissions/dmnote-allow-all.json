@@ -32,6 +32,7 @@
           "css_tab_clear",
           "css_tab_set",
           "css_tab_toggle",
+          "font_load",
           "js_get",
           "js_get_use",
           "js_toggle",
