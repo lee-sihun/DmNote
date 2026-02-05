@@ -11,6 +11,8 @@ interface DropdownProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** true일 경우 드롭다운이 부모 컨테이너의 전체 너비를 차지함 */
+  fullWidth?: boolean;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -19,6 +21,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   onChange,
   placeholder = "선택",
   disabled = false,
+  fullWidth = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -68,7 +71,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       <button
         ref={buttonRef}
         type="button"
-        className="flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none"
+        className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${fullWidth ? "w-full" : ""}`}
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
       >
@@ -96,7 +99,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       {open && (
         <div 
           ref={menuRef}
-          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-hidden gap-[2px] max-h-[200px] overflow-y-auto ${
+          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-hidden gap-[2px] max-h-[200px] overflow-y-auto ${fullWidth ? "right-0" : ""} ${
             openUpward ? "bottom-[25px]" : "top-[25px]"
           }`}
         >
