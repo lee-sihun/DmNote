@@ -140,6 +140,7 @@ impl AppState {
                 background_color: state.background_color.clone(),
                 use_custom_css: state.use_custom_css,
                 custom_css: state.custom_css.clone(),
+                font_settings: state.font_settings.clone(),
                 use_custom_js: state.use_custom_js,
                 custom_js,
                 overlay_resize_anchor: state.overlay_resize_anchor.clone(),

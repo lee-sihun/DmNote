@@ -717,6 +717,7 @@ export const Key = memo(
       borderRadius,
       fontSize,
       fontColor,
+      fontFamily,
       activeFontColor,
       idleImageFit,
       activeImageFit,
@@ -865,12 +866,20 @@ export const Key = memo(
         willChange: "auto",
         contain: "layout style paint",
         fontSize: fontSize ? `${fontSize}px` : undefined,
+        fontFamily: fontFamily || undefined,
         fontWeight: fontWeight ?? 700,
         fontStyle: fontItalic ? "italic" : "normal",
         textDecoration:
           textDecorations.length > 0 ? textDecorations.join(" ") : "none",
       };
-    }, [fontSize, fontWeight, fontItalic, fontUnderline, fontStrikethrough]);
+    }, [
+      fontSize,
+      fontFamily,
+      fontWeight,
+      fontItalic,
+      fontUnderline,
+      fontStrikethrough,
+    ]);
 
     // 텍스트 표시 조건: 현재 상태에 사용할 이미지가 없을 때만 텍스트를 표시
     const counterSettings = normalizeCounterSettings(
@@ -1093,6 +1102,8 @@ export const Key = memo(
       prevProps.position.counter?.placement ===
         nextProps.position.counter?.placement &&
       prevProps.position.counter?.align === nextProps.position.counter?.align &&
+      (prevProps.position.counter?.alignMode ?? "center") ===
+        (nextProps.position.counter?.alignMode ?? "center") &&
       prevProps.position.counter?.fill?.idle ===
         nextProps.position.counter?.fill?.idle &&
       prevProps.position.counter?.fill?.active ===
@@ -1107,6 +1118,8 @@ export const Key = memo(
         (nextProps.position.counter?.fontSize ?? 16) &&
       (prevProps.position.counter?.fontWeight ?? 400) ===
         (nextProps.position.counter?.fontWeight ?? 400) &&
+      (prevProps.position.counter?.fontFamily ?? null) ===
+        (nextProps.position.counter?.fontFamily ?? null) &&
       (prevProps.position.counter?.fontItalic ?? false) ===
         (nextProps.position.counter?.fontItalic ?? false) &&
       (prevProps.position.counter?.fontUnderline ?? false) ===

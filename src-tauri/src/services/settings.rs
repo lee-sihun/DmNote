@@ -40,6 +40,7 @@ impl SettingsService {
             state.background_color = next.background_color.clone();
             state.use_custom_css = next.use_custom_css;
             state.custom_css = next.custom_css.clone();
+            state.font_settings = next.font_settings.clone();
             state.use_custom_js = next.use_custom_js;
             state.custom_js = next.custom_js.clone();
             state.overlay_resize_anchor = next.overlay_resize_anchor.clone();
@@ -100,6 +101,9 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
     }
     if let Some(value) = patch.custom_css.as_ref() {
         normalized.custom_css = Some(apply_css_patch(current.custom_css.clone(), value));
+    }
+    if let Some(value) = patch.font_settings.as_ref() {
+        normalized.font_settings = Some(value.clone());
     }
     if let Some(value) = patch.use_custom_js {
         normalized.use_custom_js = Some(value);
@@ -196,6 +200,9 @@ fn apply_changes(mut current: SettingsState, patch: &SettingsPatch) -> SettingsS
     }
     if let Some(value) = patch.custom_css.as_ref() {
         current.custom_css = value.clone();
+    }
+    if let Some(value) = patch.font_settings.as_ref() {
+        current.font_settings = value.clone();
     }
     if let Some(value) = patch.use_custom_js {
         current.use_custom_js = value;

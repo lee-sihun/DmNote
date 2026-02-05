@@ -3,6 +3,11 @@ import {
   type NoteSettings,
   normalizeNoteSettings,
 } from "@src/types/noteSettings";
+import {
+  DEFAULT_FONT_SETTINGS,
+  type FontSettings,
+  normalizeFontSettings,
+} from "@src/types/fonts";
 import { type CustomCss } from "@src/types/css";
 import { type CustomJs } from "@src/types/js";
 import { DEFAULT_SHORTCUTS, type ShortcutsState } from "@src/types/shortcuts";
@@ -36,6 +41,7 @@ export interface SettingsState {
   overlayLocked: boolean;
   noteEffect: boolean;
   noteSettings: NoteSettings;
+  fontSettings: FontSettings;
   angleMode: string;
   language: string;
   laboratoryEnabled: boolean;
@@ -57,6 +63,7 @@ export const DEFAULT_SETTINGS_STATE: SettingsState = {
   overlayLocked: false,
   noteEffect: false,
   noteSettings: NOTE_SETTINGS_DEFAULTS,
+  fontSettings: DEFAULT_FONT_SETTINGS,
   angleMode: "d3d11",
   language: "ko",
   laboratoryEnabled: false,
@@ -75,10 +82,16 @@ export const DEFAULT_SETTINGS_STATE: SettingsState = {
 export type SettingsPatchInput = Partial<
   Omit<
     SettingsState,
-    "noteSettings" | "customCSS" | "customJS" | "gridSettings" | "shortcuts"
+    | "noteSettings"
+    | "fontSettings"
+    | "customCSS"
+    | "customJS"
+    | "gridSettings"
+    | "shortcuts"
   >
 > & {
   noteSettings?: Partial<NoteSettings>;
+  fontSettings?: FontSettings;
   customCSS?: Partial<CustomCss>;
   customJS?: Partial<CustomJs>;
   gridSettings?: Partial<GridSettings>;
@@ -88,10 +101,16 @@ export type SettingsPatchInput = Partial<
 export type SettingsPatch = Partial<
   Omit<
     SettingsState,
-    "noteSettings" | "customCSS" | "customJS" | "gridSettings" | "shortcuts"
+    | "noteSettings"
+    | "fontSettings"
+    | "customCSS"
+    | "customJS"
+    | "gridSettings"
+    | "shortcuts"
   >
 > & {
   noteSettings?: NoteSettings;
+  fontSettings?: FontSettings;
   customCSS?: CustomCss;
   customJS?: CustomJs;
   gridSettings?: GridSettings;
@@ -119,6 +138,10 @@ export function normalizeSettingsPatch(
         ...current.noteSettings,
         ...(value as Partial<NoteSettings>),
       });
+      continue;
+    }
+    if (key === "fontSettings") {
+      next.fontSettings = normalizeFontSettings(value as FontSettings);
       continue;
     }
     if (key === "customCSS") {

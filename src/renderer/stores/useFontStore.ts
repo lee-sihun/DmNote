@@ -117,14 +117,27 @@ export function removeFontCSS(fontId: string): void {
   }
 }
 
-// 모든 활성화된 폰트 CSS를 로드하는 함수
-export function loadAllFontCSS(): void {
+// 활성화된 폰트 CSS를 DOM과 동기화 (추가/제거 모두)
+export function syncFontCSS(): void {
+  if (typeof document === "undefined") return;
   const { getAllFonts } = useFontStore.getState();
-  const fonts = getAllFonts();
+  const fonts = getAllFonts().filter((font) => font.enabled && font.cssContent);
 
+  const desiredIds = new Set<string>();
   fonts.forEach((font) => {
-    if (font.enabled && font.cssContent) {
-      injectFontCSS(font.id, font.cssContent);
+    injectFontCSS(font.id, font.cssContent as string);
+    desiredIds.add(font.id);
+  });
+
+  document.querySelectorAll("style[id^='font-']").forEach((el) => {
+    const id = el.id.slice("font-".length);
+    if (!desiredIds.has(id)) {
+      el.remove();
     }
   });
+}
+
+// 모든 활성화된 폰트 CSS를 로드하는 함수
+export function loadAllFontCSS(): void {
+  syncFontCSS();
 }

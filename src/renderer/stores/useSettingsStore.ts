@@ -3,6 +3,8 @@ import {
   NOTE_SETTINGS_DEFAULTS,
   type NoteSettings,
 } from "@src/types/noteSettings";
+import type { FontSettings } from "@src/types/fonts";
+import { DEFAULT_FONT_SETTINGS } from "@src/types/fonts";
 import type { OverlayResizeAnchor } from "@src/types/settings";
 import type { JsPlugin } from "@src/types/js";
 import { DEFAULT_SHORTCUTS, type ShortcutsState } from "@src/types/shortcuts";
@@ -30,6 +32,7 @@ interface SettingsState {
   angleMode: string;
   noteEffect: boolean;
   noteSettings: NoteSettings;
+  fontSettings: FontSettings;
   useCustomCSS: boolean;
   customCSSContent: string;
   customCSSPath: string | null;
@@ -58,6 +61,7 @@ interface SettingsState {
   setAngleMode: (value: string) => void;
   setNoteEffect: (value: boolean) => void;
   setNoteSettings: (value: NoteSettings) => void;
+  setFontSettings: (value: FontSettings) => void;
   setLanguage: (value: string) => void;
   setBackgroundColor: (value: string) => void;
   setOverlayResizeAnchor: (value: OverlayResizeAnchor) => void;
@@ -82,6 +86,7 @@ export type SettingsStateSnapshot = Omit<
   | "setAngleMode"
   | "setNoteEffect"
   | "setNoteSettings"
+  | "setFontSettings"
   | "setLanguage"
   | "setBackgroundColor"
   | "setOverlayResizeAnchor"
@@ -98,6 +103,7 @@ const initialState: SettingsStateSnapshot = {
   angleMode: "d3d11",
   noteEffect: false,
   noteSettings: NOTE_SETTINGS_DEFAULTS,
+  fontSettings: DEFAULT_FONT_SETTINGS,
   useCustomCSS: false,
   customCSSContent: "",
   customCSSPath: null,
@@ -126,6 +132,13 @@ function mergeSnapshot(
     next.noteSettings = {
       ...prev.noteSettings,
       ...patch.noteSettings,
+    };
+  }
+  if (patch.fontSettings) {
+    next.fontSettings = {
+      customFonts: patch.fontSettings.customFonts.map((font) => ({
+        ...font,
+      })),
     };
   }
   if (
@@ -171,6 +184,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setAngleMode: (value) => set({ angleMode: value }),
   setNoteEffect: (value) => set({ noteEffect: value }),
   setNoteSettings: (value) => set({ noteSettings: value }),
+  setFontSettings: (value) => set({ fontSettings: value }),
   setLanguage: (value) => set({ language: value }),
   setLaboratoryEnabled: (value) => set({ laboratoryEnabled: value }),
   setBackgroundColor: (value) => set({ backgroundColor: value }),

@@ -16,6 +16,44 @@ pub enum NoteColor {
     Gradient { top: String, bottom: String },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum FontType {
+    Builtin,
+    Local,
+    Web,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomFont {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub font_type: FontType,
+    pub name: String,
+    pub display_name: String,
+    pub enabled: bool,
+    #[serde(default)]
+    pub local_path: Option<String>,
+    #[serde(default)]
+    pub css_content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FontSettings {
+    #[serde(default)]
+    pub custom_fonts: Vec<CustomFont>,
+}
+
+impl Default for FontSettings {
+    fn default() -> Self {
+        Self {
+            custom_fonts: Vec::new(),
+        }
+    }
+}
+
 // Serialize as:
 // - Solid: JSON string (e.g., "#FF00FF")
 // - Gradient: object with explicit type { type: "gradient", top, bottom }
@@ -133,6 +171,9 @@ pub struct KeyPosition {
     pub font_color: Option<String>,
     #[serde(default)]
     pub active_font_color: Option<String>,
+    /// 글꼴 패밀리 (커스텀 폰트 이름)
+    #[serde(default)]
+    pub font_family: Option<String>,
     #[serde(default)]
     pub image_fit: Option<ImageFit>,
     /// 이미지 맞춤(대기/입력 개별). 없으면 image_fit을 fallback으로 사용.
@@ -226,8 +267,9 @@ pub struct KeyCounterColor {
 impl Default for KeyCounterColor {
     fn default() -> Self {
         Self {
-            idle: "#FFFFFF".to_string(),
-            active: "#000000".to_string(),
+            // Match renderer defaults (src/types/keys.ts)
+            idle: "rgba(121, 121, 121, 0.9)".to_string(),
+            active: "#FFFFFF".to_string(),
         }
     }
 }
@@ -253,6 +295,9 @@ pub struct KeyCounterSettings {
     pub font_size: u32,
     #[serde(default = "default_counter_font_weight")]
     pub font_weight: u32,
+    /// 카운터 글꼴 패밀리 (커스텀 폰트 이름)
+    #[serde(default)]
+    pub font_family: Option<String>,
     #[serde(default)]
     pub font_italic: bool,
     #[serde(default)]
@@ -263,8 +308,9 @@ pub struct KeyCounterSettings {
 
 fn default_stroke_color() -> KeyCounterColor {
     KeyCounterColor {
-        idle: "#000000".to_string(),
-        active: "#FFFFFF".to_string(),
+        // No outline by default (match renderer defaults)
+        idle: "transparent".to_string(),
+        active: "transparent".to_string(),
     }
 }
 
@@ -280,6 +326,7 @@ impl Default for KeyCounterSettings {
             gap: default_gap(),
             font_size: default_counter_font_size(),
             font_weight: default_counter_font_weight(),
+            font_family: None,
             font_italic: false,
             font_underline: false,
             font_strikethrough: false,
@@ -287,9 +334,38 @@ impl Default for KeyCounterSettings {
     }
 }
 
+impl KeyCounterSettings {
+    /// Migrate legacy defaults that were previously serialized into store.json.
+    /// This keeps existing user customizations intact, while fixing the old default
+    /// active fill/stroke values (black text / outlined) that diverged from the renderer.
+    pub fn migrate_legacy_defaults(&mut self) -> bool {
+        let looks_like_legacy_default =
+            self.fill.idle == "#FFFFFF"
+                && self.fill.active == "#000000"
+                && self.stroke.idle == "#000000"
+                && self.stroke.active == "#FFFFFF"
+                && self.gap == default_gap()
+                && self.font_size == default_counter_font_size()
+                && self.font_weight == 400
+                && self.font_family.is_none()
+                && !self.font_italic
+                && !self.font_underline
+                && !self.font_strikethrough;
+
+        if !looks_like_legacy_default {
+            return false;
+        }
+
+        self.fill = KeyCounterColor::default();
+        self.stroke = default_stroke_color();
+        self.font_weight = default_counter_font_weight();
+        true
+    }
+}
+
 fn default_gap() -> u32 { 6 }
 fn default_counter_font_size() -> u32 { 16 }
-fn default_counter_font_weight() -> u32 { 400 }
+fn default_counter_font_weight() -> u32 { 700 }
 
 fn default_counter_enabled() -> bool { true }
 fn default_note_effect_enabled() -> bool { true }
@@ -600,6 +676,8 @@ pub struct AppStoreData {
     pub use_custom_css: bool,
     #[serde(default)]
     pub custom_css: CustomCss,
+    #[serde(default)]
+    pub font_settings: FontSettings,
     /// 탭별 CSS 오버라이드 (전역 CSS 대신 사용)
     #[serde(default)]
     pub tab_css_overrides: TabCssOverrides,
@@ -650,6 +728,7 @@ impl Default for AppStoreData {
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
+            font_settings: FontSettings::default(),
             tab_css_overrides: TabCssOverrides::new(),
             use_custom_js: false,
             custom_js: CustomJs::default(),
@@ -900,6 +979,8 @@ pub struct SettingsState {
     #[serde(rename = "customCSS")]
     #[serde(default)]
     pub custom_css: CustomCss,
+    #[serde(default)]
+    pub font_settings: FontSettings,
     #[serde(rename = "useCustomJS")]
     pub use_custom_js: bool,
     #[serde(rename = "customJS")]
@@ -933,6 +1014,7 @@ impl Default for SettingsState {
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
+            font_settings: FontSettings::default(),
             use_custom_js: false,
             custom_js: CustomJs::default(),
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,
@@ -988,6 +1070,8 @@ pub struct SettingsPatchInput {
     pub use_custom_css: Option<bool>,
     #[serde(rename = "customCSS")]
     pub custom_css: Option<CustomCssPatch>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_settings: Option<FontSettings>,
     #[serde(rename = "useCustomJS")]
     pub use_custom_js: Option<bool>,
     #[serde(rename = "customJS")]
@@ -1041,6 +1125,7 @@ impl SettingsDiff {
             p.background_color.is_some(),
             p.use_custom_css.is_some(),
             p.custom_css.is_some(),
+            p.font_settings.is_some(),
             p.use_custom_js.is_some(),
             p.custom_js.is_some(),
             p.overlay_resize_anchor.is_some(),
@@ -1083,6 +1168,8 @@ pub struct SettingsPatch {
     #[serde(rename = "customCSS")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_css: Option<CustomCss>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_settings: Option<FontSettings>,
     #[serde(rename = "useCustomJS")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_custom_js: Option<bool>,

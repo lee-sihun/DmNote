@@ -270,6 +270,20 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
 
     merge_default_counters(&mut data.key_counters, &data.keys);
 
+    // Migration: old default counter settings were persisted with inverted active colors
+    // (black text / outlined). Align them with the renderer defaults if they still match
+    // the legacy pattern (to avoid overwriting user customizations).
+    for positions in data.key_positions.values_mut() {
+        for pos in positions.iter_mut() {
+            pos.counter.migrate_legacy_defaults();
+        }
+    }
+    for positions in data.stat_positions.values_mut() {
+        for pos in positions.iter_mut() {
+            pos.position.counter.migrate_legacy_defaults();
+        }
+    }
+
     if !data.keys.contains_key(&data.selected_key_type) {
         data.selected_key_type = "4key".to_string();
     }
@@ -323,6 +337,7 @@ fn settings_from_store(store: &AppStoreData) -> SettingsState {
         background_color: store.background_color.clone(),
         use_custom_css: store.use_custom_css,
         custom_css: store.custom_css.clone(),
+        font_settings: store.font_settings.clone(),
         use_custom_js: store.use_custom_js,
         custom_js,
         overlay_resize_anchor: store.overlay_resize_anchor.clone(),

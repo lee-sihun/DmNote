@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useFontStore, syncFontCSS } from "@stores/useFontStore";
 import {
   useSettingsStore,
   type SettingsStateSnapshot,
@@ -125,6 +126,17 @@ export function useAppBootstrap() {
           },
         }));
       }
+      if (diff.changed.fontSettings) {
+        useSettingsStore.setState({
+          fontSettings: diff.changed.fontSettings,
+        });
+        useFontStore.setState({
+          customFonts: diff.changed.fontSettings.customFonts.map((font) => ({
+            ...font,
+          })),
+        });
+        syncFontCSS();
+      }
       if (diff.changed.customCSS) {
         useSettingsStore.setState({
           customCSSContent: diff.changed.customCSS.content,
@@ -136,7 +148,13 @@ export function useAppBootstrap() {
           jsPlugins: clonePlugins(diff.changed.customJS),
         });
       }
-      const { noteSettings, customCSS, customJS, ...rest } = diff.changed;
+      const {
+        noteSettings,
+        fontSettings: _fontSettings,
+        customCSS,
+        customJS,
+        ...rest
+      } = diff.changed;
       const sanitized = Object.fromEntries(
         Object.entries(rest).filter(
           ([, value]) => value !== undefined && value !== null
@@ -157,6 +175,7 @@ export function useAppBootstrap() {
         angleMode: bootstrap.settings.angleMode,
         noteEffect: bootstrap.settings.noteEffect,
         noteSettings: bootstrap.settings.noteSettings,
+        fontSettings: bootstrap.settings.fontSettings,
         useCustomCSS: bootstrap.settings.useCustomCSS,
         customCSSContent: bootstrap.settings.customCSS.content,
         customCSSPath: bootstrap.settings.customCSS.path,
@@ -172,6 +191,12 @@ export function useAppBootstrap() {
         gridSettings: bootstrap.settings.gridSettings ?? DEFAULT_GRID_SETTINGS,
         shortcuts: bootstrap.settings.shortcuts ?? DEFAULT_SHORTCUTS,
       });
+      useFontStore.setState({
+        customFonts: bootstrap.settings.fontSettings.customFonts.map(
+          (font) => ({ ...font })
+        ),
+      });
+      syncFontCSS();
       useKeyStore.setState((state) => ({
         ...state,
         keyMappings: bootstrap.keys,
