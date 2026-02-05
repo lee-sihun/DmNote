@@ -626,14 +626,24 @@ export default function DraggableKey({
       ? [counterElement, nameElement]
       : [nameElement, counterElement];
 
+    const alignMode = counterSettings.alignMode || "center";
+    const isBetween = alignMode === "between";
     const containerClass = `flex ${
       isHorizontal ? "" : "flex-col"
-    } w-full h-full items-center pointer-events-none select-none justify-center`;
+    } w-full h-full items-center pointer-events-none select-none`;
 
     return (
       <div
         className={containerClass}
-        style={{ padding: "0px", gap: `${contentGap}px` }}
+        style={{
+          justifyContent: isBetween ? "space-between" : "center",
+          padding: isBetween
+            ? isHorizontal
+              ? `0 ${contentGap}px`
+              : `${contentGap}px 0`
+            : "0px",
+          gap: isBetween ? "0px" : `${contentGap}px`,
+        }}
       >
         {elements}
       </div>
@@ -953,14 +963,24 @@ export const Key = memo(
         ? [counterElement, nameElement]
         : [nameElement, counterElement];
 
+      const alignMode = counterSettings.alignMode || "center";
+      const isBetween = alignMode === "between";
       const containerClass = `flex ${
         isHorizontal ? "" : "flex-col"
-      } w-full h-full items-center pointer-events-none select-none justify-center`;
+      } w-full h-full items-center pointer-events-none select-none`;
 
       return (
         <div
           className={containerClass}
-          style={{ padding: "0px", gap: `${contentGap}px` }}
+          style={{
+            justifyContent: isBetween ? "space-between" : "center",
+            padding: isBetween
+              ? isHorizontal
+                ? `0 ${contentGap}px`
+                : `${contentGap}px 0`
+              : "0px",
+            gap: isBetween ? "0px" : `${contentGap}px`,
+          }}
         >
           {elements}
         </div>

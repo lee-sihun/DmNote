@@ -27,6 +27,7 @@ export default function CounterSettingModal({
 
   const [placement, setPlacement] = useState(resolvedSettings.placement);
   const [align, setAlign] = useState(resolvedSettings.align);
+  const [alignMode, setAlignMode] = useState(resolvedSettings.alignMode);
   const [gap, setGap] = useState(resolvedSettings.gap ?? 6);
   const [isGapFocused, setIsGapFocused] = useState(false);
   const [displayGap, setDisplayGap] = useState(
@@ -80,6 +81,7 @@ export default function CounterSettingModal({
   useEffect(() => {
     setPlacement(resolvedSettings.placement);
     setAlign(resolvedSettings.align);
+    setAlignMode(resolvedSettings.alignMode);
     setGap(resolvedSettings.gap ?? 6);
     setDisplayGap(`${resolvedSettings.gap ?? 6}px`);
     setIsGapFocused(false);
@@ -97,12 +99,13 @@ export default function CounterSettingModal({
     const payload = {
       placement,
       align,
+      alignMode,
       gap,
       fill: { idle: fillIdle, active: fillActive },
       stroke: { idle: strokeIdle, active: strokeActive },
     };
     onPreview(payload);
-  }, [placement, align, gap]);
+  }, [placement, align, alignMode, gap]);
 
   const [pickerFor, setPickerFor] = useState(null); // 'fillIdle' | 'fillActive' | 'strokeIdle' | 'strokeActive'
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -136,6 +139,11 @@ export default function CounterSettingModal({
     { label: t("counterSetting.alignBottom"), value: "bottom" },
     { label: t("counterSetting.alignLeft"), value: "left" },
     { label: t("counterSetting.alignRight"), value: "right" },
+  ];
+
+  const alignModeOptions = [
+    { label: t("counterSetting.alignModeCenter"), value: "center" },
+    { label: t("counterSetting.alignModeBetween"), value: "between" },
   ];
 
   const colorButtonClass = (active) =>
@@ -211,6 +219,7 @@ export default function CounterSettingModal({
     const payload = {
       placement,
       align,
+      alignMode,
       gap,
       fill: {
         idle: key === "fillIdle" ? color : fillIdle,
@@ -228,6 +237,7 @@ export default function CounterSettingModal({
     const payload = {
       placement,
       align,
+      alignMode,
       gap,
       fill: {
         idle: fillIdle,
@@ -274,6 +284,20 @@ export default function CounterSettingModal({
             />
           </div>
         </div>
+
+        {/* 정렬 방식 (내부 배치 전용) */}
+        {placement === "inside" && (
+          <div className="flex justify-between w-full items-center">
+            <p className="text-white text-style-2">
+              {t("counterSetting.alignMode")}
+            </p>
+            <Dropdown
+              options={alignModeOptions}
+              value={alignMode}
+              onChange={setAlignMode}
+            />
+          </div>
+        )}
 
         {/* 간격 */}
         <div className="flex justify-between w-full items-center">

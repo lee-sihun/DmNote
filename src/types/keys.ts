@@ -13,6 +13,11 @@ export const keyCounterAlignSchema = z.union([
   z.literal("right"),
 ]);
 
+export const keyCounterAlignModeSchema = z.union([
+  z.literal("center"),
+  z.literal("between"),
+]);
+
 export const keyCounterColorSchema = z.object({
   idle: z.string(),
   active: z.string(),
@@ -23,12 +28,13 @@ const keyCounterSettingsInputSchema = z
     enabled: z.boolean().optional(),
     placement: keyCounterPlacementSchema.optional(),
     align: keyCounterAlignSchema.optional(),
+    alignMode: keyCounterAlignModeSchema.optional(),
     fill: keyCounterColorSchema.partial().optional(),
     stroke: keyCounterColorSchema.partial().optional(),
     gap: z.number().int().min(0).optional(),
     fontSize: z.number().int().min(8).max(72).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
-    fontFamily: z.string().optional(),
+    fontFamily: z.string().nullable().optional(),
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
@@ -37,12 +43,14 @@ const keyCounterSettingsInputSchema = z
 
 export type KeyCounterPlacement = z.infer<typeof keyCounterPlacementSchema>;
 export type KeyCounterAlign = z.infer<typeof keyCounterAlignSchema>;
+export type KeyCounterAlignMode = z.infer<typeof keyCounterAlignModeSchema>;
 export type KeyCounterColor = z.infer<typeof keyCounterColorSchema>;
 
 export interface KeyCounterSettings {
   enabled: boolean;
   placement: KeyCounterPlacement;
   align: KeyCounterAlign;
+  alignMode: KeyCounterAlignMode;
   fill: KeyCounterColor;
   stroke: KeyCounterColor;
   gap: number; // px 단위 간격
@@ -58,6 +66,7 @@ const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
   enabled: true,
   placement: "inside" as KeyCounterPlacement,
   align: "top" as KeyCounterAlign,
+  alignMode: "center" as KeyCounterAlignMode,
   // fill: match key text colors (idle/active)
   fill: Object.freeze({ idle: "rgba(121, 121, 121, 0.9)", active: "#FFFFFF" }),
   // stroke: transparent (no outline)
@@ -76,6 +85,7 @@ export function createDefaultCounterSettings(): KeyCounterSettings {
     enabled: COUNTER_DEFAULTS.enabled,
     placement: COUNTER_DEFAULTS.placement,
     align: COUNTER_DEFAULTS.align,
+    alignMode: COUNTER_DEFAULTS.alignMode,
     fill: {
       idle: COUNTER_DEFAULTS.fill.idle,
       active: COUNTER_DEFAULTS.fill.active,
@@ -105,6 +115,7 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     enabled,
     placement,
     align,
+    alignMode,
     fill,
     stroke,
     gap,
@@ -119,6 +130,7 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     enabled: typeof enabled === "boolean" ? enabled : fallback.enabled,
     placement: placement ?? fallback.placement,
     align: align ?? fallback.align,
+    alignMode: alignMode ?? fallback.alignMode,
     fill: {
       idle: fill?.idle ?? fallback.fill.idle,
       active: fill?.active ?? fallback.fill.active,

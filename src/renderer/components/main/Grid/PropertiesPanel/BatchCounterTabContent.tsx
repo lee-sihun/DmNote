@@ -123,6 +123,32 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         />
       </PropertyRow>
 
+      {/* 정렬 방식 (내부 배치 전용) */}
+      {batchCounterSettings.placement === "inside" && (
+        <PropertyRow label={t("counterSetting.alignMode") || "정렬 방식"}>
+          <Dropdown
+            options={[
+              {
+                label:
+                  t("counterSetting.alignModeCenter") || "가운데",
+                value: "center",
+              },
+              {
+                label:
+                  t("counterSetting.alignModeBetween") || "양끝",
+                value: "between",
+              },
+            ]}
+            value={batchCounterSettings.alignMode ?? "center"}
+            onChange={(value) =>
+              handleBatchCounterUpdate({
+                alignMode: value as "center" | "between",
+              })
+            }
+          />
+        </PropertyRow>
+      )}
+
       {/* 간격 */}
       <PropertyRow label={t("counterSetting.gap") || "간격"}>
         <NumberInput
@@ -130,7 +156,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           onChange={(value) => handleBatchCounterUpdate({ gap: value })}
           suffix="px"
           min={0}
-          max={100}
+          max={9999}
           width="54px"
         />
       </PropertyRow>

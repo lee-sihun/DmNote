@@ -104,6 +104,7 @@ export interface CounterTabState {
   counterEnabled: boolean;
   placement: string;
   align: string;
+  alignMode: string;
   gap: number;
   isGapFocused: boolean;
   displayGap: string;
@@ -144,6 +145,7 @@ export interface CounterPreviewData {
   enabled?: boolean;
   placement?: string;
   align?: string;
+  alignMode?: string;
   gap?: number;
   fill?: { idle: string; active: string };
   stroke?: { idle: string; active: string };
@@ -266,6 +268,7 @@ export function createInitialCounterState(
     counterEnabled: resolved.enabled,
     placement: resolved.placement,
     align: resolved.align,
+    alignMode: resolved.alignMode,
     gap: resolved.gap ?? 6,
     isGapFocused: false,
     displayGap: `${resolved.gap ?? 6}px`,
@@ -405,6 +408,7 @@ export function useUnifiedKeySettingState({
         enabled: counterState.counterEnabled,
         placement: counterState.placement,
         align: counterState.align,
+        alignMode: counterState.alignMode,
         gap: counterState.gap,
         fill: {
           idle: counterState.fillIdle,

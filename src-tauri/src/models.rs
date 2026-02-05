@@ -204,6 +204,19 @@ impl Default for KeyCounterAlign {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum KeyCounterAlignMode {
+    Center,
+    Between,
+}
+
+impl Default for KeyCounterAlignMode {
+    fn default() -> Self {
+        KeyCounterAlignMode::Center
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyCounterColor {
     pub idle: String,
@@ -228,6 +241,8 @@ pub struct KeyCounterSettings {
     pub placement: KeyCounterPlacement,
     #[serde(default)]
     pub align: KeyCounterAlign,
+    #[serde(default)]
+    pub align_mode: KeyCounterAlignMode,
     #[serde(default)]
     pub fill: KeyCounterColor,
     #[serde(default = "default_stroke_color")]
@@ -259,6 +274,7 @@ impl Default for KeyCounterSettings {
             enabled: true,
             placement: KeyCounterPlacement::Inside,
             align: KeyCounterAlign::Top,
+            align_mode: KeyCounterAlignMode::Center,
             fill: KeyCounterColor::default(),
             stroke: default_stroke_color(),
             gap: default_gap(),

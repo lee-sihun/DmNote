@@ -114,6 +114,11 @@ const CounterTabContent = forwardRef<
     { label: t("counterSetting.alignRight"), value: "right" },
   ];
 
+  const alignModeOptions = [
+    { label: t("counterSetting.alignModeCenter"), value: "center" },
+    { label: t("counterSetting.alignModeBetween"), value: "between" },
+  ];
+
   // 배치 변경 핸들러
   const handlePlacementChange = (value: string) => {
     setState((prev) => ({ ...prev, placement: value }));
@@ -124,6 +129,11 @@ const CounterTabContent = forwardRef<
   const handleAlignChange = (value: string) => {
     setState((prev) => ({ ...prev, align: value }));
     onPreview({ align: value });
+  };
+
+  const handleAlignModeChange = (value: string) => {
+    setState((prev) => ({ ...prev, alignMode: value }));
+    onPreview({ alignMode: value });
   };
 
   // 간격 변경 핸들러
@@ -251,6 +261,7 @@ const CounterTabContent = forwardRef<
       const payload = {
         placement: state.placement,
         align: state.align,
+        alignMode: state.alignMode,
         gap: state.gap,
         fill: {
           idle: key === "fillIdle" ? color : state.fillIdle,
@@ -267,6 +278,7 @@ const CounterTabContent = forwardRef<
       setState,
       state.placement,
       state.align,
+      state.alignMode,
       state.gap,
       state.fillIdle,
       state.fillActive,
@@ -328,6 +340,20 @@ const CounterTabContent = forwardRef<
           />
         </div>
       </div>
+
+      {/* 정렬 방식 (내부 배치 전용) */}
+      {state.placement === "inside" && (
+        <div className="flex justify-between w-full items-center">
+          <p className="text-white text-style-2">
+            {t("counterSetting.alignMode")}
+          </p>
+          <Dropdown
+            options={alignModeOptions}
+            value={state.alignMode}
+            onChange={handleAlignModeChange}
+          />
+        </div>
+      )}
 
       {/* 간격 */}
       <div className="flex justify-between w-full items-center">
