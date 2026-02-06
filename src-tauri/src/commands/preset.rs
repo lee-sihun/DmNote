@@ -1,15 +1,21 @@
-use std::fs;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::{Path, PathBuf},
+};
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
         CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, KeyMappings, KeyPositions,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        FontSettings, FontType, NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
     },
 };
 
@@ -40,6 +46,17 @@ struct PresetFile {
     use_custom_js: Option<bool>,
     #[serde(rename = "customJS")]
     custom_js: Option<CustomJs>,
+    font_settings: Option<FontSettings>,
+    embedded_local_fonts: Option<Vec<EmbeddedLocalFont>>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EmbeddedLocalFont {
+    font_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    extension: Option<String>,
+    data_base64: String,
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
@@ -57,6 +74,10 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
     };
 
     let snapshot = state.store.snapshot();
+    let used_font_families = collect_used_font_families(&snapshot.key_positions, &snapshot.stat_positions);
+    let (font_settings, embedded_local_fonts) =
+        build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
+
     let preset = PresetFile {
         keys: Some(snapshot.keys),
         key_positions: Some(snapshot.key_positions),
@@ -71,6 +92,8 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
         custom_css: Some(snapshot.custom_css),
         use_custom_js: Some(snapshot.use_custom_js),
         custom_js: Some(snapshot.custom_js),
+        font_settings: Some(font_settings),
+        embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
     };
 
     let json = serde_json::to_string_pretty(&preset).map_err(|err| err.to_string())?;
@@ -140,6 +163,15 @@ pub fn preset_load(
     let custom_css = preset.custom_css.unwrap_or_default();
     let js_use = preset.use_custom_js.unwrap_or(false);
     let custom_js = preset.custom_js.unwrap_or_default();
+    let has_font_settings = preset.font_settings.is_some();
+    let mut preset_font_settings = preset.font_settings.clone().unwrap_or_default();
+    if has_font_settings {
+        restore_preset_local_fonts(
+            &app,
+            &mut preset_font_settings,
+            preset.embedded_local_fonts.as_deref(),
+        )?;
+    }
 
     let diff = state
         .settings
@@ -157,6 +189,7 @@ pub fn preset_load(
                 path: Some(custom_css.path.clone()),
                 content: Some(custom_css.content.clone()),
             }),
+            font_settings: has_font_settings.then_some(preset_font_settings),
             use_custom_js: Some(js_use),
             custom_js: Some(CustomJsPatch {
                 path: Some(custom_js.path.clone()),
@@ -203,6 +236,198 @@ pub fn preset_load(
         success: true,
         error: None,
     })
+}
+
+fn collect_used_font_families(
+    key_positions: &KeyPositions,
+    stat_positions: &StatPositions,
+) -> HashSet<String> {
+    let mut used = HashSet::new();
+
+    for positions in key_positions.values() {
+        for position in positions {
+            maybe_insert_font_family(position.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(position.counter.font_family.as_ref(), &mut used);
+        }
+    }
+
+    for positions in stat_positions.values() {
+        for stat_position in positions {
+            maybe_insert_font_family(stat_position.position.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(stat_position.position.counter.font_family.as_ref(), &mut used);
+        }
+    }
+
+    used
+}
+
+fn maybe_insert_font_family(value: Option<&String>, target: &mut HashSet<String>) {
+    if let Some(font_family) = value {
+        let trimmed = font_family.trim();
+        if !trimmed.is_empty() {
+            target.insert(trimmed.to_string());
+        }
+    }
+}
+
+fn build_preset_font_payload(
+    font_settings: &FontSettings,
+    used_font_families: &HashSet<String>,
+) -> Result<(FontSettings, Vec<EmbeddedLocalFont>), String> {
+    let mut exported_fonts = Vec::new();
+    let mut embedded_local_fonts = Vec::new();
+
+    for font in font_settings.custom_fonts.iter() {
+        if !used_font_families.contains(&font.name) {
+            continue;
+        }
+
+        let mut next_font = font.clone();
+
+        if next_font.font_type == FontType::Local {
+            let local_path = match next_font.local_path.clone() {
+                Some(path) if !path.trim().is_empty() => path,
+                _ => {
+                    log::warn!(
+                        "[Preset] Local font '{}' has no path; exporting as disabled fallback",
+                        next_font.display_name
+                    );
+                    next_font.local_path = None;
+                    next_font.css_content = None;
+                    next_font.enabled = false;
+                    exported_fonts.push(next_font);
+                    continue;
+                }
+            };
+
+            let source_path = PathBuf::from(local_path);
+            let bytes = match fs::read(&source_path) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    log::warn!(
+                        "[Preset] Failed to read local font '{}' from '{}': {err}. Exporting as disabled fallback",
+                        next_font.display_name,
+                        source_path.display()
+                    );
+                    next_font.local_path = None;
+                    next_font.css_content = None;
+                    next_font.enabled = false;
+                    exported_fonts.push(next_font);
+                    continue;
+                }
+            };
+
+            let extension = normalize_font_extension(source_path.extension().and_then(|ext| ext.to_str()));
+            embedded_local_fonts.push(EmbeddedLocalFont {
+                font_id: next_font.id.clone(),
+                extension: Some(extension),
+                data_base64: BASE64_STANDARD.encode(bytes),
+            });
+
+            // Preset portability: paths are reconstructed at import time.
+            next_font.local_path = None;
+            next_font.css_content = None;
+        }
+
+        exported_fonts.push(next_font);
+    }
+
+    Ok((FontSettings { custom_fonts: exported_fonts }, embedded_local_fonts))
+}
+
+fn restore_preset_local_fonts(
+    app: &AppHandle,
+    font_settings: &mut FontSettings,
+    embedded_local_fonts: Option<&[EmbeddedLocalFont]>,
+) -> Result<(), String> {
+    let has_local_fonts = font_settings
+        .custom_fonts
+        .iter()
+        .any(|font| font.font_type == FontType::Local);
+    if !has_local_fonts {
+        return Ok(());
+    }
+
+    let embedded_map: HashMap<&str, &EmbeddedLocalFont> = embedded_local_fonts
+        .unwrap_or(&[])
+        .iter()
+        .map(|font| (font.font_id.as_str(), font))
+        .collect();
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    let fonts_dir = app_data_dir.join("fonts");
+    fs::create_dir_all(&fonts_dir)
+        .map_err(|err| format!("failed to create fonts directory: {err}"))?;
+
+    for font in font_settings.custom_fonts.iter_mut() {
+        if font.font_type != FontType::Local {
+            continue;
+        }
+
+        // Local fonts should always be served from the copied file path.
+        font.css_content = None;
+
+        if let Some(embedded) = embedded_map.get(font.id.as_str()) {
+            let bytes = match BASE64_STANDARD.decode(embedded.data_base64.as_bytes()) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    log::warn!(
+                        "[Preset] Failed to decode embedded local font '{}': {err}",
+                        font.display_name
+                    );
+                    font.local_path = None;
+                    font.enabled = false;
+                    continue;
+                }
+            };
+
+            let extension = normalize_font_extension(embedded.extension.as_deref());
+            let dest_path = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+            if let Err(err) = fs::write(&dest_path, bytes) {
+                log::warn!(
+                    "[Preset] Failed to restore local font file for '{}': {err}",
+                    font.display_name
+                );
+                font.local_path = None;
+                font.enabled = false;
+                continue;
+            }
+            font.local_path = Some(dest_path.to_string_lossy().to_string());
+            continue;
+        }
+
+        // Backward compatibility: keep legacy absolute paths when available.
+        let has_existing_valid_path = font
+            .local_path
+            .as_ref()
+            .map(|path| !path.trim().is_empty() && Path::new(path).exists())
+            .unwrap_or(false);
+
+        if !has_existing_valid_path {
+            font.local_path = None;
+            font.enabled = false;
+        }
+    }
+
+    Ok(())
+}
+
+fn normalize_font_extension(extension: Option<&str>) -> String {
+    match extension
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "otf" => "otf".to_string(),
+        "woff" => "woff".to_string(),
+        "woff2" => "woff2".to_string(),
+        "ttf" => "ttf".to_string(),
+        _ => "ttf".to_string(),
+    }
 }
 
 fn synthesize_custom_tabs(keys: &KeyMappings) -> Vec<CustomTab> {
