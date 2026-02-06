@@ -16,7 +16,11 @@ import {
   syncFontCSS,
 } from "@stores/useFontStore";
 import type { CustomFont } from "@src/types/fonts";
-import { extractFontFamilyFromCSS, generateFontId } from "@src/types/fonts";
+import {
+  extractFontFamilyFromCSS,
+  generateFontId,
+  normalizeFontFamilyName,
+} from "@src/types/fonts";
 import WebFontInputModal from "./WebFontInputModal";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
@@ -47,6 +51,7 @@ export default function FontManagerModal({
   const [activeTab, setActiveTab] = useState<TabType>("web");
   const [isAdding, setIsAdding] = useState(false);
   const [showWebFontModal, setShowWebFontModal] = useState(false);
+  const [editingWebFontId, setEditingWebFontId] = useState<string | null>(null);
 
   const { customFonts, setAll } = useFontStore();
 
@@ -54,6 +59,14 @@ export default function FontManagerModal({
   const currentFonts = useMemo(() => {
     return customFonts.filter((f) => f.type === activeTab);
   }, [customFonts, activeTab]);
+
+  const editingWebFont = useMemo(
+    () =>
+      customFonts.find(
+        (font) => font.type === "web" && font.id === editingWebFontId,
+      ) || null,
+    [customFonts, editingWebFontId],
+  );
 
   // 주입된 preview CSS ID들을 추적하는 ref
   const previewIdsRef = useRef<Set<string>>(new Set());
@@ -89,11 +102,6 @@ export default function FontManagerModal({
     // 현재 탭의 모든 폰트에 대해 CSS 주입 (enabled 상태와 무관하게 항상 주입하여 깜빡임 방지)
     currentFonts.forEach((font) => {
       const previewId = font.id;
-      const styleTagId = `fontpreview-${previewId}`;
-      
-      // 실제 DOM에서 style 태그가 존재하는지 확인
-      const existingStyle = document.getElementById(styleTagId);
-      if (existingStyle) return; // 이미 DOM에 존재하면 스킵
 
       // preview용 font-family 이름 사용 (원본 font-family와 분리)
       const previewFontFamily = getPreviewFontFamily(font.name);
@@ -113,6 +121,7 @@ export default function FontManagerModal({
       }
 
       if (css) {
+        // 기존 style 태그가 있어도 내용을 갱신해 웹폰트 수정 사항을 즉시 반영
         injectPreviewCSS(previewId, css);
         previewIdsRef.current.add(previewId);
       }
@@ -202,6 +211,37 @@ export default function FontManagerModal({
     [setAll],
   );
 
+  const isDuplicateFontFamily = useCallback(
+    (fontFamily: string, options?: { excludeId?: string | null }) => {
+      const normalizedFamily = normalizeFontFamilyName(fontFamily);
+      if (!normalizedFamily) return false;
+
+      const allFonts = useFontStore.getState().getAllFonts();
+      return allFonts.some((font) => {
+        if (options?.excludeId && font.id === options.excludeId) {
+          return false;
+        }
+        return normalizeFontFamilyName(font.name) === normalizedFamily;
+      });
+    },
+    [],
+  );
+
+  const showDuplicateFontFamilyAlert = useCallback(
+    (fontFamily: string) => {
+      const message =
+        t("webFontInput.duplicateFontFamilyAlert", { name: fontFamily }) ||
+        `"${fontFamily}" 폰트가 이미 등록되어 있습니다.`;
+
+      void window.api.ui.dialog
+        .alert(message, { confirmText: t("common.ok") || "확인" })
+        .catch((error) => {
+          console.error("Failed to open duplicate font alert:", error);
+        });
+    },
+    [t],
+  );
+
   // 로컬 폰트 파일 선택
   const handleAddLocalFont = useCallback(async () => {
     setIsAdding(true);
@@ -210,6 +250,11 @@ export default function FontManagerModal({
       const result = await window.api.font.load();
 
       if (result.success && result.fontName && result.fontPath) {
+        if (isDuplicateFontFamily(result.fontName)) {
+          showDuplicateFontFamilyAlert(result.fontName);
+          return;
+        }
+
         const newFont: CustomFont = {
           id: generateFontId(),
           type: "local",
@@ -228,11 +273,22 @@ export default function FontManagerModal({
     } finally {
       setIsAdding(false);
     }
-  }, [persistFonts]);
+  }, [isDuplicateFontFamily, persistFonts, showDuplicateFontFamilyAlert]);
 
   // 웹폰트 추가 버튼 클릭
   const handleAddWebFont = useCallback(() => {
+    setEditingWebFontId(null);
     setShowWebFontModal(true);
+  }, []);
+
+  const handleEditWebFont = useCallback((fontId: string) => {
+    setEditingWebFontId(fontId);
+    setShowWebFontModal(true);
+  }, []);
+
+  const handleCloseWebFontModal = useCallback(() => {
+    setShowWebFontModal(false);
+    setEditingWebFontId(null);
   }, []);
 
   // 웹폰트 CSS 추가 완료
@@ -244,7 +300,13 @@ export default function FontManagerModal({
         return;
       }
 
-      const newFont: CustomFont = {
+      if (isDuplicateFontFamily(fontFamily, { excludeId: editingWebFontId })) {
+        showDuplicateFontFamilyAlert(fontFamily);
+        return;
+      }
+
+      const currentCustomFonts = useFontStore.getState().customFonts;
+      const newWebFont: CustomFont = {
         id: generateFontId(),
         type: "web",
         name: fontFamily,
@@ -252,11 +314,30 @@ export default function FontManagerModal({
         enabled: true,
         cssContent: css,
       };
-      const nextFonts = [...useFontStore.getState().customFonts, newFont];
+
+      const nextFonts: CustomFont[] = editingWebFontId
+        ? currentCustomFonts.map((font) =>
+            font.id === editingWebFontId
+              ? {
+                  ...font,
+                  name: fontFamily,
+                  displayName: displayName || fontFamily,
+                  cssContent: css,
+                }
+              : font,
+          )
+        : [...currentCustomFonts, newWebFont];
+
       persistFonts(nextFonts);
-      setShowWebFontModal(false);
+      handleCloseWebFontModal();
     },
-    [persistFonts],
+    [
+      editingWebFontId,
+      handleCloseWebFontModal,
+      isDuplicateFontFamily,
+      persistFonts,
+      showDuplicateFontFamilyAlert,
+    ],
   );
 
   // 폰트 삭제
@@ -384,12 +465,28 @@ export default function FontManagerModal({
                         >
                           <TrashIcon className="w-[14px] h-[15px]" />
                         </button>
-                        <span
-                          className="text-white text-style-2"
-                          style={{ fontFamily: `${font.name}__preview, ${font.name}` }}
-                        >
-                          {font.displayName}
-                        </span>
+                        {font.type === "web" ? (
+                          <button
+                            type="button"
+                            className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left leading-[23px] cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
+                            style={{
+                              fontFamily: `${font.name}__preview, ${font.name}`,
+                            }}
+                            onClick={() => handleEditWebFont(font.id)}
+                            title={t("webFontInput.update") || "수정"}
+                          >
+                            {font.displayName}
+                          </button>
+                        ) : (
+                          <span
+                            className="text-white text-style-2"
+                            style={{
+                              fontFamily: `${font.name}__preview, ${font.name}`,
+                            }}
+                          >
+                            {font.displayName}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center justify-center w-[27px] h-[21px]">
                         <Checkbox
@@ -446,8 +543,12 @@ export default function FontManagerModal({
       {/* 웹폰트 CSS 입력 모달 */}
       <WebFontInputModal
         isOpen={showWebFontModal}
-        onClose={() => setShowWebFontModal(false)}
+        onClose={handleCloseWebFontModal}
         onSubmit={handleWebFontSubmit}
+        initialCss={editingWebFont?.cssContent || ""}
+        isDuplicateFontFamily={(fontFamily) =>
+          isDuplicateFontFamily(fontFamily, { excludeId: editingWebFontId })
+        }
         t={t}
       />
     </>

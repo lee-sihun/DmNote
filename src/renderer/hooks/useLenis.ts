@@ -41,8 +41,8 @@ const easeOutExpo = (t: number): number => {
  * @returns scrollContainerRef - 스크롤 컨테이너에 연결할 ref (callback ref)
  */
 export function useLenis(options: UseLenisOptions = {}) {
-  const [wrapper, setWrapper] = useState<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [wrapper, setWrapper] = useState<HTMLElement | null>(null);
+  const wrapperRef = useRef<HTMLElement | null>(null);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const lenisRef = useRef<Lenis | null>(null);
   const onScrollRef = useRef<(() => void) | undefined>(options.onScroll);
@@ -57,7 +57,7 @@ export function useLenis(options: UseLenisOptions = {}) {
   } = options;
 
   // callback ref - DOM 요소가 마운트/언마운트될 때 호출됨
-  const scrollContainerRef = useCallback((node: HTMLDivElement | null) => {
+  const scrollContainerRef = useCallback((node: HTMLElement | null) => {
     if (wrapperRef.current === node) return;
     wrapperRef.current = node;
     setWrapper(node);

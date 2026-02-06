@@ -4,8 +4,7 @@
 
 @font-face {
   font-family: "SUIT-Regular";
-  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2")
-    format("woff2");
+  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
 }
@@ -52,11 +51,11 @@ body,
 }
 
 /* 라디오 버튼 스타일링 */
-input[type="radio"]:checked + span {
+input[type="radio"]:checked+span {
   border-color: #ffb400;
 }
 
-input[type="radio"]:checked + span span {
+input[type="radio"]:checked+span span {
   background: #ffb400;
   transform: scale(0.5);
 }
@@ -112,6 +111,7 @@ input[type="number"]::-webkit-outer-spin-button {
     opacity: 0;
     transform: translateY(2px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -126,6 +126,7 @@ input[type="number"]::-webkit-outer-spin-button {
   from {
     transform: scale(0.95);
   }
+
   to {
     transform: scale(1);
   }
@@ -151,6 +152,7 @@ input[type="number"]::-webkit-outer-spin-button {
   cursor: pointer !important;
   box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
 }
+
 .rcp-saturation-cursor {
   height: 10px !important;
   width: 10px !important;
@@ -166,6 +168,7 @@ input[type="number"]::-webkit-outer-spin-button {
   height: 10px !important;
   box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
 }
+
 .rcp-hue-cursor {
   height: 10px !important;
   width: 10px !important;
@@ -181,6 +184,7 @@ input[type="number"]::-webkit-outer-spin-button {
   height: 10px !important;
   box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
 }
+
 .rcp-alpha-cursor {
   height: 10px !important;
   width: 10px !important;
@@ -203,49 +207,63 @@ input[type="number"]::-webkit-outer-spin-button {
   position: absolute;
   inset: 0;
   z-index: -1;
-  -webkit-text-stroke-width: var(
-    --counter-stroke-width,
-    var(--counter-stroke-width-default, 0px)
-  );
-  -webkit-text-stroke-color: var(
-    --counter-stroke-color,
-    var(--counter-stroke-color-default, transparent)
-  );
+  -webkit-text-stroke-width: var(--counter-stroke-width,
+      var(--counter-stroke-width-default, 0px));
+  -webkit-text-stroke-color: var(--counter-stroke-color,
+      var(--counter-stroke-color-default, transparent));
   color: transparent;
 }
 
-/* Modal content scrollbar */
-.modal-content-scroll {
+/* Modal/Code editor scrollbar */
+.modal-content-scroll,
+.code-editor-scroll {
   overscroll-behavior: contain;
-  transform: translateZ(0);
+  /* 네이티브 동작 유지 */
   -webkit-overflow-scrolling: touch;
+}
+
+.code-editor-scroll {
+  overflow-anchor: none;
+  scroll-behavior: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.modal-content-scroll {
+  transform: translateZ(0);
   contain: paint;
 }
 
-.modal-content-scroll::-webkit-scrollbar {
+.modal-content-scroll::-webkit-scrollbar,
+.code-editor-scroll::-webkit-scrollbar {
   width: 4px;
+  height: 4px;
   background: transparent;
 }
 
-.modal-content-scroll::-webkit-scrollbar-track {
+.modal-content-scroll::-webkit-scrollbar-track,
+.code-editor-scroll::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 2px;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb {
+.modal-content-scroll::-webkit-scrollbar-thumb,
+.code-editor-scroll::-webkit-scrollbar-thumb {
   background: #3a3943;
   border-radius: 2px;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:hover {
+.modal-content-scroll::-webkit-scrollbar-thumb:hover,
+.code-editor-scroll::-webkit-scrollbar-thumb:hover {
   background: #4a4953;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:active {
+.modal-content-scroll::-webkit-scrollbar-thumb:active,
+.code-editor-scroll::-webkit-scrollbar-thumb:active {
   background: #5a5963;
 }
 
-/* PropertiesPanel overlay scrollbar (no layout shrink) */
+/* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
 .properties-panel-overlay-scroll {
   position: relative;
   overflow: hidden;
@@ -294,7 +312,7 @@ input[type="number"]::-webkit-outer-spin-button {
   background: #5a5963;
 }
 
-/* Settings scroll - only show on hover */
+/* 설정 스크롤 - 호버 시에만 표시 */
 .settings-content-scroll {
   overscroll-behavior: contain;
 }
