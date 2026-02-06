@@ -26,6 +26,7 @@ interface FontPickerProps {
 }
 
 type FilterType = "all" | "builtin" | "local" | "web";
+const SCROLL_CONTENT_GUTTER = 4;
 
 export default function FontPicker({
   open,
@@ -40,6 +41,7 @@ export default function FontPicker({
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<FilterType>("all");
+  const [hasOverflow, setHasOverflow] = useState(false);
   const pickerContainerRef = useRef<HTMLDivElement>(null);
   const [fixedPosition, setFixedPosition] = useState<{
     x: number;
@@ -49,7 +51,12 @@ export default function FontPicker({
   const { builtinFonts, customFonts } = useFontStore();
 
   // Lenis smooth scroll 적용
-  const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
+  const {
+    scrollContainerRef: scrollRef,
+    wrapperElement,
+    lenisInstance,
+    scrollbarWidth,
+  } = useLenis();
 
   // 필터링된 폰트 목록
   const filteredFonts = useMemo(() => {
@@ -150,6 +157,41 @@ export default function FontPicker({
     return () => cancelAnimationFrame(rafId);
   }, [open, filteredFonts.length, filterType, searchQuery, lenisInstance]);
 
+  useEffect(() => {
+    if (!open) {
+      setHasOverflow(false);
+      return;
+    }
+
+    const wrapper = wrapperElement;
+    if (!wrapper) return;
+
+    const updateOverflow = () => {
+      const nextHasOverflow = wrapper.scrollHeight > wrapper.clientHeight;
+      setHasOverflow((prev) =>
+        prev === nextHasOverflow ? prev : nextHasOverflow,
+      );
+    };
+
+    const rafId = requestAnimationFrame(updateOverflow);
+    const resizeObserver = new ResizeObserver(updateOverflow);
+    resizeObserver.observe(wrapper);
+
+    const contentEl = wrapper.firstElementChild;
+    if (contentEl instanceof HTMLElement) {
+      resizeObserver.observe(contentEl);
+    }
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+    };
+  }, [open, wrapperElement, filteredFonts.length]);
+
+  const scrollbarCompensation = hasOverflow
+    ? scrollbarWidth + SCROLL_CONTENT_GUTTER
+    : 0;
+
   return (
     <FloatingPopup
       open={open}
@@ -174,7 +216,7 @@ export default function FontPicker({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={t("fontPicker.searchPlaceholder") || "검색..."}
-          className="w-full h-[23px] px-[8px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-4 placeholder-[#6F6E7A] focus:border-[#459BF8] outline-none"
+          className="w-full h-[23px] px-[8px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-2 placeholder-[#6F6E7A] focus:border-[#459BF8] outline-none"
         />
 
         {/* 필터 드롭다운 */}
@@ -188,9 +230,26 @@ export default function FontPicker({
         {/* 폰트 리스트 */}
         <div
           ref={scrollRef}
-          className="flex flex-col gap-[4px] min-h-[120px] h-[120px] overflow-y-auto modal-content-scroll pr-[6px]"
+          className="flex flex-col gap-[4px] min-h-[120px] h-[120px] overflow-y-auto modal-content-scroll"
+          style={{
+            width:
+              scrollbarCompensation > 0
+                ? `calc(100% + ${scrollbarCompensation}px)`
+                : undefined,
+            marginRight:
+              scrollbarCompensation > 0
+                ? `-${scrollbarCompensation}px`
+                : undefined,
+          }}
         >
-          <div className="flex flex-col gap-[4px]">
+          <div
+            className="flex flex-col gap-[4px]"
+            style={
+              hasOverflow
+                ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
+                : undefined
+            }
+          >
             {filteredFonts.length === 0 ? (
               <div className="flex items-center justify-center py-[10px] text-[#6F6E7A] text-style-4">
                 {t("fontPicker.noFonts") || "폰트 없음"}
