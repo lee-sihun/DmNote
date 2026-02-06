@@ -274,6 +274,9 @@
     "placementInside": "Inside",
     "placementOutside": "Outside",
     "alignDirection": "Alignment",
+    "alignMode": "Layout",
+    "alignModeCenter": "Centered",
+    "alignModeBetween": "Spread",
     "align": "Align",
     "alignTop": "Top",
     "alignBottom": "Bottom",
@@ -296,6 +299,7 @@
     "strokeActive": "Stroke (Active)",
     "idle": "Idle",
     "active": "Pressed",
+    "font": "Font",
     "fontSize": "Font Size",
     "fontStyle": "Font Style",
     "apply": "Apply",
@@ -410,6 +414,41 @@
     "switchToProperty": "Switch to Property Panel",
     "delete": "Delete",
     "hideLayer": "Hide",
-    "showLayer": "Show"
+    "showLayer": "Show",
+    "font": "Font"
+  },
+  "fontPicker": {
+    "searchPlaceholder": "Search...",
+    "filterAll": "All",
+    "filterBuiltin": "Built-in",
+    "filterLocal": "Local",
+    "filterWeb": "Web",
+    "noFonts": "No fonts"
+  },
+  "fontManager": {
+    "localTab": "Local Fonts",
+    "webTab": "Web Fonts",
+    "noLocalFonts": "No local fonts",
+    "noWebFonts": "No web fonts",
+    "removeFont": "Remove font",
+    "adding": "Adding...",
+    "addFont": "Add"
+  },
+  "webFontInput": {
+    "cssLabel": "@font-face CSS",
+    "submit": "Save",
+    "update": "Edit",
+    "defaultFileName": "web-font",
+    "availabilityIdle": "Waiting for input",
+    "availabilityReady": "Available",
+    "availabilityNotReady": "Unavailable",
+    "availabilityInvalidCss": "Syntax error",
+    "availabilityMissingFontFace": "No @font-face",
+    "availabilityMissingFontFamily": "No font-family",
+    "availabilityMissingSrc": "No src",
+    "availabilityDuplicateFontFamily": "Already registered font-family",
+    "availabilityMultipleFamilies": "Multiple fonts detected",
+    "duplicateFontFamilyAlert": "\"{{name}}\" font is already registered.",
+    "fixedHint": "You can add @font-face CSS."
   }
 }
