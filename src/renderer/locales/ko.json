@@ -275,6 +275,9 @@
     "placementInside": "내부",
     "placementOutside": "외부",
     "alignDirection": "정렬 방향",
+    "alignMode": "정렬 방식",
+    "alignModeCenter": "중앙",
+    "alignModeBetween": "양끝",
     "align": "정렬",
     "alignTop": "상단",
     "alignBottom": "하단",
@@ -297,6 +300,7 @@
     "strokeActive": "외곽선 (입력)",
     "idle": "대기",
     "active": "입력",
+    "font": "폰트",
     "fontSize": "폰트 크기",
     "fontStyle": "폰트 스타일",
     "apply": "적용하기",
@@ -411,6 +415,28 @@
     "switchToProperty": "속성 패널로 전환",
     "delete": "삭제",
     "hideLayer": "숨기기",
-    "showLayer": "표시하기"
+    "showLayer": "표시하기",
+    "font": "폰트"
+  },
+  "fontPicker": {
+    "searchPlaceholder": "검색",
+    "filterAll": "전체",
+    "filterBuiltin": "내장 폰트",
+    "filterLocal": "로컬 폰트",
+    "filterWeb": "웹 폰트",
+    "noFonts": "폰트 없음"
+  },
+  "fontManager": {
+    "localTab": "로컬 폰트",
+    "webTab": "웹 폰트",
+    "noLocalFonts": "로컬 폰트가 없습니다",
+    "noWebFonts": "웹 폰트가 없습니다",
+    "removeFont": "폰트 삭제",
+    "adding": "추가 중...",
+    "addFont": "추가"
+  },
+  "webFontInput": {
+    "cssLabel": "@font-face CSS",
+    "submit": "추가"
   }
 }
