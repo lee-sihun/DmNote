@@ -234,6 +234,9 @@ impl AppState {
         if let Err(err) = self.persist_key_counters() {
             log::warn!("failed to persist key counters during shutdown: {err}");
         }
+        if let Err(err) = self.store.cleanup_orphan_assets_now() {
+            log::warn!("failed to cleanup orphan assets during shutdown: {err}");
+        }
         if let Some(task) = self.keyboard_task.write().take() {
             drop(task);
         }
@@ -1114,21 +1117,46 @@ fn attach_main_window_close_handler(
         }
     }
 
+    let main_window = window.clone();
+    let shutdown_started = Arc::new(AtomicBool::new(false));
+
     window.on_window_event(move |event| {
-        if matches!(event, WindowEvent::CloseRequested { .. }) {
-            {
-                let state = app_handle.state::<AppState>();
-                state.shutdown();
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            // 중복 종료 요청 방지
+            if shutdown_started.swap(true, Ordering::SeqCst) {
+                api.prevent_close();
+                return;
             }
-            overlay_force_close.store(true, Ordering::SeqCst);
+
+            // 시각적으로 즉시 종료되도록 먼저 윈도우를 숨기고,
+            // 실제 정리/프로세스 종료는 백그라운드 스레드에서 수행합니다.
+            api.prevent_close();
+            if let Err(err) = main_window.hide() {
+                log::warn!("failed to hide main window during shutdown: {err}");
+            }
             if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
-                if let Err(err) = overlay.close() {
-                    log::warn!(
-                        "failed to close overlay window during main window shutdown: {err}"
-                    );
+                if let Err(err) = overlay.hide() {
+                    log::warn!("failed to hide overlay window during shutdown: {err}");
                 }
             }
-            app_handle.exit(0);
+
+            let app_for_shutdown = app_handle.clone();
+            let overlay_force_close_for_shutdown = overlay_force_close.clone();
+            thread::spawn(move || {
+                {
+                    let state = app_for_shutdown.state::<AppState>();
+                    state.shutdown();
+                }
+                overlay_force_close_for_shutdown.store(true, Ordering::SeqCst);
+                if let Some(overlay) = app_for_shutdown.get_webview_window(OVERLAY_LABEL) {
+                    if let Err(err) = overlay.close() {
+                        log::warn!(
+                            "failed to close overlay window during main window shutdown: {err}"
+                        );
+                    }
+                }
+                app_for_shutdown.exit(0);
+            });
         }
     });
 }

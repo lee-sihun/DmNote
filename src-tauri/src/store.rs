@@ -224,6 +224,26 @@ impl AppStore {
         fs::write(&self.path, json)
             .with_context(|| format!("failed to write store file at {}", self.path.display()))
     }
+
+    /// 앱 종료 시점에 한 번 호출하는 자원 정리.
+    /// 현재 store에서 참조하지 않는 appData/fonts, appData/images 파일을 삭제합니다.
+    pub fn cleanup_orphan_assets_now(&self) -> Result<()> {
+        let snapshot = self.state.read().clone();
+        let app_data_dir = self
+            .path
+            .parent()
+            .context("failed to resolve app data directory from store path")?;
+
+        let fonts_dir = app_data_dir.join("fonts");
+        let images_dir = app_data_dir.join("images");
+
+        let referenced_font_keys = collect_local_font_path_keys(&snapshot);
+        let referenced_image_keys = collect_local_image_path_keys(&snapshot);
+
+        sweep_unreferenced_asset_files("Fonts", &fonts_dir, &referenced_font_keys)?;
+        sweep_unreferenced_asset_files("Images", &images_dir, &referenced_image_keys)?;
+        Ok(())
+    }
 }
 
 fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> {
@@ -508,6 +528,160 @@ fn normalize_image_extension(extension: Option<&str>) -> String {
         "avif" => "avif".to_string(),
         _ => "png".to_string(),
     }
+}
+
+fn collect_local_font_path_keys(data: &AppStoreData) -> HashSet<String> {
+    data.font_settings
+        .custom_fonts
+        .iter()
+        .filter(|font| font.font_type == FontType::Local)
+        .filter_map(|font| font.local_path.as_ref())
+        .filter_map(|path| normalize_local_asset_path(path))
+        .map(|path| path_lookup_key(&path))
+        .collect()
+}
+
+fn collect_local_image_path_keys(data: &AppStoreData) -> HashSet<String> {
+    let mut paths = HashSet::new();
+
+    for positions in data.key_positions.values() {
+        for position in positions {
+            collect_image_path_from_option(&mut paths, position.active_image.as_ref());
+            collect_image_path_from_option(&mut paths, position.inactive_image.as_ref());
+        }
+    }
+
+    for positions in data.stat_positions.values() {
+        for stat_position in positions {
+            collect_image_path_from_option(
+                &mut paths,
+                stat_position.position.active_image.as_ref(),
+            );
+            collect_image_path_from_option(
+                &mut paths,
+                stat_position.position.inactive_image.as_ref(),
+            );
+        }
+    }
+
+    paths
+}
+
+fn collect_image_path_from_option(paths: &mut HashSet<String>, value: Option<&String>) {
+    let Some(path) = value else {
+        return;
+    };
+    let Some(normalized) = normalize_local_asset_path(path) else {
+        return;
+    };
+    paths.insert(path_lookup_key(&normalized));
+}
+
+fn normalize_local_asset_path(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:")
+        || lower.starts_with("blob:")
+        || lower.starts_with("asset:")
+        || lower.starts_with("tauri:")
+    {
+        return None;
+    }
+
+    let normalized = if let Some(stripped) = trimmed
+        .strip_prefix("file:///")
+        .or_else(|| trimmed.strip_prefix("file://"))
+    {
+        #[cfg(target_os = "windows")]
+        {
+            let mut value = stripped.to_string();
+            if value.starts_with('/') && value.as_bytes().get(2) == Some(&b':') {
+                value = value[1..].to_string();
+            }
+            value = value.replace('/', "\\");
+            PathBuf::from(value)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            PathBuf::from(stripped)
+        }
+    } else {
+        PathBuf::from(trimmed)
+    };
+
+    if normalized.is_absolute() {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
+fn path_lookup_key(path: &Path) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        path.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.to_string_lossy().to_string()
+    }
+}
+
+fn sweep_unreferenced_asset_files(
+    log_prefix: &str,
+    target_dir: &Path,
+    referenced_path_keys: &HashSet<String>,
+) -> Result<()> {
+    if !target_dir.exists() {
+        return Ok(());
+    }
+
+    let read_dir = fs::read_dir(target_dir)
+        .with_context(|| format!("failed to read asset directory at {}", target_dir.display()))?;
+
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!(
+                    "[{log_prefix}] Failed to read an entry from '{}': {err}",
+                    target_dir.display()
+                );
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if !path.starts_with(target_dir) {
+            continue;
+        }
+        let key = path_lookup_key(&path);
+        if referenced_path_keys.contains(&key) {
+            continue;
+        }
+
+        if let Err(err) = fs::remove_file(&path) {
+            log::warn!(
+                "[{log_prefix}] Failed to remove stale asset '{}': {err}",
+                path.display()
+            );
+        } else {
+            log::info!(
+                "[{log_prefix}] Removed stale asset '{}'",
+                path.display()
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_state(mut data: AppStoreData) -> AppStoreData {
