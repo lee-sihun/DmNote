@@ -1,4 +1,22 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { EditorSelection, EditorState } from "@codemirror/state";
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+  placeholder,
+} from "@codemirror/view";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+} from "@codemirror/commands";
+import { css } from "@codemirror/lang-css";
+import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import Modal from "@components/main/Modal/Modal";
 import { validateWebFontFaceCss } from "@src/types/fonts";
 
@@ -11,110 +29,37 @@ interface WebFontInputModalProps {
   t: (key: string, options?: Record<string, string>) => string;
 }
 
-const COMMENT_TOKEN_PREFIX = "___DMN_COMMENT_";
-const STRING_TOKEN_PREFIX = "___DMN_STRING_";
-const COMMENT_TOKEN_REGEX = /___DMN_COMMENT_(\d+)___/g;
-const STRING_TOKEN_REGEX = /___DMN_STRING_(\d+)___/g;
-const CSS_PROPERTY_REGEX = /(^|\n)(\s*)([a-z-]+)(\s*:)/g;
-const CSS_AT_RULE_REGEX = /(^|[\s{;])(@[a-zA-Z-]+)/g;
-const CSS_STRING_REGEX = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g;
-const CSS_COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
-const CSS_BRACE_REGEX = /([{}])/g;
-const INDENT_UNIT = "  ";
+const WEBFONT_EDITOR_HIGHLIGHT_STYLE = HighlightStyle.define([
+  { tag: tags.comment, color: "#6A9955" },
+  { tag: [tags.string, tags.special(tags.string)], color: "#CE9178" },
+  { tag: tags.keyword, color: "#C586C0" },
+  { tag: [tags.propertyName], color: "#9CDCFE" },
+  { tag: [tags.bracket, tags.punctuation], color: "#D4D4D4" },
+]);
 
-function countLinesUntilIndex(text: string, endExclusive: number): number {
-  let line = 1;
-  const safeEnd = Math.max(0, Math.min(endExclusive, text.length));
-  for (let index = 0; index < safeEnd; index += 1) {
-    if (text.charCodeAt(index) === 10) {
-      line += 1;
-    }
-  }
-  return line;
-}
-
-function getLineStartIndex(text: string, index: number): number {
-  if (index <= 0) return 0;
-  return text.lastIndexOf("\n", index - 1) + 1;
-}
-
-function getLineEndIndex(text: string, from: number): number {
-  const nextNewLineIndex = text.indexOf("\n", from);
-  return nextNewLineIndex === -1 ? text.length : nextNewLineIndex;
-}
-
-function getIndentRemovalCount(line: string): number {
-  if (!line) return 0;
-  if (line.startsWith("\t")) {
-    return 1;
-  }
-
-  let leadingSpaceCount = 0;
-  while (
-    leadingSpaceCount < INDENT_UNIT.length &&
-    leadingSpaceCount < line.length &&
-    line.charAt(leadingSpaceCount) === " "
-  ) {
-    leadingSpaceCount += 1;
-  }
-  return leadingSpaceCount;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function highlightCssToHtml(source: string): string {
-  if (!source) return "";
-
-  let highlighted = escapeHtml(source);
-  const comments: string[] = [];
-  const strings: string[] = [];
-
-  highlighted = highlighted.replace(CSS_COMMENT_REGEX, (match) => {
-    const token = `${COMMENT_TOKEN_PREFIX}${comments.length}___`;
-    comments.push(`<span style="color:#6A9955">${match}</span>`);
-    return token;
-  });
-
-  highlighted = highlighted.replace(CSS_STRING_REGEX, (match) => {
-    const token = `${STRING_TOKEN_PREFIX}${strings.length}___`;
-    strings.push(`<span style="color:#CE9178">${match}</span>`);
-    return token;
-  });
-
-  highlighted = highlighted.replace(
-    CSS_AT_RULE_REGEX,
-    (_match, prefix, atRule: string) =>
-      `${prefix}<span style="color:#C586C0">${atRule}</span>`,
-  );
-
-  highlighted = highlighted.replace(
-    CSS_PROPERTY_REGEX,
-    (_match, start, indent, property, colon) =>
-      `${start}${indent}<span style="color:#9CDCFE">${property}</span>${colon}`,
-  );
-
-  highlighted = highlighted.replace(
-    CSS_BRACE_REGEX,
-    '<span style="color:#D7BA7D">$1</span>',
-  );
-
-  highlighted = highlighted.replace(
-    STRING_TOKEN_REGEX,
-    (_match, index) => strings[Number(index)] || "",
-  );
-
-  highlighted = highlighted.replace(
-    COMMENT_TOKEN_REGEX,
-    (_match, index) => comments[Number(index)] || "",
-  );
-
-  return highlighted;
-}
+const WEBFONT_EDITOR_BASE_EXTENSIONS = [
+  lineNumbers(),
+  highlightActiveLine(),
+  highlightActiveLineGutter(),
+  history(),
+  indentUnit.of("  "),
+  css(),
+  syntaxHighlighting(WEBFONT_EDITOR_HIGHLIGHT_STYLE),
+  EditorView.contentAttributes.of({
+    spellcheck: "false",
+    "aria-label": "@font-face CSS input",
+  }),
+  EditorView.domEventHandlers({
+    dragstart: (event) => {
+      event.preventDefault();
+      return true;
+    },
+    drop: (event) => {
+      event.preventDefault();
+      return true;
+    },
+  }),
+] as const;
 
 export default function WebFontInputModal({
   isOpen,
@@ -125,13 +70,10 @@ export default function WebFontInputModal({
   t,
 }: WebFontInputModalProps) {
   const [cssInput, setCssInput] = useState("");
-  const [activeLine, setActiveLine] = useState(1);
-  const [isEditorFocused, setIsEditorFocused] = useState(false);
-  const lineNumberTrackRef = useRef<HTMLDivElement | null>(null);
-  const codeTrackRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const cursorSyncRafRef = useRef<number | null>(null);
-  const hasEditorContent = cssInput.length > 0;
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const handleSubmitRef = useRef<() => void>(() => undefined);
+
   const trimmedCSS = cssInput.trim();
 
   const cssValidation = useMemo(
@@ -190,248 +132,30 @@ export default function WebFontInputModal({
     t("webFontInput.fixedHint") || "@font-face CSS를 추가할 수 있습니다.";
   const submitButtonLabel = t("webFontInput.submit") || "저장";
 
-  const editorLineCount = useMemo(
-    () => Math.max(cssInput.split("\n").length, 8),
-    [cssInput],
+  const placeholderText = useMemo(
+    () =>
+      `${t("webFontInput.cssLabel") || "@font-face CSS"}\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`,
+    [t],
   );
 
-  const lineNumbers = useMemo(
-    () => Array.from({ length: editorLineCount }, (_, index) => index + 1),
-    [editorLineCount],
-  );
+  const resetEditorContent = useCallback((nextValue = "") => {
+    setCssInput(nextValue);
 
-  const highlightedCss = useMemo(() => highlightCssToHtml(cssInput), [cssInput]);
+    const editorView = editorViewRef.current;
+    if (!editorView) return;
 
-  const syncLineNumberScroll = useCallback((scrollTop: number) => {
-    if (lineNumberTrackRef.current) {
-      lineNumberTrackRef.current.style.transform = `translateY(-${scrollTop}px)`;
-    }
-  }, []);
+    const currentValue = editorView.state.doc.toString();
+    if (currentValue === nextValue) return;
 
-  const syncCodeTrackScroll = useCallback((scrollTop: number, scrollLeft: number) => {
-    if (codeTrackRef.current) {
-      codeTrackRef.current.style.transform = `translate(${-scrollLeft}px, -${scrollTop}px)`;
-    }
-  }, []);
-
-  const syncViewportFromTarget = useCallback(
-    (target: HTMLTextAreaElement) => {
-      syncLineNumberScroll(target.scrollTop);
-      syncCodeTrackScroll(target.scrollTop, target.scrollLeft);
-    },
-    [syncCodeTrackScroll, syncLineNumberScroll],
-  );
-
-  const updateActiveLineFromTarget = useCallback((target: HTMLTextAreaElement) => {
-    const cursorPosition = target.selectionStart ?? 0;
-    const line = countLinesUntilIndex(target.value, cursorPosition);
-    setActiveLine(line);
-  }, []);
-
-  const scheduleCursorSyncFromActiveTextarea = useCallback(() => {
-    if (cursorSyncRafRef.current !== null) return;
-
-    cursorSyncRafRef.current = requestAnimationFrame(() => {
-      cursorSyncRafRef.current = null;
-      const target = textareaRef.current;
-      if (!target || document.activeElement !== target) return;
-      updateActiveLineFromTarget(target);
-      syncViewportFromTarget(target);
+    editorView.dispatch({
+      changes: {
+        from: 0,
+        to: currentValue.length,
+        insert: nextValue,
+      },
+      selection: EditorSelection.cursor(0),
+      scrollIntoView: true,
     });
-  }, [syncViewportFromTarget, updateActiveLineFromTarget]);
-
-  const applyTabIndentation = useCallback(
-    (target: HTMLTextAreaElement, shouldOutdent: boolean) => {
-      const value = target.value;
-      const selectionStart = target.selectionStart ?? 0;
-      const selectionEnd = target.selectionEnd ?? selectionStart;
-
-      const applyValueAndSelection = (
-        nextValue: string,
-        nextSelectionStart: number,
-        nextSelectionEnd: number,
-      ) => {
-        setCssInput(nextValue);
-        requestAnimationFrame(() => {
-          const activeTextarea = textareaRef.current;
-          if (!activeTextarea) return;
-          activeTextarea.selectionStart = nextSelectionStart;
-          activeTextarea.selectionEnd = nextSelectionEnd;
-          updateActiveLineFromTarget(activeTextarea);
-          syncViewportFromTarget(activeTextarea);
-        });
-      };
-
-      if (selectionStart === selectionEnd) {
-        if (!shouldOutdent) {
-          const nextValue =
-            value.slice(0, selectionStart) +
-            INDENT_UNIT +
-            value.slice(selectionEnd);
-          const nextCursorPosition = selectionStart + INDENT_UNIT.length;
-          applyValueAndSelection(nextValue, nextCursorPosition, nextCursorPosition);
-          return;
-        }
-
-        const lineStart = getLineStartIndex(value, selectionStart);
-        const lineEnd = getLineEndIndex(value, lineStart);
-        const currentLine = value.slice(lineStart, lineEnd);
-        const removableIndentCount = getIndentRemovalCount(currentLine);
-        if (removableIndentCount === 0) {
-          return;
-        }
-
-        const nextLine = currentLine.slice(removableIndentCount);
-        const nextValue =
-          value.slice(0, lineStart) +
-          nextLine +
-          value.slice(lineEnd);
-        const nextCursorPosition = Math.max(
-          lineStart,
-          selectionStart - removableIndentCount,
-        );
-        applyValueAndSelection(nextValue, nextCursorPosition, nextCursorPosition);
-        return;
-      }
-
-      const firstLineStart = getLineStartIndex(value, selectionStart);
-      let effectiveSelectionEnd = selectionEnd;
-      if (
-        effectiveSelectionEnd > selectionStart &&
-        value.charCodeAt(effectiveSelectionEnd - 1) === 10
-      ) {
-        effectiveSelectionEnd -= 1;
-      }
-
-      const lastLineEnd = getLineEndIndex(
-        value,
-        Math.max(firstLineStart, effectiveSelectionEnd),
-      );
-      const selectedBlock = value.slice(firstLineStart, lastLineEnd);
-      const lines = selectedBlock.split("\n");
-
-      let firstLineDelta = 0;
-      let totalDelta = 0;
-
-      const nextBlock = lines
-        .map((line, index) => {
-          if (shouldOutdent) {
-            const removableIndentCount = getIndentRemovalCount(line);
-            if (index === 0) {
-              firstLineDelta = -removableIndentCount;
-            }
-            totalDelta -= removableIndentCount;
-            return line.slice(removableIndentCount);
-          }
-
-          if (index === 0) {
-            firstLineDelta = INDENT_UNIT.length;
-          }
-          totalDelta += INDENT_UNIT.length;
-          return `${INDENT_UNIT}${line}`;
-        })
-        .join("\n");
-
-      if (nextBlock === selectedBlock) {
-        return;
-      }
-
-      const nextValue =
-        value.slice(0, firstLineStart) +
-        nextBlock +
-        value.slice(lastLineEnd);
-      const nextSelectionStart = Math.max(
-        firstLineStart,
-        selectionStart + firstLineDelta,
-      );
-      const nextSelectionEnd = Math.max(
-        nextSelectionStart,
-        selectionEnd + totalDelta,
-      );
-      applyValueAndSelection(nextValue, nextSelectionStart, nextSelectionEnd);
-    },
-    [syncViewportFromTarget, updateActiveLineFromTarget],
-  );
-
-  const resetEditorViewport = useCallback(() => {
-    const target = textareaRef.current;
-    if (target) {
-      target.scrollTop = 0;
-      target.scrollLeft = 0;
-      syncViewportFromTarget(target);
-      return;
-    }
-    syncLineNumberScroll(0);
-    syncCodeTrackScroll(0, 0);
-  }, [syncCodeTrackScroll, syncLineNumberScroll, syncViewportFromTarget]);
-
-  const resetEditorState = useCallback(
-    ({ clearInput = false }: { clearInput?: boolean } = {}) => {
-      if (clearInput) {
-        setCssInput("");
-      }
-      setActiveLine(1);
-      setIsEditorFocused(false);
-      resetEditorViewport();
-    },
-    [resetEditorViewport],
-  );
-
-  const setTextareaElement = useCallback(
-    (node: HTMLTextAreaElement | null) => {
-      textareaRef.current = node;
-      if (!node) return;
-      syncViewportFromTarget(node);
-    },
-    [syncViewportFromTarget],
-  );
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    return () => {
-      if (cursorSyncRafRef.current !== null) {
-        cancelAnimationFrame(cursorSyncRafRef.current);
-      }
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const nextCss = initialCss || "";
-    setCssInput(nextCss);
-    setActiveLine(1);
-    setIsEditorFocused(false);
-    resetEditorViewport();
-
-    const target = textareaRef.current;
-    if (!target) return;
-
-    const rafId = requestAnimationFrame(() => {
-      target.scrollTop = 0;
-      target.scrollLeft = 0;
-      updateActiveLineFromTarget(target);
-      syncViewportFromTarget(target);
-    });
-
-    return () => cancelAnimationFrame(rafId);
-  }, [
-    initialCss,
-    isOpen,
-    resetEditorViewport,
-    syncViewportFromTarget,
-    updateActiveLineFromTarget,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (cursorSyncRafRef.current !== null) {
-        cancelAnimationFrame(cursorSyncRafRef.current);
-      }
-    };
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -440,13 +164,79 @@ export default function WebFontInputModal({
     }
 
     onSubmit(trimmedCSS, extractedFontFamily || "");
-    resetEditorState({ clearInput: true });
-  }, [canSubmit, extractedFontFamily, onSubmit, resetEditorState, trimmedCSS]);
+    resetEditorContent("");
+  }, [canSubmit, extractedFontFamily, onSubmit, resetEditorContent, trimmedCSS]);
+
+  handleSubmitRef.current = handleSubmit;
 
   const handleClose = useCallback(() => {
-    resetEditorState({ clearInput: true });
+    resetEditorContent("");
     onClose();
-  }, [onClose, resetEditorState]);
+  }, [onClose, resetEditorContent]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      if (editorViewRef.current) {
+        editorViewRef.current.destroy();
+        editorViewRef.current = null;
+      }
+      setCssInput("");
+      return;
+    }
+
+    const mountNode = editorContainerRef.current;
+    if (!mountNode) return;
+
+    const initialValue = initialCss || "";
+    const nextState = EditorState.create({
+      doc: initialValue,
+      extensions: [
+        ...WEBFONT_EDITOR_BASE_EXTENSIONS,
+        placeholder(placeholderText),
+        keymap.of([
+          ...defaultKeymap,
+          ...historyKeymap,
+          indentWithTab,
+          {
+            key: "Mod-Enter",
+            run: () => {
+              handleSubmitRef.current();
+              return true;
+            },
+            preventDefault: true,
+          },
+        ]),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            setCssInput(update.state.doc.toString());
+          }
+        }),
+      ],
+    });
+
+    const editorView = new EditorView({
+      state: nextState,
+      parent: mountNode,
+    });
+
+    editorViewRef.current = editorView;
+    setCssInput(initialValue);
+
+    const rafId = requestAnimationFrame(() => {
+      editorView.dispatch({
+        selection: EditorSelection.cursor(0),
+        scrollIntoView: true,
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      editorView.destroy();
+      if (editorViewRef.current === editorView) {
+        editorViewRef.current = null;
+      }
+    };
+  }, [initialCss, isOpen, placeholderText]);
 
   if (!isOpen) return null;
 
@@ -471,105 +261,11 @@ export default function WebFontInputModal({
         </div>
 
         <div className="p-[12px] pb-[0px]">
-          <div className="w-full h-[220px] rounded-[8px] border border-[#3A3943] bg-[#1A191E] overflow-hidden flex">
-            <div className="w-[48px] shrink-0 bg-[#23232A] border-r border-[#3A3943] overflow-hidden">
-              <div
-                ref={lineNumberTrackRef}
-                className="pt-[10px] pb-[10px] pr-[14px] text-right text-[12px] leading-[22px] text-[#6F6E7A] select-none font-mono tabular-nums will-change-transform"
-              >
-                {lineNumbers.map((line) => (
-                  <div
-                    key={line}
-                    className={`h-[22px] ${
-                      isEditorFocused && line === activeLine ? "text-[#DBDEE8]" : ""
-                    }`}
-                  >
-                    {line}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="relative flex-1 overflow-hidden">
-              <div className="absolute inset-0 z-[6] pointer-events-none overflow-hidden">
-                <div
-                  ref={codeTrackRef}
-                  className="w-max min-w-full min-h-full will-change-transform"
-                  style={{ transform: "translate(0px, 0px)" }}
-                >
-                  {hasEditorContent ? (
-                    <pre
-                      aria-hidden
-                      className="m-0 px-0 py-0 text-[12px] leading-[22px] font-mono text-[#DBDEE8] whitespace-pre"
-                    >
-                      <code
-                        className="block min-w-full pl-[15px] pr-[12px] py-[10px]"
-                        dangerouslySetInnerHTML={{
-                          __html: `${highlightedCss}\n`,
-                        }}
-                      />
-                    </pre>
-                  ) : null}
-                </div>
-              </div>
-
-              <textarea
-                ref={setTextareaElement}
-                value={cssInput}
-                onChange={(event) => {
-                  setCssInput(event.target.value);
-                  updateActiveLineFromTarget(event.currentTarget);
-                  syncViewportFromTarget(event.currentTarget);
-                }}
-                onScroll={(event) => {
-                  syncViewportFromTarget(event.currentTarget);
-                }}
-                onFocus={(event) => {
-                  setIsEditorFocused(true);
-                  updateActiveLineFromTarget(event.currentTarget);
-                  syncViewportFromTarget(event.currentTarget);
-                }}
-                onBlur={() => {
-                  setIsEditorFocused(false);
-                }}
-                onSelect={() => {
-                  scheduleCursorSyncFromActiveTextarea();
-                }}
-                onClick={() => {
-                  scheduleCursorSyncFromActiveTextarea();
-                }}
-                onKeyUp={() => {
-                  scheduleCursorSyncFromActiveTextarea();
-                }}
-                onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                    event.preventDefault();
-                    handleSubmit();
-                    return;
-                  }
-
-                  if (event.key === "Tab") {
-                    event.preventDefault();
-                    applyTabIndentation(event.currentTarget, event.shiftKey);
-                    return;
-                  }
-
-                  scheduleCursorSyncFromActiveTextarea();
-                }}
-                placeholder={`${t("webFontInput.cssLabel") || "@font-face CSS"}
-
-@font-face {
-  font-family: 'FontName';
-  src: url('https://...') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}`}
-                aria-label="@font-face CSS input"
-                wrap="off"
-                className="absolute inset-0 z-10 pl-[15px] pr-[12px] py-[10px] bg-transparent text-transparent text-[12px] leading-[22px] placeholder-[#6F6E7A] focus:placeholder-transparent outline-none resize-none font-mono caret-[#DBDEE8] selection:bg-[#264F78] selection:text-transparent select-text overflow-auto code-editor-scroll"
-                spellCheck={false}
-              />
-            </div>
+          <div className="w-full h-[220px] rounded-[8px] border border-[#3A3943] bg-[#1E1E1E] overflow-hidden">
+            <div
+              ref={editorContainerRef}
+              className="h-full webfont-cm-editor"
+            />
           </div>
         </div>
 

@@ -214,52 +214,156 @@ input[type="number"]::-webkit-outer-spin-button {
   color: transparent;
 }
 
-/* Modal/Code editor scrollbar */
-.modal-content-scroll,
-.code-editor-scroll {
+/* Modal scrollbar */
+.modal-content-scroll {
   overscroll-behavior: contain;
   /* 네이티브 동작 유지 */
   -webkit-overflow-scrolling: touch;
-}
-
-.code-editor-scroll {
-  overflow-anchor: none;
-  scroll-behavior: auto;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.modal-content-scroll {
   transform: translateZ(0);
   contain: paint;
 }
 
-.modal-content-scroll::-webkit-scrollbar,
-.code-editor-scroll::-webkit-scrollbar {
+.modal-content-scroll::-webkit-scrollbar {
   width: 4px;
   height: 4px;
   background: transparent;
 }
 
-.modal-content-scroll::-webkit-scrollbar-track,
-.code-editor-scroll::-webkit-scrollbar-track {
+.modal-content-scroll::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 2px;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb,
-.code-editor-scroll::-webkit-scrollbar-thumb {
+.modal-content-scroll::-webkit-scrollbar-thumb {
   background: #3a3943;
   border-radius: 2px;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:hover,
-.code-editor-scroll::-webkit-scrollbar-thumb:hover {
+.modal-content-scroll::-webkit-scrollbar-thumb:hover {
   background: #4a4953;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:active,
-.code-editor-scroll::-webkit-scrollbar-thumb:active {
+.modal-content-scroll::-webkit-scrollbar-thumb:active {
+  background: #5a5963;
+}
+
+/* WebFontInputModal code editor */
+.webfont-cm-editor {
+  height: 100%;
+}
+
+.webfont-cm-editor .cm-editor {
+  height: 100%;
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-line {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-gutterElement {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.webfont-cm-editor .cm-gutterElement {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.webfont-cm-editor .cm-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.webfont-cm-editor .cm-content {
+  min-height: 100%;
+  padding: 8px 12px 8px 14px;
+  tab-size: 2;
+  caret-color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-line {
+  padding: 0;
+}
+
+.webfont-cm-editor .cm-gutters {
+  background: #252526;
+  color: #858585;
+  border-right: 1px solid #33343d;
+}
+
+.webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
+  width: 52px;
+  min-width: 52px;
+  box-sizing: border-box;
+  padding: 0 12px 0 0;
+  text-align: right;
+}
+
+.webfont-cm-editor .cm-activeLine {
+  background: #ffffff10;
+}
+
+.webfont-cm-editor .cm-activeLineGutter {
+  color: #c6c6c6;
+  background: #252526;
+}
+
+.webfont-cm-editor .cm-content ::selection {
+  background: #5b7fae;
+}
+
+.webfont-cm-editor .cm-content ::-moz-selection {
+  background: #5b7fae;
+}
+
+.webfont-cm-editor .cm-cursor,
+.webfont-cm-editor .cm-dropCursor {
+  border-left-color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.webfont-cm-editor .cm-placeholder {
+  color: #6f6e7a;
+  white-space: pre;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: #3a3943;
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: #4a4953;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   background: #5a5963;
 }
 
