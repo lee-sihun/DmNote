@@ -15,6 +15,7 @@ import { useSmartGuidesElements } from "@hooks/Grid";
 import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
+import { resolveImageSource } from "@utils/imageSource";
 import {
   calculateBounds,
   calculateSnapPoints,
@@ -85,6 +86,7 @@ export default function DraggableKey({
 
   // 표시할 텍스트: displayText가 있으면 사용, 없으면 기본 displayName
   const labelText = displayText || displayName;
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
 
   // 카운터 설정 정규화
   const counterSettings = normalizeCounterSettings(
@@ -470,7 +472,7 @@ export default function DraggableKey({
         useInline && backgroundColor
           ? backgroundColor
           : `var(--key-bg, ${
-              inactiveImage
+              inactiveImageSrc
                 ? "transparent"
                 : backgroundColor || "rgba(46, 46, 47, 0.9)"
             })`,
@@ -503,7 +505,7 @@ export default function DraggableKey({
       renderDy,
       width,
       height,
-      inactiveImage,
+      inactiveImageSrc,
       zIndex,
       position.zIndex,
       useInline,
@@ -679,8 +681,8 @@ export default function DraggableKey({
       onContextMenu={handleContextMenu}
       onDragStart={(e) => e.preventDefault()}
     >
-      {inactiveImage ? (
-        <img src={inactiveImage} alt="" style={imageStyle} draggable={false} />
+      {inactiveImageSrc ? (
+        <img src={inactiveImageSrc} alt="" style={imageStyle} draggable={false} />
       ) : showInsideCounter ? (
         renderInsideCounterPreview()
       ) : (
@@ -764,6 +766,7 @@ export const Key = memo(
         : inactiveImage
         ? inactiveImage
         : null;
+    const currentImageSrc = resolveImageSource(currentImage);
     const isUsingActiveImage = active && !!activeImage;
     const effectiveImageFit = isUsingActiveImage
       ? activeImageFit || imageFit || "cover"
@@ -832,7 +835,7 @@ export const Key = memo(
       dy,
       width,
       height,
-      currentImage,
+      currentImageSrc,
       position.zIndex,
       useInline,
       backgroundColor,
@@ -1022,7 +1025,7 @@ export const Key = memo(
         onMouseDown={handleKeyMouseDown}
       >
         {currentImage ? (
-          <img src={currentImage} alt="" style={imageStyle} draggable={false} />
+          <img src={currentImageSrc || ""} alt="" style={imageStyle} draggable={false} />
         ) : showText ? (
           showInsideCounter ? (
             renderInsideLayout()
@@ -1047,10 +1050,10 @@ export const Key = memo(
               borderRadius: "inherit",
               pointerEvents: "none",
               zIndex: 1,
-              WebkitMaskImage: `url(${currentImage})`,
+              WebkitMaskImage: currentImageSrc ? `url(${currentImageSrc})` : "none",
               WebkitMaskRepeat: "no-repeat",
               WebkitMaskSize: "100% 100%",
-              maskImage: `url(${currentImage})`,
+              maskImage: currentImageSrc ? `url(${currentImageSrc})` : "none",
               maskRepeat: "no-repeat",
               maskSize: "100% 100%",
             }}

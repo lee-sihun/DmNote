@@ -39,7 +39,10 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/fonts/**"]
+        "scope": [
+          "$APPDATA/fonts/**",
+          "$APPDATA/images/**"
+        ]
       },
       "capabilities": [
         "main",

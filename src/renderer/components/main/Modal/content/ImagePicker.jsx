@@ -3,6 +3,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import FloatingPopup from "../FloatingPopup";
 import Checkbox from "@components/main/common/Checkbox";
 import Dropdown from "@components/main/common/Dropdown";
+import { resolveImageSource } from "@utils/imageSource";
 
 const STATE_MODES = {
   idle: "idle",
@@ -32,29 +33,25 @@ export default function ImagePicker({
 }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState(STATE_MODES.idle);
-  const idleInputRef = useRef(null);
-  const activeInputRef = useRef(null);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
 
-  const handleImageSelect = (e, stateMode) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (stateMode === STATE_MODES.idle) {
-          onIdleImageChange?.(event.target.result);
-        } else {
-          onActiveImageChange?.(event.target.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleImageClick = (stateMode) => {
-    if (stateMode === STATE_MODES.idle) {
-      idleInputRef.current?.click();
-    } else {
-      activeInputRef.current?.click();
+  const handleImageClick = async (stateMode) => {
+    if (isLoadingImage) return;
+    setIsLoadingImage(true);
+    try {
+      const result = await window.api.image.load();
+      if (!result?.success || !result.imagePath) {
+        return;
+      }
+      if (stateMode === STATE_MODES.idle) {
+        onIdleImageChange?.(result.imagePath);
+      } else {
+        onActiveImageChange?.(result.imagePath);
+      }
+    } catch (error) {
+      console.error("Failed to load image", error);
+    } finally {
+      setIsLoadingImage(false);
     }
   };
 
@@ -67,6 +64,7 @@ export default function ImagePicker({
   };
 
   const currentImage = mode === STATE_MODES.idle ? idleImage : activeImage;
+  const currentImageSrc = resolveImageSource(currentImage);
   const currentTransparent =
     mode === STATE_MODES.idle ? idleTransparent : activeTransparent;
   const currentImageFit = mode === STATE_MODES.idle ? idleImageFit : activeImageFit;
@@ -203,7 +201,7 @@ export default function ImagePicker({
           {currentImage && !currentTransparent && (
             <div
               className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${currentImage})` }}
+              style={{ backgroundImage: currentImageSrc ? `url(${currentImageSrc})` : "none" }}
             />
           )}
 
@@ -211,22 +209,10 @@ export default function ImagePicker({
           <div
             className="absolute inset-0 bg-black opacity-0 group-hover:opacity-40 transition-opacity"
             onClick={() => handleImageClick(mode)}
-          />
-
-          {/* 숨겨진 파일 입력 */}
-          <input
-            type="file"
-            accept="image/*"
-            ref={idleInputRef}
-            className="hidden"
-            onChange={(e) => handleImageSelect(e, STATE_MODES.idle)}
-          />
-          <input
-            type="file"
-            accept="image/*"
-            ref={activeInputRef}
-            className="hidden"
-            onChange={(e) => handleImageSelect(e, STATE_MODES.active)}
+            style={{
+              pointerEvents: isLoadingImage ? "none" : "auto",
+              cursor: isLoadingImage ? "progress" : "pointer",
+            }}
           />
         </div>
 

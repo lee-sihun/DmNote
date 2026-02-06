@@ -40,6 +40,7 @@ import {
   useSmartGuidesElements,
 } from "@hooks/Grid";
 import { createDefaultCounterSettings } from "@src/types/keys";
+import { resolveImageSource } from "@utils/imageSource";
 
 function getStatTypeLabel(type) {
   if (type === "kps") return "KPS";
@@ -920,7 +921,9 @@ export default function Grid({
       },
       keyName,
     } = duplicateState;
-    const backgroundColor = inactiveImage
+    const previewImage =
+      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || "";
+    const backgroundColor = previewImage
       ? "transparent"
       : "rgba(46, 46, 47, 0.9)";
     const borderStyle = "3px solid rgba(113, 113, 113, 0.9)";
@@ -948,9 +951,9 @@ export default function Grid({
           zIndex: 1000,
         }}
       >
-        {inactiveImage || activeImage ? (
+        {previewImage ? (
           <img
-            src={inactiveImage || activeImage || ""}
+            src={previewImage}
             alt=""
             style={{
               width: "100%",

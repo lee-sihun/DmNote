@@ -6,6 +6,7 @@ import {
   normalizeCounterSettings,
 } from "@src/types/keys";
 import { toCssRgba } from "@utils/colorUtils";
+import { resolveImageSource } from "@utils/imageSource";
 
 export default memo(function StatItem({
   statType,
@@ -52,6 +53,7 @@ export default memo(function StatItem({
   const labelText = position.displayText || label || "";
 
   const currentImage = inactiveImage ? inactiveImage : null;
+  const currentImageSrc = resolveImageSource(currentImage);
   const effectiveImageFit = idleImageFit || imageFit || "cover";
 
   const counterSettings = useMemo(() => {
@@ -71,7 +73,7 @@ export default memo(function StatItem({
     : 0;
 
   const keyStyle = useMemo(() => {
-    const defaultBgColor = currentImage
+    const defaultBgColor = currentImageSrc
       ? "transparent"
       : "rgba(46, 46, 47, 0.9)";
     const defaultBorderColor = "rgba(113, 113, 113, 0.9)";
@@ -117,7 +119,7 @@ export default memo(function StatItem({
     dy,
     width,
     height,
-    currentImage,
+    currentImageSrc,
     position.zIndex,
     useInline,
     backgroundColor,
@@ -265,8 +267,8 @@ export default memo(function StatItem({
       style={keyStyle}
       data-state="inactive"
     >
-      {currentImage ? (
-        <img src={currentImage} alt="" style={imageStyle} draggable={false} />
+      {currentImageSrc ? (
+        <img src={currentImageSrc} alt="" style={imageStyle} draggable={false} />
       ) : showInsideCounter ? (
         renderInsideLayout()
       ) : (

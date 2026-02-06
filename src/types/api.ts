@@ -71,6 +71,12 @@ export type FontLoadResult = {
   fontPath?: string;
 };
 
+export type ImageLoadResult = {
+  success: boolean;
+  error?: string;
+  imagePath?: string;
+};
+
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
@@ -682,6 +688,9 @@ export interface DMNoteAPI {
   };
   font: {
     load(): Promise<FontLoadResult>;
+  };
+  image: {
+    load(): Promise<ImageLoadResult>;
   };
   js: {
     get(): Promise<CustomJs>;

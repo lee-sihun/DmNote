@@ -116,6 +116,7 @@ fn main() {
             commands::css::css_tab_set,
             commands::css::css_tab_toggle,
             commands::font::font_load,
+            commands::image::image_load,
             commands::js::js_get,
             commands::js::js_get_use,
             commands::js::js_toggle,

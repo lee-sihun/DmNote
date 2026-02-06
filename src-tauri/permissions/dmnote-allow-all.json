@@ -33,6 +33,7 @@
           "css_tab_set",
           "css_tab_toggle",
           "font_load",
+          "image_load",
           "js_get",
           "js_get_use",
           "js_toggle",

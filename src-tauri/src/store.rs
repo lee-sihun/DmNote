@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use dirs_next::config_dir;
 use parking_lot::RwLock;
 use serde::Deserialize;
@@ -53,6 +54,9 @@ impl AppStore {
         // Migration: local fonts used to store base64(data URI) cssContent in store.json. Convert them
         // to path-based fonts stored under the app data directory so settings updates stay fast.
         if migrate_local_fonts_to_app_data(&dir, &mut state) {
+            needs_persist = true;
+        }
+        if migrate_key_images_to_app_data(&dir, &mut state) {
             needs_persist = true;
         }
 
@@ -344,6 +348,166 @@ fn migrate_local_fonts_to_app_data(app_data_dir: &Path, data: &mut AppStoreData)
     }
 
     changed
+}
+
+fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut AppStoreData) -> bool {
+    let mut changed = false;
+
+    let has_any_images = data.key_positions.values().any(|positions| {
+        positions.iter().any(|position| {
+            option_has_non_empty_text(&position.active_image)
+                || option_has_non_empty_text(&position.inactive_image)
+        })
+    }) || data.stat_positions.values().any(|positions| {
+        positions.iter().any(|stat_position| {
+            option_has_non_empty_text(&stat_position.position.active_image)
+                || option_has_non_empty_text(&stat_position.position.inactive_image)
+        })
+    });
+
+    if !has_any_images {
+        return false;
+    }
+
+    let images_dir = app_data_dir.join("images");
+    if let Err(err) = fs::create_dir_all(&images_dir) {
+        log::warn!(
+            "[Images] Failed to create images directory at {}: {err}",
+            images_dir.display()
+        );
+        return false;
+    }
+
+    for positions in data.key_positions.values_mut() {
+        for position in positions.iter_mut() {
+            changed |= migrate_image_reference_to_app_data(&images_dir, &mut position.active_image);
+            changed |= migrate_image_reference_to_app_data(&images_dir, &mut position.inactive_image);
+        }
+    }
+
+    for positions in data.stat_positions.values_mut() {
+        for stat_position in positions.iter_mut() {
+            changed |= migrate_image_reference_to_app_data(
+                &images_dir,
+                &mut stat_position.position.active_image,
+            );
+            changed |= migrate_image_reference_to_app_data(
+                &images_dir,
+                &mut stat_position.position.inactive_image,
+            );
+        }
+    }
+
+    changed
+}
+
+fn migrate_image_reference_to_app_data(images_dir: &Path, image_ref: &mut Option<String>) -> bool {
+    let Some(raw_value) = image_ref.clone() else {
+        return false;
+    };
+
+    let trimmed = raw_value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if let Some((bytes, extension)) = decode_image_data_url(trimmed) {
+        let dest = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+        match fs::write(&dest, bytes) {
+            Ok(_) => {
+                *image_ref = Some(dest.to_string_lossy().to_string());
+                return true;
+            }
+            Err(err) => {
+                log::warn!(
+                    "[Images] Failed to migrate data URL image into {}: {err}",
+                    dest.display()
+                );
+                return false;
+            }
+        }
+    }
+
+    let source = PathBuf::from(trimmed);
+    if !source.is_absolute() || !source.exists() {
+        return false;
+    }
+    if source.starts_with(images_dir) {
+        return false;
+    }
+
+    let extension = normalize_image_extension(source.extension().and_then(|ext| ext.to_str()));
+    let dest = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+    match fs::copy(&source, &dest) {
+        Ok(_) => {
+            *image_ref = Some(dest.to_string_lossy().to_string());
+            true
+        }
+        Err(err) => {
+            log::warn!(
+                "[Images] Failed to copy local image from {}: {err}",
+                source.display()
+            );
+            false
+        }
+    }
+}
+
+fn option_has_non_empty_text(value: &Option<String>) -> bool {
+    value
+        .as_ref()
+        .map(|text| !text.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn decode_image_data_url(value: &str) -> Option<(Vec<u8>, String)> {
+    let (header, payload) = value.split_once(',')?;
+    let header_lower = header.to_ascii_lowercase();
+    if !header_lower.starts_with("data:image/") || !header_lower.contains(";base64") {
+        return None;
+    }
+
+    let mime = header
+        .split(';')
+        .next()
+        .and_then(|part| part.strip_prefix("data:"))
+        .unwrap_or("image/png");
+    let extension = extension_from_image_mime(mime);
+    let bytes = BASE64_STANDARD.decode(payload.as_bytes()).ok()?;
+    Some((bytes, extension))
+}
+
+fn extension_from_image_mime(mime: &str) -> String {
+    match mime.trim().to_ascii_lowercase().as_str() {
+        "image/jpeg" | "image/jpg" => "jpg".to_string(),
+        "image/png" => "png".to_string(),
+        "image/webp" => "webp".to_string(),
+        "image/gif" => "gif".to_string(),
+        "image/bmp" => "bmp".to_string(),
+        "image/svg+xml" => "svg".to_string(),
+        "image/x-icon" | "image/vnd.microsoft.icon" => "ico".to_string(),
+        "image/avif" => "avif".to_string(),
+        _ => "png".to_string(),
+    }
+}
+
+fn normalize_image_extension(extension: Option<&str>) -> String {
+    match extension
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "jpg" | "jpeg" => "jpg".to_string(),
+        "png" => "png".to_string(),
+        "webp" => "webp".to_string(),
+        "gif" => "gif".to_string(),
+        "bmp" => "bmp".to_string(),
+        "svg" => "svg".to_string(),
+        "ico" => "ico".to_string(),
+        "avif" => "avif".to_string(),
+        _ => "png".to_string(),
+    }
 }
 
 fn normalize_state(mut data: AppStoreData) -> AppStoreData {

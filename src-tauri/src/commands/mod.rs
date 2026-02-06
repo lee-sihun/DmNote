@@ -2,6 +2,7 @@ pub mod app;
 pub mod bridge;
 pub mod css;
 pub mod font;
+pub mod image;
 pub mod js;
 pub mod keys;
 pub mod overlay;

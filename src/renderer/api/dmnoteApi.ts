@@ -282,6 +282,9 @@ const api: DMNoteAPI = {
   font: {
     load: () => invoke<import("@src/types/api").FontLoadResult>("font_load"),
   },
+  image: {
+    load: () => invoke<import("@src/types/api").ImageLoadResult>("image_load"),
+  },
   js: {
     get: () => invoke<CustomJs>("js_get"),
     getUse: () => invoke<boolean>("js_get_use"),
