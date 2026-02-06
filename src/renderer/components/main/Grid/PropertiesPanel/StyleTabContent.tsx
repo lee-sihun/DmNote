@@ -785,7 +785,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           }}
           onClose={() => setPickerFor(null)}
           onOpenManager={() => {
-            setPickerFor(null);
             setShowFontManager(true);
           }}
           interactiveRefs={[fontButtonRef]}

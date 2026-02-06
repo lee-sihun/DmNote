@@ -269,7 +269,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           }}
           onClose={() => setShowFontPicker(false)}
           onOpenManager={() => {
-            setShowFontPicker(false);
             setShowFontManager(true);
           }}
           interactiveRefs={[fontButtonRef]}

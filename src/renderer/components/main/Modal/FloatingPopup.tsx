@@ -179,6 +179,9 @@ const FloatingPopup = ({
       const interactiveEls = interactiveRefs
         .map((r) => r?.current)
         .filter(Boolean) as HTMLElement[];
+      const isInsideModal =
+        target instanceof Element &&
+        !!target.closest('[data-dmn-modal-backdrop="true"]');
       
       if (!floatingEl) return;
 
@@ -201,6 +204,13 @@ const FloatingPopup = ({
       }
 
       if (isInsideReference || isInsideInteractive) {
+        pointerCapturedInside = false;
+        return;
+      }
+
+      // 모달이 열린 상태에서 모달 내부 클릭으로 팝업이 닫히는 것을 방지.
+      // (Modal은 body로 portal 렌더링되기 때문에 단순 z-index로는 해결이 안 됨)
+      if (isInsideModal) {
         pointerCapturedInside = false;
         return;
       }

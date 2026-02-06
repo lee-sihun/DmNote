@@ -392,7 +392,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           }}
           onClose={() => setPickerFor(null)}
           onOpenManager={() => {
-            setPickerFor(null);
             setShowFontManager(true);
           }}
           interactiveRefs={[fontBtnRef]}

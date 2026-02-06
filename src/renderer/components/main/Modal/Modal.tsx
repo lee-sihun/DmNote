@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   onClick?: () => void;
@@ -46,7 +47,7 @@ export default function Modal({
     e.stopPropagation();
   };
 
-  return (
+  return createPortal(
     <div
       data-dmn-modal-backdrop="true"
       className={`fixed top-[31px] left-[1px] flex items-center justify-center w-[900px] h-[396px] bg-[#000000] bg-opacity-70 z-50 ${backdropAnimClass}`}
@@ -59,6 +60,7 @@ export default function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
