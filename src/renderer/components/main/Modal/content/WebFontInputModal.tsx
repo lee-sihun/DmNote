@@ -42,36 +42,40 @@ export default function WebFontInputModal({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] gap-[19px]"
+        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <textarea
-          autoFocus
-          value={cssInput}
-          onChange={(e) => setCssInput(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
-          placeholder={`${t("webFontInput.cssLabel") || "@font-face CSS"}
+        <div className="pr-[14px]">
+          <textarea
+            autoFocus
+            value={cssInput}
+            onChange={(e) => setCssInput(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            placeholder={`${t("webFontInput.cssLabel") || "@font-face CSS"}
 
 @font-face {
   font-family: 'FontName';
           src: url('https://...') format('woff2');
   font-weight: 400;
 }`}
-          aria-label="@font-face CSS input"
-          className="w-full h-[220px] px-[12px] py-[10px] bg-[#2A2A30] rounded-[7px] border-[1px] text-[#DBDEE8] text-style-4 placeholder-[#6F6E7A] outline-none resize-none font-mono transition-colors border-[#3A3943] focus:border-[#459BF8]"
-          spellCheck={false}
-        />
+            aria-label="@font-face CSS input"
+            className="w-full h-[220px] px-[12px] py-[10px] bg-[#2A2A30] rounded-[7px] border-[1px] text-[#DBDEE8] text-style-4 placeholder-[#6F6E7A] outline-none resize-none font-mono transition-colors border-[#3A3943] focus:border-[#459BF8]"
+            spellCheck={false}
+          />
+        </div>
 
-        <div className="flex items-center justify-end gap-[10.5px]">
+        <div className="h-px bg-[#2A2A30] my-[20px] -ml-[20px] -mr-[6px]" />
+
+        <div className="flex items-center justify-end gap-[10.5px] pr-[14px]">
           <button
             className={`w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
               canSubmit
-                ? "bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]"
+                ? "bg-[#2A2A30] hover:bg-[#34343c]"
                 : "bg-[#222228] cursor-not-allowed opacity-50"
             }`}
             onClick={handleSubmit}
@@ -80,7 +84,7 @@ export default function WebFontInputModal({
             {t("webFontInput.submit") || "추가"}
           </button>
           <button
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
+            className="w-[75px] h-[30px] bg-[#2A2A30] rounded-[7px] text-style-3 text-[#DCDEE7] hover:bg-[#34343c] transition-colors"
             onClick={handleClose}
           >
             {t("common.cancel") || "취소"}

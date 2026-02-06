@@ -414,7 +414,7 @@ export default function FontManagerModal({
           </div>
 
           {/* 구분선 */}
-          <div className="h-[0.5px] bg-[#2A2A30] my-[20px] -ml-[20px] -mr-[6px]" />
+          <div className="h-px bg-[#2A2A30] my-[20px] -ml-[20px] -mr-[6px]" />
 
           {/* 하단 버튼 */}
           <div className="flex items-center gap-[10.5px] pr-[14px]">
