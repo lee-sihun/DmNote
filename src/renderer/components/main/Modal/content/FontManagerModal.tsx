@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useRef,
   useEffect,
+  useLayoutEffect,
 } from "react";
 import { useLenis } from "@hooks/useLenis";
 import Modal from "@components/main/Modal/Modal";
@@ -26,6 +27,7 @@ interface FontManagerModalProps {
 }
 
 type TabType = "local" | "web";
+const MAX_SCROLL_HEIGHT = 195;
 
 export default function FontManagerModal({
   isOpen,
@@ -39,6 +41,7 @@ export default function FontManagerModal({
   });
   const [skipShadowTransition, setSkipShadowTransition] = useState(true);
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
+  const [isScrollable, setIsScrollable] = useState(false);
   const isFirstRender = useRef(true);
 
   const [activeTab, setActiveTab] = useState<TabType>("web");
@@ -143,10 +146,12 @@ export default function FontManagerModal({
   });
 
   // 스크롤 상태 및 높이 업데이트
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) return;
 
     setSkipShadowTransition(true);
+    setScrollState({ hasTopShadow: false, hasBottomShadow: false });
+    setIsScrollable(false);
 
     const el = wrapperElement;
     const contentEl = contentRef.current;
@@ -155,8 +160,8 @@ export default function FontManagerModal({
     const updateHeight = () => {
       if (contentEl) {
         const contentHeight = contentEl.scrollHeight;
-        const maxHeight = 195;
-        setContainerHeight(Math.min(contentHeight, maxHeight));
+        setContainerHeight(Math.min(contentHeight, MAX_SCROLL_HEIGHT));
+        setIsScrollable(contentHeight > MAX_SCROLL_HEIGHT);
       }
     };
 
@@ -182,7 +187,7 @@ export default function FontManagerModal({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [isOpen, currentFonts.length, wrapperElement, updateScrollState]);
+  }, [isOpen, activeTab, currentFonts, wrapperElement, updateScrollState]);
 
   const persistFonts = useCallback(
     (nextFonts: CustomFont[]) => {
@@ -339,11 +344,12 @@ export default function FontManagerModal({
 
             <div
               ref={scrollRef}
-              className="overflow-y-auto modal-content-scroll pr-[14px]"
+              className="modal-content-scroll pr-[14px]"
               style={{
                 height:
                   containerHeight !== null ? `${containerHeight}px` : "auto",
-                maxHeight: "195px",
+                maxHeight: `${MAX_SCROLL_HEIGHT}px`,
+                overflowY: isScrollable ? "auto" : "hidden",
                 transition: isFirstRender.current
                   ? "none"
                   : "height 100ms ease-in-out",
