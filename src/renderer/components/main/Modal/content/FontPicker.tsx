@@ -2,6 +2,7 @@ import React, {
   useState,
   useRef,
   useLayoutEffect,
+  useEffect,
   useMemo,
   useCallback,
 } from "react";
@@ -48,7 +49,7 @@ export default function FontPicker({
   const { builtinFonts, customFonts } = useFontStore();
 
   // Lenis smooth scroll 적용
-  const { scrollContainerRef: scrollRef } = useLenis();
+  const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
   // 필터링된 폰트 목록
   const filteredFonts = useMemo(() => {
@@ -141,6 +142,14 @@ export default function FontPicker({
     [onFontSelect],
   );
 
+  useEffect(() => {
+    if (!open) return;
+    const rafId = requestAnimationFrame(() => {
+      lenisInstance.current?.resize?.();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [open, filteredFonts.length, filterType, searchQuery, lenisInstance]);
+
   return (
     <FloatingPopup
       open={open}
@@ -181,34 +190,36 @@ export default function FontPicker({
           ref={scrollRef}
           className="flex flex-col gap-[4px] min-h-[120px] h-[120px] overflow-y-auto modal-content-scroll pr-[6px]"
         >
-          {filteredFonts.length === 0 ? (
-            <div className="flex items-center justify-center py-[10px] text-[#6F6E7A] text-style-4">
-              {t("fontPicker.noFonts") || "폰트 없음"}
-            </div>
-          ) : (
-            filteredFonts.map((font) => {
-              // 폰트가 선택되지 않았을 때 기본 폰트(SUIT-Regular)를 선택된 것으로 표시
-              const isSelected = effectiveSelectedFont
-                ? effectiveSelectedFont === font.name
-                : font.name === "SUIT-Regular";
-              return (
-                <button
-                  key={font.id}
-                  type="button"
-                  className={`w-full min-h-[24px] h-[24px] flex-shrink-0 px-[8px] rounded-[7px] text-left text-style-4 transition-colors truncate ${
-                    isSelected
-                      ? "bg-[#2E2D33] text-[#FFFFFF]"
-                      : "text-[#DBDEE8] hover:bg-[#26262C]"
-                  }`}
-                  style={{ fontFamily: font.name }}
-                  onClick={() => handleFontClick(font)}
-                  title={font.displayName}
-                >
-                  {font.displayName}
-                </button>
-              );
-            })
-          )}
+          <div className="flex flex-col gap-[4px]">
+            {filteredFonts.length === 0 ? (
+              <div className="flex items-center justify-center py-[10px] text-[#6F6E7A] text-style-4">
+                {t("fontPicker.noFonts") || "폰트 없음"}
+              </div>
+            ) : (
+              filteredFonts.map((font) => {
+                // 폰트가 선택되지 않았을 때 기본 폰트(SUIT-Regular)를 선택된 것으로 표시
+                const isSelected = effectiveSelectedFont
+                  ? effectiveSelectedFont === font.name
+                  : font.name === "SUIT-Regular";
+                return (
+                  <button
+                    key={font.id}
+                    type="button"
+                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 px-[8px] rounded-[7px] text-left text-style-4 transition-colors truncate ${
+                      isSelected
+                        ? "bg-[#2E2D33] text-[#FFFFFF]"
+                        : "text-[#DBDEE8] hover:bg-[#26262C]"
+                    }`}
+                    style={{ fontFamily: font.name }}
+                    onClick={() => handleFontClick(font)}
+                    title={font.displayName}
+                  >
+                    {font.displayName}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {/* 구분선 */}
