@@ -227,6 +227,8 @@ export default function FontPicker({
           fullWidth
         />
 
+        <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
+
         {/* 폰트 리스트 */}
         <div
           ref={scrollRef}

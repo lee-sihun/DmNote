@@ -31,6 +31,21 @@ export const fontSettingsSchema = z.object({
 
 export type FontSettings = z.infer<typeof fontSettingsSchema>;
 
+export type WebFontCssValidationStatus =
+  | "idle"
+  | "ready"
+  | "invalidCss"
+  | "missingFontFace"
+  | "missingFontFamily"
+  | "missingSrc"
+  | "multipleFamilies";
+
+export interface WebFontCssValidationResult {
+  status: WebFontCssValidationStatus;
+  detectedFontFamily: string | null;
+  familyNames: string[];
+}
+
 // 내장 폰트 목록 (기본 제공)
 export const BUILTIN_FONTS: CustomFont[] = [
   {
@@ -86,6 +101,210 @@ export const DEFAULT_FONT_SETTINGS: FontSettings = {
   customFonts: [],
 };
 
+function stripOuterQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+export function normalizeFontFamilyName(value: string): string {
+  return value.trim().replace(/^['"]+|['"]+$/g, "").trim().toLowerCase();
+}
+
+const FONT_FAMILY_DECLARATION_REGEX = /font-family\s*:\s*([^;]+?)(?:;|$)/i;
+const SRC_DECLARATION_REGEX = /src\s*:\s*([^;]+?)(?:;|$)/i;
+const CSS_BLOCK_COMMENT_REGEX = /\/\*[\s\S]*?\*\//g;
+
+interface CssLexState {
+  inSingleQuote: boolean;
+  inDoubleQuote: boolean;
+  inComment: boolean;
+}
+
+function createCssLexState(): CssLexState {
+  return {
+    inSingleQuote: false,
+    inDoubleQuote: false,
+    inComment: false,
+  };
+}
+
+function consumeCssLiteral(css: string, cursor: number, state: CssLexState): number | null {
+  const char = css[cursor];
+  const next = css[cursor + 1];
+
+  if (state.inComment) {
+    if (char === "*" && next === "/") {
+      state.inComment = false;
+      return cursor + 2;
+    }
+    return cursor + 1;
+  }
+
+  if (state.inSingleQuote) {
+    if (char === "\\") {
+      return Math.min(css.length, cursor + 2);
+    }
+    if (char === "'") {
+      state.inSingleQuote = false;
+    }
+    return cursor + 1;
+  }
+
+  if (state.inDoubleQuote) {
+    if (char === "\\") {
+      return Math.min(css.length, cursor + 2);
+    }
+    if (char === "\"") {
+      state.inDoubleQuote = false;
+    }
+    return cursor + 1;
+  }
+
+  if (char === "/" && next === "*") {
+    state.inComment = true;
+    return cursor + 2;
+  }
+
+  if (char === "'") {
+    state.inSingleQuote = true;
+    return cursor + 1;
+  }
+
+  if (char === "\"") {
+    state.inDoubleQuote = true;
+    return cursor + 1;
+  }
+
+  return null;
+}
+
+function matchesTokenIgnoreCase(source: string, cursor: number, token: string): boolean {
+  if (cursor + token.length > source.length) {
+    return false;
+  }
+
+  for (let index = 0; index < token.length; index += 1) {
+    const sourceCode = source.charCodeAt(cursor + index);
+    const normalizedSourceCode =
+      sourceCode >= 65 && sourceCode <= 90 ? sourceCode + 32 : sourceCode;
+    if (normalizedSourceCode !== token.charCodeAt(index)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isCssStructurallyBalanced(css: string): boolean {
+  let braceDepth = 0;
+  const state = createCssLexState();
+
+  for (let cursor = 0; cursor < css.length;) {
+    const nextCursor = consumeCssLiteral(css, cursor, state);
+    if (nextCursor !== null) {
+      cursor = nextCursor;
+      continue;
+    }
+
+    const char = css[cursor];
+    if (char === "{") {
+      braceDepth += 1;
+    } else if (char === "}") {
+      braceDepth -= 1;
+      if (braceDepth < 0) {
+        return false;
+      }
+    }
+
+    cursor += 1;
+  }
+
+  return (
+    !state.inSingleQuote &&
+    !state.inDoubleQuote &&
+    !state.inComment &&
+    braceDepth === 0
+  );
+}
+
+function extractFontFaceBodies(css: string): { bodies: string[]; malformed: boolean } {
+  const bodies: string[] = [];
+  const token = "@font-face";
+  let cursor = 0;
+  const state = createCssLexState();
+
+  while (cursor < css.length) {
+    const nextCursor = consumeCssLiteral(css, cursor, state);
+    if (nextCursor !== null) {
+      cursor = nextCursor;
+      continue;
+    }
+
+    if (!matchesTokenIgnoreCase(css, cursor, token)) {
+      cursor += 1;
+      continue;
+    }
+
+    let blockStart = cursor + token.length;
+    while (blockStart < css.length && /\s/.test(css[blockStart])) {
+      blockStart += 1;
+    }
+
+    if (css[blockStart] !== "{") {
+      return { bodies, malformed: true };
+    }
+
+    const bodyStart = blockStart + 1;
+    let bodyCursor = bodyStart;
+    let depth = 1;
+    const bodyState = createCssLexState();
+
+    while (bodyCursor < css.length) {
+      const nextBodyCursor = consumeCssLiteral(css, bodyCursor, bodyState);
+      if (nextBodyCursor !== null) {
+        bodyCursor = nextBodyCursor;
+        continue;
+      }
+
+      const bodyChar = css[bodyCursor];
+      if (bodyChar === "{") {
+        depth += 1;
+        bodyCursor += 1;
+        continue;
+      }
+
+      if (bodyChar === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
+      }
+
+      bodyCursor += 1;
+    }
+
+    if (
+      depth !== 0 ||
+      bodyState.inSingleQuote ||
+      bodyState.inDoubleQuote ||
+      bodyState.inComment
+    ) {
+      return { bodies, malformed: true };
+    }
+
+    bodies.push(css.slice(bodyStart, bodyCursor));
+    cursor = bodyCursor + 1;
+  }
+
+  return { bodies, malformed: false };
+}
+
 // 폰트 설정 정규화 함수
 export function normalizeFontSettings(raw: unknown): FontSettings {
   const parsed = fontSettingsSchema.safeParse({
@@ -95,10 +314,81 @@ export function normalizeFontSettings(raw: unknown): FontSettings {
   return parsed.success ? parsed.data : DEFAULT_FONT_SETTINGS;
 }
 
+function createValidationResult(
+  status: WebFontCssValidationStatus,
+  options?: {
+    detectedFontFamily?: string | null;
+    familyNames?: string[];
+  },
+): WebFontCssValidationResult {
+  return {
+    status,
+    detectedFontFamily: options?.detectedFontFamily ?? null,
+    familyNames: options?.familyNames ?? [],
+  };
+}
+
+export function validateWebFontFaceCss(css: string): WebFontCssValidationResult {
+  const trimmed = css.trim();
+  if (!trimmed) {
+    return createValidationResult("idle");
+  }
+
+  if (!isCssStructurallyBalanced(trimmed)) {
+    return createValidationResult("invalidCss");
+  }
+
+  const { bodies, malformed } = extractFontFaceBodies(trimmed);
+  if (malformed) {
+    return createValidationResult("invalidCss");
+  }
+
+  if (bodies.length === 0) {
+    return createValidationResult("missingFontFace");
+  }
+
+  const familyMap = new Map<string, string>();
+
+  for (const body of bodies) {
+    const bodyWithoutComments = body.replace(CSS_BLOCK_COMMENT_REGEX, " ");
+    const familyMatch = bodyWithoutComments.match(FONT_FAMILY_DECLARATION_REGEX);
+    if (!familyMatch) {
+      return createValidationResult("missingFontFamily");
+    }
+
+    const rawFamily = familyMatch[1].split(",")[0] || "";
+    const familyName = stripOuterQuotes(rawFamily).trim();
+    const normalizedFamilyName = normalizeFontFamilyName(familyName);
+    if (!normalizedFamilyName) {
+      return createValidationResult("missingFontFamily");
+    }
+
+    const srcMatch = bodyWithoutComments.match(SRC_DECLARATION_REGEX);
+    if (!srcMatch || !/url\s*\(/i.test(srcMatch[1])) {
+      return createValidationResult("missingSrc", {
+        familyNames: Array.from(familyMap.values()),
+      });
+    }
+
+    if (!familyMap.has(normalizedFamilyName)) {
+      familyMap.set(normalizedFamilyName, familyName);
+    }
+  }
+
+  const familyNames = Array.from(familyMap.values());
+  if (familyMap.size > 1) {
+    return createValidationResult("multipleFamilies", { familyNames });
+  }
+
+  return createValidationResult("ready", {
+    detectedFontFamily: familyNames[0] || null,
+    familyNames,
+  });
+}
+
 // CSS에서 font-family 이름 추출
 export function extractFontFamilyFromCSS(css: string): string | null {
-  const match = css.match(/font-family:\s*['"]?([^'";]+)['"]?\s*;/i);
-  return match ? match[1].trim() : null;
+  return validateWebFontFaceCss(css).detectedFontFamily;
 }
 
 // 고유 ID 생성
