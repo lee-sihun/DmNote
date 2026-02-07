@@ -5,6 +5,7 @@ export const DEFAULT_NOTE_BORDER_RADIUS =
 
 // 노트 효과 기본 설정
 export const DEFAULT_NOTE_SETTINGS = {
+  frameLimit: NOTE_SETTINGS_CONSTRAINTS.frameLimit.default,
   speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
   trackHeight: NOTE_SETTINGS_CONSTRAINTS.trackHeight.default,
   reverse: false,

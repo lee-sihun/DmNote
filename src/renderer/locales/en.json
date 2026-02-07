@@ -143,6 +143,7 @@
   },
   "noteSetting": {
     "borderRadius": "Corner Radius",
+    "frameLimit": "Frame Limit",
     "speed": "Speed",
     "trackHeight": "Track Height",
     "fadePosition": "Fade Position",

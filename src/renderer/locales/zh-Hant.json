@@ -143,6 +143,7 @@
   },
   "noteSetting": {
     "borderRadius": "圓角半徑",
+    "frameLimit": "幀率限制",
     "speed": "速度",
     "trackHeight": "軌道高度",
     "fadePosition": "淡出位置",

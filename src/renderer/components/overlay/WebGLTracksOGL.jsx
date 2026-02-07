@@ -243,6 +243,13 @@ const markAllAttributesDirty = (geometry, activeCount) => {
   markAttributesDirty(geometry);
 };
 
+const normalizeFrameLimit = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  const rounded = Math.floor(parsed);
+  return rounded > 0 ? rounded : 0;
+};
+
 export const WebGLTracksOGL = memo(
   ({
     tracks: _tracks,
@@ -261,6 +268,8 @@ export const WebGLTracksOGL = memo(
     const isAnimating = useRef(false);
     const lastVersionRef = useRef(noteBuffer?.version ?? 0);
     const pendingUpdateRef = useRef({ dirty: false, dirtySinceFrame: false });
+    const frameLimitRef = useRef(normalizeFrameLimit(noteSettings?.frameLimit));
+    const lastRenderTimeRef = useRef(0);
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -403,6 +412,16 @@ export const WebGLTracksOGL = memo(
           return;
         }
 
+        const frameLimit = frameLimitRef.current;
+        if (frameLimit > 0) {
+          const minFrameInterval = 1000 / frameLimit;
+          const elapsed = currentTime - lastRenderTimeRef.current;
+          if (lastRenderTimeRef.current > 0 && elapsed < minFrameInterval) {
+            return;
+          }
+        }
+        lastRenderTimeRef.current = currentTime;
+
         // 프레임 시작 시 배치 업데이트 적용
         if (pendingUpdateRef.current.dirtySinceFrame) {
           const geometryTarget = geometryRef.current;
@@ -446,6 +465,7 @@ export const WebGLTracksOGL = memo(
               pendingUpdateRef.current.dirtySinceFrame = true;
             }
             if (!isAnimating.current && noteBuffer.activeCount > 0) {
+              lastRenderTimeRef.current = 0;
               animationScheduler.add(animate);
               isAnimating.current = true;
             }
@@ -459,6 +479,7 @@ export const WebGLTracksOGL = memo(
             if (noteBuffer.activeCount === 0 && isAnimating.current) {
               animationScheduler.remove(animate);
               isAnimating.current = false;
+              lastRenderTimeRef.current = 0;
               requestAnimationFrame(() => {
                 if (!rendererRef.current) return;
                 const { gl: context } = rendererRef.current;
@@ -500,6 +521,7 @@ export const WebGLTracksOGL = memo(
       handleResize();
 
       if (noteBuffer.activeCount > 0 && !isAnimating.current) {
+        lastRenderTimeRef.current = 0;
         animationScheduler.add(animate);
         isAnimating.current = true;
       }
@@ -510,6 +532,7 @@ export const WebGLTracksOGL = memo(
         if (isAnimating.current) {
           animationScheduler.remove(animate);
         }
+        lastRenderTimeRef.current = 0;
         geometryRef.current?.remove();
         rendererRef.current?.gl
           ?.getExtension("WEBGL_lose_context")
@@ -525,6 +548,8 @@ export const WebGLTracksOGL = memo(
     useEffect(() => {
       if (!programRef.current) return;
       const uniforms = programRef.current.uniforms;
+      frameLimitRef.current = normalizeFrameLimit(noteSettings?.frameLimit);
+      lastRenderTimeRef.current = 0;
       uniforms.uFlowSpeed.value = noteSettings.speed || 180;
       uniforms.uTrackHeight.value = noteSettings.trackHeight || 150;
       uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;

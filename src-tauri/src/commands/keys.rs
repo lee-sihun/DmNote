@@ -155,6 +155,7 @@ pub fn keys_reset_all(
 
     let mut note_patch = NoteSettingsPatch::default();
     let defaults = NoteSettings::default();
+    note_patch.frame_limit = Some(defaults.frame_limit);
     note_patch.speed = Some(defaults.speed);
     note_patch.track_height = Some(defaults.track_height);
     note_patch.reverse = Some(defaults.reverse);

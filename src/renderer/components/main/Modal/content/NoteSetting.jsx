@@ -11,13 +11,20 @@ import {
 export default function NoteSetting({ onClose, settings, onSave }) {
   const { t } = useTranslation();
   const initial = settings || {};
+  const [frameLimit, setFrameLimit] = useState(
+    Number.isFinite(Number(initial.frameLimit))
+      ? clampValue(Number(initial.frameLimit), "frameLimit")
+      : NOTE_SETTINGS_CONSTRAINTS.frameLimit.default
+  );
   const [speed, setSpeed] = useState(
-    Number.isFinite(Number(initial.speed)) ? Number(initial.speed) : 180
+    Number.isFinite(Number(initial.speed))
+      ? Number(initial.speed)
+      : NOTE_SETTINGS_CONSTRAINTS.speed.default
   );
   const [trackHeight, setTrackHeight] = useState(
     Number.isFinite(Number(initial.trackHeight))
       ? Number(initial.trackHeight)
-      : 150
+      : NOTE_SETTINGS_CONSTRAINTS.trackHeight.default
   );
   const [reverse, setReverse] = useState(Boolean(initial.reverse || false));
   const [fadePosition, setFadePosition] = useState(
@@ -32,8 +39,13 @@ export default function NoteSetting({ onClose, settings, onSave }) {
   ];
 
   const handleSave = async () => {
+    const parsedFrameLimit = parseInt(String(frameLimit), 10);
     const normalized = {
       ...settings,
+      frameLimit:
+        frameLimit === "" || Number.isNaN(parsedFrameLimit)
+          ? NOTE_SETTINGS_CONSTRAINTS.frameLimit.default
+          : clampValue(parsedFrameLimit, "frameLimit"),
       speed: clampValue(
         parseInt(speed || NOTE_SETTINGS_CONSTRAINTS.speed.default),
         "speed"
@@ -59,6 +71,36 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px] border-[1px] border-[#2A2A30]"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="flex justify-between w-full items-center">
+          <p className="text-white text-style-2">{t("noteSetting.frameLimit")}</p>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.frameLimit.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.frameLimit.max}
+            value={frameLimit}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "") {
+                setFrameLimit("");
+              } else {
+                const num = parseInt(v, 10);
+                if (!Number.isNaN(num) && num >= 0) {
+                  setFrameLimit(num);
+                }
+              }
+            }}
+            onBlur={(e) => {
+              const parsed = parseInt(e.target.value, 10);
+              if (e.target.value === "" || Number.isNaN(parsed)) {
+                setFrameLimit(NOTE_SETTINGS_CONSTRAINTS.frameLimit.default);
+              } else {
+                setFrameLimit(clampValue(parsed, "frameLimit"));
+              }
+            }}
+            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+          />
+        </div>
+
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">{t("noteSetting.speed")}</p>
           <input

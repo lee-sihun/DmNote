@@ -143,6 +143,7 @@
   },
   "noteSetting": {
     "borderRadius": "라운딩",
+    "frameLimit": "프레임 제한",
     "speed": "속도",
     "trackHeight": "트랙 높이",
     "fadePosition": "페이드 위치",

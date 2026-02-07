@@ -9,6 +9,11 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
     max: 100,
     default: 2,
   },
+  frameLimit: {
+    min: 0,
+    max: 240,
+    default: 0,
+  },
   speed: {
     min: 70,
     max: 9999,

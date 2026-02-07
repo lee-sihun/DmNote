@@ -152,6 +152,7 @@ pub fn preset_load(
 
     let desired_settings = preset.note_settings.unwrap_or_else(NoteSettings::default);
     let mut note_patch = NoteSettingsPatch::default();
+    note_patch.frame_limit = Some(desired_settings.frame_limit);
     note_patch.speed = Some(desired_settings.speed);
     note_patch.track_height = Some(desired_settings.track_height);
     note_patch.reverse = Some(desired_settings.reverse);

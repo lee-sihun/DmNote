@@ -373,6 +373,7 @@ fn default_note_glow_enabled() -> bool { false }
 fn default_note_glow_size() -> u32 { 20 }
 fn default_note_glow_opacity() -> u32 { 70 }
 fn default_note_auto_y_correction() -> bool { true }
+fn default_note_frame_limit() -> u32 { 0 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -380,6 +381,8 @@ pub struct NoteSettings {
     // Legacy: global note rounding (migrated to per-key noteBorderRadius).
     #[serde(default, skip_serializing)]
     pub border_radius: Option<u32>,
+    #[serde(default = "default_note_frame_limit")]
+    pub frame_limit: u32,
     pub speed: u32,
     pub track_height: u32,
     pub reverse: bool,
@@ -420,6 +423,7 @@ impl Default for NoteSettings {
     fn default() -> Self {
         Self {
             border_radius: None,
+            frame_limit: default_note_frame_limit(),
             speed: 180,
             track_height: 150,
             reverse: false,
@@ -1028,6 +1032,7 @@ impl Default for SettingsState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct NoteSettingsPatch {
+    pub frame_limit: Option<u32>,
     pub speed: Option<u32>,
     pub track_height: Option<u32>,
     pub reverse: Option<bool>,
@@ -1041,6 +1046,7 @@ pub struct NoteSettingsPatch {
 impl Default for NoteSettingsPatch {
     fn default() -> Self {
         Self {
+            frame_limit: None,
             speed: None,
             track_height: None,
             reverse: None,
