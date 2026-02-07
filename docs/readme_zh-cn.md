@@ -15,7 +15,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **DM Note** 是一款专为配合 DJMAX RESPECT V 使用而创建的按键显示程序. 基于 Tauri 和 React 构建, 它允许您通过简单设置, 在直播或游戏视频创作时可视化显示按键输入. 目前, 它仅官方支持 Windows 10/11 和 macOS 环境. 如果您使用的是 Linux, 我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote).
 
-[前往下载 DM NOTE v1.5.0](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+[前往下载 DM NOTE v1.5.1](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
 
 ## ✨ 功能特性
 
@@ -61,6 +61,11 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 - 实时显示 每个按键的输入次数
 - 自定义计数器位置、颜色和样式
 - 自定义 CSS 支持
+
+### 📊 输入统计
+
+- 提供 KPS、AVG、MAX、TOTAL 统计数据
+- 自定义统计元素样式
 
 ### ⚙️ 图层 与 设置
 

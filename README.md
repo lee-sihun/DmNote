@@ -15,7 +15,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **DM Note**는 DJMAX RESPECT V에서 사용하기 위해 만들어진 키뷰어 프로그램입니다. Tauri와 React로 구축 되었으며 간편한 설정으로 스트리밍이나 플레이 영상 제작 시 키 입력을 시각적으로 보여줄 수 있습니다. 현재는 공식적으로 Windows 10/11, macOS 환경만 지원하고 있습니다. 만약 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해보는걸 추천합니다.
 
-[DM NOTE v1.5.0 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+[DM NOTE v1.5.1 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
 
 ## ✨ 주요 기능
 
@@ -61,6 +61,11 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 - 키별 입력 횟수 실시간 표시
 - 카운터 위치, 색상 및 스타일 커스터마이징
 - 커스텀 CSS 지원
+
+### 📊 입력 통계
+
+- KPS, AVG, MAX, TOTAL 통계 제공
+- 통계 요소 스타일 커스터마이징
 
 ### ⚙️ 그래픽 및 설정
 
@@ -173,4 +178,3 @@ npm run tauri:dev
 - 동시 입력 간격 밀리초(ms) 표시
 - 입력 통계 분석 기능
  -->
-

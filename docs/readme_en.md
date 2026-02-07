@@ -15,7 +15,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **DM Note** is a key viewer program created for use with DJMAX RESPECT V. Built with Tauri and React, it allows you to visually display key inputs during streaming or gameplay video creation with simple setup. Currently, it officially supports Windows 10/11 and macOS environments only. If you are on Linux, we recommend trying the [community fork version](https://github.com/northernorca/DmNote).
 
-[Download DM NOTE v1.5.0](https://github.com/lee-sihun/DmNote/releases/download/1.5.0/DM.NOTE.v.1.5.0.zip)
+[Download DM NOTE v1.5.1](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
 
 ## ✨ Features
 
@@ -61,6 +61,11 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 - Real-time display of input counts per key
 - Customize counter position, color, and style
 - Custom CSS support
+
+### 📊 Input Statistics
+
+- Provides KPS, AVG, MAX, TOTAL statistics
+- Customize statistics element styling
 
 ### ⚙️ Graphics & Settings
 
