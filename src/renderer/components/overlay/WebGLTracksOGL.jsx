@@ -250,6 +250,15 @@ const normalizeFrameLimit = (value) => {
   return rounded > 0 ? rounded : 0;
 };
 
+const FRAME_PACING_EPSILON_MS = 0.3;
+const MAX_DRIFT_FRAMES = 8;
+
+const resetFrameClock = (frameClock) => {
+  if (!frameClock) return;
+  frameClock.nextFrameTime = 0;
+  frameClock.stableTime = 0;
+};
+
 export const WebGLTracksOGL = memo(
   ({
     tracks: _tracks,
@@ -269,7 +278,7 @@ export const WebGLTracksOGL = memo(
     const lastVersionRef = useRef(noteBuffer?.version ?? 0);
     const pendingUpdateRef = useRef({ dirty: false, dirtySinceFrame: false });
     const frameLimitRef = useRef(normalizeFrameLimit(noteSettings?.frameLimit));
-    const lastRenderTimeRef = useRef(0);
+    const frameClockRef = useRef({ nextFrameTime: 0, stableTime: 0 });
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -413,14 +422,33 @@ export const WebGLTracksOGL = memo(
         }
 
         const frameLimit = frameLimitRef.current;
+        let renderTime = currentTime;
         if (frameLimit > 0) {
-          const minFrameInterval = 1000 / frameLimit;
-          const elapsed = currentTime - lastRenderTimeRef.current;
-          if (lastRenderTimeRef.current > 0 && elapsed < minFrameInterval) {
-            return;
+          const interval = 1000 / frameLimit;
+          const frameClock = frameClockRef.current;
+
+          if (frameClock.nextFrameTime <= 0) {
+            frameClock.stableTime = currentTime;
+            frameClock.nextFrameTime = currentTime + interval;
+          } else {
+            if (currentTime + FRAME_PACING_EPSILON_MS < frameClock.nextFrameTime) {
+              return;
+            }
+
+            const drift = currentTime - frameClock.nextFrameTime;
+            if (drift > interval * MAX_DRIFT_FRAMES) {
+              frameClock.stableTime = currentTime;
+              frameClock.nextFrameTime = currentTime + interval;
+            } else {
+              const stepCount = Math.floor(Math.max(0, drift) / interval) + 1;
+              frameClock.stableTime += interval * stepCount;
+              frameClock.nextFrameTime += interval * stepCount;
+            }
+            renderTime = frameClock.stableTime;
           }
+        } else {
+          resetFrameClock(frameClockRef.current);
         }
-        lastRenderTimeRef.current = currentTime;
 
         // 프레임 시작 시 배치 업데이트 적용
         if (pendingUpdateRef.current.dirtySinceFrame) {
@@ -432,7 +460,7 @@ export const WebGLTracksOGL = memo(
           pendingUpdateRef.current.dirty = false;
         }
 
-        programRef.current.uniforms.uTime.value = currentTime;
+        programRef.current.uniforms.uTime.value = renderTime;
         rendererRef.current.render({
           scene: sceneRef.current,
           camera: cameraRef.current,
@@ -465,7 +493,7 @@ export const WebGLTracksOGL = memo(
               pendingUpdateRef.current.dirtySinceFrame = true;
             }
             if (!isAnimating.current && noteBuffer.activeCount > 0) {
-              lastRenderTimeRef.current = 0;
+              resetFrameClock(frameClockRef.current);
               animationScheduler.add(animate);
               isAnimating.current = true;
             }
@@ -479,7 +507,7 @@ export const WebGLTracksOGL = memo(
             if (noteBuffer.activeCount === 0 && isAnimating.current) {
               animationScheduler.remove(animate);
               isAnimating.current = false;
-              lastRenderTimeRef.current = 0;
+              resetFrameClock(frameClockRef.current);
               requestAnimationFrame(() => {
                 if (!rendererRef.current) return;
                 const { gl: context } = rendererRef.current;
@@ -521,7 +549,7 @@ export const WebGLTracksOGL = memo(
       handleResize();
 
       if (noteBuffer.activeCount > 0 && !isAnimating.current) {
-        lastRenderTimeRef.current = 0;
+        resetFrameClock(frameClockRef.current);
         animationScheduler.add(animate);
         isAnimating.current = true;
       }
@@ -532,7 +560,7 @@ export const WebGLTracksOGL = memo(
         if (isAnimating.current) {
           animationScheduler.remove(animate);
         }
-        lastRenderTimeRef.current = 0;
+        resetFrameClock(frameClockRef.current);
         geometryRef.current?.remove();
         rendererRef.current?.gl
           ?.getExtension("WEBGL_lose_context")
@@ -549,7 +577,7 @@ export const WebGLTracksOGL = memo(
       if (!programRef.current) return;
       const uniforms = programRef.current.uniforms;
       frameLimitRef.current = normalizeFrameLimit(noteSettings?.frameLimit);
-      lastRenderTimeRef.current = 0;
+      resetFrameClock(frameClockRef.current);
       uniforms.uFlowSpeed.value = noteSettings.speed || 180;
       uniforms.uTrackHeight.value = noteSettings.trackHeight || 150;
       uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;
