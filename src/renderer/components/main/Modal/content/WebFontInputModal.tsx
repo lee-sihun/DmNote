@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -73,6 +73,7 @@ export default function WebFontInputModal({
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const handleSubmitRef = useRef<() => void>(() => undefined);
+  const normalizedInitialCss = initialCss || "";
 
   const trimmedCSS = cssInput.trim();
 
@@ -174,7 +175,7 @@ export default function WebFontInputModal({
     onClose();
   }, [onClose, resetEditorContent]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) {
       if (editorViewRef.current) {
         editorViewRef.current.destroy();
@@ -184,12 +185,13 @@ export default function WebFontInputModal({
       return;
     }
 
+    setCssInput(normalizedInitialCss);
+
     const mountNode = editorContainerRef.current;
     if (!mountNode) return;
 
-    const initialValue = initialCss || "";
     const nextState = EditorState.create({
-      doc: initialValue,
+      doc: normalizedInitialCss,
       extensions: [
         ...WEBFONT_EDITOR_BASE_EXTENSIONS,
         placeholder(placeholderText),
@@ -220,23 +222,39 @@ export default function WebFontInputModal({
     });
 
     editorViewRef.current = editorView;
-    setCssInput(initialValue);
-
-    const rafId = requestAnimationFrame(() => {
-      editorView.dispatch({
-        selection: EditorSelection.cursor(0),
-        scrollIntoView: true,
-      });
+    editorView.dispatch({
+      selection: EditorSelection.cursor(0),
+      scrollIntoView: true,
     });
 
     return () => {
-      cancelAnimationFrame(rafId);
       editorView.destroy();
       if (editorViewRef.current === editorView) {
         editorViewRef.current = null;
       }
     };
-  }, [initialCss, isOpen, placeholderText]);
+  }, [isOpen, normalizedInitialCss, placeholderText]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const editorView = editorViewRef.current;
+    if (!editorView) return;
+
+    const currentValue = editorView.state.doc.toString();
+    if (currentValue === normalizedInitialCss) return;
+
+    editorView.dispatch({
+      changes: {
+        from: 0,
+        to: currentValue.length,
+        insert: normalizedInitialCss,
+      },
+      selection: EditorSelection.cursor(0),
+      scrollIntoView: true,
+    });
+    setCssInput(normalizedInitialCss);
+  }, [isOpen, normalizedInitialCss]);
 
   if (!isOpen) return null;
 

@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useState,
   useMemo,
   useCallback,
@@ -21,7 +23,6 @@ import {
   generateFontId,
   normalizeFontFamilyName,
 } from "@src/types/fonts";
-import WebFontInputModal from "./WebFontInputModal";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface FontManagerModalProps {
@@ -32,6 +33,19 @@ interface FontManagerModalProps {
 
 type TabType = "local" | "web";
 const MAX_SCROLL_HEIGHT = 195;
+
+let webFontInputModalPreloadPromise:
+  | Promise<typeof import("./WebFontInputModal")>
+  | null = null;
+
+const preloadWebFontInputModal = () => {
+  if (!webFontInputModalPreloadPromise) {
+    webFontInputModalPreloadPromise = import("./WebFontInputModal");
+  }
+  return webFontInputModalPreloadPromise;
+};
+
+const LazyWebFontInputModal = lazy(preloadWebFontInputModal);
 
 export default function FontManagerModal({
   isOpen,
@@ -70,6 +84,7 @@ export default function FontManagerModal({
 
   // 주입된 preview CSS ID들을 추적하는 ref
   const previewIdsRef = useRef<Set<string>>(new Set());
+  const previewCssCacheRef = useRef<Map<string, string>>(new Map());
 
   // preview용 font-family 이름 생성 (syncFontCSS의 영향을 받지 않도록 별도 이름 사용)
   const getPreviewFontFamily = useCallback((fontName: string) => `${fontName}__preview`, []);
@@ -95,11 +110,12 @@ export default function FontManagerModal({
   }, []);
 
   // 모달이 열려있는 동안 모든 폰트의 CSS를 임시로 주입 (enabled 상태와 상관없이 미리보기 가능)
-  // 폰트가 변경될 때마다 CSS를 추가하지만, 제거는 하지 않음 (모달 닫힐 때만 제거)
+  // 폰트가 변경될 때 CSS가 실제로 달라진 항목만 갱신하여 폰트가 많아도 부담을 줄임
   useEffect(() => {
     if (!isOpen) return;
 
-    // 현재 탭의 모든 폰트에 대해 CSS 주입 (enabled 상태와 무관하게 항상 주입하여 깜빡임 방지)
+    const nextPreviewIds = new Set<string>();
+
     currentFonts.forEach((font) => {
       const previewId = font.id;
 
@@ -121,12 +137,31 @@ export default function FontManagerModal({
       }
 
       if (css) {
-        // 기존 style 태그가 있어도 내용을 갱신해 웹폰트 수정 사항을 즉시 반영
-        injectPreviewCSS(previewId, css);
-        previewIdsRef.current.add(previewId);
+        nextPreviewIds.add(previewId);
+
+        if (previewCssCacheRef.current.get(previewId) !== css) {
+          // CSS가 실제로 바뀐 경우에만 갱신하여 reflow/repaint를 줄임
+          injectPreviewCSS(previewId, css);
+          previewCssCacheRef.current.set(previewId, css);
+        }
       }
     });
-  }, [isOpen, currentFonts, getPreviewFontFamily, injectPreviewCSS]);
+
+    previewIdsRef.current.forEach((id) => {
+      if (!nextPreviewIds.has(id)) {
+        removePreviewCSS(id);
+        previewCssCacheRef.current.delete(id);
+      }
+    });
+
+    previewIdsRef.current = nextPreviewIds;
+  }, [
+    isOpen,
+    currentFonts,
+    getPreviewFontFamily,
+    injectPreviewCSS,
+    removePreviewCSS,
+  ]);
 
   // 모달이 닫힐 때만 모든 preview CSS 제거
   useEffect(() => {
@@ -135,7 +170,19 @@ export default function FontManagerModal({
     // 모달이 닫히면 모든 preview CSS 제거
     previewIdsRef.current.forEach((id) => removePreviewCSS(id));
     previewIdsRef.current.clear();
+    previewCssCacheRef.current.clear();
   }, [isOpen, removePreviewCSS]);
+
+  // 폰트 매니저가 열려 있는 동안 WebFontInputModal 코드를 미리 로드
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const timer = window.setTimeout(() => {
+      void preloadWebFontInputModal();
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
 
   // 스크롤 상태 업데이트 함수
   const updateScrollState = useCallback((el: HTMLElement | null) => {
@@ -277,11 +324,13 @@ export default function FontManagerModal({
 
   // 웹폰트 추가 버튼 클릭
   const handleAddWebFont = useCallback(() => {
+    void preloadWebFontInputModal();
     setEditingWebFontId(null);
     setShowWebFontModal(true);
   }, []);
 
   const handleEditWebFont = useCallback((fontId: string) => {
+    void preloadWebFontInputModal();
     setEditingWebFontId(fontId);
     setShowWebFontModal(true);
   }, []);
@@ -541,16 +590,33 @@ export default function FontManagerModal({
       </Modal>
 
       {/* 웹폰트 CSS 입력 모달 */}
-      <WebFontInputModal
-        isOpen={showWebFontModal}
-        onClose={handleCloseWebFontModal}
-        onSubmit={handleWebFontSubmit}
-        initialCss={editingWebFont?.cssContent || ""}
-        isDuplicateFontFamily={(fontFamily) =>
-          isDuplicateFontFamily(fontFamily, { excludeId: editingWebFontId })
-        }
-        t={t}
-      />
+      {showWebFontModal ? (
+        <Suspense
+          fallback={
+            <Modal onClick={handleCloseWebFontModal}>
+              <div
+                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-[#1A191E] rounded-[10px] border border-[#2A2A30]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-[12px] leading-[16px] text-[#8A8D99]">
+                  로딩 중...
+                </p>
+              </div>
+            </Modal>
+          }
+        >
+          <LazyWebFontInputModal
+            isOpen={showWebFontModal}
+            onClose={handleCloseWebFontModal}
+            onSubmit={handleWebFontSubmit}
+            initialCss={editingWebFont?.cssContent || ""}
+            isDuplicateFontFamily={(fontFamily) =>
+              isDuplicateFontFamily(fontFamily, { excludeId: editingWebFontId })
+            }
+            t={t}
+          />
+        </Suspense>
+      ) : null}
     </>
   );
 }
