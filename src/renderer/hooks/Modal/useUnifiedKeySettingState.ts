@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { isGradientColor, normalizeColorInput } from "@utils/colorUtils";
 import {
@@ -365,6 +366,60 @@ export function useUnifiedKeySettingState({
     },
     [onPreview]
   );
+
+  // 백그라운드 GIF 최적화 완료 시(원본 -> WebP 치환) 편집 중 상태도 동기화
+  useEffect(() => {
+    const unlistenPromise = listen<{ fromPath?: string; toPath?: string }>(
+      "image:optimized",
+      ({ payload }) => {
+        const fromPath =
+          typeof payload?.fromPath === "string" ? payload.fromPath.trim() : "";
+        const toPath =
+          typeof payload?.toPath === "string" ? payload.toPath.trim() : "";
+
+        if (!fromPath || !toPath || fromPath === toPath) return;
+
+        let previewUpdates: Omit<KeyPreviewData, "type"> | null = null;
+
+        setKeyState((prev) => {
+          let changed = false;
+          const next = { ...prev };
+
+          if (prev.inactiveImage === fromPath) {
+            next.inactiveImage = toPath;
+            changed = true;
+          }
+          if (prev.activeImage === fromPath) {
+            next.activeImage = toPath;
+            changed = true;
+          }
+
+          if (changed) {
+            previewUpdates = {
+              ...(prev.inactiveImage === fromPath
+                ? { inactiveImage: toPath }
+                : {}),
+              ...(prev.activeImage === fromPath ? { activeImage: toPath } : {}),
+            };
+            return next;
+          }
+
+          return prev;
+        });
+
+        if (previewUpdates && onPreview) {
+          onPreview({
+            type: "key",
+            ...previewUpdates,
+          });
+        }
+      }
+    );
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten()).catch(() => undefined);
+    };
+  }, [onPreview]);
 
   // 저장 핸들러
   const handleSubmit = useCallback(() => {

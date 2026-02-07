@@ -16,6 +16,7 @@ import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { resolveImageSource } from "@utils/imageSource";
+import { warmupImageSource } from "@utils/imageWarmup";
 import {
   calculateBounds,
   calculateSnapPoints,
@@ -751,6 +752,15 @@ export const Key = memo(
       : borderColor;
     const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
 
+    const inactiveImageSrc = resolveImageSource(inactiveImage);
+    const activeImageSrc = resolveImageSource(activeImage);
+
+    // 상태 전환 직전 이미지 디코드를 미리 수행해 첫 렌더 끊김을 줄임
+    useEffect(() => {
+      warmupImageSource(inactiveImageSrc);
+      warmupImageSource(activeImageSrc);
+    }, [inactiveImageSrc, activeImageSrc]);
+
     // 투명화 옵션 체크
     const isTransparent = active ? activeTransparent : idleTransparent;
 
@@ -760,21 +770,17 @@ export const Key = memo(
     }
 
     // 활성 상태에서 activeImage가 없으면 inactiveImage를 fallback으로 사용
-    const currentImage =
-      active && activeImage
-        ? activeImage
-        : inactiveImage
-        ? inactiveImage
-        : null;
-    const currentImageSrc = resolveImageSource(currentImage);
-    const isUsingActiveImage = active && !!activeImage;
+    const currentImageSrc =
+      (active && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
+    const hasCurrentImage = !!currentImageSrc;
+    const isUsingActiveImage = active && !!activeImageSrc;
     const effectiveImageFit = isUsingActiveImage
       ? activeImageFit || imageFit || "cover"
       : idleImageFit || imageFit || "cover";
 
     const keyStyle = useMemo(() => {
       // 기본 배경색 계산
-      const defaultBgColor = currentImage
+      const defaultBgColor = hasCurrentImage
         ? "transparent"
         : active
         ? "rgba(121, 121, 121, 0.9)"
@@ -787,7 +793,7 @@ export const Key = memo(
 
       // 기본 텍스트 색상 계산
       const defaultTextColor =
-        active && !activeImage ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
+        active && !activeImageSrc ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
 
       return {
         width: `${width}px`,
@@ -829,13 +835,12 @@ export const Key = memo(
       };
     }, [
       active,
-      activeImage,
-      inactiveImage,
+      hasCurrentImage,
+      activeImageSrc,
       dx,
       dy,
       width,
       height,
-      currentImageSrc,
       position.zIndex,
       useInline,
       backgroundColor,
@@ -849,6 +854,7 @@ export const Key = memo(
       activeFontColor,
     ]);
 
+    const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
     const imageStyle = useMemo(
       () => ({
         width: "100%",
@@ -859,8 +865,10 @@ export const Key = memo(
         userSelect: "none",
         position: "relative",
         zIndex: 0,
+        // mask 오버레이 대신 필터만 적용해 페인트 비용을 줄임
+        filter: fallbackImageDimmed ? "brightness(0.62)" : "none",
       }),
-      [effectiveImageFit],
+      [effectiveImageFit, fallbackImageDimmed],
     );
 
     const textStyle = useMemo(() => {
@@ -907,7 +915,7 @@ export const Key = memo(
 
     const counterValue = counterSignal?.value ?? 0;
 
-    const showText = !currentImage;
+    const showText = !hasCurrentImage;
 
     const counterFillColor = active
       ? counterSettings.fill.active
@@ -1024,7 +1032,7 @@ export const Key = memo(
         data-state={active ? "active" : "inactive"}
         onMouseDown={handleKeyMouseDown}
       >
-        {currentImage ? (
+        {hasCurrentImage ? (
           <img src={currentImageSrc || ""} alt="" style={imageStyle} draggable={false} />
         ) : showText ? (
           showInsideCounter ? (
@@ -1037,27 +1045,6 @@ export const Key = memo(
               {labelText}
             </div>
           )
-        ) : null}
-        {active && !activeImage && inactiveImage ? (
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              backgroundColor: "rgba(0,0,0,0.4)",
-              borderRadius: "inherit",
-              pointerEvents: "none",
-              zIndex: 1,
-              WebkitMaskImage: currentImageSrc ? `url(${currentImageSrc})` : "none",
-              WebkitMaskRepeat: "no-repeat",
-              WebkitMaskSize: "100% 100%",
-              maskImage: currentImageSrc ? `url(${currentImageSrc})` : "none",
-              maskRepeat: "no-repeat",
-              maskSize: "100% 100%",
-            }}
-          />
         ) : null}
       </div>
     );

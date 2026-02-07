@@ -28,6 +28,10 @@ rfd = "0.14"
 dirs-next = "2.0"
 uuid = { version = "1", features = ["v4"] }
 zip = "0.6"
+gif = "0.13.3"
+gif-dispose = "5.0.1"
+sha2 = "0.10"
+webp-animation = "0.9.0"
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = [

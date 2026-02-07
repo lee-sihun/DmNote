@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo } from "react";
 import { useSignals } from "@preact/signals-react/runtime";
 import { getStatValueSignal } from "@stores/statsSignals";
 import {
@@ -7,12 +7,14 @@ import {
 } from "@src/types/keys";
 import { toCssRgba } from "@utils/colorUtils";
 import { resolveImageSource } from "@utils/imageSource";
+import { warmupImageSource } from "@utils/imageWarmup";
 
 export default memo(function StatItem({
   statType,
   position,
   label,
   counterEnabled = false,
+  active = false,
 }) {
   useSignals();
 
@@ -23,18 +25,26 @@ export default memo(function StatItem({
     dy,
     width,
     height = 60,
+    activeImage,
     inactiveImage,
+    activeTransparent = false,
+    idleTransparent = false,
     className,
     backgroundColor,
+    activeBackgroundColor,
     borderColor,
+    activeBorderColor,
     borderWidth,
     borderRadius,
     fontSize,
     fontColor,
+    activeFontColor,
     fontFamily,
     idleImageFit,
+    activeImageFit,
     imageFit,
     useInlineStyles,
+    displayText,
     // 글꼴 스타일
     fontWeight,
     fontItalic,
@@ -42,19 +52,41 @@ export default memo(function StatItem({
     fontStrikethrough,
     // 카운터
     counter,
-    idleTransparent = false,
   } = position;
 
-  if (idleTransparent) {
+  const stateBackgroundColor = active
+    ? activeBackgroundColor ?? backgroundColor
+    : backgroundColor;
+  const stateBorderColor = active
+    ? activeBorderColor ?? borderColor
+    : borderColor;
+  const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
+
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
+
+  // 상태 전환 직전 이미지 디코드를 미리 수행해 첫 렌더 끊김을 줄임
+  useEffect(() => {
+    warmupImageSource(inactiveImageSrc);
+    warmupImageSource(activeImageSrc);
+  }, [inactiveImageSrc, activeImageSrc]);
+
+  const isTransparent = active ? activeTransparent : idleTransparent;
+  if (isTransparent) {
     return null;
   }
 
   const useInline = useInlineStyles === true;
-  const labelText = position.displayText || label || "";
+  const labelText = displayText || label || "";
 
-  const currentImage = inactiveImage ? inactiveImage : null;
-  const currentImageSrc = resolveImageSource(currentImage);
-  const effectiveImageFit = idleImageFit || imageFit || "cover";
+  // 활성 상태에서 activeImage가 없으면 inactiveImage를 fallback으로 사용
+  const currentImageSrc =
+    (active && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
+  const hasCurrentImage = !!currentImageSrc;
+  const isUsingActiveImage = active && !!activeImageSrc;
+  const effectiveImageFit = isUsingActiveImage
+    ? activeImageFit || imageFit || "cover"
+    : idleImageFit || imageFit || "cover";
 
   const counterSettings = useMemo(() => {
     if (counter) {
@@ -73,20 +105,25 @@ export default memo(function StatItem({
     : 0;
 
   const keyStyle = useMemo(() => {
-    const defaultBgColor = currentImageSrc
+    const defaultBgColor = hasCurrentImage
       ? "transparent"
+      : active
+      ? "rgba(121, 121, 121, 0.9)"
       : "rgba(46, 46, 47, 0.9)";
-    const defaultBorderColor = "rgba(113, 113, 113, 0.9)";
-    const defaultTextColor = "rgba(121, 121, 121, 0.9)";
+    const defaultBorderColor = active
+      ? "rgba(255, 255, 255, 0.9)"
+      : "rgba(113, 113, 113, 0.9)";
+    const defaultTextColor =
+      active && !activeImageSrc ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
 
     return {
       width: `${width}px`,
       height: `${height}px`,
       transform: `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`,
       backgroundColor:
-        useInline && backgroundColor
-          ? backgroundColor
-          : `var(--key-bg, ${backgroundColor || defaultBgColor})`,
+        useInline && stateBackgroundColor
+          ? stateBackgroundColor
+          : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
       borderRadius:
         useInline && borderRadius != null
           ? `${borderRadius}px`
@@ -94,18 +131,18 @@ export default memo(function StatItem({
               borderRadius != null ? `${borderRadius}px` : "10px"
             })`,
       border:
-        useInline && (borderColor || borderWidth != null)
-          ? `${borderWidth ?? 3}px solid ${borderColor || defaultBorderColor}`
+        useInline && (stateBorderColor || borderWidth != null)
+          ? `${borderWidth ?? 3}px solid ${stateBorderColor || defaultBorderColor}`
           : `var(--key-border, ${borderWidth ?? 3}px solid ${
-              borderColor || defaultBorderColor
+              stateBorderColor || defaultBorderColor
             })`,
       color:
-        useInline && fontColor
-          ? fontColor
-          : `var(--key-text-color, ${fontColor || defaultTextColor})`,
+        useInline && stateFontColor
+          ? stateFontColor
+          : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
       fontSize: fontSize ? `${fontSize}px` : undefined,
       overflow: "hidden",
-      willChange: "transform",
+      willChange: active ? "transform, background-color" : "transform",
       backfaceVisibility: "hidden",
       transformStyle: "preserve-3d",
       contain: "layout style paint",
@@ -115,21 +152,24 @@ export default memo(function StatItem({
       zIndex: position.zIndex,
     };
   }, [
+    active,
     dx,
     dy,
     width,
     height,
-    currentImageSrc,
+    hasCurrentImage,
+    activeImageSrc,
     position.zIndex,
     useInline,
-    backgroundColor,
-    borderColor,
+    stateBackgroundColor,
+    stateBorderColor,
     borderWidth,
     borderRadius,
     fontSize,
-    fontColor,
+    stateFontColor,
   ]);
 
+  const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
   const imageStyle = useMemo(
     () => ({
       width: "100%",
@@ -140,8 +180,10 @@ export default memo(function StatItem({
       userSelect: "none",
       position: "relative",
       zIndex: 0,
+      // mask 오버레이 없이 필터만 적용해 페인트 비용을 줄임
+      filter: fallbackImageDimmed ? "brightness(0.62)" : "none",
     }),
-    [effectiveImageFit],
+    [effectiveImageFit, fallbackImageDimmed],
   );
 
   const textStyle = useMemo(() => {
@@ -170,8 +212,12 @@ export default memo(function StatItem({
     fontStrikethrough,
   ]);
 
-  const counterFillColor = counterSettings.fill.idle;
-  const counterStrokeColor = counterSettings.stroke.idle;
+  const counterFillColor = active
+    ? counterSettings.fill.active
+    : counterSettings.fill.idle;
+  const counterStrokeColor = active
+    ? counterSettings.stroke.active
+    : counterSettings.stroke.idle;
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
     : 6;
@@ -197,7 +243,7 @@ export default memo(function StatItem({
         key="counter"
         className="counter pointer-events-none select-none"
         data-text={counterValue}
-        data-counter-state="inactive"
+        data-counter-state={active ? "active" : "inactive"}
         style={{
           fontSize: `${counterSettings.fontSize ?? 16}px`,
           fontFamily: counterSettings.fontFamily
@@ -265,9 +311,9 @@ export default memo(function StatItem({
     <div
       className={`absolute cursor-pointer ${className || ""}`}
       style={keyStyle}
-      data-state="inactive"
+      data-state={active ? "active" : "inactive"}
     >
-      {currentImageSrc ? (
+      {hasCurrentImage ? (
         <img src={currentImageSrc} alt="" style={imageStyle} draggable={false} />
       ) : showInsideCounter ? (
         renderInsideLayout()
