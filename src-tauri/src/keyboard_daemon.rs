@@ -829,6 +829,45 @@ fn run_raw_input() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn run_macos() -> Result<()> {
+    // 접근성(Accessibility) 권한을 확인하고, 없으면 부여될 때까지 대기합니다.
+    if !check_accessibility_permission() {
+        eprintln!("macOS 접근성 권한이 없습니다. 시스템 설정에서 허용해 주세요.");
+        eprintln!("접근성 권한 대기 중...");
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if check_accessibility_permission() {
+                eprintln!("접근성 권한이 허용되었습니다.");
+                break;
+            }
+        }
+    }
+
+    // rdev::listen은 접근성 + 입력 모니터링 권한이 모두 필요합니다.
+    // 권한 부여 직후 타이밍 이슈로 CGEventTap 생성이 실패할 수 있으므로 재시도합니다.
+    let max_retries = 5;
+    for attempt in 0..max_retries {
+        if attempt > 0 {
+            eprintln!("rdev::listen 재시도 ({}/{}), 2초 후 시도...", attempt + 1, max_retries);
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+
+        let result = run_macos_listen();
+        match result {
+            Ok(_) => return Ok(()),
+            Err(err) => {
+                eprintln!("rdev::listen 실패: {err}");
+                if attempt == max_retries - 1 {
+                    return Err(err);
+                }
+            }
+        }
+    }
+    unreachable!()
+}
+
+/// rdev::listen을 실행하는 내부 함수. 매 재시도마다 새로운 콜백/상태를 생성합니다.
+#[cfg(target_os = "macos")]
+fn run_macos_listen() -> Result<()> {
     use rdev::{listen, EventType};
 
     let mut sink: Box<dyn Write + Send> = Box::new(std::io::stdout());
@@ -918,3 +957,16 @@ fn run_macos() -> Result<()> {
     listen(callback).map_err(|err| anyhow!("macOS input listener failed: {err:?}"))?;
     Ok(())
 }
+
+/// macOS 접근성 권한(AXIsProcessTrusted)을 확인합니다.
+/// 프롬프트 없이 현재 상태만 확인하므로, 데몬 프로세스에서 폴링용으로 안전하게 사용할 수 있습니다.
+#[cfg(target_os = "macos")]
+fn check_accessibility_permission() -> bool {
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
+}
+
+
