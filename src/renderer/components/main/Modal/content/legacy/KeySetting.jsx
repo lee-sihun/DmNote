@@ -39,13 +39,46 @@ export default function KeySetting({
 
   const imageButtonRef = useRef(null);
   const initialSkipRef = useRef(skipAnimation);
+  const listeningFlagTimerRef = useRef(null);
+
+  // 키 리스닝 플래그를 전역으로 노출 (Grid 단축키 등에서 체크)
+  useEffect(() => {
+    if (listeningFlagTimerRef.current !== null) {
+      clearTimeout(listeningFlagTimerRef.current);
+      listeningFlagTimerRef.current = null;
+    }
+
+    if (isListening) {
+      window.__dmn_isKeyListening = true;
+    } else {
+      // macOS: raw input이 브라우저 keydown보다 먼저 도착할 수 있어 지연 해제
+      listeningFlagTimerRef.current = setTimeout(() => {
+        window.__dmn_isKeyListening = false;
+        listeningFlagTimerRef.current = null;
+      }, 150);
+    }
+
+    return () => {
+      if (listeningFlagTimerRef.current !== null) {
+        clearTimeout(listeningFlagTimerRef.current);
+        listeningFlagTimerRef.current = null;
+      }
+    };
+  }, [isListening]);
+
+  // 컴포넌트 언마운트 시 반드시 플래그 해제
+  useEffect(() => {
+    return () => {
+      window.__dmn_isKeyListening = false;
+      if (listeningFlagTimerRef.current !== null) {
+        clearTimeout(listeningFlagTimerRef.current);
+        listeningFlagTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isListening) return undefined;
-
-    if (typeof window !== "undefined") {
-      window.__dmn_isKeyListening = true;
-    }
     if (typeof window === "undefined" || !window.api?.keys?.onRawInput) {
       return undefined;
     }
@@ -64,9 +97,6 @@ export default function KeySetting({
     });
 
     return () => {
-      if (typeof window !== "undefined") {
-        window.__dmn_isKeyListening = false;
-      }
       try {
         unsubscribe?.();
       } catch (error) {

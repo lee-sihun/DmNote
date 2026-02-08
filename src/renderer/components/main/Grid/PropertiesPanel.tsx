@@ -203,7 +203,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedStatElements.length === 1 ? selectedStatElements[0].index : null;
   const singleStatPosition: StatItemPosition | null =
     singleStatIndex !== null
-      ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
+      ? (statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null)
       : null;
 
   // 로컬 상태 (실시간 편집용)
@@ -219,6 +219,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 키 리스닝 상태
   const [isListening, setIsListening] = useState(false);
   const justAssignedRef = useRef(false);
+  const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // 이미지 픽커 상태
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -601,11 +604,42 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 키 리스닝 상태를 전역으로 노출 (App.tsx의 Tab 단축키 등에서 체크)
   useEffect(() => {
-    (window as any).__dmn_isKeyListening = isListening;
+    // 이전 타이머 정리
+    if (listeningFlagTimerRef.current !== null) {
+      clearTimeout(listeningFlagTimerRef.current);
+      listeningFlagTimerRef.current = null;
+    }
+
+    if (isListening) {
+      (window as any).__dmn_isKeyListening = true;
+    } else {
+      // macOS에서 Tauri raw input이 브라우저 keydown보다 먼저 도착하여
+      // isListening이 false로 바뀐 뒤 뒤늦게 keydown이 발생할 수 있으므로
+      // 플래그 해제를 지연시켜 경쟁 조건 방지
+      listeningFlagTimerRef.current = setTimeout(() => {
+        (window as any).__dmn_isKeyListening = false;
+        listeningFlagTimerRef.current = null;
+      }, 150);
+    }
+
     return () => {
-      (window as any).__dmn_isKeyListening = false;
+      if (listeningFlagTimerRef.current !== null) {
+        clearTimeout(listeningFlagTimerRef.current);
+        listeningFlagTimerRef.current = null;
+      }
     };
   }, [isListening]);
+
+  // 컴포넌트 언마운트 시 반드시 플래그 해제
+  useEffect(() => {
+    return () => {
+      (window as any).__dmn_isKeyListening = false;
+      if (listeningFlagTimerRef.current !== null) {
+        clearTimeout(listeningFlagTimerRef.current);
+        listeningFlagTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 키 리스닝 중 브라우저 기본 동작 차단
   useEffect(() => {
@@ -1368,8 +1402,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           const normalizedValue = Number.isFinite(numericValue)
             ? numericValue
             : typeof schemaValue.default === "number"
-            ? schemaValue.default
-            : 0;
+              ? schemaValue.default
+              : 0;
           control = (
             <NumberInput
               value={normalizedValue}
@@ -1956,8 +1990,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             ? "fillActive"
             : "fillIdle"
           : batchCounterColorState === "active"
-          ? "strokeActive"
-          : "strokeIdle";
+            ? "strokeActive"
+            : "strokeIdle";
 
       if (batchPickerFor === target) {
         return batchLocalColors[key];
@@ -1968,8 +2002,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ? batchCounterSettings.fill.active
           : batchCounterSettings.fill.idle
         : batchCounterColorState === "active"
-        ? batchCounterSettings.stroke.active
-        : batchCounterSettings.stroke.idle;
+          ? batchCounterSettings.stroke.active
+          : batchCounterSettings.stroke.idle;
     };
 
     return (
@@ -2167,8 +2201,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 batchPickerFor === "noteColor"
                   ? batchLocalOpacities.noteOpacity
                   : batchPickerFor === "glowColor"
-                  ? batchLocalOpacities.glowOpacity
-                  : undefined
+                    ? batchLocalOpacities.glowOpacity
+                    : undefined
               }
               onOpacityPercentChange={(value: number) => {
                 if (batchPickerFor === "noteColor") {
@@ -2204,15 +2238,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 batchPickerFor === "noteColor"
                   ? t("keySetting.noteOpacity") || "노트 투명도"
                   : batchPickerFor === "glowColor"
-                  ? t("keySetting.noteGlowOpacity") || "글로우 투명도"
-                  : undefined
+                    ? t("keySetting.noteGlowOpacity") || "글로우 투명도"
+                    : undefined
               }
               opacityPercentMixed={
                 batchPickerFor === "noteColor"
                   ? noteOpacityMixed
                   : batchPickerFor === "glowColor"
-                  ? glowOpacityMixed
-                  : false
+                    ? glowOpacityMixed
+                    : false
               }
             />
           )}

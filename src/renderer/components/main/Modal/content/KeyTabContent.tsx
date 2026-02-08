@@ -36,6 +36,9 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     const { useCustomCSS } = useSettingsStore();
     const imageButtonRef = useRef<HTMLButtonElement>(null);
     const justAssignedRef = useRef<boolean>(false);
+    const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
 
     // ref를 통해 imageButtonRef 노출
     useImperativeHandle(
@@ -46,13 +49,46 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       [],
     );
 
+    // 키 리스닝 플래그를 전역으로 노출 (Grid 단축키 등에서 체크)
+    useEffect(() => {
+      // 이전 타이머 정리
+      if (listeningFlagTimerRef.current !== null) {
+        clearTimeout(listeningFlagTimerRef.current);
+        listeningFlagTimerRef.current = null;
+      }
+
+      if (state.isListening) {
+        (window as any).__dmn_isKeyListening = true;
+      } else {
+        // macOS: raw input이 브라우저 keydown보다 먼저 도착할 수 있어 지연 해제
+        listeningFlagTimerRef.current = setTimeout(() => {
+          (window as any).__dmn_isKeyListening = false;
+          listeningFlagTimerRef.current = null;
+        }, 150);
+      }
+
+      return () => {
+        if (listeningFlagTimerRef.current !== null) {
+          clearTimeout(listeningFlagTimerRef.current);
+          listeningFlagTimerRef.current = null;
+        }
+      };
+    }, [state.isListening]);
+
+    // 컴포넌트 언마운트 시 반드시 플래그 해제
+    useEffect(() => {
+      return () => {
+        (window as any).__dmn_isKeyListening = false;
+        if (listeningFlagTimerRef.current !== null) {
+          clearTimeout(listeningFlagTimerRef.current);
+          listeningFlagTimerRef.current = null;
+        }
+      };
+    }, []);
+
     // 키 리스닝 중 브라우저 기본 동작 차단
     useEffect(() => {
       if (!state.isListening) return undefined;
-
-      if (typeof window !== "undefined") {
-        (window as any).__dmn_isKeyListening = true;
-      }
 
       const blockKeyboardEvents = (e: KeyboardEvent) => {
         e.preventDefault();
@@ -77,9 +113,6 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       window.addEventListener("contextmenu", blockContextMenu, true);
 
       return () => {
-        if (typeof window !== "undefined") {
-          (window as any).__dmn_isKeyListening = false;
-        }
         window.removeEventListener("keydown", blockKeyboardEvents, true);
         window.removeEventListener("keyup", blockKeyboardEvents, true);
         window.removeEventListener("keypress", blockKeyboardEvents, true);
