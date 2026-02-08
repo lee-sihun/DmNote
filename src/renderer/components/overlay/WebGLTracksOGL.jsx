@@ -2,6 +2,7 @@ import React, { memo, useEffect, useRef } from "react";
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from "ogl";
 import { animationScheduler } from "../../utils/animationScheduler";
 import { MAX_NOTES } from "@stores/noteBuffer";
+import { isMac } from "@utils/platform";
 
 const vertexShader = `
   attribute vec3 position;
@@ -252,6 +253,7 @@ const normalizeFrameLimit = (value) => {
 
 const FRAME_PACING_EPSILON_MS = 0.3;
 const MAX_DRIFT_FRAMES = 8;
+const MACOS_DPR_CAP = 1;
 
 const resetFrameClock = (frameClock) => {
   if (!frameClock) return;
@@ -283,12 +285,18 @@ export const WebGLTracksOGL = memo(
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas || !noteBuffer) return;
+      const macOS = isMac();
+      const resolveDpr = () => {
+        const rawDpr = window.devicePixelRatio || 1;
+        return macOS ? Math.min(rawDpr, MACOS_DPR_CAP) : rawDpr;
+      };
+      const initialDpr = resolveDpr();
 
       const renderer = new Renderer({
         canvas,
         alpha: true,
         antialias: false,
-        dpr: window.devicePixelRatio,
+        dpr: initialDpr,
         premultipliedAlpha: true,
       });
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -379,7 +387,7 @@ export const WebGLTracksOGL = memo(
           uTime: { value: 0 },
           uFlowSpeed: { value: noteSettings.speed || 180 },
           uScreenHeight: { value: window.innerHeight },
-          uDpr: { value: window.devicePixelRatio || 1 },
+          uDpr: { value: initialDpr },
           uTrackHeight: { value: noteSettings.trackHeight || 150 },
           uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
           uFadePosition: {
@@ -527,7 +535,7 @@ export const WebGLTracksOGL = memo(
       const handleResize = () => {
         const width = window.innerWidth;
         const height = window.innerHeight;
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = resolveDpr();
         // Keep renderer/program in sync when moving between monitors with different DPR.
         renderer.dpr = dpr;
         renderer.setSize(width, height);
