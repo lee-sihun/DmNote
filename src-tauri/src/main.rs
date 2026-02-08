@@ -71,6 +71,8 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             register_dev_capability(app)?;
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let resolver = app.path();
             let store = AppStore::initialize(&resolver)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;

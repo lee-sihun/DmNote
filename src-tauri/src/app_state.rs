@@ -191,12 +191,14 @@ impl AppState {
         if visible {
             // 오버레이를 열 때: 창이 없으면 생성하고 표시
             let window = self.ensure_overlay_window(app)?;
-            show_overlay_window(&window)?;
+            let snapshot = self.store.snapshot();
+            show_overlay_window(&window, snapshot.always_on_top)?;
             
             // 오버레이가 숨겨진 동안 변경된 설정을 다시 적용
-            let snapshot = self.store.snapshot();
             window.set_ignore_cursor_events(snapshot.overlay_locked)?;
             window.set_always_on_top(snapshot.always_on_top)?;
+            #[cfg(target_os = "macos")]
+            apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
         } else {
             // 오버레이를 숨길 때: 창이 존재하는 경우에만 숨김
             // 창이 없으면 아무 것도 하지 않음 (창을 생성하지 않음)
@@ -772,6 +774,8 @@ impl AppState {
 
         window.set_ignore_cursor_events(snapshot.overlay_locked)?;
         window.set_always_on_top(snapshot.always_on_top)?;
+        #[cfg(target_os = "macos")]
+        apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
         let _ = window.set_maximizable(false);
 
         self.overlay_force_close.store(false, Ordering::SeqCst);
@@ -821,6 +825,8 @@ impl AppState {
                 if let Err(err) = overlay_window.set_always_on_top(snapshot.always_on_top) {
                     log::warn!("failed to reapply always on top: {err}");
                 }
+                #[cfg(target_os = "macos")]
+                apply_macos_overlay_fullscreen_behavior(&overlay_window, snapshot.always_on_top);
             }
             WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
                 if let Err(err) = persist_overlay_bounds(&overlay_window, &store) {
@@ -899,6 +905,8 @@ impl AppState {
             if is_visible {
                 if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
                     window.set_always_on_top(value)?;
+                    #[cfg(target_os = "macos")]
+                    apply_macos_overlay_fullscreen_behavior(&window, value);
                 }
             }
         }
@@ -1161,7 +1169,7 @@ fn attach_main_window_close_handler(
     });
 }
 
-fn show_overlay_window(window: &WebviewWindow) -> Result<()> {
+fn show_overlay_window(window: &WebviewWindow, always_on_top: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
@@ -1176,7 +1184,9 @@ fn show_overlay_window(window: &WebviewWindow) -> Result<()> {
     {
         // Ensure the overlay does not become key/main window when shown.
         let _ = window.set_focusable(false);
+        apply_macos_overlay_fullscreen_behavior(window, always_on_top);
         window.show()?;
+        apply_macos_overlay_fullscreen_behavior(window, always_on_top);
         Ok(())
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
@@ -1201,6 +1211,34 @@ fn hide_overlay_window(window: &WebviewWindow) -> Result<()> {
     {
         window.hide()?;
         Ok(())
+    }
+}
+
+/// macOS 전체화면 Space에서도 오버레이가 보이도록 NSWindow 동작을 보정
+#[cfg(target_os = "macos")]
+fn apply_macos_overlay_fullscreen_behavior(window: &WebviewWindow, always_on_top: bool) {
+    use objc::{msg_send, sel, sel_impl};
+
+    match window.ns_window() {
+        Ok(ns_window) => unsafe {
+            let ns_window = ns_window as *mut objc::runtime::Object;
+
+            // 전체화면 Space에서도 보이도록 레벨 및 컬렉션 동작 설정
+            // NSStatusWindowLevel (25) 수준으로 설정
+            let target_level: i64 = if always_on_top { 25 } else { 0 };
+            let _: () = msg_send![ns_window, setLevel: target_level];
+
+            let behavior: u64 = (1 << 0) | (1 << 8); // canJoinAllSpaces | fullScreenAuxiliary
+            let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
+
+            let _: () = msg_send![ns_window, setHidesOnDeactivate: false];
+            let _: () = msg_send![ns_window, orderFrontRegardless];
+
+            log::info!("macOS overlay: level={target_level}, behavior={behavior}");
+        },
+        Err(err) => {
+            log::warn!("macOS overlay: failed to get NSWindow handle: {err}");
+        }
     }
 }
 
