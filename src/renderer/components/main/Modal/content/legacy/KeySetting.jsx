@@ -15,21 +15,21 @@ export default function KeySetting({
   const { useCustomCSS } = useSettingsStore();
   const [key, setKey] = useState(keyData.key);
   const [displayKey, setDisplayKey] = useState(
-    getKeyInfoByGlobalKey(key).displayName
+    getKeyInfoByGlobalKey(key).displayName,
   );
   const [isListening, setIsListening] = useState(false);
   const [activeImage, setActiveImage] = useState(keyData.activeImage || "");
   const [inactiveImage, setInactiveImage] = useState(
-    keyData.inactiveImage || ""
+    keyData.inactiveImage || "",
   );
   const [width, setWidth] = useState(keyData.width || 60);
   const [height, setHeight] = useState(keyData.height || 60);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [idleTransparent, setIdleTransparent] = useState(
-    keyData.idleTransparent || false
+    keyData.idleTransparent || false,
   );
   const [activeTransparent, setActiveTransparent] = useState(
-    keyData.activeTransparent || false
+    keyData.activeTransparent || false,
   );
 
   const [className, setClassName] = useState(keyData.className || "");
@@ -42,6 +42,10 @@ export default function KeySetting({
 
   useEffect(() => {
     if (!isListening) return undefined;
+
+    if (typeof window !== "undefined") {
+      window.__dmn_isKeyListening = true;
+    }
     if (typeof window === "undefined" || !window.api?.keys?.onRawInput) {
       return undefined;
     }
@@ -60,6 +64,9 @@ export default function KeySetting({
     });
 
     return () => {
+      if (typeof window !== "undefined") {
+        window.__dmn_isKeyListening = false;
+      }
       try {
         unsubscribe?.();
       } catch (error) {

@@ -20,7 +20,7 @@ interface UseGridKeyboardParams {
   moveSelectedElements: (
     deltaX: number,
     deltaY: number,
-    saveHistory?: boolean
+    saveHistory?: boolean,
   ) => void;
   deleteSelectedElements: () => void;
   clearSelection: () => void;
@@ -57,6 +57,12 @@ export function useGridKeyboard({
   // 선택 요소 키보드 조작
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        typeof window !== "undefined" &&
+        (window as any).__dmn_isKeyListening
+      ) {
+        return;
+      }
       // 입력 요소에서는 무시
       const target = e.target as HTMLElement;
       if (
@@ -168,6 +174,12 @@ export function useGridKeyboard({
   // Undo/Redo 단축키 핸들러
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        typeof window !== "undefined" &&
+        (window as any).__dmn_isKeyListening
+      ) {
+        return;
+      }
       // 입력 요소에서는 단축키 무시
       const target = e.target as HTMLElement;
       if (

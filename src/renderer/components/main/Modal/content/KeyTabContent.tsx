@@ -43,12 +43,16 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       () => ({
         imageButtonRef,
       }),
-      []
+      [],
     );
 
     // 키 리스닝 중 브라우저 기본 동작 차단
     useEffect(() => {
       if (!state.isListening) return undefined;
+
+      if (typeof window !== "undefined") {
+        (window as any).__dmn_isKeyListening = true;
+      }
 
       const blockKeyboardEvents = (e: KeyboardEvent) => {
         e.preventDefault();
@@ -73,6 +77,9 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       window.addEventListener("contextmenu", blockContextMenu, true);
 
       return () => {
+        if (typeof window !== "undefined") {
+          (window as any).__dmn_isKeyListening = false;
+        }
         window.removeEventListener("keydown", blockKeyboardEvents, true);
         window.removeEventListener("keyup", blockKeyboardEvents, true);
         window.removeEventListener("keypress", blockKeyboardEvents, true);
@@ -133,7 +140,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         setState((prev) => ({ ...prev, inactiveImage: imageUrl }));
         onPreview({ inactiveImage: imageUrl });
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     const handleActiveImageChange = React.useCallback(
@@ -141,7 +148,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         setState((prev) => ({ ...prev, activeImage: imageUrl }));
         onPreview({ activeImage: imageUrl });
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     // 크기 변경 핸들러
@@ -159,7 +166,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           }
         }
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     const handleHeightChange = React.useCallback(
@@ -176,7 +183,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           }
         }
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     // 투명 토글 핸들러
@@ -185,7 +192,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         setState((prev) => ({ ...prev, idleTransparent: checked }));
         onPreview({ idleTransparent: checked });
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     const handleActiveTransparentChange = React.useCallback(
@@ -193,7 +200,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         setState((prev) => ({ ...prev, activeTransparent: checked }));
         onPreview({ activeTransparent: checked });
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     // 클래스 변경 핸들러
@@ -203,7 +210,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         setState((prev) => ({ ...prev, className: value }));
         onPreview({ className: value });
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     return (
@@ -327,7 +334,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         )}
       </div>
     );
-  }
+  },
 );
 
 export default KeyTabContent;
