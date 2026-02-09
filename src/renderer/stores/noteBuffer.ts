@@ -425,6 +425,65 @@ export class NoteBuffer {
     return index;
   }
 
+  releaseBatch(noteIds: readonly string[]) {
+    if (this.activeCount === 0 || noteIds.length === 0) {
+      return 0;
+    }
+
+    const toRemove = new Set<string>();
+    for (const noteId of noteIds) {
+      if (this.indexByNoteId.has(noteId)) {
+        toRemove.add(noteId);
+      }
+    }
+    if (toRemove.size === 0) {
+      return 0;
+    }
+
+    const previousCount = this.activeCount;
+    let writeIndex = 0;
+
+    for (let readIndex = 0; readIndex < previousCount; readIndex += 1) {
+      const currentNoteId = this.noteIdByIndex[readIndex];
+      if (!currentNoteId) {
+        continue;
+      }
+
+      if (toRemove.has(currentNoteId)) {
+        this.indexByNoteId.delete(currentNoteId);
+        continue;
+      }
+
+      const currentTrackKey = this.trackKeyByIndex[readIndex];
+      if (writeIndex !== readIndex) {
+        this.copySlot(readIndex, writeIndex);
+      }
+      this.noteIdByIndex[writeIndex] = currentNoteId;
+      this.trackKeyByIndex[writeIndex] = currentTrackKey;
+      this.indexByNoteId.set(currentNoteId, writeIndex);
+      writeIndex += 1;
+    }
+
+    for (let i = writeIndex; i < previousCount; i += 1) {
+      this.noteIdByIndex[i] = null;
+      this.trackKeyByIndex[i] = null;
+    }
+
+    this.noteInfo.fill(0, writeIndex * 3, previousCount * 3);
+    this.noteSize.fill(0, writeIndex * 2, previousCount * 2);
+    this.noteColorTop.fill(0, writeIndex * 4, previousCount * 4);
+    this.noteColorBottom.fill(0, writeIndex * 4, previousCount * 4);
+    this.noteRadius.fill(0, writeIndex, previousCount);
+    this.trackIndex.fill(0, writeIndex, previousCount);
+    this.noteGlow.fill(0, writeIndex * 3, previousCount * 3);
+    this.noteGlowColorTop.fill(0, writeIndex * 3, previousCount * 3);
+    this.noteGlowColorBottom.fill(0, writeIndex * 3, previousCount * 3);
+
+    this.activeCount = writeIndex;
+    this.version += 1;
+    return previousCount - writeIndex;
+  }
+
   clear() {
     this.activeCount = 0;
     this.version += 1;

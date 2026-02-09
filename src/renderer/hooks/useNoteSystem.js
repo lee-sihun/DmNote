@@ -141,9 +141,7 @@ export function useNoteSystem({ noteEffect, noteSettings, laboratoryEnabled }) {
     // 구독자에게 알림
     if (removedNoteIds.length > 0) {
       const buffer = noteBufferRef.current;
-      for (const removedId of removedNoteIds) {
-        buffer.release(removedId);
-      }
+      buffer.releaseBatch(removedNoteIds);
     }
 
     if (hasChanges && removedNoteIds.length > 0) {
