@@ -72,6 +72,84 @@ export type TrackLayoutInput = {
   borderRadius?: number;
 };
 
+type ResolvedTrackStyle = {
+  opacityTop: number;
+  opacityBottom: number;
+  glowSize: number;
+  glowOpacityTop: number;
+  glowOpacityBottom: number;
+  colorTop: readonly number[];
+  colorBottom: readonly number[];
+  glowColorTop: readonly number[];
+  glowColorBottom: readonly number[];
+  borderRadius: number;
+};
+
+type ResolvedTrackLayout = TrackLayoutInput & {
+  resolved: ResolvedTrackStyle;
+};
+
+const clampPercentToUnit = (value: number) =>
+  Math.min(Math.max(value / 100, 0), 1);
+
+const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
+  const baseOpacityPercent =
+    layout.noteOpacity != null && Number.isFinite(layout.noteOpacity)
+      ? layout.noteOpacity
+      : 80;
+  const opacityTopPercent =
+    layout.noteOpacityTop != null && Number.isFinite(layout.noteOpacityTop)
+      ? layout.noteOpacityTop
+      : baseOpacityPercent;
+  const opacityBottomPercent =
+    layout.noteOpacityBottom != null && Number.isFinite(layout.noteOpacityBottom)
+      ? layout.noteOpacityBottom
+      : baseOpacityPercent;
+
+  const glowEnabled = layout.noteGlowEnabled ?? false;
+  const rawGlowSize = layout.noteGlowSize ?? 20;
+  const glowSize = glowEnabled ? Math.min(Math.max(rawGlowSize, 0), 50) : 0;
+
+  const baseGlowOpacityPercent =
+    layout.noteGlowOpacity != null && Number.isFinite(layout.noteGlowOpacity)
+      ? layout.noteGlowOpacity
+      : 70;
+  const glowOpacityTopPercent =
+    layout.noteGlowOpacityTop != null &&
+    Number.isFinite(layout.noteGlowOpacityTop)
+      ? layout.noteGlowOpacityTop
+      : baseGlowOpacityPercent;
+  const glowOpacityBottomPercent =
+    layout.noteGlowOpacityBottom != null &&
+    Number.isFinite(layout.noteGlowOpacityBottom)
+      ? layout.noteGlowOpacityBottom
+      : baseGlowOpacityPercent;
+
+  const { top, bottom } = extractColorStops(layout.noteColor, "#FFFFFF");
+  const glowStops = extractColorStops(
+    layout.noteGlowColor ?? layout.noteColor,
+    "#FFFFFF"
+  );
+
+  return {
+    ...layout,
+    resolved: {
+      opacityTop: clampPercentToUnit(opacityTopPercent),
+      opacityBottom: clampPercentToUnit(opacityBottomPercent),
+      glowSize,
+      glowOpacityTop: glowEnabled ? clampPercentToUnit(glowOpacityTopPercent) : 0,
+      glowOpacityBottom: glowEnabled
+        ? clampPercentToUnit(glowOpacityBottomPercent)
+        : 0,
+      colorTop: convertLinearToSRGB(top),
+      colorBottom: convertLinearToSRGB(bottom),
+      glowColorTop: convertLinearToSRGB(glowStops.top),
+      glowColorBottom: convertLinearToSRGB(glowStops.bottom),
+      borderRadius: layout.borderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
+    },
+  };
+};
+
 export type NoteBufferEventType = "add" | "finalize" | "cleanup" | "clear";
 
 export class NoteBuffer {
@@ -88,7 +166,7 @@ export class NoteBuffer {
   private readonly noteIdByIndex: (string | null)[];
   private readonly trackKeyByIndex: (string | null)[];
   private readonly indexByNoteId: Map<string, number>;
-  private trackLayouts: Map<string, TrackLayoutInput>;
+  private trackLayouts: Map<string, ResolvedTrackLayout>;
 
   activeCount: number;
   version: number;
@@ -114,9 +192,9 @@ export class NoteBuffer {
   }
 
   updateTrackLayouts(tracks: TrackLayoutInput[]) {
-    const nextLayouts = new Map<string, TrackLayoutInput>();
+    const nextLayouts = new Map<string, ResolvedTrackLayout>();
     tracks.forEach((track) => {
-      nextLayouts.set(track.trackKey, track);
+      nextLayouts.set(track.trackKey, resolveTrackLayout(track));
     });
     this.trackLayouts = nextLayouts;
 
@@ -141,56 +219,18 @@ export class NoteBuffer {
     if (this.activeCount >= MAX_NOTES) {
       return -1;
     }
-    const baseOpacityPercent =
-      layout.noteOpacity != null && Number.isFinite(layout.noteOpacity)
-        ? layout.noteOpacity
-        : 80;
-    const opacityTopPercent =
-      layout.noteOpacityTop != null && Number.isFinite(layout.noteOpacityTop)
-        ? layout.noteOpacityTop
-        : baseOpacityPercent;
-    const opacityBottomPercent =
-      layout.noteOpacityBottom != null &&
-      Number.isFinite(layout.noteOpacityBottom)
-        ? layout.noteOpacityBottom
-        : baseOpacityPercent;
-    const opacityTop = Math.min(Math.max(opacityTopPercent / 100, 0), 1);
-    const opacityBottom = Math.min(Math.max(opacityBottomPercent / 100, 0), 1);
-    const glowEnabled = layout.noteGlowEnabled ?? false;
-    const rawGlowSize = layout.noteGlowSize ?? 20;
-    const glowSize = glowEnabled ? Math.min(Math.max(rawGlowSize, 0), 50) : 0;
-    const baseGlowOpacityPercent =
-      layout.noteGlowOpacity != null && Number.isFinite(layout.noteGlowOpacity)
-        ? layout.noteGlowOpacity
-        : 70;
-    const glowOpacityTopPercent =
-      layout.noteGlowOpacityTop != null &&
-      Number.isFinite(layout.noteGlowOpacityTop)
-        ? layout.noteGlowOpacityTop
-        : baseGlowOpacityPercent;
-    const glowOpacityBottomPercent =
-      layout.noteGlowOpacityBottom != null &&
-      Number.isFinite(layout.noteGlowOpacityBottom)
-        ? layout.noteGlowOpacityBottom
-        : baseGlowOpacityPercent;
-    const glowOpacityTop = glowEnabled
-      ? Math.min(Math.max(glowOpacityTopPercent / 100, 0), 1)
-      : 0;
-    const glowOpacityBottom = glowEnabled
-      ? Math.min(Math.max(glowOpacityBottomPercent / 100, 0), 1)
-      : 0;
-    const { top, bottom } = extractColorStops(
-      layout.noteColor,
-      "#FFFFFF"
-    );
-    const glowStops = extractColorStops(
-      layout.noteGlowColor ?? layout.noteColor,
-      "#FFFFFF"
-    );
-    const srgbTop = convertLinearToSRGB(top);
-    const srgbBottom = convertLinearToSRGB(bottom);
-    const srgbGlowTop = convertLinearToSRGB(glowStops.top);
-    const srgbGlowBottom = convertLinearToSRGB(glowStops.bottom);
+    const {
+      opacityTop,
+      opacityBottom,
+      glowSize,
+      glowOpacityTop,
+      glowOpacityBottom,
+      colorTop,
+      colorBottom,
+      glowColorTop,
+      glowColorBottom,
+      borderRadius,
+    } = layout.resolved;
     const trackIndex = layout.trackIndex;
 
     let insertIndex = this.activeCount;
@@ -272,30 +312,29 @@ export class NoteBuffer {
     this.noteSize[sizeOffset + 1] = layout.position.dy;
 
     const colorOffset = insertIndex * 4;
-    this.noteColorTop[colorOffset] = srgbTop[0];
-    this.noteColorTop[colorOffset + 1] = srgbTop[1];
-    this.noteColorTop[colorOffset + 2] = srgbTop[2];
+    this.noteColorTop[colorOffset] = colorTop[0];
+    this.noteColorTop[colorOffset + 1] = colorTop[1];
+    this.noteColorTop[colorOffset + 2] = colorTop[2];
     this.noteColorTop[colorOffset + 3] = opacityTop;
 
-    this.noteColorBottom[colorOffset] = srgbBottom[0];
-    this.noteColorBottom[colorOffset + 1] = srgbBottom[1];
-    this.noteColorBottom[colorOffset + 2] = srgbBottom[2];
+    this.noteColorBottom[colorOffset] = colorBottom[0];
+    this.noteColorBottom[colorOffset + 1] = colorBottom[1];
+    this.noteColorBottom[colorOffset + 2] = colorBottom[2];
     this.noteColorBottom[colorOffset + 3] = opacityBottom;
 
-    this.noteRadius[insertIndex] =
-      layout.borderRadius ?? DEFAULT_NOTE_BORDER_RADIUS;
+    this.noteRadius[insertIndex] = borderRadius;
     this.trackIndex[insertIndex] = trackIndex;
     const glowOffset = insertIndex * 3;
     this.noteGlow[glowOffset] = glowSize;
     this.noteGlow[glowOffset + 1] = glowOpacityTop;
     this.noteGlow[glowOffset + 2] = glowOpacityBottom;
     const glowColorOffset = insertIndex * 3;
-    this.noteGlowColorTop[glowColorOffset] = srgbGlowTop[0];
-    this.noteGlowColorTop[glowColorOffset + 1] = srgbGlowTop[1];
-    this.noteGlowColorTop[glowColorOffset + 2] = srgbGlowTop[2];
-    this.noteGlowColorBottom[glowColorOffset] = srgbGlowBottom[0];
-    this.noteGlowColorBottom[glowColorOffset + 1] = srgbGlowBottom[1];
-    this.noteGlowColorBottom[glowColorOffset + 2] = srgbGlowBottom[2];
+    this.noteGlowColorTop[glowColorOffset] = glowColorTop[0];
+    this.noteGlowColorTop[glowColorOffset + 1] = glowColorTop[1];
+    this.noteGlowColorTop[glowColorOffset + 2] = glowColorTop[2];
+    this.noteGlowColorBottom[glowColorOffset] = glowColorBottom[0];
+    this.noteGlowColorBottom[glowColorOffset + 1] = glowColorBottom[1];
+    this.noteGlowColorBottom[glowColorOffset + 2] = glowColorBottom[2];
 
     this.noteIdByIndex[insertIndex] = noteId;
     this.trackKeyByIndex[insertIndex] = trackKey;
