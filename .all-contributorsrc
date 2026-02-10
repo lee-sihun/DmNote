@@ -49,6 +49,15 @@
         "translation",
         "doc"
       ]
+    },
+    {
+      "login": "kahyou22",
+      "name": "문주",
+      "avatar_url": "https://avatars.githubusercontent.com/u/136758821?v=4",
+      "profile": "http://kahyou.dev",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
