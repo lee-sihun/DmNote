@@ -225,6 +225,20 @@ const buildPlaneGeometry = (gl) =>
     },
   });
 
+const INSTANCED_ATTRIBUTE_KEYS = Object.freeze([
+  "noteInfo",
+  "noteSize",
+  "noteColorTop",
+  "noteColorBottom",
+  "noteRadius",
+  "noteGlow",
+  "noteGlowColorTop",
+  "noteGlowColorBottom",
+  "trackIndex",
+]);
+
+const FINALIZE_ATTRIBUTE_KEYS = Object.freeze(["noteInfo"]);
+
 const markAttributesDirty = (geometry, keys) => {
   if (!geometry) return;
   const attributes = geometry.attributes;
@@ -238,10 +252,27 @@ const markAttributesDirty = (geometry, keys) => {
   });
 };
 
-const markAllAttributesDirty = (geometry, activeCount) => {
+const markInstancedAttributesDirty = (
+  geometry,
+  activeCount,
+  keys = INSTANCED_ATTRIBUTE_KEYS
+) => {
   if (!geometry) return;
   geometry.instancedCount = Math.min(activeCount, MAX_NOTES);
-  markAttributesDirty(geometry);
+  markAttributesDirty(geometry, keys);
+};
+
+const queueAttributeUpload = (
+  pendingUpdate,
+  keys,
+  activeCount = undefined
+) => {
+  if (!pendingUpdate) return;
+  if (activeCount !== undefined) {
+    pendingUpdate.instancedCount = Math.min(activeCount, MAX_NOTES);
+  }
+  keys.forEach((key) => pendingUpdate.dirtyKeys.add(key));
+  pendingUpdate.dirtySinceFrame = true;
 };
 
 const normalizeFrameLimit = (value) => {
@@ -278,7 +309,11 @@ export const WebGLTracksOGL = memo(
     const geometryRef = useRef();
     const isAnimating = useRef(false);
     const lastVersionRef = useRef(noteBuffer?.version ?? 0);
-    const pendingUpdateRef = useRef({ dirty: false, dirtySinceFrame: false });
+    const pendingUpdateRef = useRef({
+      dirtyKeys: new Set(),
+      dirtySinceFrame: false,
+      instancedCount: null,
+    });
     const frameLimitRef = useRef(normalizeFrameLimit(noteSettings?.frameLimit));
     const frameClockRef = useRef({ nextFrameTime: 0, stableTime: 0 });
 
@@ -333,48 +368,57 @@ export const WebGLTracksOGL = memo(
         instanced: 1,
         size: 3,
         data: noteBuffer.noteInfo,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteSize", {
         instanced: 1,
         size: 2,
         data: noteBuffer.noteSize,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteColorTop", {
         instanced: 1,
         size: 4,
         data: noteBuffer.noteColorTop,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteColorBottom", {
         instanced: 1,
         size: 4,
         data: noteBuffer.noteColorBottom,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteRadius", {
         instanced: 1,
         size: 1,
         data: noteBuffer.noteRadius,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteGlow", {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlow,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteGlowColorTop", {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlowColorTop,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("noteGlowColorBottom", {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlowColorBottom,
+        usage: gl.DYNAMIC_DRAW,
       });
       geometry.addAttribute("trackIndex", {
         instanced: 1,
         size: 1,
         data: noteBuffer.trackIndex,
+        usage: gl.DYNAMIC_DRAW,
       });
-      markAllAttributesDirty(geometry, noteBuffer.activeCount);
+      markInstancedAttributesDirty(geometry, noteBuffer.activeCount);
       geometryRef.current = geometry;
 
       const program = new Program(gl, {
@@ -462,10 +506,20 @@ export const WebGLTracksOGL = memo(
         if (pendingUpdateRef.current.dirtySinceFrame) {
           const geometryTarget = geometryRef.current;
           if (geometryTarget) {
-            markAllAttributesDirty(geometryTarget, noteBuffer.activeCount);
+            if (pendingUpdateRef.current.instancedCount != null) {
+              geometryTarget.instancedCount =
+                pendingUpdateRef.current.instancedCount;
+            }
+            if (pendingUpdateRef.current.dirtyKeys.size > 0) {
+              markAttributesDirty(
+                geometryTarget,
+                pendingUpdateRef.current.dirtyKeys
+              );
+            }
           }
+          pendingUpdateRef.current.dirtyKeys.clear();
           pendingUpdateRef.current.dirtySinceFrame = false;
-          pendingUpdateRef.current.dirty = false;
+          pendingUpdateRef.current.instancedCount = null;
         }
 
         programRef.current.uniforms.uTime.value = renderTime;
@@ -494,12 +548,24 @@ export const WebGLTracksOGL = memo(
 
         switch (event.type) {
           case "add":
+            queueAttributeUpload(
+              pendingUpdateRef.current,
+              INSTANCED_ATTRIBUTE_KEYS,
+              event.activeCount
+            );
+            if (!isAnimating.current && noteBuffer.activeCount > 0) {
+              resetFrameClock(frameClockRef.current);
+              animationScheduler.add(animate);
+              isAnimating.current = true;
+            }
+            break;
           case "finalize":
             // 즉시 GPU 업로드하지 않고 다음 프레임에 배치 처리
-            if (!pendingUpdateRef.current.dirty) {
-              pendingUpdateRef.current.dirty = true;
-              pendingUpdateRef.current.dirtySinceFrame = true;
-            }
+            queueAttributeUpload(
+              pendingUpdateRef.current,
+              FINALIZE_ATTRIBUTE_KEYS,
+              event.activeCount
+            );
             if (!isAnimating.current && noteBuffer.activeCount > 0) {
               resetFrameClock(frameClockRef.current);
               animationScheduler.add(animate);
@@ -509,9 +575,10 @@ export const WebGLTracksOGL = memo(
           case "cleanup":
           case "clear":
             // cleanup/clear는 즉시 처리 (빈도가 낮음)
-            markAllAttributesDirty(geometryTarget, noteBuffer.activeCount);
-            pendingUpdateRef.current.dirty = false;
+            markInstancedAttributesDirty(geometryTarget, noteBuffer.activeCount);
+            pendingUpdateRef.current.dirtyKeys.clear();
             pendingUpdateRef.current.dirtySinceFrame = false;
+            pendingUpdateRef.current.instancedCount = null;
             if (noteBuffer.activeCount === 0 && isAnimating.current) {
               animationScheduler.remove(animate);
               isAnimating.current = false;
