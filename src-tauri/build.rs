@@ -1,6 +1,4 @@
 fn main() {
-    // `tauri.conf.json`의 bundle/resources(glob)는 현재 작업 디렉토리를 기준으로 해석됩니다.
-    // Cargo build-script의 CWD가 항상 crate 루트가 아닐 수 있어, 명시적으로 고정합니다.
     let _ = std::env::set_current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")));
 
     #[cfg(target_os = "windows")]

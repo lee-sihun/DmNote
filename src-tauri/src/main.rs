@@ -502,7 +502,7 @@ fn apply_embedded_webview2_fixed_runtime_override() {
     }
 }
 
-#[cfg(any(not(target_os = "windows"), not(dmnote_embedded_webview2)))]
+#[cfg(all(target_os = "windows", not(dmnote_embedded_webview2)))]
 fn apply_embedded_webview2_fixed_runtime_override() {}
 
 #[cfg(all(target_os = "windows", dmnote_embedded_webview2))]

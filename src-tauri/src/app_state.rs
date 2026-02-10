@@ -1169,7 +1169,7 @@ fn attach_main_window_close_handler(
     });
 }
 
-fn show_overlay_window(window: &WebviewWindow, always_on_top: bool) -> Result<()> {
+fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
@@ -1184,9 +1184,9 @@ fn show_overlay_window(window: &WebviewWindow, always_on_top: bool) -> Result<()
     {
         // Ensure the overlay does not become key/main window when shown.
         let _ = window.set_focusable(false);
-        apply_macos_overlay_fullscreen_behavior(window, always_on_top);
+        apply_macos_overlay_fullscreen_behavior(window, _always_on_top);
         window.show()?;
-        apply_macos_overlay_fullscreen_behavior(window, always_on_top);
+        apply_macos_overlay_fullscreen_behavior(window, _always_on_top);
         Ok(())
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
