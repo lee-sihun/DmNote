@@ -571,8 +571,9 @@ impl AppState {
                                 continue;
                             };
                             let mode = keyboard.current_mode();
-                            if state == "DOWN" {
-                                if app_state.register_key_down(&mode, &key_label) {
+                            let state_changed = if state == "DOWN" {
+                                let changed = app_state.register_key_down(&mode, &key_label);
+                                if changed {
                                     if let Some(count) = app_state.increment_key_counter(&mode, &key_label) {
                                         log::trace!(
                                             "[IPC] emit keys:counter: mode={}, key={}, count={}",
@@ -590,8 +591,12 @@ impl AppState {
                                         }
                                     }
                                 }
+                                changed
                             } else {
-                                app_state.register_key_up(&mode, &key_label);
+                                app_state.register_key_up(&mode, &key_label)
+                            };
+                            if !state_changed {
+                                continue;
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
 
@@ -1006,9 +1011,9 @@ impl AppState {
         guard.insert(Self::compose_active_key(mode, key))
     }
 
-    pub fn register_key_up(&self, mode: &str, key: &str) {
+    pub fn register_key_up(&self, mode: &str, key: &str) -> bool {
         let mut guard = self.active_keys.write();
-        guard.remove(&Self::compose_active_key(mode, key));
+        guard.remove(&Self::compose_active_key(mode, key))
     }
 
     pub fn clear_active_keys(&self) {
