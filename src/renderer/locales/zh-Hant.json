@@ -246,6 +246,8 @@
   "contextMenu": {
     "duplicateKey": "複製按鍵",
     "deleteKey": "刪除按鍵",
+    "duplicateSelected": "複製所選項目",
+    "deleteSelected": "刪除所選項目",
 
     "duplicateStat": "複製統計",
 

@@ -91,6 +91,12 @@ interface PluginElementProps {
   keyCount?: number;
   isSelected?: boolean;
   selectedElements?: SelectedElement[];
+  onSelectionContextMenu?: (payload: {
+    elementId: string;
+    clientX: number;
+    clientY: number;
+    referenceElement: HTMLDivElement | null;
+  }) => boolean;
   onMultiDrag?: (deltaX: number, deltaY: number) => void;
   onMultiDragStart?: () => void;
   onMultiDragEnd?: () => void;
@@ -107,6 +113,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   keyCount = 0,
   isSelected = false,
   selectedElements = [],
+  onSelectionContextMenu,
   onMultiDrag,
   onMultiDragStart,
   onMultiDragEnd,
@@ -1281,23 +1288,24 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
-    // contextMenu 옵션이 있고, 메인 윈도우에서만
-    if (!element.contextMenu || windowType !== "main") return;
-
-    const {
-      enableDelete = true,
-      deleteLabel = "🗑️ 삭제",
-      customItems = [],
-    } = element.contextMenu;
-
-    // 메뉴 항목이 하나도 없으면 표시 안 함
-    if (!enableDelete && customItems.length === 0) return;
-
-    // 선택된 상태에서는 컨텍스트 메뉴 무시
-    if (isSelectionMode) return;
+    // 메인 윈도우에서만 처리
+    if (windowType !== "main") return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    const handledBySelectionMenu =
+      onSelectionContextMenu?.({
+        elementId: element.fullId,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        referenceElement: containerRef.current,
+      }) === true;
+    if (handledBySelectionMenu) return;
+
+    // 플러그인 요소 우클릭은 그리드 우클릭으로 전파하지 않음
+    // (contextMenu 설정이 없으면 메뉴만 열지 않고 종료)
+    if (!element.contextMenu) return;
 
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setContextMenuOpen(true);

@@ -452,8 +452,7 @@ export default function DraggableKey({
   const handleContextMenu = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    // 선택된 상태에서는 컨텍스트 메뉴 무시
-    if (isSelectionMode) return;
+    // 선택 상태에서도 요소 컨텍스트 메뉴를 우선 표시
     onContextMenu?.(e);
   };
 

@@ -42,6 +42,12 @@ interface PluginElementsRendererProps {
   zoom?: number;
   panX?: number;
   panY?: number;
+  onSelectionContextMenu?: (payload: {
+    elementId: string;
+    clientX: number;
+    clientY: number;
+    referenceElement: HTMLDivElement | null;
+  }) => boolean;
   onMultiDrag?: (deltaX: number, deltaY: number) => void;
   onMultiDragStart?: () => void;
   onMultiDragEnd?: () => void;
@@ -53,6 +59,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
+  onSelectionContextMenu,
   onMultiDrag,
   onMultiDragStart,
   onMultiDragEnd,
@@ -192,6 +199,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
             (sel) => sel.type === "plugin" && sel.id === element.fullId
           )}
           selectedElements={selectedElements}
+          onSelectionContextMenu={onSelectionContextMenu}
           onMultiDrag={onMultiDrag}
           onMultiDragStart={onMultiDragStart}
           onMultiDragEnd={onMultiDragEnd}

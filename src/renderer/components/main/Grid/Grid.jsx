@@ -330,6 +330,41 @@ export default function Grid({
   const [duplicateState, setDuplicateState] = useState(null);
   const [duplicateCursor, setDuplicateCursor] = useState(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const mixedSelectionMenuItems = useMemo(
+    () => [
+      { id: "delete", label: t("contextMenu.deleteSelected") },
+      { id: "duplicate", label: t("contextMenu.duplicateSelected") },
+      { id: "bringToFront", label: t("contextMenu.bringToFront") },
+      { id: "sendToBack", label: t("contextMenu.sendToBack") },
+    ],
+    [t]
+  );
+
+  const openMixedSelectionContextMenu = useCallback((x, y, referenceNode) => {
+    setContextType("mixed");
+    setContextIndex(null);
+    contextRef.current = referenceNode || null;
+    setContextPosition({ x, y });
+    setIsContextOpen(true);
+  }, []);
+
+  const shouldOpenMixedSelectionMenu = useCallback(
+    (clickedId) => {
+      if (selectedElements.length <= 1) return false;
+      if (!selectedElements.some((el) => el.id === clickedId)) return false;
+      const selectionTypes = new Set(
+        selectedElements.map((el) => {
+          if (el.type !== "plugin") return el.type;
+          const pluginElement = pluginElements.find((p) => p.fullId === el.id);
+          const pluginKind =
+            pluginElement?.pluginId || pluginElement?.definitionId || "unknown";
+          return `plugin:${pluginKind}`;
+        })
+      );
+      return selectionTypes.size > 1;
+    },
+    [selectedElements, pluginElements]
+  );
 
   // 클라이언트 좌표를 그리드 좌표로 변환 (줌/팬 반영)
   const computeSnappedCursorFromClient = useCallback(
@@ -550,6 +585,57 @@ export default function Grid({
     },
     [selectedKeyType, pushHistorySnapshot, persistStatPositions]
   );
+
+  const duplicateSelectedFromContextMenu = useCallback(async () => {
+    copySelectedElements();
+    await pasteElements();
+  }, [copySelectedElements, pasteElements]);
+
+  const moveSelectedToFront = useCallback(async () => {
+    if (selectedElements.length === 0) return;
+
+    for (const el of selectedElements) {
+      if (el.type === "key" && el.index !== undefined) {
+        if (typeof onMoveToFront === "function") {
+          await onMoveToFront(el.index);
+        }
+      } else if (el.type === "stat" && el.index !== undefined) {
+        moveStatToFront(el.index);
+      } else if (el.type === "plugin") {
+        usePluginDisplayElementStore.getState().bringToFront(el.id);
+      }
+    }
+
+    syncSelectedElementsToOverlay();
+  }, [
+    selectedElements,
+    onMoveToFront,
+    moveStatToFront,
+    syncSelectedElementsToOverlay,
+  ]);
+
+  const moveSelectedToBack = useCallback(async () => {
+    if (selectedElements.length === 0) return;
+
+    for (const el of selectedElements) {
+      if (el.type === "key" && el.index !== undefined) {
+        if (typeof onMoveToBack === "function") {
+          await onMoveToBack(el.index);
+        }
+      } else if (el.type === "stat" && el.index !== undefined) {
+        moveStatToBack(el.index);
+      } else if (el.type === "plugin") {
+        usePluginDisplayElementStore.getState().sendToBack(el.id);
+      }
+    }
+
+    syncSelectedElementsToOverlay();
+  }, [
+    selectedElements,
+    onMoveToBack,
+    moveStatToBack,
+    syncSelectedElementsToOverlay,
+  ]);
 
   const [originalKeyData, setOriginalKeyData] = useState(null);
 
@@ -787,6 +873,15 @@ export default function Grid({
             setDuplicateState(null);
             setDuplicateCursor(null);
           }
+          const clickedId = `key-${index}`;
+          if (shouldOpenMixedSelectionMenu(clickedId)) {
+            openMixedSelectionContextMenu(
+              e.clientX,
+              e.clientY,
+              keyRefs.current[index] || null
+            );
+            return;
+          }
           setContextType("key");
           setContextIndex(index);
           contextRef.current = keyRefs.current[index] || null;
@@ -894,6 +989,15 @@ export default function Grid({
           if (duplicateState) {
             setDuplicateState(null);
             setDuplicateCursor(null);
+          }
+          const clickedId = `stat-${index}`;
+          if (shouldOpenMixedSelectionMenu(clickedId)) {
+            openMixedSelectionContextMenu(
+              e.clientX,
+              e.clientY,
+              statRefs.current[index] || null
+            );
+            return;
           }
           setContextType("stat");
           setContextIndex(index);
@@ -1119,6 +1223,24 @@ export default function Grid({
           zoom={zoom}
           panX={panX}
           panY={panY}
+          onSelectionContextMenu={({
+            elementId,
+            clientX,
+            clientY,
+            referenceElement,
+          }) => {
+            if (duplicateState) {
+              setDuplicateState(null);
+              setDuplicateCursor(null);
+            }
+            if (!shouldOpenMixedSelectionMenu(elementId)) return false;
+            openMixedSelectionContextMenu(
+              clientX,
+              clientY,
+              referenceElement || null
+            );
+            return true;
+          }}
           onMultiDrag={(deltaX, deltaY) =>
             moveSelectedElements(deltaX, deltaY, false, false)
           }
@@ -1324,11 +1446,29 @@ export default function Grid({
             setContextPosition(null);
           }}
           items={
-            contextType === "stat"
+            contextType === "mixed"
+              ? mixedSelectionMenuItems
+              : contextType === "stat"
               ? getStatMenuItems(contextIndex)
               : getKeyMenuItems(contextIndex)
           }
-          onSelect={(id) => {
+          onSelect={async (id) => {
+            if (contextType === "mixed") {
+              if (id === "delete") {
+                await deleteSelectedElements();
+              } else if (id === "duplicate") {
+                await duplicateSelectedFromContextMenu();
+              } else if (id === "bringToFront") {
+                await moveSelectedToFront();
+              } else if (id === "sendToBack") {
+                await moveSelectedToBack();
+              }
+
+              setIsContextOpen(false);
+              setContextPosition(null);
+              return;
+            }
+
             if (contextIndex == null) return;
 
             if (contextType === "stat") {

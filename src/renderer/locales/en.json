@@ -245,6 +245,8 @@
   "contextMenu": {
     "duplicateKey": "Duplicate Key",
     "deleteKey": "Delete Key",
+    "duplicateSelected": "Duplicate Selection",
+    "deleteSelected": "Delete Selection",
     "duplicateStat": "Duplicate Stat",
     "deleteStat": "Delete Stat",
     "noteSetting": "Note Setting",

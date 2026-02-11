@@ -246,6 +246,8 @@
   "contextMenu": {
     "duplicateKey": "키 복제",
     "deleteKey": "키 삭제",
+    "duplicateSelected": "선택 항목 복제",
+    "deleteSelected": "선택 항목 삭제",
     "duplicateStat": "통계 복제",
     "deleteStat": "통계 삭제",
     "noteSetting": "노트 설정",
