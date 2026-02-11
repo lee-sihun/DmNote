@@ -3,6 +3,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import PlusIcon from "@assets/svgs/plus2.svg";
 import MinusIcon from "@assets/svgs/minus.svg";
 import { useKeyStore } from "@stores/useKeyStore";
+import { useLenis } from "@hooks/useLenis";
 import Alert from "./Alert.jsx";
 import TabNameModal from "./TabNameModal";
 
@@ -10,51 +11,80 @@ type TabListProps = {
   onClose?: () => void;
 };
 
+const MAX_CUSTOM_TABS = 30;
+const VISIBLE_TAB_COUNT = 5;
+const TAB_ITEM_HEIGHT = 24;
+const TAB_ITEM_GAP = 6;
+const SCROLL_CONTENT_GUTTER = 4;
+const TAB_LIST_MAX_HEIGHT =
+  VISIBLE_TAB_COUNT * TAB_ITEM_HEIGHT + (VISIBLE_TAB_COUNT - 1) * TAB_ITEM_GAP;
+
 const TabList = ({ onClose }: TabListProps) => {
   const customTabs = useKeyStore((state) => state.customTabs) ?? [];
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
-  const setCustomTabs = useKeyStore((state) => state.setCustomTabs);
   const { t } = useTranslation();
 
-  const [isLoaded, setIsLoaded] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
 
-  useEffect(() => {
-    let disposed = false;
-    window.api.keys.customTabs
-      .list()
-      .then((tabs) => {
-        if (disposed || !Array.isArray(tabs)) return;
-        setCustomTabs(tabs);
-      })
-      .catch((error) => {
-        console.error("Failed to load custom tabs", error);
-      })
-      .finally(() => {
-        if (!disposed) {
-          setIsLoaded(true);
-        }
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [setCustomTabs]);
+  const {
+    scrollContainerRef: scrollRef,
+    wrapperElement,
+    lenisInstance,
+    scrollbarWidth,
+  } = useLenis();
 
   const isCustomSelected = useMemo(
     () => !["4key", "5key", "6key", "8key"].includes(selectedKeyType),
     [selectedKeyType]
   );
 
-  const maxReached = Array.isArray(customTabs) && customTabs.length >= 5;
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => {
+      lenisInstance.current?.resize?.();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [customTabs.length, lenisInstance]);
+
+  useEffect(() => {
+    const wrapper = wrapperElement;
+    if (!wrapper) {
+      setHasOverflow(false);
+      return;
+    }
+
+    const updateOverflow = () => {
+      const nextHasOverflow = wrapper.scrollHeight > wrapper.clientHeight;
+      setHasOverflow((prev) =>
+        prev === nextHasOverflow ? prev : nextHasOverflow,
+      );
+    };
+
+    const rafId = requestAnimationFrame(updateOverflow);
+    const resizeObserver = new ResizeObserver(updateOverflow);
+    resizeObserver.observe(wrapper);
+
+    const contentEl = wrapper.firstElementChild;
+    if (contentEl instanceof HTMLElement) {
+      resizeObserver.observe(contentEl);
+    }
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+    };
+  }, [wrapperElement, customTabs.length]);
+
+  const maxReached =
+    Array.isArray(customTabs) && customTabs.length >= MAX_CUSTOM_TABS;
+  const scrollbarCompensation = hasOverflow
+    ? scrollbarWidth + SCROLL_CONTENT_GUTTER
+    : 0;
 
   const handleCreate = async (name: string) => {
     const result = await window.api.keys.customTabs.create(name);
-    if (!result?.error) {
-      onClose?.();
-    }
     return result;
   };
 
@@ -63,7 +93,6 @@ const TabList = ({ onClose }: TabListProps) => {
       const result = await window.api.keys.customTabs.select(id);
       if (result?.success) {
         setSelectedKeyType(result.selected);
-        onClose?.();
       }
       return result;
     } catch (error) {
@@ -89,21 +118,44 @@ const TabList = ({ onClose }: TabListProps) => {
         {customTabs.length === 0 ? (
           <span className="text-style-2 text-[#DBDEE8]">{t("tabs.empty")}</span>
         ) : (
-          <div className="flex flex-col w-[154px] gap-[6px] items-center">
-            {[...customTabs]
-              .slice()
-              .reverse()
-              .map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`w-[138px] h-[24px] flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-[#26262C] active:bg-[#2A2A31] ${
-                    selectedKeyType === tab.id ? "bg-[#26262C]" : ""
-                  }`}
-                  onClick={() => handleSelect(tab.id)}
-                >
-                  {tab.name}
-                </button>
-              ))}
+          <div
+            ref={scrollRef}
+            className="flex flex-col w-full gap-[6px] overflow-y-auto modal-content-scroll"
+            style={{
+              maxHeight: `${TAB_LIST_MAX_HEIGHT}px`,
+              width:
+                scrollbarCompensation > 0
+                  ? `calc(100% + ${scrollbarCompensation}px)`
+                  : undefined,
+              marginRight:
+                scrollbarCompensation > 0
+                  ? `-${scrollbarCompensation}px`
+                  : undefined,
+            }}
+          >
+            <div
+              className="flex flex-col gap-[6px]"
+              style={
+                hasOverflow
+                  ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
+                  : undefined
+              }
+            >
+              {[...customTabs]
+                .slice()
+                .reverse()
+                .map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-[#26262C] active:bg-[#2A2A31] ${
+                      selectedKeyType === tab.id ? "bg-[#26262C]" : ""
+                    }`}
+                    onClick={() => handleSelect(tab.id)}
+                  >
+                    {tab.name}
+                  </button>
+                ))}
+            </div>
           </div>
         )}
       </div>
@@ -112,7 +164,6 @@ const TabList = ({ onClose }: TabListProps) => {
           <button
             className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]"
             onClick={() => setShowNameModal(true)}
-            disabled={!isLoaded}
           >
             <PlusIcon />
           </button>
@@ -151,7 +202,6 @@ const TabList = ({ onClose }: TabListProps) => {
         onConfirm={async () => {
           setAskDelete(false);
           await handleDelete();
-          onClose?.();
         }}
         onCancel={() => setAskDelete(false)}
       />

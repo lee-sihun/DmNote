@@ -11,6 +11,9 @@ use crate::{
         NoteSettingsPatch, SettingsPatchInput,
     },
 };
+
+const MAX_CUSTOM_TABS: usize = 30;
+
 #[derive(Serialize)]
 pub struct ModeResponse {
     pub success: bool,
@@ -32,6 +35,7 @@ pub struct ResetModeResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomTabChangePayload {
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
@@ -299,7 +303,7 @@ pub fn custom_tabs_create(
             error: Some("duplicate-name".to_string()),
         });
     }
-    if snapshot.custom_tabs.len() >= 5 {
+    if snapshot.custom_tabs.len() >= MAX_CUSTOM_TABS {
         return Ok(CustomTabCreateResult {
             result: None,
             error: Some("max-reached".to_string()),

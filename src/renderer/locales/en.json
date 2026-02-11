@@ -221,7 +221,7 @@
       "duplicate": "Name already exists"
     },
     "errors": {
-      "max": "You can add up to 5 tabs",
+      "max": "You can add up to 30 tabs",
       "invalid": "Invalid name",
       "createFail": "Failed to create"
     }
