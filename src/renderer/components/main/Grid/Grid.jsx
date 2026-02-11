@@ -566,10 +566,14 @@ export default function Grid({
   const isExportImportPopupOpen = useUIStore(
     (state) => state.isExportImportPopupOpen
   );
+  const previousSelectedKeyTypeRef = useRef(selectedKeyType);
 
   // 탭 변경 시 선택 해제
   useEffect(() => {
-    clearSelection();
+    if (previousSelectedKeyTypeRef.current !== selectedKeyType) {
+      clearSelection();
+      previousSelectedKeyTypeRef.current = selectedKeyType;
+    }
   }, [selectedKeyType, clearSelection]);
 
   // 그리드 컨텍스트 메뉴

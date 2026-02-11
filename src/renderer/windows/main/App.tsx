@@ -23,6 +23,7 @@ import { useKeyStore } from "@stores/useKeyStore";
 import { useAppBootstrap } from "@hooks/useAppBootstrap";
 import { useUpdateCheck } from "@hooks/useUpdateCheck";
 import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
+import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 
 import { useUIStore } from "@stores/useUIStore";
 
@@ -130,6 +131,7 @@ export default function App() {
   const [isLaboratoryOpen, setIsLaboratoryOpen] = useState(false);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
+  const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const {
     noteEffect,
     angleMode,
@@ -588,10 +590,16 @@ export default function App() {
         setActiveTool={setActiveTool}
         isSettingsOpen={isSettingsOpen}
         onOpenSettings={() => {
+          selectedKeyTypeAtSettingsOpenRef.current = selectedKeyType;
           if (selectedKey) setSkipModalAnimationOnReturn(true);
           setIsSettingsOpen(true);
         }}
-        onCloseSettings={() => setIsSettingsOpen(false)}
+        onCloseSettings={() => {
+          if (selectedKeyTypeAtSettingsOpenRef.current !== selectedKeyType) {
+            useGridSelectionStore.getState().clearSelection();
+          }
+          setIsSettingsOpen(false);
+        }}
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
         onOpenLaboratory={() => setIsLaboratoryOpen(true)}
