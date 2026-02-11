@@ -74,6 +74,12 @@ const FloatingPopup = ({
             referenceRef.current.contains(target))
         )
           return;
+        // 모달이 열린 상태에서 모달 내부 클릭으로 팝업이 닫히는 것을 방지
+        // (Modal은 body로 portal 렌더링되기 때문에 floating 내부로 인식되지 않음)
+        const isInsideModal =
+          target instanceof Element &&
+          !!target.closest('[data-dmn-modal-backdrop="true"]');
+        if (isInsideModal) return;
         onClose?.();
       };
 
