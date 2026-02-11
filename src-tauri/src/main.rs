@@ -73,6 +73,33 @@ fn main() {
             register_dev_capability(app)?;
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // macOS: 편집 메뉴 추가 (Cmd+Z/X/C/V/A 등 네이티브 편집 단축키 활성화)
+            // WKWebView에서 단축키들이 동작하려면 네이티브 Edit 메뉴가 필요 
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+
+                let edit_menu = Submenu::with_items(
+                    app,
+                    "Edit",
+                    true,
+                    &[
+                        &PredefinedMenuItem::undo(app, None)?,
+                        &PredefinedMenuItem::redo(app, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::cut(app, None)?,
+                        &PredefinedMenuItem::copy(app, None)?,
+                        &PredefinedMenuItem::paste(app, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::select_all(app, None)?,
+                    ],
+                )?;
+
+                let menu = Menu::with_items(app, &[&edit_menu])?;
+                app.set_menu(menu)?;
+            }
+
             let resolver = app.path();
             let store = AppStore::initialize(&resolver)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
