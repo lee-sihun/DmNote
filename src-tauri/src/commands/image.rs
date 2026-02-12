@@ -124,6 +124,11 @@ fn replace_store_image_path_references(
             stat_position.position.active_image.as_deref() == Some(from.as_str())
                 || stat_position.position.inactive_image.as_deref() == Some(from.as_str())
         })
+    }) || snapshot.graph_positions.values().any(|positions| {
+        positions.iter().any(|graph_position| {
+            graph_position.position.active_image.as_deref() == Some(from.as_str())
+                || graph_position.position.inactive_image.as_deref() == Some(from.as_str())
+        })
     });
 
     if !has_reference {
@@ -165,6 +170,19 @@ fn replace_store_image_path_references(
                     }
                 }
             }
+
+            for positions in store.graph_positions.values_mut() {
+                for graph_position in positions.iter_mut() {
+                    if graph_position.position.active_image.as_deref() == Some(from.as_str()) {
+                        graph_position.position.active_image = Some(to.clone());
+                        changed = true;
+                    }
+                    if graph_position.position.inactive_image.as_deref() == Some(from.as_str()) {
+                        graph_position.position.inactive_image = Some(to.clone());
+                        changed = true;
+                    }
+                }
+            }
         })
         .map_err(|error| format!("스토어 업데이트 실패: {error}"))?;
 
@@ -181,6 +199,8 @@ fn replace_store_image_path_references(
         .map_err(|error| format!("positions:changed emit 실패: {error}"))?;
     app.emit("statPositions:changed", &updated.stat_positions)
         .map_err(|error| format!("statPositions:changed emit 실패: {error}"))?;
+    app.emit("graphPositions:changed", &updated.graph_positions)
+        .map_err(|error| format!("graphPositions:changed emit 실패: {error}"))?;
     let _ = app.emit(
         "image:optimized",
         serde_json::json!({ "fromPath": from, "toPath": to }),

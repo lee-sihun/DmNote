@@ -126,6 +126,8 @@ fn main() {
             commands::keys::positions_update,
             commands::stat_items::stat_positions_get,
             commands::stat_items::stat_positions_update,
+            commands::graph_items::graph_positions_get,
+            commands::graph_items::graph_positions_update,
             commands::keys::keys_set_mode,
             commands::keys::keys_reset_all,
             commands::keys::keys_reset_mode,

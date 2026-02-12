@@ -72,7 +72,9 @@
           "plugin_storage_has_data",
           "plugin_storage_clear_by_prefix",
           "stat_positions_get",
-          "stat_positions_update"
+          "stat_positions_update",
+          "graph_positions_get",
+          "graph_positions_update"
         ],
         "deny": []
       }
