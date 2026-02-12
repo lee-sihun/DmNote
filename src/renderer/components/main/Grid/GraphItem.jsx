@@ -10,6 +10,7 @@ import {
   calculateGroupBounds,
 } from "@utils/smartGuides";
 import GraphPanel from "@components/graph/GraphPanel";
+import { resolveImageSource } from "@utils/imageSource";
 
 const PREVIEW_HISTORY_BASE = [
   8, 10, 11, 13, 12, 14, 15, 16, 14, 13, 12, 14, 15, 14, 14,
@@ -49,6 +50,14 @@ export default function GraphItem({
     className,
     graphType = "line",
     graphColor = "#86EFAC",
+    backgroundColor,
+    borderColor,
+    borderWidth,
+    borderRadius,
+    inactiveImage,
+    activeImage,
+    idleImageFit,
+    imageFit,
   } = position;
 
   const { getOtherElements } = useSmartGuidesElements();
@@ -67,6 +76,12 @@ export default function GraphItem({
   const effectiveElementId = elementId || `graph-${index}`;
 
   const previewHistory = useMemo(() => [...PREVIEW_HISTORY_BASE], []);
+  const previewImageSrc = useMemo(
+    () =>
+      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || null,
+    [inactiveImage, activeImage]
+  );
+  const previewImageFit = idleImageFit || imageFit || "cover";
 
   const draggable = useDraggable({
     gridSize: gridSnapSize,
@@ -388,6 +403,12 @@ export default function GraphItem({
       className={className}
       graphType={graphType}
       graphColor={graphColor || "#86EFAC"}
+      backgroundColor={backgroundColor}
+      borderColor={borderColor}
+      borderWidth={borderWidth}
+      borderRadius={borderRadius}
+      imageSrc={previewImageSrc}
+      imageFit={previewImageFit}
       history={previewHistory}
       avg={PREVIEW_AVG}
       maxval={PREVIEW_MAX}

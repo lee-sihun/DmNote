@@ -238,6 +238,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 이미지 픽커 상태
   const [showImagePicker, setShowImagePicker] = useState(false);
   const imageButtonRef = useRef<HTMLButtonElement>(null);
+  const [showGraphImagePicker, setShowGraphImagePicker] = useState(false);
+  const graphImageButtonRef = useRef<HTMLButtonElement>(null);
 
   // 다중 선택용 이미지 픽커 상태
   const [showBatchImagePicker, setShowBatchImagePicker] = useState(false);
@@ -533,6 +535,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     keyTypeChangedRef.current = false;
 
     setShowImagePicker(false);
+    setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
     setIsListening(false);
   }, [
@@ -745,6 +748,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       manuallyClosedRef.current = true;
       setIsPanelVisible(false);
       setShowImagePicker(false);
+      setShowGraphImagePicker(false);
       setShowBatchImagePicker(false);
     }
   }, [isPanelVisible, selectedElements.length]);
@@ -2628,6 +2632,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.graphSpeed || 1000)}
+                  width="62px"
                   onChange={(value) => {
                     const clamped = Math.max(500, Math.min(5000, value));
                     const snapped = Math.round(clamped / 100) * 100;
@@ -2658,9 +2663,173 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   panelElement={panelElement}
                 />
               </PropertyRow>
+
+              <SectionDivider />
+
+              <PropertyRow
+                label={t("propertiesPanel.backgroundColor") || "Background Color"}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.backgroundColor || "rgba(17, 17, 20, 0.9)"
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      backgroundColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderColor") || "Border Color"}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.borderColor || "rgba(255, 255, 255, 0.1)"
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderWidth") || "Border Width"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderWidth ?? 1)}
+                  width="62px"
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderWidth: Math.max(0, Math.min(20, value)),
+                    } as any)
+                  }
+                  min={0}
+                  max={20}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderRadius") || "Border Radius"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderRadius ?? 8)}
+                  width="62px"
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderRadius: Math.max(0, Math.min(100, value)),
+                    } as any)
+                  }
+                  min={0}
+                  max={100}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.customImage") || "Custom Image"}
+              >
+                <button
+                  ref={graphImageButtonRef}
+                  type="button"
+                  className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                    showGraphImagePicker
+                      ? "border-[#459BF8]"
+                      : "border-[#3A3943]"
+                  } text-[#DBDEE8] text-style-4`}
+                  onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
+                >
+                  {t("propertiesPanel.configure") || "Configure"}
+                </button>
+              </PropertyRow>
             </div>
           </div>
         </div>
+
+        {showGraphImagePicker && graphImageButtonRef.current && (
+          <ImagePicker
+            open={showGraphImagePicker}
+            referenceRef={graphImageButtonRef}
+            panelElement={panelElement}
+            idleImage={singleGraphPosition.inactiveImage || ""}
+            activeImage={singleGraphPosition.activeImage || ""}
+            idleTransparent={false}
+            activeTransparent={false}
+            idleImageFit={
+              singleGraphPosition.idleImageFit ||
+              singleGraphPosition.imageFit ||
+              "cover"
+            }
+            activeImageFit={
+              singleGraphPosition.activeImageFit ||
+              singleGraphPosition.imageFit ||
+              "cover"
+            }
+            onIdleImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                inactiveImage: imageUrl,
+              } as any)
+            }
+            onActiveImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImage: imageUrl,
+              } as any)
+            }
+            onIdleTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                idleTransparent: value,
+              } as any)
+            }
+            onActiveTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeTransparent: value,
+              } as any)
+            }
+            onIdleImageFitChange={(fit: any) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                idleImageFit: fit,
+              } as any)
+            }
+            onActiveImageFitChange={(fit: any) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImageFit: fit,
+              } as any)
+            }
+            onIdleImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                inactiveImage: "",
+              } as any)
+            }
+            onActiveImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImage: "",
+              } as any)
+            }
+            onClose={() => setShowGraphImagePicker(false)}
+          />
+        )}
       </div>
     );
   }

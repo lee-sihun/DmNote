@@ -33,6 +33,12 @@ const GraphPanel = forwardRef(function GraphPanel(
     className = "",
     graphType = "line",
     graphColor = "#86EFAC",
+    backgroundColor = "rgba(17, 17, 20, 0.9)",
+    borderColor = "rgba(255, 255, 255, 0.1)",
+    borderWidth = 1,
+    borderRadius = 8,
+    imageSrc = null,
+    imageFit = "cover",
     history = [],
     avg = 0,
     maxval = 1,
@@ -58,6 +64,18 @@ const GraphPanel = forwardRef(function GraphPanel(
     [history, safeMax]
   );
 
+  const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
+    ? Math.max(0, Number(borderWidth))
+    : 1;
+  const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
+    ? Math.max(0, Number(borderRadius))
+    : 8;
+  const resolvedBackgroundColor = backgroundColor || "rgba(17, 17, 20, 0.9)";
+  const resolvedBorder =
+    resolvedBorderWidth <= 0
+      ? "none"
+      : `${resolvedBorderWidth}px solid ${borderColor || "rgba(255, 255, 255, 0.1)"}`;
+
   const avgY = 100 - Math.min((avg / safeMax) * 100, 100);
 
   return (
@@ -68,14 +86,14 @@ const GraphPanel = forwardRef(function GraphPanel(
         width: `${width}px`,
         height: `${height}px`,
         transform,
-        background: "rgba(17, 17, 20, 0.9)",
+        background: resolvedBackgroundColor,
         color: "#FFFFFF",
-        border: "1px solid rgba(255, 255, 255, 0.1)",
-        borderRadius: "8px",
-        padding: "8px",
+        border: resolvedBorder,
+        borderRadius: `${resolvedBorderRadius}px`,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
         cursor: interactive ? "pointer" : "default",
         fontFamily:
           "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
@@ -94,18 +112,34 @@ const GraphPanel = forwardRef(function GraphPanel(
       onContextMenu={onContextMenu}
       onDragStart={onDragStart}
     >
+      {imageSrc ? (
+        <img
+          src={imageSrc}
+          alt=""
+          draggable={false}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: imageFit || "cover",
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 0,
+          }}
+        />
+      ) : null}
       {resolvedGraphType === "bar" ? (
         <div
           style={{
             display: "flex",
             alignItems: "flex-end",
             flex: 1,
-            minHeight: "50px",
-            marginTop: "0px",
-            padding: "4px",
-            background: "rgba(0, 0, 0, 0.3)",
-            borderRadius: "4px",
+            minHeight: 0,
+            background: "transparent",
             gap: "1px",
+            position: "relative",
+            zIndex: 1,
           }}
         >
           {history.map((value, index) => {
@@ -134,13 +168,11 @@ const GraphPanel = forwardRef(function GraphPanel(
             alignItems: "flex-end",
             justifyContent: "space-between",
             flex: 1,
-            minHeight: "50px",
-            marginTop: "0px",
-            padding: "4px",
-            background: "rgba(0, 0, 0, 0.3)",
-            borderRadius: "4px",
+            minHeight: 0,
+            background: "transparent",
             gap: "1px",
             position: "relative",
+            zIndex: 1,
           }}
         >
           <svg
@@ -150,12 +182,12 @@ const GraphPanel = forwardRef(function GraphPanel(
             preserveAspectRatio="none"
             style={{
               position: "absolute",
-              top: "4px",
-              left: "4px",
-              right: "4px",
-              bottom: "4px",
-              width: "calc(100% - 8px)",
-              height: "calc(100% - 8px)",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: "100%",
+              height: "100%",
             }}
           >
             <defs>

@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { getStatValueSignal } from "@stores/statsSignals";
 import GraphPanel from "@components/graph/GraphPanel";
+import { resolveImageSource } from "@utils/imageSource";
 
 const GRAPH_UPDATE_MS = 100;
 const GRAPH_TICK_MS = 50;
@@ -27,6 +28,14 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
     graphType = "line",
     graphSpeed = 1000,
     graphColor = "#86EFAC",
+    backgroundColor,
+    borderColor,
+    borderWidth,
+    borderRadius,
+    inactiveImage,
+    activeImage,
+    idleImageFit,
+    imageFit,
     dx = 0,
     dy = 0,
     width = 200,
@@ -35,6 +44,12 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
   } = position;
 
   const statSignal = useMemo(() => getStatValueSignal(statType), [statType]);
+  const imageSrc = useMemo(
+    () =>
+      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || null,
+    [inactiveImage, activeImage]
+  );
+  const resolvedImageFit = idleImageFit || imageFit || "cover";
   const uidRef = useRef(
     `graph-overlay-${Math.random().toString(36).slice(2, 11)}`
   );
@@ -114,6 +129,12 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
       className={className}
       graphType={graphType}
       graphColor={graphColor}
+      backgroundColor={backgroundColor}
+      borderColor={borderColor}
+      borderWidth={borderWidth}
+      borderRadius={borderRadius}
+      imageSrc={imageSrc}
+      imageFit={resolvedImageFit}
       history={graphState.history}
       avg={graphState.avg}
       maxval={graphState.maxval}
