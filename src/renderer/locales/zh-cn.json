@@ -206,6 +206,7 @@
     "removeKey": "移除 [{{name}}] 键?",
 
     "removeStat": "移除 [{{name}}] 统计?",
+    "removeGraph": "移除 [{{name}}] 图表?",
     "remove": "移除"
   },
   "tabs": {
@@ -252,6 +253,8 @@
     "duplicateStat": "复制统计",
 
     "deleteStat": "删除统计",
+    "duplicateGraph": "复制图表",
+    "deleteGraph": "删除图表",
     "noteSetting": "音符设置",
     "counterSetting": "计数器设置",
     "counterReset": "重置计数器",
@@ -260,7 +263,8 @@
     "bringForward": "上移一层",
     "sendBackward": "下移一层",
     "tabCssSetting": "标签页 CSS 设置",
-    "addStat": "添加统计"
+    "addStat": "添加统计",
+    "addGraph": "添加图表"
   },
   "noteColor": {
     "color": "颜色",
@@ -386,6 +390,13 @@
     "keyMapping": "按键映射",
     "statType": "统计类型",
     "statKpsType": "KPS 类型",
+    "graphType": "统计类型",
+    "graphKpsType": "KPS 类型",
+    "graphShape": "图表形状",
+    "graphShapeLine": "折线",
+    "graphShapeBar": "柱状",
+    "graphSpeed": "图表速度",
+    "graphColor": "图表颜色",
     "pressAnyKey": "按下任意键",
     "clickToSet": "点击设置",
     "customImage": "自定义图像",

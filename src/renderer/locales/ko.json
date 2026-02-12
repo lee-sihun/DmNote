@@ -206,6 +206,7 @@
     "removeKey": "[{{name}}] 키를 제거하시겠습니까?",
 
     "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
+    "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
     "remove": "제거하기"
   },
   "tabs": {
@@ -250,6 +251,8 @@
     "deleteSelected": "선택 항목 삭제",
     "duplicateStat": "통계 복제",
     "deleteStat": "통계 삭제",
+    "duplicateGraph": "그래프 복제",
+    "deleteGraph": "그래프 삭제",
     "noteSetting": "노트 설정",
     "counterSetting": "카운터 설정",
     "counterReset": "카운터 초기화",
@@ -258,7 +261,8 @@
     "bringForward": "앞으로",
     "sendBackward": "뒤로",
     "tabCssSetting": "현재 탭 CSS 설정",
-    "addStat": "통계 추가"
+    "addStat": "통계 추가",
+    "addGraph": "그래프 추가"
   },
   "noteColor": {
     "color": "색상",
@@ -384,6 +388,13 @@
     "keyMapping": "키 매핑",
     "statType": "통계 종류",
     "statKpsType": "KPS 종류",
+    "graphType": "통계 종류",
+    "graphKpsType": "KPS 종류",
+    "graphShape": "그래프 형태",
+    "graphShapeLine": "선 그래프",
+    "graphShapeBar": "바 그래프",
+    "graphSpeed": "그래프 속도",
+    "graphColor": "그래프 색상",
     "pressAnyKey": "아무 키나 누르세요",
     "clickToSet": "클릭하여 설정",
     "customImage": "커스텀 이미지",
