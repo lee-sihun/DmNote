@@ -2508,15 +2508,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyLikeElements.length === 0 &&
     selectedPluginElements.length === 0
   ) {
-    const graphBaseOptions = [
-      { label: "KPS", value: "kps" },
-      { label: "Total", value: "total" },
-    ];
-    const graphKpsOptions = [
-      { label: "KPS", value: "kps" },
-      { label: "AVG", value: "kpsAvg" },
-      { label: "MAX", value: "kpsMax" },
-    ];
     const graphShapeOptions = [
       {
         label: t("propertiesPanel.graphShapeLine") || "Line",
@@ -2530,8 +2521,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const resolvedGraphStatType =
       (singleGraphPosition.statType as StatItemType) || "kps";
-    const graphBaseValue =
-      resolvedGraphStatType === "total" ? "total" : "kps";
     const graphTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
 
     return (
@@ -2563,49 +2552,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div className="flex-1 properties-panel-overlay-scroll">
           <div className="properties-panel-overlay-viewport">
             <div className="p-[12px] flex flex-col gap-[12px]">
-              <PropertyRow
-                label={t("propertiesPanel.graphType") || "Stat Type"}
-              >
-                <Dropdown
-                  options={graphBaseOptions}
-                  value={graphBaseValue}
-                  onChange={(value) => {
-                    if (value === "total") {
-                      handleGraphUpdate({
-                        index: singleGraphIndex!,
-                        statType: "total" as any,
-                      });
-                      return;
-                    }
-                    handleGraphUpdate({
-                      index: singleGraphIndex!,
-                      statType:
-                        resolvedGraphStatType === "total"
-                          ? ("kps" as any)
-                          : resolvedGraphStatType,
-                    });
-                  }}
-                />
-              </PropertyRow>
-              {graphBaseValue === "kps" ? (
-                <PropertyRow
-                  label={t("propertiesPanel.graphKpsType") || "KPS Type"}
-                >
-                  <Dropdown
-                    options={graphKpsOptions}
-                    value={resolvedGraphStatType}
-                    onChange={(value) =>
-                      handleGraphUpdate({
-                        index: singleGraphIndex!,
-                        statType: value as any,
-                      })
-                    }
-                  />
-                </PropertyRow>
-              ) : null}
-
-              <SectionDivider />
-
               <PropertyRow label={t("propertiesPanel.position") || "Position"}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.dx || 0)}
