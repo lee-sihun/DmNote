@@ -2,8 +2,9 @@ import { create } from "zustand";
 import type { KeyPosition } from "@src/types/keys";
 import type { PluginDisplayElementInternal } from "@src/types/api";
 import type { StatItemPosition } from "@src/types/statItems";
+import type { GraphItemPosition } from "@src/types/graphItems";
 
-export type SelectableElementType = "key" | "stat" | "plugin";
+export type SelectableElementType = "key" | "stat" | "graph" | "plugin";
 
 export interface SelectedElement {
   type: SelectableElementType;
@@ -24,13 +25,23 @@ export interface ClipboardStatData {
   position: StatItemPosition;
 }
 
+// 클립보드에 저장되는 그래프 데이터
+export interface ClipboardGraphData {
+  type: "graph";
+  position: GraphItemPosition;
+}
+
 // 클립보드에 저장되는 플러그인 요소 데이터
 export interface ClipboardPluginData {
   type: "plugin";
   element: Omit<PluginDisplayElementInternal, "fullId">;
 }
 
-export type ClipboardItem = ClipboardKeyData | ClipboardStatData | ClipboardPluginData;
+export type ClipboardItem =
+  | ClipboardKeyData
+  | ClipboardStatData
+  | ClipboardGraphData
+  | ClipboardPluginData;
 
 interface GridSelectionState {
   // 선택된 요소들

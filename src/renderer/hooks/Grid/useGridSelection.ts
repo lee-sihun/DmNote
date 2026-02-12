@@ -8,6 +8,7 @@
 import { useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import {
@@ -85,6 +86,21 @@ export function useGridSelection({
       console.error("Failed to broadcast stat positions to overlay", error);
     }
 
+    // 그래프 요소 위치 동기화
+    const currentGraphPositions = useGraphItemStore.getState().positions;
+    window.api.graphItems
+      .updatePositions(currentGraphPositions as any)
+      .catch((error: Error) => {
+        console.error("Failed to sync graph positions to overlay", error);
+      });
+    try {
+      window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        positions: currentGraphPositions,
+      });
+    } catch (error) {
+      console.error("Failed to broadcast graph positions to overlay", error);
+    }
+
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
@@ -116,9 +132,16 @@ export function useGridSelection({
       if (saveHistory) {
         const { keyMappings: km } = useKeyStore.getState();
         const currentStatPositions = useStatItemStore.getState().positions;
+        const currentGraphPositions = useGraphItemStore.getState().positions;
         useHistoryStore
           .getState()
-          .pushState(km, currentPositions, currentStatPositions as any, currentPluginElements);
+          .pushState(
+            km,
+            currentPositions,
+            currentStatPositions as any,
+            currentGraphPositions as any,
+            currentPluginElements
+          );
       }
 
       // 키 위치 배치 업데이트
@@ -187,6 +210,39 @@ export function useGridSelection({
         }
       }
 
+      // 그래프 요소 배치 업데이트
+      const graphUpdates = selectedElements.filter(
+        (el) => el.type === "graph" && el.index !== undefined
+      );
+      if (graphUpdates.length > 0) {
+        const currentGraphPositions = useGraphItemStore.getState().positions;
+        const newGraphPositions = { ...currentGraphPositions };
+        const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
+
+        graphUpdates.forEach((el) => {
+          if (el.index === undefined) return;
+          const currentPos = tabPositions[el.index];
+          if (currentPos) {
+            tabPositions[el.index] = {
+              ...currentPos,
+              dx: currentPos.dx + deltaX,
+              dy: currentPos.dy + deltaY,
+            };
+          }
+        });
+
+        newGraphPositions[selectedKeyType] = tabPositions;
+        useGraphItemStore.getState().setPositions(newGraphPositions as any);
+
+        if (syncToOverlay) {
+          window.api.graphItems
+            .updatePositions(newGraphPositions as any)
+            .catch((error: Error) => {
+              console.error("Failed to sync graph positions to overlay", error);
+            });
+        }
+      }
+
       // 플러그인 요소 배치 업데이트
       const pluginUpdates = selectedElements.filter(
         (el) => el.type === "plugin"
@@ -228,6 +284,10 @@ export function useGridSelection({
       .filter((el) => el.type === "stat" && el.index !== undefined)
       .map((el) => el.index as number);
 
+    const graphsToDelete = selectedElements
+      .filter((el) => el.type === "graph" && el.index !== undefined)
+      .map((el) => el.index as number);
+
     const pluginsToDelete = selectedElements
       .filter((el) => el.type === "plugin")
       .map((el) => el.id);
@@ -236,15 +296,23 @@ export function useGridSelection({
     if (
       keysToDelete.length > 0 ||
       statsToDelete.length > 0 ||
+      graphsToDelete.length > 0 ||
       pluginsToDelete.length > 0
     ) {
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       useHistoryStore
         .getState()
-        .pushState(km, pos, currentStatPositions as any, currentPluginElements);
+        .pushState(
+          km,
+          pos,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements
+        );
     }
 
     // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
@@ -328,6 +396,35 @@ export function useGridSelection({
         // ignore
       }
     }
+
+    // 그래프 요소 배치 삭제
+    if (graphsToDelete.length > 0) {
+      const current = useGraphItemStore.getState().positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const deleteSet = new Set(graphsToDelete);
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
+      };
+
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setPositions(updatedPositions as any);
+      try {
+        await window.api.graphItems.updatePositions(updatedPositions as any);
+      } catch (error) {
+        console.error("Failed to delete graph items", error);
+      } finally {
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      }
+
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+    }
   }, [selectedElements, selectedKeyType, clearSelection]);
 
   // 선택된 요소들 복사
@@ -340,6 +437,8 @@ export function useGridSelection({
     const currentPositions = pos[selectedKeyType] || [];
     const currentStatPositions =
       useStatItemStore.getState().positions[selectedKeyType] || [];
+    const currentGraphPositions =
+      useGraphItemStore.getState().positions[selectedKeyType] || [];
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
@@ -361,6 +460,14 @@ export function useGridSelection({
         if (position) {
           clipboardItems.push({
             type: "stat",
+            position: { ...position },
+          });
+        }
+      } else if (element.type === "graph" && element.index !== undefined) {
+        const position = currentGraphPositions[element.index];
+        if (position) {
+          clipboardItems.push({
+            type: "graph",
             position: { ...position },
           });
         }
@@ -394,6 +501,7 @@ export function useGridSelection({
     const { keyMappings: km, positions: pos } = useKeyStore.getState();
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
+    const currentGraphPositions = useGraphItemStore.getState().positions;
 
     // 히스토리 저장
     const historyStore = useHistoryStore.getState();
@@ -401,11 +509,13 @@ export function useGridSelection({
       { ...km },
       { ...pos },
       { ...(useStatItemStore.getState().positions as any) },
+      { ...(currentGraphPositions as any) },
       [...currentPluginElements]
     );
 
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
     const statsToAdd: { position: any }[] = [];
+    const graphsToAdd: { position: any }[] = [];
     const pluginsToAdd: any[] = [];
 
     for (const item of currentClipboard) {
@@ -420,6 +530,14 @@ export function useGridSelection({
         });
       } else if (item.type === "stat") {
         statsToAdd.push({
+          position: {
+            ...item.position,
+            dx: (item.position.dx || 0) + PASTE_OFFSET,
+            dy: (item.position.dy || 0) + PASTE_OFFSET,
+          },
+        });
+      } else if (item.type === "graph") {
+        graphsToAdd.push({
           position: {
             ...item.position,
             dx: (item.position.dx || 0) + PASTE_OFFSET,
@@ -518,6 +636,43 @@ export function useGridSelection({
 
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    // 그래프 요소 추가
+    if (graphsToAdd.length > 0) {
+      const current = useGraphItemStore.getState().positions;
+      const posArray = [...(current[selectedKeyType] || [])];
+      const startIndex = posArray.length;
+
+      for (let i = 0; i < graphsToAdd.length; i++) {
+        posArray.push(graphsToAdd[i].position);
+        newSelectedElements.push({
+          type: "graph",
+          id: `graph-${startIndex + i}`,
+          index: startIndex + i,
+        });
+      }
+
+      const updatedPositions = { ...current, [selectedKeyType]: posArray };
+
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setPositions(updatedPositions as any);
+
+      try {
+        await window.api.graphItems.updatePositions(updatedPositions as any);
+      } catch (error) {
+        console.error("Failed to paste graph items", error);
+      } finally {
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      }
+
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
           positions: updatedPositions,
         });
       } catch {
