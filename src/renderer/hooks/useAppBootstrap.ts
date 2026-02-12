@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { useFontStore, syncFontCSS } from "@stores/useFontStore";
 import {
   useSettingsStore,
@@ -208,6 +209,10 @@ export function useAppBootstrap() {
         ...state,
         positions: bootstrap.statPositions ?? {},
       }));
+      useGraphItemStore.setState((state) => ({
+        ...state,
+        positions: bootstrap.graphPositions ?? {},
+      }));
       applyCounterSnapshot(bootstrap.keyCounters);
 
       // macOS 커서 시스템 초기화 (시스템 설정 반영)
@@ -241,6 +246,15 @@ export function useAppBootstrap() {
         )
           return;
         useStatItemStore.setState((state) => ({ ...state, positions }));
+      }),
+      window.api.graphItems.onPositionsChanged((positions) => {
+        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        if (
+          !isOverlayWindow &&
+          useGraphItemStore.getState().isLocalUpdateInProgress
+        )
+          return;
+        useGraphItemStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));
