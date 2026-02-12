@@ -9,6 +9,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
@@ -18,6 +19,7 @@ import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { translatePluginMessage } from "@utils/pluginI18n";
 import type { KeyPosition, KeyCounterSettings } from "@src/types/keys";
 import type { StatItemPosition, StatItemType } from "@src/types/statItems";
+import type { GraphItemPosition } from "@src/types/graphItems";
 import type { PluginSettingSchema, PluginMessages } from "@src/types/api";
 import {
   createDefaultCounterSettings,
@@ -106,6 +108,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const statItemPositions = useStatItemStore((state) => state.positions);
+  const graphItemPositions = useGraphItemStore((state) => state.positions);
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
@@ -139,6 +142,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const selectedStatElements = selectedElements.filter(
     (el) => el.type === "stat",
+  );
+  const selectedGraphElements = selectedElements.filter(
+    (el) => el.type === "graph",
   );
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === "key" || el.type === "stat",
@@ -204,6 +210,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const singleStatPosition: StatItemPosition | null =
     singleStatIndex !== null
       ? (statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null)
+      : null;
+  const singleGraphIndex =
+    selectedGraphElements.length === 1 ? selectedGraphElements[0].index : null;
+  const singleGraphPosition: GraphItemPosition | null =
+    singleGraphIndex !== null
+      ? (graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null)
       : null;
 
   // 로컬 상태 (실시간 편집용)
@@ -768,12 +780,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
+    pushHistoryState(
+      keyMappings,
+      positions,
+      statItemPositions,
+      graphItemPositions,
+      pluginElements,
+    );
     pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
     statItemPositions,
+    graphItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -784,12 +803,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
+    pushHistoryState(
+      keyMappings,
+      positions,
+      statItemPositions,
+      graphItemPositions,
+      pluginElements,
+    );
     pluginTransformHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
     statItemPositions,
+    graphItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -976,7 +1002,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, current, currentPluginElements);
+      pushHistoryState(
+        km,
+        currentPositions,
+        current,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
 
       const nextList = list.map((pos, i) =>
         i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
@@ -1069,7 +1101,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, current, currentPluginElements);
+      pushHistoryState(
+        km,
+        currentPositions,
+        current,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
 
       const nextList = list.map((pos, i) => {
         const update = updateMap.get(i);
@@ -1090,6 +1128,52 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         });
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [pushHistoryState, selectedKeyType],
+  );
+
+  const handleGraphUpdate = useCallback(
+    (data: Partial<GraphItemPosition> & { index: number }) => {
+      const { index, ...updates } = data;
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (!list[index]) return;
+
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        currentPositions,
+        useStatItemStore.getState().positions,
+        current,
+        currentPluginElements,
+      );
+
+      const nextList = list.map((pos, i) =>
+        i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
+      );
+      const nextPositions = { ...current, [mode]: nextList };
+
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setPositions(nextPositions);
+      window.api.graphItems
+        .updatePositions(nextPositions)
+        .catch((error) => {
+          console.error("Failed to update graph item", error);
+        })
+        .finally(() => {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        });
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
           positions: nextPositions,
         });
       } catch {
@@ -2302,7 +2386,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 플러그인 요소가 선택된 경우 (키/통계 요소가 없을 때만)
   if (
     selectedPluginElements.length > 0 &&
-    selectedKeyLikeElements.length === 0
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0
   ) {
     const pluginTitle =
       selectedPluginDefinition?.name ||
@@ -2409,6 +2494,224 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 className="properties-panel-overlay-thumb"
                 style={{ display: "none" }}
               />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 단일 그래프 요소 선택인 경우
+  if (
+    selectedGraphElements.length === 1 &&
+    !!singleGraphPosition &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    const graphBaseOptions = [
+      { label: "KPS", value: "kps" },
+      { label: "Total", value: "total" },
+    ];
+    const graphKpsOptions = [
+      { label: "KPS", value: "kps" },
+      { label: "AVG", value: "kpsAvg" },
+      { label: "MAX", value: "kpsMax" },
+    ];
+    const graphShapeOptions = [
+      {
+        label: t("propertiesPanel.graphShapeLine") || "Line",
+        value: "line",
+      },
+      {
+        label: t("propertiesPanel.graphShapeBar") || "Bar",
+        value: "bar",
+      },
+    ];
+
+    const resolvedGraphStatType =
+      (singleGraphPosition.statType as StatItemType) || "kps";
+    const graphBaseValue =
+      resolvedGraphStatType === "total" ? "total" : "kps";
+    const graphTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
+
+    return (
+      <div
+        ref={setPanelElement}
+        className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      >
+        <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+          <span className="text-[#DBDEE8] text-style-2 truncate max-w-[120px]">
+            {graphTitle}
+          </span>
+          <div className="flex items-center gap-[4px]">
+            <button
+              onClick={handleToggleMode}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+            >
+              <ModeToggleIcon mode="layer" />
+            </button>
+            <button
+              onClick={handleTogglePanel}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t("propertiesPanel.closePanel") || "Close"}
+            >
+              <SidebarToggleIcon isOpen={true} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 properties-panel-overlay-scroll">
+          <div className="properties-panel-overlay-viewport">
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <PropertyRow
+                label={t("propertiesPanel.graphType") || "Stat Type"}
+              >
+                <Dropdown
+                  options={graphBaseOptions}
+                  value={graphBaseValue}
+                  onChange={(value) => {
+                    if (value === "total") {
+                      handleGraphUpdate({
+                        index: singleGraphIndex!,
+                        statType: "total" as any,
+                      });
+                      return;
+                    }
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      statType:
+                        resolvedGraphStatType === "total"
+                          ? ("kps" as any)
+                          : resolvedGraphStatType,
+                    });
+                  }}
+                />
+              </PropertyRow>
+              {graphBaseValue === "kps" ? (
+                <PropertyRow
+                  label={t("propertiesPanel.graphKpsType") || "KPS Type"}
+                >
+                  <Dropdown
+                    options={graphKpsOptions}
+                    value={resolvedGraphStatType}
+                    onChange={(value) =>
+                      handleGraphUpdate({
+                        index: singleGraphIndex!,
+                        statType: value as any,
+                      })
+                    }
+                  />
+                </PropertyRow>
+              ) : null}
+
+              <SectionDivider />
+
+              <PropertyRow label={t("propertiesPanel.position") || "Position"}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      dx: value,
+                    } as any)
+                  }
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      dy: value,
+                    } as any)
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
+                />
+              </PropertyRow>
+
+              <PropertyRow label={t("propertiesPanel.size") || "Size"}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.width || 200)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      width: Math.max(20, value),
+                    } as any)
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.height || 100)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      height: Math.max(20, value),
+                    } as any)
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+
+              <SectionDivider />
+
+              <PropertyRow
+                label={t("propertiesPanel.graphShape") || "Graph Shape"}
+              >
+                <Dropdown
+                  options={graphShapeOptions}
+                  value={singleGraphPosition.graphType || "line"}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphType: value as any,
+                    } as any)
+                  }
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.graphSpeed || 1000)}
+                  onChange={(value) => {
+                    const clamped = Math.max(500, Math.min(5000, value));
+                    const snapped = Math.round(clamped / 100) * 100;
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphSpeed: snapped,
+                    } as any);
+                  }}
+                  min={500}
+                  max={5000}
+                  suffix="ms"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.graphColor") || "Graph Color"}
+              >
+                <ColorInput
+                  value={singleGraphPosition.graphColor || "#86EFAC"}
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
             </div>
           </div>
         </div>

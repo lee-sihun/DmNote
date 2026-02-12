@@ -7,6 +7,7 @@ import { usePluginMenuStore } from "@stores/usePluginMenuStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { translatePluginMessage } from "@utils/pluginI18n";
 import { handlerRegistry } from "../handlers";
 import { displayElementInstanceRegistry } from "../displayElement";
@@ -218,11 +219,18 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       // 설정 변경 전 히스토리 저장
       const { keyMappings, positions } = useKeyStore.getState();
       const statPositions = useStatItemStore.getState().positions;
+      const graphPositions = useGraphItemStore.getState().positions;
       const pluginElements = usePluginDisplayElementStore.getState().elements;
       const { pushState } = await import("@stores/useHistoryStore").then((m) =>
         m.useHistoryStore.getState()
       );
-      pushState(keyMappings, positions, statPositions, pluginElements);
+      pushState(
+        keyMappings,
+        positions,
+        statPositions,
+        graphPositions,
+        pluginElements
+      );
 
       const currentSettings = {
         ...defaultSettings,
