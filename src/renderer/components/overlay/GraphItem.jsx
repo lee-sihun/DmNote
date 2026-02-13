@@ -28,6 +28,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
     graphType = "line",
     graphSpeed = 1000,
     graphColor = "#86EFAC",
+    showAvgLine = true,
     backgroundColor,
     borderColor,
     borderWidth,
@@ -130,6 +131,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
       className={className}
       graphType={graphType}
       graphColor={graphColor}
+      showAvgLine={showAvgLine}
       backgroundColor={backgroundColor}
       borderColor={borderColor}
       borderWidth={borderWidth}

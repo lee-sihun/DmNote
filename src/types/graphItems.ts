@@ -9,6 +9,7 @@ export type GraphItemPosition = KeyPosition & {
   graphType: GraphItemType;
   graphSpeed: number;
   graphColor: string;
+  showAvgLine?: boolean;
 };
 
 export type GraphItemPositions = Record<string, GraphItemPosition[]>;

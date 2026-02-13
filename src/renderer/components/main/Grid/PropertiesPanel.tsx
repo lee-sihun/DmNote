@@ -2636,6 +2636,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 />
               </PropertyRow>
 
+              {(singleGraphPosition.graphType || "line") === "line" && (
+                <div className="flex justify-between items-center w-full h-[23px]">
+                  <p className="text-white text-style-2">
+                    {t("propertiesPanel.graphShowAverageLine") ||
+                      "Show Average Line"}
+                  </p>
+                  <Checkbox
+                    checked={singleGraphPosition.showAvgLine ?? true}
+                    onChange={() =>
+                      handleGraphUpdate({
+                        index: singleGraphIndex!,
+                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      } as any)
+                    }
+                  />
+                </div>
+              )}
+
               <PropertyRow
                 label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
               >

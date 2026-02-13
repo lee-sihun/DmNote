@@ -393,6 +393,7 @@
     "graphShape": "그래프 형태",
     "graphShapeLine": "선 그래프",
     "graphShapeBar": "바 그래프",
+    "graphShowAverageLine": "평균선 표시",
     "graphSpeed": "그래프 속도",
     "graphColor": "그래프 색상",
     "pressAnyKey": "아무 키나 누르세요",

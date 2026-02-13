@@ -395,6 +395,7 @@
     "graphShape": "图表形状",
     "graphShapeLine": "折线",
     "graphShapeBar": "柱状",
+    "graphShowAverageLine": "显示平均线",
     "graphSpeed": "图表速度",
     "graphColor": "图表颜色",
     "pressAnyKey": "按下任意键",

@@ -33,6 +33,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     className = "",
     graphType = "line",
     graphColor = "#86EFAC",
+    showAvgLine = true,
     backgroundColor = "rgba(17, 17, 20, 0.9)",
     borderColor = "rgba(255, 255, 255, 0.1)",
     borderWidth = 1,
@@ -240,17 +241,19 @@ const GraphPanel = forwardRef(function GraphPanel(
               </linearGradient>
             </defs>
             <polygon points={fillPoints} fill={`url(#fillGradient-${uid})`} />
-            <line
-              x1="0"
-              y1={avgY}
-              x2="100"
-              y2={avgY}
-              stroke={graphStrokeColor}
-              strokeWidth="1"
-              strokeDasharray="2,2"
-              opacity="0.5"
-              vectorEffect="non-scaling-stroke"
-            />
+            {showAvgLine ? (
+              <line
+                x1="0"
+                y1={avgY}
+                x2="100"
+                y2={avgY}
+                stroke={graphStrokeColor}
+                strokeWidth="1"
+                strokeDasharray="2,2"
+                opacity="0.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
             <polyline
               points={linePoints}
               fill="none"

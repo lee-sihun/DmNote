@@ -240,6 +240,8 @@ pub struct GraphPosition {
     pub graph_type: GraphType,
     pub graph_speed: u32,
     pub graph_color: String,
+    #[serde(default = "default_true")]
+    pub show_avg_line: bool,
     #[serde(flatten)]
     pub position: KeyPosition,
 }

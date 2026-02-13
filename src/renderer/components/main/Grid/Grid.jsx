@@ -2284,6 +2284,7 @@ export default function Grid({
                 graphType: "line",
                 graphSpeed: 1000,
                 graphColor: "#86EFAC",
+                showAvgLine: true,
                 dx: gridAddLocalPos.dx,
                 dy: gridAddLocalPos.dy,
                 width: 200,

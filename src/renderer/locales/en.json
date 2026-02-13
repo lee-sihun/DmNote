@@ -392,6 +392,7 @@
     "graphShape": "Graph Shape",
     "graphShapeLine": "Line",
     "graphShapeBar": "Bar",
+    "graphShowAverageLine": "Show Average Line",
     "graphSpeed": "Graph Speed",
     "graphColor": "Graph Color",
     "pressAnyKey": "Press any key",
