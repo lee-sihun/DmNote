@@ -114,6 +114,7 @@ export default function Settings({ showAlert, showConfirm }) {
     { value: "en", label: "English" },
     { value: "zh-cn", label: "简体中文" },
     { value: "zh-Hant", label: "繁體中文" },
+    { value: "ru", label: "Русский" },
   ];
 
   const handleHardwareAccelerationChange = () => {
