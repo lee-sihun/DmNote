@@ -58,6 +58,7 @@ export default function GraphItem({
     activeImage,
     idleImageFit,
     imageFit,
+    useInlineStyles = false,
   } = position;
 
   const { getOtherElements } = useSmartGuidesElements();
@@ -409,6 +410,7 @@ export default function GraphItem({
       borderRadius={borderRadius}
       imageSrc={previewImageSrc}
       imageFit={previewImageFit}
+      useInlineStyles={useInlineStyles}
       history={previewHistory}
       avg={PREVIEW_AVG}
       maxval={PREVIEW_MAX}

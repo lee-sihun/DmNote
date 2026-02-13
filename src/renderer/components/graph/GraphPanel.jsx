@@ -39,6 +39,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     borderRadius = 8,
     imageSrc = null,
     imageFit = "cover",
+    useInlineStyles = false,
     history = [],
     avg = 0,
     maxval = 1,
@@ -70,11 +71,25 @@ const GraphPanel = forwardRef(function GraphPanel(
   const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
     ? Math.max(0, Number(borderRadius))
     : 8;
+  const useInline = useInlineStyles === true;
   const resolvedBackgroundColor = backgroundColor || "rgba(17, 17, 20, 0.9)";
-  const resolvedBorder =
+  const fallbackBorder =
     resolvedBorderWidth <= 0
       ? "none"
       : `${resolvedBorderWidth}px solid ${borderColor || "rgba(255, 255, 255, 0.1)"}`;
+  const resolvedBorder = useInline
+    ? fallbackBorder
+    : `var(--graph-border, ${fallbackBorder})`;
+  const resolvedBg = useInline
+    ? resolvedBackgroundColor
+    : `var(--graph-bg, ${resolvedBackgroundColor})`;
+  const resolvedRadius = useInline
+    ? `${resolvedBorderRadius}px`
+    : `var(--graph-radius, ${resolvedBorderRadius}px)`;
+  const resolvedGraphColor = graphColor || "#86EFAC";
+  const graphStrokeColor = useInline
+    ? resolvedGraphColor
+    : `var(--graph-color, ${resolvedGraphColor})`;
 
   const avgY = 100 - Math.min((avg / safeMax) * 100, 100);
 
@@ -86,10 +101,10 @@ const GraphPanel = forwardRef(function GraphPanel(
         width: `${width}px`,
         height: `${height}px`,
         transform,
-        background: resolvedBackgroundColor,
+        background: resolvedBg,
         color: "#FFFFFF",
         border: resolvedBorder,
-        borderRadius: `${resolvedBorderRadius}px`,
+        borderRadius: resolvedRadius,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -152,7 +167,7 @@ const GraphPanel = forwardRef(function GraphPanel(
                   flex: 1,
                   minHeight: "2px",
                   transition: "height 0.15s ease-out",
-                  background: graphColor,
+                  background: graphStrokeColor,
                   height: `${barHeight}%`,
                   opacity,
                   clipPath: "inset(0 0 0 0 round 2px 2px 0 0)",
@@ -200,11 +215,11 @@ const GraphPanel = forwardRef(function GraphPanel(
               >
                 <stop
                   offset="0%"
-                  style={{ stopColor: graphColor, stopOpacity: 0.3 }}
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.3 }}
                 />
                 <stop
                   offset="100%"
-                  style={{ stopColor: graphColor, stopOpacity: 1 }}
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 1 }}
                 />
               </linearGradient>
               <linearGradient
@@ -216,11 +231,11 @@ const GraphPanel = forwardRef(function GraphPanel(
               >
                 <stop
                   offset="0%"
-                  style={{ stopColor: graphColor, stopOpacity: 0.05 }}
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.05 }}
                 />
                 <stop
                   offset="100%"
-                  style={{ stopColor: graphColor, stopOpacity: 0.15 }}
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.15 }}
                 />
               </linearGradient>
             </defs>
@@ -230,7 +245,7 @@ const GraphPanel = forwardRef(function GraphPanel(
               y1={avgY}
               x2="100"
               y2={avgY}
-              stroke={graphColor}
+              stroke={graphStrokeColor}
               strokeWidth="1"
               strokeDasharray="2,2"
               opacity="0.5"

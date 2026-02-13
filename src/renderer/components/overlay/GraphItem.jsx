@@ -36,6 +36,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
     activeImage,
     idleImageFit,
     imageFit,
+    useInlineStyles = false,
     dx = 0,
     dy = 0,
     width = 200,
@@ -135,6 +136,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
       borderRadius={borderRadius}
       imageSrc={imageSrc}
       imageFit={resolvedImageFit}
+      useInlineStyles={useInlineStyles}
       history={graphState.history}
       avg={graphState.avg}
       maxval={graphState.maxval}

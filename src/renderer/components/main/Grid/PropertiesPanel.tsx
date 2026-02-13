@@ -240,6 +240,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const imageButtonRef = useRef<HTMLButtonElement>(null);
   const [showGraphImagePicker, setShowGraphImagePicker] = useState(false);
   const graphImageButtonRef = useRef<HTMLButtonElement>(null);
+  const [graphClassNameDraft, setGraphClassNameDraft] = useState("");
 
   // 다중 선택용 이미지 픽커 상태
   const [showBatchImagePicker, setShowBatchImagePicker] = useState(false);
@@ -461,6 +462,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatPosition?.dy,
     singleStatPosition?.width,
     singleStatPosition?.height,
+  ]);
+
+  useEffect(() => {
+    setGraphClassNameDraft(singleGraphPosition?.className || "");
+  }, [
+    selectedKeyType,
+    singleGraphIndex,
+    singleGraphPosition?.className,
   ]);
 
   useEffect(() => {
@@ -2709,7 +2718,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderWidth ?? 1)}
-                  width="62px"
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex!,
@@ -2727,7 +2735,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderRadius ?? 8)}
-                  width="62px"
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex!,
@@ -2756,6 +2763,44 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   {t("propertiesPanel.configure") || "Configure"}
                 </button>
               </PropertyRow>
+
+              {useCustomCSS && (
+                <>
+                  <SectionDivider />
+
+                  <div className="flex justify-between items-center w-full h-[23px]">
+                    <p className="text-white text-style-2">
+                      {t("propertiesPanel.useInlineStyles") || "인라인 스타일 우선"}
+                    </p>
+                    <Checkbox
+                      checked={singleGraphPosition.useInlineStyles ?? false}
+                      onChange={() =>
+                        handleGraphUpdate({
+                          index: singleGraphIndex!,
+                          useInlineStyles: !(
+                            singleGraphPosition.useInlineStyles ?? false
+                          ),
+                        } as any)
+                      }
+                    />
+                  </div>
+
+                  <PropertyRow label={t("propertiesPanel.className") || "클래스"}>
+                    <TextInput
+                      value={graphClassNameDraft}
+                      onChange={setGraphClassNameDraft}
+                      onBlur={() =>
+                        handleGraphUpdate({
+                          index: singleGraphIndex!,
+                          className: graphClassNameDraft || "",
+                        } as any)
+                      }
+                      placeholder="className"
+                      width="90px"
+                    />
+                  </PropertyRow>
+                </>
+              )}
             </div>
           </div>
         </div>

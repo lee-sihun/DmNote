@@ -2311,7 +2311,7 @@ export default function Grid({
                 fontColor: "#FFFFFF",
                 activeFontColor: "#FFFFFF",
                 fontSize: 12,
-                useInlineStyles: true,
+                useInlineStyles: false,
                 displayText: "",
               });
               const nextPositions = {
