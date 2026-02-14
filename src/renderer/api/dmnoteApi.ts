@@ -221,6 +221,8 @@ const api: DMNoteAPI = {
       height: number;
       anchor?: string;
       contentTopOffset?: number;
+      fixedPositionDeltaX?: number;
+      fixedPositionDeltaY?: number;
     }) => invoke<OverlayBounds>("overlay_resize", { payload }),
     onVisibility: (listener: (payload: OverlayVisibilityPayload) => void) =>
       subscribe<OverlayVisibilityPayload>("overlay:visibility", listener),

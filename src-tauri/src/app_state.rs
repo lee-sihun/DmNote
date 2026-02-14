@@ -266,6 +266,8 @@ impl AppState {
         height: f64,
         anchor: Option<String>,
         content_top_offset: Option<f64>,
+        fixed_position_delta_x: Option<f64>,
+        fixed_position_delta_y: Option<f64>,
     ) -> Result<OverlayBounds> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
         // 창이 없으면 에러 반환 (창을 자동으로 생성하지 않음)
@@ -302,7 +304,17 @@ impl AppState {
                 new_x += (size.width - width) / 2.0;
                 new_y += (size.height - height) / 2.0;
             }
+            OverlayResizeAnchor::FixedPosition => {}
             OverlayResizeAnchor::TopLeft => {}
+        }
+
+        if anchor == OverlayResizeAnchor::FixedPosition {
+            if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
+                new_x += delta_x;
+            }
+            if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
+                new_y += delta_y;
+            }
         }
 
         if let Some(offset) = content_top_offset {
@@ -317,6 +329,7 @@ impl AppState {
                     match anchor {
                         OverlayResizeAnchor::Center => new_y -= delta / 2.0,
                         OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
+                        OverlayResizeAnchor::FixedPosition => new_y -= delta,
                         _ => new_y -= delta,
                     }
                 }

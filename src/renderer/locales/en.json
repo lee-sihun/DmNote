@@ -25,6 +25,7 @@
     "topRight": "Top-Right",
     "bottomRight": "Bottom-Right",
     "center": "Center",
+    "fixedPosition": "Fixed Position",
     "graphicsOption": "Graphics API",
     "renderMode": "Select Rendering Mode",
     "resetData": "Reset Data",

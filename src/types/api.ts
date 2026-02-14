@@ -655,6 +655,8 @@ export interface DMNoteAPI {
       height: number;
       anchor?: string;
       contentTopOffset?: number;
+      fixedPositionDeltaX?: number;
+      fixedPositionDeltaY?: number;
     }): Promise<OverlayBounds>;
     onVisibility(
       listener: (payload: OverlayVisibilityPayload) => void,

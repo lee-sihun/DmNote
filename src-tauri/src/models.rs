@@ -565,6 +565,7 @@ pub enum OverlayResizeAnchor {
     BottomLeft,
     BottomRight,
     Center,
+    FixedPosition,
 }
 
 impl Default for OverlayResizeAnchor {
@@ -630,6 +631,7 @@ impl OverlayResizeAnchor {
             OverlayResizeAnchor::BottomLeft => "bottom-left",
             OverlayResizeAnchor::BottomRight => "bottom-right",
             OverlayResizeAnchor::Center => "center",
+            OverlayResizeAnchor::FixedPosition => "fixed-position",
         }
     }
 }
@@ -641,6 +643,7 @@ pub fn overlay_resize_anchor_from_str(value: &str) -> Option<OverlayResizeAnchor
         "bottom-left" => Some(OverlayResizeAnchor::BottomLeft),
         "bottom-right" => Some(OverlayResizeAnchor::BottomRight),
         "center" => Some(OverlayResizeAnchor::Center),
+        "fixed-position" => Some(OverlayResizeAnchor::FixedPosition),
         _ => None,
     }
 }

@@ -504,6 +504,8 @@ export default function App() {
     height: number;
     anchor: string;
     contentTopOffset: number;
+    minX: number;
+    minY: number;
   } | null>(null);
 
   useEffect(() => {
@@ -515,15 +517,29 @@ export default function App() {
     const totalWidth = keyAreaWidth + PADDING * 2;
     const totalHeight = keyAreaHeight + PADDING * 2 + extraTop;
     const contentTopOffset = extraTop + PADDING;
+    const currentMinX = bounds.minX;
+    const currentMinY = bounds.minY;
 
     // 이전 값과 비교하여 실제로 변경되었을 때만 resize 호출
     const lastParams = lastResizeParams.current;
+    const fixedPositionAnchor = overlayAnchor === "fixed-position";
+    const fixedPositionDeltaX =
+      fixedPositionAnchor && lastParams?.anchor === "fixed-position"
+        ? currentMinX - lastParams.minX
+        : 0;
+    const fixedPositionDeltaY =
+      fixedPositionAnchor && lastParams?.anchor === "fixed-position"
+        ? currentMinY - lastParams.minY
+        : 0;
     if (
       lastParams &&
       Math.abs(lastParams.width - totalWidth) < 0.5 &&
       Math.abs(lastParams.height - totalHeight) < 0.5 &&
       lastParams.anchor === overlayAnchor &&
-      Math.abs(lastParams.contentTopOffset - contentTopOffset) < 0.5
+      Math.abs(lastParams.contentTopOffset - contentTopOffset) < 0.5 &&
+      (!fixedPositionAnchor ||
+        (Math.abs(lastParams.minX - currentMinX) < 0.5 &&
+          Math.abs(lastParams.minY - currentMinY) < 0.5))
     ) {
       return; // 변경사항 없음, resize 건너뛰기
     }
@@ -533,6 +549,8 @@ export default function App() {
       height: totalHeight,
       anchor: overlayAnchor,
       contentTopOffset,
+      minX: currentMinX,
+      minY: currentMinY,
     };
 
     window.api.overlay
@@ -541,6 +559,12 @@ export default function App() {
         height: totalHeight,
         anchor: overlayAnchor,
         contentTopOffset,
+        fixedPositionDeltaX: fixedPositionAnchor
+          ? fixedPositionDeltaX
+          : undefined,
+        fixedPositionDeltaY: fixedPositionAnchor
+          ? fixedPositionDeltaY
+          : undefined,
       })
       .catch((error) => {
         console.error("Failed to resize overlay window", error);
