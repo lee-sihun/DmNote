@@ -1,4 +1,6 @@
-import React, { forwardRef, useMemo } from "react";
+import React, { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+
+const BAR_ANIMATION_DURATION_MS = 150;
 
 function buildLinePoints(history, safeMax) {
   const denominator = Math.max(history.length - 1, 1);
@@ -21,6 +23,90 @@ function buildLinePoints(history, safeMax) {
   ].join(" ");
 
   return { points, fillPoints };
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+  return history.map((value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  });
+}
+
+function resizeHistory(history, targetSize) {
+  if (targetSize <= 0) {
+    return [];
+  }
+  if (!history.length) {
+    return new Array(targetSize).fill(0);
+  }
+  if (history.length === targetSize) {
+    return [...history];
+  }
+  if (targetSize === 1) {
+    return [history[history.length - 1] || 0];
+  }
+
+  const sourceLastIndex = history.length - 1;
+  const targetLastIndex = targetSize - 1;
+  return Array.from({ length: targetSize }, (_, index) => {
+    const sourceIndex = Math.round((index / targetLastIndex) * sourceLastIndex);
+    return history[sourceIndex] || 0;
+  });
+}
+
+function areHistoriesEqual(a, b) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (Math.abs(a[index] - b[index]) > 0.001) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function buildBarPath(history, safeMax, width, height) {
+  const count = history.length;
+  if (count <= 0) {
+    return "";
+  }
+
+  const safeWidth = Math.max(Number(width) || 0, 1);
+  const safeHeightPx = Math.max(Number(height) || 0, 1);
+  const gap = (1 / safeWidth) * 100;
+  const totalGap = gap * Math.max(count - 1, 0);
+  const barWidth = Math.max((100 - totalGap) / count, 0);
+  const radiusXBase = (2 / safeWidth) * 100;
+  const radiusYBase = (2 / safeHeightPx) * 100;
+
+  let path = "";
+  for (let index = 0; index < count; index += 1) {
+    const value = history[index] || 0;
+    const normalized = Math.min((value / safeMax) * 100, 100);
+    if (normalized <= 0) {
+      continue;
+    }
+    const barHeight = normalized;
+    const x = index * (barWidth + gap);
+    const y = 100 - barHeight;
+    const radiusX = Math.min(radiusXBase, barWidth / 2);
+    const radiusY = Math.min(radiusYBase, barHeight);
+    const right = x + barWidth;
+
+    path +=
+      `M ${x} 100 ` +
+      `L ${x} ${y + radiusY} ` +
+      `Q ${x} ${y} ${x + radiusX} ${y} ` +
+      `L ${right - radiusX} ${y} ` +
+      `Q ${right} ${y} ${right} ${y + radiusY} ` +
+      `L ${right} 100 Z `;
+  }
+
+  return path.trim();
 }
 
 const GraphPanel = forwardRef(function GraphPanel(
@@ -53,7 +139,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     onContextMenu,
     onDragStart,
   },
-  ref
+  ref,
 ) {
   const safeMax = maxval > 0 ? maxval : 1;
   const resolvedGraphType = graphType === "bar" ? "bar" : "line";
@@ -63,7 +149,98 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const { points: linePoints, fillPoints } = useMemo(
     () => buildLinePoints(history, safeMax),
-    [history, safeMax]
+    [history, safeMax],
+  );
+  const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
+  const [animatedBarHistory, setAnimatedBarHistory] = useState(() =>
+    normalizeHistory(history),
+  );
+  const animatedBarHistoryRef = useRef(animatedBarHistory);
+  const animationFrameRef = useRef(null);
+
+  useEffect(() => {
+    animatedBarHistoryRef.current = animatedBarHistory;
+  }, [animatedBarHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (resolvedGraphType !== "bar") {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory(normalizedHistory);
+      animatedBarHistoryRef.current = normalizedHistory;
+      return;
+    }
+
+    const targetHistory = normalizedHistory;
+    const targetSize = targetHistory.length;
+    if (targetSize <= 0) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory([]);
+      animatedBarHistoryRef.current = [];
+      return;
+    }
+
+    const startHistory = resizeHistory(
+      animatedBarHistoryRef.current,
+      targetSize,
+    );
+    if (areHistoriesEqual(startHistory, targetHistory)) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory(targetHistory);
+      animatedBarHistoryRef.current = targetHistory;
+      return;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    const startTime = performance.now();
+    const animate = (now) => {
+      const t = Math.min(
+        1,
+        (now - startTime) / Math.max(BAR_ANIMATION_DURATION_MS, 1),
+      );
+      const eased = 1 - (1 - t) * (1 - t) * (1 - t);
+      const nextHistory = startHistory.map(
+        (startValue, index) =>
+          startValue + (targetHistory[index] - startValue) * eased,
+      );
+
+      setAnimatedBarHistory(nextHistory);
+      animatedBarHistoryRef.current = nextHistory;
+
+      if (t < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        animationFrameRef.current = null;
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }, [normalizedHistory, resolvedGraphType]);
+
+  const barHistory =
+    resolvedGraphType === "bar" ? animatedBarHistory : normalizedHistory;
+  const barPath = useMemo(
+    () => buildBarPath(barHistory, safeMax, width, height),
+    [barHistory, safeMax, width, height],
   );
 
   const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
@@ -149,33 +326,50 @@ const GraphPanel = forwardRef(function GraphPanel(
         <div
           style={{
             display: "flex",
-            alignItems: "flex-end",
             flex: 1,
             minHeight: 0,
             background: "transparent",
-            gap: "1px",
             position: "relative",
             zIndex: 1,
           }}
         >
-          {history.map((value, index) => {
-            const barHeight = Math.min((value / safeMax) * 100, 100);
-            const opacity = 0.3 + (index / history.length) * 0.7;
-            return (
-              <div
-                key={`${uid}-bar-${index}`}
-                style={{
-                  flex: 1,
-                  minHeight: "2px",
-                  transition: "height 0.15s ease-out",
-                  background: graphStrokeColor,
-                  height: `${barHeight}%`,
-                  opacity,
-                  clipPath: "inset(0 0 0 0 round 2px 2px 0 0)",
-                }}
-              />
-            );
-          })}
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            <defs>
+              <linearGradient
+                id={`barGradient-${uid}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop
+                  offset="0%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.3 }}
+                />
+                <stop
+                  offset="100%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 1 }}
+                />
+              </linearGradient>
+            </defs>
+            {barPath ? (
+              <path d={barPath} fill={`url(#barGradient-${uid})`} />
+            ) : null}
+          </svg>
         </div>
       ) : (
         <div
