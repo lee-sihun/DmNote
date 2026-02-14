@@ -25,6 +25,7 @@
     "topRight": "우상단",
     "bottomRight": "우하단",
     "center": "가운데",
+    "fixedPosition": "위치 고정",
     "graphicsOption": "그래픽 렌더링 옵션",
     "renderMode": "렌더링 모드 선택",
     "resetData": "데이터 초기화",

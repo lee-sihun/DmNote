@@ -17,7 +17,8 @@ export type OverlayResizeAnchor =
   | "top-right"
   | "bottom-left"
   | "bottom-right"
-  | "center";
+  | "center"
+  | "fixed-position";
 
 export interface GridSettings {
   alignmentGuides: boolean;
