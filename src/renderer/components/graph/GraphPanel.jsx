@@ -4,22 +4,27 @@ const BAR_ANIMATION_DURATION_MS = 150;
 
 function buildLinePoints(history, safeMax) {
   const denominator = Math.max(history.length - 1, 1);
+  const baselineY = 101; // 선 그래프 베이스 라인
   const points = history
-    .map((value, index) => {
+    .map((rawValue, index) => {
+      const value = Number(rawValue) || 0;
       const x = (index / denominator) * 100;
-      const y = 100 - Math.min((value / safeMax) * 100, 100);
+      const y =
+        value <= 0 ? baselineY : 100 - Math.min((value / safeMax) * 100, 100);
       return `${x},${y}`;
     })
     .join(" ");
 
   const fillPoints = [
-    "0,100",
-    ...history.map((value, index) => {
+    `0,${baselineY}`,
+    ...history.map((rawValue, index) => {
+      const value = Number(rawValue) || 0;
       const x = (index / denominator) * 100;
-      const y = 100 - Math.min((value / safeMax) * 100, 100);
+      const y =
+        value <= 0 ? baselineY : 100 - Math.min((value / safeMax) * 100, 100);
       return `${x},${y}`;
     }),
-    "100,100",
+    `100,${baselineY}`,
   ].join(" ");
 
   return { points, fillPoints };
@@ -147,11 +152,11 @@ const GraphPanel = forwardRef(function GraphPanel(
     ? `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
     : `translate3d(${dx}px, ${dy}px, 0)`;
 
-  const { points: linePoints, fillPoints } = useMemo(
-    () => buildLinePoints(history, safeMax),
-    [history, safeMax],
-  );
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
+  const { points: linePoints, fillPoints } = useMemo(
+    () => buildLinePoints(normalizedHistory, safeMax),
+    [normalizedHistory, safeMax],
+  );
   const [animatedBarHistory, setAnimatedBarHistory] = useState(() =>
     normalizeHistory(history),
   );
