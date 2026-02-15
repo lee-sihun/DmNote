@@ -1626,7 +1626,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }));
       }
 
-      // 노트/글로우는 프리뷰도 함께 업데이트
+      const isGradientNoteLikeColor =
+        !!newColor &&
+        typeof newColor === "object" &&
+        (newColor as any).type === "gradient";
+
+      // 다중 편집에서 노트/글로우 그라데이션을 드래그 중 매 프레임 프리뷰하면
+      // 대량 업데이트 + IPC가 과도하게 발생해 UI가 멈출 수 있어 complete 시점에만 반영한다.
+      if (
+        isGradientNoteLikeColor &&
+        (batchPickerFor === "noteColor" || batchPickerFor === "glowColor")
+      ) {
+        return;
+      }
+
+      // 노트/글로우(단색)는 프리뷰도 함께 업데이트
       if (batchPickerFor === "noteColor") {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchNoteColorChangeKeysOnly(newColor);
