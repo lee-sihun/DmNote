@@ -382,6 +382,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           prefix="W"
           min={10}
           max={500}
+          allowDecimal
+          decimalScale={1}
           isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
         />
         <NumberInput
@@ -390,6 +392,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           prefix="H"
           min={10}
           max={500}
+          allowDecimal
+          decimalScale={1}
           isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
         />
       </PropertyRow>

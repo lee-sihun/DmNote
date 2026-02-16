@@ -45,6 +45,8 @@ export interface NumberInputProps {
   prefix?: string;
   suffix?: string;
   width?: string;
+  allowDecimal?: boolean;
+  decimalScale?: number;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }

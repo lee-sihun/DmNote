@@ -41,16 +41,75 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   prefix,
   suffix,
   width = "54px",
+  allowDecimal = false,
+  decimalScale = 1,
   isMixed = false,
   mixedPlaceholder = "Mixed",
 }) => {
   const hasSuffix = !!suffix;
+  const resolvedDecimalScale = allowDecimal
+    ? Math.max(0, Math.floor(decimalScale))
+    : 0;
+  const supportsDecimal = resolvedDecimalScale > 0;
+
+  const normalizePrecision = (num: number): number => {
+    if (!supportsDecimal) return num;
+    return Number(num.toFixed(resolvedDecimalScale));
+  };
+
+  const sanitizeNumericInput = (raw: string): string => {
+    let sanitized = raw.replace(supportsDecimal ? /[^0-9.-]/g : /[^0-9-]/g, "");
+
+    const isNegative = sanitized.startsWith("-");
+    sanitized = sanitized.replace(/-/g, "");
+    if (isNegative) {
+      sanitized = `-${sanitized}`;
+    }
+
+    if (!supportsDecimal) {
+      return sanitized;
+    }
+
+    const sign = sanitized.startsWith("-") ? "-" : "";
+    const unsigned = sign ? sanitized.slice(1) : sanitized;
+    const dotIndex = unsigned.indexOf(".");
+
+    if (dotIndex === -1) {
+      return `${sign}${unsigned}`;
+    }
+
+    const integerPart = unsigned.slice(0, dotIndex);
+    const fractionalPart = unsigned
+      .slice(dotIndex + 1)
+      .replace(/\./g, "")
+      .slice(0, resolvedDecimalScale);
+
+    return `${sign}${integerPart}.${fractionalPart}`;
+  };
+
+  const canParseNumericValue = (input: string): boolean => {
+    if (input === "" || input === "-") return false;
+    if (supportsDecimal && (input === "." || input === "-.")) return false;
+    return Number.isFinite(Number(input));
+  };
+
+  const parseAndClamp = (input: string): number | null => {
+    if (!canParseNumericValue(input)) {
+      return null;
+    }
+
+    const numValue = Number(input);
+    const clamped = Math.min(Math.max(numValue, min), max);
+    return normalizePrecision(clamped);
+  };
 
   const getDisplayValue = (val: number | string, focused: boolean): string => {
+    const normalized =
+      typeof val === "number" ? normalizePrecision(val) : val;
     if (hasSuffix && !focused) {
-      return `${val}${suffix}`;
+      return `${normalized}${suffix}`;
     }
-    return String(val);
+    return String(normalized);
   };
 
   const [localValue, setLocalValue] = useState<string>(
@@ -66,7 +125,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     }
   }, [value, isFocused, hasSuffix, suffix, isMixed]);
 
-  // 숫자, 마이너스, 백스페이스, Delete, 화살표, Tab, Enter만 허용
+  // 숫자, 마이너스, 소수점(옵션), 백스페이스, Delete, 화살표, Tab, Enter만 허용
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
       "Backspace",
@@ -95,6 +154,17 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     if (/^[0-9]$/.test(e.key)) {
       return;
     }
+
+    // 소수점 (허용된 경우)
+    if (supportsDecimal && (e.key === "." || e.key === "Decimal")) {
+      const input = e.currentTarget;
+      const selectionStart = input.selectionStart ?? input.value.length;
+      const selectionEnd = input.selectionEnd ?? selectionStart;
+      const selectedText = input.value.slice(selectionStart, selectionEnd);
+      if (!input.value.includes(".") || selectedText.includes(".")) {
+        return;
+      }
+    }
     
     // 마이너스 (첫 번째 위치에서만)
     if (e.key === "-" && e.currentTarget.selectionStart === 0) {
@@ -106,13 +176,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value.replace(/[^0-9-]/g, "");
+    const newValue = sanitizeNumericInput(e.target.value);
     setLocalValue(newValue);
     setHasUserInput(true);
 
-    if (newValue !== "" && newValue !== "-" && !isNaN(Number(newValue))) {
-      const numValue = Number(newValue);
-      const clamped = Math.min(Math.max(numValue, min), max);
+    const clamped = parseAndClamp(newValue);
+    if (clamped !== null) {
       onChange(clamped);
     }
   };
@@ -121,7 +190,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     setIsFocused(true);
     setHasUserInput(false);
     if (!isMixed) {
-      const numericValue = String(value);
+      const numericValue =
+        typeof value === "number"
+          ? String(normalizePrecision(value))
+          : String(value);
       setLocalValue(numericValue);
     } else {
       setLocalValue("");
@@ -130,7 +202,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
-    const numericValue = localValue.replace(/[^0-9-]/g, "");
+    const numericValue = sanitizeNumericInput(localValue);
     
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
@@ -140,15 +212,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       return;
     }
     
-    if (
-      numericValue === "" ||
-      numericValue === "-" ||
-      isNaN(Number(numericValue))
-    ) {
+    const clamped = parseAndClamp(numericValue);
+    if (clamped === null) {
       setLocalValue(isMixed ? "" : getDisplayValue(value, false));
     } else {
-      const numValue = Number(numericValue);
-      const clamped = Math.min(Math.max(numValue, min), max);
       setLocalValue(getDisplayValue(clamped, false));
       onChange(clamped);
     }
@@ -163,7 +230,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     return (
       <input
         type="text"
-        inputMode="numeric"
+        inputMode={supportsDecimal ? "decimal" : "numeric"}
         value={localValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -192,7 +259,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       )}
       <input
         type="text"
-        inputMode="numeric"
+        inputMode={supportsDecimal ? "decimal" : "numeric"}
         value={localValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

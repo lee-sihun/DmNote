@@ -491,6 +491,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           prefix="X"
           min={-9999}
           max={9999}
+          allowDecimal
+          decimalScale={1}
         />
         <NumberInput
           value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
@@ -498,6 +500,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           prefix="Y"
           min={-9999}
           max={9999}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
@@ -514,6 +518,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           prefix="W"
           min={1}
           max={999}
+          allowDecimal
+          decimalScale={1}
         />
         <NumberInput
           value={
@@ -526,6 +532,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           prefix="H"
           min={1}
           max={999}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 

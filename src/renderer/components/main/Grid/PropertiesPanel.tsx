@@ -2365,6 +2365,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="X"
                       min={-9999}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                     <NumberInput
                       value={selectedPluginElement?.position.y ?? 0}
@@ -2372,6 +2374,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="Y"
                       min={-9999}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                   </PropertyRow>
                   <PropertyRow label={t("propertiesPanel.size") || "크기"}>
@@ -2381,6 +2385,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="W"
                       min={10}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                     <NumberInput
                       value={pluginDisplaySize.height}
@@ -2388,6 +2394,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="H"
                       min={10}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                   </PropertyRow>
                   <SectionDivider />
