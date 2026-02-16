@@ -42,6 +42,7 @@ interface PluginElementsRendererProps {
   zoom?: number;
   panX?: number;
   panY?: number;
+  isViewportTransforming?: boolean;
   onSelectionContextMenu?: (payload: {
     elementId: string;
     clientX: number;
@@ -59,6 +60,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
+  isViewportTransforming = false,
   onSelectionContextMenu,
   onMultiDrag,
   onMultiDragStart,
@@ -193,6 +195,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
           zoom={zoom}
           panX={panX}
           panY={panY}
+          isViewportTransforming={isViewportTransforming}
           arrayIndex={index}
           keyCount={keyCount}
           isSelected={selectedElements.some(

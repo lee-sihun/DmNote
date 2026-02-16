@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useGridViewStore,
   MIN_ZOOM,
@@ -35,6 +35,26 @@ export function useGridZoomPan({
 
   // 휠 이벤트 누적 방지용 ref
   const isWheelProcessingRef = useRef(false);
+  const [isTransforming, setIsTransforming] = useState(false);
+  const isTransformingRef = useRef(false);
+  const transformIdleTimerRef = useRef<number | null>(null);
+
+  const setTransformingState = useCallback((next: boolean) => {
+    if (isTransformingRef.current === next) return;
+    isTransformingRef.current = next;
+    setIsTransforming(next);
+  }, []);
+
+  const touchTransforming = useCallback(() => {
+    setTransformingState(true);
+    if (transformIdleTimerRef.current !== null) {
+      window.clearTimeout(transformIdleTimerRef.current);
+    }
+    transformIdleTimerRef.current = window.setTimeout(() => {
+      transformIdleTimerRef.current = null;
+      setTransformingState(false);
+    }, 120);
+  }, [setTransformingState]);
 
   /**
    * 클라이언트 좌표를 그리드 로컬 좌표로 변환
@@ -85,10 +105,11 @@ export function useGridZoomPan({
       const newPanX = clientX - rect.left - mouseGridX * clampedZoom;
       const newPanY = clientY - rect.top - mouseGridY * clampedZoom;
 
+      touchTransforming();
       setZoom(mode, clampedZoom);
       setPan(mode, newPanX, newPanY);
     },
-    [containerRef, zoom, panX, panY, mode, setZoom, setPan]
+    [containerRef, zoom, panX, panY, mode, setZoom, setPan, touchTransforming]
   );
 
   /**
@@ -125,9 +146,10 @@ export function useGridZoomPan({
    */
   const pan = useCallback(
     (deltaX: number, deltaY: number) => {
+      touchTransforming();
       setPan(mode, panX + deltaX, panY + deltaY);
     },
-    [mode, panX, panY, setPan]
+    [mode, panX, panY, setPan, touchTransforming]
   );
 
   /**
@@ -253,10 +275,16 @@ export function useGridZoomPan({
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
+        touchTransforming();
         setPan(mode, startPanX + deltaX, startPanY + deltaY);
       };
 
       const handleMouseUp = () => {
+        if (transformIdleTimerRef.current !== null) {
+          window.clearTimeout(transformIdleTimerRef.current);
+          transformIdleTimerRef.current = null;
+        }
+        setTransformingState(false);
         setMiddleButtonDragging(false);
         // 커서 및 pointer-events 복원
         if (container) {
@@ -272,7 +300,16 @@ export function useGridZoomPan({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [containerRef, contentRef, mode, panX, panY, setPan]
+    [
+      containerRef,
+      contentRef,
+      mode,
+      panX,
+      panY,
+      setPan,
+      touchTransforming,
+      setTransformingState,
+    ]
   );
 
   // 휠 이벤트 등록
@@ -307,6 +344,15 @@ export function useGridZoomPan({
     };
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    return () => {
+      if (transformIdleTimerRef.current !== null) {
+        window.clearTimeout(transformIdleTimerRef.current);
+        transformIdleTimerRef.current = null;
+      }
+    };
+  }, []);
+
   return {
     // 현재 상태
     zoom,
@@ -331,5 +377,6 @@ export function useGridZoomPan({
     minZoom: MIN_ZOOM,
     maxZoom: MAX_ZOOM,
     zoomStep: ZOOM_STEP,
+    isTransforming,
   };
 }

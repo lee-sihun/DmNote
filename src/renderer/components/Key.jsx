@@ -45,6 +45,7 @@ export default function DraggableKey({
   panX = 0,
   panY = 0,
   zIndex = 0,
+  isViewportTransforming = false,
   // 카운터 미리보기 props
   counterEnabled = false,
   counterPreviewValue = 0,
@@ -462,12 +463,14 @@ export default function DraggableKey({
 
   // 인라인 스타일 우선 여부에 따라 CSS 변수 또는 직접 값 사용
   const useInline = useInlineStyles === true;
+  const shouldPromoteTransformLayer =
+    isDraggingOrResizing || isViewportTransforming;
 
   const keyStyle = useMemo(
     () => ({
       width: `${width}px`,
       height: `${height}px`,
-      transform: `translate3d(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)), 0)`,
+      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
       backgroundColor:
         useInline && backgroundColor
           ? backgroundColor
@@ -491,9 +494,7 @@ export default function DraggableKey({
               borderColor || "rgba(113, 113, 113, 0.9)"
             })`,
       overflow: "hidden",
-      willChange: "transform",
-      backfaceVisibility: "hidden",
-      transformStyle: "preserve-3d",
+      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
       contain: "layout style paint",
       imageRendering: "auto",
       isolation: "isolate",
@@ -513,6 +514,7 @@ export default function DraggableKey({
       borderColor,
       borderWidth,
       borderRadius,
+      shouldPromoteTransformLayer,
     ],
   );
 

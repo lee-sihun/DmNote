@@ -87,6 +87,7 @@ interface PluginElementProps {
   zoom?: number;
   panX?: number;
   panY?: number;
+  isViewportTransforming?: boolean;
   arrayIndex?: number;
   keyCount?: number;
   isSelected?: boolean;
@@ -109,6 +110,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
+  isViewportTransforming = false,
   arrayIndex = 0,
   keyCount = 0,
   isSelected = false,
@@ -1232,11 +1234,19 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   ]);
 
   const elementStyle: React.CSSProperties = useMemo(() => {
+    const shouldPromoteTransformLayer =
+      windowType === "overlay" ||
+      (windowType === "main" &&
+        (isDraggingOrResizing || isViewportTransforming));
+
     const baseStyle: React.CSSProperties = {
       position: "absolute",
       left: 0,
       top: 0,
-      transform: `translate3d(${renderX}px, ${renderY}px, 0)`,
+      transform:
+        windowType === "main"
+          ? `translate(${renderX}px, ${renderY}px)`
+          : `translate3d(${renderX}px, ${renderY}px, 0)`,
       // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
       // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
       zIndex: element.zIndex ?? keyCount + arrayIndex,
@@ -1246,7 +1256,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           : element.onClick && windowType === "main"
           ? "pointer"
           : "default",
-      willChange: "transform",
+      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
       pointerEvents: windowType === "main" ? "auto" : "none",
     };
 
@@ -1269,6 +1279,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     element.measuredSize,
     definition?.resizable,
     windowType,
+    isDraggingOrResizing,
+    isViewportTransforming,
     arrayIndex,
     keyCount,
   ]);
