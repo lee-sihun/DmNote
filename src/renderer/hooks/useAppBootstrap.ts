@@ -186,6 +186,7 @@ export function useAppBootstrap() {
         laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
         developerModeEnabled:
           (bootstrap.settings as any).developerModeEnabled ?? false,
+        trayEnabled: (bootstrap.settings as any).trayEnabled ?? false,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
         gridSettings: bootstrap.settings.gridSettings ?? DEFAULT_GRID_SETTINGS,

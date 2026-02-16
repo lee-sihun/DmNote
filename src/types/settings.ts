@@ -47,6 +47,7 @@ export interface SettingsState {
   language: string;
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
+  trayEnabled: boolean;
   backgroundColor: string;
   useCustomCSS: boolean;
   customCSS: CustomCss;
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS_STATE: SettingsState = {
   language: "ko",
   laboratoryEnabled: false,
   developerModeEnabled: false,
+  trayEnabled: false,
   backgroundColor: "transparent",
   useCustomCSS: false,
   customCSS: { path: null, content: "" },

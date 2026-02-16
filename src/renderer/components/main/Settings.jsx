@@ -48,6 +48,8 @@ export default function Settings({ showAlert, showConfirm }) {
     setNoteEffect,
     laboratoryEnabled,
     setLaboratoryEnabled,
+    trayEnabled,
+    setTrayEnabled,
     developerModeEnabled,
     setDeveloperModeEnabled,
     useCustomCSS,
@@ -439,6 +441,16 @@ export default function Settings({ showAlert, showConfirm }) {
     }
   };
 
+  const handleTrayToggle = async () => {
+    const next = !trayEnabled;
+    setTrayEnabled(next);
+    try {
+      await window.api.settings.update({ trayEnabled: next });
+    } catch (error) {
+      console.error("Failed to toggle tray mode", error);
+    }
+  };
+
   const handleDeveloperModeToggle = async () => {
     const next = !developerModeEnabled;
     setDeveloperModeEnabled(next);
@@ -603,6 +615,15 @@ export default function Settings({ showAlert, showConfirm }) {
                   checked={laboratoryEnabled}
                   onChange={handleLaboratoryToggle}
                 />
+              </div>
+              <div
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+                onClick={handleTrayToggle}
+              >
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.trayEnabled")}
+                </p>
+                <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
               </div>
               {null}
               <div

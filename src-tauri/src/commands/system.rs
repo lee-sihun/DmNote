@@ -1,6 +1,5 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
-use crate::app_state::AppState;
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 
 #[tauri::command(permission = "dmnote-allow-all")]
@@ -12,15 +11,10 @@ pub fn window_minimize(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn window_close(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
-    state.shutdown();
+pub fn window_close(app: AppHandle) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         main.close().map_err(|err| err.to_string())?;
     }
-    if let Some(overlay) = app.get_webview_window("overlay") {
-        overlay.close().map_err(|err| err.to_string())?;
-    }
-    app.exit(0);
     Ok(())
 }
 
