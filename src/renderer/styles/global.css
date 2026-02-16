@@ -199,6 +199,9 @@ input[type="number"]::-webkit-outer-spin-button {
   display: inline-block;
   pointer-events: none;
   -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+  padding-inline: var(--dmn-counter-safe-inline, 1px);
+  white-space: nowrap;
   color: var(--counter-color, var(--counter-color-default, #ffffff));
 }
 
@@ -212,6 +215,11 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-text-stroke-color: var(--counter-stroke-color,
       var(--counter-stroke-color-default, transparent));
   color: transparent;
+}
+
+.text-safe-inline {
+  box-sizing: border-box;
+  padding-inline: var(--dmn-text-safe-inline, 2px);
 }
 
 /* Modal scrollbar */

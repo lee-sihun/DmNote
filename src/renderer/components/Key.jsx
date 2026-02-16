@@ -616,7 +616,7 @@ export default function DraggableKey({
     const nameElement = (
       <span
         key="label"
-        className="font-bold text-[14px] pointer-events-none select-none leading-none"
+        className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
         style={textStyle}
       >
         {labelText}
@@ -689,7 +689,7 @@ export default function DraggableKey({
         renderInsideCounterPreview()
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold"
+          className="flex items-center justify-center h-full font-bold text-safe-inline"
           style={textStyle}
         >
           {labelText}
@@ -974,7 +974,7 @@ export const Key = memo(
       const nameElement = (
         <span
           key="label"
-          className="font-bold text-[14px] pointer-events-none select-none leading-none"
+          className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
           style={textStyle}
         >
           {labelText}
@@ -1040,7 +1040,7 @@ export const Key = memo(
             renderInsideLayout()
           ) : (
             <div
-              className="flex items-center justify-center h-full font-bold"
+              className="flex items-center justify-center h-full font-bold text-safe-inline"
               style={textStyle}
             >
               {labelText}
