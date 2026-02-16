@@ -26,6 +26,7 @@
     "topRight": "右上",
     "bottomRight": "右下",
     "center": "居中",
+    "fixedPosition": "固定位置",
     "graphicsOption": "圖形渲染 (API)",
     "renderMode": "選擇渲染模式",
     "resetData": "重置資料",

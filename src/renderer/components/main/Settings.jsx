@@ -91,7 +91,8 @@ export default function Settings({ showAlert, showConfirm }) {
     { value: "top-right", key: "topRight" },
     { value: "bottom-right", key: "bottomRight" },
     { value: "center", key: "center" },
-    { value: "fixed-position", key: "fixedPosition" },
+    // 미완성 기능
+    // { value: "fixed-position", key: "fixedPosition" },
   ];
 
   const ANGLE_OPTIONS = [
