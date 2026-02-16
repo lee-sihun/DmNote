@@ -1183,6 +1183,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
+    handleBatchSpacing,
+    handleBatchSpacingPreview,
+    handleBatchSpacingCommit,
+    getBatchSpacingValue,
     handleBatchResize,
     handleBatchCounterUpdate,
     handleBatchNoteColorChange,
@@ -1995,6 +1999,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (pos) => pos.noteGlowOpacity,
       70,
     ).isMixed;
+    const batchSpacing = getBatchSpacingValue();
 
     // 카운터 색상 표시 (피커가 열려있을 때는 로컬 상태 사용)
     const getCounterColorDisplay = (target: "fill" | "stroke") => {
@@ -2091,6 +2096,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   getSelectedKeysData={getSelectedKeysData}
                   handleBatchAlign={handleBatchAlign}
                   handleBatchDistribute={handleBatchDistribute}
+                  handleBatchSpacing={handleBatchSpacing}
+                  handleBatchSpacingPreview={handleBatchSpacingPreview}
+                  handleBatchSpacingCommit={handleBatchSpacingCommit}
+                  batchSpacing={batchSpacing}
                   handleBatchResize={handleBatchResize}
                   handleBatchStyleChange={handleBatchStyleChange}
                   handleBatchStyleChangeComplete={

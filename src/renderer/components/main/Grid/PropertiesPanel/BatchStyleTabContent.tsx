@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import type { KeyPosition } from "@src/types/keys";
 import {
   PropertyRow,
@@ -35,6 +35,10 @@ interface BatchStyleTabContentProps {
     direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
   ) => void;
   handleBatchDistribute: (direction: "horizontal" | "vertical") => void;
+  handleBatchSpacing: (spacing: number) => void;
+  handleBatchSpacingPreview?: (spacing: number) => void;
+  handleBatchSpacingCommit?: (spacing: number) => void;
+  batchSpacing: { isMixed: boolean; value: number };
   handleBatchResize: (dimension: "width" | "height", value: number) => void;
   handleBatchStyleChange: (property: keyof KeyPosition, value: any) => void;
   handleBatchStyleChangeComplete: (
@@ -58,6 +62,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   getSelectedKeysData,
   handleBatchAlign,
   handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingPreview,
+  handleBatchSpacingCommit,
+  batchSpacing,
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
@@ -70,6 +78,28 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 }) => {
   const [colorState, setColorState] = useState<"idle" | "active">("idle");
   const [showFontPicker, setShowFontPicker] = useState(false);
+
+  // 간격 입력 preview/commit 분리: 마지막 preview 값을 추적
+  const lastSpacingRef = useRef<number | null>(null);
+
+  const onSpacingChange = useCallback(
+    (value: number) => {
+      lastSpacingRef.current = value;
+      if (handleBatchSpacingPreview) {
+        handleBatchSpacingPreview(value);
+      } else {
+        handleBatchSpacing(value);
+      }
+    },
+    [handleBatchSpacingPreview, handleBatchSpacing],
+  );
+
+  const onSpacingBlur = useCallback(() => {
+    if (handleBatchSpacingCommit && lastSpacingRef.current !== null) {
+      handleBatchSpacingCommit(lastSpacingRef.current);
+      lastSpacingRef.current = null;
+    }
+  }, [handleBatchSpacingCommit]);
   const [showFontManager, setShowFontManager] = useState(false);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -372,6 +402,21 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </svg>
           </button>
         </div>
+      </PropertyRow>
+
+      {/* 간격 */}
+      <PropertyRow label={t("propertiesPanel.spacing") || "간격"}>
+        <NumberInput
+          value={batchSpacing.value}
+          onChange={onSpacingChange}
+          onBlur={onSpacingBlur}
+          suffix="px"
+          min={0}
+          max={500}
+          allowDecimal
+          decimalScale={1}
+          isMixed={batchSpacing.isMixed}
+        />
       </PropertyRow>
 
       {/* 크기 */}
