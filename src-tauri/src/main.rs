@@ -390,8 +390,28 @@ fn apply_main_window_configuration(
         log::warn!("failed to reset main window zoom to 100%: {err}");
     }
 
+    let state = app.state::<AppState>();
+    let snapshot = state.store.snapshot();
+    let should_start_hidden = snapshot.tray_enabled && snapshot.main_window_hidden;
+
+    if should_start_hidden {
+        if let Err(err) = state.ensure_tray_icon_for_background(app) {
+            log::warn!("failed to create tray icon on startup: {err}");
+            if let Err(err) = window.show() {
+                log::warn!("failed to show main window after tray init error: {err}");
+            }
+            if let Err(err) = state.set_main_window_hidden(false) {
+                log::warn!("failed to reset main hidden state after tray init error: {err}");
+            }
+        }
+        return Ok(());
+    }
+
     if let Err(err) = window.show() {
         log::warn!("failed to show main window after configuration: {err}");
+    }
+    if let Err(err) = state.set_main_window_hidden(false) {
+        log::warn!("failed to persist visible main window state: {err}");
     }
     Ok(())
 }

@@ -15,6 +15,8 @@ use log::{error, warn};
 use parking_lot::RwLock;
 use serde_json::json;
 use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
@@ -31,6 +33,9 @@ use crate::{
 };
 
 const OVERLAY_LABEL: &str = "overlay";
+const TRAY_ICON_ID: &str = "background-tray";
+const TRAY_MENU_SETTINGS_ID: &str = "tray-settings";
+const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const OVERLAY_MARGIN: f64 = 40.0;
@@ -122,6 +127,65 @@ impl AppState {
         });
     }
 
+    pub fn ensure_tray_icon_for_background(&self, app: &AppHandle) -> Result<()> {
+        if app.tray_by_id(TRAY_ICON_ID).is_some() {
+            return Ok(());
+        }
+
+        let snapshot = self.store.snapshot();
+        let (settings_label, quit_label) = tray_menu_labels(&snapshot.language);
+
+        let settings_item = MenuItem::with_id(
+            app,
+            TRAY_MENU_SETTINGS_ID,
+            settings_label,
+            true,
+            None::<&str>,
+        )?;
+        let quit_item = MenuItem::with_id(
+            app,
+            TRAY_MENU_QUIT_ID,
+            quit_label,
+            true,
+            None::<&str>,
+        )?;
+        let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
+        let overlay_force_close = self.overlay_force_close.clone();
+
+        let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID).menu(&menu);
+        if let Some(icon) = app.default_window_icon().cloned() {
+            tray_builder = tray_builder.icon(icon);
+        }
+
+        tray_builder
+            .on_menu_event(move |app_handle, event| {
+                if event.id() == TRAY_MENU_SETTINGS_ID {
+                    if let Err(err) = show_main_window(app_handle) {
+                        log::error!("failed to show main window from tray: {err}");
+                    }
+                    return;
+                }
+
+                if event.id() == TRAY_MENU_QUIT_ID {
+                    let app_for_shutdown = app_handle.clone();
+                    let overlay_force_close_for_shutdown = overlay_force_close.clone();
+                    thread::spawn(move || {
+                        shutdown_application(app_for_shutdown, overlay_force_close_for_shutdown);
+                    });
+                }
+            })
+            .build(app)?;
+
+        Ok(())
+    }
+
+    pub fn set_main_window_hidden(&self, hidden: bool) -> Result<()> {
+        let _ = self.store.update(|state| {
+            state.main_window_hidden = hidden;
+        })?;
+        Ok(())
+    }
+
     pub fn bootstrap_payload(&self) -> BootstrapPayload {
         let state = self.store.snapshot();
         let mut custom_js = state.custom_js.clone();
@@ -137,6 +201,7 @@ impl AppState {
                 language: state.language.clone(),
                 laboratory_enabled: state.laboratory_enabled,
                 developer_mode_enabled: state.developer_mode_enabled,
+                tray_enabled: state.tray_enabled,
                 background_color: state.background_color.clone(),
                 use_custom_css: state.use_custom_css,
                 custom_css: state.custom_css.clone(),
@@ -958,6 +1023,17 @@ impl AppState {
             }
         }
 
+        if let Some(enabled) = diff.changed.tray_enabled {
+            if !enabled {
+                let _ = app.remove_tray_by_id(TRAY_ICON_ID);
+                if let Err(err) = self.set_main_window_hidden(false) {
+                    log::warn!("failed to clear main_window_hidden when disabling tray mode: {err}");
+                }
+            } else if self.store.snapshot().main_window_hidden {
+                self.ensure_tray_icon_for_background(app)?;
+            }
+        }
+
         if diff.changed.shortcuts.is_some() {
             // Restart keyboard daemon to apply updated global hotkeys.
             if let Some(task) = self.keyboard_task.write().take() {
@@ -1154,6 +1230,25 @@ fn attach_main_window_close_handler(
 
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
+            if overlay_force_close.load(Ordering::SeqCst) {
+                return;
+            }
+
+            let state = app_handle.state::<AppState>();
+            if state.store.snapshot().tray_enabled {
+                api.prevent_close();
+                if let Err(err) = main_window.hide() {
+                    log::warn!("failed to hide main window for tray mode: {err}");
+                }
+                if let Err(err) = state.set_main_window_hidden(true) {
+                    log::warn!("failed to persist main hidden state: {err}");
+                }
+                if let Err(err) = state.ensure_tray_icon_for_background(&app_handle) {
+                    log::warn!("failed to create tray icon: {err}");
+                }
+                return;
+            }
+
             // 중복 종료 요청 방지
             if shutdown_started.swap(true, Ordering::SeqCst) {
                 api.prevent_close();
@@ -1175,22 +1270,61 @@ fn attach_main_window_close_handler(
             let app_for_shutdown = app_handle.clone();
             let overlay_force_close_for_shutdown = overlay_force_close.clone();
             thread::spawn(move || {
-                {
-                    let state = app_for_shutdown.state::<AppState>();
-                    state.shutdown();
-                }
-                overlay_force_close_for_shutdown.store(true, Ordering::SeqCst);
-                if let Some(overlay) = app_for_shutdown.get_webview_window(OVERLAY_LABEL) {
-                    if let Err(err) = overlay.close() {
-                        log::warn!(
-                            "failed to close overlay window during main window shutdown: {err}"
-                        );
-                    }
-                }
-                app_for_shutdown.exit(0);
+                shutdown_application(app_for_shutdown, overlay_force_close_for_shutdown);
             });
         }
     });
+}
+
+fn tray_menu_labels(_language: &str) -> (&'static str, &'static str) {
+    ("Settings", "Quit")
+}
+
+fn show_main_window(app_handle: &AppHandle) -> Result<()> {
+    if let Some(main) = app_handle.get_webview_window("main") {
+        let _ = main.unminimize();
+        main.show()?;
+        let _ = main.set_focus();
+    }
+
+    if app_handle.tray_by_id(TRAY_ICON_ID).is_some() {
+        let _ = app_handle.remove_tray_by_id(TRAY_ICON_ID);
+    }
+
+    let state = app_handle.state::<AppState>();
+    state.set_main_window_hidden(false)?;
+    Ok(())
+}
+
+fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBool>) {
+    if overlay_force_close.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let main_hidden = app_handle
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok().map(|visible| !visible))
+        .unwrap_or(false);
+
+    {
+        let state = app_handle.state::<AppState>();
+        let tray_enabled = state.store.snapshot().tray_enabled;
+        let persist_hidden = tray_enabled && main_hidden;
+        if let Err(err) = state.set_main_window_hidden(persist_hidden) {
+            log::warn!("failed to persist main hidden state during shutdown: {err}");
+        }
+        state.shutdown();
+    }
+
+    let _ = app_handle.remove_tray_by_id(TRAY_ICON_ID);
+
+    if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
+        if let Err(err) = overlay.close() {
+            log::warn!("failed to close overlay window during shutdown: {err}");
+        }
+    }
+
+    app_handle.exit(0);
 }
 
 fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<()> {
