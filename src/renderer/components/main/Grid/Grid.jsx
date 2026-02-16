@@ -1078,7 +1078,7 @@ export default function Grid({
           />
         ) : (
           <div
-            className="flex items-center justify-center h-full font-bold"
+            className="flex items-center justify-center h-full font-bold leading-none"
             style={{
               color: "var(--key-text-color, rgba(121, 121, 121, 0.9))",
               willChange: "auto",

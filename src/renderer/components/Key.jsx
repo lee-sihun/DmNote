@@ -974,7 +974,7 @@ export const Key = memo(
       const nameElement = (
         <span
           key="label"
-          className="font-bold text-[14px] pointer-events-none select-none"
+          className="font-bold text-[14px] pointer-events-none select-none leading-none"
           style={textStyle}
         >
           {labelText}
