@@ -385,6 +385,11 @@ fn apply_main_window_configuration(
         log::warn!("failed to center window: {err}");
     }
 
+    // WebView2에 잔류된 줌 레벨을 항상 100%로 강제 리셋
+    if let Err(err) = window.set_zoom(1.0) {
+        log::warn!("failed to reset main window zoom to 100%: {err}");
+    }
+
     if let Err(err) = window.show() {
         log::warn!("failed to show main window after configuration: {err}");
     }

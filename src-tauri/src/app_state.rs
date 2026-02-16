@@ -752,7 +752,8 @@ impl AppState {
             .title("DM Note - Overlay")
             .decorations(false)
             .resizable(false)
-            .maximizable(false);
+            .maximizable(false)
+            .zoom_hotkeys_enabled(false);
 
             let window_builder = window_builder.transparent(true);
 
@@ -769,6 +770,11 @@ impl AppState {
             .devtools(true)
             .build()
             .context("failed to create overlay window")?;
+
+        // WebView2에 잔류된 줌 레벨을 항상 100%로 강제 리셋
+        if let Err(err) = window.set_zoom(1.0) {
+            log::warn!("failed to reset overlay zoom to 100%: {err}");
+        }
 
         // macOS에서 오버레이 창이 앱 포커스를 빼앗지 않도록 설정
         #[cfg(target_os = "macos")]
