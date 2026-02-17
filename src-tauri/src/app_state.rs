@@ -1431,7 +1431,7 @@ fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         UI::{
             Shell::{DefSubclassProc, SetWindowSubclass},
-            WindowsAndMessaging::WM_INITMENU,
+            WindowsAndMessaging::{GetSystemMenu, WM_INITMENU},
         },
     };
 
@@ -1452,11 +1452,14 @@ fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
         _dw_ref_data: usize,
     ) -> LRESULT {
         if msg == WM_INITMENU {
-            // Electron과 동일한 방식: 창을 잠깐 비활성화했다가 다시 활성화
-            // 이렇게 하면 시스템 메뉴 초기화가 취소됨
-            EnableWindow(hwnd.0 as isize, 0); // FALSE
-            EnableWindow(hwnd.0 as isize, 1); // TRUE
-            return LRESULT(0);
+            let system_menu = GetSystemMenu(hwnd, false);
+            let is_system_menu = !system_menu.0.is_null() && (system_menu.0 as usize == wparam.0);
+            if is_system_menu {
+                // 시스템 메뉴만 차단하고, 앱이 띄우는 커스텀 메뉴(Menu.popup)는 허용
+                EnableWindow(hwnd.0 as isize, 0); // FALSE
+                EnableWindow(hwnd.0 as isize, 1); // TRUE
+                return LRESULT(0);
+            }
         }
         DefSubclassProc(hwnd, msg, wparam, lparam)
     }
