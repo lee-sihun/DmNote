@@ -25,6 +25,8 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **DM Note** is a key viewer program created for use with DJMAX RESPECT V. Built with Tauri and React, it allows you to visually display key inputs during streaming or gameplay video creation with simple setup. Currently, it officially supports Windows 10/11 and macOS environments only. If you are on Linux, we recommend trying the [community fork version](https://github.com/northernorca/DmNote).
 
+**This program is free to use for streaming or gameplay video production.**
+
 [Download DM NOTE v1.5.1](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
 
 ## ✨ Features
@@ -69,8 +71,8 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 ### ⚙️ Graphics & Settings
 
-- Multilingual support (Korean, English)
-- Graphics rendering options (Direct3D 11/9, OpenGL)
+- Multilingual interface support (Korean, English, Chinese (Simplified, Traditional), Russian)
+- Graphics rendering options
 - Reset settings
 
 ## 🚀 Development
@@ -137,6 +139,7 @@ npm run tauri:dev
 - Custom CSS example files are located in the `assets` folder.
 - When assigning class names, enter only the name excluding the selector (e.g., `blue` -> o, `.blue` -> x).
 - Program default settings are saved in the `store.json` file in the `%appdata%/com.dmnote.desktop` folder.
+- [macOS installation and permission setup guide](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide_en.md)
 
 ## 🤝 Contributing
 
