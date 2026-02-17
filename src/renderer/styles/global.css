@@ -4,7 +4,8 @@
 
 @font-face {
   font-family: "SUIT-Regular";
-  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2") format("woff2");
+  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2")
+    format("woff2");
   font-weight: normal;
   font-style: normal;
 }
@@ -51,11 +52,11 @@ body,
 }
 
 /* 라디오 버튼 스타일링 */
-input[type="radio"]:checked+span {
+input[type="radio"]:checked + span {
   border-color: #ffb400;
 }
 
-input[type="radio"]:checked+span span {
+input[type="radio"]:checked + span span {
   background: #ffb400;
   transform: scale(0.5);
 }
@@ -104,6 +105,38 @@ input[type="number"]::-webkit-outer-spin-button {
 .settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
 .settings-scroll:hover::-webkit-scrollbar-thumb:active {
   background: #d0d3d9;
+}
+
+/* ListPopup 컨텍스트 메뉴 커스텀 스크롤바 */
+.listpopup-scroll {
+  overscroll-behavior: contain;
+}
+
+.listpopup-scroll::-webkit-scrollbar {
+  width: 4px;
+  background: transparent;
+}
+
+.listpopup-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb {
+  background: #4a4d5a;
+  border-radius: 4px;
+}
+
+.listpopup-scroll:hover::-webkit-scrollbar-thumb {
+  background: #5e6170;
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb:hover {
+  background: #74778a;
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb:active {
+  background: #8b8ea0;
 }
 
 @keyframes tooltipFadeIn {
@@ -210,10 +243,14 @@ input[type="number"]::-webkit-outer-spin-button {
   position: absolute;
   inset: 0;
   z-index: -1;
-  -webkit-text-stroke-width: var(--counter-stroke-width,
-      var(--counter-stroke-width-default, 0px));
-  -webkit-text-stroke-color: var(--counter-stroke-color,
-      var(--counter-stroke-color-default, transparent));
+  -webkit-text-stroke-width: var(
+    --counter-stroke-width,
+    var(--counter-stroke-width-default, 0px)
+  );
+  -webkit-text-stroke-color: var(
+    --counter-stroke-color,
+    var(--counter-stroke-color-default, transparent)
+  );
   color: transparent;
 }
 
@@ -281,7 +318,9 @@ input[type="number"]::-webkit-outer-spin-button {
   line-height: 20px;
   letter-spacing: 0;
   font-variant-ligatures: none;
-  font-feature-settings: "liga" 0, "calt" 0;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
 }
 
 .webfont-cm-editor .cm-gutterElement {

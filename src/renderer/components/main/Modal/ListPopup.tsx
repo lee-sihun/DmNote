@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import FloatingPopup from "./FloatingPopup";
+import { useLenis } from "@hooks/useLenis";
 
 export type ListItem = {
   id: string;
@@ -88,10 +89,19 @@ const SubMenu = ({
     ? effectiveMax * itemHeight + separatorCount * 9 + 10
     : undefined;
 
+  const { scrollContainerRef: subLenisRef } = useLenis({
+    duration: 0.5,
+    wheelMultiplier: 0.7,
+  });
+
   return (
     <div
-      ref={subMenuRef}
-      className="fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in"
+      ref={(node) => {
+        (subMenuRef as React.MutableRefObject<HTMLDivElement | null>).current =
+          node;
+        if (needsScroll) subLenisRef(node);
+      }}
+      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${needsScroll ? " listpopup-scroll" : ""}`}
       style={{
         left: pos.left,
         top: pos.top,
@@ -156,10 +166,10 @@ const MenuItemRow = ({
     };
   }, []);
 
-  // 구분선
+  // 구분선 (부모 p-[5px] 패딩을 무시하고 전체 폭 사용)
   if (item.type === "separator") {
     return (
-      <div className="px-[8px] py-[3px]">
+      <div className="-mx-[5px] py-[3px]">
         <div className="h-[1px] bg-[#3A3D4A]" />
       </div>
     );
@@ -223,16 +233,16 @@ const MenuItemRow = ({
         <span className="w-[18px] flex-shrink-0 flex items-center justify-center">
           {hasChildren && (
             <svg
-              width="8"
-              height="10"
-              viewBox="0 0 8 10"
+              width="7"
+              height="12"
+              viewBox="0 0 7 12"
               fill="none"
-              className="text-[#8B8EA0]"
+              className="text-[#DBDEE8]"
             >
               <path
-                d="M1.5 1L6.5 5L1.5 9"
+                d="M1 1L5.5 6L1 11"
                 stroke="currentColor"
-                strokeWidth="1.3"
+                strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -283,6 +293,11 @@ const ListPopup = ({
     ? maxVisibleItems * itemHeight + separatorCount * 9 + 10
     : undefined;
 
+  const { scrollContainerRef: lenisRef } = useLenis({
+    duration: 0.5,
+    wheelMultiplier: 0.7,
+  });
+
   return (
     <FloatingPopup
       open={open}
@@ -297,12 +312,13 @@ const ListPopup = ({
       className={effectiveClassName}
     >
       <div
+        ref={needsScroll ? lenisRef : undefined}
         style={
           maxHeight
             ? { maxHeight, overflowY: "auto", overflowX: "hidden" }
             : undefined
         }
-        className="flex flex-col gap-[1px]"
+        className={`flex flex-col gap-[1px]${needsScroll ? " listpopup-scroll" : ""}`}
       >
         {items.map((it) => (
           <MenuItemRow
