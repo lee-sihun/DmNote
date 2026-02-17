@@ -593,11 +593,13 @@ export interface DMNoteAPI {
     bootstrap(): Promise<BootstrapPayload>;
     openExternal(url: string): Promise<void>;
     restart(): Promise<void>;
+    quit(): Promise<void>;
   };
   window: {
     type: "main" | "overlay";
     minimize(): Promise<void>;
     close(): Promise<void>;
+    showMain(): Promise<void>;
     openDevtoolsAll?(): Promise<void>;
   };
   settings: {

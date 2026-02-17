@@ -263,7 +263,8 @@
     "bringForward": "上移一層",
     "sendBackward": "下移一層",
     "tabCssSetting": "標籤頁 CSS 設定",
-    "addStat": "新增統計"
+    "addStat": "新增統計",
+    "quitApp": "退出程式"
   },
   "noteColor": {
     "color": "顏色",

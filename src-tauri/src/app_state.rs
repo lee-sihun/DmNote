@@ -313,6 +313,13 @@ impl AppState {
         }
     }
 
+    pub fn request_shutdown(&self, app_handle: AppHandle) {
+        let overlay_force_close = self.overlay_force_close.clone();
+        thread::spawn(move || {
+            shutdown_application(app_handle, overlay_force_close);
+        });
+    }
+
     pub fn set_overlay_anchor(&self, app: &AppHandle, anchor: &str) -> Result<String> {
         let parsed = overlay_resize_anchor_from_str(anchor);
         let value: OverlayResizeAnchor =

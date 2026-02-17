@@ -260,7 +260,8 @@
     "bringForward": "Bring Forward",
     "sendBackward": "Send Backward",
     "tabCssSetting": "Tab CSS Settings",
-    "addStat": "Add Stat"
+    "addStat": "Add Stat",
+    "quitApp": "Quit Application"
   },
   "noteColor": {
     "color": "Color",

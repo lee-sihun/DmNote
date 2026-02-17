@@ -7,7 +7,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, Window as TauriWindow } from "@tauri-apps/api/window";
 import { isMac } from "@utils/platform";
 import { Key } from "@components/Key";
 import { useTranslation } from "@contexts/I18nContext";
@@ -162,12 +162,16 @@ export default function App() {
   );
 
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);
+  const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop);
+  const trayEnabled = useSettingsStore((state) => state.trayEnabled);
+  const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop);
   const noteSettings = useSettingsStore((state) => state.noteSettings);
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled
   );
+  const [canOpenMainSettings, setCanOpenMainSettings] = useState(false);
   const [overlayContextMenuOpen, setOverlayContextMenuOpen] = useState(false);
   const [overlayContextMenuPosition, setOverlayContextMenuPosition] = useState<{
     x: number;
@@ -179,15 +183,54 @@ export default function App() {
     overlayContextMenuOpenRef.current = overlayContextMenuOpen;
   }, [overlayContextMenuOpen]);
 
+  const refreshSettingsActionAvailability = useCallback(async () => {
+    if (!trayEnabled) {
+      setCanOpenMainSettings(false);
+      return;
+    }
+
+    setCanOpenMainSettings(false);
+    try {
+      const mainWindow = await TauriWindow.getByLabel("main");
+      if (!mainWindow) {
+        setCanOpenMainSettings(false);
+        return;
+      }
+      const isMainVisible = await mainWindow.isVisible();
+      setCanOpenMainSettings(!isMainVisible);
+    } catch (error) {
+      console.error("Failed to resolve main window visibility", error);
+      setCanOpenMainSettings(false);
+    }
+  }, [trayEnabled]);
+
   const overlayContextMenuItems = useMemo<ListItem[]>(
-    () => [{ id: "closeOverlay", label: t("tooltip.overlayClose") }],
-    [t]
+    () => [
+      {
+        id: "toggleAlwaysOnTop",
+        label: `${t("settings.alwaysOnTop")} (${alwaysOnTop ? "ON" : "OFF"})`,
+      },
+      { id: "closeOverlay", label: t("tooltip.overlayClose") },
+      { id: "separator-main", label: "────────", disabled: true },
+      {
+        id: "openSettingsWindow",
+        label: t("tooltip.settings"),
+        disabled: !canOpenMainSettings,
+      },
+      { id: "separator-app", label: "────────", disabled: true },
+      { id: "quitApplication", label: t("contextMenu.quitApp") },
+    ],
+    [alwaysOnTop, canOpenMainSettings, t]
   );
 
-  const openOverlayContextMenuAt = useCallback((x: number, y: number) => {
-    setOverlayContextMenuPosition({ x, y });
-    setOverlayContextMenuOpen(true);
-  }, []);
+  const openOverlayContextMenuAt = useCallback(
+    (x: number, y: number) => {
+      void refreshSettingsActionAvailability();
+      setOverlayContextMenuPosition({ x, y });
+      setOverlayContextMenuOpen(true);
+    },
+    [refreshSettingsActionAvailability]
+  );
 
   useEffect(() => {
     const handleWindowContextMenu = (event: MouseEvent) => {
@@ -236,6 +279,34 @@ export default function App() {
     } finally {
       setOverlayContextMenuOpen(false);
       setOverlayContextMenuPosition(null);
+    }
+  }, []);
+
+  const toggleAlwaysOnTop = useCallback(async () => {
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next);
+    try {
+      await window.api.settings.update({ alwaysOnTop: next });
+    } catch (error) {
+      console.error("Failed to toggle always-on-top", error);
+      setAlwaysOnTop(!next);
+    }
+  }, [alwaysOnTop, setAlwaysOnTop]);
+
+  const openSettingsWindow = useCallback(async () => {
+    try {
+      await window.api.window.showMain();
+      setCanOpenMainSettings(false);
+    } catch (error) {
+      console.error("Failed to open settings window", error);
+    }
+  }, []);
+
+  const quitApplication = useCallback(async () => {
+    try {
+      await window.api.app.quit();
+    } catch (error) {
+      console.error("Failed to quit application", error);
     }
   }, []);
 
@@ -740,9 +811,10 @@ export default function App() {
         items={overlayContextMenuItems}
         className="overlay-context-menu"
         onSelect={(id) => {
-          if (id === "closeOverlay") {
-            void closeOverlayWindow();
-          }
+          if (id === "toggleAlwaysOnTop") void toggleAlwaysOnTop();
+          if (id === "closeOverlay") void closeOverlayWindow();
+          if (id === "openSettingsWindow") void openSettingsWindow();
+          if (id === "quitApplication") void quitApplication();
         }}
       />
     </div>

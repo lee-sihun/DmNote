@@ -260,7 +260,8 @@
     "bringForward": "Выше",
     "sendBackward": "Ниже",
     "tabCssSetting": "CSS вкладки",
-    "addStat": "Добавить стат."
+    "addStat": "Добавить стат.",
+    "quitApp": "Выйти из приложения"
   },
   "noteColor": {
     "color": "Цвет",

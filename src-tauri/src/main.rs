@@ -180,8 +180,10 @@ fn main() {
             commands::plugin_storage::plugin_storage_clear_by_prefix,
             commands::system::window_minimize,
             commands::system::window_close,
+            commands::system::window_show_main,
             commands::system::app_open_external,
             commands::system::app_restart,
+            commands::system::app_quit,
             commands::system::window_open_devtools_all,
             commands::system::get_cursor_settings,
         ])
