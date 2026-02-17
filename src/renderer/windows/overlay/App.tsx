@@ -10,6 +10,7 @@ import React, {
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac } from "@utils/platform";
 import { Key } from "@components/Key";
+import { useTranslation } from "@contexts/I18nContext";
 import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
@@ -37,6 +38,7 @@ import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import StatItem from "@components/overlay/StatItem";
 import StatCounterLayer from "@components/overlay/StatCounterLayer";
+import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -82,6 +84,7 @@ export default function App() {
   useAppBootstrap();
   useBuiltinStatsSubscription();
   useBlockBrowserShortcuts();
+  const { t } = useTranslation();
   const macOS = isMac();
   const developerModeEnabled = useSettingsStore(
     (state) => state.developerModeEnabled
@@ -165,6 +168,76 @@ export default function App() {
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled
   );
+  const [overlayContextMenuOpen, setOverlayContextMenuOpen] = useState(false);
+  const [overlayContextMenuPosition, setOverlayContextMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const overlayContextMenuOpenRef = useRef(overlayContextMenuOpen);
+
+  useEffect(() => {
+    overlayContextMenuOpenRef.current = overlayContextMenuOpen;
+  }, [overlayContextMenuOpen]);
+
+  const overlayContextMenuItems = useMemo<ListItem[]>(
+    () => [{ id: "closeOverlay", label: t("tooltip.overlayClose") }],
+    [t]
+  );
+
+  const openOverlayContextMenuAt = useCallback((x: number, y: number) => {
+    setOverlayContextMenuPosition({ x, y });
+    setOverlayContextMenuOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const handleWindowContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openOverlayContextMenuAt(event.clientX, event.clientY);
+    };
+
+    window.addEventListener("contextmenu", handleWindowContextMenu, true);
+    return () => {
+      window.removeEventListener("contextmenu", handleWindowContextMenu, true);
+    };
+  }, [openOverlayContextMenuAt]);
+
+  const handleOverlayMouseDownCapture = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // 좌클릭은 창 전체 드래그 유지
+      if (e.button !== 0) return;
+
+      const target = e.target as HTMLElement | null;
+      const clickedMenu =
+        target?.closest(".overlay-context-menu") != null ||
+        target?.closest('[data-overlay-context-menu="true"]') != null;
+      if (clickedMenu) {
+        return;
+      }
+
+      if (overlayContextMenuOpenRef.current) {
+        setOverlayContextMenuOpen(false);
+        setOverlayContextMenuPosition(null);
+        return;
+      }
+
+      getCurrentWindow().startDragging().catch((error) => {
+        console.error("Failed to start overlay dragging", error);
+      });
+    },
+    []
+  );
+
+  const closeOverlayWindow = useCallback(async () => {
+    try {
+      await window.api.overlay.setVisible(false);
+    } catch (error) {
+      console.error("Failed to close overlay window", error);
+    } finally {
+      setOverlayContextMenuOpen(false);
+      setOverlayContextMenuPosition(null);
+    }
+  }, []);
 
   const {
     notesRef,
@@ -564,23 +637,9 @@ export default function App() {
       });
   }, [bounds, trackHeight, overlayAnchor]);
 
-  // macOS용 오버레이 드래그 핸들러
-  const handleOverlayMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isMac()) return;
-
-      // 기본 (왼쪽) 버튼에서만 드래그 시작
-      if (e.buttons === 1) {
-        getCurrentWindow().startDragging();
-      }
-    },
-    []
-  );
-
   return (
     <div
-      data-tauri-drag-region
-      className="relative w-full h-screen m-0 overflow-hidden [app-region:drag]"
+      className="relative w-full h-screen m-0 overflow-hidden"
       style={{
         backgroundColor:
           backgroundColor === "transparent" ? "transparent" : backgroundColor,
@@ -595,7 +654,7 @@ export default function App() {
               contain: "layout style paint",
             }),
       }}
-      onMouseDown={handleOverlayMouseDown}
+      onMouseDownCapture={handleOverlayMouseDownCapture}
     >
       {noteEffect && (
         <Suspense fallback={null}>
@@ -670,6 +729,21 @@ export default function App() {
       <PluginElementsRenderer
         windowType="overlay"
         positionOffset={positionOffset}
+      />
+      <ListPopup
+        open={overlayContextMenuOpen}
+        position={overlayContextMenuPosition || undefined}
+        onClose={() => {
+          setOverlayContextMenuOpen(false);
+          setOverlayContextMenuPosition(null);
+        }}
+        items={overlayContextMenuItems}
+        className="overlay-context-menu"
+        onSelect={(id) => {
+          if (id === "closeOverlay") {
+            void closeOverlayWindow();
+          }
+        }}
       />
     </div>
   );

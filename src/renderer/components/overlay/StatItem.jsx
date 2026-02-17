@@ -150,6 +150,7 @@ export default memo(function StatItem({
       isolation: "isolate",
       boxSizing: "border-box",
       zIndex: position.zIndex,
+      cursor: "default",
     };
   }, [
     active,
@@ -309,7 +310,7 @@ export default memo(function StatItem({
 
   return (
     <div
-      className={`absolute cursor-pointer ${className || ""}`}
+      className={`absolute ${className || ""}`}
       style={keyStyle}
       data-state={active ? "active" : "inactive"}
     >

@@ -6,7 +6,6 @@ import React, {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac } from "@utils/platform";
 import {
   PluginDisplayElementInternal,
@@ -1300,8 +1299,11 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
-    // 메인 윈도우에서만 처리
-    if (windowType !== "main") return;
+    // 오버레이에서는 기본 브라우저 메뉴만 차단
+    if (windowType !== "main") {
+      e.preventDefault();
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
@@ -1605,18 +1607,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     return null;
   };
 
-  // macOS용 오버레이 드래그 핸들러
-  const handleOverlayDrag = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isMac()) return;
-
-      if (windowType === "overlay" && e.buttons === 1 && !isSelectionMode) {
-        getCurrentWindow().startDragging();
-      }
-    },
-    [windowType, isSelectionMode]
-  );
-
   return (
     <>
       <div
@@ -1626,16 +1616,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         style={elementStyle}
         data-plugin-element={element.fullId}
         data-plugin-id={element.pluginId}
-        data-tauri-drag-region={windowType === "overlay" ? true : undefined}
         data-editing={isDraggingOrResizing ? "true" : undefined}
         onClick={handleClick}
-        onMouseDown={
-          isSelectionMode
-            ? handleSelectionDragMouseDown
-            : windowType === "overlay"
-            ? handleOverlayDrag
-            : undefined
-        }
+        onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
         onContextMenu={handleContextMenu}
       >
         {element.scoped && shadowRoot
