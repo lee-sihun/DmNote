@@ -197,13 +197,12 @@ export default function App() {
 
   // 탭 목록 (기본 탭 + 커스텀 탭)
   const BUILTIN_TABS = useMemo(
-    () => [
-      { id: "4key", name: "4Key" },
-      { id: "5key", name: "5Key" },
-      { id: "6key", name: "6Key" },
-      { id: "8key", name: "8Key" },
-    ],
-    [],
+    () =>
+      ["4key", "5key", "6key", "8key"].map((id) => {
+        const num = id.replace("key", "");
+        return { id, name: t(`mode.button${num}`) };
+      }),
+    [t],
   );
 
   const handleOverlayMouseDownCapture = useCallback(
