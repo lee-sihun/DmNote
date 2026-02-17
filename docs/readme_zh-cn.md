@@ -15,7 +15,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **本程序可自由用于直播或游戏视频制作等场景.**
 
-[前往下载 DM NOTE v1.5.1](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
+[前往下载 DM NOTE v1.5.2](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
 
 ## ✨ 功能特性
 

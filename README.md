@@ -15,7 +15,7 @@
   </p>
   
   [![GitHub release](https://img.shields.io/github/release/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases)
-  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
+  [![GitHub downloads](https://img.shields.io/github/downloads/lee-sihun/DmNote/total.svg?logo=github)](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 **이 프로그램은 스트리밍이나 플레이 영상 제작 등에 자유롭게 사용 가능합니다.** 
 
-[DM NOTE v1.5.1 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.5.1/DM.NOTE.v.1.5.1.zip)
+[DM NOTE v1.5.2 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
 
 ## ✨ 주요 기능
 
