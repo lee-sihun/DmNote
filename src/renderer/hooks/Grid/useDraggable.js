@@ -57,6 +57,7 @@ export const useDraggable = ({
   const elementHeightRef = useRef(elementHeight);
   const getOtherElementsRef = useRef(getOtherElements);
   const disabledRef = useRef(disabled);
+  const previousBodyCursorRef = useRef(null);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -82,17 +83,32 @@ export const useDraggable = ({
     setNode(nodeEle);
   }, []);
 
-  const handleMouseOver = () => {
+  const restoreBodyCursor = useCallback(() => {
+    if (typeof document === "undefined") return;
+    if (previousBodyCursorRef.current === null) return;
+    document.body.style.cursor = previousBodyCursorRef.current;
+    previousBodyCursorRef.current = null;
+  }, []);
+
+  const setBodyCursor = useCallback((cursor) => {
+    if (typeof document === "undefined") return;
+    if (previousBodyCursorRef.current === null) {
+      previousBodyCursorRef.current = document.body.style.cursor || "";
+    }
+    document.body.style.cursor = cursor;
+  }, []);
+
+  const handleMouseOver = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
     if (node && !isDragging) node.style.cursor = "grab";
-  };
+  }, [node, isDragging]);
 
-  const handleMouseOut = () => {
+  const handleMouseOut = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
-    if (node && !isDragging) node.style.cursor = "default";
-  };
+    if (node && !isDragging) node.style.cursor = "";
+  }, [node, isDragging]);
 
   const handleMouseDown = useCallback(
     (e) => {
@@ -159,6 +175,7 @@ export const useDraggable = ({
         ) {
           actuallyDragging = true;
           node.style.cursor = "grabbing";
+          setBodyCursor("grabbing");
           // 실제 드래그가 시작될 때만 최적화 적용
           node.style.pointerEvents = "none";
           node.style.userSelect = "none";
@@ -316,6 +333,7 @@ export const useDraggable = ({
       const handleMouseUp = () => {
         // 드래그 종료 플래그 설정 (pending rAF 콜백이 실행되지 않도록)
         dragEnded = true;
+        restoreBodyCursor();
 
         // pending rAF가 있으면 취소
         if (rafId) {
@@ -355,22 +373,28 @@ export const useDraggable = ({
       document.addEventListener("mouseup", handleMouseUp);
       window.addEventListener("blur", handleMouseUp);
     },
-    [node, dx, dy, onPositionChange]
+    [node, dx, dy, onPositionChange, restoreBodyCursor, setBodyCursor]
   );
 
   useEffect(() => {
     if (!node) return;
 
     node.addEventListener("mousedown", handleMouseDown);
-    node.addEventListener("mouseover", handleMouseOver);
-    node.addEventListener("mouseout", handleMouseOut);
+    node.addEventListener("mouseenter", handleMouseOver);
+    node.addEventListener("mouseleave", handleMouseOut);
 
     return () => {
       node.removeEventListener("mousedown", handleMouseDown);
-      node.removeEventListener("mouseover", handleMouseOver);
-      node.removeEventListener("mouseout", handleMouseOut);
+      node.removeEventListener("mouseenter", handleMouseOver);
+      node.removeEventListener("mouseleave", handleMouseOut);
     };
-  }, [node, handleMouseDown]);
+  }, [node, handleMouseDown, handleMouseOver, handleMouseOut]);
+
+  useEffect(() => {
+    return () => {
+      restoreBodyCursor();
+    };
+  }, [restoreBodyCursor]);
 
   return { ref, dx, dy, wasMoved, isDragging };
 };
