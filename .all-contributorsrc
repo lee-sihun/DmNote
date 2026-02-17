@@ -58,6 +58,15 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "dustingusius",
+      "name": "dustingusius",
+      "avatar_url": "https://avatars.githubusercontent.com/u/128625716?v=4",
+      "profile": "https://github.com/dustingusius",
+      "contributions": [
+        "translation"
+      ]
     }
   ],
   "contributorsPerLine": 7,
