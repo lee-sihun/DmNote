@@ -261,7 +261,9 @@
     "sendBackward": "Send Backward",
     "tabCssSetting": "Tab CSS Settings",
     "addStat": "Add Stat",
-    "quitApp": "Quit Application"
+    "quitApp": "Quit Application",
+    "snapToEdge": "Snap to Edge",
+    "selectTab": "Select Tab"
   },
   "noteColor": {
     "color": "Color",

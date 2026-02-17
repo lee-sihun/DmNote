@@ -264,7 +264,9 @@
     "sendBackward": "下移一層",
     "tabCssSetting": "標籤頁 CSS 設定",
     "addStat": "新增統計",
-    "quitApp": "退出程式"
+    "quitApp": "退出程式",
+    "snapToEdge": "貼靠螢幕邊緣",
+    "selectTab": "選擇標籤頁"
   },
   "noteColor": {
     "color": "顏色",

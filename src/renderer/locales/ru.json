@@ -261,7 +261,9 @@
     "sendBackward": "Ниже",
     "tabCssSetting": "CSS вкладки",
     "addStat": "Добавить стат.",
-    "quitApp": "Выйти из приложения"
+    "quitApp": "Выйти из приложения",
+    "snapToEdge": "Привязать к краю",
+    "selectTab": "Выбор вкладки"
   },
   "noteColor": {
     "color": "Цвет",

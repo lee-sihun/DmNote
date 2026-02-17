@@ -7,7 +7,10 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { getCurrentWindow, Window as TauriWindow } from "@tauri-apps/api/window";
+import {
+  getCurrentWindow,
+  Window as TauriWindow,
+} from "@tauri-apps/api/window";
 import { isMac } from "@utils/platform";
 import { Key } from "@components/Key";
 import { useTranslation } from "@contexts/I18nContext";
@@ -87,7 +90,7 @@ export default function App() {
   const { t } = useTranslation();
   const macOS = isMac();
   const developerModeEnabled = useSettingsStore(
-    (state) => state.developerModeEnabled
+    (state) => state.developerModeEnabled,
   );
 
   // 개발자 모드 비활성 시 DevTools 단축키 차단
@@ -158,7 +161,7 @@ export default function App() {
   const positions = useKeyStore((state) => state.positions);
   const statPositions = useStatItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
 
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);
@@ -169,8 +172,10 @@ export default function App() {
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(
-    (state) => state.keyCounterEnabled
+    (state) => state.keyCounterEnabled,
   );
+  const customTabs = useKeyStore((state) => state.customTabs);
+  const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
   const [canOpenMainSettings, setCanOpenMainSettings] = useState(false);
   const [overlayContextMenuOpen, setOverlayContextMenuOpen] = useState(false);
   const [overlayContextMenuPosition, setOverlayContextMenuPosition] = useState<{
@@ -204,23 +209,55 @@ export default function App() {
     }
   }, [trayEnabled]);
 
+  // 탭 목록 (기본 탭 + 커스텀 탭)
+  const BUILTIN_TABS = useMemo(
+    () => [
+      { id: "4key", name: "4Key" },
+      { id: "5key", name: "5Key" },
+      { id: "6key", name: "6Key" },
+      { id: "8key", name: "8Key" },
+    ],
+    [],
+  );
+
+  const tabChildrenItems = useMemo<ListItem[]>(() => {
+    const allTabs = [
+      ...BUILTIN_TABS,
+      ...customTabs.map((t) => ({ id: t.id, name: t.name })),
+    ];
+    return allTabs.map((tab) => ({
+      id: `selectTab-${tab.id}`,
+      label: tab.name,
+      checked: tab.id === selectedKeyType,
+    }));
+  }, [BUILTIN_TABS, customTabs, selectedKeyType]);
+
   const overlayContextMenuItems = useMemo<ListItem[]>(
     () => [
       {
         id: "toggleAlwaysOnTop",
-        label: `${t("settings.alwaysOnTop")} (${alwaysOnTop ? "ON" : "OFF"})`,
+        label: t("settings.alwaysOnTop"),
+        checked: alwaysOnTop,
+      },
+      { id: "separator-top", label: "", type: "separator" as const },
+      {
+        id: "selectTab",
+        label: t("contextMenu.selectTab"),
+        children: tabChildrenItems,
+        maxVisibleChildren: 5,
       },
       { id: "closeOverlay", label: t("tooltip.overlayClose") },
-      { id: "separator-main", label: "────────", disabled: true },
+      { id: "snapToEdge", label: t("contextMenu.snapToEdge") },
+      { id: "separator-main", label: "", type: "separator" as const },
       {
         id: "openSettingsWindow",
         label: t("tooltip.settings"),
         disabled: !canOpenMainSettings,
       },
-      { id: "separator-app", label: "────────", disabled: true },
+      { id: "separator-app", label: "", type: "separator" as const },
       { id: "quitApplication", label: t("contextMenu.quitApp") },
     ],
-    [alwaysOnTop, canOpenMainSettings, t]
+    [alwaysOnTop, canOpenMainSettings, t, tabChildrenItems],
   );
 
   const openOverlayContextMenuAt = useCallback(
@@ -229,7 +266,7 @@ export default function App() {
       setOverlayContextMenuPosition({ x, y });
       setOverlayContextMenuOpen(true);
     },
-    [refreshSettingsActionAvailability]
+    [refreshSettingsActionAvailability],
   );
 
   useEffect(() => {
@@ -264,11 +301,13 @@ export default function App() {
         return;
       }
 
-      getCurrentWindow().startDragging().catch((error) => {
-        console.error("Failed to start overlay dragging", error);
-      });
+      getCurrentWindow()
+        .startDragging()
+        .catch((error) => {
+          console.error("Failed to start overlay dragging", error);
+        });
     },
-    []
+    [],
   );
 
   const closeOverlayWindow = useCallback(async () => {
@@ -307,6 +346,46 @@ export default function App() {
       await window.api.app.quit();
     } catch (error) {
       console.error("Failed to quit application", error);
+    }
+  }, []);
+
+  const snapToNearestEdge = useCallback(async () => {
+    try {
+      const win = getCurrentWindow();
+      const { currentMonitor } = await import("@tauri-apps/api/window");
+      const { PhysicalPosition } = await import("@tauri-apps/api/dpi");
+      const [monitor, pos, size] = await Promise.all([
+        currentMonitor(),
+        win.outerPosition(),
+        win.outerSize(),
+      ]);
+      if (!monitor) return;
+
+      const monitorPos = monitor.position;
+      const monitorSize = monitor.size;
+
+      // 창의 중심 좌표
+      const centerX = pos.x + size.width / 2;
+      const centerY = pos.y + size.height / 2;
+
+      // 모니터의 중심 좌표
+      const monitorCenterX = monitorPos.x + monitorSize.width / 2;
+      const monitorCenterY = monitorPos.y + monitorSize.height / 2;
+
+      // 가장 가까운 모서리 결정
+      const snapLeft = centerX < monitorCenterX;
+      const snapTop = centerY < monitorCenterY;
+
+      const newX = snapLeft
+        ? monitorPos.x
+        : monitorPos.x + monitorSize.width - size.width;
+      const newY = snapTop
+        ? monitorPos.y
+        : monitorPos.y + monitorSize.height - size.height;
+
+      await win.setPosition(new PhysicalPosition(newX, newY));
+    } catch (error) {
+      console.error("Failed to snap overlay to edge", error);
     }
   }, []);
 
@@ -363,7 +442,7 @@ export default function App() {
       }, delayMs);
       timerEntry.timers.add(timer);
     },
-    [] // ref를 사용하므로 dependency 불필요
+    [], // ref를 사용하므로 dependency 불필요
   );
 
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
@@ -439,17 +518,17 @@ export default function App() {
 
   const currentKeys = useMemo(
     () => keyMappings[selectedKeyType] ?? [],
-    [keyMappings, selectedKeyType]
+    [keyMappings, selectedKeyType],
   );
 
   const currentPositions = useMemo<KeyPosition[]>(
     () => positions[selectedKeyType] ?? [],
-    [positions, selectedKeyType]
+    [positions, selectedKeyType],
   );
 
   const currentStatPositions = useMemo<any[]>(
     () => statPositions[selectedKeyType] ?? [],
-    [statPositions, selectedKeyType]
+    [statPositions, selectedKeyType],
   );
 
   const bounds = useMemo<Bounds | null>(() => {
@@ -493,7 +572,7 @@ export default function App() {
         // 앵커 기반 위치 계산
         if (element.anchor?.keyCode && selectedKeyType) {
           const keyIndex = currentKeys.findIndex(
-            (key) => key === element.anchor?.keyCode
+            (key) => key === element.anchor?.keyCode,
           );
           if (keyIndex >= 0 && currentPositions[keyIndex]) {
             const keyPosition = currentPositions[keyIndex];
@@ -583,43 +662,51 @@ export default function App() {
 
   const webglTracks = useMemo(
     () =>
-      currentKeys.map((key, index) => {
-        const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
-        if (originalPosition.hidden) return null;
-        const position = displayPositions[index] ?? originalPosition;
-        // noteAutoYCorrection이 false면 원래 위치 사용, 아니면 topMostY로 보정
-        const useAutoCorrection = position.noteAutoYCorrection !== false;
-        const trackStartY = useAutoCorrection ? topMostY : position.dy;
-        const keyWidth = position.width;
-        const desiredNoteWidth =
-          typeof position.noteWidth === "number" && Number.isFinite(position.noteWidth)
-            ? Math.max(1, Math.round(position.noteWidth))
-            : keyWidth;
-        const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
+      currentKeys
+        .map((key, index) => {
+          const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
+          if (originalPosition.hidden) return null;
+          const position = displayPositions[index] ?? originalPosition;
+          // noteAutoYCorrection이 false면 원래 위치 사용, 아니면 topMostY로 보정
+          const useAutoCorrection = position.noteAutoYCorrection !== false;
+          const trackStartY = useAutoCorrection ? topMostY : position.dy;
+          const keyWidth = position.width;
+          const desiredNoteWidth =
+            typeof position.noteWidth === "number" &&
+            Number.isFinite(position.noteWidth)
+              ? Math.max(1, Math.round(position.noteWidth))
+              : keyWidth;
+          const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
 
-        return {
-          trackKey: key,
-          trackIndex: position.zIndex ?? index,
-          position: { ...position, dx: position.dx + noteOffsetX, dy: trackStartY },
-          width: desiredNoteWidth,
-          height: trackHeight,
-          noteColor: position.noteColor,
-          noteOpacity: position.noteOpacity,
-          noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
-          noteOpacityBottom: position.noteOpacityBottom ?? position.noteOpacity,
-          noteGlowEnabled: position.noteGlowEnabled ?? false,
-          noteGlowSize: position.noteGlowSize ?? 20,
-          noteGlowOpacity: position.noteGlowOpacity ?? 70,
-          noteGlowOpacityTop:
-            position.noteGlowOpacityTop ?? (position.noteGlowOpacity ?? 70),
-          noteGlowOpacityBottom:
-            position.noteGlowOpacityBottom ?? (position.noteGlowOpacity ?? 70),
-          noteGlowColor: position.noteGlowColor ?? position.noteColor,
-          flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
-          borderRadius:
-            position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
-        };
-      }).filter(Boolean),
+          return {
+            trackKey: key,
+            trackIndex: position.zIndex ?? index,
+            position: {
+              ...position,
+              dx: position.dx + noteOffsetX,
+              dy: trackStartY,
+            },
+            width: desiredNoteWidth,
+            height: trackHeight,
+            noteColor: position.noteColor,
+            noteOpacity: position.noteOpacity,
+            noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
+            noteOpacityBottom:
+              position.noteOpacityBottom ?? position.noteOpacity,
+            noteGlowEnabled: position.noteGlowEnabled ?? false,
+            noteGlowSize: position.noteGlowSize ?? 20,
+            noteGlowOpacity: position.noteGlowOpacity ?? 70,
+            noteGlowOpacityTop:
+              position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
+            noteGlowOpacityBottom:
+              position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
+            noteGlowColor: position.noteGlowColor ?? position.noteColor,
+            flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
+            borderRadius:
+              position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
+          };
+        })
+        .filter(Boolean),
     [
       currentKeys,
       currentPositions,
@@ -628,7 +715,7 @@ export default function App() {
       trackHeight,
       noteSettings?.speed,
       DEFAULT_NOTE_BORDER_RADIUS,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -770,10 +857,10 @@ export default function App() {
           pos.statType === "kpsAvg"
             ? "AVG"
             : pos.statType === "kpsMax"
-            ? "MAX"
-            : pos.statType === "total"
-            ? "Total"
-            : "KPS";
+              ? "MAX"
+              : pos.statType === "total"
+                ? "Total"
+                : "KPS";
         const label = (pos.displayText || "").trim() || defaultLabel;
         const position = { ...pos, zIndex: pos.zIndex ?? index };
 
@@ -810,11 +897,17 @@ export default function App() {
         }}
         items={overlayContextMenuItems}
         className="overlay-context-menu"
+        textAlign="left"
         onSelect={(id) => {
           if (id === "toggleAlwaysOnTop") void toggleAlwaysOnTop();
           if (id === "closeOverlay") void closeOverlayWindow();
+          if (id === "snapToEdge") void snapToNearestEdge();
           if (id === "openSettingsWindow") void openSettingsWindow();
           if (id === "quitApplication") void quitApplication();
+          if (id.startsWith("selectTab-")) {
+            const tabId = id.replace("selectTab-", "");
+            setSelectedKeyType(tabId);
+          }
         }}
       />
     </div>
