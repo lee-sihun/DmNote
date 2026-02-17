@@ -11,6 +11,8 @@ import {
   getCurrentWindow,
   Window as TauriWindow,
 } from "@tauri-apps/api/window";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu } from "@tauri-apps/api/menu";
 import { isMac } from "@utils/platform";
 import { Key } from "@components/Key";
 import { useTranslation } from "@contexts/I18nContext";
@@ -41,7 +43,6 @@ import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import StatItem from "@components/overlay/StatItem";
 import StatCounterLayer from "@components/overlay/StatCounterLayer";
-import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -176,36 +177,21 @@ export default function App() {
   );
   const customTabs = useKeyStore((state) => state.customTabs);
   const setSelectedKeyType = useKeyStore((state) => state.setSelectedKeyType);
-  const [canOpenMainSettings, setCanOpenMainSettings] = useState(false);
-  const [overlayContextMenuOpen, setOverlayContextMenuOpen] = useState(false);
-  const [overlayContextMenuPosition, setOverlayContextMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const overlayContextMenuOpenRef = useRef(overlayContextMenuOpen);
-
-  useEffect(() => {
-    overlayContextMenuOpenRef.current = overlayContextMenuOpen;
-  }, [overlayContextMenuOpen]);
-
-  const refreshSettingsActionAvailability = useCallback(async () => {
+  const resolveCanOpenMainSettings = useCallback(async () => {
     if (!trayEnabled) {
-      setCanOpenMainSettings(false);
-      return;
+      return false;
     }
 
-    setCanOpenMainSettings(false);
     try {
       const mainWindow = await TauriWindow.getByLabel("main");
       if (!mainWindow) {
-        setCanOpenMainSettings(false);
-        return;
+        return false;
       }
       const isMainVisible = await mainWindow.isVisible();
-      setCanOpenMainSettings(!isMainVisible);
+      return !isMainVisible;
     } catch (error) {
       console.error("Failed to resolve main window visibility", error);
-      setCanOpenMainSettings(false);
+      return false;
     }
   }, [trayEnabled]);
 
@@ -220,86 +206,10 @@ export default function App() {
     [],
   );
 
-  const tabChildrenItems = useMemo<ListItem[]>(() => {
-    const allTabs = [
-      ...BUILTIN_TABS,
-      ...customTabs.map((t) => ({ id: t.id, name: t.name })),
-    ];
-    return allTabs.map((tab) => ({
-      id: `selectTab-${tab.id}`,
-      label: tab.name,
-      checked: tab.id === selectedKeyType,
-    }));
-  }, [BUILTIN_TABS, customTabs, selectedKeyType]);
-
-  const overlayContextMenuItems = useMemo<ListItem[]>(
-    () => [
-      {
-        id: "toggleAlwaysOnTop",
-        label: t("settings.alwaysOnTop"),
-        checked: alwaysOnTop,
-      },
-      { id: "separator-top", label: "", type: "separator" as const },
-      {
-        id: "selectTab",
-        label: t("contextMenu.selectTab"),
-        children: tabChildrenItems,
-        maxVisibleChildren: 5,
-      },
-      { id: "closeOverlay", label: t("tooltip.overlayClose") },
-      { id: "snapToEdge", label: t("contextMenu.snapToEdge") },
-      { id: "separator-main", label: "", type: "separator" as const },
-      {
-        id: "openSettingsWindow",
-        label: t("tooltip.settings"),
-        disabled: !canOpenMainSettings,
-      },
-      { id: "separator-app", label: "", type: "separator" as const },
-      { id: "quitApplication", label: t("contextMenu.quitApp") },
-    ],
-    [alwaysOnTop, canOpenMainSettings, t, tabChildrenItems],
-  );
-
-  const openOverlayContextMenuAt = useCallback(
-    (x: number, y: number) => {
-      void refreshSettingsActionAvailability();
-      setOverlayContextMenuPosition({ x, y });
-      setOverlayContextMenuOpen(true);
-    },
-    [refreshSettingsActionAvailability],
-  );
-
-  useEffect(() => {
-    const handleWindowContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openOverlayContextMenuAt(event.clientX, event.clientY);
-    };
-
-    window.addEventListener("contextmenu", handleWindowContextMenu, true);
-    return () => {
-      window.removeEventListener("contextmenu", handleWindowContextMenu, true);
-    };
-  }, [openOverlayContextMenuAt]);
-
   const handleOverlayMouseDownCapture = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // 좌클릭은 창 전체 드래그 유지
       if (e.button !== 0) return;
-
-      const target = e.target as HTMLElement | null;
-      const clickedMenu =
-        target?.closest(".overlay-context-menu") != null ||
-        target?.closest('[data-overlay-context-menu="true"]') != null;
-      if (clickedMenu) {
-        return;
-      }
-
-      if (overlayContextMenuOpenRef.current) {
-        setOverlayContextMenuOpen(false);
-        setOverlayContextMenuPosition(null);
-        return;
-      }
 
       getCurrentWindow()
         .startDragging()
@@ -315,9 +225,6 @@ export default function App() {
       await window.api.overlay.setVisible(false);
     } catch (error) {
       console.error("Failed to close overlay window", error);
-    } finally {
-      setOverlayContextMenuOpen(false);
-      setOverlayContextMenuPosition(null);
     }
   }, []);
 
@@ -335,7 +242,6 @@ export default function App() {
   const openSettingsWindow = useCallback(async () => {
     try {
       await window.api.window.showMain();
-      setCanOpenMainSettings(false);
     } catch (error) {
       console.error("Failed to open settings window", error);
     }
@@ -388,6 +294,114 @@ export default function App() {
       console.error("Failed to snap overlay to edge", error);
     }
   }, []);
+
+  const openOverlayContextMenuAt = useCallback(
+    async (x: number, y: number) => {
+      const canOpenMainSettings = await resolveCanOpenMainSettings();
+      const allTabs = [
+        ...BUILTIN_TABS,
+        ...customTabs.map((tab) => ({ id: tab.id, name: tab.name })),
+      ];
+
+      let menu: Menu | null = null;
+      try {
+        menu = await Menu.new({
+          items: [
+            {
+              id: "toggleAlwaysOnTop",
+              text: t("settings.alwaysOnTop"),
+              checked: alwaysOnTop,
+              action: () => {
+                void toggleAlwaysOnTop();
+              },
+            },
+            { item: "Separator" },
+            {
+              id: "selectTab",
+              text: t("contextMenu.selectTab"),
+              items: allTabs.map((tab) => ({
+                id: `selectTab-${tab.id}`,
+                text: tab.name,
+                checked: tab.id === selectedKeyType,
+                action: () => {
+                  setSelectedKeyType(tab.id);
+                },
+              })),
+            },
+            {
+              id: "closeOverlay",
+              text: t("tooltip.overlayClose"),
+              action: () => {
+                void closeOverlayWindow();
+              },
+            },
+            {
+              id: "snapToEdge",
+              text: t("contextMenu.snapToEdge"),
+              action: () => {
+                void snapToNearestEdge();
+              },
+            },
+            { item: "Separator" },
+            {
+              id: "openSettingsWindow",
+              text: t("tooltip.settings"),
+              enabled: canOpenMainSettings,
+              action: () => {
+                void openSettingsWindow();
+              },
+            },
+            { item: "Separator" },
+            {
+              id: "quitApplication",
+              text: t("contextMenu.quitApp"),
+              action: () => {
+                void quitApplication();
+              },
+            },
+          ],
+        });
+
+        await menu.popup(
+          new LogicalPosition(Math.round(x), Math.round(y)),
+          getCurrentWindow(),
+        );
+      } catch (error) {
+        console.error("Failed to open native overlay context menu", error);
+      } finally {
+        if (menu) {
+          await menu.close().catch(() => {});
+        }
+      }
+    },
+    [
+      BUILTIN_TABS,
+      alwaysOnTop,
+      closeOverlayWindow,
+      customTabs,
+      openSettingsWindow,
+      quitApplication,
+      resolveCanOpenMainSettings,
+      selectedKeyType,
+      setSelectedKeyType,
+      snapToNearestEdge,
+      t,
+      toggleAlwaysOnTop,
+    ],
+  );
+
+  useEffect(() => {
+    const handleWindowContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void openOverlayContextMenuAt(event.clientX, event.clientY);
+    };
+
+    window.addEventListener("contextmenu", handleWindowContextMenu, true);
+    return () => {
+      window.removeEventListener("contextmenu", handleWindowContextMenu, true);
+    };
+  }, [openOverlayContextMenuAt]);
 
   const {
     notesRef,
@@ -887,28 +901,6 @@ export default function App() {
       <PluginElementsRenderer
         windowType="overlay"
         positionOffset={positionOffset}
-      />
-      <ListPopup
-        open={overlayContextMenuOpen}
-        position={overlayContextMenuPosition || undefined}
-        onClose={() => {
-          setOverlayContextMenuOpen(false);
-          setOverlayContextMenuPosition(null);
-        }}
-        items={overlayContextMenuItems}
-        className="overlay-context-menu"
-        textAlign="left"
-        onSelect={(id) => {
-          if (id === "toggleAlwaysOnTop") void toggleAlwaysOnTop();
-          if (id === "closeOverlay") void closeOverlayWindow();
-          if (id === "snapToEdge") void snapToNearestEdge();
-          if (id === "openSettingsWindow") void openSettingsWindow();
-          if (id === "quitApplication") void quitApplication();
-          if (id.startsWith("selectTab-")) {
-            const tabId = id.replace("selectTab-", "");
-            setSelectedKeyType(tabId);
-          }
-        }}
       />
     </div>
   );
