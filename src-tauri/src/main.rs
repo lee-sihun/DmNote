@@ -17,6 +17,9 @@ use anyhow::Result;
 use log::LevelFilter;
 use std::{thread, time::Duration};
 
+#[cfg(target_os = "macos")]
+use std::{path::PathBuf, process::Command};
+
 #[cfg(target_os = "windows")]
 use std::{fs, path::PathBuf};
 
@@ -114,6 +117,9 @@ fn main() {
                     .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             }
             configure_main_window(&app.handle());
+
+            #[cfg(target_os = "macos")]
+            launch_macos_dock_helper();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -438,6 +444,88 @@ fn register_dev_capability(app: &tauri::App) -> Result<(), Box<dyn std::error::E
 
     app.add_capability(builder)
         .map_err(|err| -> Box<dyn std::error::Error> { err.into() })
+}
+
+#[cfg(target_os = "macos")]
+fn launch_macos_dock_helper() {
+    let Some(helper_path) = resolve_macos_dock_helper_path() else {
+        log::warn!("macOS helper app not found; dock helper launch skipped");
+        return;
+    };
+
+    let mut cmd = Command::new("/usr/bin/open");
+    cmd.arg(&helper_path)
+        .arg("--args")
+        .arg("--main-pid")
+        .arg(std::process::id().to_string())
+        .arg("--main-bundle-id")
+        .arg("com.dmnote.desktop");
+
+    if let Some(bundle_path) = resolve_current_bundle_path() {
+        cmd.arg("--main-bundle-path").arg(bundle_path);
+    }
+
+    match cmd.status() {
+        Ok(status) if status.success() => {
+            log::info!("launched macOS dock helper: {}", helper_path.display());
+        }
+        Ok(status) => {
+            log::warn!(
+                "failed to launch macOS helper app {}: open exited with {status}",
+                helper_path.display()
+            );
+        }
+        Err(err) => {
+            log::warn!(
+                "failed to launch macOS helper app {}: {err}",
+                helper_path.display()
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_macos_dock_helper_path() -> Option<PathBuf> {
+    if let Some(bundle_path) = resolve_current_bundle_path() {
+        let bundled_helper = bundle_path
+            .join("Contents")
+            .join("Resources")
+            .join("DM NOTE.app");
+        if bundled_helper.is_dir() {
+            return Some(bundled_helper);
+        }
+    }
+
+    let dev_helper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("dmnote-helper")
+        .join("DM NOTE.app");
+    if dev_helper.is_dir() {
+        return Some(dev_helper);
+    }
+
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_current_bundle_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let macos_dir = exe.parent()?;
+    if macos_dir.file_name()? != "MacOS" {
+        return None;
+    }
+
+    let contents_dir = macos_dir.parent()?;
+    if contents_dir.file_name()? != "Contents" {
+        return None;
+    }
+
+    let bundle_dir = contents_dir.parent()?;
+    if bundle_dir.extension()? == "app" {
+        return Some(bundle_dir.to_path_buf());
+    }
+
+    None
 }
 
 #[cfg(target_os = "windows")]

@@ -6,5 +6,7 @@
     <string>DM NOTE needs to monitor keyboard and mouse input to display your keystrokes.</string>
     <key>NSAccessibilityUsageDescription</key>
     <string>DM NOTE needs accessibility access to capture keyboard and mouse events for the keystroke visualizer.</string>
+    <key>LSUIElement</key>
+    <true/>
 </dict>
 </plist>
