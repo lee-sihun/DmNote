@@ -603,6 +603,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   />
                 </div>
               </div>
+              {/*
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey("laboratory")}
@@ -617,6 +618,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleLaboratoryToggle}
                 />
               </div>
+              */}
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleTrayToggle}

@@ -18,7 +18,6 @@ type SettingToolProps = {
   onCloseSettings?: () => void;
   showAlert?: (message: string) => void;
   onOpenNoteSetting?: () => void;
-  onOpenLaboratory?: () => void;
 };
 
 const SettingTool = ({
@@ -27,7 +26,6 @@ const SettingTool = ({
   onCloseSettings,
   showAlert,
   onOpenNoteSetting,
-  onOpenLaboratory,
 }: SettingToolProps) => {
   const { t } = useTranslation();
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
@@ -35,7 +33,7 @@ const SettingTool = ({
   const [isExtrasOpen, setIsExtrasOpenLocal] = useState(false);
   const exportImportRef = useRef<HTMLButtonElement | null>(null);
   const extrasRef = useRef<HTMLButtonElement | null>(null);
-  const { noteEffect, laboratoryEnabled } = useSettingsStore();
+  const { noteEffect } = useSettingsStore();
   const setExtrasPopupOpen = useUIStore((state) => state.setExtrasPopupOpen);
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen
@@ -85,7 +83,6 @@ const SettingTool = ({
   }, []);
 
   const menuItems: ListItem[] = [
-    { id: "lab", label: t("tooltip.laboratory"), disabled: !laboratoryEnabled },
     { id: "note", label: t("tooltip.noteSettings"), disabled: !noteEffect },
   ];
 
@@ -205,9 +202,7 @@ const SettingTool = ({
                   onClose={() => setIsExtrasOpen(false)}
                   items={menuItems}
                   onSelect={(id) => {
-                    if (id === "lab") {
-                      onOpenLaboratory?.();
-                    } else if (id === "note") {
+                    if (id === "note") {
                       onOpenNoteSetting?.();
                     }
                   }}

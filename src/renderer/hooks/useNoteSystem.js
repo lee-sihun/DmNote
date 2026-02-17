@@ -43,7 +43,7 @@ const releaseAllNotes = (notesByKey, pool, lookup) => {
   }
 };
 
-export function useNoteSystem({ noteEffect, noteSettings, laboratoryEnabled }) {
+export function useNoteSystem({ noteEffect, noteSettings }) {
   const notesRef = useRef({});
   const noteEffectEnabled = useRef(true);
   const activeNotes = useRef(new Map());
@@ -57,7 +57,6 @@ export function useNoteSystem({ noteEffect, noteSettings, laboratoryEnabled }) {
   const notePoolRef = useRef([]);
   const noteLookupRef = useRef(new Map());
   const noteBufferRef = useRef(createNoteBuffer());
-  const labEnabledRef = useRef(false);
   const finalizeTimersRef = useRef(new Map());
   // 이벤트 기반 클린업을 위한 refs
   const cleanupTimerRef = useRef(null);
@@ -217,7 +216,7 @@ export function useNoteSystem({ noteEffect, noteSettings, laboratoryEnabled }) {
       Number(settings?.speed) || DEFAULT_NOTE_SETTINGS.speed;
     trackHeightRef.current =
       Number(settings?.trackHeight) || DEFAULT_NOTE_SETTINGS.trackHeight;
-    // 실험적 기능: delayed note
+    // 지연 기반 단/롱 노트 처리
     delayEnabledRef.current = !!settings?.delayedNoteEnabled;
     // 설정에서 짧은 노트 분리 대기(ms) - 이름은 shortNoteThresholdMs로 사용됨
     delayMsRef.current = Number(settings?.shortNoteThresholdMs) || 0;
@@ -229,10 +228,6 @@ export function useNoteSystem({ noteEffect, noteSettings, laboratoryEnabled }) {
   useEffect(() => {
     updateLabSettings(noteSettings || DEFAULT_NOTE_SETTINGS);
   }, [noteSettings, updateLabSettings]);
-
-  useEffect(() => {
-    labEnabledRef.current = !!laboratoryEnabled;
-  }, [laboratoryEnabled]);
 
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;

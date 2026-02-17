@@ -161,9 +161,6 @@ export default function App() {
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);
   const noteSettings = useSettingsStore((state) => state.noteSettings);
   const noteEffect = useSettingsStore((state) => state.noteEffect);
-  const laboratoryEnabled = useSettingsStore(
-    (state) => state.laboratoryEnabled
-  );
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled
@@ -179,17 +176,13 @@ export default function App() {
   } = useNoteSystem({
     noteEffect,
     noteSettings,
-    laboratoryEnabled,
   });
 
   const trackHeight =
     noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight;
 
-  // 키 딜레이 설정 (실험적 기능)
-  const keyDisplayDelayMs =
-    laboratoryEnabled && noteSettings?.keyDisplayDelayMs
-      ? noteSettings.keyDisplayDelayMs
-      : 0;
+  // 키 딜레이 설정
+  const keyDisplayDelayMs = Number(noteSettings?.keyDisplayDelayMs ?? 0);
 
   // 키 딜레이 값을 ref로 관리하여 클로저 문제 방지
   const keyDisplayDelayMsRef = useRef(keyDisplayDelayMs);
@@ -611,7 +604,6 @@ export default function App() {
             notesRef={notesRef}
             subscribe={subscribe}
             noteSettings={noteSettings}
-            laboratoryEnabled={laboratoryEnabled}
             noteBuffer={noteBuffer}
           />
         </Suspense>
