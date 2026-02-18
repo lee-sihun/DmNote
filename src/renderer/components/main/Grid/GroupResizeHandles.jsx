@@ -146,6 +146,7 @@ function isElementResizable(
   element,
   positions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   pluginElements
 ) {
@@ -153,6 +154,8 @@ function isElementResizable(
     // 키 요소는 항상 리사이즈 가능
     return true;
   } else if (element.type === "stat") {
+    return true;
+  } else if (element.type === "graph") {
     return true;
   } else if (element.type === "plugin") {
     const pluginEl = pluginElements.find((p) => p.fullId === element.id);
@@ -175,6 +178,7 @@ function getElementBounds(
   element,
   positions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   pluginElements
 ) {
@@ -196,6 +200,15 @@ function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
+  } else if (element.type === "graph" && element.index !== undefined) {
+    const pos = graphPositions?.[selectedKeyType]?.[element.index];
+    if (!pos) return null;
+    return {
+      x: pos.dx,
+      y: pos.dy,
+      width: pos.width || 200,
+      height: pos.height || 100,
+    };
   } else if (element.type === "plugin") {
     const pluginEl = pluginElements.find((p) => p.fullId === element.id);
     if (!pluginEl?.measuredSize) return null;
@@ -216,6 +229,7 @@ function calculateGroupBounds(
   selectedElements,
   positions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   pluginElements
 ) {
@@ -233,6 +247,7 @@ function calculateGroupBounds(
         element,
         positions,
         statPositions,
+        graphPositions,
         selectedKeyType,
         pluginElements
       )
@@ -244,6 +259,7 @@ function calculateGroupBounds(
       element,
       positions,
       statPositions,
+      graphPositions,
       selectedKeyType,
       pluginElements
     );
@@ -272,6 +288,7 @@ export default function GroupResizeHandles({
   selectedElements,
   positions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   pluginElements,
   zoom = 1,
@@ -299,6 +316,7 @@ export default function GroupResizeHandles({
     selectedElements,
     positions,
     statPositions,
+    graphPositions,
     selectedKeyType,
     pluginElements
   );
@@ -310,6 +328,7 @@ export default function GroupResizeHandles({
       element,
       positions,
       statPositions,
+      graphPositions,
       selectedKeyType,
       pluginElements
     ),
@@ -335,6 +354,7 @@ export default function GroupResizeHandles({
             element,
             positions,
             statPositions,
+            graphPositions,
             selectedKeyType,
             pluginElements
           )
@@ -346,6 +366,7 @@ export default function GroupResizeHandles({
             element,
             positions,
             statPositions,
+            graphPositions,
             selectedKeyType,
             pluginElements
           )
@@ -776,6 +797,8 @@ export default function GroupResizeHandles({
       groupData,
       positions,
       selectedKeyType,
+      statPositions,
+      graphPositions,
       pluginElements,
       selectedElements,
       zoom,
@@ -834,6 +857,8 @@ export default function GroupResizeHandles({
         const bounds = getElementBounds(
           element,
           positions,
+          statPositions,
+          graphPositions,
           selectedKeyType,
           pluginElements
         );
@@ -886,6 +911,7 @@ function getNonResizableElementIds(
   selectedElements,
   positions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   pluginElements
 ) {
@@ -896,6 +922,7 @@ function getNonResizableElementIds(
           element,
           positions,
           statPositions,
+          graphPositions,
           selectedKeyType,
           pluginElements
         )

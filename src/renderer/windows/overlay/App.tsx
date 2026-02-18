@@ -28,6 +28,7 @@ import { useAppBootstrap } from "@hooks/useAppBootstrap";
 import { useBuiltinStatsSubscription } from "@hooks/useBuiltinStatsSubscription";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
@@ -43,6 +44,7 @@ import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import StatItem from "@components/overlay/StatItem";
 import StatCounterLayer from "@components/overlay/StatCounterLayer";
+import GraphItem from "@components/overlay/GraphItem";
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -72,6 +74,7 @@ const PADDING = 30;
 const OverlayKey = Key as React.ComponentType<any>;
 const OverlayStatItem = StatItem as React.ComponentType<any>;
 const OverlayStatCounterLayer = StatCounterLayer as React.ComponentType<any>;
+const OverlayGraphItem = GraphItem as React.ComponentType<any>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -157,10 +160,26 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 메인에서 bridge를 통한 graphPositions 동기화 수신
+  useEffect(() => {
+    const unsubscribe = window.api.bridge.on<{
+      positions: Record<string, any[]>;
+    }>("graphPositions:sync", (data) => {
+      if (data?.positions) {
+        useGraphItemStore.setState((state) => ({
+          ...state,
+          positions: data.positions,
+        }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
   const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -544,10 +563,16 @@ export default function App() {
     [statPositions, selectedKeyType],
   );
 
+  const currentGraphPositions = useMemo<any[]>(
+    () => graphPositions[selectedKeyType] ?? [],
+    [graphPositions, selectedKeyType]
+  );
+
   const bounds = useMemo<Bounds | null>(() => {
     if (
       !currentPositions.length &&
       !currentStatPositions.length &&
+      !currentGraphPositions.length &&
       !pluginElements.length
     )
       return null;
@@ -573,6 +598,15 @@ export default function App() {
       ys.push(pos.dy);
       widths.push(pos.dx + (pos.width ?? 60));
       heights.push(pos.dy + (pos.height ?? 60));
+    });
+
+    // 그래프 요소 위치
+    currentGraphPositions.forEach((pos: any) => {
+      if (!pos || pos.hidden) return;
+      xs.push(pos.dx);
+      ys.push(pos.dy);
+      widths.push(pos.dx + (pos.width ?? 200));
+      heights.push(pos.dy + (pos.height ?? 100));
     });
 
     // 플러그인 요소 위치 (앵커 기반 계산 포함)
@@ -619,6 +653,7 @@ export default function App() {
   }, [
     currentPositions,
     currentStatPositions,
+    currentGraphPositions,
     pluginElements,
     selectedKeyType,
     currentKeys,
@@ -655,6 +690,22 @@ export default function App() {
       dy: position.dy + offsetY,
     }));
   }, [currentStatPositions, bounds, trackHeight, layoutVersion]);
+
+  const displayGraphPositions = useMemo<any[]>(() => {
+    if (!bounds || !currentGraphPositions.length) {
+      return currentGraphPositions;
+    }
+
+    const topOffset = trackHeight + PADDING;
+    const offsetX = PADDING - bounds.minX;
+    const offsetY = topOffset - bounds.minY;
+
+    return currentGraphPositions.map((position: any) => ({
+      ...position,
+      dx: position.dx + offsetX,
+      dy: position.dy + offsetY,
+    }));
+  }, [currentGraphPositions, bounds, trackHeight, layoutVersion]);
 
   // 오버레이의 위치 오프셋 계산
   const positionOffset = useMemo(() => {
@@ -884,6 +935,17 @@ export default function App() {
             label={label}
             position={position}
             counterEnabled={true}
+          />
+        );
+      })}
+      {displayGraphPositions.map((pos: any, index: number) => {
+        if (!pos || pos.hidden) return null;
+        const graphPosition = { ...pos, zIndex: pos.zIndex ?? index };
+        return (
+          <OverlayGraphItem
+            key={`graph-${selectedKeyType}-${index}`}
+            index={index}
+            position={graphPosition}
           />
         );
       })}

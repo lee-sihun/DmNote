@@ -15,7 +15,8 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, KeyMappings, KeyPositions,
-        FontSettings, FontType, NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        FontSettings, FontType, GraphPositions, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
+        StatPositions,
     },
 };
 
@@ -32,6 +33,7 @@ struct PresetFile {
     keys: Option<KeyMappings>,
     key_positions: Option<KeyPositions>,
     stat_positions: Option<StatPositions>,
+    graph_positions: Option<GraphPositions>,
     background_color: Option<String>,
     note_settings: Option<NoteSettings>,
     note_effect: Option<bool>,
@@ -86,16 +88,25 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
     };
 
     let snapshot = state.store.snapshot();
-    let used_font_families = collect_used_font_families(&snapshot.key_positions, &snapshot.stat_positions);
+    let used_font_families = collect_used_font_families(
+        &snapshot.key_positions,
+        &snapshot.stat_positions,
+        &snapshot.graph_positions,
+    );
     let (font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
-    let (key_positions, stat_positions, embedded_local_images) =
-        build_preset_image_payload(&snapshot.key_positions, &snapshot.stat_positions)?;
+    let (key_positions, stat_positions, graph_positions, embedded_local_images) =
+        build_preset_image_payload(
+            &snapshot.key_positions,
+            &snapshot.stat_positions,
+            &snapshot.graph_positions,
+        )?;
 
     let preset = PresetFile {
         keys: Some(snapshot.keys),
         key_positions: Some(key_positions),
         stat_positions: Some(stat_positions),
+        graph_positions: Some(graph_positions),
         background_color: Some(snapshot.background_color),
         note_settings: Some(snapshot.note_settings),
         note_effect: Some(snapshot.note_effect),
@@ -143,6 +154,7 @@ pub fn preset_load(
     let keys = preset.keys.unwrap_or_else(|| default_keys().clone());
     let mut positions = preset.key_positions.unwrap_or_else(|| default_positions().clone());
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
+    let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -178,6 +190,7 @@ pub fn preset_load(
         &app,
         &mut positions,
         &mut stat_positions,
+        &mut graph_positions,
         preset.embedded_local_images.as_deref(),
     )?;
 
@@ -187,6 +200,7 @@ pub fn preset_load(
             store.keys = keys.clone();
             store.key_positions = positions.clone();
             store.stat_positions = stat_positions.clone();
+            store.graph_positions = graph_positions.clone();
             store.custom_tabs = custom_tabs.clone();
             store.selected_key_type = selected_key_type.clone();
         })
@@ -232,6 +246,8 @@ pub fn preset_load(
         .map_err(|err| err.to_string())?;
     app.emit("statPositions:changed", &stat_positions)
         .map_err(|err| err.to_string())?;
+    app.emit("graphPositions:changed", &graph_positions)
+        .map_err(|err| err.to_string())?;
     app.emit(
         "customTabs:changed",
         &crate::commands::keys::CustomTabChangePayload {
@@ -263,6 +279,7 @@ pub fn preset_load(
 fn collect_used_font_families(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
+    graph_positions: &GraphPositions,
 ) -> HashSet<String> {
     let mut used = HashSet::new();
 
@@ -277,6 +294,13 @@ fn collect_used_font_families(
         for stat_position in positions {
             maybe_insert_font_family(stat_position.position.font_family.as_ref(), &mut used);
             maybe_insert_font_family(stat_position.position.counter.font_family.as_ref(), &mut used);
+        }
+    }
+
+    for positions in graph_positions.values() {
+        for graph_position in positions {
+            maybe_insert_font_family(graph_position.position.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(graph_position.position.counter.font_family.as_ref(), &mut used);
         }
     }
 
@@ -455,9 +479,11 @@ fn normalize_font_extension(extension: Option<&str>) -> String {
 fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
-) -> Result<(KeyPositions, StatPositions, Vec<EmbeddedLocalImage>), String> {
+    graph_positions: &GraphPositions,
+) -> Result<(KeyPositions, StatPositions, GraphPositions, Vec<EmbeddedLocalImage>), String> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
+    let mut exported_graph_positions = graph_positions.clone();
     let mut embedded_local_images = Vec::new();
     let mut path_to_image_id: HashMap<String, String> = HashMap::new();
 
@@ -491,9 +517,25 @@ fn build_preset_image_payload(
         }
     }
 
+    for positions in exported_graph_positions.values_mut() {
+        for graph_position in positions.iter_mut() {
+            rewrite_position_image_reference(
+                &mut graph_position.position.active_image,
+                &mut embedded_local_images,
+                &mut path_to_image_id,
+            )?;
+            rewrite_position_image_reference(
+                &mut graph_position.position.inactive_image,
+                &mut embedded_local_images,
+                &mut path_to_image_id,
+            )?;
+        }
+    }
+
     Ok((
         exported_key_positions,
         exported_stat_positions,
+        exported_graph_positions,
         embedded_local_images,
     ))
 }
@@ -567,6 +609,7 @@ fn restore_preset_local_images(
     app: &AppHandle,
     key_positions: &mut KeyPositions,
     stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
     embedded_local_images: Option<&[EmbeddedLocalImage]>,
 ) -> Result<(), String> {
     let has_any_images = key_positions.values().any(|positions| {
@@ -578,6 +621,11 @@ fn restore_preset_local_images(
         positions.iter().any(|stat_position| {
             option_has_non_empty_text(&stat_position.position.active_image)
                 || option_has_non_empty_text(&stat_position.position.inactive_image)
+        })
+    }) || graph_positions.values().any(|positions| {
+        positions.iter().any(|graph_position| {
+            option_has_non_empty_text(&graph_position.position.active_image)
+                || option_has_non_empty_text(&graph_position.position.inactive_image)
         })
     });
 
@@ -630,6 +678,23 @@ fn restore_preset_local_images(
                 &embedded_map,
                 &mut restored_path_cache,
                 &mut stat_position.position.inactive_image,
+            )?;
+        }
+    }
+
+    for positions in graph_positions.values_mut() {
+        for graph_position in positions.iter_mut() {
+            restore_position_image_reference(
+                &images_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut graph_position.position.active_image,
+            )?;
+            restore_position_image_reference(
+                &images_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut graph_position.position.inactive_image,
             )?;
         }
     }

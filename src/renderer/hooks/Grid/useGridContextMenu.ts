@@ -39,6 +39,7 @@ interface UseGridContextMenuParams {
 interface UseGridContextMenuReturn {
   getKeyMenuItems: (contextIndex: number | null) => MenuItem[];
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
+  getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null
   ) => MenuItem[];
@@ -162,11 +163,22 @@ export function useGridContextMenu({
     [t]
   );
 
+  const getGraphMenuItems = useCallback(
+    (_contextIndex: number | null): MenuItem[] => [
+      { id: "delete", label: t("contextMenu.deleteGraph") },
+      { id: "duplicate", label: t("contextMenu.duplicateGraph") },
+      { id: "bringToFront", label: t("contextMenu.bringToFront") },
+      { id: "sendToBack", label: t("contextMenu.sendToBack") },
+    ],
+    [t]
+  );
+
   const getGridMenuItems = useCallback(
     (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
         { id: "add", label: t("tooltip.addKey") },
         { id: "addStat", label: t("contextMenu.addStat") },
+        { id: "addGraph", label: t("contextMenu.addGraph") },
       ];
       const bottomBaseItems: MenuItem[] = [
         { id: "tabCss", label: t("contextMenu.tabCssSetting") },
@@ -220,6 +232,7 @@ export function useGridContextMenu({
   return {
     getKeyMenuItems,
     getStatMenuItems,
+    getGraphMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,

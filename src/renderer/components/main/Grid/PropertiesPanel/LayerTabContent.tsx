@@ -10,6 +10,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
@@ -23,7 +24,7 @@ import OpenEyeIcon from "@assets/svgs/open_eye.svg";
 // ============================================================================
 
 interface LayerItem {
-  type: "key" | "stat" | "plugin";
+  type: "key" | "stat" | "graph" | "plugin";
   id: string;
   index?: number; // key/stat인 경우
   name: string;
@@ -95,6 +96,24 @@ const StatIcon: React.FC = () => (
   </svg>
 );
 
+const GraphIcon: React.FC = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M2 10.5L5.2 7.3L7.4 8.8L12 4.2"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 4.2H9.8"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 // ============================================================================
 // 레이어 탭 콘텐츠 컴포넌트
 // ============================================================================
@@ -108,6 +127,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -249,6 +269,27 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       });
     });
 
+    // 그래프 아이템 추가
+    const currentGraphPositions = graphPositions[selectedKeyType] || [];
+    currentGraphPositions.forEach((pos, index) => {
+      const name =
+        pos.statType === "kpsAvg"
+          ? "AVG Graph"
+          : pos.statType === "kpsMax"
+            ? "MAX Graph"
+            : pos.statType === "total"
+              ? "Total Graph"
+              : "KPS Graph";
+      items.push({
+        type: "graph",
+        id: `graph-${index}`,
+        index,
+        name,
+        zIndex: pos.zIndex ?? index,
+        hidden: !!pos.hidden,
+      });
+    });
+
     // 플러그인 아이템 추가
     pluginElements.forEach((el) => {
       items.push({
@@ -264,7 +305,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     items.sort((a, b) => b.zIndex - a.zIndex);
 
     return items;
-  }, [positions, statPositions, selectedKeyType, keyMappings, pluginElements]);
+  }, [
+    positions,
+    statPositions,
+    graphPositions,
+    selectedKeyType,
+    keyMappings,
+    pluginElements,
+  ]);
 
   // layerItems를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const layerItemsRef = useRef(layerItems);
@@ -295,6 +343,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         toggleSelection({ type: "key", id: item.id, index: item.index });
       } else if (item.type === "stat" && item.index !== undefined) {
         toggleSelection({ type: "stat", id: item.id, index: item.index });
+      } else if (item.type === "graph" && item.index !== undefined) {
+        toggleSelection({ type: "graph", id: item.id, index: item.index });
       } else if (item.type === "plugin") {
         toggleSelection({ type: "plugin", id: item.id });
       }
@@ -350,6 +400,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           } else if (rangeItem.type === "stat" && rangeItem.index !== undefined) {
             rangeElements.push({
               type: "stat",
+              id: rangeItem.id,
+              index: rangeItem.index,
+            });
+          } else if (rangeItem.type === "graph" && rangeItem.index !== undefined) {
+            rangeElements.push({
+              type: "graph",
               id: rangeItem.id,
               index: rangeItem.index,
             });
@@ -409,6 +465,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             toggleSelection({ type: "stat", id: item.id, index: item.index });
           }
         }
+      } else if (item.type === "graph" && item.index !== undefined) {
+        if (isPrimaryModifierPressed) {
+          toggleSelection({ type: "graph", id: item.id, index: item.index });
+        } else {
+          if (isAlreadySelected) {
+            pendingDeselectTimerRef.current = window.setTimeout(() => {
+              clearSelection();
+              pendingDeselectTimerRef.current = null;
+            }, 50);
+          } else {
+            clearSelection();
+            toggleSelection({ type: "graph", id: item.id, index: item.index });
+          }
+        }
       } else if (item.type === "plugin") {
         if (isPrimaryModifierPressed) {
           toggleSelection({ type: "plugin", id: item.id });
@@ -449,11 +519,18 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       useHistoryStore
         .getState()
-        .pushState(km, pos, currentStatPositions as any, currentPluginElements);
+        .pushState(
+          km,
+          pos,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements
+        );
 
       if (item.type === "key" && item.index !== undefined) {
         const currentPositions = pos[selectedKeyType] || [];
@@ -516,6 +593,41 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
+      if (item.type === "graph" && item.index !== undefined) {
+        const current = useGraphItemStore.getState().positions;
+        const currentPositions = current[selectedKeyType] || [];
+        const target = currentPositions[item.index];
+        if (!target) return;
+
+        const updatedPositions = { ...current };
+        const updatedModePositions = [...currentPositions];
+        updatedModePositions[item.index] = {
+          ...target,
+          hidden: !target.hidden,
+        };
+        updatedPositions[selectedKeyType] = updatedModePositions;
+
+        useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useGraphItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.graphItems.updatePositions(updatedPositions);
+        } catch (error) {
+          console.error("Failed to toggle graph item visibility", error);
+        } finally {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        }
+
+        try {
+          window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+            positions: updatedPositions,
+          });
+        } catch {
+          // ignore
+        }
+
+        return;
+      }
+
       if (item.type === "plugin") {
         const el = currentPluginElements.find((p) => p.fullId === item.id);
         if (!el) return;
@@ -558,6 +670,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           toggleSelection({ type: "key", id: item.id, index: item.index });
         } else if (item.type === "stat" && item.index !== undefined) {
           toggleSelection({ type: "stat", id: item.id, index: item.index });
+        } else if (item.type === "graph" && item.index !== undefined) {
+          toggleSelection({ type: "graph", id: item.id, index: item.index });
         } else if (item.type === "plugin") {
           toggleSelection({ type: "plugin", id: item.id });
         }
@@ -592,6 +706,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           .filter((el) => el.type === "stat" && el.index !== undefined)
           .map((el) => el.index as number);
 
+        const graphsToDelete = selectedElements
+          .filter((el) => el.type === "graph" && el.index !== undefined)
+          .map((el) => el.index as number);
+
         const pluginsToDelete = selectedElements
           .filter((el) => el.type === "plugin")
           .map((el) => el.id);
@@ -600,15 +718,23 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         if (
           keysToDelete.length > 0 ||
           statsToDelete.length > 0 ||
+          graphsToDelete.length > 0 ||
           pluginsToDelete.length > 0
         ) {
           const { keyMappings: km, positions: pos } = useKeyStore.getState();
           const currentStatPositions = useStatItemStore.getState().positions;
+          const currentGraphPositions = useGraphItemStore.getState().positions;
           const currentPluginElements =
             usePluginDisplayElementStore.getState().elements;
           useHistoryStore
             .getState()
-            .pushState(km, pos, currentStatPositions as any, currentPluginElements);
+            .pushState(
+              km,
+              pos,
+              currentStatPositions as any,
+              currentGraphPositions as any,
+              currentPluginElements
+            );
         }
 
         // 선택 해제
@@ -682,6 +808,36 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           }
         }
 
+        // 그래프 요소 배치 삭제
+        if (graphsToDelete.length > 0) {
+          const current = useGraphItemStore.getState().positions;
+          const posArray = current[selectedKeyType] || [];
+          const deleteSet = new Set(graphsToDelete);
+
+          const updatedPositions = {
+            ...current,
+            [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
+          };
+
+          useGraphItemStore.getState().setLocalUpdateInProgress(true);
+          useGraphItemStore.getState().setPositions(updatedPositions);
+          try {
+            await window.api.graphItems.updatePositions(updatedPositions);
+          } catch (error) {
+            console.error("Failed to delete graph items", error);
+          } finally {
+            useGraphItemStore.getState().setLocalUpdateInProgress(false);
+          }
+
+          try {
+            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+              positions: updatedPositions,
+            });
+          } catch {
+            // ignore
+          }
+        }
+
         // 플러그인 요소 배치 삭제
         if (pluginsToDelete.length > 0) {
           const currentElements =
@@ -711,12 +867,19 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 히스토리 저장
       const currentPositions = useKeyStore.getState().positions;
       const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
       useHistoryStore
         .getState()
-        .pushState(km, currentPositions, currentStatPositions as any, currentPluginElements);
+        .pushState(
+          km,
+          currentPositions,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements,
+        );
 
       // 아이템 재정렬
       const [removed] = items.splice(fromIndex, 1);
@@ -735,6 +898,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const updatedStatPositions = { ...useStatItemStore.getState().positions };
       const currentStatModePositions = [
         ...(updatedStatPositions[selectedKeyType] || []),
+      ];
+      // 그래프 positions 복사 및 업데이트
+      const updatedGraphPositions = {
+        ...useGraphItemStore.getState().positions,
+      };
+      const currentGraphModePositions = [
+        ...(updatedGraphPositions[selectedKeyType] || []),
       ];
 
       items.forEach((item, idx) => {
@@ -755,6 +925,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               zIndex: newZIndex,
             };
           }
+        } else if (item.type === "graph" && item.index !== undefined) {
+          if (currentGraphModePositions[item.index]) {
+            currentGraphModePositions[item.index] = {
+              ...currentGraphModePositions[item.index],
+              zIndex: newZIndex,
+            };
+          }
         } else if (item.type === "plugin") {
           // 플러그인 z-index 업데이트
           usePluginDisplayElementStore.getState().updateElement(item.id, {
@@ -770,18 +947,24 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 통계 positions 일괄 업데이트
       updatedStatPositions[selectedKeyType] = currentStatModePositions;
       useStatItemStore.getState().setPositions(updatedStatPositions);
+      // 그래프 positions 일괄 업데이트
+      updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
+      useGraphItemStore.getState().setPositions(updatedGraphPositions);
 
       // 백엔드/오버레이 동기화 (레이어 정렬 결과 즉시 반영)
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
       try {
         await window.api.keys.updatePositions(updatedPositions);
         await window.api.statItems.updatePositions(updatedStatPositions);
+        await window.api.graphItems.updatePositions(updatedGraphPositions);
       } catch (error) {
         console.error("Failed to reorder layers", error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
         useStatItemStore.getState().setLocalUpdateInProgress(false);
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
 
       try {
@@ -795,6 +978,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
           positions: updatedStatPositions,
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+          positions: updatedGraphPositions,
         });
       } catch {
         // ignore
@@ -944,6 +1134,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     <KeyIcon />
                   ) : item.type === "stat" ? (
                     <StatIcon />
+                  ) : item.type === "graph" ? (
+                    <GraphIcon />
                   ) : (
                     <PluginIcon />
                   )}

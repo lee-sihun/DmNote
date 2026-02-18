@@ -3,6 +3,7 @@ import { getCounterSnapshot } from "@stores/keyCounterSignals";
 import type { KeyCounters, KeyMappings, KeyPositions } from "@src/types/keys";
 import type { PluginDisplayElementInternal } from "@src/types/api";
 import type { StatItemPositions } from "@src/types/statItems";
+import type { GraphItemPositions } from "@src/types/graphItems";
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)
 type SerializablePluginElement = Omit<
@@ -14,6 +15,7 @@ interface HistoryState {
   keyMappings: KeyMappings;
   positions: KeyPositions;
   statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
   pluginElements?: SerializablePluginElement[];
   keyCounters: KeyCounters;
 }
@@ -27,18 +29,21 @@ interface HistoryStore {
     keyMappings: KeyMappings,
     positions: KeyPositions,
     statPositions: StatItemPositions,
+    graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[]
   ) => void;
   undo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
+    currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => HistoryState | null;
   redo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
+    currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => HistoryState | null;
   clear: () => void;
@@ -78,6 +83,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     keyMappings: KeyMappings,
     positions: KeyPositions,
     statPositions: StatItemPositions,
+    graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[]
   ) => {
     set((state) => {
@@ -85,6 +91,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
         keyMappings: JSON.parse(JSON.stringify(keyMappings)),
         positions: JSON.parse(JSON.stringify(positions)),
         statPositions: JSON.parse(JSON.stringify(statPositions)),
+        graphPositions: JSON.parse(JSON.stringify(graphPositions)),
         pluginElements: pluginElements
           ? serializePluginElements(pluginElements)
           : undefined,
@@ -108,6 +115,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
+    currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => {
     const state = get();
@@ -121,6 +129,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
       keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
       positions: JSON.parse(JSON.stringify(currentPositions)),
       statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
+      graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
         : undefined,
@@ -139,6 +148,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
+    currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[]
   ) => {
     const state = get();
@@ -152,6 +162,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
       keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
       positions: JSON.parse(JSON.stringify(currentPositions)),
       statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
+      graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
         : undefined,

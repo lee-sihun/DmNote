@@ -9,6 +9,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
@@ -18,6 +19,7 @@ import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { translatePluginMessage } from "@utils/pluginI18n";
 import type { KeyPosition, KeyCounterSettings } from "@src/types/keys";
 import type { StatItemPosition, StatItemType } from "@src/types/statItems";
+import type { GraphItemPosition } from "@src/types/graphItems";
 import type { PluginSettingSchema, PluginMessages } from "@src/types/api";
 import {
   createDefaultCounterSettings,
@@ -106,6 +108,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const positions = useKeyStore((state) => state.positions);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const statItemPositions = useStatItemStore((state) => state.positions);
+  const graphItemPositions = useGraphItemStore((state) => state.positions);
   const { useCustomCSS } = useSettingsStore();
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
@@ -139,6 +142,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
   const selectedStatElements = selectedElements.filter(
     (el) => el.type === "stat",
+  );
+  const selectedGraphElements = selectedElements.filter(
+    (el) => el.type === "graph",
   );
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === "key" || el.type === "stat",
@@ -205,6 +211,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatIndex !== null
       ? (statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null)
       : null;
+  const singleGraphIndex =
+    selectedGraphElements.length === 1 ? selectedGraphElements[0].index : null;
+  const singleGraphPosition: GraphItemPosition | null =
+    singleGraphIndex !== null
+      ? (graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null)
+      : null;
 
   // 로컬 상태 (실시간 편집용)
   const [localState, setLocalState] = useState<
@@ -226,6 +238,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 이미지 픽커 상태
   const [showImagePicker, setShowImagePicker] = useState(false);
   const imageButtonRef = useRef<HTMLButtonElement>(null);
+  const [showGraphImagePicker, setShowGraphImagePicker] = useState(false);
+  const graphImageButtonRef = useRef<HTMLButtonElement>(null);
+  const [graphClassNameDraft, setGraphClassNameDraft] = useState("");
 
   // 다중 선택용 이미지 픽커 상태
   const [showBatchImagePicker, setShowBatchImagePicker] = useState(false);
@@ -450,6 +465,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ]);
 
   useEffect(() => {
+    setGraphClassNameDraft(singleGraphPosition?.className || "");
+  }, [
+    selectedKeyType,
+    singleGraphIndex,
+    singleGraphPosition?.className,
+  ]);
+
+  useEffect(() => {
     if (pluginSettingsPanel) {
       setPluginPanelSettings(pluginSettingsPanel.settings || {});
     }
@@ -521,6 +544,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     keyTypeChangedRef.current = false;
 
     setShowImagePicker(false);
+    setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
     setIsListening(false);
   }, [
@@ -733,6 +757,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       manuallyClosedRef.current = true;
       setIsPanelVisible(false);
       setShowImagePicker(false);
+      setShowGraphImagePicker(false);
       setShowBatchImagePicker(false);
     }
   }, [isPanelVisible, selectedElements.length]);
@@ -768,12 +793,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
+    pushHistoryState(
+      keyMappings,
+      positions,
+      statItemPositions,
+      graphItemPositions,
+      pluginElements,
+    );
     pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
     statItemPositions,
+    graphItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -784,12 +816,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(keyMappings, positions, statItemPositions, pluginElements);
+    pushHistoryState(
+      keyMappings,
+      positions,
+      statItemPositions,
+      graphItemPositions,
+      pluginElements,
+    );
     pluginTransformHistoryRef.current = selectedPluginElement.fullId;
   }, [
     keyMappings,
     positions,
     statItemPositions,
+    graphItemPositions,
     pluginElements,
     pushHistoryState,
     selectedPluginElement,
@@ -976,7 +1015,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, current, currentPluginElements);
+      pushHistoryState(
+        km,
+        currentPositions,
+        current,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
 
       const nextList = list.map((pos, i) =>
         i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
@@ -1069,7 +1114,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(km, currentPositions, current, currentPluginElements);
+      pushHistoryState(
+        km,
+        currentPositions,
+        current,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
 
       const nextList = list.map((pos, i) => {
         const update = updateMap.get(i);
@@ -1090,6 +1141,52 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         });
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [pushHistoryState, selectedKeyType],
+  );
+
+  const handleGraphUpdate = useCallback(
+    (data: Partial<GraphItemPosition> & { index: number }) => {
+      const { index, ...updates } = data;
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (!list[index]) return;
+
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        currentPositions,
+        useStatItemStore.getState().positions,
+        current,
+        currentPluginElements,
+      );
+
+      const nextList = list.map((pos, i) =>
+        i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
+      );
+      const nextPositions = { ...current, [mode]: nextList };
+
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setPositions(nextPositions);
+      window.api.graphItems
+        .updatePositions(nextPositions)
+        .catch((error) => {
+          console.error("Failed to update graph item", error);
+        })
+        .finally(() => {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        });
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
           positions: nextPositions,
         });
       } catch {
@@ -2325,7 +2422,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 플러그인 요소가 선택된 경우 (키/통계 요소가 없을 때만)
   if (
     selectedPluginElements.length > 0 &&
-    selectedKeyLikeElements.length === 0
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0
   ) {
     const pluginTitle =
       selectedPluginDefinition?.name ||
@@ -2443,6 +2541,389 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // 단일 그래프 요소 선택인 경우
+  if (
+    selectedGraphElements.length === 1 &&
+    !!singleGraphPosition &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    const graphShapeOptions = [
+      {
+        label: t("propertiesPanel.graphShapeLine") || "Line",
+        value: "line",
+      },
+      {
+        label: t("propertiesPanel.graphShapeBar") || "Bar",
+        value: "bar",
+      },
+    ];
+
+    const resolvedGraphStatType =
+      (singleGraphPosition.statType as StatItemType) || "kps";
+    const graphTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
+
+    return (
+      <div
+        ref={setPanelElement}
+        className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      >
+        <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+          <span className="text-[#DBDEE8] text-style-2 truncate max-w-[120px]">
+            {graphTitle}
+          </span>
+          <div className="flex items-center gap-[4px]">
+            <button
+              onClick={handleToggleMode}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+            >
+              <ModeToggleIcon mode="layer" />
+            </button>
+            <button
+              onClick={handleTogglePanel}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t("propertiesPanel.closePanel") || "Close"}
+            >
+              <SidebarToggleIcon isOpen={true} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 properties-panel-overlay-scroll">
+          <div className="properties-panel-overlay-viewport">
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <PropertyRow label={t("propertiesPanel.position") || "Position"}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      dx: value,
+                    } as any)
+                  }
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      dy: value,
+                    } as any)
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
+                />
+              </PropertyRow>
+
+              <PropertyRow label={t("propertiesPanel.size") || "Size"}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.width || 200)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      width: Math.max(20, value),
+                    } as any)
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.height || 100)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      height: Math.max(20, value),
+                    } as any)
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+
+              <SectionDivider />
+
+              <PropertyRow
+                label={t("propertiesPanel.graphShape") || "Graph Shape"}
+              >
+                <Dropdown
+                  options={graphShapeOptions}
+                  value={singleGraphPosition.graphType || "line"}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphType: value as any,
+                    } as any)
+                  }
+                />
+              </PropertyRow>
+
+              {(singleGraphPosition.graphType || "line") === "line" && (
+                <div className="flex justify-between items-center w-full h-[23px]">
+                  <p className="text-white text-style-2">
+                    {t("propertiesPanel.graphShowAverageLine") ||
+                      "Show Average Line"}
+                  </p>
+                  <Checkbox
+                    checked={singleGraphPosition.showAvgLine ?? true}
+                    onChange={() =>
+                      handleGraphUpdate({
+                        index: singleGraphIndex!,
+                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      } as any)
+                    }
+                  />
+                </div>
+              )}
+
+              <PropertyRow
+                label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.graphSpeed || 1000)}
+                  width="62px"
+                  onChange={(value) => {
+                    const clamped = Math.max(500, Math.min(5000, value));
+                    const snapped = Math.round(clamped / 100) * 100;
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphSpeed: snapped,
+                    } as any);
+                  }}
+                  min={500}
+                  max={5000}
+                  suffix="ms"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.graphColor") || "Graph Color"}
+              >
+                <ColorInput
+                  value={singleGraphPosition.graphColor || "#86EFAC"}
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <SectionDivider />
+
+              <PropertyRow
+                label={t("propertiesPanel.backgroundColor") || "Background Color"}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.backgroundColor || "rgba(17, 17, 20, 0.9)"
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      backgroundColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderColor") || "Border Color"}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.borderColor || "rgba(255, 255, 255, 0.1)"
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderColor: value,
+                    } as any)
+                  }
+                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderWidth") || "Border Width"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderWidth ?? 1)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderWidth: Math.max(0, Math.min(20, value)),
+                    } as any)
+                  }
+                  min={0}
+                  max={20}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.borderRadius") || "Border Radius"}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderRadius ?? 8)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      borderRadius: Math.max(0, Math.min(100, value)),
+                    } as any)
+                  }
+                  min={0}
+                  max={100}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t("propertiesPanel.customImage") || "Custom Image"}
+              >
+                <button
+                  ref={graphImageButtonRef}
+                  type="button"
+                  className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                    showGraphImagePicker
+                      ? "border-[#459BF8]"
+                      : "border-[#3A3943]"
+                  } text-[#DBDEE8] text-style-4`}
+                  onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
+                >
+                  {t("propertiesPanel.configure") || "Configure"}
+                </button>
+              </PropertyRow>
+
+              {useCustomCSS && (
+                <>
+                  <SectionDivider />
+
+                  <div className="flex justify-between items-center w-full h-[23px]">
+                    <p className="text-white text-style-2">
+                      {t("propertiesPanel.useInlineStyles") || "인라인 스타일 우선"}
+                    </p>
+                    <Checkbox
+                      checked={singleGraphPosition.useInlineStyles ?? false}
+                      onChange={() =>
+                        handleGraphUpdate({
+                          index: singleGraphIndex!,
+                          useInlineStyles: !(
+                            singleGraphPosition.useInlineStyles ?? false
+                          ),
+                        } as any)
+                      }
+                    />
+                  </div>
+
+                  <PropertyRow label={t("propertiesPanel.className") || "클래스"}>
+                    <TextInput
+                      value={graphClassNameDraft}
+                      onChange={setGraphClassNameDraft}
+                      onBlur={() =>
+                        handleGraphUpdate({
+                          index: singleGraphIndex!,
+                          className: graphClassNameDraft || "",
+                        } as any)
+                      }
+                      placeholder="className"
+                      width="90px"
+                    />
+                  </PropertyRow>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {showGraphImagePicker && graphImageButtonRef.current && (
+          <ImagePicker
+            open={showGraphImagePicker}
+            referenceRef={graphImageButtonRef}
+            panelElement={panelElement}
+            idleImage={singleGraphPosition.inactiveImage || ""}
+            activeImage={singleGraphPosition.activeImage || ""}
+            idleTransparent={false}
+            activeTransparent={false}
+            idleImageFit={
+              singleGraphPosition.idleImageFit ||
+              singleGraphPosition.imageFit ||
+              "cover"
+            }
+            activeImageFit={
+              singleGraphPosition.activeImageFit ||
+              singleGraphPosition.imageFit ||
+              "cover"
+            }
+            onIdleImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                inactiveImage: imageUrl,
+              } as any)
+            }
+            onActiveImageChange={(imageUrl: string) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImage: imageUrl,
+              } as any)
+            }
+            onIdleTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                idleTransparent: value,
+              } as any)
+            }
+            onActiveTransparentChange={(value: boolean) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeTransparent: value,
+              } as any)
+            }
+            onIdleImageFitChange={(fit: any) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                idleImageFit: fit,
+              } as any)
+            }
+            onActiveImageFitChange={(fit: any) =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImageFit: fit,
+              } as any)
+            }
+            onIdleImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                inactiveImage: "",
+              } as any)
+            }
+            onActiveImageReset={() =>
+              handleGraphUpdate({
+                index: singleGraphIndex!,
+                activeImage: "",
+              } as any)
+            }
+            onClose={() => setShowGraphImagePicker(false)}
+          />
+        )}
       </div>
     );
   }

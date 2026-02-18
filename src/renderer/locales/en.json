@@ -208,6 +208,7 @@
     "reset": "Reset",
     "removeKey": "Remove key [{{name}}]?",
     "removeStat": "Remove stat [{{name}}]?",
+    "removeGraph": "Remove graph [{{name}}]?",
     "remove": "Remove"
   },
   "tabs": {
@@ -252,6 +253,8 @@
     "deleteSelected": "Delete Selection",
     "duplicateStat": "Duplicate Stat",
     "deleteStat": "Delete Stat",
+    "duplicateGraph": "Duplicate Graph",
+    "deleteGraph": "Delete Graph",
     "noteSetting": "Note Setting",
     "counterSetting": "Counter Setting",
     "counterReset": "Reset Counter",
@@ -261,6 +264,7 @@
     "sendBackward": "Send Backward",
     "tabCssSetting": "Tab CSS Settings",
     "addStat": "Add Stat",
+    "addGraph": "Add Graph"
     "quitApp": "Quit Application",
     "snapToEdge": "Snap to Edge",
     "selectTab": "Select Tab"
@@ -389,6 +393,14 @@
     "keyMapping": "Key Mapping",
     "statType": "Stat Type",
     "statKpsType": "KPS Type",
+    "graphType": "Stat Type",
+    "graphKpsType": "KPS Type",
+    "graphShape": "Graph Shape",
+    "graphShapeLine": "Line",
+    "graphShapeBar": "Bar",
+    "graphShowAverageLine": "Show Average Line",
+    "graphSpeed": "Graph Speed",
+    "graphColor": "Graph Color",
     "pressAnyKey": "Press any key",
     "clickToSet": "Click to set",
     "customImage": "Custom Image",

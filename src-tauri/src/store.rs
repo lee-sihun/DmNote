@@ -18,7 +18,7 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, KeyCounters, KeyMappings, KeyPositions, NoteSettings, OverlayBounds,
-        FontType, StatPositions,
+        FontType, GraphPositions, StatPositions,
         SettingsState,
     },
 };
@@ -126,6 +126,14 @@ impl AppStore {
         Ok(guard.stat_positions.clone())
     }
 
+    pub fn update_graph_positions(&self, positions: GraphPositions) -> Result<GraphPositions> {
+        let mut guard = self.state.write();
+        guard.graph_positions = positions.clone();
+        *guard = normalize_state(guard.clone());
+        self.persist_locked(&guard)?;
+        Ok(guard.graph_positions.clone())
+    }
+
     pub fn set_key_counters(&self, counters: KeyCounters) -> Result<KeyCounters> {
         let mut guard = self.state.write();
         guard.key_counters = counters.clone();
@@ -213,6 +221,9 @@ impl AppStore {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("statPositions") {
+                reorder(v);
+            }
+            if let Some(v) = obj.get_mut("graphPositions") {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("keyCounters") {
@@ -383,6 +394,11 @@ fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut AppStoreData) 
             option_has_non_empty_text(&stat_position.position.active_image)
                 || option_has_non_empty_text(&stat_position.position.inactive_image)
         })
+    }) || data.graph_positions.values().any(|positions| {
+        positions.iter().any(|graph_position| {
+            option_has_non_empty_text(&graph_position.position.active_image)
+                || option_has_non_empty_text(&graph_position.position.inactive_image)
+        })
     });
 
     if !has_any_images {
@@ -414,6 +430,19 @@ fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut AppStoreData) 
             changed |= migrate_image_reference_to_app_data(
                 &images_dir,
                 &mut stat_position.position.inactive_image,
+            );
+        }
+    }
+
+    for positions in data.graph_positions.values_mut() {
+        for graph_position in positions.iter_mut() {
+            changed |= migrate_image_reference_to_app_data(
+                &images_dir,
+                &mut graph_position.position.active_image,
+            );
+            changed |= migrate_image_reference_to_app_data(
+                &images_dir,
+                &mut graph_position.position.inactive_image,
             );
         }
     }
@@ -560,6 +589,19 @@ fn collect_local_image_path_keys(data: &AppStoreData) -> HashSet<String> {
             collect_image_path_from_option(
                 &mut paths,
                 stat_position.position.inactive_image.as_ref(),
+            );
+        }
+    }
+
+    for positions in data.graph_positions.values() {
+        for graph_position in positions {
+            collect_image_path_from_option(
+                &mut paths,
+                graph_position.position.active_image.as_ref(),
+            );
+            collect_image_path_from_option(
+                &mut paths,
+                graph_position.position.inactive_image.as_ref(),
             );
         }
     }
@@ -721,6 +763,11 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
             pos.position.counter.migrate_legacy_defaults();
         }
     }
+    for positions in data.graph_positions.values_mut() {
+        for pos in positions.iter_mut() {
+            pos.position.counter.migrate_legacy_defaults();
+        }
+    }
 
     if !data.keys.contains_key(&data.selected_key_type) {
         data.selected_key_type = "4key".to_string();
@@ -852,6 +899,12 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
             .and_then(|v| serde_json::from_value::<StatPositions>(v.clone()).ok())
         {
             data.stat_positions = v;
+        }
+        if let Some(v) = obj
+            .get("graphPositions")
+            .and_then(|v| serde_json::from_value::<GraphPositions>(v.clone()).ok())
+        {
+            data.graph_positions = v;
         }
         if let Some(v) = obj
             .get("keyCounters")

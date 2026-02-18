@@ -1,18 +1,25 @@
 import { useEffect, useMemo } from "react";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { applyStatsSnapshot } from "@stores/statsSignals";
 
 export function useBuiltinStatsSubscription() {
   const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
 
-  const hasAnyStatItem = useMemo(() => {
-    return Object.values(statPositions || {}).some(
+  const hasAnyStatConsumer = useMemo(() => {
+    const hasStat = Object.values(statPositions || {}).some(
       (list) => Array.isArray(list) && list.length > 0,
     );
-  }, [statPositions]);
+    if (hasStat) return true;
+
+    return Object.values(graphPositions || {}).some(
+      (list) => Array.isArray(list) && list.length > 0,
+    );
+  }, [statPositions, graphPositions]);
 
   useEffect(() => {
-    if (!hasAnyStatItem) {
+    if (!hasAnyStatConsumer) {
       return;
     }
 
@@ -34,6 +41,6 @@ export function useBuiltinStatsSubscription() {
         // ignore
       }
     };
-  }, [hasAnyStatItem]);
+  }, [hasAnyStatConsumer]);
 }
 

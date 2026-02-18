@@ -4,6 +4,7 @@
 import { useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { calculateBounds, type ElementBounds } from "@utils/smartGuides";
 
@@ -14,6 +15,7 @@ export function useSmartGuidesElements() {
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements
   );
@@ -66,6 +68,24 @@ export function useSmartGuidesElements() {
         }
       });
 
+      // 그래프 요소 bounds
+      const graphs = graphPositions[selectedKeyType] || [];
+      graphs.forEach((pos, index) => {
+        if (!pos || pos.hidden) return;
+        const id = `graph-${index}`;
+        if (!excludeSet.has(id)) {
+          bounds.push(
+            calculateBounds(
+              pos.dx,
+              pos.dy,
+              pos.width || 200,
+              pos.height || 100,
+              id
+            )
+          );
+        }
+      });
+
       // 플러그인 요소 bounds (현재 탭에 속하는 요소만)
       pluginElements.forEach((el) => {
         if (el.hidden) return;
@@ -92,7 +112,7 @@ export function useSmartGuidesElements() {
 
       return bounds;
     },
-    [positions, statPositions, selectedKeyType, pluginElements]
+    [positions, statPositions, graphPositions, selectedKeyType, pluginElements]
   );
 
   return { getOtherElements };

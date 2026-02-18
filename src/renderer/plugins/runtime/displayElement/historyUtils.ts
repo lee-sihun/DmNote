@@ -5,6 +5,7 @@
 
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 
@@ -27,10 +28,17 @@ export const saveToHistory = (): void => {
 
   const { keyMappings, positions } = useKeyStore.getState();
   const statPositions = useStatItemStore.getState().positions;
+  const graphPositions = useGraphItemStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
   useHistoryStore
     .getState()
-    .pushState(keyMappings, positions, statPositions, pluginElements);
+    .pushState(
+      keyMappings,
+      positions,
+      statPositions,
+      graphPositions,
+      pluginElements
+    );
 };
 
 /**

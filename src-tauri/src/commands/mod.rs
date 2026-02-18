@@ -2,6 +2,7 @@ pub mod app;
 pub mod bridge;
 pub mod css;
 pub mod font;
+pub mod graph_items;
 pub mod image;
 pub mod js;
 pub mod keys;

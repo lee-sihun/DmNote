@@ -1,0 +1,472 @@
+import React, { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+
+const BAR_ANIMATION_DURATION_MS = 150;
+
+function buildLinePoints(history, safeMax) {
+  const denominator = Math.max(history.length - 1, 1);
+  const baselineY = 101; // 선 그래프 베이스 라인
+  const points = history
+    .map((rawValue, index) => {
+      const value = Number(rawValue) || 0;
+      const x = (index / denominator) * 100;
+      const y =
+        value <= 0 ? baselineY : 100 - Math.min((value / safeMax) * 100, 100);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const fillPoints = [
+    `0,${baselineY}`,
+    ...history.map((rawValue, index) => {
+      const value = Number(rawValue) || 0;
+      const x = (index / denominator) * 100;
+      const y =
+        value <= 0 ? baselineY : 100 - Math.min((value / safeMax) * 100, 100);
+      return `${x},${y}`;
+    }),
+    `100,${baselineY}`,
+  ].join(" ");
+
+  return { points, fillPoints };
+}
+
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+  return history.map((value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  });
+}
+
+function resizeHistory(history, targetSize) {
+  if (targetSize <= 0) {
+    return [];
+  }
+  if (!history.length) {
+    return new Array(targetSize).fill(0);
+  }
+  if (history.length === targetSize) {
+    return [...history];
+  }
+  if (targetSize === 1) {
+    return [history[history.length - 1] || 0];
+  }
+
+  const sourceLastIndex = history.length - 1;
+  const targetLastIndex = targetSize - 1;
+  return Array.from({ length: targetSize }, (_, index) => {
+    const sourceIndex = Math.round((index / targetLastIndex) * sourceLastIndex);
+    return history[sourceIndex] || 0;
+  });
+}
+
+function areHistoriesEqual(a, b) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (Math.abs(a[index] - b[index]) > 0.001) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function buildBarPath(history, safeMax, width, height) {
+  const count = history.length;
+  if (count <= 0) {
+    return "";
+  }
+
+  const safeWidth = Math.max(Number(width) || 0, 1);
+  const safeHeightPx = Math.max(Number(height) || 0, 1);
+  const gap = (1 / safeWidth) * 100;
+  const totalGap = gap * Math.max(count - 1, 0);
+  const barWidth = Math.max((100 - totalGap) / count, 0);
+  const radiusXBase = (2 / safeWidth) * 100;
+  const radiusYBase = (2 / safeHeightPx) * 100;
+
+  let path = "";
+  for (let index = 0; index < count; index += 1) {
+    const value = history[index] || 0;
+    const normalized = Math.min((value / safeMax) * 100, 100);
+    if (normalized <= 0) {
+      continue;
+    }
+    const barHeight = normalized;
+    const x = index * (barWidth + gap);
+    const y = 100 - barHeight;
+    const radiusX = Math.min(radiusXBase, barWidth / 2);
+    const radiusY = Math.min(radiusYBase, barHeight);
+    const right = x + barWidth;
+
+    path +=
+      `M ${x} 100 ` +
+      `L ${x} ${y + radiusY} ` +
+      `Q ${x} ${y} ${x + radiusX} ${y} ` +
+      `L ${right - radiusX} ${y} ` +
+      `Q ${right} ${y} ${right} ${y + radiusY} ` +
+      `L ${right} 100 Z `;
+  }
+
+  return path.trim();
+}
+
+const GraphPanel = forwardRef(function GraphPanel(
+  {
+    dx = 0,
+    dy = 0,
+    width = 200,
+    height = 100,
+    zIndex = 0,
+    className = "",
+    graphType = "line",
+    graphColor = "#86EFAC",
+    showAvgLine = true,
+    backgroundColor = "rgba(17, 17, 20, 0.9)",
+    borderColor = "rgba(255, 255, 255, 0.1)",
+    borderWidth = 1,
+    borderRadius = 8,
+    imageSrc = null,
+    imageFit = "cover",
+    useInlineStyles = false,
+    history = [],
+    avg = 0,
+    maxval = 1,
+    uid = "graph",
+    withOffsetVars = true,
+    interactive = true,
+    dataEditing,
+    onClick,
+    onMouseDown,
+    onContextMenu,
+    onDragStart,
+  },
+  ref,
+) {
+  const safeMax = maxval > 0 ? maxval : 1;
+  const resolvedGraphType = graphType === "bar" ? "bar" : "line";
+  const transform = withOffsetVars
+    ? `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
+    : `translate3d(${dx}px, ${dy}px, 0)`;
+
+  const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
+  const { points: linePoints, fillPoints } = useMemo(
+    () => buildLinePoints(normalizedHistory, safeMax),
+    [normalizedHistory, safeMax],
+  );
+  const [animatedBarHistory, setAnimatedBarHistory] = useState(() =>
+    normalizeHistory(history),
+  );
+  const animatedBarHistoryRef = useRef(animatedBarHistory);
+  const animationFrameRef = useRef(null);
+
+  useEffect(() => {
+    animatedBarHistoryRef.current = animatedBarHistory;
+  }, [animatedBarHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (resolvedGraphType !== "bar") {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory(normalizedHistory);
+      animatedBarHistoryRef.current = normalizedHistory;
+      return;
+    }
+
+    const targetHistory = normalizedHistory;
+    const targetSize = targetHistory.length;
+    if (targetSize <= 0) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory([]);
+      animatedBarHistoryRef.current = [];
+      return;
+    }
+
+    const startHistory = resizeHistory(
+      animatedBarHistoryRef.current,
+      targetSize,
+    );
+    if (areHistoriesEqual(startHistory, targetHistory)) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      setAnimatedBarHistory(targetHistory);
+      animatedBarHistoryRef.current = targetHistory;
+      return;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    const startTime = performance.now();
+    const animate = (now) => {
+      const t = Math.min(
+        1,
+        (now - startTime) / Math.max(BAR_ANIMATION_DURATION_MS, 1),
+      );
+      const eased = 1 - (1 - t) * (1 - t) * (1 - t);
+      const nextHistory = startHistory.map(
+        (startValue, index) =>
+          startValue + (targetHistory[index] - startValue) * eased,
+      );
+
+      setAnimatedBarHistory(nextHistory);
+      animatedBarHistoryRef.current = nextHistory;
+
+      if (t < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        animationFrameRef.current = null;
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }, [normalizedHistory, resolvedGraphType]);
+
+  const barHistory =
+    resolvedGraphType === "bar" ? animatedBarHistory : normalizedHistory;
+  const barPath = useMemo(
+    () => buildBarPath(barHistory, safeMax, width, height),
+    [barHistory, safeMax, width, height],
+  );
+
+  const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
+    ? Math.max(0, Number(borderWidth))
+    : 1;
+  const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
+    ? Math.max(0, Number(borderRadius))
+    : 8;
+  const useInline = useInlineStyles === true;
+  const resolvedBackgroundColor = backgroundColor || "rgba(17, 17, 20, 0.9)";
+  const fallbackBorder =
+    resolvedBorderWidth <= 0
+      ? "none"
+      : `${resolvedBorderWidth}px solid ${borderColor || "rgba(255, 255, 255, 0.1)"}`;
+  const resolvedBorder = useInline
+    ? fallbackBorder
+    : `var(--graph-border, ${fallbackBorder})`;
+  const resolvedBg = useInline
+    ? resolvedBackgroundColor
+    : `var(--graph-bg, ${resolvedBackgroundColor})`;
+  const resolvedRadius = useInline
+    ? `${resolvedBorderRadius}px`
+    : `var(--graph-radius, ${resolvedBorderRadius}px)`;
+  const resolvedGraphColor = graphColor || "#86EFAC";
+  const graphStrokeColor = useInline
+    ? resolvedGraphColor
+    : `var(--graph-color, ${resolvedGraphColor})`;
+
+  const avgY = 100 - Math.min((avg / safeMax) * 100, 100);
+
+  return (
+    <div
+      ref={ref}
+      className={`absolute select-none ${className || ""}`}
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        transform,
+        background: resolvedBg,
+        color: "#FFFFFF",
+        border: resolvedBorder,
+        borderRadius: resolvedRadius,
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        cursor: interactive ? "pointer" : "default",
+        fontFamily:
+          "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+        willChange: "transform",
+        backfaceVisibility: "hidden",
+        transformStyle: "preserve-3d",
+        contain: "layout style paint",
+        imageRendering: "auto",
+        isolation: "isolate",
+        zIndex,
+      }}
+      data-state="inactive"
+      data-editing={dataEditing ? "true" : undefined}
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onContextMenu={onContextMenu}
+      onDragStart={onDragStart}
+    >
+      {imageSrc ? (
+        <img
+          src={imageSrc}
+          alt=""
+          draggable={false}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: imageFit || "cover",
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 0,
+          }}
+        />
+      ) : null}
+      {resolvedGraphType === "bar" ? (
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            minHeight: 0,
+            background: "transparent",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            <defs>
+              <linearGradient
+                id={`barGradient-${uid}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop
+                  offset="0%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.3 }}
+                />
+                <stop
+                  offset="100%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 1 }}
+                />
+              </linearGradient>
+            </defs>
+            {barPath ? (
+              <path d={barPath} fill={`url(#barGradient-${uid})`} />
+            ) : null}
+          </svg>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            flex: 1,
+            minHeight: 0,
+            background: "transparent",
+            gap: "1px",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
+          <svg
+            width="100%"
+            height="100%"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: "100%",
+              height: "100%",
+            }}
+          >
+            <defs>
+              <linearGradient
+                id={`lineGradient-${uid}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop
+                  offset="0%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.3 }}
+                />
+                <stop
+                  offset="100%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 1 }}
+                />
+              </linearGradient>
+              <linearGradient
+                id={`fillGradient-${uid}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop
+                  offset="0%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.05 }}
+                />
+                <stop
+                  offset="100%"
+                  style={{ stopColor: graphStrokeColor, stopOpacity: 0.15 }}
+                />
+              </linearGradient>
+            </defs>
+            <polygon points={fillPoints} fill={`url(#fillGradient-${uid})`} />
+            {showAvgLine ? (
+              <line
+                x1="0"
+                y1={avgY}
+                x2="100"
+                y2={avgY}
+                stroke={graphStrokeColor}
+                strokeWidth="1"
+                strokeDasharray="2,2"
+                opacity="0.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+            <polyline
+              points={linePoints}
+              fill="none"
+              stroke={`url(#lineGradient-${uid})`}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+});
+
+export default GraphPanel;

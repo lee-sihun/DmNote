@@ -72,6 +72,29 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 }
 ```
 
+## Graph Style Variables
+
+CSS variables available for graph elements.
+Disable **Inline Styles Priority** on the graph to control these via CSS.
+
+| Variable         | Description            | Type       | Example                  |
+| ---------------- | ---------------------- | ---------- | ------------------------ |
+| `--graph-bg`     | Graph background       | `<color>`  | `rgba(17, 17, 20, 0.85)` |
+| `--graph-border` | Graph border           | `<border>` | `1px solid #7dd3fc`      |
+| `--graph-radius` | Graph corner radius    | `<length>` | `10px`                   |
+| `--graph-color`  | Line/bar drawing color | `<color>`  | `#86efac`                |
+
+### Usage Example
+
+```css
+.kps-graph {
+  --graph-bg: rgba(7, 10, 18, 0.72);
+  --graph-border: 1px solid rgba(125, 211, 252, 0.55);
+  --graph-radius: 12px;
+  --graph-color: #7dd3fc;
+}
+```
+
 ## Selector Reference
 
 ### Key Selectors
@@ -91,6 +114,15 @@ CSS variables applied to counter elements. Use with `.counter[data-counter-state
 | `.counter[data-counter-state="inactive"]`          | Inactive counters                   |
 | `.counter[data-counter-state="active"]`            | Active counters                     |
 | `.classname .counter[data-counter-state="active"]` | Counter of keys with specific class |
+
+### Graph Selectors
+
+| Selector                  | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `.graphClassName`         | Style a specific graph container                 |
+| `.graphClassName svg`     | Style line graph SVG (stroke/fill)               |
+| `.graphClassName > div`   | Style the inner plot area (line/bar shared)      |
+| `.graphClassName > div > div` | Style individual bars in bar mode            |
 
 ## Standard CSS Properties
 

@@ -65,6 +65,7 @@ import type {
   KeyCounters,
 } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
+import type { GraphItemPositions } from "@src/types/graphItems";
 import type {
   SettingsState,
   SettingsPatchInput,
@@ -210,6 +211,13 @@ const api: DMNoteAPI = {
       invoke<StatItemPositions>("stat_positions_update", { positions }),
     onPositionsChanged: (listener: (positions: StatItemPositions) => void) =>
       subscribe<StatItemPositions>("statPositions:changed", listener),
+  },
+  graphItems: {
+    getPositions: () => invoke<GraphItemPositions>("graph_positions_get"),
+    updatePositions: (positions: GraphItemPositions) =>
+      invoke<GraphItemPositions>("graph_positions_update", { positions }),
+    onPositionsChanged: (listener: (positions: GraphItemPositions) => void) =>
+      subscribe<GraphItemPositions>("graphPositions:changed", listener),
   },
   overlay: {
     get: () => invoke<OverlayState>("overlay_get"),

@@ -9,6 +9,7 @@ pub type KeyMappings = HashMap<String, Vec<String>>;
 pub type KeyPositions = HashMap<String, Vec<KeyPosition>>;
 pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
+pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoteColor {
@@ -212,6 +213,35 @@ pub enum StatType {
 #[serde(rename_all = "camelCase")]
 pub struct StatPosition {
     pub stat_type: StatType,
+    #[serde(flatten)]
+    pub position: KeyPosition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum GraphStatType {
+    Kps,
+    KpsAvg,
+    KpsMax,
+    Total,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum GraphType {
+    Line,
+    Bar,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphPosition {
+    pub stat_type: GraphStatType,
+    pub graph_type: GraphType,
+    pub graph_speed: u32,
+    pub graph_color: String,
+    #[serde(default = "default_true")]
+    pub show_avg_line: bool,
     #[serde(flatten)]
     pub position: KeyPosition,
 }
@@ -682,6 +712,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub stat_positions: StatPositions,
     #[serde(default)]
+    pub graph_positions: GraphPositions,
+    #[serde(default)]
     pub key_counters: KeyCounters,
     pub background_color: String,
     pub use_custom_css: bool,
@@ -737,6 +769,7 @@ impl Default for AppStoreData {
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
+            graph_positions: GraphPositions::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
             use_custom_css: false,
@@ -965,6 +998,7 @@ pub struct BootstrapPayload {
     pub keys: KeyMappings,
     pub positions: KeyPositions,
     pub stat_positions: StatPositions,
+    pub graph_positions: GraphPositions,
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,

@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
@@ -64,6 +65,7 @@ export function useKeyManager() {
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
   const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
   const setKeyMappings = useKeyStore((state) => state.setKeyMappings);
   const setPositions = useKeyStore((state) => state.setPositions);
   const setLocalUpdateInProgress = useKeyStore(
@@ -88,8 +90,21 @@ export function useKeyManager() {
 
   // 히스토리에 현재 상태 저장 (플러그인 요소 포함)
   const saveToHistory = useCallback(() => {
-    pushState(keyMappings, positions, statPositions, pluginElements);
-  }, [keyMappings, positions, statPositions, pluginElements, pushState]);
+    pushState(
+      keyMappings,
+      positions,
+      statPositions,
+      graphPositions,
+      pluginElements
+    );
+  }, [
+    keyMappings,
+    positions,
+    statPositions,
+    graphPositions,
+    pluginElements,
+    pushState,
+  ]);
 
   const handlePositionChange = (index: number, dx: number, dy: number) => {
     const current = positions[selectedKeyType] || [];
@@ -1067,6 +1082,7 @@ export function useKeyManager() {
         keyMappings,
         positions,
         statPositions,
+        graphPositions,
         currentPluginElements,
       );
 
@@ -1074,6 +1090,7 @@ export function useKeyManager() {
         setKeyMappings(previousState.keyMappings);
         setPositions(previousState.positions);
         useStatItemStore.getState().setPositions(previousState.statPositions);
+        useGraphItemStore.getState().setPositions(previousState.graphPositions);
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (previousState.keyCounters) {
@@ -1165,6 +1182,11 @@ export function useKeyManager() {
             .catch((error) => {
               console.error("Failed to apply undo stat positions", error);
             });
+          window.api.graphItems
+            .updatePositions(previousState.graphPositions as any)
+            .catch((error) => {
+              console.error("Failed to apply undo graph positions", error);
+            });
 
           if (previousState.keyCounters) {
             await window.api.keys.setCounters(previousState.keyCounters);
@@ -1173,6 +1195,13 @@ export function useKeyManager() {
           try {
             window.api.bridge.sendTo("overlay", "statPositions:sync", {
               positions: previousState.statPositions,
+            });
+          } catch {
+            // ignore
+          }
+          try {
+            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+              positions: previousState.graphPositions,
             });
           } catch {
             // ignore
@@ -1189,6 +1218,7 @@ export function useKeyManager() {
     keyMappings,
     positions,
     statPositions,
+    graphPositions,
     setKeyMappings,
     setPositions,
     setPluginElements,
@@ -1204,6 +1234,7 @@ export function useKeyManager() {
         keyMappings,
         positions,
         statPositions,
+        graphPositions,
         currentPluginElements,
       );
 
@@ -1211,6 +1242,7 @@ export function useKeyManager() {
         setKeyMappings(nextState.keyMappings);
         setPositions(nextState.positions);
         useStatItemStore.getState().setPositions(nextState.statPositions);
+        useGraphItemStore.getState().setPositions(nextState.graphPositions);
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (nextState.keyCounters) {
@@ -1293,6 +1325,11 @@ export function useKeyManager() {
             .catch((error) => {
               console.error("Failed to apply redo stat positions", error);
             });
+          window.api.graphItems
+            .updatePositions(nextState.graphPositions as any)
+            .catch((error) => {
+              console.error("Failed to apply redo graph positions", error);
+            });
 
           if (nextState.keyCounters) {
             await window.api.keys.setCounters(nextState.keyCounters);
@@ -1301,6 +1338,13 @@ export function useKeyManager() {
           try {
             window.api.bridge.sendTo("overlay", "statPositions:sync", {
               positions: nextState.statPositions,
+            });
+          } catch {
+            // ignore
+          }
+          try {
+            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+              positions: nextState.graphPositions,
             });
           } catch {
             // ignore
@@ -1317,6 +1361,7 @@ export function useKeyManager() {
     keyMappings,
     positions,
     statPositions,
+    graphPositions,
     setKeyMappings,
     setPositions,
     setPluginElements,

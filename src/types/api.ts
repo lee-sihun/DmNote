@@ -8,6 +8,7 @@ import {
   KeyCounters,
 } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
+import type { GraphItemPositions } from "@src/types/graphItems";
 import {
   SettingsDiff,
   SettingsPatchInput,
@@ -645,6 +646,15 @@ export interface DMNoteAPI {
     updatePositions(positions: StatItemPositions): Promise<StatItemPositions>;
     onPositionsChanged(
       listener: (positions: StatItemPositions) => void,
+    ): Unsubscribe;
+  };
+  graphItems: {
+    getPositions(): Promise<GraphItemPositions>;
+    updatePositions(
+      positions: GraphItemPositions,
+    ): Promise<GraphItemPositions>;
+    onPositionsChanged(
+      listener: (positions: GraphItemPositions) => void,
     ): Unsubscribe;
   };
   overlay: {
