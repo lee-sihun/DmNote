@@ -844,9 +844,10 @@ impl AppState {
             .build()
             .context("failed to create overlay window")?;
 
-        // WebView2에 잔류된 줌 레벨을 항상 100%로 강제 리셋
-        if let Err(err) = window.set_zoom(1.0) {
-            log::warn!("failed to reset overlay zoom to 100%: {err}");
+        // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
+        let zoom = crate::compute_compensating_zoom();
+        if let Err(err) = window.set_zoom(zoom) {
+            log::warn!("failed to set overlay compensating zoom: {err}");
         }
 
         // macOS에서 오버레이 창이 앱 포커스를 빼앗지 않도록 설정

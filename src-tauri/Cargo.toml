@@ -43,6 +43,7 @@ windows = { version = "0.61.3", features = [
 	"Win32_System_Pipes",
 	"Win32_System_LibraryLoader",
 	"Win32_System_IO",
+	"Win32_System_Registry",
 	"Win32_Security",
 	"Win32_UI_Shell"
 ] }

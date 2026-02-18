@@ -6,6 +6,7 @@ AGENTS.md
 copilot-instructions.md
 src-tauri/target
 .DS_Store
+.claude/settings.local.json
 
 # WebView2 FixedVersionRuntime (downloaded locally; keep placeholder)
 src-tauri/webview2-fixed-runtime/*

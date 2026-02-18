@@ -23,7 +23,13 @@ use std::{path::PathBuf, process::Command};
 #[cfg(target_os = "windows")]
 use std::{fs, path::PathBuf};
 
-use tauri::{ipc::CapabilityBuilder, LogicalSize, Manager, PhysicalPosition, Position};
+use tauri::{
+    ipc::CapabilityBuilder,
+    webview::PageLoadEvent,
+    LogicalSize, Manager, PhysicalPosition, Position,
+};
+
+use dm_note::compute_compensating_zoom;
 
 use app_state::AppState;
 use store::AppStore;
@@ -72,6 +78,18 @@ fn main() {
     let context = tauri::generate_context!();
 
     tauri::Builder::default()
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                let zoom = compute_compensating_zoom();
+                let label = webview.label();
+                log::info!(
+                    "[zoom-guard] page loaded in '{label}', applying compensating zoom={zoom:.6}"
+                );
+                if let Err(err) = webview.set_zoom(zoom) {
+                    log::warn!("[zoom-guard] failed to set zoom for '{label}': {err}");
+                }
+            }
+        })
         .setup(|app| {
             register_dev_capability(app)?;
             #[cfg(target_os = "macos")]
@@ -395,9 +413,13 @@ fn apply_main_window_configuration(
         log::warn!("failed to center window: {err}");
     }
 
-    // WebView2에 잔류된 줌 레벨을 항상 100%로 강제 리셋
-    if let Err(err) = window.set_zoom(1.0) {
-        log::warn!("failed to reset main window zoom to 100%: {err}");
+    // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
+    let zoom = compute_compensating_zoom();
+    log::info!(
+        "[zoom-guard] main window initial config: compensating zoom={zoom:.6}"
+    );
+    if let Err(err) = window.set_zoom(zoom) {
+        log::warn!("failed to set main window compensating zoom: {err}");
     }
 
     let state = app.state::<AppState>();
@@ -750,3 +772,4 @@ fn request_accessibility_permission() {
         }
     }
 }
+
