@@ -37,6 +37,12 @@ use store::AppStore;
 fn main() {
     #[cfg(target_os = "windows")]
     {
+        // 단일 인스턴스 보장: 이미 실행 중인 경우 기존 창을 활성화하고 종료
+        if !acquire_single_instance_lock() {
+            focus_existing_window_and_exit();
+            return;
+        }
+
         // WebView2 투명 오버레이(레이어드/알파) 이슈가 특정 런타임 버전에서 발생할 수 있어,
         // 고정(Fixed) 런타임을 번들/지정한 경우 우선 사용하도록 합니다.
         apply_embedded_webview2_fixed_runtime_override();
@@ -708,6 +714,70 @@ fn extract_zip_bytes_to_dir(zip_bytes: &[u8], dest_dir: &std::path::Path) -> Res
     }
 
     Ok(())
+}
+
+/// Windows 전역 Named Mutex로 단일 인스턴스 잠금을 획득합니다.
+/// 이미 다른 인스턴스가 실행 중이면 false를 반환합니다.
+#[cfg(target_os = "windows")]
+fn acquire_single_instance_lock() -> bool {
+    use std::ffi::OsStr;
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::{
+        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        System::Threading::CreateMutexW,
+    };
+
+    let name = OsStr::new("Global\\DmNote_SingleInstance")
+        .encode_wide()
+        .chain(once(0u16))
+        .collect::<Vec<u16>>();
+
+    unsafe {
+        let result = CreateMutexW(
+            None,
+            false,
+            windows::core::PCWSTR(name.as_ptr()),
+        );
+        match result {
+            Ok(_handle) => {
+                // 뮤텍스 핸들을 의도적으로 유지 (프로세스 종료 시 자동 해제)
+                // _handle을 drop하지 않기 위해 forget
+                std::mem::forget(_handle);
+                let last_err = GetLastError();
+                last_err != ERROR_ALREADY_EXISTS
+            }
+            Err(_) => false,
+        }
+    }
+}
+
+/// 기존 실행 중인 창을 포그라운드로 가져오고 현재 프로세스를 종료합니다.
+#[cfg(target_os = "windows")]
+fn focus_existing_window_and_exit() {
+    use std::ffi::OsStr;
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    let title: Vec<u16> = OsStr::new("DM Note - Settings")
+        .encode_wide()
+        .chain(once(0u16))
+        .collect();
+
+    unsafe {
+        let hwnd = FindWindowW(None, windows::core::PCWSTR(title.as_ptr()));
+        if !hwnd.0.is_null() {
+            if IsIconic(hwnd).as_bool() {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+
+    std::process::exit(0);
 }
 
 /// macOS 접근성(Accessibility) 권한을 확인하고,
