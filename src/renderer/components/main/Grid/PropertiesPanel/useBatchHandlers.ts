@@ -10,13 +10,420 @@ import type { StatItemPosition } from "@src/types/statItems";
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = "rgba(121, 121, 121, 0.9)";
 const DEFAULT_ACTIVE_BORDER_COLOR = "rgba(255, 255, 255, 0.9)";
 const DEFAULT_ACTIVE_FONT_COLOR = "#FFFFFF";
+const SPACING_GROUP_TOLERANCE = 2;
+const SPACING_DECIMAL_SCALE = 1;
+const POSITION_CHANGE_EPSILON = 0.05;
+const SPACING_GROUP_SIZE_FACTOR = 0.35;
+// 엣지 오버랩 기반 그룹핑: 작은 쪽 크기의 이 비율 이상 겹치면 같은 행/열로 판정
+const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
 
 type KeyLikeType = "key" | "stat";
+type AxisDirection = "horizontal" | "vertical";
+
+interface LayoutElement {
+  type: KeyLikeType;
+  index: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type KeyLikeBatchUpdate = {
+  type: KeyLikeType;
+  index: number;
+} & Partial<KeyPosition>;
+
+interface SpacingAxisPlan {
+  applyHorizontal: boolean;
+  applyVertical: boolean;
+  horizontalGroups: LayoutElement[][];
+  verticalGroups: LayoutElement[][];
+}
 
 interface SelectedElement {
   type: KeyLikeType;
   index?: number;
 }
+
+const roundToSpacingPrecision = (value: number): number => {
+  const factor = 10 ** SPACING_DECIMAL_SCALE;
+  return Math.round(value * factor) / factor;
+};
+
+const getLayoutElementKey = (type: KeyLikeType, index: number): string =>
+  `${type}:${index}`;
+
+const getReferenceAxisValue = (
+  element: LayoutElement,
+  direction: AxisDirection,
+): number => (direction === "horizontal" ? element.y : element.x);
+
+const getReferenceAxisSize = (
+  element: LayoutElement,
+  direction: AxisDirection,
+): number => (direction === "horizontal" ? element.height : element.width);
+
+const getReferenceAxisCenter = (
+  element: LayoutElement,
+  direction: AxisDirection,
+): number =>
+  getReferenceAxisValue(element, direction) +
+  getReferenceAxisSize(element, direction) / 2;
+
+const getPrimaryAxisValue = (
+  element: LayoutElement,
+  direction: AxisDirection,
+): number => (direction === "horizontal" ? element.x : element.y);
+
+const getPrimaryAxisSize = (
+  element: LayoutElement,
+  direction: AxisDirection,
+): number => (direction === "horizontal" ? element.width : element.height);
+
+const sortByPrimaryAxis = (
+  elements: LayoutElement[],
+  direction: AxisDirection,
+): LayoutElement[] =>
+  [...elements].sort(
+    (a, b) =>
+      getPrimaryAxisValue(a, direction) - getPrimaryAxisValue(b, direction),
+  );
+
+const getAxisSpan = (
+  elements: LayoutElement[],
+  direction: AxisDirection,
+): number => {
+  if (elements.length === 0) return 0;
+  const starts = elements.map((element) =>
+    getPrimaryAxisValue(element, direction),
+  );
+  const ends = elements.map(
+    (element) =>
+      getPrimaryAxisValue(element, direction) +
+      getPrimaryAxisSize(element, direction),
+  );
+  return Math.max(...ends) - Math.min(...starts);
+};
+
+/**
+ * 두 범위의 오버랩 비율을 계산 (작은 쪽 크기 기준)
+ * 같은 행/열에 있지만 크기가 다른 요소를 정확히 감지하기 위한 헬퍼
+ */
+const computeOverlapRatio = (
+  startA: number,
+  endA: number,
+  startB: number,
+  endB: number,
+): number => {
+  const overlapStart = Math.max(startA, startB);
+  const overlapEnd = Math.min(endA, endB);
+  const overlapLength = Math.max(0, overlapEnd - overlapStart);
+  const sizeA = endA - startA;
+  const sizeB = endB - startB;
+  const minSize = Math.min(sizeA, sizeB);
+  if (minSize <= 0) return 0;
+  return overlapLength / minSize;
+};
+
+/**
+ * 그룹의 교차축 바운딩 범위와 요소의 오버랩 비율을 계산
+ */
+const computeGroupOverlapRatio = (
+  group: { minEdge: number; maxEdge: number },
+  elementStart: number,
+  elementEnd: number,
+): number => {
+  return computeOverlapRatio(
+    group.minEdge,
+    group.maxEdge,
+    elementStart,
+    elementEnd,
+  );
+};
+
+const groupElementsByReferenceAxis = (
+  elements: LayoutElement[],
+  direction: AxisDirection,
+): LayoutElement[][] => {
+  const sortedByReference = [...elements].sort(
+    (a, b) =>
+      getReferenceAxisCenter(a, direction) -
+      getReferenceAxisCenter(b, direction),
+  );
+
+  const groups: Array<{
+    elements: LayoutElement[];
+    averageCenter: number;
+    averageSize: number;
+    // 그룹의 교차축 바운딩 범위 (엣지 오버랩 판정용)
+    minEdge: number;
+    maxEdge: number;
+  }> = [];
+
+  for (const element of sortedByReference) {
+    const elementCenter = getReferenceAxisCenter(element, direction);
+    const elementSize = getReferenceAxisSize(element, direction);
+    const elementStart = getReferenceAxisValue(element, direction);
+    const elementEnd = elementStart + elementSize;
+
+    let targetGroupIndex = -1;
+    let smallestDistance = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < groups.length; i += 1) {
+      const group = groups[i];
+      const distance = Math.abs(elementCenter - group.averageCenter);
+      const dynamicTolerance = Math.max(
+        SPACING_GROUP_TOLERANCE,
+        ((group.averageSize + elementSize) / 2) * SPACING_GROUP_SIZE_FACTOR,
+      );
+
+      // 1차: 기존 중심점 거리 기반 매칭
+      if (distance <= dynamicTolerance && distance < smallestDistance) {
+        smallestDistance = distance;
+        targetGroupIndex = i;
+      }
+    }
+
+    // 2차: 중심점 매칭 실패 시 엣지 오버랩 기반 매칭
+    // 크기가 다른 요소가 같은 행/열에 있을 때 누락 방지
+    if (targetGroupIndex < 0) {
+      let bestOverlap = 0;
+      for (let i = 0; i < groups.length; i += 1) {
+        const group = groups[i];
+        const overlap = computeGroupOverlapRatio(
+          group,
+          elementStart,
+          elementEnd,
+        );
+        if (
+          overlap >= SPACING_GROUP_OVERLAP_THRESHOLD &&
+          overlap > bestOverlap
+        ) {
+          bestOverlap = overlap;
+          targetGroupIndex = i;
+        }
+      }
+    }
+
+    if (targetGroupIndex >= 0) {
+      const targetGroup = groups[targetGroupIndex];
+      targetGroup.elements.push(element);
+      targetGroup.averageCenter =
+        targetGroup.elements.reduce(
+          (sum, current) => sum + getReferenceAxisCenter(current, direction),
+          0,
+        ) / targetGroup.elements.length;
+      targetGroup.averageSize =
+        targetGroup.elements.reduce(
+          (sum, current) => sum + getReferenceAxisSize(current, direction),
+          0,
+        ) / targetGroup.elements.length;
+      // 바운딩 범위 갱신
+      targetGroup.minEdge = Math.min(targetGroup.minEdge, elementStart);
+      targetGroup.maxEdge = Math.max(targetGroup.maxEdge, elementEnd);
+    } else {
+      groups.push({
+        elements: [element],
+        averageCenter: elementCenter,
+        averageSize: elementSize,
+        minEdge: elementStart,
+        maxEdge: elementEnd,
+      });
+    }
+  }
+
+  return groups.map((group) => group.elements);
+};
+
+const countAxisPairs = (groups: LayoutElement[][]): number => {
+  return groups.reduce((sum, group) => sum + Math.max(0, group.length - 1), 0);
+};
+
+const inferSpacingAxisPlan = (elements: LayoutElement[]): SpacingAxisPlan => {
+  const horizontalGroups = groupElementsByReferenceAxis(elements, "horizontal");
+  const verticalGroups = groupElementsByReferenceAxis(elements, "vertical");
+
+  // 수평 적용 여부: 하나 이상의 행에 2개 이상의 요소가 있으면 수평 간격 조절 가능
+  const applyHorizontal = countAxisPairs(horizontalGroups) > 0;
+
+  // 수직 적용 여부: 행이 2개 이상이면 수직 간격 조절 가능
+  // 열(column) 그룹 기반 판정은 사용하지 않는다.
+  // - 넓이가 다른 요소가 혼재할 때 열 그룹핑이 오동작하여 수직 적용이 누락되는 버그가 있음
+  // - 수직 간격 적용은 applyVerticalRowSpacing에서 행(row) 단위로 처리하므로
+  //   열 구조와 무관하게 행 수만으로 판정하는 것이 정확함
+  const applyVertical = horizontalGroups.length >= 2;
+
+  return {
+    applyHorizontal,
+    applyVertical,
+    horizontalGroups,
+    verticalGroups,
+  };
+};
+
+const collectAxisGapsFromGroups = (
+  groups: LayoutElement[][],
+  direction: AxisDirection,
+): number[] => {
+  const collectFromGroup = (group: LayoutElement[]): number[] => {
+    if (group.length < 2) return [];
+    const sorted = sortByPrimaryAxis(group, direction);
+    const gaps: number[] = [];
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1];
+      const current = sorted[i];
+      const prevEnd =
+        getPrimaryAxisValue(prev, direction) +
+        getPrimaryAxisSize(prev, direction);
+      const currentStart = getPrimaryAxisValue(current, direction);
+      gaps.push(currentStart - prevEnd);
+    }
+    return gaps;
+  };
+
+  return groups.flatMap(collectFromGroup);
+};
+
+const applyAxisSpacing = (
+  elements: LayoutElement[],
+  direction: AxisDirection,
+  spacing: number,
+  updateMap: Map<string, KeyLikeBatchUpdate>,
+  groups?: LayoutElement[][],
+): boolean => {
+  const applyToGroup = (group: LayoutElement[]): boolean => {
+    if (group.length < 2) return false;
+    const sorted = sortByPrimaryAxis(group, direction);
+    let currentStart = getPrimaryAxisValue(sorted[0], direction);
+
+    sorted.forEach((element, index) => {
+      if (index > 0) {
+        const prev = sorted[index - 1];
+        currentStart += getPrimaryAxisSize(prev, direction) + spacing;
+      }
+
+      const key = `${element.type}:${element.index}`;
+      const update = updateMap.get(key) ?? {
+        type: element.type,
+        index: element.index,
+      };
+      const normalizedValue = roundToSpacingPrecision(currentStart);
+      if (direction === "horizontal") {
+        update.dx = normalizedValue;
+        element.x = normalizedValue;
+      } else {
+        update.dy = normalizedValue;
+        element.y = normalizedValue;
+      }
+      updateMap.set(key, update);
+    });
+
+    return true;
+  };
+
+  let applied = false;
+  const targetGroups =
+    groups ?? groupElementsByReferenceAxis(elements, direction);
+  for (const group of targetGroups) {
+    if (applyToGroup(group)) {
+      applied = true;
+    }
+  }
+
+  return applied;
+};
+
+/**
+ * 행 단위 수직 간격 수집
+ * 열(컬럼) 기반이 아닌 행 사이의 실제 간격을 반환
+ */
+const collectRowGaps = (horizontalGroups: LayoutElement[][]): number[] => {
+  if (horizontalGroups.length < 2) return [];
+
+  const sortedRows = [...horizontalGroups].sort((a, b) => {
+    const centerA =
+      a.reduce((sum, el) => sum + el.y + el.height / 2, 0) / a.length;
+    const centerB =
+      b.reduce((sum, el) => sum + el.y + el.height / 2, 0) / b.length;
+    return centerA - centerB;
+  });
+
+  const gaps: number[] = [];
+  for (let i = 1; i < sortedRows.length; i += 1) {
+    const prevRowBottom = Math.max(
+      ...sortedRows[i - 1].map((el) => el.y + el.height),
+    );
+    const currentRowTop = Math.min(...sortedRows[i].map((el) => el.y));
+    gaps.push(currentRowTop - prevRowBottom);
+  }
+  return gaps;
+};
+
+/**
+ * 수직 간격을 행(row) 단위로 적용
+ *
+ * 열(컬럼) 기반 처리는 행마다 요소 수가 다를 때 싱글톤 열 요소가 누락되어
+ * 같은 행 내에서 y좌표가 달라지는 계단 현상이 발생한다.
+ * 이 함수는 행 전체를 하나의 단위로 이동시켜 해당 문제를 방지한다.
+ */
+const applyVerticalRowSpacing = (
+  horizontalGroups: LayoutElement[][],
+  spacing: number,
+  updateMap: Map<string, KeyLikeBatchUpdate>,
+): boolean => {
+  const validRows = horizontalGroups.filter((g) => g.length >= 1);
+  if (validRows.length < 2) return false;
+
+  // 행을 y 중심 기준으로 정렬
+  const sortedRows = [...validRows].sort((a, b) => {
+    const centerA =
+      a.reduce((sum, el) => sum + el.y + el.height / 2, 0) / a.length;
+    const centerB =
+      b.reduce((sum, el) => sum + el.y + el.height / 2, 0) / b.length;
+    return centerA - centerB;
+  });
+
+  // 첫 번째 행의 최소 y를 앵커로 사용
+  let currentRowMinY = Math.min(...sortedRows[0].map((el) => el.y));
+  // 행의 실제 세로 범위 = max(y + height) - min(y)
+  const computeRowSpan = (row: LayoutElement[]): number => {
+    const rowMinY = Math.min(...row.map((el) => el.y));
+    const rowMaxBottom = Math.max(...row.map((el) => el.y + el.height));
+    return rowMaxBottom - rowMinY;
+  };
+  let prevRowSpan = computeRowSpan(sortedRows[0]);
+
+  for (let i = 0; i < sortedRows.length; i += 1) {
+    const row = sortedRows[i];
+
+    if (i > 0) {
+      currentRowMinY = roundToSpacingPrecision(
+        currentRowMinY + prevRowSpan + spacing,
+      );
+    }
+
+    // 행 내 각 요소의 상대 y 오프셋을 유지
+    // (세로 중앙·하단 정렬 등으로 y가 다를 수 있음)
+    const rowMinY = Math.min(...row.map((el) => el.y));
+    for (const element of row) {
+      const relativeOffset = element.y - rowMinY;
+      const newY = roundToSpacingPrecision(currentRowMinY + relativeOffset);
+      const key = getLayoutElementKey(element.type, element.index);
+      const update = updateMap.get(key) ?? {
+        type: element.type,
+        index: element.index,
+      };
+      update.dy = newY;
+      element.y = newY;
+      updateMap.set(key, update);
+    }
+
+    prevRowSpan = computeRowSpan(row);
+  }
+
+  return true;
+};
 
 interface UseBatchHandlersProps {
   selectedKeyLikeElements: SelectedElement[];
@@ -124,6 +531,46 @@ export function useBatchHandlers({
       updates.forEach((update) => onStatUpdate(update));
     },
     [onStatBatchPreview, onStatPreview, onStatBatchUpdate, onStatUpdate],
+  );
+
+  const getSelectedLayoutElements = useCallback((): LayoutElement[] => {
+    return selectedKeyLikeElements
+      .filter(
+        (el): el is { type: KeyLikeType; index: number } =>
+          el.index !== undefined,
+      )
+      .map((el) => {
+        const pos = getKeyLikePosition(el.type, el.index);
+        if (!pos) return null;
+        return {
+          type: el.type,
+          index: el.index,
+          x: pos.dx,
+          y: pos.dy,
+          width: pos.width,
+          height: pos.height,
+        };
+      })
+      .filter((element): element is LayoutElement => element !== null);
+  }, [getKeyLikePosition, selectedKeyLikeElements]);
+
+  const dispatchKeyLikeUpdates = useCallback(
+    (updates: KeyLikeBatchUpdate[], kind: "preview" | "commit" = "commit") => {
+      const keyUpdates = updates
+        .filter((u) => u.type === "key")
+        .map(({ type: _t, ...rest }) => rest) as Array<
+        { index: number } & Partial<KeyPosition>
+      >;
+      const statUpdates = updates
+        .filter((u) => u.type === "stat")
+        .map(({ type: _t, ...rest }) => rest) as Array<
+        { index: number } & Partial<StatItemPosition>
+      >;
+
+      dispatchKeyUpdates(keyUpdates, kind);
+      dispatchStatUpdates(statUpdates, kind);
+    },
+    [dispatchKeyUpdates, dispatchStatUpdates],
   );
 
   // 스타일 변경 (프리뷰)
@@ -258,32 +705,7 @@ export function useBatchHandlers({
     (
       direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
     ) => {
-      const elements = selectedKeyLikeElements
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const pos = getKeyLikePosition(el.type, el.index!);
-          if (!pos) return null;
-          return {
-            type: el.type,
-            index: el.index!,
-            x: pos.dx,
-            y: pos.dy,
-            width: pos.width,
-            height: pos.height,
-          };
-        })
-        .filter(
-          (
-            d,
-          ): d is {
-            type: KeyLikeType;
-            index: number;
-            x: number;
-            y: number;
-            width: number;
-            height: number;
-          } => d !== null,
-        );
+      const elements = getSelectedLayoutElements();
 
       if (elements.length < 2) return;
 
@@ -292,9 +714,7 @@ export function useBatchHandlers({
       const minY = Math.min(...elements.map((k) => k.y));
       const maxY = Math.max(...elements.map((k) => k.y + k.height));
 
-      let updates: Array<
-        { type: KeyLikeType; index: number } & Partial<KeyPosition>
-      > = [];
+      let updates: KeyLikeBatchUpdate[] = [];
 
       switch (direction) {
         case "left":
@@ -345,63 +765,19 @@ export function useBatchHandlers({
           break;
       }
 
-      const keyUpdates = updates
-        .filter((u) => u.type === "key")
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      const statUpdates = updates
-        .filter((u) => u.type === "stat")
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<StatItemPosition>
-      >;
-
-      dispatchKeyUpdates(keyUpdates, "commit");
-      dispatchStatUpdates(statUpdates, "commit");
+      dispatchKeyLikeUpdates(updates);
     },
-    [
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      getKeyLikePosition,
-      selectedKeyLikeElements,
-    ],
+    [dispatchKeyLikeUpdates, getSelectedLayoutElements],
   );
 
   // 분배 핸들러
   const handleBatchDistribute = useCallback(
     (direction: "horizontal" | "vertical") => {
-      const elements = selectedKeyLikeElements
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const pos = getKeyLikePosition(el.type, el.index!);
-          if (!pos) return null;
-          return {
-            type: el.type,
-            index: el.index!,
-            x: pos.dx,
-            y: pos.dy,
-            width: pos.width,
-            height: pos.height,
-          };
-        })
-        .filter(
-          (
-            d,
-          ): d is {
-            type: KeyLikeType;
-            index: number;
-            x: number;
-            y: number;
-            width: number;
-            height: number;
-          } => d !== null,
-        );
+      const elements = getSelectedLayoutElements();
 
       if (elements.length < 3) return;
 
-      let updates: Array<
-        { type: KeyLikeType; index: number } & Partial<KeyPosition>
-      > = [];
+      let updates: KeyLikeBatchUpdate[] = [];
 
       if (direction === "horizontal") {
         const sorted = [...elements].sort((a, b) => a.x - b.x);
@@ -433,27 +809,131 @@ export function useBatchHandlers({
         });
       }
 
-      const keyUpdates = updates
-        .filter((u) => u.type === "key")
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      const statUpdates = updates
-        .filter((u) => u.type === "stat")
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<StatItemPosition>
-      >;
-
-      dispatchKeyUpdates(keyUpdates, "commit");
-      dispatchStatUpdates(statUpdates, "commit");
+      dispatchKeyLikeUpdates(updates);
     },
-    [
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      getKeyLikePosition,
-      selectedKeyLikeElements,
-    ],
+    [dispatchKeyLikeUpdates, getSelectedLayoutElements],
   );
+
+  /**
+   * 간격 적용 공통 로직 (preview/commit 공용)
+   * 반환: 변경이 필요한 업데이트 배열 (없으면 빈 배열)
+   */
+  const computeSpacingUpdates = useCallback(
+    (spacing: number): KeyLikeBatchUpdate[] => {
+      const originalElements = getSelectedLayoutElements();
+      if (originalElements.length < 2) return [];
+
+      const elements = originalElements.map((element) => ({ ...element }));
+      const axisPlan = inferSpacingAxisPlan(elements);
+      if (!axisPlan.applyHorizontal && !axisPlan.applyVertical) return [];
+
+      const normalizedSpacing = roundToSpacingPrecision(Math.max(0, spacing));
+      const updateMap = new Map<string, KeyLikeBatchUpdate>();
+
+      const appliedHorizontal = axisPlan.applyHorizontal
+        ? applyAxisSpacing(
+            elements,
+            "horizontal",
+            normalizedSpacing,
+            updateMap,
+            axisPlan.horizontalGroups,
+          )
+        : false;
+      const appliedVertical = axisPlan.applyVertical
+        ? applyVerticalRowSpacing(
+            axisPlan.horizontalGroups,
+            normalizedSpacing,
+            updateMap,
+          )
+        : false;
+
+      if (!appliedHorizontal && !appliedVertical) return [];
+
+      const originalById = new Map(
+        originalElements.map((element) => [
+          getLayoutElementKey(element.type, element.index),
+          element,
+        ]),
+      );
+
+      return Array.from(updateMap.values()).filter((update) => {
+        const original = originalById.get(
+          getLayoutElementKey(update.type, update.index),
+        );
+        if (!original) return false;
+
+        const dxChanged =
+          update.dx !== undefined &&
+          Math.abs(update.dx - original.x) > POSITION_CHANGE_EPSILON;
+        const dyChanged =
+          update.dy !== undefined &&
+          Math.abs(update.dy - original.y) > POSITION_CHANGE_EPSILON;
+
+        return dxChanged || dyChanged;
+      });
+    },
+    [getSelectedLayoutElements],
+  );
+
+  // 간격 프리뷰 (타이핑 중 시각적 반영, 히스토리 미저장)
+  const handleBatchSpacingPreview = useCallback(
+    (spacing: number) => {
+      const updates = computeSpacingUpdates(spacing);
+      if (updates.length === 0) return;
+      dispatchKeyLikeUpdates(updates, "preview");
+    },
+    [computeSpacingUpdates, dispatchKeyLikeUpdates],
+  );
+
+  // 간격 커밋 (blur 시 최종 반영 + 히스토리 저장)
+  const handleBatchSpacingCommit = useCallback(
+    (spacing: number) => {
+      const updates = computeSpacingUpdates(spacing);
+      if (updates.length === 0) return;
+      dispatchKeyLikeUpdates(updates, "commit");
+    },
+    [computeSpacingUpdates, dispatchKeyLikeUpdates],
+  );
+
+  // 기존 호환용 (외부에서 직접 호출 시 commit 모드)
+  const handleBatchSpacing = useCallback(
+    (spacing: number) => {
+      handleBatchSpacingCommit(spacing);
+    },
+    [handleBatchSpacingCommit],
+  );
+
+  const getBatchSpacingValue = useCallback(() => {
+    const elements = getSelectedLayoutElements();
+    if (elements.length < 2) {
+      return { isMixed: false, value: 0 };
+    }
+
+    const workingElements = elements.map((element) => ({ ...element }));
+    const axisPlan = inferSpacingAxisPlan(workingElements);
+
+    const rawGaps: number[] = [];
+    if (axisPlan.applyHorizontal) {
+      rawGaps.push(
+        ...collectAxisGapsFromGroups(axisPlan.horizontalGroups, "horizontal"),
+      );
+    }
+    if (axisPlan.applyVertical) {
+      rawGaps.push(...collectRowGaps(axisPlan.horizontalGroups));
+    }
+
+    const gaps = rawGaps.map((gap) =>
+      roundToSpacingPrecision(Math.max(0, gap)),
+    );
+
+    if (gaps.length === 0) {
+      return { isMixed: false, value: 0 };
+    }
+
+    const firstGap = gaps[0];
+    const isMixed = gaps.some((gap) => Math.abs(gap - firstGap) > 0.05);
+    return { isMixed, value: firstGap };
+  }, [getSelectedLayoutElements]);
 
   // 일괄 크기 변경 핸들러
   const handleBatchResize = useCallback(
@@ -636,6 +1116,10 @@ export function useBatchHandlers({
     handleBatchStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
+    handleBatchSpacing,
+    handleBatchSpacingPreview,
+    handleBatchSpacingCommit,
+    getBatchSpacingValue,
     handleBatchResize,
     handleBatchCounterUpdate,
     handleBatchNoteColorChange,

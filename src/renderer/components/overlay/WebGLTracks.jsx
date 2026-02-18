@@ -288,7 +288,7 @@ const buildColorAttributes = (color, opacity = 1) => {
 };
 
 export const WebGLTracks = memo(
-  ({ tracks, notesRef, subscribe, noteSettings, laboratoryEnabled }) => {
+  ({ tracks, notesRef, subscribe, noteSettings }) => {
     const canvasRef = useRef();
     const rendererRef = useRef();
     const sceneRef = useRef();
@@ -348,8 +348,7 @@ export const WebGLTracks = memo(
           },
           uShortMinLengthPx: { value: noteSettings.shortNoteMinLengthPx || 10 },
           uDelayEnabled: {
-            value:
-              laboratoryEnabled && noteSettings.delayedNoteEnabled ? 1.0 : 0.0,
+            value: noteSettings.delayedNoteEnabled ? 1.0 : 0.0,
           },
           // fadePosition: 'auto' | 'top' | 'bottom' | 'none' -> 0 | 1 | 2 | 3
           uFadePosition: {
@@ -699,7 +698,7 @@ export const WebGLTracks = memo(
         materialRef.current.uniforms.uShortMinLengthPx.value =
           noteSettings.shortNoteMinLengthPx || 10;
         materialRef.current.uniforms.uDelayEnabled.value =
-          laboratoryEnabled && noteSettings.delayedNoteEnabled ? 1.0 : 0.0;
+          noteSettings.delayedNoteEnabled ? 1.0 : 0.0;
         materialRef.current.uniforms.uFadePosition.value =
           noteSettings.fadePosition === "top"
             ? 1.0
@@ -716,7 +715,6 @@ export const WebGLTracks = memo(
       noteSettings.shortNoteThresholdMs,
       noteSettings.shortNoteMinLengthPx,
       noteSettings.delayedNoteEnabled,
-      laboratoryEnabled,
       noteSettings.fadePosition,
     ]);
 

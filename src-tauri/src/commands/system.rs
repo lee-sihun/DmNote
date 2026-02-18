@@ -3,6 +3,8 @@ use tauri::{AppHandle, Manager, State};
 use crate::app_state::AppState;
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 
+const TRAY_ICON_ID: &str = "background-tray";
+
 #[tauri::command(permission = "dmnote-allow-all")]
 pub fn window_minimize(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
@@ -12,15 +14,10 @@ pub fn window_minimize(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn window_close(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
-    state.shutdown();
+pub fn window_close(app: AppHandle) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         main.close().map_err(|err| err.to_string())?;
     }
-    if let Some(overlay) = app.get_webview_window("overlay") {
-        overlay.close().map_err(|err| err.to_string())?;
-    }
-    app.exit(0);
     Ok(())
 }
 
@@ -35,6 +32,31 @@ pub fn app_open_external(_app: AppHandle, url: String) -> Result<(), String> {
 #[tauri::command(permission = "dmnote-allow-all")]
 pub fn app_restart(app: AppHandle) -> Result<(), String> {
     app.request_restart();
+    Ok(())
+}
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        main.show().map_err(|err| err.to_string())?;
+        let _ = main.set_focus();
+    }
+
+    if app.tray_by_id(TRAY_ICON_ID).is_some() {
+        let _ = app.remove_tray_by_id(TRAY_ICON_ID);
+    }
+
+    state
+        .set_main_window_hidden(false)
+        .map_err(|err| err.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.request_shutdown(app);
     Ok(())
 }
 

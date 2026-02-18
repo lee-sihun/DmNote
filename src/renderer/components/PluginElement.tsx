@@ -6,7 +6,6 @@ import React, {
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac } from "@utils/platform";
 import {
   PluginDisplayElementInternal,
@@ -88,6 +87,7 @@ interface PluginElementProps {
   zoom?: number;
   panX?: number;
   panY?: number;
+  isViewportTransforming?: boolean;
   arrayIndex?: number;
   keyCount?: number;
   isSelected?: boolean;
@@ -110,6 +110,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
+  isViewportTransforming = false,
   arrayIndex = 0,
   keyCount = 0,
   isSelected = false,
@@ -1240,11 +1241,19 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   ]);
 
   const elementStyle: React.CSSProperties = useMemo(() => {
+    const shouldPromoteTransformLayer =
+      windowType === "overlay" ||
+      (windowType === "main" &&
+        (isDraggingOrResizing || isViewportTransforming));
+
     const baseStyle: React.CSSProperties = {
       position: "absolute",
       left: 0,
       top: 0,
-      transform: `translate3d(${renderX}px, ${renderY}px, 0)`,
+      transform:
+        windowType === "main"
+          ? `translate(${renderX}px, ${renderY}px)`
+          : `translate3d(${renderX}px, ${renderY}px, 0)`,
       // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
       // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
       zIndex: element.zIndex ?? keyCount + arrayIndex,
@@ -1254,7 +1263,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           : element.onClick && windowType === "main"
           ? "pointer"
           : "default",
-      willChange: "transform",
+      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
       pointerEvents: windowType === "main" ? "auto" : "none",
     };
 
@@ -1277,6 +1286,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     element.measuredSize,
     definition?.resizable,
     windowType,
+    isDraggingOrResizing,
+    isViewportTransforming,
     arrayIndex,
     keyCount,
   ]);
@@ -1296,8 +1307,11 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
-    // 메인 윈도우에서만 처리
-    if (windowType !== "main") return;
+    // 오버레이에서는 기본 브라우저 메뉴만 차단
+    if (windowType !== "main") {
+      e.preventDefault();
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
@@ -1601,18 +1615,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     return null;
   };
 
-  // macOS용 오버레이 드래그 핸들러
-  const handleOverlayDrag = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isMac()) return;
-
-      if (windowType === "overlay" && e.buttons === 1 && !isSelectionMode) {
-        getCurrentWindow().startDragging();
-      }
-    },
-    [windowType, isSelectionMode]
-  );
-
   return (
     <>
       <div
@@ -1622,16 +1624,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         style={elementStyle}
         data-plugin-element={element.fullId}
         data-plugin-id={element.pluginId}
-        data-tauri-drag-region={windowType === "overlay" ? true : undefined}
         data-editing={isDraggingOrResizing ? "true" : undefined}
         onClick={handleClick}
-        onMouseDown={
-          isSelectionMode
-            ? handleSelectionDragMouseDown
-            : windowType === "overlay"
-            ? handleOverlayDrag
-            : undefined
-        }
+        onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
         onContextMenu={handleContextMenu}
       >
         {element.scoped && shadowRoot

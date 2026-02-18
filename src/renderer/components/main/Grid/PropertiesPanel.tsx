@@ -1280,6 +1280,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
+    handleBatchSpacing,
+    handleBatchSpacingPreview,
+    handleBatchSpacingCommit,
+    getBatchSpacingValue,
     handleBatchResize,
     handleBatchCounterUpdate,
     handleBatchNoteColorChange,
@@ -1723,7 +1727,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }));
       }
 
-      // 노트/글로우는 프리뷰도 함께 업데이트
+      const isGradientNoteLikeColor =
+        !!newColor &&
+        typeof newColor === "object" &&
+        (newColor as any).type === "gradient";
+
+      // 다중 편집에서 노트/글로우 그라데이션을 드래그 중 매 프레임 프리뷰하면
+      // 대량 업데이트 + IPC가 과도하게 발생해 UI가 멈출 수 있어 complete 시점에만 반영한다.
+      if (
+        isGradientNoteLikeColor &&
+        (batchPickerFor === "noteColor" || batchPickerFor === "glowColor")
+      ) {
+        return;
+      }
+
+      // 노트/글로우(단색)는 프리뷰도 함께 업데이트
       if (batchPickerFor === "noteColor") {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchNoteColorChangeKeysOnly(newColor);
@@ -2078,6 +2096,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (pos) => pos.noteGlowOpacity,
       70,
     ).isMixed;
+    const batchSpacing = getBatchSpacingValue();
 
     // 카운터 색상 표시 (피커가 열려있을 때는 로컬 상태 사용)
     const getCounterColorDisplay = (target: "fill" | "stroke") => {
@@ -2174,6 +2193,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   getSelectedKeysData={getSelectedKeysData}
                   handleBatchAlign={handleBatchAlign}
                   handleBatchDistribute={handleBatchDistribute}
+                  handleBatchSpacing={handleBatchSpacing}
+                  handleBatchSpacingPreview={handleBatchSpacingPreview}
+                  handleBatchSpacingCommit={handleBatchSpacingCommit}
+                  batchSpacing={batchSpacing}
                   handleBatchResize={handleBatchResize}
                   handleBatchStyleChange={handleBatchStyleChange}
                   handleBatchStyleChangeComplete={
@@ -2449,6 +2472,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="X"
                       min={-9999}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                     <NumberInput
                       value={selectedPluginElement?.position.y ?? 0}
@@ -2456,6 +2481,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="Y"
                       min={-9999}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                   </PropertyRow>
                   <PropertyRow label={t("propertiesPanel.size") || "크기"}>
@@ -2465,6 +2492,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="W"
                       min={10}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                     <NumberInput
                       value={pluginDisplaySize.height}
@@ -2472,6 +2501,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       prefix="H"
                       min={10}
                       max={9999}
+                      allowDecimal
+                      decimalScale={1}
                     />
                   </PropertyRow>
                   <SectionDivider />

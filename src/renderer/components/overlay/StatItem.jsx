@@ -150,6 +150,7 @@ export default memo(function StatItem({
       isolation: "isolate",
       boxSizing: "border-box",
       zIndex: position.zIndex,
+      cursor: "default",
     };
   }, [
     active,
@@ -265,7 +266,7 @@ export default memo(function StatItem({
     const nameElement = (
       <span
         key="label"
-        className="font-bold text-[14px] pointer-events-none select-none"
+        className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
         style={textStyle}
       >
         {labelText}
@@ -309,7 +310,7 @@ export default memo(function StatItem({
 
   return (
     <div
-      className={`absolute cursor-pointer ${className || ""}`}
+      className={`absolute ${className || ""}`}
       style={keyStyle}
       data-state={active ? "active" : "inactive"}
     >
@@ -319,7 +320,7 @@ export default memo(function StatItem({
         renderInsideLayout()
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold"
+          className="flex items-center justify-center h-full font-bold text-safe-inline"
           style={textStyle}
         >
           {labelText}

@@ -594,11 +594,13 @@ export interface DMNoteAPI {
     bootstrap(): Promise<BootstrapPayload>;
     openExternal(url: string): Promise<void>;
     restart(): Promise<void>;
+    quit(): Promise<void>;
   };
   window: {
     type: "main" | "overlay";
     minimize(): Promise<void>;
     close(): Promise<void>;
+    showMain(): Promise<void>;
     openDevtoolsAll?(): Promise<void>;
   };
   settings: {
@@ -665,6 +667,8 @@ export interface DMNoteAPI {
       height: number;
       anchor?: string;
       contentTopOffset?: number;
+      fixedPositionDeltaX?: number;
+      fixedPositionDeltaY?: number;
     }): Promise<OverlayBounds>;
     onVisibility(
       listener: (payload: OverlayVisibilityPayload) => void,

@@ -9,7 +9,7 @@ import {
 import type { ReactNode } from "react";
 import type { SettingsDiff, SettingsState } from "@src/types/settings";
 
-export type SupportedLocale = "ko" | "en" | "zh-cn" | "zh-Hant";
+export type SupportedLocale = "ko" | "en" | "zh-cn" | "zh-Hant" | "ru";
 
 type Messages = Record<string, unknown>;
 
@@ -27,7 +27,11 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 function isSupportedLocale(value: unknown): value is SupportedLocale {
   return (
-    value === "ko" || value === "en" || value === "zh-cn" || value === "zh-Hant"
+    value === "ko" ||
+    value === "en" ||
+    value === "zh-cn" ||
+    value === "zh-Hant" ||
+    value === "ru"
   );
 }
 
@@ -113,6 +117,11 @@ function detectBrowserLocale(): SupportedLocale {
       value.startsWith("zh-hant"),
   );
   if (isTraditionalChinese) return "zh-Hant";
+
+  const isRussian = normalized.some(
+    (value) => value === "ru" || value.startsWith("ru-"),
+  );
+  if (isRussian) return "ru";
 
   return "en";
 }

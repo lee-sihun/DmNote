@@ -512,6 +512,7 @@ fn run_raw_input() -> Result<()> {
         GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
         RAWINPUTHEADER, RIDEV_INPUTSINK, RIDEV_NOLEGACY, RID_INPUT, RIM_TYPEKEYBOARD, RIM_TYPEMOUSE,
     };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{MapVirtualKeyW, MAPVK_VSC_TO_VK_EX};
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassExW,
         TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, MSG, WNDCLASSEXW, WM_DESTROY,
@@ -656,9 +657,35 @@ fn run_raw_input() -> Result<()> {
                         let scan_code = kbd.MakeCode as u32;
                         let flags = kbd.Flags as u32;
 
+                        let is_e0 = (flags & RI_KEY_E0) != 0;
+                        // RI_KEY_E1 is not currently exposed in windows crate constants.
+                        const RI_KEY_E1: u32 = 0x0004;
+                        let is_e1 = (flags & RI_KEY_E1) != 0;
+
+                        // Prefix scan code for MAPVK_VSC_TO_VK_EX (E0/E1 in high byte).
+                        let scan_code_prefixed = if is_e0 {
+                            scan_code | 0xE000
+                        } else if is_e1 {
+                            scan_code | 0xE100
+                        } else {
+                            scan_code
+                        };
+
                         // Normalize virtual key so that left/right modifiers and others
-                        // match willhook's expectations.
+                        // match expected labels. Prefer scancode-based recovery for fake keys.
                         let mut vk_norm = vkey;
+                        if vk_norm == 0 || vk_norm == 0xFF {
+                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                            if mapped != 0 {
+                                vk_norm = mapped;
+                            } else {
+                                // Fake/incomplete key events can appear as VK 0/255.
+                                // Skip unresolved events instead of forcing a wrong key label.
+                                let _ = TranslateMessage(&msg);
+                                DispatchMessageW(&msg);
+                                continue;
+                            }
+                        }
 
                         const VK_SHIFT: u32 = 0x10;
                         const VK_CONTROL: u32 = 0x11;
@@ -671,15 +698,19 @@ fn run_raw_input() -> Result<()> {
                         const VK_RMENU: u32 = 0xA5;
 
                         if vk_norm == VK_SHIFT {
-                            match scan_code {
-                                42 => vk_norm = VK_LSHIFT,
-                                54 => vk_norm = VK_RSHIFT,
-                                _ => {}
+                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                            match mapped {
+                                VK_LSHIFT | VK_RSHIFT => vk_norm = mapped,
+                                _ => match scan_code {
+                                    42 => vk_norm = VK_LSHIFT,
+                                    54 => vk_norm = VK_RSHIFT,
+                                    _ => {}
+                                },
                             }
                         }
 
                         if vk_norm == VK_CONTROL {
-                            if (flags & RI_KEY_E0) != 0 {
+                            if is_e0 {
                                 vk_norm = VK_RCONTROL;
                             } else {
                                 vk_norm = VK_LCONTROL;
@@ -687,7 +718,7 @@ fn run_raw_input() -> Result<()> {
                         }
 
                         if vk_norm == VK_MENU {
-                            if (flags & RI_KEY_E0) != 0 {
+                            if is_e0 {
                                 vk_norm = VK_RMENU;
                             } else {
                                 vk_norm = VK_LMENU;
@@ -714,7 +745,7 @@ fn run_raw_input() -> Result<()> {
                         // Map Raw Input extended flag to low-level hook-style flags
                         // so that keyboard_labels' numpad/extended logic behaves identically.
                         let mut ll_flags = 0u32;
-                        if (flags & RI_KEY_E0) != 0 {
+                        if is_e0 {
                             // LLKHF_EXTENDED == 0x01 in keyboard_labels.rs
                             ll_flags |= 0x01;
                         }

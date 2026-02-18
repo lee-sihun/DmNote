@@ -105,6 +105,7 @@ export default function Grid({
     resetZoom,
     minZoom,
     maxZoom,
+    isTransforming,
   } = useGridZoomPan({
     mode: selectedKeyType,
     containerRef: gridContainerRef,
@@ -1201,6 +1202,7 @@ export default function Grid({
         zoom={zoom}
         panX={panX}
         panY={panY}
+        isViewportTransforming={isTransforming}
         counterEnabled={keyCounterEnabled}
         counterPreviewValue={0}
       />
@@ -1322,6 +1324,7 @@ export default function Grid({
         zoom={zoom}
         panX={panX}
         panY={panY}
+        isViewportTransforming={isTransforming}
         counterEnabled={true}
         counterPreviewValue={0}
         setReferenceRef={(node) => {
@@ -1531,7 +1534,7 @@ export default function Grid({
           />
         ) : (
           <div
-            className="flex items-center justify-center h-full font-bold"
+            className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
             style={{
               color: "var(--key-text-color, rgba(121, 121, 121, 0.9))",
               willChange: "auto",
@@ -1666,7 +1669,7 @@ export default function Grid({
         style={{
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
           transformOrigin: "0 0",
-          willChange: "transform",
+          willChange: isTransforming ? "transform" : "auto",
         }}
       >
         {renderKeys()}
@@ -1686,6 +1689,7 @@ export default function Grid({
           zoom={zoom}
           panX={panX}
           panY={panY}
+          isViewportTransforming={isTransforming}
           onSelectionContextMenu={({
             elementId,
             clientX,

@@ -1,6 +1,6 @@
 {
   "name": "dm-note",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "DM NOTE",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "tauri:build:mac:universal": "tauri build --target universal-apple-darwin",
     "//": "버전 업데이트: patch(1.4.0->1.4.1), minor(1.4.0->1.5.0), major(1.4.0->2.0.0)",
     "sync-version": "node scripts/sync-version.js",
-    "version": "npm run sync-version && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml",
+    "version": "npm run sync-version && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml README.md docs/readme_en.md docs/readme_zh-cn.md",
     "contributors:add": "all-contributors add",
     "contributors:generate": "all-contributors generate"
   },

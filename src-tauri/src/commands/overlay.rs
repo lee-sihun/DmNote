@@ -15,6 +15,10 @@ pub struct OverlayResizeArgs {
     pub anchor: Option<String>,
     #[serde(default)]
     pub content_top_offset: Option<f64>,
+    #[serde(default)]
+    pub fixed_position_delta_x: Option<f64>,
+    #[serde(default)]
+    pub fixed_position_delta_y: Option<f64>,
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
@@ -68,6 +72,8 @@ pub fn overlay_resize(
             payload.height,
             payload.anchor,
             payload.content_top_offset,
+            payload.fixed_position_delta_x,
+            payload.fixed_position_delta_y,
         )
         .map_err(|err| err.to_string())
 }

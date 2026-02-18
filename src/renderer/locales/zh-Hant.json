@@ -4,6 +4,7 @@
     "alwaysOnTop": "始終置頂",
     "noteEffect": "顯示鍵雨",
     "laboratory": "啟用實驗性功能",
+    "trayEnabled": "啟用系統匣模式",
     "keyCounter": "顯示按鍵計數器",
     "customCSS": "啟用自定義 CSS",
     "noCssFile": "(未選擇 CSS 檔案)",
@@ -25,6 +26,7 @@
     "topRight": "右上",
     "bottomRight": "右下",
     "center": "居中",
+    "fixedPosition": "固定位置",
     "graphicsOption": "圖形渲染 (API)",
     "renderMode": "選擇渲染模式",
     "resetData": "重置資料",
@@ -59,6 +61,7 @@
     "alwaysOnTopDesc": "使懸浮窗始終顯示在其他視窗之上.",
     "noteEffectDesc": "按下按鍵時顯示鍵雨.",
     "laboratoryDesc": "嘗試實驗性功能.",
+    "trayEnabledDesc": "關閉主視窗時不退出程式，而是隱藏到系統匣.",
     "developerMode": "啟用開發者模式",
     "developerModeDesc": "即使在生產版本中也允許打開開發者工具 (DevTools).",
     "customCSSDesc": "載入自定義 CSS 檔案以調整懸浮窗樣式.",
@@ -256,6 +259,16 @@
     "duplicateGraph": "複製圖表",
     "deleteGraph": "刪除圖表",
     "noteSetting": "音符設定",
+  "contextMenu": {
+    "duplicateKey": "複製按鍵",
+    "deleteKey": "刪除按鍵",
+    "duplicateSelected": "複製所選項目",
+    "deleteSelected": "刪除所選項目",
+
+    "duplicateStat": "複製統計",
+
+    "deleteStat": "刪除統計",
+    "noteSetting": "音符設定",
     "counterSetting": "計數器設定",
     "counterReset": "重置計數器",
     "bringToFront": "置於頂層",
@@ -265,6 +278,12 @@
     "tabCssSetting": "標籤頁 CSS 設定",
     "addStat": "新增統計",
     "addGraph": "新增圖表"
+  },
+    "tabCssSetting": "標籤頁 CSS 設定",
+    "addStat": "新增統計",
+    "quitApp": "退出程式",
+    "snapToEdge": "貼靠螢幕邊緣",
+    "selectTab": "選擇標籤頁"
   },
   "noteColor": {
     "color": "顏色",
@@ -423,6 +442,7 @@
     "distribution": "分佈",
     "distributeH": "水平分佈",
     "distributeV": "垂直分佈",
+    "spacing": "間距",
     "width": "寬度",
     "height": "高度",
     "canvas": "畫布",

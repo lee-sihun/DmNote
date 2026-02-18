@@ -42,6 +42,7 @@ interface SettingsState {
   language: string;
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
+  trayEnabled: boolean;
   overlayResizeAnchor: OverlayResizeAnchor;
   keyCounterEnabled: boolean;
   gridSettings: GridSettings;
@@ -49,6 +50,7 @@ interface SettingsState {
   setAll: (payload: SettingsStateSnapshot) => void;
   merge: (payload: Partial<SettingsStateSnapshot>) => void;
   setLaboratoryEnabled: (value: boolean) => void;
+  setTrayEnabled: (value: boolean) => void;
   setDeveloperModeEnabled: (value: boolean) => void;
   setHardwareAcceleration: (value: boolean) => void;
   setAlwaysOnTop: (value: boolean) => void;
@@ -75,6 +77,7 @@ export type SettingsStateSnapshot = Omit<
   | "setAll"
   | "merge"
   | "setLaboratoryEnabled"
+  | "setTrayEnabled"
   | "setHardwareAcceleration"
   | "setAlwaysOnTop"
   | "setUseCustomCSS"
@@ -113,6 +116,7 @@ const initialState: SettingsStateSnapshot = {
   language: "ko",
   laboratoryEnabled: false,
   developerModeEnabled: false,
+  trayEnabled: false,
   overlayResizeAnchor: "top-left",
   keyCounterEnabled: false,
   gridSettings: DEFAULT_GRID_SETTINGS,
@@ -187,6 +191,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setFontSettings: (value) => set({ fontSettings: value }),
   setLanguage: (value) => set({ language: value }),
   setLaboratoryEnabled: (value) => set({ laboratoryEnabled: value }),
+  setTrayEnabled: (value) => set({ trayEnabled: value }),
   setBackgroundColor: (value) => set({ backgroundColor: value }),
   setOverlayResizeAnchor: (value) => set({ overlayResizeAnchor: value }),
   setKeyCounterEnabled: (value) => set({ keyCounterEnabled: value }),

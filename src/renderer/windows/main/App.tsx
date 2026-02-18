@@ -11,7 +11,6 @@ import { useKeyManager } from "@hooks/useKeyManager";
 import { usePalette } from "@hooks/usePalette";
 import CustomAlert from "@components/main/Modal/content/Alert";
 import NoteSettingModal from "@components/main/Modal/content/NoteSetting";
-import LaboratoryModal from "@components/main/Modal/content/Laboratory";
 import UpdateModal from "@components/main/Modal/content/UpdateModal";
 import PropertiesPanel from "@components/main/Grid/PropertiesPanel";
 import { useSettingsStore } from "@stores/useSettingsStore";
@@ -128,7 +127,6 @@ export default function App() {
   const [activeTool, setActiveTool] = useState("move");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
-  const [isLaboratoryOpen, setIsLaboratoryOpen] = useState(false);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
     useState(false);
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
@@ -138,8 +136,6 @@ export default function App() {
     setAngleMode,
     language: storeLanguage,
     setLanguage,
-    laboratoryEnabled,
-    setLaboratoryEnabled,
     noteSettings,
     setNoteSettings,
     developerModeEnabled,
@@ -602,7 +598,6 @@ export default function App() {
         }}
         showAlert={showAlert}
         onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
-        onOpenLaboratory={() => setIsLaboratoryOpen(true)}
         primaryButtonRef={primaryButtonRef}
       />
       {palette && (
@@ -629,29 +624,6 @@ export default function App() {
               console.error("Failed to update note settings", error);
             }
           }}
-        />
-      )}
-      {isLaboratoryOpen && noteSettings && (
-        <LaboratoryModal
-          delayEnabled={noteSettings.delayedNoteEnabled}
-          thresholdMs={noteSettings.shortNoteThresholdMs}
-          minLengthPx={noteSettings.shortNoteMinLengthPx}
-          keyDisplayDelayMs={noteSettings.keyDisplayDelayMs ?? 0}
-          trackHeight={noteSettings.trackHeight}
-          speed={noteSettings.speed}
-          onSave={async (payload) => {
-            try {
-              const updated = {
-                ...noteSettings,
-                ...payload,
-              };
-              await window.api.settings.update({ noteSettings: updated });
-              setNoteSettings(updated);
-            } catch (error) {
-              console.error("Failed to update laboratory settings", error);
-            }
-          }}
-          onClose={() => setIsLaboratoryOpen(false)}
         />
       )}
       <CustomAlert

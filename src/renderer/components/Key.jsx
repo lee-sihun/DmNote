@@ -1,5 +1,4 @@
 import React, { memo, useMemo, useCallback, useRef, useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getKeySignal } from "@stores/keySignals";
 import { getKeyCounterSignal } from "@stores/keyCounterSignals";
 import { useSignals } from "@preact/signals-react/runtime";
@@ -45,6 +44,7 @@ export default function DraggableKey({
   panX = 0,
   panY = 0,
   zIndex = 0,
+  isViewportTransforming = false,
   // 카운터 미리보기 props
   counterEnabled = false,
   counterPreviewValue = 0,
@@ -462,12 +462,14 @@ export default function DraggableKey({
 
   // 인라인 스타일 우선 여부에 따라 CSS 변수 또는 직접 값 사용
   const useInline = useInlineStyles === true;
+  const shouldPromoteTransformLayer =
+    isDraggingOrResizing || isViewportTransforming;
 
   const keyStyle = useMemo(
     () => ({
       width: `${width}px`,
       height: `${height}px`,
-      transform: `translate3d(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)), 0)`,
+      transform: `translate(calc(${renderDx}px + var(--key-offset-x, 0px)), calc(${renderDy}px + var(--key-offset-y, 0px)))`,
       backgroundColor:
         useInline && backgroundColor
           ? backgroundColor
@@ -491,9 +493,7 @@ export default function DraggableKey({
               borderColor || "rgba(113, 113, 113, 0.9)"
             })`,
       overflow: "hidden",
-      willChange: "transform",
-      backfaceVisibility: "hidden",
-      transformStyle: "preserve-3d",
+      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
       contain: "layout style paint",
       imageRendering: "auto",
       isolation: "isolate",
@@ -513,6 +513,7 @@ export default function DraggableKey({
       borderColor,
       borderWidth,
       borderRadius,
+      shouldPromoteTransformLayer,
     ],
   );
 
@@ -614,7 +615,7 @@ export default function DraggableKey({
     const nameElement = (
       <span
         key="label"
-        className="font-bold text-[14px] pointer-events-none select-none leading-none"
+        className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
         style={textStyle}
       >
         {labelText}
@@ -687,7 +688,7 @@ export default function DraggableKey({
         renderInsideCounterPreview()
       ) : (
         <div
-          className="flex items-center justify-center h-full font-bold"
+          className="flex items-center justify-center h-full font-bold text-safe-inline"
           style={textStyle}
         >
           {labelText}
@@ -972,7 +973,7 @@ export const Key = memo(
       const nameElement = (
         <span
           key="label"
-          className="font-bold text-[14px] pointer-events-none select-none"
+          className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
           style={textStyle}
         >
           {labelText}
@@ -1014,22 +1015,11 @@ export const Key = memo(
       );
     };
 
-    // macOS 용 오버레이 드래그 핸들러
-    const handleKeyMouseDown = useCallback((e) => {
-      if (!isMac()) return;
-
-      if (e.buttons === 1) {
-        getCurrentWindow().startDragging();
-      }
-    }, []);
-
     return (
       <div
-        data-tauri-drag-region
         className={`absolute ${className || ""}`}
         style={keyStyle}
         data-state={active ? "active" : "inactive"}
-        onMouseDown={handleKeyMouseDown}
       >
         {hasCurrentImage ? (
           <img src={currentImageSrc || ""} alt="" style={imageStyle} draggable={false} />
@@ -1038,7 +1028,7 @@ export const Key = memo(
             renderInsideLayout()
           ) : (
             <div
-              className="flex items-center justify-center h-full font-bold"
+              className="flex items-center justify-center h-full font-bold text-safe-inline"
               style={textStyle}
             >
               {labelText}

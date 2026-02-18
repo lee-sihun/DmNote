@@ -595,6 +595,7 @@ pub enum OverlayResizeAnchor {
     BottomLeft,
     BottomRight,
     Center,
+    FixedPosition,
 }
 
 impl Default for OverlayResizeAnchor {
@@ -660,6 +661,7 @@ impl OverlayResizeAnchor {
             OverlayResizeAnchor::BottomLeft => "bottom-left",
             OverlayResizeAnchor::BottomRight => "bottom-right",
             OverlayResizeAnchor::Center => "center",
+            OverlayResizeAnchor::FixedPosition => "fixed-position",
         }
     }
 }
@@ -671,6 +673,7 @@ pub fn overlay_resize_anchor_from_str(value: &str) -> Option<OverlayResizeAnchor
         "bottom-left" => Some(OverlayResizeAnchor::BottomLeft),
         "bottom-right" => Some(OverlayResizeAnchor::BottomRight),
         "center" => Some(OverlayResizeAnchor::Center),
+        "fixed-position" => Some(OverlayResizeAnchor::FixedPosition),
         _ => None,
     }
 }
@@ -698,6 +701,10 @@ pub struct AppStoreData {
     pub laboratory_enabled: bool,
     #[serde(default)]
     pub developer_mode_enabled: bool,
+    #[serde(default)]
+    pub tray_enabled: bool,
+    #[serde(default)]
+    pub main_window_hidden: bool,
     #[serde(default)]
     pub keys: KeyMappings,
     #[serde(default)]
@@ -757,6 +764,8 @@ impl Default for AppStoreData {
             language: "ko".to_string(),
             laboratory_enabled: false,
             developer_mode_enabled: false,
+            tray_enabled: false,
+            main_window_hidden: false,
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
@@ -1011,6 +1020,8 @@ pub struct SettingsState {
     pub laboratory_enabled: bool,
     #[serde(default)]
     pub developer_mode_enabled: bool,
+    #[serde(default)]
+    pub tray_enabled: bool,
     pub background_color: String,
     #[serde(rename = "useCustomCSS")]
     pub use_custom_css: bool,
@@ -1049,6 +1060,7 @@ impl Default for SettingsState {
             language: "ko".to_string(),
             laboratory_enabled: false,
             developer_mode_enabled: false,
+            tray_enabled: false,
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
@@ -1105,6 +1117,7 @@ pub struct SettingsPatchInput {
     pub language: Option<String>,
     pub laboratory_enabled: Option<bool>,
     pub developer_mode_enabled: Option<bool>,
+    pub tray_enabled: Option<bool>,
     pub background_color: Option<String>,
     #[serde(rename = "useCustomCSS")]
     pub use_custom_css: Option<bool>,
@@ -1163,6 +1176,7 @@ impl SettingsDiff {
             p.language.is_some(),
             p.laboratory_enabled.is_some(),
             p.developer_mode_enabled.is_some(),
+            p.tray_enabled.is_some(),
             p.background_color.is_some(),
             p.use_custom_css.is_some(),
             p.custom_css.is_some(),
@@ -1201,6 +1215,8 @@ pub struct SettingsPatch {
     pub laboratory_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub developer_mode_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tray_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<String>,
     #[serde(rename = "useCustomCSS")]

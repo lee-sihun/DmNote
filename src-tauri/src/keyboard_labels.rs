@@ -323,7 +323,6 @@ fn other_key_labels(code: u32) -> Vec<String> {
         189 => vec!["MINUS".to_string(), "-".to_string()],
         93 => vec!["CONTEXT MENU".to_string(), "APPS".to_string()],
         19 => vec!["PAUSE".to_string()],
-        255 => vec!["PAUSE".to_string()],
         // VK_END (0x23 / 35) is not mapped in KeyboardKey,
         // so it comes through as Other(35); normalize to "END"
         // to match frontend key map expectations.

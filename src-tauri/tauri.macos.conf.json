@@ -4,6 +4,7 @@
     "active": true,
     "targets": ["app", "dmg"],
     "icon": ["icons/icon.icns"],
+    "resources": ["target/dmnote-helper/DM NOTE.app"],
     "macOS": {
       "entitlements": null,
       "infoPlist": "Info.macos.plist"

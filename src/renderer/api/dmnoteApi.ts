@@ -74,7 +74,7 @@ import type {
 
 const LOCALE_STORAGE_KEY = "dmnote:locale";
 const DEFAULT_LOCALE = "ko";
-const SUPPORTED_LOCALES = new Set(["ko", "en", "zh-cn", "zh-Hant"]);
+const SUPPORTED_LOCALES = new Set(["ko", "en", "zh-cn", "zh-Hant", "ru"]);
 
 let cachedLocale: string | null = null;
 const i18nListeners = new Set<(locale: string) => void>();
@@ -127,11 +127,13 @@ const api: DMNoteAPI = {
     bootstrap: () => invoke<BootstrapPayload>("app_bootstrap"),
     openExternal: (url: string) => invoke("app_open_external", { url }),
     restart: () => invoke("app_restart"),
+    quit: () => invoke("app_quit"),
   },
   window: {
     type: (window as any).__dmn_window_type as "main" | "overlay",
     minimize: () => invoke("window_minimize"),
     close: () => invoke("window_close"),
+    showMain: () => invoke("window_show_main"),
     openDevtoolsAll: () => invoke("window_open_devtools_all"),
   },
   settings: {
@@ -229,6 +231,8 @@ const api: DMNoteAPI = {
       height: number;
       anchor?: string;
       contentTopOffset?: number;
+      fixedPositionDeltaX?: number;
+      fixedPositionDeltaY?: number;
     }) => invoke<OverlayBounds>("overlay_resize", { payload }),
     onVisibility: (listener: (payload: OverlayVisibilityPayload) => void) =>
       subscribe<OverlayVisibilityPayload>("overlay:visibility", listener),

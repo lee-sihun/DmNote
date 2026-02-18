@@ -4,6 +4,7 @@
     "alwaysOnTop": "Always on Top",
     "noteEffect": "Show Note Effect",
     "laboratory": "Enable experimental features",
+    "trayEnabled": "Enable tray mode",
     "keyCounter": "Show Key Counter",
     "customCSS": "Enable Custom CSS",
     "noCssFile": "(No CSS file selected)",
@@ -25,6 +26,7 @@
     "topRight": "Top-Right",
     "bottomRight": "Bottom-Right",
     "center": "Center",
+    "fixedPosition": "Fixed Position",
     "graphicsOption": "Graphics API",
     "renderMode": "Select Rendering Mode",
     "resetData": "Reset Data",
@@ -59,6 +61,7 @@
     "alwaysOnTopDesc": "Keeps the overlay window always on top of other windows.",
     "noteEffectDesc": "Shows note effects when keys are pressed.",
     "laboratoryDesc": "Try experimental features.",
+    "trayEnabledDesc": "Hide the main window to tray instead of exiting on close.",
     "developerMode": "Enable Developer Mode",
     "developerModeDesc": "Allow opening DevTools even in production builds.",
     "customCSSDesc": "Loads a custom CSS file to style the overlay.",
@@ -262,6 +265,9 @@
     "tabCssSetting": "Tab CSS Settings",
     "addStat": "Add Stat",
     "addGraph": "Add Graph"
+    "quitApp": "Quit Application",
+    "snapToEdge": "Snap to Edge",
+    "selectTab": "Select Tab"
   },
   "noteColor": {
     "color": "Color",
@@ -420,6 +426,7 @@
     "distribution": "Distribution",
     "distributeH": "Distribute Horizontally",
     "distributeV": "Distribute Vertically",
+    "spacing": "Spacing",
     "width": "Width",
     "height": "Height",
     "canvas": "Canvas",

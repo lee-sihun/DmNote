@@ -71,8 +71,7 @@ export function useAppBootstrap() {
     };
 
     const getCounterDelayMs = () => {
-      const { laboratoryEnabled, noteSettings } = useSettingsStore.getState();
-      if (!laboratoryEnabled) return 0;
+      const { noteSettings } = useSettingsStore.getState();
       const delay = Number(noteSettings?.keyDisplayDelayMs ?? 0);
       return delay > 0 ? delay : 0;
     };
@@ -187,6 +186,7 @@ export function useAppBootstrap() {
         laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
         developerModeEnabled:
           (bootstrap.settings as any).developerModeEnabled ?? false,
+        trayEnabled: (bootstrap.settings as any).trayEnabled ?? false,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
         gridSettings: bootstrap.settings.gridSettings ?? DEFAULT_GRID_SETTINGS,
@@ -302,13 +302,10 @@ export function useAppBootstrap() {
         });
       }),
       useSettingsStore.subscribe((state, previousState) => {
-        const nextDelay = state.laboratoryEnabled
-          ? Number(state.noteSettings?.keyDisplayDelayMs ?? 0)
+        const nextDelay = Number(state.noteSettings?.keyDisplayDelayMs ?? 0);
+        const prevDelay = previousState
+          ? Number(previousState.noteSettings?.keyDisplayDelayMs ?? 0)
           : 0;
-        const prevDelay =
-          previousState && previousState.laboratoryEnabled
-            ? Number(previousState.noteSettings?.keyDisplayDelayMs ?? 0)
-            : 0;
         if (nextDelay <= 0 && prevDelay > 0) {
           clearCounterDelayTimers();
         }

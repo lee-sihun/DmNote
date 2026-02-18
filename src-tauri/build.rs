@@ -3,7 +3,79 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     maybe_embed_webview2_fixed_runtime();
+    #[cfg(target_os = "macos")]
+    maybe_build_macos_dock_helper();
     tauri_build::build()
+}
+
+#[cfg(target_os = "macos")]
+fn maybe_build_macos_dock_helper() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    let helper_src = PathBuf::from("helper/DockHelper/main.swift");
+    let helper_info = PathBuf::from("helper/DockHelper/Info.plist");
+    let legacy_helper_bundle = PathBuf::from("target/dmnote-helper/DMNoteDockHelper.app");
+    let helper_bundle = PathBuf::from("target/dmnote-helper/DM NOTE.app");
+    let helper_contents = helper_bundle.join("Contents");
+    let helper_macos = helper_contents.join("MacOS");
+    let helper_resources = helper_contents.join("Resources");
+    let helper_exec = helper_macos.join("DMNoteDockHelper");
+    let helper_bundle_info = helper_contents.join("Info.plist");
+    let helper_icon = helper_resources.join("icon.icns");
+    let source_icon = PathBuf::from("icons/icon.icns");
+
+    println!("cargo:rerun-if-changed={}", helper_src.display());
+    println!("cargo:rerun-if-changed={}", helper_info.display());
+    println!("cargo:rerun-if-changed={}", source_icon.display());
+
+    if legacy_helper_bundle.exists() {
+        let _ = fs::remove_dir_all(&legacy_helper_bundle);
+    }
+
+    if let Err(err) = fs::create_dir_all(&helper_macos) {
+        println!("cargo:warning=failed to create helper MacOS dir: {err}");
+        return;
+    }
+    if let Err(err) = fs::create_dir_all(&helper_resources) {
+        println!("cargo:warning=failed to create helper Resources dir: {err}");
+        return;
+    }
+
+    let status = Command::new("xcrun")
+        .args(["--sdk", "macosx", "swiftc"])
+        .arg(&helper_src)
+        .args(["-O", "-framework", "AppKit", "-o"])
+        .arg(&helper_exec)
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            println!("cargo:warning=swiftc helper build failed with status {s}");
+            return;
+        }
+        Err(err) => {
+            println!("cargo:warning=failed to invoke swiftc for helper build: {err}");
+            return;
+        }
+    }
+
+    if let Err(err) = fs::set_permissions(&helper_exec, fs::Permissions::from_mode(0o755)) {
+        println!("cargo:warning=failed to set helper executable permissions: {err}");
+    }
+
+    if let Err(err) = fs::copy(&helper_info, &helper_bundle_info) {
+        println!("cargo:warning=failed to copy helper Info.plist: {err}");
+        return;
+    }
+
+    if let Err(err) = fs::copy(&source_icon, &helper_icon) {
+        println!("cargo:warning=failed to copy helper icon: {err}");
+        return;
+    }
 }
 
 #[cfg(target_os = "windows")]
