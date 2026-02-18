@@ -149,6 +149,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === "key" || el.type === "stat",
   );
+  const selectedBatchStyleElements = selectedElements.filter(
+    (el) => el.type === "key" || el.type === "stat" || el.type === "graph",
+  );
   const selectedPluginElements = selectedElements.filter(
     (el) => el.type === "plugin",
   );
@@ -313,6 +316,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyElements.length,
   ]);
 
+  // 그래프만 다중 선택된 상태에서는 STYLE 탭만 사용
+  useEffect(() => {
+    const graphOnlyMultiSelection =
+      selectedGraphElements.length > 1 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedPluginElements.length === 0;
+    if (graphOnlyMultiSelection && activeTab !== TABS.STYLE) {
+      setActiveTab(TABS.STYLE);
+    }
+  }, [
+    activeTab,
+    selectedGraphElements.length,
+    selectedKeyLikeElements.length,
+    selectedPluginElements.length,
+  ]);
+
   // 스크롤 훅 사용
   const {
     batchScrollRefFor,
@@ -386,7 +405,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const hasPluginPanel =
       !!pluginSettingsPanel ||
       (selectedPluginElements.length > 0 &&
-        selectedKeyLikeElements.length === 0);
+        selectedKeyLikeElements.length === 0 &&
+        selectedGraphElements.length === 0);
 
     if (!hasPluginPanel) return;
 
@@ -405,6 +425,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     hasSinglePluginSelection,
     selectedPluginElements.length,
     selectedKeyLikeElements.length,
+    selectedGraphElements.length,
     updatePluginThumbDOM,
   ]);
 
@@ -558,14 +579,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 다중 선택 시 패널 자동 열기
   useEffect(() => {
     if (
-      selectedKeyLikeElements.length > 1 &&
+      selectedBatchStyleElements.length > 1 &&
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
       setPanelMode("property");
       setIsPanelVisible(true);
     }
-  }, [selectedKeyLikeElements.length, isPanelVisible]);
+  }, [selectedBatchStyleElements.length, isPanelVisible]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -1196,6 +1217,105 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     [pushHistoryState, selectedKeyType],
   );
 
+  const handleGraphPreview = useCallback(
+    (index: number, updates: Partial<GraphItemPosition>) => {
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (!list[index]) return;
+
+      const nextList = list.map((pos, i) =>
+        i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
+      );
+      const nextPositions = { ...current, [mode]: nextList };
+      useGraphItemStore.getState().setPositions(nextPositions);
+    },
+    [selectedKeyType],
+  );
+
+  const handleGraphBatchPreview = useCallback(
+    (updates: Array<{ index: number } & Partial<GraphItemPosition>>) => {
+      if (updates.length === 0) return;
+
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list.length === 0) return;
+
+      const updateMap = new Map<number, Partial<GraphItemPosition>>();
+      for (const { index, ...rest } of updates) {
+        if (list[index]) {
+          updateMap.set(index, rest);
+        }
+      }
+      if (updateMap.size === 0) return;
+
+      const nextList = list.map((pos, i) => {
+        const update = updateMap.get(i);
+        return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+      });
+      const nextPositions = { ...current, [mode]: nextList };
+      useGraphItemStore.getState().setPositions(nextPositions);
+    },
+    [selectedKeyType],
+  );
+
+  const handleGraphBatchUpdate = useCallback(
+    (updates: Array<{ index: number } & Partial<GraphItemPosition>>) => {
+      if (updates.length === 0) return;
+
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list.length === 0) return;
+
+      const updateMap = new Map<number, Partial<GraphItemPosition>>();
+      for (const { index, ...rest } of updates) {
+        if (list[index]) {
+          updateMap.set(index, rest);
+        }
+      }
+      if (updateMap.size === 0) return;
+
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        currentPositions,
+        useStatItemStore.getState().positions,
+        current,
+        currentPluginElements,
+      );
+
+      const nextList = list.map((pos, i) => {
+        const update = updateMap.get(i);
+        return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+      });
+      const nextPositions = { ...current, [mode]: nextList };
+
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setPositions(nextPositions);
+      window.api.graphItems
+        .updatePositions(nextPositions)
+        .catch((error) => {
+          console.error("Failed to batch update graph items", error);
+        })
+        .finally(() => {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        });
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [pushHistoryState, selectedKeyType],
+  );
+
   // 크기 변경 완료 (blur 시 저장)
   const handleSizeBlur = useCallback(() => {
     if (singleKeyIndex === null && singleStatIndex === null) return;
@@ -1249,6 +1369,51 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     statItemPositions,
   ]);
 
+  const getSelectedGraphsData = useCallback(() => {
+    return selectedGraphElements
+      .map((el) => {
+        const index = el.index!;
+        const position = graphItemPositions[selectedKeyType]?.[index];
+        const graphLabel = `${getStatTypeLabel(position?.statType ?? null)} Graph`;
+        const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
+        return { index, position, keyCode: null, keyInfo };
+      })
+      .filter((data) => data.position !== undefined);
+  }, [selectedGraphElements, graphItemPositions, selectedKeyType]);
+
+  const getSelectedBatchStyleData = useCallback(() => {
+    return selectedBatchStyleElements
+      .map((el) => {
+        const index = el.index!;
+        if (el.type === "key") {
+          const position = positions[selectedKeyType]?.[index];
+          const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
+          const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
+          return { index, position, keyCode, keyInfo };
+        }
+        if (el.type === "stat") {
+          const position = statItemPositions[selectedKeyType]?.[index];
+          const statLabel =
+            (position?.displayText || "").trim() ||
+            getStatTypeLabel(position?.statType ?? null);
+          const keyInfo = { globalKey: statLabel, displayName: statLabel };
+          return { index, position, keyCode: null, keyInfo };
+        }
+        const position = graphItemPositions[selectedKeyType]?.[index];
+        const graphLabel = `${getStatTypeLabel(position?.statType ?? null)} Graph`;
+        const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
+        return { index, position, keyCode: null, keyInfo };
+      })
+      .filter((data) => data.position !== undefined);
+  }, [
+    selectedBatchStyleElements,
+    positions,
+    selectedKeyType,
+    keyMappings,
+    statItemPositions,
+    graphItemPositions,
+  ]);
+
   const getMixedValue = useCallback(
     <T,>(
       getter: (pos: KeyPosition) => T | undefined,
@@ -1271,6 +1436,60 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     [getSelectedKeysData],
   );
 
+  const getMixedValueGraphs = useCallback(
+    <T,>(
+      getter: (pos: GraphItemPosition) => T | undefined,
+      defaultValue: T,
+    ): { isMixed: boolean; value: T } => {
+      const graphsData = getSelectedGraphsData();
+      if (graphsData.length === 0) return { isMixed: false, value: defaultValue };
+
+      const firstValue = getter(graphsData[0].position!) ?? defaultValue;
+      const isMixed = graphsData.some((data) => {
+        const val = getter(data.position!) ?? defaultValue;
+        if (typeof val === "object" && typeof firstValue === "object") {
+          return JSON.stringify(val) !== JSON.stringify(firstValue);
+        }
+        return val !== firstValue;
+      });
+
+      return { isMixed, value: firstValue };
+    },
+    [getSelectedGraphsData],
+  );
+
+  const getMixedValueGraphsAsKey = useCallback(
+    <T,>(
+      getter: (pos: KeyPosition) => T | undefined,
+      defaultValue: T,
+    ): { isMixed: boolean; value: T } => {
+      return getMixedValueGraphs((pos) => getter(pos), defaultValue);
+    },
+    [getMixedValueGraphs],
+  );
+
+  const getMixedValueBatch = useCallback(
+    <T,>(
+      getter: (pos: KeyPosition) => T | undefined,
+      defaultValue: T,
+    ): { isMixed: boolean; value: T } => {
+      const batchData = getSelectedBatchStyleData();
+      if (batchData.length === 0) return { isMixed: false, value: defaultValue };
+
+      const firstValue = getter(batchData[0].position as KeyPosition) ?? defaultValue;
+      const isMixed = batchData.some((data) => {
+        const val = getter(data.position as KeyPosition) ?? defaultValue;
+        if (typeof val === "object" && typeof firstValue === "object") {
+          return JSON.stringify(val) !== JSON.stringify(firstValue);
+        }
+        return val !== firstValue;
+      });
+
+      return { isMixed, value: firstValue };
+    },
+    [getSelectedBatchStyleData],
+  );
+
   // ============================================================================
   // 다중 선택 일괄 편집 핸들러 (훅 사용)
   // ============================================================================
@@ -1291,9 +1510,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
-    selectedKeyLikeElements: selectedKeyLikeElements as any,
+    selectedKeyLikeElements: selectedBatchStyleElements as any,
     keyPositions: positions,
     statPositions: statItemPositions,
+    graphPositions: graphItemPositions,
     selectedKeyType,
     onKeyUpdate,
     onKeyBatchUpdate,
@@ -1303,6 +1523,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onStatBatchUpdate: handleStatBatchUpdate,
     onStatPreview: handleStatPreview,
     onStatBatchPreview: handleStatBatchPreview,
+    onGraphUpdate: handleGraphUpdate,
+    onGraphBatchUpdate: handleGraphBatchUpdate,
+    onGraphPreview: handleGraphPreview,
+    onGraphBatchPreview: handleGraphBatchPreview,
   });
 
   // NOTE 탭은 "키"에만 적용되어야 함 (통계 요소 포함 다중선택 시)
@@ -1418,6 +1642,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       dispatchKeyOnlyBatchUpdates(updates, "commit");
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
+  );
+
+  const handleGraphBatchSharedSetting = useCallback(
+    (updates: Partial<GraphItemPosition>) => {
+      const batchUpdates = selectedGraphElements
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({ index: el.index!, ...updates })) as Array<
+        { index: number } & Partial<GraphItemPosition>
+      >;
+      handleGraphBatchUpdate(batchUpdates);
+    },
+    [selectedGraphElements, handleGraphBatchUpdate],
   );
 
   const renderPluginSettingsForm = useCallback(
@@ -1962,11 +2198,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 다중 선택인 경우 (키 + 통계 요소)
+  // 다중 선택인 경우 (키/통계, 그래프 혼합 포함)
   if (
-    selectedKeyLikeElements.length > 1 &&
+    selectedBatchStyleElements.length > 1 &&
+    selectedKeyLikeElements.length > 0 &&
     selectedPluginElements.length === 0
   ) {
+    const hasGraphSelection = selectedGraphElements.length > 0;
+    const styleMixedValueGetter = hasGraphSelection
+      ? getMixedValueBatch
+      : getMixedValue;
+    const styleSelectedDataGetter = hasGraphSelection
+      ? getSelectedBatchStyleData
+      : getSelectedKeysData;
+
     const getBatchNoteColorDisplay = () => {
       // 노트 피커가 열려있으면 로컬 상태 사용
       if (batchPickerFor === "noteColor") {
@@ -2097,6 +2342,35 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       70,
     ).isMixed;
     const batchSpacing = getBatchSpacingValue();
+    const graphTypeState = getMixedValueGraphs(
+      (pos) => pos.graphType || "line",
+      "line",
+    );
+    const showAvgLineState = getMixedValueGraphs(
+      (pos) => pos.showAvgLine ?? true,
+      true,
+    );
+    const graphSpeedState = getMixedValueGraphs(
+      (pos) => Math.round(pos.graphSpeed || 1000),
+      1000,
+    );
+    const graphColorState = getMixedValueGraphs(
+      (pos) => pos.graphColor || "#86EFAC",
+      "#86EFAC",
+    );
+    const hasLineGraph = getSelectedGraphsData().some(
+      (data) => (data.position?.graphType || "line") === "line",
+    );
+    const graphShapeOptions = [
+      {
+        label: t("propertiesPanel.graphShapeLine") || "Line",
+        value: "line",
+      },
+      {
+        label: t("propertiesPanel.graphShapeBar") || "Bar",
+        value: "bar",
+      },
+    ];
 
     // 카운터 색상 표시 (피커가 열려있을 때는 로컬 상태 사용)
     const getCounterColorDisplay = (target: "fill" | "stroke") => {
@@ -2136,7 +2410,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {t("propertiesPanel.multiSelection") || "다중 선택"}
               </span>
               <span className="text-[#6B6D75] text-style-4">
-                ({selectedKeyLikeElements.length})
+                ({selectedBatchStyleElements.length})
               </span>
             </div>
             <div className="flex items-center gap-[4px]">
@@ -2188,9 +2462,92 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             >
               <div className="p-[12px] flex flex-col gap-[12px]">
                 <BatchStyleTabContent
-                  selectedCount={selectedKeyLikeElements.length}
-                  getMixedValue={getMixedValue}
-                  getSelectedKeysData={getSelectedKeysData}
+                  selectedCount={selectedBatchStyleElements.length}
+                  getMixedValue={styleMixedValueGetter}
+                  getSelectedKeysData={styleSelectedDataGetter}
+                  afterSizeContent={
+                    hasGraphSelection ? (
+                      <>
+                        <PropertyRow
+                          label={t("propertiesPanel.graphShape") || "Graph Shape"}
+                        >
+                          {graphTypeState.isMixed ? (
+                            <span className="text-[#6B6D75] text-style-4 italic">
+                              Mixed
+                            </span>
+                          ) : null}
+                          <Dropdown
+                            options={graphShapeOptions}
+                            value={graphTypeState.value}
+                            onChange={(value) =>
+                              handleGraphBatchSharedSetting({
+                                graphType: value as any,
+                              })
+                            }
+                          />
+                        </PropertyRow>
+
+                        {hasLineGraph && (
+                          <div className="flex justify-between items-center w-full h-[23px]">
+                            <p className="text-white text-style-2">
+                              {t("propertiesPanel.graphShowAverageLine") ||
+                                "Show Average Line"}
+                            </p>
+                            <Checkbox
+                              checked={showAvgLineState.value}
+                              onChange={() =>
+                                handleGraphBatchSharedSetting({
+                                  showAvgLine: !showAvgLineState.value,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        <PropertyRow
+                          label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+                        >
+                          {graphSpeedState.isMixed ? (
+                            <span className="text-[#6B6D75] text-style-4 italic">
+                              Mixed
+                            </span>
+                          ) : null}
+                          <NumberInput
+                            value={graphSpeedState.value}
+                            width="62px"
+                            onChange={(value) => {
+                              const clamped = Math.max(500, Math.min(5000, value));
+                              const snapped = Math.round(clamped / 100) * 100;
+                              handleGraphBatchSharedSetting({ graphSpeed: snapped });
+                            }}
+                            min={500}
+                            max={5000}
+                            suffix="ms"
+                            isMixed={graphSpeedState.isMixed}
+                          />
+                        </PropertyRow>
+
+                        <PropertyRow
+                          label={t("propertiesPanel.graphColor") || "Graph Color"}
+                        >
+                          {graphColorState.isMixed ? (
+                            <span className="text-[#6B6D75] text-style-4 italic">
+                              Mixed
+                            </span>
+                          ) : null}
+                          <ColorInput
+                            value={graphColorState.value}
+                            onChange={() => {}}
+                            onChangeComplete={(value) =>
+                              handleGraphBatchSharedSetting({ graphColor: value })
+                            }
+                            colorId={`graph-batch-mixed-color-${selectedKeyType}`}
+                            panelElement={panelElement}
+                          />
+                        </PropertyRow>
+                      </>
+                    ) : undefined
+                  }
                   handleBatchAlign={handleBatchAlign}
                   handleBatchDistribute={handleBatchDistribute}
                   handleBatchSpacing={handleBatchSpacing}
@@ -2378,20 +2735,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               referenceRef={batchImageButtonRef}
               panelElement={panelElement}
               idleImage={
-                getMixedValue((pos) => pos.inactiveImage, "").isMixed
+                styleMixedValueGetter((pos) => pos.inactiveImage, "").isMixed
                   ? ""
-                  : getMixedValue((pos) => pos.inactiveImage, "").value
+                  : styleMixedValueGetter((pos) => pos.inactiveImage, "").value
               }
               activeImage={
-                getMixedValue((pos) => pos.activeImage, "").isMixed
+                styleMixedValueGetter((pos) => pos.activeImage, "").isMixed
                   ? ""
-                  : getMixedValue((pos) => pos.activeImage, "").value
+                  : styleMixedValueGetter((pos) => pos.activeImage, "").value
               }
               idleTransparent={
-                getMixedValue((pos) => pos.idleTransparent, false).value
+                styleMixedValueGetter((pos) => pos.idleTransparent, false).value
               }
               activeTransparent={
-                getMixedValue((pos) => pos.activeTransparent, false).value
+                styleMixedValueGetter((pos) => pos.activeTransparent, false).value
               }
               onIdleImageChange={(imageUrl: string) => {
                 handleBatchStyleChangeComplete("inactiveImage", imageUrl);
@@ -2415,6 +2772,246 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             />
           )}
         </>
+      </div>
+    );
+  }
+
+  // 다중 선택인 경우 (그래프 요소)
+  if (
+    selectedGraphElements.length > 1 &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    const graphShapeOptions = [
+      {
+        label: t("propertiesPanel.graphShapeLine") || "Line",
+        value: "line",
+      },
+      {
+        label: t("propertiesPanel.graphShapeBar") || "Bar",
+        value: "bar",
+      },
+    ];
+    const graphTypeState = getMixedValueGraphs(
+      (pos) => pos.graphType || "line",
+      "line",
+    );
+    const showAvgLineState = getMixedValueGraphs(
+      (pos) => pos.showAvgLine ?? true,
+      true,
+    );
+    const graphSpeedState = getMixedValueGraphs(
+      (pos) => Math.round(pos.graphSpeed || 1000),
+      1000,
+    );
+    const graphColorState = getMixedValueGraphs(
+      (pos) => pos.graphColor || "#86EFAC",
+      "#86EFAC",
+    );
+    const hasLineGraph = getSelectedGraphsData().some(
+      (data) => (data.position?.graphType || "line") === "line",
+    );
+    const batchGraphSpacing = getBatchSpacingValue();
+
+    return (
+      <div
+        ref={setPanelElement}
+        className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      >
+        <div className="flex-shrink-0 border-b border-[#3A3943]">
+          <div className="flex items-center justify-between p-[12px] pb-[8px]">
+            <div className="flex items-center gap-[8px]">
+              <span className="text-[#DBDEE8] text-style-2">
+                {t("propertiesPanel.multiSelection") || "다중 선택"}
+              </span>
+              <span className="text-[#6B6D75] text-style-4">
+                ({selectedGraphElements.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-[4px]">
+              <button
+                onClick={handleToggleMode}
+                className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+                title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+              >
+                <ModeToggleIcon mode="layer" />
+              </button>
+              <button
+                onClick={handleTogglePanel}
+                className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+                title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+              >
+                <SidebarToggleIcon isOpen={true} />
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <div className="flex-1 properties-panel-overlay-scroll">
+          <div
+            ref={batchScrollRefFor(TABS.STYLE)}
+            className="properties-panel-overlay-viewport"
+          >
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <BatchStyleTabContent
+                selectedCount={selectedGraphElements.length}
+                hideDisplayText
+                hideFontControls
+                afterSizeContent={
+                  <>
+                    <PropertyRow
+                      label={t("propertiesPanel.graphShape") || "Graph Shape"}
+                    >
+                      {graphTypeState.isMixed ? (
+                        <span className="text-[#6B6D75] text-style-4 italic">
+                          Mixed
+                        </span>
+                      ) : null}
+                      <Dropdown
+                        options={graphShapeOptions}
+                        value={graphTypeState.value}
+                        onChange={(value) =>
+                          handleGraphBatchSharedSetting({
+                            graphType: value as any,
+                          })
+                        }
+                      />
+                    </PropertyRow>
+
+                    {hasLineGraph && (
+                      <div className="flex justify-between items-center w-full h-[23px]">
+                        <p className="text-white text-style-2">
+                          {t("propertiesPanel.graphShowAverageLine") ||
+                            "Show Average Line"}
+                        </p>
+                        <Checkbox
+                          checked={showAvgLineState.value}
+                          onChange={() =>
+                            handleGraphBatchSharedSetting({
+                              showAvgLine: !showAvgLineState.value,
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+
+                    <PropertyRow
+                      label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+                    >
+                      {graphSpeedState.isMixed ? (
+                        <span className="text-[#6B6D75] text-style-4 italic">
+                          Mixed
+                        </span>
+                      ) : null}
+                      <NumberInput
+                        value={graphSpeedState.value}
+                        width="62px"
+                        onChange={(value) => {
+                          const clamped = Math.max(500, Math.min(5000, value));
+                          const snapped = Math.round(clamped / 100) * 100;
+                          handleGraphBatchSharedSetting({ graphSpeed: snapped });
+                        }}
+                        min={500}
+                        max={5000}
+                        suffix="ms"
+                        isMixed={graphSpeedState.isMixed}
+                      />
+                    </PropertyRow>
+
+                    <PropertyRow
+                      label={t("propertiesPanel.graphColor") || "Graph Color"}
+                    >
+                      {graphColorState.isMixed ? (
+                        <span className="text-[#6B6D75] text-style-4 italic">
+                          Mixed
+                        </span>
+                      ) : null}
+                      <ColorInput
+                        value={graphColorState.value}
+                        onChange={() => {}}
+                        onChangeComplete={(value) =>
+                          handleGraphBatchSharedSetting({ graphColor: value })
+                        }
+                        colorId={`graph-batch-color-${selectedKeyType}`}
+                        panelElement={panelElement}
+                      />
+                    </PropertyRow>
+                  </>
+                }
+                getMixedValue={getMixedValueGraphsAsKey}
+                getSelectedKeysData={getSelectedGraphsData}
+                handleBatchAlign={handleBatchAlign}
+                handleBatchDistribute={handleBatchDistribute}
+                handleBatchSpacing={handleBatchSpacing}
+                handleBatchSpacingPreview={handleBatchSpacingPreview}
+                handleBatchSpacingCommit={handleBatchSpacingCommit}
+                batchSpacing={batchGraphSpacing}
+                handleBatchResize={handleBatchResize}
+                handleBatchStyleChange={handleBatchStyleChange}
+                handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                showBatchImagePicker={showBatchImagePicker}
+                onToggleBatchImagePicker={() =>
+                  setShowBatchImagePicker(!showBatchImagePicker)
+                }
+                batchImageButtonRef={batchImageButtonRef}
+                panelElement={panelElement}
+                useCustomCSS={useCustomCSS}
+                t={t}
+              />
+            </div>
+            <div className="properties-panel-overlay-bar">
+              <div
+                ref={batchThumbRefFor(TABS.STYLE)}
+                className="properties-panel-overlay-thumb"
+                style={{ display: "none" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {showBatchImagePicker && batchImageButtonRef.current && (
+          <ImagePicker
+            open={showBatchImagePicker}
+            referenceRef={batchImageButtonRef}
+            panelElement={panelElement}
+            idleImage={
+              getMixedValueGraphs((pos) => pos.inactiveImage, "").isMixed
+                ? ""
+                : getMixedValueGraphs((pos) => pos.inactiveImage, "").value
+            }
+            activeImage={
+              getMixedValueGraphs((pos) => pos.activeImage, "").isMixed
+                ? ""
+                : getMixedValueGraphs((pos) => pos.activeImage, "").value
+            }
+            idleTransparent={
+              getMixedValueGraphs((pos) => pos.idleTransparent, false).value
+            }
+            activeTransparent={
+              getMixedValueGraphs((pos) => pos.activeTransparent, false).value
+            }
+            onIdleImageChange={(imageUrl: string) => {
+              handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
+            }}
+            onActiveImageChange={(imageUrl: string) => {
+              handleGraphBatchSharedSetting({ activeImage: imageUrl });
+            }}
+            onIdleTransparentChange={(value: boolean) => {
+              handleGraphBatchSharedSetting({ idleTransparent: value });
+            }}
+            onActiveTransparentChange={(value: boolean) => {
+              handleGraphBatchSharedSetting({ activeTransparent: value });
+            }}
+            onIdleImageReset={() => {
+              handleGraphBatchSharedSetting({ inactiveImage: "" });
+            }}
+            onActiveImageReset={() => {
+              handleGraphBatchSharedSetting({ activeImage: "" });
+            }}
+            onClose={() => setShowBatchImagePicker(false)}
+          />
+        )}
       </div>
     );
   }

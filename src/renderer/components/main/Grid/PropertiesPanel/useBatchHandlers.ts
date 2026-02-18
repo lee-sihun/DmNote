@@ -6,6 +6,7 @@ import type {
 } from "@src/types/keys";
 import { normalizeCounterSettings } from "@src/types/keys";
 import type { StatItemPosition } from "@src/types/statItems";
+import type { GraphItemPosition } from "@src/types/graphItems";
 
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = "rgba(121, 121, 121, 0.9)";
 const DEFAULT_ACTIVE_BORDER_COLOR = "rgba(255, 255, 255, 0.9)";
@@ -17,7 +18,7 @@ const SPACING_GROUP_SIZE_FACTOR = 0.35;
 // 엣지 오버랩 기반 그룹핑: 작은 쪽 크기의 이 비율 이상 겹치면 같은 행/열로 판정
 const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
 
-type KeyLikeType = "key" | "stat";
+type KeyLikeType = "key" | "stat" | "graph";
 type AxisDirection = "horizontal" | "vertical";
 
 interface LayoutElement {
@@ -429,6 +430,7 @@ interface UseBatchHandlersProps {
   selectedKeyLikeElements: SelectedElement[];
   keyPositions: Record<string, KeyPosition[] | undefined>;
   statPositions: Record<string, StatItemPosition[] | undefined>;
+  graphPositions?: Record<string, GraphItemPosition[] | undefined>;
   selectedKeyType: string;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
@@ -446,12 +448,24 @@ interface UseBatchHandlersProps {
   onStatBatchPreview?: (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
   ) => void;
+  onGraphUpdate?: (data: Partial<GraphItemPosition> & { index: number }) => void;
+  onGraphBatchUpdate?: (
+    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+  ) => void;
+  onGraphPreview?: (
+    index: number,
+    updates: Partial<GraphItemPosition>,
+  ) => void;
+  onGraphBatchPreview?: (
+    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+  ) => void;
 }
 
 export function useBatchHandlers({
   selectedKeyLikeElements,
   keyPositions,
   statPositions,
+  graphPositions,
   selectedKeyType,
   onKeyUpdate,
   onKeyBatchUpdate,
@@ -461,6 +475,10 @@ export function useBatchHandlers({
   onStatBatchUpdate,
   onStatPreview,
   onStatBatchPreview,
+  onGraphUpdate,
+  onGraphBatchUpdate,
+  onGraphPreview,
+  onGraphBatchPreview,
 }: UseBatchHandlersProps) {
   const selectedKeys = selectedKeyLikeElements.filter(
     (el) => el.type === "key",
@@ -468,13 +486,17 @@ export function useBatchHandlers({
   const selectedStats = selectedKeyLikeElements.filter(
     (el) => el.type === "stat",
   );
+  const selectedGraphs = selectedKeyLikeElements.filter(
+    (el) => el.type === "graph",
+  );
 
   const getKeyLikePosition = useCallback(
     (type: KeyLikeType, index: number) => {
       if (type === "key") return keyPositions[selectedKeyType]?.[index] ?? null;
-      return statPositions[selectedKeyType]?.[index] ?? null;
+      if (type === "stat") return statPositions[selectedKeyType]?.[index] ?? null;
+      return graphPositions?.[selectedKeyType]?.[index] ?? null;
     },
-    [keyPositions, statPositions, selectedKeyType],
+    [keyPositions, statPositions, graphPositions, selectedKeyType],
   );
 
   const dispatchKeyUpdates = useCallback(
@@ -533,6 +555,43 @@ export function useBatchHandlers({
     [onStatBatchPreview, onStatPreview, onStatBatchUpdate, onStatUpdate],
   );
 
+  const dispatchGraphUpdates = useCallback(
+    (
+      updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+      kind: "preview" | "commit",
+    ) => {
+      if (updates.length === 0) return;
+      if (kind === "preview") {
+        if (onGraphBatchPreview) {
+          onGraphBatchPreview(updates);
+          return;
+        }
+        if (onGraphPreview) {
+          updates.forEach(({ index, ...rest }) => onGraphPreview(index, rest));
+          return;
+        }
+        if (onGraphUpdate) {
+          updates.forEach((update) => onGraphUpdate(update));
+        }
+        return;
+      }
+
+      if (onGraphBatchUpdate) {
+        onGraphBatchUpdate(updates);
+        return;
+      }
+      if (onGraphUpdate) {
+        updates.forEach((update) => onGraphUpdate(update));
+      }
+    },
+    [
+      onGraphBatchPreview,
+      onGraphPreview,
+      onGraphBatchUpdate,
+      onGraphUpdate,
+    ],
+  );
+
   const getSelectedLayoutElements = useCallback((): LayoutElement[] => {
     return selectedKeyLikeElements
       .filter(
@@ -566,11 +625,17 @@ export function useBatchHandlers({
         .map(({ type: _t, ...rest }) => rest) as Array<
         { index: number } & Partial<StatItemPosition>
       >;
+      const graphUpdates = updates
+        .filter((u) => u.type === "graph")
+        .map(({ type: _t, ...rest }) => rest) as Array<
+        { index: number } & Partial<GraphItemPosition>
+      >;
 
       dispatchKeyUpdates(keyUpdates, kind);
       dispatchStatUpdates(statUpdates, kind);
+      dispatchGraphUpdates(graphUpdates, kind);
     },
-    [dispatchKeyUpdates, dispatchStatUpdates],
+    [dispatchKeyUpdates, dispatchStatUpdates, dispatchGraphUpdates],
   );
 
   // 스타일 변경 (프리뷰)
@@ -589,8 +654,22 @@ export function useBatchHandlers({
         { index: number } & Partial<StatItemPosition>
       >;
       dispatchStatUpdates(statUpdates, "preview");
+
+      const graphUpdates = selectedGraphs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({ index: el.index!, [property]: value })) as Array<
+        { index: number } & Partial<GraphItemPosition>
+      >;
+      dispatchGraphUpdates(graphUpdates, "preview");
     },
-    [dispatchKeyUpdates, dispatchStatUpdates, selectedKeys, selectedStats],
+    [
+      dispatchKeyUpdates,
+      dispatchStatUpdates,
+      dispatchGraphUpdates,
+      selectedKeys,
+      selectedStats,
+      selectedGraphs,
+    ],
   );
 
   // 스타일 변경 완료 (저장)
@@ -688,6 +767,13 @@ export function useBatchHandlers({
           return { index, [property]: value } as any;
         });
       dispatchStatUpdates(statUpdates, "commit");
+
+      const graphUpdates = selectedGraphs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({ index: el.index!, [property]: value })) as Array<
+        { index: number } & Partial<GraphItemPosition>
+      >;
+      dispatchGraphUpdates(graphUpdates, "commit");
     },
     [
       keyPositions,
@@ -695,8 +781,10 @@ export function useBatchHandlers({
       selectedKeyType,
       selectedKeys,
       selectedStats,
+      selectedGraphs,
       dispatchKeyUpdates,
       dispatchStatUpdates,
+      dispatchGraphUpdates,
     ],
   );
 
@@ -951,8 +1039,22 @@ export function useBatchHandlers({
         { index: number } & Partial<StatItemPosition>
       >;
       dispatchStatUpdates(statUpdates, "commit");
+
+      const graphUpdates = selectedGraphs
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+        { index: number } & Partial<GraphItemPosition>
+      >;
+      dispatchGraphUpdates(graphUpdates, "commit");
     },
-    [dispatchKeyUpdates, dispatchStatUpdates, selectedKeys, selectedStats],
+    [
+      dispatchKeyUpdates,
+      dispatchStatUpdates,
+      dispatchGraphUpdates,
+      selectedKeys,
+      selectedStats,
+      selectedGraphs,
+    ],
   );
 
   // 카운터 업데이트 핸들러

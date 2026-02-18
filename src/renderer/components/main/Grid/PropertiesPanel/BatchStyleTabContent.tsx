@@ -23,6 +23,8 @@ interface BatchStyleTabContentProps {
   // 다중 선택 정보
   selectedCount: number;
   hideDisplayText?: boolean;
+  hideFontControls?: boolean;
+  afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
     getter: (pos: KeyPosition) => T | undefined,
@@ -58,6 +60,8 @@ interface BatchStyleTabContentProps {
 const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   selectedCount,
   hideDisplayText = false,
+  hideFontControls = false,
+  afterSizeContent,
   getMixedValue,
   getSelectedKeysData,
   handleBatchAlign,
@@ -443,7 +447,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         />
       </PropertyRow>
 
-      <SectionDivider />
+      {afterSizeContent ? (
+        <>
+          <SectionDivider />
+          {afterSizeContent}
+          <SectionDivider />
+        </>
+      ) : (
+        <SectionDivider />
+      )}
 
       {/* 배경색 */}
       <PropertyRow label={t("propertiesPanel.backgroundColor") || "배경색"}>
@@ -577,7 +589,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         </button>
       </PropertyRow>
 
-      <SectionDivider />
+      {!hideDisplayText || !hideFontControls ? <SectionDivider /> : null}
 
       {/* 표시 텍스트 */}
       {!hideDisplayText && (
@@ -604,105 +616,112 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         </PropertyRow>
       )}
 
-      {/* 폰트 */}
-      <PropertyRow label={t("propertiesPanel.font") || "폰트"}>
-        {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
-        <button
-          ref={fontButtonRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showFontPicker ? "border-[#459BF8]" : "border-[#3A3943]"
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => setShowFontPicker(!showFontPicker)}
-        >
-          {t("propertiesPanel.configure") || "설정하기"}
-        </button>
-      </PropertyRow>
+      {!hideFontControls && (
+        <>
+          {/* 폰트 */}
+          <PropertyRow label={t("propertiesPanel.font") || "폰트"}>
+            {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
+              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+            ) : null}
+            <button
+              ref={fontButtonRef}
+              type="button"
+              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                showFontPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+              } text-[#DBDEE8] text-style-4`}
+              onClick={() => setShowFontPicker(!showFontPicker)}
+            >
+              {t("propertiesPanel.configure") || "설정하기"}
+            </button>
+          </PropertyRow>
 
-      {/* 글꼴 크기 */}
-      <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>
-        {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
-        <NumberInput
-          value={getMixedValue((pos) => pos.fontSize, 14).value}
-          onChange={(value) =>
-            handleBatchStyleChangeComplete("fontSize", value)
-          }
-          suffix="px"
-          min={8}
-          max={72}
-        />
-      </PropertyRow>
+          {/* 글꼴 크기 */}
+          <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>
+            {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
+              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+            ) : null}
+            <NumberInput
+              value={getMixedValue((pos) => pos.fontSize, 14).value}
+              onChange={(value) =>
+                handleBatchStyleChangeComplete("fontSize", value)
+              }
+              suffix="px"
+              min={8}
+              max={72}
+            />
+          </PropertyRow>
 
-      {/* 글꼴 색상 */}
-      <PropertyRow label={t("propertiesPanel.fontColor") || "글꼴 색상"}>
-        {(
-          colorState === "active"
-            ? getMixedValue(
-                (pos) => pos.activeFontColor ?? pos.fontColor,
-                "#FFFFFF",
-              ).isMixed
-            : getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
-                .isMixed
-        ) ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
-        <ColorInput
-          value={
-            getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
-              .value
-          }
-          activeValue={
-            getMixedValue(
-              (pos) => pos.activeFontColor ?? pos.fontColor,
-              "#FFFFFF",
-            ).value
-          }
-          showStateTabs
-          stateMode={colorState}
-          onStateModeChange={setColorState}
-          onChange={(color) => handleBatchStyleChange("fontColor", color)}
-          onChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("fontColor", color)
-          }
-          onActiveChange={(color) =>
-            handleBatchStyleChange("activeFontColor", color)
-          }
-          onActiveChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("activeFontColor", color)
-          }
-          panelElement={panelElement}
-        />
-      </PropertyRow>
+          {/* 글꼴 색상 */}
+          <PropertyRow label={t("propertiesPanel.fontColor") || "글꼴 색상"}>
+            {(
+              colorState === "active"
+                ? getMixedValue(
+                    (pos) => pos.activeFontColor ?? pos.fontColor,
+                    "#FFFFFF",
+                  ).isMixed
+                : getMixedValue(
+                    (pos) => pos.fontColor,
+                    "rgba(121, 121, 121, 0.9)",
+                  ).isMixed
+            ) ? (
+              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+            ) : null}
+            <ColorInput
+              value={
+                getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
+                  .value
+              }
+              activeValue={
+                getMixedValue(
+                  (pos) => pos.activeFontColor ?? pos.fontColor,
+                  "#FFFFFF",
+                ).value
+              }
+              showStateTabs
+              stateMode={colorState}
+              onStateModeChange={setColorState}
+              onChange={(color) => handleBatchStyleChange("fontColor", color)}
+              onChangeComplete={(color) =>
+                handleBatchStyleChangeComplete("fontColor", color)
+              }
+              onActiveChange={(color) =>
+                handleBatchStyleChange("activeFontColor", color)
+              }
+              onActiveChangeComplete={(color) =>
+                handleBatchStyleChangeComplete("activeFontColor", color)
+              }
+              panelElement={panelElement}
+            />
+          </PropertyRow>
 
-      {/* 글꼴 스타일 */}
-      <PropertyRow label={t("propertiesPanel.fontStyle") || "글꼴 스타일"}>
-        <FontStyleToggle
-          isBold={
-            getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true).value
-          }
-          isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
-          isUnderline={getMixedValue((pos) => pos.fontUnderline, false).value}
-          isStrikethrough={
-            getMixedValue((pos) => pos.fontStrikethrough, false).value
-          }
-          onBoldChange={(value) =>
-            handleBatchStyleChangeComplete("fontWeight", value ? 700 : 400)
-          }
-          onItalicChange={(value) =>
-            handleBatchStyleChangeComplete("fontItalic", value)
-          }
-          onUnderlineChange={(value) =>
-            handleBatchStyleChangeComplete("fontUnderline", value)
-          }
-          onStrikethroughChange={(value) =>
-            handleBatchStyleChangeComplete("fontStrikethrough", value)
-          }
-        />
-      </PropertyRow>
+          {/* 글꼴 스타일 */}
+          <PropertyRow label={t("propertiesPanel.fontStyle") || "글꼴 스타일"}>
+            <FontStyleToggle
+              isBold={
+                getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true)
+                  .value
+              }
+              isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
+              isUnderline={getMixedValue((pos) => pos.fontUnderline, false).value}
+              isStrikethrough={
+                getMixedValue((pos) => pos.fontStrikethrough, false).value
+              }
+              onBoldChange={(value) =>
+                handleBatchStyleChangeComplete("fontWeight", value ? 700 : 400)
+              }
+              onItalicChange={(value) =>
+                handleBatchStyleChangeComplete("fontItalic", value)
+              }
+              onUnderlineChange={(value) =>
+                handleBatchStyleChangeComplete("fontUnderline", value)
+              }
+              onStrikethroughChange={(value) =>
+                handleBatchStyleChangeComplete("fontStrikethrough", value)
+              }
+            />
+          </PropertyRow>
+        </>
+      )}
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
@@ -753,7 +772,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       )}
 
       {/* FontPicker */}
-      {showFontPicker && (
+      {!hideFontControls && showFontPicker && (
         <FontPicker
           open={true}
           referenceRef={fontButtonRef}
@@ -771,7 +790,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       )}
 
       {/* FontManagerModal */}
-      {showFontManager && (
+      {!hideFontControls && showFontManager && (
         <FontManagerModal
           isOpen={showFontManager}
           onClose={() => setShowFontManager(false)}
