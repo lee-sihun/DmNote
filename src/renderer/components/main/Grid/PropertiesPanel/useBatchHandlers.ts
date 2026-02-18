@@ -13,12 +13,9 @@ const DEFAULT_ACTIVE_FONT_COLOR = "#FFFFFF";
 const SPACING_GROUP_TOLERANCE = 2;
 const SPACING_DECIMAL_SCALE = 1;
 const POSITION_CHANGE_EPSILON = 0.05;
-const SPACING_AXIS_DOMINANCE_RATIO = 1.6;
 const SPACING_GROUP_SIZE_FACTOR = 0.35;
 // 엣지 오버랩 기반 그룹핑: 작은 쪽 크기의 이 비율 이상 겹치면 같은 행/열로 판정
 const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
-// 그리드 정합성 검증: 행/열 크기 편차 허용 범위
-const GRID_ROW_SIZE_TOLERANCE = 1;
 
 type KeyLikeType = "key" | "stat";
 type AxisDirection = "horizontal" | "vertical";
@@ -243,125 +240,23 @@ const countAxisPairs = (groups: LayoutElement[][]): number => {
   return groups.reduce((sum, group) => sum + Math.max(0, group.length - 1), 0);
 };
 
-const countGroupsWithPairs = (groups: LayoutElement[][]): number =>
-  groups.filter((group) => group.length >= 2).length;
-
-/**
- * 그리드 정합성 검증: 행/열 구조가 실제 정규 그리드인지 확인
- * 불규칙 배치에서 양축 동시 적용이 잘못 트리거되는 것을 방지
- */
-const isRegularGridLayout = (
-  horizontalGroups: LayoutElement[][],
-  verticalGroups: LayoutElement[][],
-  totalElements: number,
-): boolean => {
-  // pair가 있는 그룹만 필터
-  const hGroupsWithPairs = horizontalGroups.filter((g) => g.length >= 2);
-  const vGroupsWithPairs = verticalGroups.filter((g) => g.length >= 2);
-
-  if (hGroupsWithPairs.length < 2 || vGroupsWithPairs.length < 2) return false;
-
-  // 각 행의 요소 수가 균일해야 함 (최대 GRID_ROW_SIZE_TOLERANCE 차이 허용)
-  const hSizes = hGroupsWithPairs.map((g) => g.length);
-  const hMin = Math.min(...hSizes);
-  const hMax = Math.max(...hSizes);
-  if (hMax - hMin > GRID_ROW_SIZE_TOLERANCE) return false;
-
-  // 각 열의 요소 수도 균일해야 함
-  const vSizes = vGroupsWithPairs.map((g) => g.length);
-  const vMin = Math.min(...vSizes);
-  const vMax = Math.max(...vSizes);
-  if (vMax - vMin > GRID_ROW_SIZE_TOLERANCE) return false;
-
-  // rows × cols가 전체 요소 수와 근접해야 함
-  const expectedRows = horizontalGroups.length;
-  const expectedCols = verticalGroups.length;
-  const expectedTotal = expectedRows * expectedCols;
-  if (Math.abs(expectedTotal - totalElements) > GRID_ROW_SIZE_TOLERANCE) {
-    return false;
-  }
-
-  return true;
-};
-
 const inferSpacingAxisPlan = (elements: LayoutElement[]): SpacingAxisPlan => {
   const horizontalGroups = groupElementsByReferenceAxis(elements, "horizontal");
   const verticalGroups = groupElementsByReferenceAxis(elements, "vertical");
 
-  const horizontalPairCount = countAxisPairs(horizontalGroups);
-  const verticalPairCount = countAxisPairs(verticalGroups);
+  // 수평 적용 여부: 하나 이상의 행에 2개 이상의 요소가 있으면 수평 간격 조절 가능
+  const applyHorizontal = countAxisPairs(horizontalGroups) > 0;
 
-  if (horizontalPairCount === 0 && verticalPairCount === 0) {
-    return {
-      applyHorizontal: false,
-      applyVertical: false,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  if (horizontalPairCount > 0 && verticalPairCount === 0) {
-    return {
-      applyHorizontal: true,
-      applyVertical: false,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  if (verticalPairCount > 0 && horizontalPairCount === 0) {
-    return {
-      applyHorizontal: false,
-      applyVertical: true,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  const horizontalGroupCount = countGroupsWithPairs(horizontalGroups);
-  const verticalGroupCount = countGroupsWithPairs(verticalGroups);
-
-  // 양축 동시 적용: 기본 조건 + 그리드 정합성 검증
-  const canApplyBoth =
-    elements.length >= 4 &&
-    horizontalGroupCount >= 2 &&
-    verticalGroupCount >= 2 &&
-    isRegularGridLayout(horizontalGroups, verticalGroups, elements.length);
-
-  if (canApplyBoth) {
-    return {
-      applyHorizontal: true,
-      applyVertical: true,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  if (horizontalPairCount >= verticalPairCount * SPACING_AXIS_DOMINANCE_RATIO) {
-    return {
-      applyHorizontal: true,
-      applyVertical: false,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  if (verticalPairCount >= horizontalPairCount * SPACING_AXIS_DOMINANCE_RATIO) {
-    return {
-      applyHorizontal: false,
-      applyVertical: true,
-      horizontalGroups,
-      verticalGroups,
-    };
-  }
-
-  const horizontalSpan = getAxisSpan(elements, "horizontal");
-  const verticalSpan = getAxisSpan(elements, "vertical");
-  const preferHorizontal = horizontalSpan >= verticalSpan;
+  // 수직 적용 여부: 행이 2개 이상이면 수직 간격 조절 가능
+  // 열(column) 그룹 기반 판정은 사용하지 않는다.
+  // - 넓이가 다른 요소가 혼재할 때 열 그룹핑이 오동작하여 수직 적용이 누락되는 버그가 있음
+  // - 수직 간격 적용은 applyVerticalRowSpacing에서 행(row) 단위로 처리하므로
+  //   열 구조와 무관하게 행 수만으로 판정하는 것이 정확함
+  const applyVertical = horizontalGroups.length >= 2;
 
   return {
-    applyHorizontal: preferHorizontal,
-    applyVertical: !preferHorizontal,
+    applyHorizontal,
+    applyVertical,
     horizontalGroups,
     verticalGroups,
   };
@@ -437,6 +332,97 @@ const applyAxisSpacing = (
   }
 
   return applied;
+};
+
+/**
+ * 행 단위 수직 간격 수집
+ * 열(컬럼) 기반이 아닌 행 사이의 실제 간격을 반환
+ */
+const collectRowGaps = (horizontalGroups: LayoutElement[][]): number[] => {
+  if (horizontalGroups.length < 2) return [];
+
+  const sortedRows = [...horizontalGroups].sort((a, b) => {
+    const centerA =
+      a.reduce((sum, el) => sum + el.y + el.height / 2, 0) / a.length;
+    const centerB =
+      b.reduce((sum, el) => sum + el.y + el.height / 2, 0) / b.length;
+    return centerA - centerB;
+  });
+
+  const gaps: number[] = [];
+  for (let i = 1; i < sortedRows.length; i += 1) {
+    const prevRowBottom = Math.max(
+      ...sortedRows[i - 1].map((el) => el.y + el.height),
+    );
+    const currentRowTop = Math.min(...sortedRows[i].map((el) => el.y));
+    gaps.push(currentRowTop - prevRowBottom);
+  }
+  return gaps;
+};
+
+/**
+ * 수직 간격을 행(row) 단위로 적용
+ *
+ * 열(컬럼) 기반 처리는 행마다 요소 수가 다를 때 싱글톤 열 요소가 누락되어
+ * 같은 행 내에서 y좌표가 달라지는 계단 현상이 발생한다.
+ * 이 함수는 행 전체를 하나의 단위로 이동시켜 해당 문제를 방지한다.
+ */
+const applyVerticalRowSpacing = (
+  horizontalGroups: LayoutElement[][],
+  spacing: number,
+  updateMap: Map<string, KeyLikeBatchUpdate>,
+): boolean => {
+  const validRows = horizontalGroups.filter((g) => g.length >= 1);
+  if (validRows.length < 2) return false;
+
+  // 행을 y 중심 기준으로 정렬
+  const sortedRows = [...validRows].sort((a, b) => {
+    const centerA =
+      a.reduce((sum, el) => sum + el.y + el.height / 2, 0) / a.length;
+    const centerB =
+      b.reduce((sum, el) => sum + el.y + el.height / 2, 0) / b.length;
+    return centerA - centerB;
+  });
+
+  // 첫 번째 행의 최소 y를 앵커로 사용
+  let currentRowMinY = Math.min(...sortedRows[0].map((el) => el.y));
+  // 행의 실제 세로 범위 = max(y + height) - min(y)
+  const computeRowSpan = (row: LayoutElement[]): number => {
+    const rowMinY = Math.min(...row.map((el) => el.y));
+    const rowMaxBottom = Math.max(...row.map((el) => el.y + el.height));
+    return rowMaxBottom - rowMinY;
+  };
+  let prevRowSpan = computeRowSpan(sortedRows[0]);
+
+  for (let i = 0; i < sortedRows.length; i += 1) {
+    const row = sortedRows[i];
+
+    if (i > 0) {
+      currentRowMinY = roundToSpacingPrecision(
+        currentRowMinY + prevRowSpan + spacing,
+      );
+    }
+
+    // 행 내 각 요소의 상대 y 오프셋을 유지
+    // (세로 중앙·하단 정렬 등으로 y가 다를 수 있음)
+    const rowMinY = Math.min(...row.map((el) => el.y));
+    for (const element of row) {
+      const relativeOffset = element.y - rowMinY;
+      const newY = roundToSpacingPrecision(currentRowMinY + relativeOffset);
+      const key = getLayoutElementKey(element.type, element.index);
+      const update = updateMap.get(key) ?? {
+        type: element.type,
+        index: element.index,
+      };
+      update.dy = newY;
+      element.y = newY;
+      updateMap.set(key, update);
+    }
+
+    prevRowSpan = computeRowSpan(row);
+  }
+
+  return true;
 };
 
 interface UseBatchHandlersProps {
@@ -854,12 +840,10 @@ export function useBatchHandlers({
           )
         : false;
       const appliedVertical = axisPlan.applyVertical
-        ? applyAxisSpacing(
-            elements,
-            "vertical",
+        ? applyVerticalRowSpacing(
+            axisPlan.horizontalGroups,
             normalizedSpacing,
             updateMap,
-            axisPlan.verticalGroups,
           )
         : false;
 
@@ -935,9 +919,7 @@ export function useBatchHandlers({
       );
     }
     if (axisPlan.applyVertical) {
-      rawGaps.push(
-        ...collectAxisGapsFromGroups(axisPlan.verticalGroups, "vertical"),
-      );
+      rawGaps.push(...collectRowGaps(axisPlan.horizontalGroups));
     }
 
     const gaps = rawGaps.map((gap) =>
