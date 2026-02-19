@@ -16,8 +16,16 @@ import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
+import { useHistoryStore } from "@stores/useHistoryStore";
+import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { ARROW_KEY_HISTORY_DELAY } from "./constants";
 import { isMac } from "@utils/platform";
+import {
+  applyGroupIdToSelectedElements,
+  buildNextLayerGroupName,
+  normalizeLayerGroupsForMode,
+  resolveSingleGroupIdFromSelection,
+} from "@utils/layerGroupUtils";
 
 interface UseGridKeyboardParams {
   selectedElements: SelectedElement[];
@@ -36,6 +44,7 @@ interface UseGridKeyboardParams {
   onRedo?: () => void;
   onMoveForward?: () => void;
   onMoveBackward?: () => void;
+  newGroupLabel?: string;
 }
 
 /**
@@ -54,6 +63,7 @@ export function useGridKeyboard({
   onRedo,
   onMoveForward,
   onMoveBackward,
+  newGroupLabel = "New Group",
 }: UseGridKeyboardParams): void {
   const lastArrowKeyTime = useRef(0);
   const macOS = isMac();
@@ -85,52 +95,94 @@ export function useGridKeyboard({
         if (selectedElements.length < 2) return;
 
         const selectedKeyType = useKeyStore.getState().selectedKeyType;
-        const groupId = crypto.randomUUID();
-        const existingGroups =
-          useLayerGroupStore.getState().getGroupsForMode(selectedKeyType);
-        const groupName = "New Group " + (existingGroups.length + 1);
+        const { keyMappings, positions } = useKeyStore.getState();
+        const statPos = useStatItemStore.getState().positions;
+        const graphPos = useGraphItemStore.getState().positions;
+        const pluginElements = usePluginDisplayElementStore.getState().elements;
+        const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+        const modeGroups = currentLayerGroups[selectedKeyType] || [];
 
-        const updatedGroups = useLayerGroupStore
-          .getState()
-          .addGroup(selectedKeyType, { id: groupId, name: groupName });
-        window.api.layerGroups.update(updatedGroups).catch(() => {});
+        const singleGroupId = resolveSingleGroupIdFromSelection(
+          selectedKeyType,
+          selectedElements,
+          positions,
+          statPos,
+          graphPos,
+        );
 
-        const keyPos = { ...useKeyStore.getState().positions };
-        const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
-        const statPos = { ...useStatItemStore.getState().positions };
-        const modeStatPos = [...(statPos[selectedKeyType] || [])];
-        const graphPos = { ...useGraphItemStore.getState().positions };
-        const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+        let targetGroupId = singleGroupId;
+        let nextLayerGroups = currentLayerGroups;
+        let createdGroup = false;
 
-        selectedElements.forEach((el) => {
-          if (el.type === "key" && el.index !== undefined && modeKeyPos[el.index]) {
-            modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId };
-          } else if (
-            el.type === "stat" &&
-            el.index !== undefined &&
-            modeStatPos[el.index]
-          ) {
-            modeStatPos[el.index] = { ...modeStatPos[el.index], groupId };
-          } else if (
-            el.type === "graph" &&
-            el.index !== undefined &&
-            modeGraphPos[el.index]
-          ) {
-            modeGraphPos[el.index] = { ...modeGraphPos[el.index], groupId };
-          }
+        if (!targetGroupId) {
+          targetGroupId = crypto.randomUUID();
+          const groupName = buildNextLayerGroupName(newGroupLabel, modeGroups);
+          nextLayerGroups = {
+            ...currentLayerGroups,
+            [selectedKeyType]: [
+              ...modeGroups,
+              {
+                id: targetGroupId,
+                name: groupName,
+              },
+            ],
+          };
+          createdGroup = true;
+        }
+
+        const grouped = applyGroupIdToSelectedElements({
+          mode: selectedKeyType,
+          selectedElements,
+          keyPositions: positions,
+          statPositions: statPos,
+          graphPositions: graphPos,
+          targetGroupId,
         });
 
-        keyPos[selectedKeyType] = modeKeyPos;
-        statPos[selectedKeyType] = modeStatPos;
-        graphPos[selectedKeyType] = modeGraphPos;
+        const normalized = normalizeLayerGroupsForMode({
+          mode: selectedKeyType,
+          keyPositions: grouped.keyPositions,
+          statPositions: grouped.statPositions,
+          graphPositions: grouped.graphPositions,
+          layerGroups: nextLayerGroups,
+        });
 
-        useKeyStore.getState().setPositions(keyPos);
-        useStatItemStore.getState().setPositions(statPos);
-        useGraphItemStore.getState().setPositions(graphPos);
+        const hasChange =
+          grouped.changed ||
+          normalized.positionsChanged ||
+          createdGroup ||
+          normalized.groupsChanged;
+        if (!hasChange) return;
 
-        window.api.keys.updatePositions(keyPos).catch(() => {});
-        window.api.statItems.updatePositions(statPos).catch(() => {});
-        window.api.graphItems.updatePositions(graphPos).catch(() => {});
+        useHistoryStore
+          .getState()
+          .pushState(
+            keyMappings,
+            positions,
+            statPos,
+            graphPos,
+            pluginElements,
+            currentLayerGroups,
+          );
+
+        useKeyStore.getState().setPositions(normalized.keyPositions);
+        useStatItemStore.getState().setPositions(normalized.statPositions);
+        useGraphItemStore.getState().setPositions(normalized.graphPositions);
+
+        window.api.keys.updatePositions(normalized.keyPositions).catch(() => {});
+        window.api
+          .statItems
+          .updatePositions(normalized.statPositions)
+          .catch(() => {});
+        window.api
+          .graphItems
+          .updatePositions(normalized.graphPositions)
+          .catch(() => {});
+
+        if (createdGroup || normalized.groupsChanged) {
+          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+          window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
+        }
         return;
       }
 
@@ -140,43 +192,61 @@ export function useGridKeyboard({
         if (selectedElements.length === 0) return;
 
         const selectedKeyType = useKeyStore.getState().selectedKeyType;
+        const { keyMappings, positions } = useKeyStore.getState();
+        const statPos = useStatItemStore.getState().positions;
+        const graphPos = useGraphItemStore.getState().positions;
+        const pluginElements = usePluginDisplayElementStore.getState().elements;
+        const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
-        const keyPos = { ...useKeyStore.getState().positions };
-        const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
-        const statPos = { ...useStatItemStore.getState().positions };
-        const modeStatPos = [...(statPos[selectedKeyType] || [])];
-        const graphPos = { ...useGraphItemStore.getState().positions };
-        const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
-
-        selectedElements.forEach((el) => {
-          if (el.type === "key" && el.index !== undefined && modeKeyPos[el.index]) {
-            modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId: undefined };
-          } else if (
-            el.type === "stat" &&
-            el.index !== undefined &&
-            modeStatPos[el.index]
-          ) {
-            modeStatPos[el.index] = { ...modeStatPos[el.index], groupId: undefined };
-          } else if (
-            el.type === "graph" &&
-            el.index !== undefined &&
-            modeGraphPos[el.index]
-          ) {
-            modeGraphPos[el.index] = { ...modeGraphPos[el.index], groupId: undefined };
-          }
+        const ungrouped = applyGroupIdToSelectedElements({
+          mode: selectedKeyType,
+          selectedElements,
+          keyPositions: positions,
+          statPositions: statPos,
+          graphPositions: graphPos,
+          targetGroupId: undefined,
         });
 
-        keyPos[selectedKeyType] = modeKeyPos;
-        statPos[selectedKeyType] = modeStatPos;
-        graphPos[selectedKeyType] = modeGraphPos;
+        const normalized = normalizeLayerGroupsForMode({
+          mode: selectedKeyType,
+          keyPositions: ungrouped.keyPositions,
+          statPositions: ungrouped.statPositions,
+          graphPositions: ungrouped.graphPositions,
+          layerGroups: currentLayerGroups,
+        });
 
-        useKeyStore.getState().setPositions(keyPos);
-        useStatItemStore.getState().setPositions(statPos);
-        useGraphItemStore.getState().setPositions(graphPos);
+        const hasChange = ungrouped.changed || normalized.groupsChanged;
+        if (!hasChange) return;
 
-        window.api.keys.updatePositions(keyPos).catch(() => {});
-        window.api.statItems.updatePositions(statPos).catch(() => {});
-        window.api.graphItems.updatePositions(graphPos).catch(() => {});
+        useHistoryStore
+          .getState()
+          .pushState(
+            keyMappings,
+            positions,
+            statPos,
+            graphPos,
+            pluginElements,
+            currentLayerGroups,
+          );
+
+        useKeyStore.getState().setPositions(normalized.keyPositions);
+        useStatItemStore.getState().setPositions(normalized.statPositions);
+        useGraphItemStore.getState().setPositions(normalized.graphPositions);
+
+        window.api.keys.updatePositions(normalized.keyPositions).catch(() => {});
+        window.api
+          .statItems
+          .updatePositions(normalized.statPositions)
+          .catch(() => {});
+        window.api
+          .graphItems
+          .updatePositions(normalized.graphPositions)
+          .catch(() => {});
+
+        if (normalized.groupsChanged) {
+          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+          window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
+        }
         return;
       }
 
@@ -274,6 +344,7 @@ export function useGridKeyboard({
     pasteElements,
     onMoveForward,
     onMoveBackward,
+    newGroupLabel,
   ]);
 
   // Undo/Redo 단축키 핸들러

@@ -285,8 +285,8 @@
     "quitApp": "退出程式",
     "snapToEdge": "貼靠螢幕邊緣",
     "selectTab": "選擇標籤頁",
-    "groupSelected": "將選取項目分組",
-    "renameGroup": "重新命名群組",
+    "groupSelected": "群組",
+    "renameGroup": "重新命名",
     "ungroup": "取消分組",
     "removeFromGroup": "從群組中移除"
   },

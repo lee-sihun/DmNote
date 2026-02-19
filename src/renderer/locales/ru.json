@@ -265,8 +265,8 @@
     "quitApp": "Выйти из приложения",
     "snapToEdge": "Привязать к краю",
     "selectTab": "Выбор вкладки",
-    "groupSelected": "Сгруппировать выбранные",
-    "renameGroup": "Переименовать группу",
+    "groupSelected": "Группа",
+    "renameGroup": "Переименовать",
     "ungroup": "Разгруппировать",
     "removeFromGroup": "Удалить из группы"
   },

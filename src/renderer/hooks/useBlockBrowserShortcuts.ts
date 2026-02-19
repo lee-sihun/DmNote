@@ -16,6 +16,7 @@ export function useBlockBrowserShortcuts() {
         ctrl?: boolean;
         shift?: boolean;
         alt?: boolean;
+        allowPropagation?: boolean;
       }> = [
         // 인쇄
         { key: "p", ctrl: true },
@@ -24,8 +25,10 @@ export function useBlockBrowserShortcuts() {
         // 찾기
         { key: "f", ctrl: true },
         // 모두 찾기
-        { key: "g", ctrl: true },
-        { key: "g", ctrl: true, shift: true },
+        // Grid 단축키(Ctrl/Cmd+G, Ctrl/Cmd+Shift+G)와 충돌하지 않도록
+        // 기본 동작만 막고 앱 핸들러로 이벤트 전파는 허용
+        { key: "g", ctrl: true, allowPropagation: true },
+        { key: "g", ctrl: true, shift: true, allowPropagation: true },
         // 새로고침
         { key: "r", ctrl: true },
         // 강력 새로고침
@@ -62,7 +65,7 @@ export function useBlockBrowserShortcuts() {
       ];
 
       // 현재 눌린 단축키가 차단 목록에 있는지 확인
-      const shouldBlock = blockedShortcuts.some((shortcut) => {
+      const matchedShortcut = blockedShortcuts.find((shortcut) => {
         const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
         const ctrlMatch = shortcut.ctrl ? isCtrlOrCmd : !isCtrlOrCmd;
         const shiftMatch = shortcut.shift ? e.shiftKey : !e.shiftKey;
@@ -76,9 +79,11 @@ export function useBlockBrowserShortcuts() {
         return keyMatch && ctrlMatch && shiftMatch && altMatch;
       });
 
-      if (shouldBlock) {
+      if (matchedShortcut) {
         e.preventDefault();
-        e.stopPropagation();
+        if (!matchedShortcut.allowPropagation) {
+          e.stopPropagation();
+        }
       }
     };
 

@@ -19,6 +19,13 @@ import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
 import CloseEyeIcon from "@assets/svgs/close_eye.svg";
 import OpenEyeIcon from "@assets/svgs/open_eye.svg";
 import { useLayerGroupStore } from "@stores/useLayerGroupStore";
+import type { LayerGroups } from "@src/types/layerGroups";
+import {
+  applyGroupIdToSelectedElements,
+  buildNextLayerGroupName,
+  normalizeLayerGroupsForMode,
+  resolveSingleGroupIdFromSelection,
+} from "@utils/layerGroupUtils";
 
 // ============================================================================
 // 레이어 아이템 타입
@@ -806,11 +813,25 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   );
 
   // 아이템이 선택되었는지 확인
+  const selectedElementIdSet = useMemo(
+    () => new Set(selectedElements.map((el) => el.id)),
+    [selectedElements],
+  );
+
   const isItemSelected = useCallback(
     (item: LayerItem) => {
-      return selectedElements.some((el) => el.id === item.id);
+      return selectedElementIdSet.has(item.id);
     },
-    [selectedElements],
+    [selectedElementIdSet],
+  );
+
+  const isGroupHeaderSelected = useCallback(
+    (groupId: string) => {
+      return layerItems.some(
+        (item) => item.groupId === groupId && selectedElementIdSet.has(item.id),
+      );
+    },
+    [layerItems, selectedElementIdSet],
   );
 
   // 인라인 이름 변경 상태 (레이어 + 그룹 공용)
@@ -831,23 +852,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       return [
         {
           id: "renameGroup",
-          label: t("contextMenu.renameGroup") || "Rename Group",
+          label: t("contextMenu.renameGroup") || "Rename",
         },
         { id: "ungroup", label: t("contextMenu.ungroup") || "Ungroup" },
       ];
     }
 
     // 레이어 아이템 우클릭
-    const items: ListItem[] = [
-      { id: "rename", label: t("contextMenu.rename") || "Rename" },
-      { id: "delete", label: t("propertiesPanel.delete") || "Delete" },
-    ];
+    const items: ListItem[] = [{ id: "rename", label: t("contextMenu.rename") || "Rename" }];
 
-    // 여러 아이템이 선택되었으면 그룹화 옵션 추가
-    if (selectedElements.length >= 2) {
+    // 여러 아이템이 선택되어 있고, 우클릭 항목이 그룹 미소속일 때만 그룹화 노출
+    if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
       items.push({
         id: "groupSelected",
-        label: t("contextMenu.groupSelected") || "Group Selected",
+        label: t("contextMenu.groupSelected") || "Group",
       });
     }
 
@@ -858,6 +876,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         label: t("contextMenu.removeFromGroup") || "Remove from Group",
       });
     }
+
+    items.push({ id: "delete", label: t("propertiesPanel.delete") || "Delete" });
 
     return items;
   }, [t, selectedElements.length, contextMenuItem, contextMenuGroupId]);
@@ -970,109 +990,90 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 선택된 레이어들에 groupId 설정하는 유틸리티
   const setGroupIdOnSelected = useCallback(
-    async (targetGroupId: string | undefined) => {
+    async (
+      targetGroupId: string | undefined,
+      elementsOverride?: typeof selectedElements,
+      options?: {
+        skipHistory?: boolean;
+        historyLayerGroups?: LayerGroups;
+        layerGroupsForNormalization?: LayerGroups;
+      },
+    ) => {
+      const selectedForUpdate = elementsOverride ?? selectedElements;
+      if (selectedForUpdate.length === 0) return false;
+
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
+      const currentPluginElements = usePluginDisplayElementStore.getState().elements;
+      const storeLayerGroups = useLayerGroupStore.getState().layerGroups;
+      const historyLayerGroups = options?.historyLayerGroups ?? storeLayerGroups;
+      const layerGroupsForNormalization =
+        options?.layerGroupsForNormalization ?? storeLayerGroups;
 
-      // 히스토리 저장
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          pos,
-          currentStatPositions as any,
-          currentGraphPositions as any,
-          currentPluginElements,
-        );
+      const grouped = applyGroupIdToSelectedElements({
+        mode: selectedKeyType,
+        selectedElements: selectedForUpdate,
+        keyPositions: pos,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
+        targetGroupId,
+      });
 
-      // 대상 아이템 수집
-      const keyIndices = selectedElements
-        .filter((el) => el.type === "key" && el.index !== undefined)
-        .map((el) => el.index as number);
-      const statIndices = selectedElements
-        .filter((el) => el.type === "stat" && el.index !== undefined)
-        .map((el) => el.index as number);
-      const graphIndices = selectedElements
-        .filter((el) => el.type === "graph" && el.index !== undefined)
-        .map((el) => el.index as number);
+      const normalized = normalizeLayerGroupsForMode({
+        mode: selectedKeyType,
+        keyPositions: grouped.keyPositions,
+        statPositions: grouped.statPositions,
+        graphPositions: grouped.graphPositions,
+        layerGroups: layerGroupsForNormalization,
+      });
 
-      // 키 positions 업데이트
-      if (keyIndices.length > 0) {
-        const updatedPositions = { ...pos };
-        const modePositions = [...(pos[selectedKeyType] || [])];
-        keyIndices.forEach((idx) => {
-          if (modePositions[idx]) {
-            modePositions[idx] = {
-              ...modePositions[idx],
-              groupId: targetGroupId,
-            };
-          }
-        });
-        updatedPositions[selectedKeyType] = modePositions;
+      const shouldPersistGroups =
+        normalized.groupsChanged ||
+        options?.layerGroupsForNormalization !== undefined;
+      const hasChange =
+        grouped.changed || normalized.positionsChanged || shouldPersistGroups;
+      if (!hasChange) return false;
 
-        useKeyStore.getState().setLocalUpdateInProgress(true);
-        useKeyStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.keys.updatePositions(updatedPositions);
-        } finally {
-          useKeyStore.getState().setLocalUpdateInProgress(false);
-        }
+      if (!options?.skipHistory) {
+        useHistoryStore
+          .getState()
+          .pushState(
+            km,
+            pos,
+            currentStatPositions as any,
+            currentGraphPositions as any,
+            currentPluginElements,
+            historyLayerGroups,
+          );
       }
 
-      // 통계 positions 업데이트
-      if (statIndices.length > 0) {
-        const current = useStatItemStore.getState().positions;
-        const modePositions = [...(current[selectedKeyType] || [])];
-        statIndices.forEach((idx) => {
-          if (modePositions[idx]) {
-            modePositions[idx] = {
-              ...modePositions[idx],
-              groupId: targetGroupId,
-            } as any;
-          }
-        });
-        const updatedPositions = {
-          ...current,
-          [selectedKeyType]: modePositions,
-        };
+      useKeyStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
 
-        useStatItemStore.getState().setLocalUpdateInProgress(true);
-        useStatItemStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.statItems.updatePositions(updatedPositions);
-        } finally {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-        }
+      useKeyStore.getState().setPositions(normalized.keyPositions);
+      useStatItemStore.getState().setPositions(normalized.statPositions);
+      useGraphItemStore.getState().setPositions(normalized.graphPositions);
+
+      if (shouldPersistGroups) {
+        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
 
-      // 그래프 positions 업데이트
-      if (graphIndices.length > 0) {
-        const current = useGraphItemStore.getState().positions;
-        const modePositions = [...(current[selectedKeyType] || [])];
-        graphIndices.forEach((idx) => {
-          if (modePositions[idx]) {
-            modePositions[idx] = {
-              ...modePositions[idx],
-              groupId: targetGroupId,
-            } as any;
-          }
-        });
-        const updatedPositions = {
-          ...current,
-          [selectedKeyType]: modePositions,
-        };
-
-        useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useGraphItemStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.graphItems.updatePositions(updatedPositions);
-        } finally {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      try {
+        await window.api.keys.updatePositions(normalized.keyPositions);
+        await window.api.statItems.updatePositions(normalized.statPositions);
+        await window.api.graphItems.updatePositions(normalized.graphPositions);
+        if (shouldPersistGroups) {
+          await window.api.layerGroups.update(normalized.layerGroups);
         }
+      } finally {
+        useKeyStore.getState().setLocalUpdateInProgress(false);
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
+
+      return true;
     },
     [selectedElements, selectedKeyType],
   );
@@ -1084,9 +1085,27 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const trimmed = value.trim();
       if (trimmed === "") return;
 
-      const updated = useLayerGroupStore
+      const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const statPos = useStatItemStore.getState().positions;
+      const graphPos = useGraphItemStore.getState().positions;
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+      const currentGroups = useLayerGroupStore.getState().layerGroups;
+      const currentModeGroups = currentGroups[selectedKeyType] || [];
+      const currentGroup = currentModeGroups.find((group) => group.id === groupId);
+      if (!currentGroup || currentGroup.name === trimmed) return;
+
+      useHistoryStore
         .getState()
-        .renameGroup(selectedKeyType, groupId, trimmed);
+        .pushState(km, pos, statPos as any, graphPos as any, pluginEls, currentGroups);
+
+      const updated: LayerGroups = {
+        ...currentGroups,
+        [selectedKeyType]: currentModeGroups.map((group) =>
+          group.id === groupId ? { ...group, name: trimmed } : group,
+        ),
+      };
+
+      useLayerGroupStore.getState().setLayerGroups(updated);
       try {
         await window.api.layerGroups.update(updated);
       } catch (error) {
@@ -1237,100 +1256,17 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           return;
         }
         if (itemId === "ungroup") {
-          // 그룹 해제: 모든 자식의 groupId 제거 + 그룹 정의 삭제
           const children = layerItems.filter(
             (item) => item.groupId === contextMenuGroupId,
           );
-          // 자식들을 선택 상태로 만들어 setGroupIdOnSelected 사용
           const elements = children.map((child) => ({
             type: child.type as any,
             id: child.id,
             index: child.index,
           }));
-          useGridSelectionStore.getState().setSelectedElements(elements);
+          await setGroupIdOnSelected(undefined, elements);
 
-          // groupId를 undefined로 설정하기 위해 직접 처리
-          const { keyMappings: km, positions: pos } = useKeyStore.getState();
-          const statPos = useStatItemStore.getState().positions;
-          const graphPos = useGraphItemStore.getState().positions;
-          const pluginEls =
-            usePluginDisplayElementStore.getState().elements;
-          useHistoryStore
-            .getState()
-            .pushState(km, pos, statPos as any, graphPos as any, pluginEls);
-
-          // 키
-          const updatedKeyPos = { ...pos };
-          const keyMode = [...(pos[selectedKeyType] || [])];
-          children
-            .filter((c) => c.type === "key" && c.index !== undefined)
-            .forEach((c) => {
-              if (c.index !== undefined && keyMode[c.index]) {
-                keyMode[c.index] = {
-                  ...keyMode[c.index],
-                  groupId: undefined,
-                };
-              }
-            });
-          updatedKeyPos[selectedKeyType] = keyMode;
-          useKeyStore.getState().setLocalUpdateInProgress(true);
-          useKeyStore.getState().setPositions(updatedKeyPos);
-          window.api.keys
-            .updatePositions(updatedKeyPos)
-            .finally(() =>
-              useKeyStore.getState().setLocalUpdateInProgress(false),
-            );
-
-          // 통계
-          const updatedStatPos = { ...statPos };
-          const statMode = [...(statPos[selectedKeyType] || [])];
-          children
-            .filter((c) => c.type === "stat" && c.index !== undefined)
-            .forEach((c) => {
-              if (c.index !== undefined && statMode[c.index]) {
-                statMode[c.index] = {
-                  ...statMode[c.index],
-                  groupId: undefined,
-                } as any;
-              }
-            });
-          updatedStatPos[selectedKeyType] = statMode;
-          useStatItemStore.getState().setLocalUpdateInProgress(true);
-          useStatItemStore.getState().setPositions(updatedStatPos);
-          window.api.statItems
-            .updatePositions(updatedStatPos)
-            .finally(() =>
-              useStatItemStore.getState().setLocalUpdateInProgress(false),
-            );
-
-          // 그래프
-          const updatedGraphPos = { ...graphPos };
-          const graphMode = [...(graphPos[selectedKeyType] || [])];
-          children
-            .filter((c) => c.type === "graph" && c.index !== undefined)
-            .forEach((c) => {
-              if (c.index !== undefined && graphMode[c.index]) {
-                graphMode[c.index] = {
-                  ...graphMode[c.index],
-                  groupId: undefined,
-                } as any;
-              }
-            });
-          updatedGraphPos[selectedKeyType] = graphMode;
-          useGraphItemStore.getState().setLocalUpdateInProgress(true);
-          useGraphItemStore.getState().setPositions(updatedGraphPos);
-          window.api.graphItems
-            .updatePositions(updatedGraphPos)
-            .finally(() =>
-              useGraphItemStore.getState().setLocalUpdateInProgress(false),
-            );
-
-          // 그룹 정의 삭제
-          const updatedGroups = useLayerGroupStore
-            .getState()
-            .removeGroup(selectedKeyType, contextMenuGroupId);
-          window.api.layerGroups.update(updatedGroups).catch(() => {});
-
+          onSelectionFromPanel?.();
           clearSelection();
           setContextMenuOpen(false);
           setContextMenuGroupId(null);
@@ -1359,17 +1295,38 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       if (itemId === "groupSelected") {
         if (selectedElements.length < 2) return;
 
-        const groupId = crypto.randomUUID();
-        const groupName = `${t("layerGroup.newGroup")} ${(layerGroupsForMode.length + 1)}`;
+        const currentGroups = useLayerGroupStore.getState().layerGroups;
+        const modeGroups = currentGroups[selectedKeyType] || [];
+        const keyPos = useKeyStore.getState().positions;
+        const statPos = useStatItemStore.getState().positions;
+        const graphPos = useGraphItemStore.getState().positions;
 
-        // 그룹 정의 추가
-        const updatedGroups = useLayerGroupStore
-          .getState()
-          .addGroup(selectedKeyType, { id: groupId, name: groupName });
-        window.api.layerGroups.update(updatedGroups).catch(() => {});
+        const singleGroupId = resolveSingleGroupIdFromSelection(
+          selectedKeyType,
+          selectedElements,
+          keyPos,
+          statPos,
+          graphPos,
+        );
 
-        // 선택된 아이템들에 groupId 설정
-        await setGroupIdOnSelected(groupId);
+        if (singleGroupId) {
+          await setGroupIdOnSelected(singleGroupId);
+        } else {
+          const groupId = crypto.randomUUID();
+          const groupName = buildNextLayerGroupName(
+            t("layerGroup.newGroup") || "New Group",
+            modeGroups,
+          );
+          const nextGroups: LayerGroups = {
+            ...currentGroups,
+            [selectedKeyType]: [...modeGroups, { id: groupId, name: groupName }],
+          };
+
+          await setGroupIdOnSelected(groupId, undefined, {
+            historyLayerGroups: currentGroups,
+            layerGroupsForNormalization: nextGroups,
+          });
+        }
 
         setContextMenuOpen(false);
         return;
@@ -1386,8 +1343,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               index: contextMenuItem.index,
             },
           ];
-          useGridSelectionStore.getState().setSelectedElements(elements);
-          await setGroupIdOnSelected(undefined);
+          await setGroupIdOnSelected(undefined, elements);
+          onSelectionFromPanel?.();
           clearSelection();
         }
         setContextMenuOpen(false);
@@ -1426,6 +1383,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           const currentGraphPositions = useGraphItemStore.getState().positions;
           const currentPluginElements =
             usePluginDisplayElementStore.getState().elements;
+          const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
           useHistoryStore
             .getState()
             .pushState(
@@ -1433,11 +1391,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               pos,
               currentStatPositions as any,
               currentGraphPositions as any,
-              currentPluginElements
+              currentPluginElements,
+              currentLayerGroups,
             );
         }
 
         // 선택 해제
+        onSelectionFromPanel?.();
         clearSelection();
 
         // 키 배치 삭제
@@ -1548,6 +1508,38 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           );
           usePluginDisplayElementStore.getState().setElements(newElements);
         }
+
+        const normalized = normalizeLayerGroupsForMode({
+          mode: selectedKeyType,
+          keyPositions: useKeyStore.getState().positions,
+          statPositions: useStatItemStore.getState().positions,
+          graphPositions: useGraphItemStore.getState().positions,
+          layerGroups: useLayerGroupStore.getState().layerGroups,
+        });
+
+        if (normalized.positionsChanged || normalized.groupsChanged) {
+          useKeyStore.getState().setLocalUpdateInProgress(true);
+          useStatItemStore.getState().setLocalUpdateInProgress(true);
+          useGraphItemStore.getState().setLocalUpdateInProgress(true);
+          useKeyStore.getState().setPositions(normalized.keyPositions);
+          useStatItemStore.getState().setPositions(normalized.statPositions);
+          useGraphItemStore.getState().setPositions(normalized.graphPositions);
+          if (normalized.groupsChanged) {
+            useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+          }
+          try {
+            await window.api.keys.updatePositions(normalized.keyPositions);
+            await window.api.statItems.updatePositions(normalized.statPositions);
+            await window.api.graphItems.updatePositions(normalized.graphPositions);
+            if (normalized.groupsChanged) {
+              await window.api.layerGroups.update(normalized.layerGroups);
+            }
+          } finally {
+            useKeyStore.getState().setLocalUpdateInProgress(false);
+            useStatItemStore.getState().setLocalUpdateInProgress(false);
+            useGraphItemStore.getState().setLocalUpdateInProgress(false);
+          }
+        }
       }
 
       setContextMenuOpen(false);
@@ -1560,6 +1552,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       contextMenuGroupId,
       layerGroupsForMode,
       layerItems,
+      onSelectionFromPanel,
       setGroupIdOnSelected,
       t,
     ],
@@ -1574,12 +1567,34 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       if (fromIndex === -1 || fromIndex === toIndex) return;
 
-      // 히스토리 저장
+      // 아이템 재정렬
+      const [removed] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, removed);
+
+      const previousItem = items[toIndex - 1];
+      const nextItem = items[toIndex + 1];
+      let droppedGroupId: string | undefined = removed.groupId;
+      if (removed.type !== "plugin") {
+        const prevGroupId = previousItem?.groupId;
+        const nextGroupId = nextItem?.groupId;
+        if (prevGroupId && nextGroupId) {
+          droppedGroupId =
+            prevGroupId === nextGroupId ? prevGroupId : undefined;
+        } else if (prevGroupId) {
+          droppedGroupId = prevGroupId;
+        } else if (nextGroupId) {
+          droppedGroupId = nextGroupId;
+        } else {
+          droppedGroupId = undefined;
+        }
+      }
+
       const currentPositions = useKeyStore.getState().positions;
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
       const { keyMappings: km } = useKeyStore.getState();
       useHistoryStore
         .getState()
@@ -1589,29 +1604,26 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           currentStatPositions as any,
           currentGraphPositions as any,
           currentPluginElements,
+          currentLayerGroups,
         );
-
-      // 아이템 재정렬
-      const [removed] = items.splice(fromIndex, 1);
-      items.splice(toIndex, 0, removed);
 
       // 새 z-index 계산 및 적용
       const maxZIndex = items.length - 1;
 
       // 키 positions 복사 및 업데이트
-      const updatedPositions = { ...useKeyStore.getState().positions };
+      const updatedPositions = { ...currentPositions };
       const currentModePositions = [
         ...(updatedPositions[selectedKeyType] || []),
       ];
 
       // 통계 positions 복사 및 업데이트
-      const updatedStatPositions = { ...useStatItemStore.getState().positions };
+      const updatedStatPositions = { ...currentStatPositions };
       const currentStatModePositions = [
         ...(updatedStatPositions[selectedKeyType] || []),
       ];
       // 그래프 positions 복사 및 업데이트
       const updatedGraphPositions = {
-        ...useGraphItemStore.getState().positions,
+        ...currentGraphPositions,
       };
       const currentGraphModePositions = [
         ...(updatedGraphPositions[selectedKeyType] || []),
@@ -1623,23 +1635,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         if (item.type === "key" && item.index !== undefined) {
           // 키 z-index 업데이트
           if (currentModePositions[item.index]) {
+            const isDroppedItem = item.id === removed.id;
             currentModePositions[item.index] = {
               ...currentModePositions[item.index],
               zIndex: newZIndex,
+              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
             };
           }
         } else if (item.type === "stat" && item.index !== undefined) {
           if (currentStatModePositions[item.index]) {
+            const isDroppedItem = item.id === removed.id;
             currentStatModePositions[item.index] = {
               ...currentStatModePositions[item.index],
               zIndex: newZIndex,
+              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
             };
           }
         } else if (item.type === "graph" && item.index !== undefined) {
           if (currentGraphModePositions[item.index]) {
+            const isDroppedItem = item.id === removed.id;
             currentGraphModePositions[item.index] = {
               ...currentGraphModePositions[item.index],
               zIndex: newZIndex,
+              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
             };
           }
         } else if (item.type === "plugin") {
@@ -1652,23 +1670,37 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 키 positions 일괄 업데이트
       updatedPositions[selectedKeyType] = currentModePositions;
-      useKeyStore.getState().setPositions(updatedPositions);
 
       // 통계 positions 일괄 업데이트
       updatedStatPositions[selectedKeyType] = currentStatModePositions;
-      useStatItemStore.getState().setPositions(updatedStatPositions);
       // 그래프 positions 일괄 업데이트
       updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
-      useGraphItemStore.getState().setPositions(updatedGraphPositions);
+      const normalized = normalizeLayerGroupsForMode({
+        mode: selectedKeyType,
+        keyPositions: updatedPositions,
+        statPositions: updatedStatPositions,
+        graphPositions: updatedGraphPositions,
+        layerGroups: currentLayerGroups,
+      });
+
+      useGraphItemStore.getState().setPositions(normalized.graphPositions);
+      useKeyStore.getState().setPositions(normalized.keyPositions);
+      useStatItemStore.getState().setPositions(normalized.statPositions);
+      if (normalized.groupsChanged) {
+        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+      }
 
       // 백엔드/오버레이 동기화 (레이어 정렬 결과 즉시 반영)
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
       try {
-        await window.api.keys.updatePositions(updatedPositions);
-        await window.api.statItems.updatePositions(updatedStatPositions);
-        await window.api.graphItems.updatePositions(updatedGraphPositions);
+        await window.api.keys.updatePositions(normalized.keyPositions);
+        await window.api.statItems.updatePositions(normalized.statPositions);
+        await window.api.graphItems.updatePositions(normalized.graphPositions);
+        if (normalized.groupsChanged) {
+          await window.api.layerGroups.update(normalized.layerGroups);
+        }
       } catch (error) {
         console.error("Failed to reorder layers", error);
       } finally {
@@ -1679,7 +1711,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       try {
         window.api.bridge.sendTo("overlay", "positions:sync", {
-          positions: updatedPositions,
+          positions: normalized.keyPositions,
         });
       } catch {
         // ignore
@@ -1687,14 +1719,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
-          positions: updatedStatPositions,
+          positions: normalized.statPositions,
         });
       } catch {
         // ignore
       }
       try {
         window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-          positions: updatedGraphPositions,
+          positions: normalized.graphPositions,
         });
       } catch {
         // ignore
@@ -1784,6 +1816,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
       const { keyMappings: km } = useKeyStore.getState();
       useHistoryStore
         .getState()
@@ -1793,6 +1826,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           currentStatPositions as any,
           currentGraphPositions as any,
           currentPluginElements,
+          currentLayerGroups,
         );
 
       // z-index 재계산
@@ -2124,6 +2158,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                 const isRenamingGroup =
                   renamingItemId === `group:${gh.groupId}`;
                 const isBeingDragged = draggedGroupId === gh.groupId;
+                const isSelected = isGroupHeaderSelected(gh.groupId);
 
                 return (
                   <div
@@ -2144,7 +2179,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       select-none cursor-grab
                       ${gh.allHidden && !isBeingDragged ? "opacity-60" : ""}
                       ${isBeingDragged ? "opacity-30" : ""}
-                      ${isDragging ? "" : "hover:bg-[#2A2A30]"} text-[#9B9DA5]
+                      ${
+                        isSelected
+                          ? "bg-[#3B82F6]/20 text-[#DBDEE8]"
+                          : isDragging
+                            ? "text-[#9B9DA5]"
+                            : "hover:bg-[#2A2A30] text-[#9B9DA5]"
+                      }
                     `}
                   >
                     {/* 그룹 드래그 드롭 인디케이터 */}

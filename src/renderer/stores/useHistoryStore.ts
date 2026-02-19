@@ -4,6 +4,7 @@ import type { KeyCounters, KeyMappings, KeyPositions } from "@src/types/keys";
 import type { PluginDisplayElementInternal } from "@src/types/api";
 import type { StatItemPositions } from "@src/types/statItems";
 import type { GraphItemPositions } from "@src/types/graphItems";
+import type { LayerGroups } from "@src/types/layerGroups";
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)
 type SerializablePluginElement = Omit<
@@ -17,6 +18,7 @@ interface HistoryState {
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
   pluginElements?: SerializablePluginElement[];
+  layerGroups?: LayerGroups;
   keyCounters: KeyCounters;
 }
 
@@ -30,21 +32,24 @@ interface HistoryStore {
     positions: KeyPositions,
     statPositions: StatItemPositions,
     graphPositions: GraphItemPositions,
-    pluginElements?: PluginDisplayElementInternal[]
+    pluginElements?: PluginDisplayElementInternal[],
+    layerGroups?: LayerGroups
   ) => void;
   undo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[]
+    currentPluginElements?: PluginDisplayElementInternal[],
+    currentLayerGroups?: LayerGroups
   ) => HistoryState | null;
   redo: (
     currentKeyMappings: KeyMappings,
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[]
+    currentPluginElements?: PluginDisplayElementInternal[],
+    currentLayerGroups?: LayerGroups
   ) => HistoryState | null;
   clear: () => void;
   clearFuture: () => void;
@@ -84,7 +89,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     positions: KeyPositions,
     statPositions: StatItemPositions,
     graphPositions: GraphItemPositions,
-    pluginElements?: PluginDisplayElementInternal[]
+    pluginElements?: PluginDisplayElementInternal[],
+    layerGroups?: LayerGroups
   ) => {
     set((state) => {
       const newState: HistoryState = {
@@ -94,6 +100,9 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
         graphPositions: JSON.parse(JSON.stringify(graphPositions)),
         pluginElements: pluginElements
           ? serializePluginElements(pluginElements)
+          : undefined,
+        layerGroups: layerGroups
+          ? JSON.parse(JSON.stringify(layerGroups))
           : undefined,
         keyCounters: getCounterSnapshot(),
       };
@@ -116,7 +125,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[]
+    currentPluginElements?: PluginDisplayElementInternal[],
+    currentLayerGroups?: LayerGroups
   ) => {
     const state = get();
     if (state.past.length === 0) return null;
@@ -132,6 +142,9 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
       graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
+        : undefined,
+      layerGroups: currentLayerGroups
+        ? JSON.parse(JSON.stringify(currentLayerGroups))
         : undefined,
       keyCounters: getCounterSnapshot(),
     };
@@ -149,7 +162,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentPositions: KeyPositions,
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[]
+    currentPluginElements?: PluginDisplayElementInternal[],
+    currentLayerGroups?: LayerGroups
   ) => {
     const state = get();
     if (state.future.length === 0) return null;
@@ -165,6 +179,9 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
       graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
       pluginElements: currentPluginElements
         ? serializePluginElements(currentPluginElements)
+        : undefined,
+      layerGroups: currentLayerGroups
+        ? JSON.parse(JSON.stringify(currentLayerGroups))
         : undefined,
       keyCounters: getCounterSnapshot(),
     };

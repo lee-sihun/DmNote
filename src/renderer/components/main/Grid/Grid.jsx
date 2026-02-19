@@ -15,6 +15,7 @@ import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
 import { useGridZoomPan } from "@hooks/Grid/useGridZoomPan";
 import GridMinimap from "./GridMinimap";
@@ -43,6 +44,12 @@ import {
 } from "@hooks/Grid";
 import { createDefaultCounterSettings } from "@src/types/keys";
 import { resolveImageSource } from "@utils/imageSource";
+import {
+  applyGroupIdToSelectedElements,
+  buildNextLayerGroupName,
+  normalizeLayerGroupsForMode,
+  resolveSingleGroupIdFromSelection,
+} from "@utils/layerGroupUtils";
 
 function getStatTypeLabel(type) {
   if (type === "kps") return "KPS";
@@ -412,6 +419,7 @@ export default function Grid({
     onRedo,
     onMoveForward: handleSelectedMoveForward,
     onMoveBackward: handleSelectedMoveBackward,
+    newGroupLabel: t("layerGroup.newGroup") || "New Group",
   });
 
   // 키 컨텍스트 메뉴
@@ -431,8 +439,6 @@ export default function Grid({
     const items = [
       { id: "delete", label: t("contextMenu.deleteSelected") },
       { id: "duplicate", label: t("contextMenu.duplicateSelected") },
-      { id: "bringToFront", label: t("contextMenu.bringToFront") },
-      { id: "sendToBack", label: t("contextMenu.sendToBack") },
     ];
 
     if (selectedElements.length >= 2) {
@@ -472,6 +478,9 @@ export default function Grid({
         items.push({ id: "ungroupSelected", label: t("contextMenu.ungroup") });
       }
     }
+
+    items.push({ id: "bringToFront", label: t("contextMenu.bringToFront") });
+    items.push({ id: "sendToBack", label: t("contextMenu.sendToBack") });
 
     return items;
   }, [t, selectedElements, positions, selectedKeyType]);
@@ -2054,132 +2063,153 @@ export default function Grid({
               } else if (id === "sendToBack") {
                 await moveSelectedToBack();
               } else if (id === "groupSelected") {
-                const groupId = crypto.randomUUID();
-                const { useLayerGroupStore } = await import(
-                  "@stores/useLayerGroupStore"
+                const { keyMappings: km, positions: keyPos } = useKeyStore.getState();
+                const statPos = useStatItemStore.getState().positions;
+                const graphPos = useGraphItemStore.getState().positions;
+                const pluginEls = usePluginDisplayElementStore.getState().elements;
+                const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+                const modeGroups = currentLayerGroups[selectedKeyType] || [];
+
+                const singleGroupId = resolveSingleGroupIdFromSelection(
+                  selectedKeyType,
+                  selectedElements,
+                  keyPos,
+                  statPos,
+                  graphPos,
                 );
-                const groupName = `${t("layerGroup.newGroup")} ${
-                  useLayerGroupStore
+
+                let targetGroupId = singleGroupId;
+                let nextLayerGroups = currentLayerGroups;
+                let createdGroup = false;
+                if (!targetGroupId) {
+                  targetGroupId = crypto.randomUUID();
+                  const groupName = buildNextLayerGroupName(
+                    t("layerGroup.newGroup") || "New Group",
+                    modeGroups,
+                  );
+                  nextLayerGroups = {
+                    ...currentLayerGroups,
+                    [selectedKeyType]: [
+                      ...modeGroups,
+                      { id: targetGroupId, name: groupName },
+                    ],
+                  };
+                  createdGroup = true;
+                }
+
+                const grouped = applyGroupIdToSelectedElements({
+                  mode: selectedKeyType,
+                  selectedElements,
+                  keyPositions: keyPos,
+                  statPositions: statPos,
+                  graphPositions: graphPos,
+                  targetGroupId,
+                });
+
+                const normalized = normalizeLayerGroupsForMode({
+                  mode: selectedKeyType,
+                  keyPositions: grouped.keyPositions,
+                  statPositions: grouped.statPositions,
+                  graphPositions: grouped.graphPositions,
+                  layerGroups: nextLayerGroups,
+                });
+
+                const hasChange =
+                  grouped.changed ||
+                  normalized.positionsChanged ||
+                  createdGroup ||
+                  normalized.groupsChanged;
+                if (hasChange) {
+                  useHistoryStore
                     .getState()
-                    .getGroupsForMode(selectedKeyType).length + 1
-                }`;
-                const updatedGroups = useLayerGroupStore
-                  .getState()
-                  .addGroup(selectedKeyType, { id: groupId, name: groupName });
-                window.api.layerGroups.update(updatedGroups).catch(() => {});
+                    .pushState(
+                      km,
+                      keyPos,
+                      statPos,
+                      graphPos,
+                      pluginEls,
+                      currentLayerGroups,
+                    );
 
-                const keyPos = { ...positions };
-                const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
-                const statPos = { ...useStatItemStore.getState().positions };
-                const modeStatPos = [...(statPos[selectedKeyType] || [])];
-                const graphPos = { ...useGraphItemStore.getState().positions };
-                const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+                  useKeyStore.getState().setPositions(normalized.keyPositions);
+                  useStatItemStore.getState().setPositions(normalized.statPositions);
+                  useGraphItemStore
+                    .getState()
+                    .setPositions(normalized.graphPositions);
 
-                selectedElements.forEach((el) => {
-                  if (
-                    el.type === "key" &&
-                    el.index !== undefined &&
-                    modeKeyPos[el.index]
-                  ) {
-                    modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId };
-                  } else if (
-                    el.type === "stat" &&
-                    el.index !== undefined &&
-                    modeStatPos[el.index]
-                  ) {
-                    modeStatPos[el.index] = {
-                      ...modeStatPos[el.index],
-                      groupId,
-                    };
-                  } else if (
-                    el.type === "graph" &&
-                    el.index !== undefined &&
-                    modeGraphPos[el.index]
-                  ) {
-                    modeGraphPos[el.index] = {
-                      ...modeGraphPos[el.index],
-                      groupId,
-                    };
+                  await window.api.keys.updatePositions(normalized.keyPositions);
+                  await window.api
+                    .statItems
+                    .updatePositions(normalized.statPositions);
+                  await window.api
+                    .graphItems
+                    .updatePositions(normalized.graphPositions);
+
+                  if (createdGroup || normalized.groupsChanged) {
+                    useLayerGroupStore
+                      .getState()
+                      .setLayerGroups(normalized.layerGroups);
+                    await window.api.layerGroups.update(normalized.layerGroups);
                   }
-                });
-                keyPos[selectedKeyType] = modeKeyPos;
-                statPos[selectedKeyType] = modeStatPos;
-                graphPos[selectedKeyType] = modeGraphPos;
-
-                useKeyStore.getState().setPositions(keyPos);
-                useStatItemStore.getState().setPositions(statPos);
-                useGraphItemStore.getState().setPositions(graphPos);
-
-                await window.api.keys.updatePositions(keyPos);
-                await window.api.statItems.updatePositions(statPos);
-                await window.api.graphItems.updatePositions(graphPos);
+                }
               } else if (id === "ungroupSelected") {
-                const { useLayerGroupStore } = await import(
-                  "@stores/useLayerGroupStore"
-                );
+                const { keyMappings: km, positions: keyPos } = useKeyStore.getState();
+                const statPos = useStatItemStore.getState().positions;
+                const graphPos = useGraphItemStore.getState().positions;
+                const pluginEls = usePluginDisplayElementStore.getState().elements;
+                const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
-                const keyPos = { ...positions };
-                const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
-                const statPos = { ...useStatItemStore.getState().positions };
-                const modeStatPos = [...(statPos[selectedKeyType] || [])];
-                const graphPos = { ...useGraphItemStore.getState().positions };
-                const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
-
-                const groupIdsToCheck = new Set();
-
-                selectedElements.forEach((el) => {
-                  if (
-                    el.type === "key" &&
-                    el.index !== undefined &&
-                    modeKeyPos[el.index]
-                  ) {
-                    if (modeKeyPos[el.index].groupId) {
-                      groupIdsToCheck.add(modeKeyPos[el.index].groupId);
-                    }
-                    modeKeyPos[el.index] = {
-                      ...modeKeyPos[el.index],
-                      groupId: undefined,
-                    };
-                  } else if (
-                    el.type === "stat" &&
-                    el.index !== undefined &&
-                    modeStatPos[el.index]
-                  ) {
-                    if (modeStatPos[el.index].groupId) {
-                      groupIdsToCheck.add(modeStatPos[el.index].groupId);
-                    }
-                    modeStatPos[el.index] = {
-                      ...modeStatPos[el.index],
-                      groupId: undefined,
-                    };
-                  } else if (
-                    el.type === "graph" &&
-                    el.index !== undefined &&
-                    modeGraphPos[el.index]
-                  ) {
-                    if (modeGraphPos[el.index].groupId) {
-                      groupIdsToCheck.add(modeGraphPos[el.index].groupId);
-                    }
-                    modeGraphPos[el.index] = {
-                      ...modeGraphPos[el.index],
-                      groupId: undefined,
-                    };
-                  }
+                const ungrouped = applyGroupIdToSelectedElements({
+                  mode: selectedKeyType,
+                  selectedElements,
+                  keyPositions: keyPos,
+                  statPositions: statPos,
+                  graphPositions: graphPos,
+                  targetGroupId: undefined,
                 });
-                void useLayerGroupStore;
-                void groupIdsToCheck;
 
-                keyPos[selectedKeyType] = modeKeyPos;
-                statPos[selectedKeyType] = modeStatPos;
-                graphPos[selectedKeyType] = modeGraphPos;
+                const normalized = normalizeLayerGroupsForMode({
+                  mode: selectedKeyType,
+                  keyPositions: ungrouped.keyPositions,
+                  statPositions: ungrouped.statPositions,
+                  graphPositions: ungrouped.graphPositions,
+                  layerGroups: currentLayerGroups,
+                });
 
-                useKeyStore.getState().setPositions(keyPos);
-                useStatItemStore.getState().setPositions(statPos);
-                useGraphItemStore.getState().setPositions(graphPos);
+                const hasChange = ungrouped.changed || normalized.groupsChanged;
+                if (hasChange) {
+                  useHistoryStore
+                    .getState()
+                    .pushState(
+                      km,
+                      keyPos,
+                      statPos,
+                      graphPos,
+                      pluginEls,
+                      currentLayerGroups,
+                    );
 
-                await window.api.keys.updatePositions(keyPos);
-                await window.api.statItems.updatePositions(statPos);
-                await window.api.graphItems.updatePositions(graphPos);
+                  useKeyStore.getState().setPositions(normalized.keyPositions);
+                  useStatItemStore.getState().setPositions(normalized.statPositions);
+                  useGraphItemStore
+                    .getState()
+                    .setPositions(normalized.graphPositions);
+
+                  await window.api.keys.updatePositions(normalized.keyPositions);
+                  await window.api
+                    .statItems
+                    .updatePositions(normalized.statPositions);
+                  await window.api
+                    .graphItems
+                    .updatePositions(normalized.graphPositions);
+
+                  if (normalized.groupsChanged) {
+                    useLayerGroupStore
+                      .getState()
+                      .setLayerGroups(normalized.layerGroups);
+                    await window.api.layerGroups.update(normalized.layerGroups);
+                  }
+                }
               }
 
               setIsContextOpen(false);

@@ -272,8 +272,8 @@
     "quitApp": "退出程序",
     "snapToEdge": "贴靠屏幕边缘",
     "selectTab": "选择标签页",
-    "groupSelected": "将选中项分组",
-    "renameGroup": "重命名组",
+    "groupSelected": "分组",
+    "renameGroup": "重命名",
     "ungroup": "取消分组",
     "removeFromGroup": "从组中移除"
   },

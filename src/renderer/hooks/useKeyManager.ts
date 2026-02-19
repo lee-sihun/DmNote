@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
@@ -1078,12 +1079,14 @@ export function useKeyManager() {
       // 현재 상태를 가져와서 undo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
       const previousState = undo(
         keyMappings,
         positions,
         statPositions,
         graphPositions,
         currentPluginElements,
+        currentLayerGroups,
       );
 
       if (previousState) {
@@ -1091,6 +1094,9 @@ export function useKeyManager() {
         setPositions(previousState.positions);
         useStatItemStore.getState().setPositions(previousState.statPositions);
         useGraphItemStore.getState().setPositions(previousState.graphPositions);
+        if (previousState.layerGroups !== undefined) {
+          useLayerGroupStore.getState().setLayerGroups(previousState.layerGroups);
+        }
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (previousState.keyCounters) {
@@ -1187,6 +1193,11 @@ export function useKeyManager() {
             .catch((error) => {
               console.error("Failed to apply undo graph positions", error);
             });
+          if (previousState.layerGroups !== undefined) {
+            window.api.layerGroups.update(previousState.layerGroups).catch((error) => {
+              console.error("Failed to apply undo layer groups", error);
+            });
+          }
 
           if (previousState.keyCounters) {
             await window.api.keys.setCounters(previousState.keyCounters);
@@ -1230,12 +1241,14 @@ export function useKeyManager() {
       // 현재 상태를 가져와서 redo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
       const nextState = redo(
         keyMappings,
         positions,
         statPositions,
         graphPositions,
         currentPluginElements,
+        currentLayerGroups,
       );
 
       if (nextState) {
@@ -1243,6 +1256,9 @@ export function useKeyManager() {
         setPositions(nextState.positions);
         useStatItemStore.getState().setPositions(nextState.statPositions);
         useGraphItemStore.getState().setPositions(nextState.graphPositions);
+        if (nextState.layerGroups !== undefined) {
+          useLayerGroupStore.getState().setLayerGroups(nextState.layerGroups);
+        }
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
         if (nextState.keyCounters) {
@@ -1330,6 +1346,11 @@ export function useKeyManager() {
             .catch((error) => {
               console.error("Failed to apply redo graph positions", error);
             });
+          if (nextState.layerGroups !== undefined) {
+            window.api.layerGroups.update(nextState.layerGroups).catch((error) => {
+              console.error("Failed to apply redo layer groups", error);
+            });
+          }
 
           if (nextState.keyCounters) {
             await window.api.keys.setCounters(nextState.keyCounters);

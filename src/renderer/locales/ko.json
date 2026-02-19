@@ -270,8 +270,8 @@
     "quitApp": "프로그램 종료",
     "snapToEdge": "화면 모서리에 맞추기",
     "selectTab": "탭 선택",
-    "groupSelected": "선택 항목 그룹화",
-    "renameGroup": "그룹 이름 변경",
+    "groupSelected": "그룹",
+    "renameGroup": "이름 변경",
     "ungroup": "그룹 해제",
     "removeFromGroup": "그룹에서 제거"
   },

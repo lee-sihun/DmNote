@@ -10,6 +10,7 @@ import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import {
   useGridSelectionStore,
@@ -18,6 +19,7 @@ import {
 } from "@stores/useGridSelectionStore";
 import { PASTE_OFFSET } from "./constants";
 import type { KeyMappings, KeyPositions, KeyPosition } from "@src/types/keys";
+import { normalizeLayerGroupsForMode } from "@utils/layerGroupUtils";
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -304,6 +306,7 @@ export function useGridSelection({
       const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
       useHistoryStore
         .getState()
         .pushState(
@@ -311,7 +314,8 @@ export function useGridSelection({
           pos,
           currentStatPositions as any,
           currentGraphPositions as any,
-          currentPluginElements
+          currentPluginElements,
+          currentLayerGroups
         );
     }
 
@@ -423,6 +427,45 @@ export function useGridSelection({
         });
       } catch {
         // ignore
+      }
+    }
+
+    const normalized = normalizeLayerGroupsForMode({
+      mode: selectedKeyType,
+      keyPositions: useKeyStore.getState().positions,
+      statPositions: useStatItemStore.getState().positions as any,
+      graphPositions: useGraphItemStore.getState().positions as any,
+      layerGroups: useLayerGroupStore.getState().layerGroups,
+    });
+
+    if (normalized.positionsChanged || normalized.groupsChanged) {
+      useKeyStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useKeyStore.getState().setPositions(normalized.keyPositions);
+      useStatItemStore.getState().setPositions(normalized.statPositions as any);
+      useGraphItemStore.getState().setPositions(normalized.graphPositions as any);
+      if (normalized.groupsChanged) {
+        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+      }
+
+      try {
+        await window.api.keys.updatePositions(normalized.keyPositions);
+        await window.api.statItems.updatePositions(
+          normalized.statPositions as any
+        );
+        await window.api.graphItems.updatePositions(
+          normalized.graphPositions as any
+        );
+        if (normalized.groupsChanged) {
+          await window.api.layerGroups.update(normalized.layerGroups);
+        }
+      } catch (error) {
+        console.error("Failed to normalize layer groups after delete", error);
+      } finally {
+        useKeyStore.getState().setLocalUpdateInProgress(false);
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
     }
   }, [selectedElements, selectedKeyType, clearSelection]);

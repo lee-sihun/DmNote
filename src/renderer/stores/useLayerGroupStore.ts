@@ -28,7 +28,17 @@ export const useLayerGroupStore = create<LayerGroupStoreState>((set, get) => ({
   layerGroups: {},
   collapsedGroups: new Set(),
 
-  setLayerGroups: (groups) => set({ layerGroups: groups }),
+  setLayerGroups: (groups) =>
+    set((state) => {
+      const validGroupIds = new Set<string>();
+      Object.values(groups).forEach((modeGroups) => {
+        modeGroups.forEach((group) => validGroupIds.add(group.id));
+      });
+      const collapsedGroups = new Set(
+        Array.from(state.collapsedGroups).filter((id) => validGroupIds.has(id))
+      );
+      return { layerGroups: groups, collapsedGroups };
+    }),
 
   addGroup: (mode, group) => {
     const current = get().layerGroups;
