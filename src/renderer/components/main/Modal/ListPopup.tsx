@@ -177,6 +177,36 @@ const MenuItemRow = ({
 
   const isLeft = textAlign === "left";
   const hasCheck = typeof item.checked === "boolean";
+  const isBasicCenterItem = !isLeft && !hasCheck && !hasChildren;
+
+  const handleSelect = () => {
+    if (item.disabled || hasChildren) return;
+    onSelect?.(item.id);
+    onCloseAll?.();
+  };
+
+  if (isBasicCenterItem) {
+    return (
+      <button
+        type="button"
+        disabled={item.disabled}
+        onClick={handleSelect}
+        className={`w-full min-w-[108px] h-[24px] px-[24px] rounded-[7px] flex items-center justify-center ${
+          item.disabled
+            ? "opacity-70"
+            : "hover:bg-button-hover active:bg-button-active cursor-pointer"
+        }`}
+      >
+        <span
+          className={`text-style-2 whitespace-nowrap ${
+            item.disabled ? "text-[#6B6E7B]" : "text-[#DBDEE8]"
+          }`}
+        >
+          {item.label}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -188,11 +218,7 @@ const MenuItemRow = ({
         ref={rowRef}
         type="button"
         disabled={item.disabled}
-        onClick={() => {
-          if (item.disabled || hasChildren) return;
-          onSelect?.(item.id);
-          onCloseAll?.();
-        }}
+        onClick={handleSelect}
         className={`w-full min-w-[140px] h-[28px] px-[6px] rounded-[5px] flex items-center gap-[4px] ${
           item.disabled
             ? "opacity-70"
