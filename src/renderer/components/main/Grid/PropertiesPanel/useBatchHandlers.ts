@@ -35,6 +35,10 @@ type KeyLikeBatchUpdate = {
   index: number;
 } & Partial<KeyPosition>;
 
+type BatchCommitOptions = {
+  skipHistory?: boolean;
+};
+
 interface SpacingAxisPlan {
   applyHorizontal: boolean;
   applyVertical: boolean;
@@ -435,6 +439,7 @@ interface UseBatchHandlersProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
+    options?: BatchCommitOptions,
   ) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyBatchPreview?: (
@@ -443,6 +448,7 @@ interface UseBatchHandlersProps {
   onStatUpdate: (data: Partial<StatItemPosition> & { index: number }) => void;
   onStatBatchUpdate?: (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
+    options?: BatchCommitOptions,
   ) => void;
   onStatPreview?: (index: number, updates: Partial<StatItemPosition>) => void;
   onStatBatchPreview?: (
@@ -451,6 +457,7 @@ interface UseBatchHandlersProps {
   onGraphUpdate?: (data: Partial<GraphItemPosition> & { index: number }) => void;
   onGraphBatchUpdate?: (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+    options?: BatchCommitOptions,
   ) => void;
   onGraphPreview?: (
     index: number,
@@ -503,6 +510,7 @@ export function useBatchHandlers({
     (
       updates: Array<{ index: number } & Partial<KeyPosition>>,
       kind: "preview" | "commit",
+      options?: BatchCommitOptions,
     ) => {
       if (updates.length === 0) return;
       if (kind === "preview") {
@@ -518,7 +526,7 @@ export function useBatchHandlers({
       }
 
       if (onKeyBatchUpdate) {
-        onKeyBatchUpdate(updates);
+        onKeyBatchUpdate(updates, options);
         return;
       }
       updates.forEach((update) => onKeyUpdate(update));
@@ -530,6 +538,7 @@ export function useBatchHandlers({
     (
       updates: Array<{ index: number } & Partial<StatItemPosition>>,
       kind: "preview" | "commit",
+      options?: BatchCommitOptions,
     ) => {
       if (updates.length === 0) return;
       if (kind === "preview") {
@@ -547,7 +556,7 @@ export function useBatchHandlers({
       }
 
       if (onStatBatchUpdate) {
-        onStatBatchUpdate(updates);
+        onStatBatchUpdate(updates, options);
         return;
       }
       updates.forEach((update) => onStatUpdate(update));
@@ -559,6 +568,7 @@ export function useBatchHandlers({
     (
       updates: Array<{ index: number } & Partial<GraphItemPosition>>,
       kind: "preview" | "commit",
+      options?: BatchCommitOptions,
     ) => {
       if (updates.length === 0) return;
       if (kind === "preview") {
@@ -577,7 +587,7 @@ export function useBatchHandlers({
       }
 
       if (onGraphBatchUpdate) {
-        onGraphBatchUpdate(updates);
+        onGraphBatchUpdate(updates, options);
         return;
       }
       if (onGraphUpdate) {
@@ -614,7 +624,11 @@ export function useBatchHandlers({
   }, [getKeyLikePosition, selectedKeyLikeElements]);
 
   const dispatchKeyLikeUpdates = useCallback(
-    (updates: KeyLikeBatchUpdate[], kind: "preview" | "commit" = "commit") => {
+    (
+      updates: KeyLikeBatchUpdate[],
+      kind: "preview" | "commit" = "commit",
+      options?: BatchCommitOptions,
+    ) => {
       const keyUpdates = updates
         .filter((u) => u.type === "key")
         .map(({ type: _t, ...rest }) => rest) as Array<
@@ -631,9 +645,31 @@ export function useBatchHandlers({
         { index: number } & Partial<GraphItemPosition>
       >;
 
-      dispatchKeyUpdates(keyUpdates, kind);
-      dispatchStatUpdates(statUpdates, kind);
-      dispatchGraphUpdates(graphUpdates, kind);
+      if (kind === "preview") {
+        dispatchKeyUpdates(keyUpdates, "preview");
+        dispatchStatUpdates(statUpdates, "preview");
+        dispatchGraphUpdates(graphUpdates, "preview");
+        return;
+      }
+
+      let hasSavedHistory = options?.skipHistory === true;
+      if (keyUpdates.length > 0) {
+        dispatchKeyUpdates(keyUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
+      if (statUpdates.length > 0) {
+        dispatchStatUpdates(statUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
+      if (graphUpdates.length > 0) {
+        dispatchGraphUpdates(graphUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+      }
     },
     [dispatchKeyUpdates, dispatchStatUpdates, dispatchGraphUpdates],
   );
@@ -973,20 +1009,20 @@ export function useBatchHandlers({
     [computeSpacingUpdates, dispatchKeyLikeUpdates],
   );
 
-  // 간격 커밋 (blur 시 최종 반영 + 히스토리 저장)
+  // 간격 커밋
   const handleBatchSpacingCommit = useCallback(
-    (spacing: number) => {
+    (spacing: number, options?: BatchCommitOptions) => {
       const updates = computeSpacingUpdates(spacing);
       if (updates.length === 0) return;
-      dispatchKeyLikeUpdates(updates, "commit");
+      dispatchKeyLikeUpdates(updates, "commit", options);
     },
     [computeSpacingUpdates, dispatchKeyLikeUpdates],
   );
 
   // 기존 호환용 (외부에서 직접 호출 시 commit 모드)
   const handleBatchSpacing = useCallback(
-    (spacing: number) => {
-      handleBatchSpacingCommit(spacing);
+    (spacing: number, options?: BatchCommitOptions) => {
+      handleBatchSpacingCommit(spacing, options);
     },
     [handleBatchSpacingCommit],
   );

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { KeyPosition } from "@src/types/keys";
 import {
   PropertyRow,
@@ -11,6 +11,9 @@ import {
 import Checkbox from "@components/main/common/Checkbox";
 import FontPicker from "@components/main/Modal/content/FontPicker";
 import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
+
+const SPACING_COMMIT_DEBOUNCE_MS = 80;
+const SPACING_COMMIT_EPSILON = 0.0001;
 
 interface KeyData {
   index: number;
@@ -37,9 +40,15 @@ interface BatchStyleTabContentProps {
     direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
   ) => void;
   handleBatchDistribute: (direction: "horizontal" | "vertical") => void;
-  handleBatchSpacing: (spacing: number) => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
   handleBatchSpacingPreview?: (spacing: number) => void;
-  handleBatchSpacingCommit?: (spacing: number) => void;
+  handleBatchSpacingCommit?: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
   batchSpacing: { isMixed: boolean; value: number };
   handleBatchResize: (dimension: "width" | "height", value: number) => void;
   handleBatchStyleChange: (property: keyof KeyPosition, value: any) => void;
@@ -67,7 +76,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   handleBatchAlign,
   handleBatchDistribute,
   handleBatchSpacing,
-  handleBatchSpacingPreview,
   handleBatchSpacingCommit,
   batchSpacing,
   handleBatchResize,
@@ -83,27 +91,81 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   const [colorState, setColorState] = useState<"idle" | "active">("idle");
   const [showFontPicker, setShowFontPicker] = useState(false);
 
-  // 간격 입력 preview/commit 분리: 마지막 preview 값을 추적
+  // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
   const lastSpacingRef = useRef<number | null>(null);
+  const lastCommittedSpacingRef = useRef<number | null>(null);
+  const spacingDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const spacingHistorySeededRef = useRef(false);
+
+  const isSameSpacingValue = useCallback(
+    (a: number | null, b: number | null): boolean => {
+      if (a === null || b === null) return false;
+      return Math.abs(a - b) < SPACING_COMMIT_EPSILON;
+    },
+    [],
+  );
+
+  const commitSpacing = useCallback(
+    (spacing: number) => {
+      const options = spacingHistorySeededRef.current
+        ? { skipHistory: true }
+        : undefined;
+
+      if (handleBatchSpacingCommit) {
+        handleBatchSpacingCommit(spacing, options);
+      } else {
+        handleBatchSpacing(spacing, options);
+      }
+
+      spacingHistorySeededRef.current = true;
+      lastCommittedSpacingRef.current = spacing;
+    },
+    [handleBatchSpacingCommit, handleBatchSpacing],
+  );
 
   const onSpacingChange = useCallback(
     (value: number) => {
       lastSpacingRef.current = value;
-      if (handleBatchSpacingPreview) {
-        handleBatchSpacingPreview(value);
-      } else {
-        handleBatchSpacing(value);
+      if (spacingDebounceTimerRef.current) {
+        clearTimeout(spacingDebounceTimerRef.current);
       }
+      spacingDebounceTimerRef.current = setTimeout(() => {
+        spacingDebounceTimerRef.current = null;
+        const spacing = lastSpacingRef.current;
+        if (spacing === null) return;
+        if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing)) return;
+        commitSpacing(spacing);
+      }, SPACING_COMMIT_DEBOUNCE_MS);
     },
-    [handleBatchSpacingPreview, handleBatchSpacing],
+    [commitSpacing, isSameSpacingValue],
   );
 
   const onSpacingBlur = useCallback(() => {
-    if (handleBatchSpacingCommit && lastSpacingRef.current !== null) {
-      handleBatchSpacingCommit(lastSpacingRef.current);
-      lastSpacingRef.current = null;
+    if (spacingDebounceTimerRef.current) {
+      clearTimeout(spacingDebounceTimerRef.current);
+      spacingDebounceTimerRef.current = null;
     }
-  }, [handleBatchSpacingCommit]);
+    if (!isSameSpacingValue(lastCommittedSpacingRef.current, lastSpacingRef.current)) {
+      const spacing = lastSpacingRef.current;
+      if (spacing !== null) {
+        commitSpacing(spacing);
+      }
+    }
+
+    lastSpacingRef.current = null;
+    lastCommittedSpacingRef.current = null;
+    spacingHistorySeededRef.current = false;
+  }, [commitSpacing, isSameSpacingValue]);
+
+  useEffect(() => {
+    return () => {
+      if (spacingDebounceTimerRef.current) {
+        clearTimeout(spacingDebounceTimerRef.current);
+      }
+    };
+  }, []);
   const [showFontManager, setShowFontManager] = useState(false);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
 

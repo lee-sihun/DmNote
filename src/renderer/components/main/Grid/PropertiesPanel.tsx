@@ -99,6 +99,7 @@ interface PropertiesPanelProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
+    options?: { skipHistory?: boolean },
   ) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyBatchPreview?: (
@@ -1387,7 +1388,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
 
   const handleStatBatchUpdate = useCallback(
-    (updates: Array<{ index: number } & Partial<StatItemPosition>>) => {
+    (
+      updates: Array<{ index: number } & Partial<StatItemPosition>>,
+      options?: { skipHistory?: boolean },
+    ) => {
       if (updates.length === 0) return;
 
       const mode = selectedKeyType;
@@ -1403,17 +1407,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
       if (updateMap.size === 0) return;
 
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        current,
-        useGraphItemStore.getState().positions,
-        currentPluginElements,
-      );
+      if (!options?.skipHistory) {
+        const currentPositions = useKeyStore.getState().positions;
+        const currentPluginElements =
+          usePluginDisplayElementStore.getState().elements;
+        const { keyMappings: km } = useKeyStore.getState();
+        pushHistoryState(
+          km,
+          currentPositions,
+          current,
+          useGraphItemStore.getState().positions,
+          currentPluginElements,
+        );
+      }
 
       const nextList = list.map((pos, i) => {
         const update = updateMap.get(i);
@@ -1533,7 +1539,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
 
   const handleGraphBatchUpdate = useCallback(
-    (updates: Array<{ index: number } & Partial<GraphItemPosition>>) => {
+    (
+      updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+      options?: { skipHistory?: boolean },
+    ) => {
       if (updates.length === 0) return;
 
       const mode = selectedKeyType;
@@ -1549,17 +1558,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
       if (updateMap.size === 0) return;
 
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        useStatItemStore.getState().positions,
-        current,
-        currentPluginElements,
-      );
+      if (!options?.skipHistory) {
+        const currentPositions = useKeyStore.getState().positions;
+        const currentPluginElements =
+          usePluginDisplayElementStore.getState().elements;
+        const { keyMappings: km } = useKeyStore.getState();
+        pushHistoryState(
+          km,
+          currentPositions,
+          useStatItemStore.getState().positions,
+          current,
+          currentPluginElements,
+        );
+      }
 
       const nextList = list.map((pos, i) => {
         const update = updateMap.get(i);

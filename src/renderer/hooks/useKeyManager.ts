@@ -1447,6 +1447,7 @@ export function useKeyManager() {
   const handleKeyBatchStyleUpdate = useCallback(
     (
       updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
+      options?: { skipHistory?: boolean },
     ) => {
       if (updates.length === 0) return;
 
@@ -1469,7 +1470,9 @@ export function useKeyManager() {
       if (updateMap.size === 0) return;
 
       // 히스토리에 현재 상태 저장 (한 번만)
-      saveToHistory();
+      if (!options?.skipHistory) {
+        saveToHistory();
+      }
 
       const updatedPositions: KeyPositions = {
         ...currentPositions,
