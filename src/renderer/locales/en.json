@@ -167,9 +167,9 @@
   "tooltip": {
     "github": "GitHub",
     "issue": "Report Issue",
-    "move": "Move Keys",
-    "eraser": "Delete Key",
-    "addKey": "Add Key",
+    "move": "Move",
+    "delete": "Delete",
+    "add": "Add",
     "palette": "Canvas",
     "resetCurrentTab": "Reset",
     "exportPreset": "Export Preset",
@@ -185,7 +185,10 @@
   },
   "toolbar": {
     "resetTab": "Reset Tab",
-    "resetCounters": "Reset Counters"
+    "resetCounters": "Reset Counters",
+    "addKey": "Key",
+    "addStat": "Stat",
+    "addGraph": "Graph"
   },
   "preset": {
     "import": "Import",
@@ -263,6 +266,7 @@
     "bringForward": "Bring Forward",
     "sendBackward": "Send Backward",
     "tabCssSetting": "Tab CSS Settings",
+    "addKey": "Add Key",
     "addStat": "Add Stat",
     "addGraph": "Add Graph",
     "rename": "Rename",

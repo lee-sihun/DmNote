@@ -83,6 +83,7 @@ function calculateAnchorOffset(
 interface PluginElementProps {
   element: PluginDisplayElementInternal;
   windowType: "main" | "overlay";
+  activeTool?: string;
   positionOffset?: { x: number; y: number };
   zoom?: number;
   panX?: number;
@@ -106,6 +107,7 @@ interface PluginElementProps {
 export const PluginElement: React.FC<PluginElementProps> = ({
   element,
   windowType,
+  activeTool,
   positionOffset = { x: 0, y: 0 },
   zoom = 1,
   panX = 0,
@@ -1333,10 +1335,32 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     setContextMenuOpen(true);
   };
 
+  const deletePluginElement = useCallback(() => {
+    // onDelete 핸들러 호출 (자동 래핑되어 있음)
+    if (element.onDelete && typeof element.onDelete === "string") {
+      const handler = (window as any)[element.onDelete];
+      if (typeof handler === "function") {
+        handler();
+      }
+    }
+
+    if (window.api?.ui?.displayElement) {
+      window.api.ui.displayElement.remove(element.fullId);
+    } else {
+      usePluginDisplayElementStore.getState().removeElement(element.fullId);
+    }
+  }, [element]);
+
   // onClick 핸들러
   const handleClick = (e: React.MouseEvent) => {
     // 우클릭은 컨텍스트 메뉴용이므로 제외
     if (e.button !== 0) return;
+
+    if (windowType === "main" && activeTool === "eraser") {
+      e.stopPropagation();
+      deletePluginElement();
+      return;
+    }
 
     // Ctrl+클릭으로 선택 토글 (메인 윈도우에서만) - 선택 모드에서도 동작해야 함 (선택 해제용)
     const macOS = isMac();
@@ -1562,19 +1586,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {
     if (itemId === "delete") {
-      // onDelete 핸들러 호출 (자동 래핑되어 있음)
-      if (element.onDelete && typeof element.onDelete === "string") {
-        const handler = (window as any)[element.onDelete];
-        if (typeof handler === "function") {
-          handler();
-        }
-      }
-
-      if (window.api?.ui?.displayElement) {
-        window.api.ui.displayElement.remove(element.fullId);
-      } else {
-        usePluginDisplayElementStore.getState().removeElement(element.fullId);
-      }
+      deletePluginElement();
     } else if (itemId === "bringToFront") {
       usePluginDisplayElementStore.getState().bringToFront(element.fullId);
     } else if (itemId === "bringForward") {

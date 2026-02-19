@@ -176,7 +176,7 @@ export function useGridContextMenu({
   const getGridMenuItems = useCallback(
     (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
-        { id: "add", label: t("tooltip.addKey") },
+        { id: "add", label: t("contextMenu.addKey") },
         { id: "addStat", label: t("contextMenu.addStat") },
         { id: "addGraph", label: t("contextMenu.addGraph") },
       ];

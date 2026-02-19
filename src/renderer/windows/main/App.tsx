@@ -26,6 +26,8 @@ import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 
 import { useUIStore } from "@stores/useUIStore";
 
+type ToolbarAddItemType = "key" | "stat" | "graph";
+
 export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
@@ -107,7 +109,6 @@ export default function App() {
     handleNoteColorPreview,
     handleCounterSettingsUpdate,
     handleCounterSettingsPreview,
-    handleAddKey,
     handleAddKeyAt,
     handleDuplicateKey,
     handleDeleteKey,
@@ -125,6 +126,10 @@ export default function App() {
     usePalette();
 
   const [activeTool, setActiveTool] = useState("move");
+  const [toolbarAddRequest, setToolbarAddRequest] = useState<{
+    id: number;
+    type: ToolbarAddItemType;
+  } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNoteSettingOpen, setIsNoteSettingOpen] = useState(false);
   const [skipModalAnimationOnReturn, setSkipModalAnimationOnReturn] =
@@ -543,6 +548,8 @@ export default function App() {
               onRedo={handleRedo}
               canUndo={canUndo}
               canRedo={canRedo}
+              toolbarAddRequest={toolbarAddRequest}
+              onToolbarAddConsumed={() => setToolbarAddRequest(null)}
             />
             <PropertiesPanel
               onPositionChange={handlePositionChange}
@@ -559,7 +566,12 @@ export default function App() {
         )}
       </div>
       <ToolBar
-        onAddKey={handleAddKey}
+        onAddItem={(type) =>
+          setToolbarAddRequest({
+            id: Date.now(),
+            type,
+          })
+        }
         onTogglePalette={() => setPalette((p) => !p)}
         isPaletteOpen={palette}
         onResetCurrentMode={() =>

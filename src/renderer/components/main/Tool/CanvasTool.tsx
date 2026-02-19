@@ -10,9 +10,10 @@ import { TooltipGroup } from "../Modal/TooltipGroup";
 import ListPopup from "../Modal/ListPopup";
 
 type SelectableTool = "move" | "eraser";
+type AddItemType = "key" | "stat" | "graph";
 
 type CanvasToolProps = {
-  onAddKey: () => void;
+  onAddItem: (type: AddItemType) => void;
   onTogglePalette: () => void;
   isPaletteOpen: boolean;
   onResetCurrentMode: () => void;
@@ -23,7 +24,7 @@ type CanvasToolProps = {
 };
 
 const CanvasTool = ({
-  onAddKey,
+  onAddItem,
   onTogglePalette,
   isPaletteOpen,
   onResetCurrentMode,
@@ -36,7 +37,9 @@ const CanvasTool = ({
   const [selectedTool, setSelectedTool] = useState<SelectableTool | null>(
     (activeTool as SelectableTool) || "move"
   );
+  const [isAddPopupOpen, setIsAddPopupOpen] = useState(false);
   const [isResetPopupOpen, setIsResetPopupOpen] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const resetButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // 상태 동기화
@@ -50,18 +53,24 @@ const CanvasTool = ({
     if (key === "move" || key === "eraser") {
       setSelectedTool(key as SelectableTool);
       setActiveTool?.(key);
+      setIsAddPopupOpen(false);
+      setIsResetPopupOpen(false);
       return;
     }
     if (key === "layer") {
-      onAddKey();
+      setIsAddPopupOpen((prev) => !prev);
+      setIsResetPopupOpen(false);
       return;
     }
     if (key === "primary") {
       onTogglePalette();
+      setIsAddPopupOpen(false);
+      setIsResetPopupOpen(false);
       return;
     }
     if (key === "broom") {
       setIsResetPopupOpen((prev) => !prev);
+      setIsAddPopupOpen(false);
       return;
     }
   };
@@ -105,9 +114,9 @@ const CanvasTool = ({
               toolItem.key === "move"
                 ? t("tooltip.move")
                 : toolItem.key === "eraser"
-                ? t("tooltip.eraser")
+                ? t("tooltip.delete")
                 : toolItem.key === "layer"
-                ? t("tooltip.addKey")
+                ? t("tooltip.add")
                 : toolItem.key === "primary"
                 ? t("tooltip.palette")
                 : t("tooltip.resetCurrentTab")
@@ -117,6 +126,8 @@ const CanvasTool = ({
               ref={
                 toolItem.key === "primary"
                   ? primaryButtonRef
+                  : toolItem.key === "layer"
+                  ? (addButtonRef as unknown as React.Ref<HTMLButtonElement>)
                   : toolItem.key === "broom"
                   ? (resetButtonRef as unknown as React.Ref<HTMLButtonElement>)
                   : undefined
@@ -131,6 +142,26 @@ const CanvasTool = ({
         ))}
       </div>
       <ListPopup
+        open={isAddPopupOpen}
+        referenceRef={addButtonRef as unknown as React.RefObject<HTMLElement>}
+        onClose={() => setIsAddPopupOpen(false)}
+        items={[
+          { id: "addKey", label: t("toolbar.addKey") },
+          { id: "addStat", label: t("toolbar.addStat") },
+          { id: "addGraph", label: t("toolbar.addGraph") },
+        ]}
+        onSelect={(id) => {
+          if (id === "addKey") {
+            onAddItem("key");
+          } else if (id === "addStat") {
+            onAddItem("stat");
+          } else if (id === "addGraph") {
+            onAddItem("graph");
+          }
+          setIsAddPopupOpen(false);
+        }}
+      />
+      <ListPopup
         open={isResetPopupOpen}
         referenceRef={resetButtonRef as unknown as React.RefObject<HTMLElement>}
         onClose={() => setIsResetPopupOpen(false)}
@@ -144,6 +175,7 @@ const CanvasTool = ({
           } else if (id === "resetCounters") {
             onResetCounters?.();
           }
+          setIsResetPopupOpen(false);
         }}
       />
     </TooltipGroup>

@@ -8,7 +8,7 @@ import { useTranslation } from "@contexts/I18nContext";
 import FloatingTooltip from "../Modal/FloatingTooltip";
 
 type Props = {
-  onAddKey: () => void;
+  onAddItem: (type: "key" | "stat" | "graph") => void;
   onTogglePalette: () => void;
   isPaletteOpen: boolean;
   onResetCurrentMode: () => void;
@@ -24,7 +24,7 @@ type Props = {
 };
 
 const ToolBar = ({
-  onAddKey,
+  onAddItem,
   onTogglePalette,
   isPaletteOpen,
   onResetCurrentMode,
@@ -86,7 +86,7 @@ const ToolBar = ({
       <div className="flex gap-[10px]">
         {!isSettingsOpen && (
           <CanvasTool
-            onAddKey={onAddKey}
+            onAddItem={onAddItem}
             onTogglePalette={onTogglePalette}
             isPaletteOpen={isPaletteOpen}
             onResetCurrentMode={onResetCurrentMode}

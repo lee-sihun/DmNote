@@ -168,8 +168,8 @@
     "github": "GitHub",
     "issue": "Проблема",
     "move": "Двигать",
-    "eraser": "Удалить",
-    "addKey": "Добавить",
+    "delete": "Удалить",
+    "add": "Добавить",
     "palette": "Канва",
     "resetCurrentTab": "Сброс",
     "exportPreset": "Экспорт пресета",
@@ -185,7 +185,10 @@
   },
   "toolbar": {
     "resetTab": "Сброс вкладки",
-    "resetCounters": "Сброс счётчиков"
+    "resetCounters": "Сброс счётчиков",
+    "addKey": "Клавиша",
+    "addStat": "Стат.",
+    "addGraph": "График"
   },
   "preset": {
     "import": "Импорт",
@@ -260,6 +263,7 @@
     "bringForward": "Выше",
     "sendBackward": "Ниже",
     "tabCssSetting": "CSS вкладки",
+    "addKey": "Добавить клавишу",
     "addStat": "Добавить стат.",
     "rename": "Переименовать",
     "quitApp": "Выйти из приложения",

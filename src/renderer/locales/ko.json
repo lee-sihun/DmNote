@@ -167,9 +167,9 @@
   "tooltip": {
     "github": "깃허브",
     "issue": "이슈 신고",
-    "move": "키 이동",
-    "eraser": "키 삭제",
-    "addKey": "키 추가",
+    "move": "이동",
+    "delete": "삭제",
+    "add": "추가",
     "palette": "캔버스 색상",
     "resetCurrentTab": "초기화",
     "exportPreset": "프리셋 내보내기",
@@ -185,7 +185,10 @@
   },
   "toolbar": {
     "resetTab": "탭 초기화",
-    "resetCounters": "카운터 초기화"
+    "resetCounters": "카운터 초기화",
+    "addKey": "키",
+    "addStat": "통계",
+    "addGraph": "그래프"
   },
   "preset": {
     "import": "불러오기",
@@ -264,6 +267,7 @@
     "bringForward": "앞으로",
     "sendBackward": "뒤로",
     "tabCssSetting": "현재 탭 CSS 설정",
+    "addKey": "키 추가",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",
     "rename": "이름 변경",

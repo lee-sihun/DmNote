@@ -167,9 +167,9 @@
   "tooltip": {
     "github": "GitHub",
     "issue": "报告问题",
-    "move": "移动按键",
-    "eraser": "删除按键",
-    "addKey": "添加按键",
+    "move": "移动",
+    "delete": "删除",
+    "add": "添加",
     "palette": "画布",
     "resetCurrentTab": "重置",
     "exportPreset": "导出预设",
@@ -185,7 +185,10 @@
   },
   "toolbar": {
     "resetTab": "重置标签页",
-    "resetCounters": "重置计数器"
+    "resetCounters": "重置计数器",
+    "addKey": "按键",
+    "addStat": "统计",
+    "addGraph": "图表"
   },
   "preset": {
     "import": "导入",
@@ -266,6 +269,7 @@
     "bringForward": "上移一层",
     "sendBackward": "下移一层",
     "tabCssSetting": "标签页 CSS 设置",
+    "addKey": "添加按键",
     "addStat": "添加统计",
     "addGraph": "添加图表",
     "rename": "重命名",

@@ -32,6 +32,7 @@ export default function GraphItem({
   onMultiDragStart,
   onMultiDragEnd,
   activeTool,
+  onEraserClick,
   onContextMenu,
   setReferenceRef,
   zoom = 1,
@@ -346,6 +347,7 @@ export default function GraphItem({
       }
 
       if (activeTool === "eraser") {
+        onEraserClick?.();
         return;
       }
 
@@ -368,6 +370,7 @@ export default function GraphItem({
       isSelectionMode,
       onCtrlClick,
       activeTool,
+      onEraserClick,
       draggable.wasMoved,
       onShiftClick,
       onClick,

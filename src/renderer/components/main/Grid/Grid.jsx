@@ -88,6 +88,8 @@ export default function Grid({
   onRedo,
   canUndo,
   canRedo,
+  toolbarAddRequest,
+  onToolbarAddConsumed,
 }) {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyCounterEnabled = useSettingsStore((state) => state.keyCounterEnabled);
@@ -965,6 +967,155 @@ export default function Grid({
     syncSelectedElementsToOverlay,
   ]);
 
+  const addKeyAtPosition = useCallback(
+    (dx, dy) => {
+      if (typeof onAddKeyAt === "function") {
+        onAddKeyAt(dx, dy);
+      }
+    },
+    [onAddKeyAt]
+  );
+
+  const addStatAtPosition = useCallback(
+    (dx, dy) => {
+      const current = useStatItemStore.getState().positions;
+      pushHistorySnapshot(current, useGraphItemStore.getState().positions);
+
+      const list = [...(current[selectedKeyType] || [])];
+      list.push({
+        statType: "kps",
+        dx,
+        dy,
+        width: 60,
+        height: 60,
+        hidden: false,
+        activeImage: "",
+        inactiveImage: "",
+        activeTransparent: false,
+        idleTransparent: false,
+        count: 0,
+        noteColor: "#FFFFFF",
+        noteOpacity: 80,
+        noteEffectEnabled: true,
+        noteGlowEnabled: false,
+        noteGlowSize: 20,
+        noteGlowOpacity: 70,
+        noteGlowColor: "#FFFFFF",
+        noteAutoYCorrection: true,
+        className: "",
+        counter: createDefaultCounterSettings(),
+      });
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: list,
+      };
+      persistStatPositions(nextPositions, "Failed to add stat item");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+  );
+
+  const addGraphAtPosition = useCallback(
+    (dx, dy) => {
+      const current = useGraphItemStore.getState().positions;
+      pushHistorySnapshot(useStatItemStore.getState().positions, current);
+
+      const list = [...(current[selectedKeyType] || [])];
+      list.push({
+        statType: "kps",
+        graphType: "line",
+        graphSpeed: 1000,
+        graphColor: "#86EFAC",
+        showAvgLine: true,
+        graphAnimationEnabled: true,
+        dx,
+        dy,
+        width: 120,
+        height: 60,
+        hidden: false,
+        activeImage: "",
+        inactiveImage: "",
+        activeTransparent: false,
+        idleTransparent: false,
+        count: 0,
+        noteColor: "#FFFFFF",
+        noteOpacity: 80,
+        noteEffectEnabled: true,
+        noteGlowEnabled: false,
+        noteGlowSize: 20,
+        noteGlowOpacity: 70,
+        noteGlowColor: "#FFFFFF",
+        noteAutoYCorrection: true,
+        className: "",
+        counter: createDefaultCounterSettings(),
+        backgroundColor: "rgba(46, 46, 47, 0.9)",
+        borderColor: "rgba(113, 113, 113, 0.9)",
+        borderWidth: 3,
+        borderRadius: 10,
+        fontColor: "#FFFFFF",
+        activeFontColor: "#FFFFFF",
+        fontSize: 12,
+        useInlineStyles: false,
+        displayText: "",
+      });
+
+      const nextPositions = {
+        ...current,
+        [selectedKeyType]: list,
+      };
+      persistGraphPositions(nextPositions, "Failed to add graph item");
+    },
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+  );
+
+  const getViewportCenterSnappedPosition = useCallback((width, height) => {
+    const container = gridContainerRef.current;
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    const centerClientX = rect.left + rect.width / 2;
+    const centerClientY = rect.top + rect.height / 2;
+    const gridCoords = clientToGridCoords(centerClientX, centerClientY);
+    if (!gridCoords) return null;
+    const targetX = gridCoords.x - width / 2;
+    const targetY = gridCoords.y - height / 2;
+    const snapped = snapCursorToGrid(targetX, targetY);
+    return {
+      dx: snapped.x,
+      dy: snapped.y,
+    };
+  }, [clientToGridCoords]);
+
+  useEffect(() => {
+    if (!toolbarAddRequest) return;
+
+    const defaultSize =
+      toolbarAddRequest.type === "graph"
+        ? { width: 120, height: 60 }
+        : { width: 60, height: 60 };
+    const targetPos = getViewportCenterSnappedPosition(
+      defaultSize.width,
+      defaultSize.height
+    );
+    if (targetPos) {
+      if (toolbarAddRequest.type === "key") {
+        addKeyAtPosition(targetPos.dx, targetPos.dy);
+      } else if (toolbarAddRequest.type === "stat") {
+        addStatAtPosition(targetPos.dx, targetPos.dy);
+      } else if (toolbarAddRequest.type === "graph") {
+        addGraphAtPosition(targetPos.dx, targetPos.dy);
+      }
+    }
+
+    onToolbarAddConsumed?.();
+  }, [
+    toolbarAddRequest,
+    getViewportCenterSnappedPosition,
+    addKeyAtPosition,
+    addStatAtPosition,
+    addGraphAtPosition,
+    onToolbarAddConsumed,
+  ]);
+
   const [originalKeyData, setOriginalKeyData] = useState(null);
 
   // 탭 CSS 모달 상태
@@ -1385,6 +1536,14 @@ export default function Grid({
             );
         }}
         activeTool={activeTool}
+        onEraserClick={() => {
+          const displayName = getStatTypeLabel(position.statType);
+          showConfirm(
+            t("confirm.removeStat", { name: displayName }),
+            () => deleteStatAtIndex(index),
+            t("confirm.remove")
+          );
+        }}
         onContextMenu={(e) => {
           if (duplicateState) {
             setDuplicateState(null);
@@ -1530,6 +1689,14 @@ export default function Grid({
             );
         }}
         activeTool={activeTool}
+        onEraserClick={() => {
+          const displayName = getStatTypeLabel(position.statType);
+          showConfirm(
+            t("confirm.removeGraph", { name: displayName }),
+            () => deleteGraphAtIndex(index),
+            t("confirm.remove")
+          );
+        }}
         onContextMenu={(e) => {
           if (duplicateState) {
             setDuplicateState(null);
@@ -1793,6 +1960,7 @@ export default function Grid({
         {renderDuplicateGhost()}
         <PluginElementsRenderer
           windowType="main"
+          activeTool={activeTool}
           zoom={zoom}
           panX={panX}
           panY={panY}
@@ -2455,143 +2623,12 @@ export default function Grid({
             }
 
             // 기본 메뉴 처리
-            if (
-              id === "add" &&
-              gridAddLocalPos &&
-              typeof onAddKeyAt === "function"
-            ) {
-              onAddKeyAt(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            if (id === "add" && gridAddLocalPos) {
+              addKeyAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === "addStat" && gridAddLocalPos) {
-              const current = useStatItemStore.getState().positions;
-              const currentGraph = useGraphItemStore.getState().positions;
-              // 히스토리 저장
-              const currentPositions = useKeyStore.getState().positions;
-              const currentPluginElements =
-                usePluginDisplayElementStore.getState().elements;
-              const { keyMappings: km } = useKeyStore.getState();
-              useHistoryStore
-                .getState()
-                .pushState(
-                  km,
-                  currentPositions,
-                  current,
-                  currentGraph,
-                  currentPluginElements
-                );
-
-              const list = [...(current[selectedKeyType] || [])];
-              list.push({
-                statType: "kps",
-                dx: gridAddLocalPos.dx,
-                dy: gridAddLocalPos.dy,
-                width: 60,
-                height: 60,
-                hidden: false,
-                activeImage: "",
-                inactiveImage: "",
-                activeTransparent: false,
-                idleTransparent: false,
-                count: 0,
-                noteColor: "#FFFFFF",
-                noteOpacity: 80,
-                noteEffectEnabled: true,
-                noteGlowEnabled: false,
-                noteGlowSize: 20,
-                noteGlowOpacity: 70,
-                noteGlowColor: "#FFFFFF",
-                noteAutoYCorrection: true,
-                className: "",
-                counter: createDefaultCounterSettings(),
-              });
-              const nextPositions = {
-                ...current,
-                [selectedKeyType]: list,
-              };
-              useStatItemStore.getState().setPositions(nextPositions);
-              window.api.statItems
-                .updatePositions(nextPositions)
-                .catch((error) => {
-                  console.error("Failed to add stat item", error);
-                });
-              try {
-                window.api.bridge.sendTo("overlay", "statPositions:sync", {
-                  positions: nextPositions,
-                });
-              } catch {
-                // ignore
-              }
+              addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === "addGraph" && gridAddLocalPos) {
-              const current = useGraphItemStore.getState().positions;
-              const currentStat = useStatItemStore.getState().positions;
-              const currentPositions = useKeyStore.getState().positions;
-              const currentPluginElements =
-                usePluginDisplayElementStore.getState().elements;
-              const { keyMappings: km } = useKeyStore.getState();
-              useHistoryStore
-                .getState()
-                .pushState(
-                  km,
-                  currentPositions,
-                  currentStat,
-                  current,
-                  currentPluginElements
-                );
-
-              const list = [...(current[selectedKeyType] || [])];
-              list.push({
-                statType: "kps",
-                graphType: "line",
-                graphSpeed: 1000,
-                graphColor: "#86EFAC",
-                showAvgLine: true,
-                graphAnimationEnabled: true,
-                dx: gridAddLocalPos.dx,
-                dy: gridAddLocalPos.dy,
-                width: 120,
-                height: 60,
-                hidden: false,
-                activeImage: "",
-                inactiveImage: "",
-                activeTransparent: false,
-                idleTransparent: false,
-                count: 0,
-                noteColor: "#FFFFFF",
-                noteOpacity: 80,
-                noteEffectEnabled: true,
-                noteGlowEnabled: false,
-                noteGlowSize: 20,
-                noteGlowOpacity: 70,
-                noteGlowColor: "#FFFFFF",
-                noteAutoYCorrection: true,
-                className: "",
-                counter: createDefaultCounterSettings(),
-                backgroundColor: "rgba(46, 46, 47, 0.9)",
-                borderColor: "rgba(113, 113, 113, 0.9)",
-                borderWidth: 3,
-                borderRadius: 10,
-                fontColor: "#FFFFFF",
-                activeFontColor: "#FFFFFF",
-                fontSize: 12,
-                useInlineStyles: false,
-                displayText: "",
-              });
-              const nextPositions = {
-                ...current,
-                [selectedKeyType]: list,
-              };
-              useGraphItemStore.getState().setPositions(nextPositions);
-              window.api.graphItems
-                .updatePositions(nextPositions)
-                .catch((error) => {
-                  console.error("Failed to add graph item", error);
-                });
-              try {
-                window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-                  positions: nextPositions,
-                });
-              } catch {
-                // ignore
-              }
+              addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === "tabCss") {
               setIsTabCssModalOpen(true);
             }
