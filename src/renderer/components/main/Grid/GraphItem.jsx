@@ -51,6 +51,7 @@ export default function GraphItem({
     graphType = "line",
     graphColor = "#86EFAC",
     showAvgLine = true,
+    graphAnimationEnabled = true,
     backgroundColor,
     borderColor,
     borderWidth,
@@ -406,6 +407,7 @@ export default function GraphItem({
       graphType={graphType}
       graphColor={graphColor || "#86EFAC"}
       showAvgLine={showAvgLine}
+      animationEnabled={graphAnimationEnabled ?? true}
       backgroundColor={backgroundColor}
       borderColor={borderColor}
       borderWidth={borderWidth}

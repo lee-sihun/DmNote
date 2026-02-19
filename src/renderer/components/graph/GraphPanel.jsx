@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 const BAR_ANIMATION_DURATION_MS = 150;
+const LINE_ANIMATION_DURATION_MS = 150;
 
 function buildLinePoints(history, safeMax) {
   const denominator = Math.max(history.length - 1, 1);
@@ -127,11 +128,12 @@ const GraphPanel = forwardRef(function GraphPanel(
     showAvgLine = true,
     backgroundColor = "rgba(17, 17, 20, 0.9)",
     borderColor = "rgba(255, 255, 255, 0.1)",
-    borderWidth = 1,
+    borderWidth = 3,
     borderRadius = 8,
     imageSrc = null,
     imageFit = "cover",
     useInlineStyles = false,
+    animationEnabled = true,
     history = [],
     avg = 0,
     maxval = 1,
@@ -153,15 +155,20 @@ const GraphPanel = forwardRef(function GraphPanel(
     : `translate3d(${dx}px, ${dy}px, 0)`;
 
   const normalizedHistory = useMemo(() => normalizeHistory(history), [history]);
-  const { points: linePoints, fillPoints } = useMemo(
-    () => buildLinePoints(normalizedHistory, safeMax),
-    [normalizedHistory, safeMax],
+  const [animatedLineHistory, setAnimatedLineHistory] = useState(() =>
+    normalizeHistory(history),
   );
+  const animatedLineHistoryRef = useRef(animatedLineHistory);
   const [animatedBarHistory, setAnimatedBarHistory] = useState(() =>
     normalizeHistory(history),
   );
   const animatedBarHistoryRef = useRef(animatedBarHistory);
-  const animationFrameRef = useRef(null);
+  const lineAnimationFrameRef = useRef(null);
+  const barAnimationFrameRef = useRef(null);
+
+  useEffect(() => {
+    animatedLineHistoryRef.current = animatedLineHistory;
+  }, [animatedLineHistory]);
 
   useEffect(() => {
     animatedBarHistoryRef.current = animatedBarHistory;
@@ -169,17 +176,86 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (lineAnimationFrameRef.current) {
+        cancelAnimationFrame(lineAnimationFrameRef.current);
+      }
+      if (barAnimationFrameRef.current) {
+        cancelAnimationFrame(barAnimationFrameRef.current);
       }
     };
   }, []);
 
   useEffect(() => {
-    if (resolvedGraphType !== "bar") {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+    if (!animationEnabled || resolvedGraphType !== "line") {
+      if (lineAnimationFrameRef.current) {
+        cancelAnimationFrame(lineAnimationFrameRef.current);
+        lineAnimationFrameRef.current = null;
+      }
+      setAnimatedLineHistory(normalizedHistory);
+      animatedLineHistoryRef.current = normalizedHistory;
+      return;
+    }
+
+    const targetHistory = normalizedHistory;
+    const targetSize = targetHistory.length;
+    if (targetSize <= 0) {
+      if (lineAnimationFrameRef.current) {
+        cancelAnimationFrame(lineAnimationFrameRef.current);
+        lineAnimationFrameRef.current = null;
+      }
+      setAnimatedLineHistory([]);
+      animatedLineHistoryRef.current = [];
+      return;
+    }
+
+    const startHistory = resizeHistory(
+      animatedLineHistoryRef.current,
+      targetSize,
+    );
+    if (areHistoriesEqual(startHistory, targetHistory)) {
+      if (lineAnimationFrameRef.current) {
+        cancelAnimationFrame(lineAnimationFrameRef.current);
+        lineAnimationFrameRef.current = null;
+      }
+      setAnimatedLineHistory(targetHistory);
+      animatedLineHistoryRef.current = targetHistory;
+      return;
+    }
+
+    if (lineAnimationFrameRef.current) {
+      cancelAnimationFrame(lineAnimationFrameRef.current);
+    }
+
+    const startTime = performance.now();
+    const animate = (now) => {
+      const t = Math.min(
+        1,
+        (now - startTime) / Math.max(LINE_ANIMATION_DURATION_MS, 1),
+      );
+      const eased = 1 - (1 - t) * (1 - t) * (1 - t);
+      const nextHistory = startHistory.map(
+        (startValue, index) =>
+          startValue + (targetHistory[index] - startValue) * eased,
+      );
+
+      setAnimatedLineHistory(nextHistory);
+      animatedLineHistoryRef.current = nextHistory;
+
+      if (t < 1) {
+        lineAnimationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        lineAnimationFrameRef.current = null;
+      }
+    };
+
+    lineAnimationFrameRef.current = requestAnimationFrame(animate);
+  }, [animationEnabled, normalizedHistory, resolvedGraphType]);
+
+  useEffect(() => {
+    if (!animationEnabled || resolvedGraphType !== "bar") {
+      if (barAnimationFrameRef.current) {
+        cancelAnimationFrame(barAnimationFrameRef.current);
+        barAnimationFrameRef.current = null;
       }
       setAnimatedBarHistory(normalizedHistory);
       animatedBarHistoryRef.current = normalizedHistory;
@@ -189,9 +265,9 @@ const GraphPanel = forwardRef(function GraphPanel(
     const targetHistory = normalizedHistory;
     const targetSize = targetHistory.length;
     if (targetSize <= 0) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      if (barAnimationFrameRef.current) {
+        cancelAnimationFrame(barAnimationFrameRef.current);
+        barAnimationFrameRef.current = null;
       }
       setAnimatedBarHistory([]);
       animatedBarHistoryRef.current = [];
@@ -203,17 +279,17 @@ const GraphPanel = forwardRef(function GraphPanel(
       targetSize,
     );
     if (areHistoriesEqual(startHistory, targetHistory)) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      if (barAnimationFrameRef.current) {
+        cancelAnimationFrame(barAnimationFrameRef.current);
+        barAnimationFrameRef.current = null;
       }
       setAnimatedBarHistory(targetHistory);
       animatedBarHistoryRef.current = targetHistory;
       return;
     }
 
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
+    if (barAnimationFrameRef.current) {
+      cancelAnimationFrame(barAnimationFrameRef.current);
     }
 
     const startTime = performance.now();
@@ -232,15 +308,21 @@ const GraphPanel = forwardRef(function GraphPanel(
       animatedBarHistoryRef.current = nextHistory;
 
       if (t < 1) {
-        animationFrameRef.current = requestAnimationFrame(animate);
+        barAnimationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        animationFrameRef.current = null;
+        barAnimationFrameRef.current = null;
       }
     };
 
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, [normalizedHistory, resolvedGraphType]);
+    barAnimationFrameRef.current = requestAnimationFrame(animate);
+  }, [animationEnabled, normalizedHistory, resolvedGraphType]);
 
+  const lineHistory =
+    resolvedGraphType === "line" ? animatedLineHistory : normalizedHistory;
+  const { points: linePoints, fillPoints } = useMemo(
+    () => buildLinePoints(lineHistory, safeMax),
+    [lineHistory, safeMax],
+  );
   const barHistory =
     resolvedGraphType === "bar" ? animatedBarHistory : normalizedHistory;
   const barPath = useMemo(
@@ -250,7 +332,7 @@ const GraphPanel = forwardRef(function GraphPanel(
 
   const resolvedBorderWidth = Number.isFinite(Number(borderWidth))
     ? Math.max(0, Number(borderWidth))
-    : 1;
+    : 3;
   const resolvedBorderRadius = Number.isFinite(Number(borderRadius))
     ? Math.max(0, Number(borderRadius))
     : 8;

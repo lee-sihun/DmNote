@@ -398,6 +398,7 @@
     "keyMapping": "Привязка клавиш",
     "statType": "Тип стат.",
     "statKpsType": "Тип KPS",
+    "graphAnimation": "Анимация графика",
     "pressAnyKey": "Нажмите клавишу",
     "clickToSet": "Нажмите",
     "customImage": "Своя картинка",

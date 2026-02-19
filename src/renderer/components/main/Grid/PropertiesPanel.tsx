@@ -14,6 +14,7 @@ import { useSettingsStore } from "@stores/useSettingsStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import { useUIStore } from "@stores/useUIStore";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import { translatePluginMessage } from "@utils/pluginI18n";
@@ -69,6 +70,25 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
       return "KPS";
   }
 };
+
+const RenameIcon: React.FC = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M12 20H21"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -220,6 +240,66 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleGraphIndex !== null
       ? (graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null)
       : null;
+  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
+  const layerGroupsForMode = useMemo(
+    () => allLayerGroups[selectedKeyType] || [],
+    [allLayerGroups, selectedKeyType],
+  );
+  const selectedGroupInfo = useMemo(() => {
+    if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
+      return null;
+    }
+
+    const keyModePositions = positions[selectedKeyType] || [];
+    const statModePositions = statItemPositions[selectedKeyType] || [];
+    const graphModePositions = graphItemPositions[selectedKeyType] || [];
+
+    let groupId: string | undefined;
+
+    for (const element of selectedElements) {
+      let currentGroupId: string | undefined;
+      if (element.type === "key" && typeof element.index === "number") {
+        currentGroupId = keyModePositions[element.index]?.groupId;
+      } else if (element.type === "stat" && typeof element.index === "number") {
+        currentGroupId = (statModePositions[element.index] as any)?.groupId;
+      } else if (element.type === "graph" && typeof element.index === "number") {
+        currentGroupId = (graphModePositions[element.index] as any)?.groupId;
+      } else {
+        return null;
+      }
+
+      if (!currentGroupId) return null;
+      if (!groupId) {
+        groupId = currentGroupId;
+      } else if (groupId !== currentGroupId) {
+        return null;
+      }
+    }
+
+    if (!groupId) return null;
+
+    const totalMembers =
+      keyModePositions.filter((pos) => pos?.groupId === groupId).length +
+      statModePositions.filter((pos) => (pos as any)?.groupId === groupId).length +
+      graphModePositions.filter((pos) => (pos as any)?.groupId === groupId).length;
+
+    if (totalMembers < 2 || totalMembers !== selectedElements.length) {
+      return null;
+    }
+
+    const groupDef = layerGroupsForMode.find((group) => group.id === groupId);
+    if (!groupDef) return null;
+
+    return { id: groupDef.id, name: groupDef.name, memberCount: totalMembers };
+  }, [
+    selectedElements,
+    selectedPluginElements.length,
+    positions,
+    statItemPositions,
+    graphItemPositions,
+    selectedKeyType,
+    layerGroupsForMode,
+  ]);
 
   // 로컬 상태 (실시간 편집용)
   const [localState, setLocalState] = useState<
@@ -325,13 +405,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyElements.length,
   ]);
 
-  // 그래프만 다중 선택된 상태에서는 STYLE 탭만 사용
+  // 그래프만 선택된 상태에서는 STYLE 탭만 사용
   useEffect(() => {
-    const graphOnlyMultiSelection =
-      selectedGraphElements.length > 1 &&
+    const graphOnlySelection =
+      selectedGraphElements.length > 0 &&
       selectedKeyLikeElements.length === 0 &&
       selectedPluginElements.length === 0;
-    if (graphOnlyMultiSelection && activeTab !== TABS.STYLE) {
+    if (graphOnlySelection && activeTab !== TABS.STYLE) {
       setActiveTab(TABS.STYLE);
     }
   }, [
@@ -343,14 +423,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
   const getCurrentLayerName = useCallback((): string => {
+    if (selectedGroupInfo) return selectedGroupInfo.name || "";
     if (singleKeyPosition) return singleKeyPosition.layerName || "";
     if (singleStatPosition) return (singleStatPosition as any).layerName || "";
     if (singleGraphPosition) return (singleGraphPosition as any).layerName || "";
     return "";
-  }, [singleKeyPosition, singleStatPosition, singleGraphPosition]);
+  }, [selectedGroupInfo, singleKeyPosition, singleStatPosition, singleGraphPosition]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 기본 표시 이름 가져오기
   const getCurrentDefaultTitle = useCallback((): string => {
+    if (selectedGroupInfo) return selectedGroupInfo.name;
     if (singleKeyPosition) {
       return singleKeyInfo?.displayName || singleKeyCode || "Key";
     }
@@ -361,7 +443,50 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return `${getStatTypeLabel((singleGraphPosition as any).statType ?? null)} Graph`;
     }
     return "";
-  }, [singleKeyPosition, singleKeyInfo, singleKeyCode, singleStatPosition, singleGraphPosition]);
+  }, [
+    selectedGroupInfo,
+    singleKeyPosition,
+    singleKeyInfo,
+    singleKeyCode,
+    singleStatPosition,
+    singleGraphPosition,
+  ]);
+
+  const handleGroupRenameCommit = useCallback(
+    async (groupId: string, value: string) => {
+      const trimmed = value.trim();
+      if (trimmed === "") return;
+
+      const currentGroups = useLayerGroupStore.getState().layerGroups;
+      const currentModeGroups = currentGroups[selectedKeyType] || [];
+      const currentGroup = currentModeGroups.find((group) => group.id === groupId);
+      if (!currentGroup || currentGroup.name === trimmed) return;
+
+      const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const statPos = useStatItemStore.getState().positions;
+      const graphPos = useGraphItemStore.getState().positions;
+      const pluginEls = usePluginDisplayElementStore.getState().elements;
+
+      useHistoryStore
+        .getState()
+        .pushState(km, pos, statPos as any, graphPos as any, pluginEls, currentGroups);
+
+      const updated = {
+        ...currentGroups,
+        [selectedKeyType]: currentModeGroups.map((group) =>
+          group.id === groupId ? { ...group, name: trimmed } : group,
+        ),
+      };
+
+      useLayerGroupStore.getState().setLayerGroups(updated);
+      try {
+        await window.api.layerGroups.update(updated);
+      } catch (error) {
+        console.error("Failed to rename group", error);
+      }
+    },
+    [selectedKeyType],
+  );
 
   // 레이어 이름 변경 시작
   const handleRenameStart = useCallback(() => {
@@ -378,6 +503,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const handleRenameCommit = useCallback(
     async (value: string) => {
       setIsRenaming(false);
+
+      if (selectedGroupInfo) {
+        await handleGroupRenameCommit(selectedGroupInfo.id, value);
+        return;
+      }
+
       const trimmed = value.trim();
       const defaultTitle = getCurrentDefaultTitle();
       // 기본 이름과 같으면 layerName 제거 (빈 문자열도 제거)
@@ -429,6 +560,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       singleStatPosition,
       singleGraphIndex,
       singleGraphPosition,
+      selectedGroupInfo,
+      handleGroupRenameCommit,
       selectedKeyType,
       onKeyUpdate,
     ],
@@ -445,14 +578,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (renameRequestSignal !== prevRenameSignalRef.current) {
       prevRenameSignalRef.current = renameRequestSignal;
-      // 단일 선택이 있을 때만 rename 시작
-      if (singleKeyPosition || singleStatPosition || singleGraphPosition) {
+      // 단일 선택 또는 단일 그룹 선택일 때 rename 시작
+      if (
+        selectedGroupInfo ||
+        singleKeyPosition ||
+        singleStatPosition ||
+        singleGraphPosition
+      ) {
         // 속성 패널 모드로 전환
         setPanelMode("property");
         handleRenameStart();
       }
     }
-  }, [renameRequestSignal, singleKeyPosition, singleStatPosition, singleGraphPosition, handleRenameStart]);
+  }, [
+    renameRequestSignal,
+    selectedGroupInfo,
+    singleKeyPosition,
+    singleStatPosition,
+    singleGraphPosition,
+    handleRenameStart,
+  ]);
 
   // 선택이 변경되면 rename 모드 해제
   useEffect(() => {
@@ -2485,6 +2630,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (pos) => pos.graphColor || "#86EFAC",
       "#86EFAC",
     );
+    const graphAnimationState = getMixedValueGraphs(
+      (pos) => pos.graphAnimationEnabled ?? true,
+      true,
+    );
     const hasLineGraph = getSelectedGraphsData().some(
       (data) => (data.position?.graphType || "line") === "line",
     );
@@ -2533,12 +2682,58 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {/* 헤더 */}
           <div className="flex items-center justify-between p-[12px] pb-[8px]">
             <div className="flex items-center gap-[8px]">
-              <span className="text-[#DBDEE8] text-style-2">
-                {t("propertiesPanel.multiSelection") || "다중 선택"}
-              </span>
-              <span className="text-[#6B6D75] text-style-4">
-                ({selectedBatchStyleElements.length})
-              </span>
+              {selectedGroupInfo ? (
+                isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    type="text"
+                    className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => {
+                      if (!renameCancelledRef.current) {
+                        handleRenameCommit(renameValue);
+                      }
+                      renameCancelledRef.current = false;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        handleRenameCancel();
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center gap-[4px] min-w-0">
+                    <span
+                      className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                      onDoubleClick={handleRenameStart}
+                      title={selectedGroupInfo.name}
+                    >
+                      {selectedGroupInfo.name}
+                    </span>
+                    <button
+                      onClick={handleRenameStart}
+                      className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                      title={t("contextMenu.rename") || "Rename"}
+                    >
+                      <RenameIcon />
+                    </button>
+                  </div>
+                )
+              ) : (
+                <span className="text-[#DBDEE8] text-style-2">
+                  {t("propertiesPanel.multiSelection") || "다중 선택"}
+                </span>
+              )}
+              {!selectedGroupInfo && (
+                <span className="text-[#6B6D75] text-style-4">
+                  ({selectedBatchStyleElements.length})
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-[4px]">
               {/* 레이어 모드로 전환 버튼 */}
@@ -2672,6 +2867,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                             panelElement={panelElement}
                           />
                         </PropertyRow>
+
+                        <div className="flex justify-between items-center w-full h-[23px]">
+                          <p className="text-white text-style-2">
+                            {t("propertiesPanel.graphAnimation") ||
+                              "Graph Animation"}
+                          </p>
+                          <div className="flex items-center gap-[6px]">
+                            {graphAnimationState.isMixed ? (
+                              <span className="text-[#6B6D75] text-style-4 italic">
+                                Mixed
+                              </span>
+                            ) : null}
+                            <Checkbox
+                              checked={graphAnimationState.value}
+                              onChange={() =>
+                                handleGraphBatchSharedSetting({
+                                  graphAnimationEnabled:
+                                    !graphAnimationState.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
                       </>
                     ) : undefined
                   }
@@ -2935,6 +3153,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       (pos) => pos.graphColor || "#86EFAC",
       "#86EFAC",
     );
+    const graphAnimationState = getMixedValueGraphs(
+      (pos) => pos.graphAnimationEnabled ?? true,
+      true,
+    );
     const hasLineGraph = getSelectedGraphsData().some(
       (data) => (data.position?.graphType || "line") === "line",
     );
@@ -2948,12 +3170,58 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div className="flex-shrink-0 border-b border-[#3A3943]">
           <div className="flex items-center justify-between p-[12px] pb-[8px]">
             <div className="flex items-center gap-[8px]">
-              <span className="text-[#DBDEE8] text-style-2">
-                {t("propertiesPanel.multiSelection") || "다중 선택"}
-              </span>
-              <span className="text-[#6B6D75] text-style-4">
-                ({selectedGraphElements.length})
-              </span>
+              {selectedGroupInfo ? (
+                isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    type="text"
+                    className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => {
+                      if (!renameCancelledRef.current) {
+                        handleRenameCommit(renameValue);
+                      }
+                      renameCancelledRef.current = false;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        handleRenameCancel();
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center gap-[4px] min-w-0">
+                    <span
+                      className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                      onDoubleClick={handleRenameStart}
+                      title={selectedGroupInfo.name}
+                    >
+                      {selectedGroupInfo.name}
+                    </span>
+                    <button
+                      onClick={handleRenameStart}
+                      className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                      title={t("contextMenu.rename") || "Rename"}
+                    >
+                      <RenameIcon />
+                    </button>
+                  </div>
+                )
+              ) : (
+                <span className="text-[#DBDEE8] text-style-2">
+                  {t("propertiesPanel.multiSelection") || "다중 선택"}
+                </span>
+              )}
+              {!selectedGroupInfo && (
+                <span className="text-[#6B6D75] text-style-4">
+                  ({selectedGraphElements.length})
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-[4px]">
               <button
@@ -3064,6 +3332,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         panelElement={panelElement}
                       />
                     </PropertyRow>
+
+                    <div className="flex justify-between items-center w-full h-[23px]">
+                      <p className="text-white text-style-2">
+                        {t("propertiesPanel.graphAnimation") ||
+                          "Graph Animation"}
+                      </p>
+                      <div className="flex items-center gap-[6px]">
+                        {graphAnimationState.isMixed ? (
+                          <span className="text-[#6B6D75] text-style-4 italic">
+                            Mixed
+                          </span>
+                        ) : null}
+                        <Checkbox
+                          checked={graphAnimationState.value}
+                          onChange={() =>
+                            handleGraphBatchSharedSetting({
+                              graphAnimationEnabled: !graphAnimationState.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
                   </>
                 }
                 getMixedValue={getMixedValueGraphsAsKey}
@@ -3322,13 +3612,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               }}
             />
           ) : (
-            <span
-              className="text-[#DBDEE8] text-style-2 truncate max-w-[120px] cursor-default"
-              onDoubleClick={handleRenameStart}
-              title={graphTitle}
-            >
-              {graphTitle}
-            </span>
+            <div className="flex items-center gap-[4px] min-w-0">
+              <span
+                className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
+                onDoubleClick={handleRenameStart}
+                title={graphTitle}
+              >
+                {graphTitle}
+              </span>
+              <button
+                onClick={handleRenameStart}
+                className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                title={t("contextMenu.rename") || "Rename"}
+              >
+                <RenameIcon />
+              </button>
+            </div>
           )}
           <div className="flex items-center gap-[4px]">
             <button
@@ -3348,7 +3647,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
         </div>
         <div className="flex-1 properties-panel-overlay-scroll">
-          <div className="properties-panel-overlay-viewport">
+          <div
+            ref={singleScrollRefFor(TABS.STYLE)}
+            className="properties-panel-overlay-viewport"
+          >
             <div className="p-[12px] flex flex-col gap-[12px]">
               <PropertyRow label={t("propertiesPanel.position") || "Position"}>
                 <NumberInput
@@ -3476,6 +3778,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 />
               </PropertyRow>
 
+              <div className="flex justify-between items-center w-full h-[23px]">
+                <p className="text-white text-style-2">
+                  {t("propertiesPanel.graphAnimation") || "Graph Animation"}
+                </p>
+                <Checkbox
+                  checked={singleGraphPosition.graphAnimationEnabled ?? true}
+                  onChange={() =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex!,
+                      graphAnimationEnabled: !(
+                        singleGraphPosition.graphAnimationEnabled ?? true
+                      ),
+                    } as any)
+                  }
+                />
+              </div>
+
               <SectionDivider />
 
               <PropertyRow
@@ -3520,7 +3839,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 label={t("propertiesPanel.borderWidth") || "Border Width"}
               >
                 <NumberInput
-                  value={Math.round(singleGraphPosition.borderWidth ?? 1)}
+                  value={Math.round(singleGraphPosition.borderWidth ?? 3)}
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex!,
@@ -3604,6 +3923,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   </PropertyRow>
                 </>
               )}
+            </div>
+            <div className="properties-panel-overlay-bar">
+              <div
+                ref={singleThumbRefFor(TABS.STYLE)}
+                className="properties-panel-overlay-thumb"
+                style={{ display: "none" }}
+              />
             </div>
           </div>
         </div>
@@ -3814,13 +4140,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               }}
             />
           ) : (
-            <span
-              className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[130px]"
-              onDoubleClick={handleRenameStart}
-              title={keyLikeTitle}
-            >
-              {keyLikeTitle}
-            </span>
+            <div className="flex items-center gap-[4px] min-w-0">
+              <span
+                className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                onDoubleClick={handleRenameStart}
+                title={keyLikeTitle}
+              >
+                {keyLikeTitle}
+              </span>
+              <button
+                onClick={handleRenameStart}
+                className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                title={t("contextMenu.rename") || "Rename"}
+              >
+                <RenameIcon />
+              </button>
+            </div>
           )}
 
           <div className="flex items-center gap-[4px]">

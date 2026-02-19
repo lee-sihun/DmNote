@@ -172,6 +172,8 @@ pub struct KeyPosition {
     pub font_color: Option<String>,
     #[serde(default)]
     pub active_font_color: Option<String>,
+    #[serde(default)]
+    pub graph_animation_enabled: Option<bool>,
     /// 글꼴 패밀리 (커스텀 폰트 이름)
     #[serde(default)]
     pub font_family: Option<String>,

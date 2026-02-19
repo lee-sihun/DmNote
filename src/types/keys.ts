@@ -250,6 +250,7 @@ export const keyPositionSchema = z.object({
   fontSize: z.number().optional(),
   fontColor: z.string().optional(),
   activeFontColor: z.string().optional(),
+  graphAnimationEnabled: z.boolean().optional(),
   // 폰트 패밀리 (커스텀 폰트 이름)
   fontFamily: z.string().optional(),
   // 이미지 맞춤(대기/입력 개별 설정). 없으면 imageFit을 fallback으로 사용.
