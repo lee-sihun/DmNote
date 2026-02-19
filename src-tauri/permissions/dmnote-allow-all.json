@@ -76,7 +76,9 @@
           "stat_positions_get",
           "stat_positions_update",
           "graph_positions_get",
-          "graph_positions_update"
+          "graph_positions_update",
+          "layer_groups_get",
+          "layer_groups_update"
         ],
         "deny": []
       }
