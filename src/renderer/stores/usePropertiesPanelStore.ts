@@ -32,6 +32,10 @@ interface PropertiesPanelState {
   // 외부(단축키 등)에서 토글 요청을 보내기 위한 시그널
   canvasPanelToggleSignal: number;
   requestCanvasPanelToggle: () => void;
+
+  // 레이어 이름 변경 요청 시그널 (캔버스 컨텍스트 메뉴에서 트리거)
+  renameRequestSignal: number;
+  requestRename: () => void;
 }
 
 export const usePropertiesPanelStore = create<PropertiesPanelState>(
@@ -62,5 +66,9 @@ export const usePropertiesPanelStore = create<PropertiesPanelState>(
     canvasPanelToggleSignal: 0,
     requestCanvasPanelToggle: () =>
       set((state) => ({ canvasPanelToggleSignal: state.canvasPanelToggleSignal + 1 })),
+
+    renameRequestSignal: 0,
+    requestRename: () =>
+      set((state) => ({ renameRequestSignal: state.renameRequestSignal + 1 })),
   })
 );

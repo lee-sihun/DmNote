@@ -12,6 +12,10 @@ import {
   useGridSelectionStore,
   type SelectedElement,
 } from "@stores/useGridSelectionStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
+import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { ARROW_KEY_HISTORY_DELAY } from "./constants";
 import { isMac } from "@utils/platform";
 
@@ -74,6 +78,107 @@ export function useGridKeyboard({
       }
 
       const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
+
+      // Ctrl/Cmd + G: Group selected
+      if (isPrimaryModifierPressed && !e.shiftKey && e.code === "KeyG") {
+        e.preventDefault();
+        if (selectedElements.length < 2) return;
+
+        const selectedKeyType = useKeyStore.getState().selectedKeyType;
+        const groupId = crypto.randomUUID();
+        const existingGroups =
+          useLayerGroupStore.getState().getGroupsForMode(selectedKeyType);
+        const groupName = "New Group " + (existingGroups.length + 1);
+
+        const updatedGroups = useLayerGroupStore
+          .getState()
+          .addGroup(selectedKeyType, { id: groupId, name: groupName });
+        window.api.layerGroups.update(updatedGroups).catch(() => {});
+
+        const keyPos = { ...useKeyStore.getState().positions };
+        const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
+        const statPos = { ...useStatItemStore.getState().positions };
+        const modeStatPos = [...(statPos[selectedKeyType] || [])];
+        const graphPos = { ...useGraphItemStore.getState().positions };
+        const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+
+        selectedElements.forEach((el) => {
+          if (el.type === "key" && el.index !== undefined && modeKeyPos[el.index]) {
+            modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId };
+          } else if (
+            el.type === "stat" &&
+            el.index !== undefined &&
+            modeStatPos[el.index]
+          ) {
+            modeStatPos[el.index] = { ...modeStatPos[el.index], groupId };
+          } else if (
+            el.type === "graph" &&
+            el.index !== undefined &&
+            modeGraphPos[el.index]
+          ) {
+            modeGraphPos[el.index] = { ...modeGraphPos[el.index], groupId };
+          }
+        });
+
+        keyPos[selectedKeyType] = modeKeyPos;
+        statPos[selectedKeyType] = modeStatPos;
+        graphPos[selectedKeyType] = modeGraphPos;
+
+        useKeyStore.getState().setPositions(keyPos);
+        useStatItemStore.getState().setPositions(statPos);
+        useGraphItemStore.getState().setPositions(graphPos);
+
+        window.api.keys.updatePositions(keyPos).catch(() => {});
+        window.api.statItems.updatePositions(statPos).catch(() => {});
+        window.api.graphItems.updatePositions(graphPos).catch(() => {});
+        return;
+      }
+
+      // Ctrl/Cmd + Shift + G: Ungroup selected
+      if (isPrimaryModifierPressed && e.shiftKey && e.code === "KeyG") {
+        e.preventDefault();
+        if (selectedElements.length === 0) return;
+
+        const selectedKeyType = useKeyStore.getState().selectedKeyType;
+
+        const keyPos = { ...useKeyStore.getState().positions };
+        const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
+        const statPos = { ...useStatItemStore.getState().positions };
+        const modeStatPos = [...(statPos[selectedKeyType] || [])];
+        const graphPos = { ...useGraphItemStore.getState().positions };
+        const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+
+        selectedElements.forEach((el) => {
+          if (el.type === "key" && el.index !== undefined && modeKeyPos[el.index]) {
+            modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId: undefined };
+          } else if (
+            el.type === "stat" &&
+            el.index !== undefined &&
+            modeStatPos[el.index]
+          ) {
+            modeStatPos[el.index] = { ...modeStatPos[el.index], groupId: undefined };
+          } else if (
+            el.type === "graph" &&
+            el.index !== undefined &&
+            modeGraphPos[el.index]
+          ) {
+            modeGraphPos[el.index] = { ...modeGraphPos[el.index], groupId: undefined };
+          }
+        });
+
+        keyPos[selectedKeyType] = modeKeyPos;
+        statPos[selectedKeyType] = modeStatPos;
+        graphPos[selectedKeyType] = modeGraphPos;
+
+        useKeyStore.getState().setPositions(keyPos);
+        useStatItemStore.getState().setPositions(statPos);
+        useGraphItemStore.getState().setPositions(graphPos);
+
+        window.api.keys.updatePositions(keyPos).catch(() => {});
+        window.api.statItems.updatePositions(statPos).catch(() => {});
+        window.api.graphItems.updatePositions(graphPos).catch(() => {});
+        return;
+      }
 
       // Ctrl+C: 복사 (선택된 요소가 있을 때)
       if (isPrimaryModifierPressed && e.key.toLowerCase() === "c") {

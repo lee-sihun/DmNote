@@ -18,6 +18,7 @@ import { useLenis } from "@hooks/useLenis";
 import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
 import CloseEyeIcon from "@assets/svgs/close_eye.svg";
 import OpenEyeIcon from "@assets/svgs/open_eye.svg";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 
 // ============================================================================
 // 레이어 아이템 타입
@@ -30,7 +31,79 @@ interface LayerItem {
   name: string;
   zIndex: number;
   hidden: boolean;
+  groupId?: string;
 }
+
+// ============================================================================
+// 그룹 헤더 / 디스플레이 아이템 타입
+// ============================================================================
+
+interface GroupHeaderItem {
+  displayType: "group-header";
+  groupId: string;
+  groupName: string;
+  isCollapsed: boolean;
+  childCount: number;
+  allHidden: boolean;
+}
+
+interface LayerDisplayItem {
+  displayType: "layer";
+  item: LayerItem;
+  groupDepth: number; // 0 = ungrouped, 1 = in group
+  flatIndex: number; // index in the original layerItems array
+}
+
+type DisplayItem = GroupHeaderItem | LayerDisplayItem;
+
+// ============================================================================
+// 그룹 폴더 아이콘
+// ============================================================================
+
+const FolderIcon: React.FC<{ open?: boolean }> = ({ open }) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    {open ? (
+      <path
+        d="M1.5 3.5C1.5 2.95 1.95 2.5 2.5 2.5H5.5L7 4H11.5C12.05 4 12.5 4.45 12.5 5V10.5C12.5 11.05 12.05 11.5 11.5 11.5H2.5C1.95 11.5 1.5 11.05 1.5 10.5V3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    ) : (
+      <path
+        d="M1.5 3.5C1.5 2.95 1.95 2.5 2.5 2.5H5.5L7 4H11.5C12.05 4 12.5 4.45 12.5 5V10.5C12.5 11.05 12.05 11.5 11.5 11.5H2.5C1.95 11.5 1.5 11.05 1.5 10.5V3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="currentColor"
+        fillOpacity="0.15"
+      />
+    )}
+  </svg>
+);
+
+const ChevronIcon: React.FC<{ collapsed?: boolean }> = ({ collapsed }) => (
+  <svg
+    width="10"
+    height="10"
+    viewBox="0 0 10 10"
+    fill="none"
+    style={{
+      transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+      transition: "transform 0.15s ease",
+    }}
+  >
+    <path
+      d="M3 4L5 6L7 4"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 // ============================================================================
 // 레이어 탭 콘텐츠 Props
@@ -144,6 +217,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<number | null>(
+    null,
+  );
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const didDragRef = useRef(false);
@@ -176,6 +253,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // 드래그 상태를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const dragStateRef = useRef<{
     startIndex: number;
+    itemHeight: number;
+    currentOverIndex: number | null;
+  } | null>(null);
+
+  // 그룹 드래그 상태 ref
+  const groupDragStateRef = useRef<{
+    groupId: string;
     itemHeight: number;
     currentOverIndex: number | null;
   } | null>(null);
@@ -238,20 +322,22 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     currentPositions.forEach((pos, index) => {
       const keyCode = currentKeyMappings[index] || "";
       const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
+      const defaultName = keyInfo?.displayName || keyCode || `Key ${index + 1}`;
       items.push({
         type: "key",
         id: `key-${index}`,
         index,
-        name: keyInfo?.displayName || keyCode || `Key ${index + 1}`,
+        name: pos.layerName || defaultName,
         zIndex: pos.zIndex ?? index,
         hidden: !!pos.hidden,
+        groupId: pos.groupId,
       });
     });
 
     // 통계 아이템 추가
     const currentStatPositions = statPositions[selectedKeyType] || [];
     currentStatPositions.forEach((pos, index) => {
-      const name =
+      const defaultName =
         pos.statType === "kpsAvg"
           ? "AVG"
           : pos.statType === "kpsMax"
@@ -263,16 +349,17 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         type: "stat",
         id: `stat-${index}`,
         index,
-        name,
+        name: (pos as any).layerName || defaultName,
         zIndex: pos.zIndex ?? index,
         hidden: !!pos.hidden,
+        groupId: (pos as any).groupId,
       });
     });
 
     // 그래프 아이템 추가
     const currentGraphPositions = graphPositions[selectedKeyType] || [];
     currentGraphPositions.forEach((pos, index) => {
-      const name =
+      const defaultName =
         pos.statType === "kpsAvg"
           ? "AVG Graph"
           : pos.statType === "kpsMax"
@@ -284,9 +371,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         type: "graph",
         id: `graph-${index}`,
         index,
-        name,
+        name: (pos as any).layerName || defaultName,
         zIndex: pos.zIndex ?? index,
         hidden: !!pos.hidden,
+        groupId: (pos as any).groupId,
       });
     });
 
@@ -298,6 +386,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         name: el.definitionId || "Plugin",
         zIndex: el.zIndex ?? 0,
         hidden: !!el.hidden,
+        groupId: (el as any).groupId,
       });
     });
 
@@ -314,9 +403,86 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     pluginElements,
   ]);
 
+  // 레이어 그룹 스토어 (안정적인 참조 유지: 셀렉터에서 새 객체를 생성하지 않음)
+  const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
+  const layerGroupsForMode = useMemo(
+    () => allLayerGroups[selectedKeyType] || [],
+    [allLayerGroups, selectedKeyType],
+  );
+  const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
+  const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
+
+  // 디스플레이 아이템: 그룹 헤더가 삽입된 목록
+  const displayItems = useMemo((): DisplayItem[] => {
+    const result: DisplayItem[] = [];
+    const seenGroups = new Set<string>();
+    // 그룹별 자식 아이템 사전 수집
+    const groupChildren = new Map<string, LayerItem[]>();
+    layerItems.forEach((item) => {
+      if (item.groupId) {
+        const children = groupChildren.get(item.groupId) || [];
+        children.push(item);
+        groupChildren.set(item.groupId, children);
+      }
+    });
+
+    let flatIdx = 0;
+    layerItems.forEach((item) => {
+      if (item.groupId) {
+        if (!seenGroups.has(item.groupId)) {
+          seenGroups.add(item.groupId);
+          // 그룹 정의 찾기
+          const groupDef = layerGroupsForMode.find(
+            (g) => g.id === item.groupId,
+          );
+          const children = groupChildren.get(item.groupId) || [];
+          const isCollapsed = collapsedGroups.has(item.groupId);
+          const allHidden = children.every((c) => c.hidden);
+
+          result.push({
+            displayType: "group-header",
+            groupId: item.groupId,
+            groupName: groupDef?.name || t("layerGroup.defaultName"),
+            isCollapsed,
+            childCount: children.length,
+            allHidden,
+          });
+
+          if (!isCollapsed) {
+            // 펼쳐진 상태: 자식 아이템 추가
+            children.forEach((child) => {
+              const childFlatIdx = layerItems.indexOf(child);
+              result.push({
+                displayType: "layer",
+                item: child,
+                groupDepth: 1,
+                flatIndex: childFlatIdx,
+              });
+            });
+          }
+        }
+        // 이미 처리된 그룹 아이템은 건너뜀
+      } else {
+        // 그룹에 속하지 않는 아이템
+        result.push({
+          displayType: "layer",
+          item,
+          groupDepth: 0,
+          flatIndex: flatIdx,
+        });
+      }
+      flatIdx++;
+    });
+
+    return result;
+  }, [layerItems, layerGroupsForMode, collapsedGroups, t]);
+
   // layerItems를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const layerItemsRef = useRef(layerItems);
   layerItemsRef.current = layerItems;
+
+  const displayItemsRef = useRef(displayItems);
+  displayItemsRef.current = displayItems;
 
   // 선택된 요소들 설정
   const setSelectedElements = useGridSelectionStore(
@@ -647,10 +813,54 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     [selectedElements],
   );
 
-  // 컨텍스트 메뉴 아이템
+  // 인라인 이름 변경 상태 (레이어 + 그룹 공용)
+  const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelledRef = useRef(false);
+
+  // 그룹 컨텍스트 메뉴 상태 (그룹 헤더 우클릭 시)
+  const [contextMenuGroupId, setContextMenuGroupId] = useState<string | null>(
+    null,
+  );
+
+  // 컨텍스트 메뉴 아이템 (동적 생성)
   const contextMenuItems = useMemo<ListItem[]>(() => {
-    return [{ id: "delete", label: t("propertiesPanel.delete") || "Delete" }];
-  }, [t]);
+    // 그룹 헤더 우클릭
+    if (contextMenuGroupId) {
+      return [
+        {
+          id: "renameGroup",
+          label: t("contextMenu.renameGroup") || "Rename Group",
+        },
+        { id: "ungroup", label: t("contextMenu.ungroup") || "Ungroup" },
+      ];
+    }
+
+    // 레이어 아이템 우클릭
+    const items: ListItem[] = [
+      { id: "rename", label: t("contextMenu.rename") || "Rename" },
+      { id: "delete", label: t("propertiesPanel.delete") || "Delete" },
+    ];
+
+    // 여러 아이템이 선택되었으면 그룹화 옵션 추가
+    if (selectedElements.length >= 2) {
+      items.push({
+        id: "groupSelected",
+        label: t("contextMenu.groupSelected") || "Group Selected",
+      });
+    }
+
+    // 우클릭한 아이템이 그룹에 속해 있으면 그룹 해제 옵션 추가
+    if (contextMenuItem?.groupId) {
+      items.push({
+        id: "removeFromGroup",
+        label: t("contextMenu.removeFromGroup") || "Remove from Group",
+      });
+    }
+
+    return items;
+  }, [t, selectedElements.length, contextMenuItem, contextMenuGroupId]);
 
   // 우클릭 핸들러
   const handleContextMenu = useCallback(
@@ -691,9 +901,499 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     ],
   );
 
+  // 레이어 이름 변경 커밋
+  const handleLayerRenameCommit = useCallback(
+    async (item: LayerItem, value: string) => {
+      setRenamingItemId(null);
+      const trimmed = value.trim();
+      // 빈 문자열이면 layerName 제거 (기본 이름으로 복원)
+      const newLayerName = trimmed === "" ? undefined : trimmed;
+
+      if (item.type === "key" && item.index !== undefined) {
+        const { keyMappings: km, positions: pos } = useKeyStore.getState();
+        const currentPositions = pos[selectedKeyType] || [];
+        const current = currentPositions[item.index];
+        if (!current) return;
+
+        const updatedPositions = { ...pos };
+        const updatedModePositions = [...currentPositions];
+        updatedModePositions[item.index] = { ...current, layerName: newLayerName };
+        updatedPositions[selectedKeyType] = updatedModePositions;
+
+        useKeyStore.getState().setLocalUpdateInProgress(true);
+        useKeyStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.keys.updatePositions(updatedPositions);
+        } finally {
+          useKeyStore.getState().setLocalUpdateInProgress(false);
+        }
+      } else if (item.type === "stat" && item.index !== undefined) {
+        const current = useStatItemStore.getState().positions;
+        const currentPositions = current[selectedKeyType] || [];
+        const target = currentPositions[item.index];
+        if (!target) return;
+
+        const updatedPositions = { ...current };
+        const updatedModePositions = [...currentPositions];
+        updatedModePositions[item.index] = { ...target, layerName: newLayerName };
+        updatedPositions[selectedKeyType] = updatedModePositions;
+
+        useStatItemStore.getState().setLocalUpdateInProgress(true);
+        useStatItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.statItems.updatePositions(updatedPositions);
+        } finally {
+          useStatItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      } else if (item.type === "graph" && item.index !== undefined) {
+        const current = useGraphItemStore.getState().positions;
+        const currentPositions = current[selectedKeyType] || [];
+        const target = currentPositions[item.index];
+        if (!target) return;
+
+        const updatedPositions = { ...current };
+        const updatedModePositions = [...currentPositions];
+        updatedModePositions[item.index] = { ...target, layerName: newLayerName };
+        updatedPositions[selectedKeyType] = updatedModePositions;
+
+        useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useGraphItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.graphItems.updatePositions(updatedPositions);
+        } finally {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+    },
+    [selectedKeyType],
+  );
+
+  // 선택된 레이어들에 groupId 설정하는 유틸리티
+  const setGroupIdOnSelected = useCallback(
+    async (targetGroupId: string | undefined) => {
+      const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+
+      // 히스토리 저장
+      useHistoryStore
+        .getState()
+        .pushState(
+          km,
+          pos,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements,
+        );
+
+      // 대상 아이템 수집
+      const keyIndices = selectedElements
+        .filter((el) => el.type === "key" && el.index !== undefined)
+        .map((el) => el.index as number);
+      const statIndices = selectedElements
+        .filter((el) => el.type === "stat" && el.index !== undefined)
+        .map((el) => el.index as number);
+      const graphIndices = selectedElements
+        .filter((el) => el.type === "graph" && el.index !== undefined)
+        .map((el) => el.index as number);
+
+      // 키 positions 업데이트
+      if (keyIndices.length > 0) {
+        const updatedPositions = { ...pos };
+        const modePositions = [...(pos[selectedKeyType] || [])];
+        keyIndices.forEach((idx) => {
+          if (modePositions[idx]) {
+            modePositions[idx] = {
+              ...modePositions[idx],
+              groupId: targetGroupId,
+            };
+          }
+        });
+        updatedPositions[selectedKeyType] = modePositions;
+
+        useKeyStore.getState().setLocalUpdateInProgress(true);
+        useKeyStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.keys.updatePositions(updatedPositions);
+        } finally {
+          useKeyStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+
+      // 통계 positions 업데이트
+      if (statIndices.length > 0) {
+        const current = useStatItemStore.getState().positions;
+        const modePositions = [...(current[selectedKeyType] || [])];
+        statIndices.forEach((idx) => {
+          if (modePositions[idx]) {
+            modePositions[idx] = {
+              ...modePositions[idx],
+              groupId: targetGroupId,
+            } as any;
+          }
+        });
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: modePositions,
+        };
+
+        useStatItemStore.getState().setLocalUpdateInProgress(true);
+        useStatItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.statItems.updatePositions(updatedPositions);
+        } finally {
+          useStatItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+
+      // 그래프 positions 업데이트
+      if (graphIndices.length > 0) {
+        const current = useGraphItemStore.getState().positions;
+        const modePositions = [...(current[selectedKeyType] || [])];
+        graphIndices.forEach((idx) => {
+          if (modePositions[idx]) {
+            modePositions[idx] = {
+              ...modePositions[idx],
+              groupId: targetGroupId,
+            } as any;
+          }
+        });
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: modePositions,
+        };
+
+        useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useGraphItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.graphItems.updatePositions(updatedPositions);
+        } finally {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+    },
+    [selectedElements, selectedKeyType],
+  );
+
+  // 그룹 이름 변경 커밋
+  const handleGroupRenameCommit = useCallback(
+    async (groupId: string, value: string) => {
+      setRenamingItemId(null);
+      const trimmed = value.trim();
+      if (trimmed === "") return;
+
+      const updated = useLayerGroupStore
+        .getState()
+        .renameGroup(selectedKeyType, groupId, trimmed);
+      try {
+        await window.api.layerGroups.update(updated);
+      } catch (error) {
+        console.error("Failed to rename group", error);
+      }
+    },
+    [selectedKeyType],
+  );
+
+  // 그룹 전체 표시/숨김 토글
+  const handleToggleGroupVisibility = useCallback(
+    async (e: React.MouseEvent, groupId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 그룹 소속 아이템 목록
+      const children = layerItems.filter((item) => item.groupId === groupId);
+      if (children.length === 0) return;
+
+      const allHidden = children.every((c) => c.hidden);
+      const newHidden = !allHidden;
+
+      // 히스토리 저장
+      const { keyMappings: km, positions: pos } = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      useHistoryStore
+        .getState()
+        .pushState(
+          km,
+          pos,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements,
+        );
+
+      // 키 positions 업데이트
+      const keyChildren = children.filter(
+        (c) => c.type === "key" && c.index !== undefined,
+      );
+      if (keyChildren.length > 0) {
+        const updatedPositions = { ...pos };
+        const modePositions = [...(pos[selectedKeyType] || [])];
+        keyChildren.forEach((c) => {
+          if (c.index !== undefined && modePositions[c.index]) {
+            modePositions[c.index] = {
+              ...modePositions[c.index],
+              hidden: newHidden,
+            };
+          }
+        });
+        updatedPositions[selectedKeyType] = modePositions;
+        useKeyStore.getState().setLocalUpdateInProgress(true);
+        useKeyStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.keys.updatePositions(updatedPositions);
+        } finally {
+          useKeyStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+
+      // 통계 positions 업데이트
+      const statChildren = children.filter(
+        (c) => c.type === "stat" && c.index !== undefined,
+      );
+      if (statChildren.length > 0) {
+        const current = useStatItemStore.getState().positions;
+        const modePositions = [...(current[selectedKeyType] || [])];
+        statChildren.forEach((c) => {
+          if (c.index !== undefined && modePositions[c.index]) {
+            modePositions[c.index] = {
+              ...modePositions[c.index],
+              hidden: newHidden,
+            };
+          }
+        });
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: modePositions,
+        };
+        useStatItemStore.getState().setLocalUpdateInProgress(true);
+        useStatItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.statItems.updatePositions(updatedPositions);
+        } finally {
+          useStatItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+
+      // 그래프 positions 업데이트
+      const graphChildren = children.filter(
+        (c) => c.type === "graph" && c.index !== undefined,
+      );
+      if (graphChildren.length > 0) {
+        const current = useGraphItemStore.getState().positions;
+        const modePositions = [...(current[selectedKeyType] || [])];
+        graphChildren.forEach((c) => {
+          if (c.index !== undefined && modePositions[c.index]) {
+            modePositions[c.index] = {
+              ...modePositions[c.index],
+              hidden: newHidden,
+            };
+          }
+        });
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: modePositions,
+        };
+        useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useGraphItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.graphItems.updatePositions(updatedPositions);
+        } finally {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+
+      // 플러그인
+      const pluginChildren = children.filter((c) => c.type === "plugin");
+      pluginChildren.forEach((c) => {
+        usePluginDisplayElementStore
+          .getState()
+          .updateElement(c.id, { hidden: newHidden });
+      });
+    },
+    [layerItems, selectedKeyType],
+  );
+
   // 컨텍스트 메뉴 선택 핸들러
   const handleContextMenuSelect = useCallback(
     async (itemId: string) => {
+      // 그룹 헤더 컨텍스트 메뉴 처리
+      if (contextMenuGroupId) {
+        if (itemId === "renameGroup") {
+          const groupDef = layerGroupsForMode.find(
+            (g) => g.id === contextMenuGroupId,
+          );
+          setRenamingItemId(`group:${contextMenuGroupId}`);
+          setRenameValue(groupDef?.name || "");
+          setContextMenuOpen(false);
+          setContextMenuGroupId(null);
+          requestAnimationFrame(() => {
+            renameInputRef.current?.focus();
+            renameInputRef.current?.select();
+          });
+          return;
+        }
+        if (itemId === "ungroup") {
+          // 그룹 해제: 모든 자식의 groupId 제거 + 그룹 정의 삭제
+          const children = layerItems.filter(
+            (item) => item.groupId === contextMenuGroupId,
+          );
+          // 자식들을 선택 상태로 만들어 setGroupIdOnSelected 사용
+          const elements = children.map((child) => ({
+            type: child.type as any,
+            id: child.id,
+            index: child.index,
+          }));
+          useGridSelectionStore.getState().setSelectedElements(elements);
+
+          // groupId를 undefined로 설정하기 위해 직접 처리
+          const { keyMappings: km, positions: pos } = useKeyStore.getState();
+          const statPos = useStatItemStore.getState().positions;
+          const graphPos = useGraphItemStore.getState().positions;
+          const pluginEls =
+            usePluginDisplayElementStore.getState().elements;
+          useHistoryStore
+            .getState()
+            .pushState(km, pos, statPos as any, graphPos as any, pluginEls);
+
+          // 키
+          const updatedKeyPos = { ...pos };
+          const keyMode = [...(pos[selectedKeyType] || [])];
+          children
+            .filter((c) => c.type === "key" && c.index !== undefined)
+            .forEach((c) => {
+              if (c.index !== undefined && keyMode[c.index]) {
+                keyMode[c.index] = {
+                  ...keyMode[c.index],
+                  groupId: undefined,
+                };
+              }
+            });
+          updatedKeyPos[selectedKeyType] = keyMode;
+          useKeyStore.getState().setLocalUpdateInProgress(true);
+          useKeyStore.getState().setPositions(updatedKeyPos);
+          window.api.keys
+            .updatePositions(updatedKeyPos)
+            .finally(() =>
+              useKeyStore.getState().setLocalUpdateInProgress(false),
+            );
+
+          // 통계
+          const updatedStatPos = { ...statPos };
+          const statMode = [...(statPos[selectedKeyType] || [])];
+          children
+            .filter((c) => c.type === "stat" && c.index !== undefined)
+            .forEach((c) => {
+              if (c.index !== undefined && statMode[c.index]) {
+                statMode[c.index] = {
+                  ...statMode[c.index],
+                  groupId: undefined,
+                } as any;
+              }
+            });
+          updatedStatPos[selectedKeyType] = statMode;
+          useStatItemStore.getState().setLocalUpdateInProgress(true);
+          useStatItemStore.getState().setPositions(updatedStatPos);
+          window.api.statItems
+            .updatePositions(updatedStatPos)
+            .finally(() =>
+              useStatItemStore.getState().setLocalUpdateInProgress(false),
+            );
+
+          // 그래프
+          const updatedGraphPos = { ...graphPos };
+          const graphMode = [...(graphPos[selectedKeyType] || [])];
+          children
+            .filter((c) => c.type === "graph" && c.index !== undefined)
+            .forEach((c) => {
+              if (c.index !== undefined && graphMode[c.index]) {
+                graphMode[c.index] = {
+                  ...graphMode[c.index],
+                  groupId: undefined,
+                } as any;
+              }
+            });
+          updatedGraphPos[selectedKeyType] = graphMode;
+          useGraphItemStore.getState().setLocalUpdateInProgress(true);
+          useGraphItemStore.getState().setPositions(updatedGraphPos);
+          window.api.graphItems
+            .updatePositions(updatedGraphPos)
+            .finally(() =>
+              useGraphItemStore.getState().setLocalUpdateInProgress(false),
+            );
+
+          // 그룹 정의 삭제
+          const updatedGroups = useLayerGroupStore
+            .getState()
+            .removeGroup(selectedKeyType, contextMenuGroupId);
+          window.api.layerGroups.update(updatedGroups).catch(() => {});
+
+          clearSelection();
+          setContextMenuOpen(false);
+          setContextMenuGroupId(null);
+          return;
+        }
+        setContextMenuOpen(false);
+        setContextMenuGroupId(null);
+        return;
+      }
+
+      if (itemId === "rename") {
+        // 우클릭한 아이템에 대해 인라인 이름 변경 시작
+        if (contextMenuItem) {
+          setRenamingItemId(contextMenuItem.id);
+          setRenameValue(contextMenuItem.name);
+          setContextMenuOpen(false);
+          requestAnimationFrame(() => {
+            renameInputRef.current?.focus();
+            renameInputRef.current?.select();
+          });
+        }
+        return;
+      }
+
+      // 선택 항목 그룹화
+      if (itemId === "groupSelected") {
+        if (selectedElements.length < 2) return;
+
+        const groupId = crypto.randomUUID();
+        const groupName = `${t("layerGroup.newGroup")} ${(layerGroupsForMode.length + 1)}`;
+
+        // 그룹 정의 추가
+        const updatedGroups = useLayerGroupStore
+          .getState()
+          .addGroup(selectedKeyType, { id: groupId, name: groupName });
+        window.api.layerGroups.update(updatedGroups).catch(() => {});
+
+        // 선택된 아이템들에 groupId 설정
+        await setGroupIdOnSelected(groupId);
+
+        setContextMenuOpen(false);
+        return;
+      }
+
+      // 그룹에서 제거
+      if (itemId === "removeFromGroup") {
+        if (contextMenuItem) {
+          // 단일 아이템만 그룹에서 제거
+          const elements = [
+            {
+              type: contextMenuItem.type as any,
+              id: contextMenuItem.id,
+              index: contextMenuItem.index,
+            },
+          ];
+          useGridSelectionStore.getState().setSelectedElements(elements);
+          await setGroupIdOnSelected(undefined);
+          clearSelection();
+        }
+        setContextMenuOpen(false);
+        return;
+      }
+
       if (itemId === "delete") {
         // 선택된 요소들 삭제
         if (selectedElements.length === 0) return;
@@ -852,7 +1552,17 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       setContextMenuOpen(false);
     },
-    [selectedElements, selectedKeyType, clearSelection],
+    [
+      selectedElements,
+      selectedKeyType,
+      clearSelection,
+      contextMenuItem,
+      contextMenuGroupId,
+      layerGroupsForMode,
+      layerItems,
+      setGroupIdOnSelected,
+      t,
+    ],
   );
 
   // 드롭 처리
@@ -1003,6 +1713,197 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     [selectedKeyType],
   );
 
+  // 그룹 드롭 처리 (그룹 단위 이동)
+  const performGroupDrop = useCallback(
+    async (groupId: string, targetDisplayIndex: number) => {
+      const items = [...layerItemsRef.current];
+      const currentDisplay = displayItemsRef.current;
+
+      // 그룹 자식 아이템 수집 (items 내 순서 유지)
+      const groupChildren = items.filter((item) => item.groupId === groupId);
+      const remainingItems = items.filter((item) => item.groupId !== groupId);
+
+      if (groupChildren.length === 0) return;
+
+      // targetDisplayIndex에서 드래그 중인 그룹 행을 제외하여 필터된 인덱스 계산
+      let offset = 0;
+      for (let i = 0; i < targetDisplayIndex && i < currentDisplay.length; i++) {
+        const di = currentDisplay[i];
+        if (di.displayType === "group-header" && di.groupId === groupId) offset++;
+        else if (di.displayType === "layer" && di.item.groupId === groupId)
+          offset++;
+      }
+      const filteredTargetIndex = targetDisplayIndex - offset;
+
+      // 필터된 디스플레이 목록 (드래그 중인 그룹 제외)
+      const filteredDisplay = currentDisplay.filter((di) => {
+        if (di.displayType === "group-header" && di.groupId === groupId)
+          return false;
+        if (di.displayType === "layer" && di.item.groupId === groupId)
+          return false;
+        return true;
+      });
+
+      // remainingItems 내 삽입 위치 계산
+      let insertionIndex = remainingItems.length;
+
+      if (filteredTargetIndex < filteredDisplay.length) {
+        const targetDI = filteredDisplay[filteredTargetIndex];
+        if (targetDI.displayType === "layer") {
+          const idx = remainingItems.findIndex(
+            (i) => i.id === targetDI.item.id,
+          );
+          if (idx !== -1) insertionIndex = idx;
+        } else if (targetDI.displayType === "group-header") {
+          const firstChild = remainingItems.find(
+            (i) => i.groupId === targetDI.groupId,
+          );
+          if (firstChild) {
+            const idx = remainingItems.indexOf(firstChild);
+            if (idx !== -1) insertionIndex = idx;
+          }
+        }
+      }
+
+      // 새 순서 구성
+      const newItems = [
+        ...remainingItems.slice(0, insertionIndex),
+        ...groupChildren,
+        ...remainingItems.slice(insertionIndex),
+      ];
+
+      // 순서 변경 여부 확인
+      const orderChanged = newItems.some(
+        (item, idx) => item.id !== items[idx]?.id,
+      );
+      if (!orderChanged) return;
+
+      // 히스토리 저장
+      const currentPositions = useKeyStore.getState().positions;
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore
+        .getState()
+        .pushState(
+          km,
+          currentPositions,
+          currentStatPositions as any,
+          currentGraphPositions as any,
+          currentPluginElements,
+        );
+
+      // z-index 재계산
+      const maxZIndex = newItems.length - 1;
+
+      const updatedPositions = { ...useKeyStore.getState().positions };
+      const currentModePositions = [
+        ...(updatedPositions[selectedKeyType] || []),
+      ];
+      const updatedStatPositions = {
+        ...useStatItemStore.getState().positions,
+      };
+      const currentStatModePositions = [
+        ...(updatedStatPositions[selectedKeyType] || []),
+      ];
+      const updatedGraphPositions = {
+        ...useGraphItemStore.getState().positions,
+      };
+      const currentGraphModePositions = [
+        ...(updatedGraphPositions[selectedKeyType] || []),
+      ];
+
+      newItems.forEach((item, idx) => {
+        const newZIndex = maxZIndex - idx;
+        if (item.type === "key" && item.index !== undefined) {
+          if (currentModePositions[item.index]) {
+            currentModePositions[item.index] = {
+              ...currentModePositions[item.index],
+              zIndex: newZIndex,
+            };
+          }
+        } else if (item.type === "stat" && item.index !== undefined) {
+          if (currentStatModePositions[item.index]) {
+            currentStatModePositions[item.index] = {
+              ...currentStatModePositions[item.index],
+              zIndex: newZIndex,
+            };
+          }
+        } else if (item.type === "graph" && item.index !== undefined) {
+          if (currentGraphModePositions[item.index]) {
+            currentGraphModePositions[item.index] = {
+              ...currentGraphModePositions[item.index],
+              zIndex: newZIndex,
+            };
+          }
+        } else if (item.type === "plugin") {
+          usePluginDisplayElementStore.getState().updateElement(item.id, {
+            zIndex: newZIndex,
+          });
+        }
+      });
+
+      // 일괄 업데이트
+      updatedPositions[selectedKeyType] = currentModePositions;
+      useKeyStore.getState().setPositions(updatedPositions);
+      updatedStatPositions[selectedKeyType] = currentStatModePositions;
+      useStatItemStore.getState().setPositions(updatedStatPositions);
+      updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
+      useGraphItemStore.getState().setPositions(updatedGraphPositions);
+
+      // 백엔드 동기화
+      useKeyStore.getState().setLocalUpdateInProgress(true);
+      useStatItemStore.getState().setLocalUpdateInProgress(true);
+      useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      try {
+        await window.api.keys.updatePositions(updatedPositions);
+        await window.api.statItems.updatePositions(updatedStatPositions);
+        await window.api.graphItems.updatePositions(updatedGraphPositions);
+      } catch (error) {
+        console.error("Failed to reorder group", error);
+      } finally {
+        useKeyStore.getState().setLocalUpdateInProgress(false);
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      }
+
+      // 오버레이 동기화
+      try {
+        window.api.bridge.sendTo("overlay", "positions:sync", {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          positions: updatedStatPositions,
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+          positions: updatedGraphPositions,
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        const pluginEls =
+          usePluginDisplayElementStore.getState().elements;
+        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+          elements: pluginEls,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [selectedKeyType],
+  );
+
   // 드래그 시작 (마우스 다운)
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, item: LayerItem, index: number) => {
@@ -1092,6 +1993,117 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     [clearPendingDeselect, performDrop],
   );
 
+  // 그룹 헤더 드래그 시작 (그룹 단위 이동)
+  const handleGroupMouseDown = useCallback(
+    (e: React.MouseEvent, groupId: string) => {
+      if (e.button !== 0) return;
+      clearPendingDeselect();
+
+      const target = e.currentTarget as HTMLElement;
+      const rect = target.getBoundingClientRect();
+
+      groupDragStateRef.current = {
+        groupId,
+        itemHeight: rect.height,
+        currentOverIndex: null,
+      };
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      isDraggingRef.current = false;
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (
+          !groupDragStateRef.current ||
+          !scrollElementRef.current ||
+          !dragStartRef.current
+        )
+          return;
+
+        const dx = moveEvent.clientX - dragStartRef.current.x;
+        const dy = moveEvent.clientY - dragStartRef.current.y;
+
+        if (!isDraggingRef.current) {
+          if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+          isDraggingRef.current = true;
+          didDragRef.current = true;
+          setDraggedGroupId(groupId);
+          setIsDragging(true);
+        }
+
+        moveEvent.preventDefault();
+
+        const scrollRect = scrollElementRef.current.getBoundingClientRect();
+        const relativeY =
+          moveEvent.clientY -
+          scrollRect.top +
+          scrollElementRef.current.scrollTop;
+        const displayCount = displayItemsRef.current.length;
+        const newIndex = Math.max(
+          0,
+          Math.min(
+            displayCount,
+            Math.floor(relativeY / groupDragStateRef.current.itemHeight),
+          ),
+        );
+
+        groupDragStateRef.current.currentOverIndex = newIndex;
+        setDragOverDisplayIndex(newIndex);
+      };
+
+      const handleMouseUp = () => {
+        if (groupDragStateRef.current && isDraggingRef.current) {
+          const targetIdx = groupDragStateRef.current.currentOverIndex;
+          if (targetIdx !== null) {
+            performGroupDrop(groupId, targetIdx);
+          }
+        }
+
+        groupDragStateRef.current = null;
+        dragStartRef.current = null;
+        isDraggingRef.current = false;
+        setDraggedGroupId(null);
+        setDragOverDisplayIndex(null);
+        setIsDragging(false);
+
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [clearPendingDeselect, performGroupDrop],
+  );
+
+  // 그룹 헤더 클릭 → 그룹 소속 아이템 전체 선택
+  const handleGroupHeaderClick = useCallback(
+    (groupId: string) => {
+      onSelectionFromPanel?.();
+      const children = layerItems.filter((item) => item.groupId === groupId);
+      const elements = children.map((child) => ({
+        type: child.type as any,
+        id: child.id,
+        index: child.index,
+      }));
+      clearSelection();
+      setSelectedElements(elements);
+    },
+    [layerItems, clearSelection, setSelectedElements, onSelectionFromPanel],
+  );
+
+  // 그룹 헤더 우클릭 핸들러
+  const handleGroupHeaderContextMenu = useCallback(
+    (e: React.MouseEvent, groupId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      clearPendingDeselect();
+      setContextMenuGroupId(groupId);
+      setContextMenuItem(null);
+      setContextMenuPosition({ x: e.clientX, y: e.clientY });
+      setContextMenuOpen(true);
+    },
+    [clearPendingDeselect],
+  );
+
   return (
     <div className="flex-1 properties-panel-overlay-scroll">
       <div ref={setScrollRef} className="properties-panel-overlay-viewport">
@@ -1103,79 +2115,266 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           </div>
         ) : (
           <div className="relative">
-            {layerItems.map((item, index) => (
-              <div
-                key={item.id}
-                onMouseDown={(e) => handleMouseDown(e, item, index)}
-                onClick={(e) => handleItemClick(item, index, e)}
-                onDoubleClick={(e) => handleItemDoubleClick(item, index, e)}
-                onContextMenu={(e) => handleContextMenu(e, item, index)}
-                className={`
-                  relative flex items-center gap-[8px] px-[12px] h-[34px]
-                  select-none cursor-grab
-                  ${item.hidden ? "opacity-60" : ""}
-                  ${
-                    isItemSelected(item)
-                      ? "bg-[#3B82F6]/20 text-[#DBDEE8]"
-                      : isDragging
-                        ? "text-[#8B8D95]"
-                        : "hover:bg-[#2A2A30] text-[#8B8D95]"
+            {displayItems.map((displayItem, displayIndex) => {
+              // ──────────────────────────────────────────────────
+              // 그룹 헤더 렌더링
+              // ──────────────────────────────────────────────────
+              if (displayItem.displayType === "group-header") {
+                const gh = displayItem;
+                const isRenamingGroup =
+                  renamingItemId === `group:${gh.groupId}`;
+                const isBeingDragged = draggedGroupId === gh.groupId;
+
+                return (
+                  <div
+                    key={`group:${gh.groupId}`}
+                    onMouseDown={(e) => handleGroupMouseDown(e, gh.groupId)}
+                    onContextMenu={(e) =>
+                      handleGroupHeaderContextMenu(e, gh.groupId)
+                    }
+                    onClick={() => {
+                      if (didDragRef.current) {
+                        didDragRef.current = false;
+                        return;
+                      }
+                      handleGroupHeaderClick(gh.groupId);
+                    }}
+                    className={`
+                      relative flex items-center gap-[8px] px-[12px] h-[34px]
+                      select-none cursor-grab
+                      ${gh.allHidden && !isBeingDragged ? "opacity-60" : ""}
+                      ${isBeingDragged ? "opacity-30" : ""}
+                      ${isDragging ? "" : "hover:bg-[#2A2A30]"} text-[#9B9DA5]
+                    `}
+                  >
+                    {/* 그룹 드래그 드롭 인디케이터 */}
+                    {draggedGroupId &&
+                      dragOverDisplayIndex === displayIndex &&
+                      draggedGroupId !== gh.groupId && (
+                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                      )}
+                    {/* 접기/펼치기 토글 (아이콘 왼쪽 좁은 영역) */}
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[12px] flex items-center justify-center cursor-pointer z-[1]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapsed(gh.groupId);
+                      }}
+                    >
+                      <ChevronIcon collapsed={gh.isCollapsed} />
+                    </div>
+
+                    {/* 폴더 아이콘 (다른 요소 아이콘과 같은 X 위치) */}
+                    <div className="flex-shrink-0">
+                      <FolderIcon open={!gh.isCollapsed} />
+                    </div>
+
+                    {/* 그룹 이름 */}
+                    {isRenamingGroup ? (
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        className="flex-1 text-[12px] bg-transparent border-none p-0 outline-none text-[#DBDEE8] min-w-0 caret-[#3B82F6]"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => {
+                          if (!renameCancelledRef.current) {
+                            handleGroupRenameCommit(gh.groupId, renameValue);
+                          }
+                          renameCancelledRef.current = false;
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            renameCancelledRef.current = true;
+                            setRenamingItemId(null);
+                          }
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span className="flex-1 text-[12px] truncate font-medium">
+                        {gh.groupName}
+                      </span>
+                    )}
+
+                    {/* 그룹 표시/숨김 토글 */}
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleGroupVisibility(e, gh.groupId);
+                      }}
+                      className="flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                    >
+                      {gh.allHidden ? (
+                        <CloseEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      ) : (
+                        <OpenEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      )}
+                    </button>
+                  </div>
+                );
+              }
+
+              // ──────────────────────────────────────────────────
+              // 레이어 아이템 렌더링
+              // ──────────────────────────────────────────────────
+              const { item, groupDepth, flatIndex } = displayItem;
+              const paddingLeft = groupDepth > 0 ? 28 : 12;
+              const isInDraggedGroup =
+                draggedGroupId != null && item.groupId === draggedGroupId;
+
+              return (
+                <div
+                  key={item.id}
+                  onMouseDown={(e) => handleMouseDown(e, item, flatIndex)}
+                  onClick={(e) => handleItemClick(item, flatIndex, e)}
+                  onDoubleClick={(e) =>
+                    handleItemDoubleClick(item, flatIndex, e)
                   }
-                `}
-              >
-                {/* 드롭 인디케이터 (피그마 스타일 선) - 위쪽 */}
-                {dragOverIndex === index && draggedItemId !== item.id && (
-                  <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
-                )}
-
-                {/* 아이콘 */}
-                <div className="flex-shrink-0">
-                  {item.type === "key" ? (
-                    <KeyIcon />
-                  ) : item.type === "stat" ? (
-                    <StatIcon />
-                  ) : item.type === "graph" ? (
-                    <GraphIcon />
-                  ) : (
-                    <PluginIcon />
-                  )}
-                </div>
-
-                {/* 이름 */}
-                <span className="flex-1 text-[12px] truncate">{item.name}</span>
-
-                {/* 표시/숨김 토글 */}
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onDoubleClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => handleToggleVisibility(e, item)}
-                  title={
-                    item.hidden
-                      ? t("propertiesPanel.showLayer") || "Show"
-                      : t("propertiesPanel.hideLayer") || "Hide"
-                  }
-                  className="flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                  onContextMenu={(e) => handleContextMenu(e, item, flatIndex)}
+                  style={{ paddingLeft }}
+                  className={`
+                    relative flex items-center gap-[8px] pr-[12px] h-[34px]
+                    select-none cursor-grab
+                    ${item.hidden && !isInDraggedGroup ? "opacity-60" : ""}
+                    ${isInDraggedGroup ? "opacity-30" : ""}
+                    ${
+                      isItemSelected(item)
+                        ? "bg-[#3B82F6]/20 text-[#DBDEE8]"
+                        : isDragging
+                          ? "text-[#8B8D95]"
+                          : "hover:bg-[#2A2A30] text-[#8B8D95]"
+                    }
+                  `}
                 >
-                  {item.hidden ? (
-                    <CloseEyeIcon width={14} height={14} fill="currentColor" />
+                  {/* 드롭 인디케이터 (피그마 스타일 선) - 위쪽 */}
+                  {dragOverIndex === flatIndex &&
+                    draggedItemId !== item.id && (
+                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                    )}
+                  {/* 그룹 드래그 드롭 인디케이터 */}
+                  {draggedGroupId &&
+                    dragOverDisplayIndex === displayIndex &&
+                    item.groupId !== draggedGroupId && (
+                      <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                    )}
+
+                  {/* 아이콘 */}
+                  <div className="flex-shrink-0">
+                    {item.type === "key" ? (
+                      <KeyIcon />
+                    ) : item.type === "stat" ? (
+                      <StatIcon />
+                    ) : item.type === "graph" ? (
+                      <GraphIcon />
+                    ) : (
+                      <PluginIcon />
+                    )}
+                  </div>
+
+                  {/* 이름 */}
+                  {renamingItemId === item.id ? (
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      className="flex-1 text-[12px] bg-transparent border-none p-0 outline-none text-[#DBDEE8] min-w-0 caret-[#3B82F6]"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => {
+                        if (!renameCancelledRef.current) {
+                          handleLayerRenameCommit(item, renameValue);
+                        }
+                        renameCancelledRef.current = false;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          (e.target as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          renameCancelledRef.current = true;
+                          setRenamingItemId(null);
+                        }
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    />
                   ) : (
-                    <OpenEyeIcon width={14} height={14} fill="currentColor" />
+                    <span className="flex-1 text-[12px] truncate">
+                      {item.name}
+                    </span>
                   )}
-                </button>
-              </div>
-            ))}
+
+                  {/* 표시/숨김 토글 */}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDoubleClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => handleToggleVisibility(e, item)}
+                    title={
+                      item.hidden
+                        ? t("propertiesPanel.showLayer") || "Show"
+                        : t("propertiesPanel.hideLayer") || "Hide"
+                    }
+                    className="flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                  >
+                    {item.hidden ? (
+                      <CloseEyeIcon
+                        width={14}
+                        height={14}
+                        fill="currentColor"
+                      />
+                    ) : (
+                      <OpenEyeIcon
+                        width={14}
+                        height={14}
+                        fill="currentColor"
+                      />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
 
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
             {dragOverIndex === layerItems.length && (
               <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
             )}
+            {/* 그룹 드래그: 마지막 아이템 뒤 드롭 인디케이터 */}
+            {draggedGroupId &&
+              dragOverDisplayIndex === displayItems.length && (
+                <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+              )}
           </div>
         )}
 
@@ -1195,7 +2394,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           <ListPopup
             open={contextMenuOpen}
             position={contextMenuPosition}
-            onClose={() => setContextMenuOpen(false)}
+            onClose={() => {
+              setContextMenuOpen(false);
+              setContextMenuGroupId(null);
+            }}
             items={contextMenuItems}
             onSelect={handleContextMenuSelect}
             className="!z-[10000]"

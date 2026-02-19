@@ -231,6 +231,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     Record<string, any>
   >({});
 
+  // 레이어 이름 변경 상태
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelledRef = useRef(false);
+  const renameRequestSignal = usePropertiesPanelStore(
+    (state) => state.renameRequestSignal,
+  );
+
   // 키 리스닝 상태
   const [isListening, setIsListening] = useState(false);
   const justAssignedRef = useRef(false);
@@ -331,6 +340,124 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyLikeElements.length,
     selectedPluginElements.length,
   ]);
+
+  // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
+  const getCurrentLayerName = useCallback((): string => {
+    if (singleKeyPosition) return singleKeyPosition.layerName || "";
+    if (singleStatPosition) return (singleStatPosition as any).layerName || "";
+    if (singleGraphPosition) return (singleGraphPosition as any).layerName || "";
+    return "";
+  }, [singleKeyPosition, singleStatPosition, singleGraphPosition]);
+
+  // 레이어 이름 변경: 현재 선택된 요소의 기본 표시 이름 가져오기
+  const getCurrentDefaultTitle = useCallback((): string => {
+    if (singleKeyPosition) {
+      return singleKeyInfo?.displayName || singleKeyCode || "Key";
+    }
+    if (singleStatPosition) {
+      return getStatTypeLabel((singleStatPosition as any).statType ?? null);
+    }
+    if (singleGraphPosition) {
+      return `${getStatTypeLabel((singleGraphPosition as any).statType ?? null)} Graph`;
+    }
+    return "";
+  }, [singleKeyPosition, singleKeyInfo, singleKeyCode, singleStatPosition, singleGraphPosition]);
+
+  // 레이어 이름 변경 시작
+  const handleRenameStart = useCallback(() => {
+    const current = getCurrentLayerName();
+    setRenameValue(current || getCurrentDefaultTitle());
+    setIsRenaming(true);
+    requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+  }, [getCurrentLayerName, getCurrentDefaultTitle]);
+
+  // 레이어 이름 변경 커밋
+  const handleRenameCommit = useCallback(
+    async (value: string) => {
+      setIsRenaming(false);
+      const trimmed = value.trim();
+      const defaultTitle = getCurrentDefaultTitle();
+      // 기본 이름과 같으면 layerName 제거 (빈 문자열도 제거)
+      const newLayerName = trimmed === defaultTitle || trimmed === "" ? undefined : trimmed;
+
+      if (singleKeyIndex !== null && singleKeyPosition) {
+        onKeyUpdate({ index: singleKeyIndex, layerName: newLayerName } as any);
+      } else if (singleStatIndex !== null && singleStatPosition) {
+        const mode = selectedKeyType;
+        const current = useStatItemStore.getState().positions;
+        const list = current[mode] || [];
+        if (list[singleStatIndex]) {
+          const nextList = list.map((pos, i) =>
+            i === singleStatIndex ? { ...pos, layerName: newLayerName } : pos,
+          );
+          const nextPositions = { ...current, [mode]: nextList };
+          useStatItemStore.getState().setLocalUpdateInProgress(true);
+          useStatItemStore.getState().setPositions(nextPositions);
+          try {
+            await window.api.statItems.updatePositions(nextPositions);
+          } finally {
+            useStatItemStore.getState().setLocalUpdateInProgress(false);
+          }
+        }
+      } else if (singleGraphIndex !== null && singleGraphPosition) {
+        const mode = selectedKeyType;
+        const current = useGraphItemStore.getState().positions;
+        const list = current[mode] || [];
+        if (list[singleGraphIndex]) {
+          const nextList = list.map((pos, i) =>
+            i === singleGraphIndex ? { ...pos, layerName: newLayerName } : pos,
+          );
+          const nextPositions = { ...current, [mode]: nextList };
+          useGraphItemStore.getState().setLocalUpdateInProgress(true);
+          useGraphItemStore.getState().setPositions(nextPositions);
+          try {
+            await window.api.graphItems.updatePositions(nextPositions);
+          } finally {
+            useGraphItemStore.getState().setLocalUpdateInProgress(false);
+          }
+        }
+      }
+    },
+    [
+      getCurrentDefaultTitle,
+      singleKeyIndex,
+      singleKeyPosition,
+      singleStatIndex,
+      singleStatPosition,
+      singleGraphIndex,
+      singleGraphPosition,
+      selectedKeyType,
+      onKeyUpdate,
+    ],
+  );
+
+  // 레이어 이름 변경 취소
+  const handleRenameCancel = useCallback(() => {
+    renameCancelledRef.current = true;
+    setIsRenaming(false);
+  }, []);
+
+  // 캔버스 컨텍스트 메뉴에서 rename 요청 시 트리거
+  const prevRenameSignalRef = useRef(renameRequestSignal);
+  useEffect(() => {
+    if (renameRequestSignal !== prevRenameSignalRef.current) {
+      prevRenameSignalRef.current = renameRequestSignal;
+      // 단일 선택이 있을 때만 rename 시작
+      if (singleKeyPosition || singleStatPosition || singleGraphPosition) {
+        // 속성 패널 모드로 전환
+        setPanelMode("property");
+        handleRenameStart();
+      }
+    }
+  }, [renameRequestSignal, singleKeyPosition, singleStatPosition, singleGraphPosition, handleRenameStart]);
+
+  // 선택이 변경되면 rename 모드 해제
+  useEffect(() => {
+    setIsRenaming(false);
+  }, [selectedElements]);
 
   // 스크롤 훅 사용
   const {
@@ -3162,7 +3289,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const resolvedGraphStatType =
       (singleGraphPosition.statType as StatItemType) || "kps";
-    const graphTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
+    const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
+    const graphTitle = (singleGraphPosition as any).layerName || graphDefaultTitle;
 
     return (
       <div
@@ -3170,9 +3298,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
       >
         <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
-          <span className="text-[#DBDEE8] text-style-2 truncate max-w-[120px]">
-            {graphTitle}
-          </span>
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={() => {
+                if (!renameCancelledRef.current) {
+                  handleRenameCommit(renameValue);
+                }
+                renameCancelledRef.current = false;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  handleRenameCancel();
+                }
+              }}
+            />
+          ) : (
+            <span
+              className="text-[#DBDEE8] text-style-2 truncate max-w-[120px] cursor-default"
+              onDoubleClick={handleRenameStart}
+              title={graphTitle}
+            >
+              {graphTitle}
+            </span>
+          )}
           <div className="flex items-center gap-[4px]">
             <button
               onClick={handleToggleMode}
@@ -3557,9 +3714,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     isSingleStat ? singleStatPosition! : singleKeyPosition!
   ) as any;
 
-  const keyLikeTitle = isSingleStat
+  const keyLikeDefaultTitle = isSingleStat
     ? statTitle
     : singleKeyInfo?.displayName || singleKeyCode || "Key";
+  const keyLikeTitle = keyLikePosition?.layerName || keyLikeDefaultTitle;
 
   const keyLikeCode = isSingleStat ? null : singleKeyCode;
   const keyLikeInfo = isSingleStat
@@ -3632,7 +3790,38 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       <div className="flex-shrink-0 border-b border-[#3A3943]">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
-          <span className="text-[#DBDEE8] text-style-2">{keyLikeTitle}</span>
+          {isRenaming ? (
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={() => {
+                if (!renameCancelledRef.current) {
+                  handleRenameCommit(renameValue);
+                }
+                renameCancelledRef.current = false;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  handleRenameCancel();
+                }
+              }}
+            />
+          ) : (
+            <span
+              className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[130px]"
+              onDoubleClick={handleRenameStart}
+              title={keyLikeTitle}
+            >
+              {keyLikeTitle}
+            </span>
+          )}
 
           <div className="flex items-center gap-[4px]">
             {/* 레이어 모드로 전환 버튼 */}

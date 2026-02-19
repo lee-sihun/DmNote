@@ -277,13 +277,22 @@
     "sendBackward": "下移一層",
     "tabCssSetting": "標籤頁 CSS 設定",
     "addStat": "新增統計",
-    "addGraph": "新增圖表"
+    "addGraph": "新增圖表",
+    "rename": "重新命名"
   },
     "tabCssSetting": "標籤頁 CSS 設定",
     "addStat": "新增統計",
     "quitApp": "退出程式",
     "snapToEdge": "貼靠螢幕邊緣",
-    "selectTab": "選擇標籤頁"
+    "selectTab": "選擇標籤頁",
+    "groupSelected": "將選取項目分組",
+    "renameGroup": "重新命名群組",
+    "ungroup": "取消分組",
+    "removeFromGroup": "從群組中移除"
+  },
+  "layerGroup": {
+    "defaultName": "群組",
+    "newGroup": "新群組"
   },
   "noteColor": {
     "color": "顏色",

@@ -268,9 +268,18 @@
     "tabCssSetting": "标签页 CSS 设置",
     "addStat": "添加统计",
     "addGraph": "添加图表",
+    "rename": "重命名",
     "quitApp": "退出程序",
     "snapToEdge": "贴靠屏幕边缘",
-    "selectTab": "选择标签页"
+    "selectTab": "选择标签页",
+    "groupSelected": "将选中项分组",
+    "renameGroup": "重命名组",
+    "ungroup": "取消分组",
+    "removeFromGroup": "从组中移除"
+  },
+  "layerGroup": {
+    "defaultName": "组",
+    "newGroup": "新建组"
   },
   "noteColor": {
     "color": "颜色",

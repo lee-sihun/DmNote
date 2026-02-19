@@ -172,6 +172,8 @@ fn main() {
             commands::keys::custom_tabs_create,
             commands::keys::custom_tabs_delete,
             commands::keys::custom_tabs_select,
+            commands::keys::layer_groups_get,
+            commands::keys::layer_groups_update,
             commands::css::css_get,
             commands::css::css_get_use,
             commands::css::css_toggle,

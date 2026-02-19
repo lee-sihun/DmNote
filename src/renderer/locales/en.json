@@ -265,9 +265,18 @@
     "tabCssSetting": "Tab CSS Settings",
     "addStat": "Add Stat",
     "addGraph": "Add Graph",
+    "rename": "Rename",
     "quitApp": "Quit Application",
     "snapToEdge": "Snap to Edge",
-    "selectTab": "Select Tab"
+    "selectTab": "Select Tab",
+    "groupSelected": "Group Selected",
+    "renameGroup": "Rename Group",
+    "ungroup": "Ungroup",
+    "removeFromGroup": "Remove from Group"
+  },
+  "layerGroup": {
+    "defaultName": "Group",
+    "newGroup": "New Group"
   },
   "noteColor": {
     "color": "Color",

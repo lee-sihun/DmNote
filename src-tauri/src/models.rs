@@ -200,6 +200,12 @@ pub struct KeyPosition {
     /// 취소선 여부
     #[serde(default)]
     pub font_strikethrough: Option<bool>,
+    /// 레이어 패널에서 표시할 커스텀 이름
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_name: Option<String>,
+    /// 레이어 그룹 ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -686,6 +692,15 @@ pub struct CustomTab {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct LayerGroupDef {
+    pub id: String,
+    pub name: String,
+}
+
+pub type LayerGroups = HashMap<String, Vec<LayerGroupDef>>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct AppStoreData {
     pub hardware_acceleration: bool,
     pub always_on_top: bool,
@@ -713,6 +728,8 @@ pub struct AppStoreData {
     pub stat_positions: StatPositions,
     #[serde(default)]
     pub graph_positions: GraphPositions,
+    #[serde(default)]
+    pub layer_groups: LayerGroups,
     #[serde(default)]
     pub key_counters: KeyCounters,
     pub background_color: String,
@@ -770,6 +787,7 @@ impl Default for AppStoreData {
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
             graph_positions: GraphPositions::new(),
+            layer_groups: LayerGroups::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
             use_custom_css: false,

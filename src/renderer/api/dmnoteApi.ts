@@ -66,6 +66,7 @@ import type {
 } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
 import type { GraphItemPositions } from "@src/types/graphItems";
+import type { LayerGroups } from "@src/types/layerGroups";
 import type {
   SettingsState,
   SettingsPatchInput,
@@ -218,6 +219,13 @@ const api: DMNoteAPI = {
       invoke<GraphItemPositions>("graph_positions_update", { positions }),
     onPositionsChanged: (listener: (positions: GraphItemPositions) => void) =>
       subscribe<GraphItemPositions>("graphPositions:changed", listener),
+  },
+  layerGroups: {
+    get: () => invoke<LayerGroups>("layer_groups_get"),
+    update: (groups: LayerGroups) =>
+      invoke<LayerGroups>("layer_groups_update", { groups }),
+    onChanged: (listener: (groups: LayerGroups) => void) =>
+      subscribe<LayerGroups>("layerGroups:changed", listener),
   },
   overlay: {
     get: () => invoke<OverlayState>("overlay_get"),

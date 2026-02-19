@@ -18,7 +18,7 @@ use crate::{
     defaults::{default_keys, default_positions},
     models::{
         AppStoreData, KeyCounters, KeyMappings, KeyPositions, NoteSettings, OverlayBounds,
-        FontType, GraphPositions, StatPositions,
+        FontType, GraphPositions, LayerGroups, StatPositions,
         SettingsState,
     },
 };
@@ -116,6 +116,17 @@ impl AppStore {
         *guard = normalize_state(guard.clone());
         self.persist_locked(&guard)?;
         Ok(guard.key_positions.clone())
+    }
+
+    pub fn update_layer_groups(&self, groups: LayerGroups) -> Result<LayerGroups> {
+        let mut guard = self.state.write();
+        guard.layer_groups = groups;
+        *guard = normalize_state(guard.clone());
+        let result = guard.layer_groups.clone();
+        drop(guard);
+        let snapshot = self.state.read().clone();
+        self.persist_locked(&snapshot)?;
+        Ok(result)
     }
 
     pub fn update_stat_positions(&self, positions: StatPositions) -> Result<StatPositions> {

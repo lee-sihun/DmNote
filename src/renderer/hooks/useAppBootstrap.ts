@@ -3,6 +3,7 @@ import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { useFontStore, syncFontCSS } from "@stores/useFontStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
 import {
   useSettingsStore,
   type SettingsStateSnapshot,
@@ -215,6 +216,14 @@ export function useAppBootstrap() {
       }));
       applyCounterSnapshot(bootstrap.keyCounters);
 
+      // 레이어 그룹 로드
+      window.api.layerGroups
+        .get()
+        .then((groups) => {
+          useLayerGroupStore.getState().setLayerGroups(groups);
+        })
+        .catch(() => {});
+
       // macOS 커서 시스템 초기화 (시스템 설정 반영)
       initializeCursorSystem().catch(() => {});
 
@@ -255,6 +264,9 @@ export function useAppBootstrap() {
         )
           return;
         useGraphItemStore.setState((state) => ({ ...state, positions }));
+      }),
+      window.api.layerGroups.onChanged((groups) => {
+        useLayerGroupStore.getState().setLayerGroups(groups);
       }),
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));

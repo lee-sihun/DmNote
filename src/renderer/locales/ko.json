@@ -266,9 +266,18 @@
     "tabCssSetting": "현재 탭 CSS 설정",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",
+    "rename": "이름 변경",
     "quitApp": "프로그램 종료",
     "snapToEdge": "화면 모서리에 맞추기",
-    "selectTab": "탭 선택"
+    "selectTab": "탭 선택",
+    "groupSelected": "선택 항목 그룹화",
+    "renameGroup": "그룹 이름 변경",
+    "ungroup": "그룹 해제",
+    "removeFromGroup": "그룹에서 제거"
+  },
+  "layerGroup": {
+    "defaultName": "그룹",
+    "newGroup": "새 그룹"
   },
   "noteColor": {
     "color": "색상",

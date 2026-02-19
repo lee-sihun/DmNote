@@ -9,6 +9,7 @@ import {
 } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
 import type { GraphItemPositions } from "@src/types/graphItems";
+import type { LayerGroups } from "@src/types/layerGroups";
 import {
   SettingsDiff,
   SettingsPatchInput,
@@ -656,6 +657,11 @@ export interface DMNoteAPI {
     onPositionsChanged(
       listener: (positions: GraphItemPositions) => void,
     ): Unsubscribe;
+  };
+  layerGroups: {
+    get(): Promise<LayerGroups>;
+    update(groups: LayerGroups): Promise<LayerGroups>;
+    onChanged(listener: (groups: LayerGroups) => void): Unsubscribe;
   };
   overlay: {
     get(): Promise<OverlayState>;

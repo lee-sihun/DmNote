@@ -427,15 +427,54 @@ export default function Grid({
   const [duplicateState, setDuplicateState] = useState(null);
   const [duplicateCursor, setDuplicateCursor] = useState(null);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
-  const mixedSelectionMenuItems = useMemo(
-    () => [
+  const mixedSelectionMenuItems = useMemo(() => {
+    const items = [
       { id: "delete", label: t("contextMenu.deleteSelected") },
       { id: "duplicate", label: t("contextMenu.duplicateSelected") },
       { id: "bringToFront", label: t("contextMenu.bringToFront") },
       { id: "sendToBack", label: t("contextMenu.sendToBack") },
-    ],
-    [t]
-  );
+    ];
+
+    if (selectedElements.length >= 2) {
+      // 선택된 요소들의 그룹 상태 확인
+      const modeKeyPos = positions[selectedKeyType] || [];
+      const modeStatPos = useStatItemStore.getState().positions[selectedKeyType] || [];
+      const modeGraphPos = useGraphItemStore.getState().positions[selectedKeyType] || [];
+
+      let anyInGroup = false;
+      let allInSameGroup = true;
+      let firstGroupId;
+      let first = true;
+
+      selectedElements.forEach((el) => {
+        let gid;
+        if (el.type === "key" && el.index !== undefined) {
+          gid = modeKeyPos[el.index]?.groupId;
+        } else if (el.type === "stat" && el.index !== undefined) {
+          gid = modeStatPos[el.index]?.groupId;
+        } else if (el.type === "graph" && el.index !== undefined) {
+          gid = modeGraphPos[el.index]?.groupId;
+        }
+        if (gid) anyInGroup = true;
+        if (first) { firstGroupId = gid; first = false; }
+        else if (gid !== firstGroupId) allInSameGroup = false;
+      });
+
+      if (anyInGroup && allInSameGroup && firstGroupId) {
+        // 모두 같은 그룹 → 그룹 해제만
+        items.push({ id: "ungroupSelected", label: t("contextMenu.ungroup") });
+      } else if (!anyInGroup) {
+        // 그룹 없음 → 그룹화만
+        items.push({ id: "groupSelected", label: t("contextMenu.groupSelected") });
+      } else {
+        // 혼합 → 둘 다
+        items.push({ id: "groupSelected", label: t("contextMenu.groupSelected") });
+        items.push({ id: "ungroupSelected", label: t("contextMenu.ungroup") });
+      }
+    }
+
+    return items;
+  }, [t, selectedElements, positions, selectedKeyType]);
 
   const openMixedSelectionContextMenu = useCallback((x, y, referenceNode) => {
     setContextType("mixed");
@@ -449,18 +488,9 @@ export default function Grid({
     (clickedId) => {
       if (selectedElements.length <= 1) return false;
       if (!selectedElements.some((el) => el.id === clickedId)) return false;
-      const selectionTypes = new Set(
-        selectedElements.map((el) => {
-          if (el.type !== "plugin") return el.type;
-          const pluginElement = pluginElements.find((p) => p.fullId === el.id);
-          const pluginKind =
-            pluginElement?.pluginId || pluginElement?.definitionId || "unknown";
-          return `plugin:${pluginKind}`;
-        })
-      );
-      return selectionTypes.size > 1;
+      return true;
     },
-    [selectedElements, pluginElements]
+    [selectedElements]
   );
 
   // 클라이언트 좌표를 그리드 좌표로 변환 (줌/팬 반영)
@@ -994,6 +1024,28 @@ export default function Grid({
           // 단일 선택: 기존 선택을 해제하고 이 키만 선택
           clearSelection();
           toggleSelection({ type: "key", id: `key-${index}`, index });
+          if (position?.groupId) {
+            const groupId = position.groupId;
+            (positions[selectedKeyType] || []).forEach((p, i) => {
+              if (p?.groupId === groupId && i !== index) {
+                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+              }
+            });
+            const statPos =
+              useStatItemStore.getState().positions[selectedKeyType] || [];
+            statPos.forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+              }
+            });
+            const graphPos =
+              useGraphItemStore.getState().positions[selectedKeyType] || [];
+            graphPos.forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+              }
+            });
+          }
           // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
           const pos = positions[selectedKeyType]?.[index];
           if (pos) {
@@ -1269,6 +1321,29 @@ export default function Grid({
           }
           clearSelection();
           toggleSelection({ type: "stat", id: `stat-${index}`, index });
+          const statTabPositions =
+            useStatItemStore.getState().positions[selectedKeyType] || [];
+          const pos = statTabPositions[index];
+          if (pos?.groupId) {
+            const groupId = pos.groupId;
+            (positions[selectedKeyType] || []).forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+              }
+            });
+            statTabPositions.forEach((p, i) => {
+              if (p?.groupId === groupId && i !== index) {
+                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+              }
+            });
+            const graphPos =
+              useGraphItemStore.getState().positions[selectedKeyType] || [];
+            graphPos.forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+              }
+            });
+          }
         }}
         onCtrlClick={() => {
           toggleSelection({ type: "stat", id: `stat-${index}`, index });
@@ -1392,6 +1467,29 @@ export default function Grid({
           }
           clearSelection();
           toggleSelection({ type: "graph", id: `graph-${index}`, index });
+          const graphTabPositions =
+            useGraphItemStore.getState().positions[selectedKeyType] || [];
+          const pos = graphTabPositions[index];
+          if (pos?.groupId) {
+            const groupId = pos.groupId;
+            (positions[selectedKeyType] || []).forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+              }
+            });
+            const statPos =
+              useStatItemStore.getState().positions[selectedKeyType] || [];
+            statPos.forEach((p, i) => {
+              if (p?.groupId === groupId) {
+                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+              }
+            });
+            graphTabPositions.forEach((p, i) => {
+              if (p?.groupId === groupId && i !== index) {
+                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+              }
+            });
+          }
         }}
         onCtrlClick={() => {
           toggleSelection({ type: "graph", id: `graph-${index}`, index });
@@ -1955,6 +2053,133 @@ export default function Grid({
                 await moveSelectedToFront();
               } else if (id === "sendToBack") {
                 await moveSelectedToBack();
+              } else if (id === "groupSelected") {
+                const groupId = crypto.randomUUID();
+                const { useLayerGroupStore } = await import(
+                  "@stores/useLayerGroupStore"
+                );
+                const groupName = `${t("layerGroup.newGroup")} ${
+                  useLayerGroupStore
+                    .getState()
+                    .getGroupsForMode(selectedKeyType).length + 1
+                }`;
+                const updatedGroups = useLayerGroupStore
+                  .getState()
+                  .addGroup(selectedKeyType, { id: groupId, name: groupName });
+                window.api.layerGroups.update(updatedGroups).catch(() => {});
+
+                const keyPos = { ...positions };
+                const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
+                const statPos = { ...useStatItemStore.getState().positions };
+                const modeStatPos = [...(statPos[selectedKeyType] || [])];
+                const graphPos = { ...useGraphItemStore.getState().positions };
+                const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+
+                selectedElements.forEach((el) => {
+                  if (
+                    el.type === "key" &&
+                    el.index !== undefined &&
+                    modeKeyPos[el.index]
+                  ) {
+                    modeKeyPos[el.index] = { ...modeKeyPos[el.index], groupId };
+                  } else if (
+                    el.type === "stat" &&
+                    el.index !== undefined &&
+                    modeStatPos[el.index]
+                  ) {
+                    modeStatPos[el.index] = {
+                      ...modeStatPos[el.index],
+                      groupId,
+                    };
+                  } else if (
+                    el.type === "graph" &&
+                    el.index !== undefined &&
+                    modeGraphPos[el.index]
+                  ) {
+                    modeGraphPos[el.index] = {
+                      ...modeGraphPos[el.index],
+                      groupId,
+                    };
+                  }
+                });
+                keyPos[selectedKeyType] = modeKeyPos;
+                statPos[selectedKeyType] = modeStatPos;
+                graphPos[selectedKeyType] = modeGraphPos;
+
+                useKeyStore.getState().setPositions(keyPos);
+                useStatItemStore.getState().setPositions(statPos);
+                useGraphItemStore.getState().setPositions(graphPos);
+
+                await window.api.keys.updatePositions(keyPos);
+                await window.api.statItems.updatePositions(statPos);
+                await window.api.graphItems.updatePositions(graphPos);
+              } else if (id === "ungroupSelected") {
+                const { useLayerGroupStore } = await import(
+                  "@stores/useLayerGroupStore"
+                );
+
+                const keyPos = { ...positions };
+                const modeKeyPos = [...(keyPos[selectedKeyType] || [])];
+                const statPos = { ...useStatItemStore.getState().positions };
+                const modeStatPos = [...(statPos[selectedKeyType] || [])];
+                const graphPos = { ...useGraphItemStore.getState().positions };
+                const modeGraphPos = [...(graphPos[selectedKeyType] || [])];
+
+                const groupIdsToCheck = new Set();
+
+                selectedElements.forEach((el) => {
+                  if (
+                    el.type === "key" &&
+                    el.index !== undefined &&
+                    modeKeyPos[el.index]
+                  ) {
+                    if (modeKeyPos[el.index].groupId) {
+                      groupIdsToCheck.add(modeKeyPos[el.index].groupId);
+                    }
+                    modeKeyPos[el.index] = {
+                      ...modeKeyPos[el.index],
+                      groupId: undefined,
+                    };
+                  } else if (
+                    el.type === "stat" &&
+                    el.index !== undefined &&
+                    modeStatPos[el.index]
+                  ) {
+                    if (modeStatPos[el.index].groupId) {
+                      groupIdsToCheck.add(modeStatPos[el.index].groupId);
+                    }
+                    modeStatPos[el.index] = {
+                      ...modeStatPos[el.index],
+                      groupId: undefined,
+                    };
+                  } else if (
+                    el.type === "graph" &&
+                    el.index !== undefined &&
+                    modeGraphPos[el.index]
+                  ) {
+                    if (modeGraphPos[el.index].groupId) {
+                      groupIdsToCheck.add(modeGraphPos[el.index].groupId);
+                    }
+                    modeGraphPos[el.index] = {
+                      ...modeGraphPos[el.index],
+                      groupId: undefined,
+                    };
+                  }
+                });
+                void useLayerGroupStore;
+                void groupIdsToCheck;
+
+                keyPos[selectedKeyType] = modeKeyPos;
+                statPos[selectedKeyType] = modeStatPos;
+                graphPos[selectedKeyType] = modeGraphPos;
+
+                useKeyStore.getState().setPositions(keyPos);
+                useStatItemStore.getState().setPositions(statPos);
+                useGraphItemStore.getState().setPositions(graphPos);
+
+                await window.api.keys.updatePositions(keyPos);
+                await window.api.statItems.updatePositions(statPos);
+                await window.api.graphItems.updatePositions(graphPos);
               }
 
               setIsContextOpen(false);

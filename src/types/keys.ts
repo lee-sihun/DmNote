@@ -261,6 +261,10 @@ export const keyPositionSchema = z.object({
   useInlineStyles: z.boolean().optional(),
   // 키에 표시할 커스텀 텍스트 (없으면 기본 키 이름 표시)
   displayText: z.string().optional(),
+  // 레이어 패널에서 표시할 커스텀 이름 (없으면 기본 키/통계/그래프 이름 표시)
+  layerName: z.string().optional(),
+  // 레이어 그룹 ID (같은 그룹에 속한 레이어들은 같은 groupId를 가짐)
+  groupId: z.string().optional(),
   // 글꼴 스타일 속성들
   fontWeight: z.number().optional(), // CSS font-weight 값 (400, 700 등)
   fontItalic: z.boolean().optional(),

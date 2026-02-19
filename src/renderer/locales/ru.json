@@ -261,9 +261,18 @@
     "sendBackward": "Ниже",
     "tabCssSetting": "CSS вкладки",
     "addStat": "Добавить стат.",
+    "rename": "Переименовать",
     "quitApp": "Выйти из приложения",
     "snapToEdge": "Привязать к краю",
-    "selectTab": "Выбор вкладки"
+    "selectTab": "Выбор вкладки",
+    "groupSelected": "Сгруппировать выбранные",
+    "renameGroup": "Переименовать группу",
+    "ungroup": "Разгруппировать",
+    "removeFromGroup": "Удалить из группы"
+  },
+  "layerGroup": {
+    "defaultName": "Группа",
+    "newGroup": "Новая группа"
   },
   "noteColor": {
     "color": "Цвет",

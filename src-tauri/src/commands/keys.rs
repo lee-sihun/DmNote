@@ -7,7 +7,7 @@ use crate::{
     app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
-        CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, NoteSettings,
+        CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, LayerGroups, NoteSettings,
         NoteSettingsPatch, SettingsPatchInput,
     },
 };
@@ -551,6 +551,26 @@ pub fn keys_set_counters(
         .replace_key_counters(counters, &keys_snapshot)
         .map_err(|err| err.to_string())?;
     app.emit("keys:counters", &updated)
+        .map_err(|err| err.to_string())?;
+    Ok(updated)
+}
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn layer_groups_get(state: State<'_, AppState>) -> Result<LayerGroups, String> {
+    Ok(state.store.snapshot().layer_groups)
+}
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn layer_groups_update(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    groups: LayerGroups,
+) -> Result<LayerGroups, String> {
+    let updated = state
+        .store
+        .update_layer_groups(groups)
+        .map_err(|err| err.to_string())?;
+    app.emit("layerGroups:changed", &updated)
         .map_err(|err| err.to_string())?;
     Ok(updated)
 }
