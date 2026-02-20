@@ -4,6 +4,7 @@ pub mod cursor;
 pub mod defaults;
 pub mod keyboard;
 pub mod keyboard_daemon;
+pub mod key_sound;
 #[cfg(target_os = "windows")]
 pub mod keyboard_labels;
 pub mod ipc;

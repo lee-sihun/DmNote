@@ -23,6 +23,7 @@ use tauri::{
 use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{
+    key_sound::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, KeyCounters,
@@ -52,6 +53,7 @@ pub struct AppState {
     active_keys: Arc<RwLock<HashSet<String>>>,
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
+    key_sound: Arc<KeySoundEngine>,
     /// CSS 파일 핫리로딩 워처
     css_watcher: RwLock<Option<CssWatcher>>,
 }
@@ -68,6 +70,7 @@ impl AppState {
         Self::sync_counters_with_keys_impl(&key_counters, &snapshot.keys);
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
         let active_keys = Arc::new(RwLock::new(HashSet::new()));
+        let key_sound = Arc::new(KeySoundEngine::new());
 
         Ok(Self {
             store,
@@ -80,6 +83,7 @@ impl AppState {
             key_counter_enabled,
             active_keys,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            key_sound,
             css_watcher: RwLock::new(None),
         })
     }
@@ -695,6 +699,11 @@ impl AppState {
                             if !state_changed {
                                 continue;
                             }
+                            if message.device == crate::ipc::InputDeviceKind::Keyboard
+                                && state == "DOWN"
+                            {
+                                app_state.key_sound.play_labels(&message.labels);
+                            }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
 
                             let mut emitted = false;
@@ -1183,6 +1192,28 @@ impl AppState {
     /// Get current raw input subscriber count
     pub fn raw_input_subscriber_count(&self) -> u32 {
         self.raw_input_subscribers.load(Ordering::Relaxed)
+    }
+
+    pub fn key_sound_status(&self) -> KeySoundStatus {
+        self.key_sound.status()
+    }
+
+    pub fn key_sound_set_enabled(&self, enabled: bool) -> KeySoundStatus {
+        self.key_sound.set_enabled(enabled)
+    }
+
+    pub fn key_sound_set_volume(&self, volume: f32) -> KeySoundStatus {
+        self.key_sound.set_volume(volume)
+    }
+
+    pub fn key_sound_load_soundpack(&self, soundpack_dir: &str) -> Result<KeySoundStatus, String> {
+        self.key_sound
+            .load_soundpack_dir(soundpack_dir)
+            .map_err(|err| err.to_string())
+    }
+
+    pub fn key_sound_unload_soundpack(&self) -> KeySoundStatus {
+        self.key_sound.unload_soundpack()
     }
 
     // ========== CSS 핫리로딩 관련 메서드 ==========

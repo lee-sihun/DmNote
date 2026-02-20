@@ -5,6 +5,7 @@ pub mod font;
 pub mod graph_items;
 pub mod image;
 pub mod js;
+pub mod key_sound;
 pub mod keys;
 pub mod overlay;
 pub mod plugin_storage;
