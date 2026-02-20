@@ -17,6 +17,8 @@ const POSITION_CHANGE_EPSILON = 0.05;
 const SPACING_GROUP_SIZE_FACTOR = 0.35;
 // 엣지 오버랩 기반 그룹핑: 작은 쪽 크기의 이 비율 이상 겹치면 같은 행/열로 판정
 const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
+// 같은 축 시작점이 사실상 동일한 요소(같은 열/행)로 보는 허용 오차
+const PRIMARY_AXIS_STACK_EPSILON = 0.1;
 
 type KeyLikeType = "key" | "stat" | "graph";
 type AxisDirection = "horizontal" | "vertical";
@@ -252,12 +254,12 @@ const inferSpacingAxisPlan = (elements: LayoutElement[]): SpacingAxisPlan => {
   // 수평 적용 여부: 하나 이상의 행에 2개 이상의 요소가 있으면 수평 간격 조절 가능
   const applyHorizontal = countAxisPairs(horizontalGroups) > 0;
 
-  // 수직 적용 여부: 행이 2개 이상이면 수직 간격 조절 가능
-  // 열(column) 그룹 기반 판정은 사용하지 않는다.
-  // - 넓이가 다른 요소가 혼재할 때 열 그룹핑이 오동작하여 수직 적용이 누락되는 버그가 있음
-  // - 수직 간격 적용은 applyVerticalRowSpacing에서 행(row) 단위로 처리하므로
-  //   열 구조와 무관하게 행 수만으로 판정하는 것이 정확함
-  const applyVertical = horizontalGroups.length >= 2;
+  // 수직 적용 여부:
+  // - 기본은 행(row) 수 기준(2개 이상)
+  // - 단, 행 그룹이 1개로 뭉개진 특수 케이스(예: 세로로 긴 요소가 여러 행을 겹쳐 커버)에서는
+  //   열(column) 내 쌍이 존재하면 수직 간격 fallback을 허용한다.
+  const applyVertical =
+    horizontalGroups.length >= 2 || countAxisPairs(verticalGroups) > 0;
 
   return {
     applyHorizontal,
@@ -300,28 +302,57 @@ const applyAxisSpacing = (
   const applyToGroup = (group: LayoutElement[]): boolean => {
     if (group.length < 2) return false;
     const sorted = sortByPrimaryAxis(group, direction);
-    let currentStart = getPrimaryAxisValue(sorted[0], direction);
+    type AxisStack = {
+      start: number;
+      maxSize: number;
+      elements: LayoutElement[];
+    };
 
-    sorted.forEach((element, index) => {
-      if (index > 0) {
-        const prev = sorted[index - 1];
-        currentStart += getPrimaryAxisSize(prev, direction) + spacing;
-      }
+    const stacks: AxisStack[] = [];
+    for (const element of sorted) {
+      const start = getPrimaryAxisValue(element, direction);
+      const size = getPrimaryAxisSize(element, direction);
+      const lastStack = stacks[stacks.length - 1];
 
-      const key = `${element.type}:${element.index}`;
-      const update = updateMap.get(key) ?? {
-        type: element.type,
-        index: element.index,
-      };
-      const normalizedValue = roundToSpacingPrecision(currentStart);
-      if (direction === "horizontal") {
-        update.dx = normalizedValue;
-        element.x = normalizedValue;
+      if (
+        lastStack &&
+        Math.abs(start - lastStack.start) <= PRIMARY_AXIS_STACK_EPSILON
+      ) {
+        lastStack.elements.push(element);
+        lastStack.maxSize = Math.max(lastStack.maxSize, size);
       } else {
-        update.dy = normalizedValue;
-        element.y = normalizedValue;
+        stacks.push({
+          start,
+          maxSize: size,
+          elements: [element],
+        });
       }
-      updateMap.set(key, update);
+    }
+
+    let currentStart = stacks[0].start;
+    stacks.forEach((stack, index) => {
+      if (index > 0) {
+        const prev = stacks[index - 1];
+        currentStart += prev.maxSize + spacing;
+      }
+
+      const normalizedValue = roundToSpacingPrecision(currentStart);
+      for (const element of stack.elements) {
+        const key = getLayoutElementKey(element.type, element.index);
+        const update = updateMap.get(key) ?? {
+          type: element.type,
+          index: element.index,
+        };
+
+        if (direction === "horizontal") {
+          update.dx = normalizedValue;
+          element.x = normalizedValue;
+        } else {
+          update.dy = normalizedValue;
+          element.y = normalizedValue;
+        }
+        updateMap.set(key, update);
+      }
     });
 
     return true;
@@ -963,13 +994,26 @@ export function useBatchHandlers({
             axisPlan.horizontalGroups,
           )
         : false;
-      const appliedVertical = axisPlan.applyVertical
-        ? applyVerticalRowSpacing(
-            axisPlan.horizontalGroups,
+      let appliedVertical = false;
+      if (axisPlan.applyVertical) {
+        appliedVertical = applyVerticalRowSpacing(
+          axisPlan.horizontalGroups,
+          normalizedSpacing,
+          updateMap,
+        );
+
+        // 행 기반 수직 적용이 불가능한 경우(예: 행이 1개로 인식됨)에는
+        // 열 기반 수직 간격 적용으로 보완한다.
+        if (!appliedVertical) {
+          appliedVertical = applyAxisSpacing(
+            elements,
+            "vertical",
             normalizedSpacing,
             updateMap,
-          )
-        : false;
+            axisPlan.verticalGroups,
+          );
+        }
+      }
 
       if (!appliedHorizontal && !appliedVertical) return [];
 
@@ -1043,7 +1087,14 @@ export function useBatchHandlers({
       );
     }
     if (axisPlan.applyVertical) {
-      rawGaps.push(...collectRowGaps(axisPlan.horizontalGroups));
+      const rowGaps = collectRowGaps(axisPlan.horizontalGroups);
+      if (rowGaps.length > 0) {
+        rawGaps.push(...rowGaps);
+      } else {
+        rawGaps.push(
+          ...collectAxisGapsFromGroups(axisPlan.verticalGroups, "vertical"),
+        );
+      }
     }
 
     const gaps = rawGaps.map((gap) =>
