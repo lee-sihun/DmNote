@@ -142,13 +142,7 @@ impl AppState {
             true,
             None::<&str>,
         )?;
-        let quit_item = MenuItem::with_id(
-            app,
-            TRAY_MENU_QUIT_ID,
-            quit_label,
-            true,
-            None::<&str>,
-        )?;
+        let quit_item = MenuItem::with_id(app, TRAY_MENU_QUIT_ID, quit_label, true, None::<&str>)?;
         let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
         let overlay_force_close = self.overlay_force_close.clone();
 
@@ -202,6 +196,7 @@ impl AppState {
                 laboratory_enabled: state.laboratory_enabled,
                 developer_mode_enabled: state.developer_mode_enabled,
                 tray_enabled: state.tray_enabled,
+                auto_update_enabled: state.auto_update_enabled,
                 background_color: state.background_color.clone(),
                 use_custom_css: state.use_custom_css,
                 custom_css: state.custom_css.clone(),
@@ -239,7 +234,10 @@ impl AppState {
     }
 
     pub fn emit_settings_changed(&self, diff: &SettingsDiff, app: &AppHandle) -> Result<()> {
-        log::debug!("[IPC] emit_settings_changed: {} fields changed", diff.changed_count());
+        log::debug!(
+            "[IPC] emit_settings_changed: {} fields changed",
+            diff.changed_count()
+        );
         self.apply_settings_effects(diff, app)?;
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
@@ -253,13 +251,13 @@ impl AppState {
 
     pub fn set_overlay_visibility(&self, app: &AppHandle, visible: bool) -> Result<()> {
         log::debug!("[IPC] set_overlay_visibility: visible={}", visible);
-        
+
         if visible {
             // 오버레이를 열 때: 창이 없으면 생성하고 표시
             let window = self.ensure_overlay_window(app)?;
             let snapshot = self.store.snapshot();
             show_overlay_window(&window, snapshot.always_on_top)?;
-            
+
             // 오버레이가 숨겨진 동안 변경된 설정을 다시 적용
             window.set_ignore_cursor_events(snapshot.overlay_locked)?;
             window.set_always_on_top(snapshot.always_on_top)?;
@@ -272,14 +270,18 @@ impl AppState {
                 hide_overlay_window(&window)?;
             }
         }
-        
+
         *self.overlay_visible.write() = visible;
         app.emit("overlay:visibility", &json!({ "visible": visible }))?;
         Ok(())
     }
 
     pub fn set_overlay_lock(&self, app: &AppHandle, locked: bool, persist: bool) -> Result<()> {
-        log::debug!("[IPC] set_overlay_lock: locked={}, persist={}", locked, persist);
+        log::debug!(
+            "[IPC] set_overlay_lock: locked={}, persist={}",
+            locked,
+            persist
+        );
         if persist {
             let _ = self.store.update(|state| {
                 state.overlay_locked = locked;
@@ -344,7 +346,8 @@ impl AppState {
     ) -> Result<OverlayBounds> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
         // 창이 없으면 에러 반환 (창을 자동으로 생성하지 않음)
-        let window = app.get_webview_window(OVERLAY_LABEL)
+        let window = app
+            .get_webview_window(OVERLAY_LABEL)
             .ok_or_else(|| anyhow!("Overlay window is not open"))?;
         let anchor = anchor
             .and_then(|value| overlay_resize_anchor_from_str(&value))
@@ -429,7 +432,10 @@ impl AppState {
 
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
-            bounds.width, bounds.height, bounds.x, bounds.y
+            bounds.width,
+            bounds.height,
+            bounds.x,
+            bounds.y
         );
         app.emit(
             "overlay:resized",
@@ -461,12 +467,17 @@ impl AppState {
         let pipe_receiver: Option<std::sync::mpsc::Receiver<Option<std::fs::File>>> = {
             use std::sync::mpsc;
             let (tx, rx) = mpsc::channel();
-            std::thread::spawn(move || {
-                match crate::ipc::pipe_server_create("dmnote_keys_v1") {
-                    Ok(f) => { let _ = tx.send(Some(f)); }
-                    Err(err) => { warn!("failed to create named pipe: {err}"); let _ = tx.send(None); }
-                }
-            });
+            std::thread::spawn(
+                move || match crate::ipc::pipe_server_create("dmnote_keys_v1") {
+                    Ok(f) => {
+                        let _ = tx.send(Some(f));
+                    }
+                    Err(err) => {
+                        warn!("failed to create named pipe: {err}");
+                        let _ = tx.send(None);
+                    }
+                },
+            );
             Some(rx)
         };
         #[cfg(not(target_os = "windows"))]
@@ -998,7 +1009,7 @@ impl AppState {
     fn apply_settings_effects(&self, diff: &SettingsDiff, app: &AppHandle) -> Result<()> {
         // 오버레이가 보이는 상태일 때만 설정 적용
         let is_visible = *self.overlay_visible.read();
-        
+
         if let Some(value) = diff.changed.always_on_top {
             if is_visible {
                 if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
@@ -1021,7 +1032,7 @@ impl AppState {
         }
 
         if let Some(enabled) = diff.changed.developer_mode_enabled {
-            // 활성화 시에만 DevTools 열기 
+            // 활성화 시에만 DevTools 열기
             if enabled {
                 if let Some(main) = app.get_webview_window("main") {
                     let _ = main.open_devtools();
@@ -1036,7 +1047,9 @@ impl AppState {
             if !enabled {
                 let _ = app.remove_tray_by_id(TRAY_ICON_ID);
                 if let Err(err) = self.set_main_window_hidden(false) {
-                    log::warn!("failed to clear main_window_hidden when disabling tray mode: {err}");
+                    log::warn!(
+                        "failed to clear main_window_hidden when disabling tray mode: {err}"
+                    );
                 }
             } else if self.store.snapshot().main_window_hidden {
                 self.ensure_tray_icon_for_background(app)?;
@@ -1691,4 +1704,3 @@ struct OverlayPosition {
     x: f64,
     y: f64,
 }
-

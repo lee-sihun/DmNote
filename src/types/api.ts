@@ -144,6 +144,11 @@ export type CustomTabDeleteResult = {
 export type KeyCounterUpdate = { mode: string; key: string; count: number };
 
 export type PresetOperationResult = { success: boolean; error?: string };
+export type AppAutoUpdateResult = {
+  previousVersion: string;
+  updatedTo: string;
+  downloadUrl: string;
+};
 
 export type BridgeMessage<T = any> = { type: string; data?: T };
 export type BridgeMessageListener<T = any> = (data: T) => void;
@@ -593,6 +598,7 @@ export interface PanelOptions {
 export interface DMNoteAPI {
   app: {
     bootstrap(): Promise<BootstrapPayload>;
+    autoUpdate(tag: string): Promise<AppAutoUpdateResult>;
     openExternal(url: string): Promise<void>;
     restart(): Promise<void>;
     quit(): Promise<void>;

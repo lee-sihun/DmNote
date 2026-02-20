@@ -3,6 +3,7 @@ import { create } from "zustand";
 const GITHUB_REPO = "lee-sihun/DmNote";
 const STORAGE_KEY = "dmnote:skipped-version";
 const CACHE_KEY = "dmnote:update-check-cache";
+const POST_UPDATE_NOTICE_KEY = "dmnote:post-update-release-notice-version";
 const CACHE_MS = 5 * 60 * 1000; // 5분 캐시
 const CURRENT_VERSION = __APP_VERSION__;
 
@@ -28,17 +29,35 @@ interface UpdateState {
   isLatestVersion: boolean;
   updateInfo: UpdateInfo | null;
   isChecking: boolean;
+  isAutoUpdating: boolean;
   error: string | null;
   dismissed: boolean;
   cacheUntil: number | null;
   lastCheckHadUpdate: boolean; // 마지막 체크 결과 (캐시용)
   checkForUpdates: (manual?: boolean) => Promise<void>;
+  runAutoUpdate: (targetTag: string) => Promise<void>;
   dismissUpdate: () => void;
   skipVersion: () => void;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+  }
+  return "Unknown error";
+}
+
 function compareVersions(current: string, latest: string): number {
-  const normalize = (v: string) => v.replace(/^v/, "");
+  const normalize = (v: string) => v.replace(/^v/i, "");
   const currentParts = normalize(current).split(".").map(Number);
   const latestParts = normalize(latest).split(".").map(Number);
 
@@ -99,11 +118,44 @@ function setCacheUntil(time: number): void {
   }
 }
 
+function normalizeVersionString(version: string): string {
+  return version.trim().replace(/^v/i, "");
+}
+
+function setPostUpdateNoticeVersion(version: string): void {
+  try {
+    localStorage.setItem(POST_UPDATE_NOTICE_KEY, normalizeVersionString(version));
+  } catch (e) {
+    console.warn("Failed to save post-update notice version", e);
+  }
+}
+
+export function clearPendingPostUpdateReleaseNotice(): void {
+  try {
+    localStorage.removeItem(POST_UPDATE_NOTICE_KEY);
+  } catch (e) {
+    console.warn("Failed to clear post-update notice version", e);
+  }
+}
+
+export function hasPendingPostUpdateReleaseNotice(
+  currentVersion: string = CURRENT_VERSION
+): boolean {
+  try {
+    const pending = localStorage.getItem(POST_UPDATE_NOTICE_KEY);
+    if (!pending) return false;
+    return normalizeVersionString(pending) === normalizeVersionString(currentVersion);
+  } catch {
+    return false;
+  }
+}
+
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   updateAvailable: false,
   isLatestVersion: false,
   updateInfo: null,
   isChecking: false,
+  isAutoUpdating: false,
   error: null,
   dismissed: false,
   cacheUntil: getCacheUntil(),
@@ -224,9 +276,37 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         clearSkippedVersion();
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
+      const message = getErrorMessage(e);
       set({ error: message, isChecking: false });
       console.error("Update check failed:", e);
+    }
+  },
+
+  runAutoUpdate: async (targetTag: string) => {
+    const state = get();
+    if (state.isAutoUpdating) return;
+
+    const normalizedTag = targetTag?.trim();
+    if (!normalizedTag) {
+      throw new Error("Invalid target version");
+    }
+
+    set({
+      isAutoUpdating: true,
+      error: null,
+    });
+
+    // 성공적으로 재시작된 다음 실행에서 릴리즈 노트 모달을 1회 노출
+    setPostUpdateNoticeVersion(normalizedTag);
+
+    try {
+      await window.api.app.autoUpdate(normalizedTag);
+      set({ isAutoUpdating: false });
+    } catch (e) {
+      clearPendingPostUpdateReleaseNotice();
+      const message = getErrorMessage(e);
+      set({ isAutoUpdating: false, error: message });
+      throw e;
     }
   },
 
@@ -252,9 +332,11 @@ export function useUpdateCheck() {
     isLatestVersion: store.isLatestVersion && !store.dismissed,
     updateInfo: store.updateInfo,
     isChecking: store.isChecking,
+    isAutoUpdating: store.isAutoUpdating,
     error: store.error,
     dismissUpdate: store.dismissUpdate,
     skipVersion: store.skipVersion,
     checkForUpdates: store.checkForUpdates,
+    runAutoUpdate: store.runAutoUpdate,
   };
 }

@@ -50,6 +50,8 @@ export default function Settings({ showAlert, showConfirm }) {
     setLaboratoryEnabled,
     trayEnabled,
     setTrayEnabled,
+    autoUpdateEnabled,
+    setAutoUpdateEnabled,
     developerModeEnabled,
     setDeveloperModeEnabled,
     useCustomCSS,
@@ -452,6 +454,16 @@ export default function Settings({ showAlert, showConfirm }) {
     }
   };
 
+  const handleAutoUpdateToggle = async () => {
+    const next = !autoUpdateEnabled;
+    setAutoUpdateEnabled(next);
+    try {
+      await window.api.settings.update({ autoUpdateEnabled: next });
+    } catch (error) {
+      console.error("Failed to toggle auto update", error);
+    }
+  };
+
   const handleDeveloperModeToggle = async () => {
     const next = !developerModeEnabled;
     setDeveloperModeEnabled(next);
@@ -786,6 +798,18 @@ export default function Settings({ showAlert, showConfirm }) {
                   onChange={handleAngleModeChangeSelect}
                   placeholder={t("settings.renderMode")}
                   disabled={isMacOS}
+                />
+              </div>
+              <div
+                className="flex flex-row justify-between items-center h-[25px] cursor-pointer"
+                onClick={handleAutoUpdateToggle}
+              >
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t("settings.autoUpdate")}
+                </p>
+                <Checkbox
+                  checked={autoUpdateEnabled}
+                  onChange={handleAutoUpdateToggle}
                 />
               </div>
               <div

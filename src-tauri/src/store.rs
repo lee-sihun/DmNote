@@ -17,9 +17,8 @@ use uuid::Uuid;
 use crate::{
     defaults::{default_keys, default_positions},
     models::{
-        AppStoreData, KeyCounters, KeyMappings, KeyPositions, NoteSettings, OverlayBounds,
-        FontType, GraphPositions, LayerGroups, StatPositions,
-        SettingsState,
+        AppStoreData, FontType, GraphPositions, KeyCounters, KeyMappings, KeyPositions,
+        LayerGroups, NoteSettings, OverlayBounds, SettingsState, StatPositions,
     },
 };
 
@@ -287,7 +286,10 @@ fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> {
         Err(_) => (repair_legacy_state(&content), true),
     };
     if needs_persist {
-        log::info!("[Store] Persisting migrated store file at {}", path.display());
+        log::info!(
+            "[Store] Persisting migrated store file at {}",
+            path.display()
+        );
     }
     Ok((state, needs_persist))
 }
@@ -428,7 +430,8 @@ fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut AppStoreData) 
     for positions in data.key_positions.values_mut() {
         for position in positions.iter_mut() {
             changed |= migrate_image_reference_to_app_data(&images_dir, &mut position.active_image);
-            changed |= migrate_image_reference_to_app_data(&images_dir, &mut position.inactive_image);
+            changed |=
+                migrate_image_reference_to_app_data(&images_dir, &mut position.inactive_image);
         }
     }
 
@@ -678,7 +681,9 @@ fn normalize_local_asset_path(path: &str) -> Option<PathBuf> {
 fn path_lookup_key(path: &Path) -> String {
     #[cfg(target_os = "windows")]
     {
-        path.to_string_lossy().replace('/', "\\").to_ascii_lowercase()
+        path.to_string_lossy()
+            .replace('/', "\\")
+            .to_ascii_lowercase()
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -727,10 +732,7 @@ fn sweep_unreferenced_asset_files(
                 path.display()
             );
         } else {
-            log::info!(
-                "[{log_prefix}] Removed stale asset '{}'",
-                path.display()
-            );
+            log::info!("[{log_prefix}] Removed stale asset '{}'", path.display());
         }
     }
 
@@ -799,7 +801,9 @@ fn merge_default_modes(target: &mut KeyMappings, defaults: &KeyMappings) {
 fn merge_default_positions(target: &mut KeyPositions, defaults: &KeyPositions) {
     // Only seed missing modes; keep intentionally empty modes as-is.
     for (mode, positions) in defaults.iter() {
-        target.entry(mode.clone()).or_insert_with(|| positions.clone());
+        target
+            .entry(mode.clone())
+            .or_insert_with(|| positions.clone());
     }
 }
 
@@ -831,6 +835,7 @@ fn settings_from_store(store: &AppStoreData) -> SettingsState {
         laboratory_enabled: store.laboratory_enabled,
         developer_mode_enabled: store.developer_mode_enabled,
         tray_enabled: store.tray_enabled,
+        auto_update_enabled: store.auto_update_enabled,
         background_color: store.background_color.clone(),
         use_custom_css: store.use_custom_css,
         custom_css: store.custom_css.clone(),
@@ -889,6 +894,9 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
         }
         if let Some(v) = obj.get("trayEnabled").and_then(Value::as_bool) {
             data.tray_enabled = v;
+        }
+        if let Some(v) = obj.get("autoUpdateEnabled").and_then(Value::as_bool) {
+            data.auto_update_enabled = v;
         }
         if let Some(v) = obj.get("mainWindowHidden").and_then(Value::as_bool) {
             data.main_window_hidden = v;
@@ -998,7 +1006,7 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
             data.key_counter_enabled = v;
         }
     }
-        let _ = data.custom_js.normalize();
+    let _ = data.custom_js.normalize();
     normalize_state(data)
 }
 

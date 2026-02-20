@@ -7,6 +7,7 @@
       "commands": {
         "allow": [
           "app_bootstrap",
+          "app_auto_update",
           "app_open_external",
           "app_restart",
           "app_quit",

@@ -20,13 +20,38 @@ import Palette from "@components/main/Modal/content/Palette";
 import ColorPicker from "@components/main/Modal/content/ColorPicker";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useAppBootstrap } from "@hooks/useAppBootstrap";
-import { useUpdateCheck } from "@hooks/useUpdateCheck";
+import {
+  useUpdateCheck,
+  hasPendingPostUpdateReleaseNotice,
+  clearPendingPostUpdateReleaseNotice,
+} from "@hooks/useUpdateCheck";
 import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 
 import { useUIStore } from "@stores/useUIStore";
 
 type ToolbarAddItemType = "key" | "stat" | "graph";
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
 
 export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
@@ -44,12 +69,22 @@ export default function App() {
     dismissUpdate,
     skipVersion,
     checkForUpdates,
+    runAutoUpdate,
+    isAutoUpdating,
   } = useUpdateCheck();
 
-  // 앱 시작 시 자동 업데이트 체크
+  const [pendingPostUpdateNotice, setPendingPostUpdateNotice] = useState(() =>
+    hasPendingPostUpdateReleaseNotice()
+  );
+
+  // 앱 시작 시 업데이트 체크 (자동 업데이트 직후에는 최신 버전 모달을 1회 표시)
   useEffect(() => {
+    if (pendingPostUpdateNotice) {
+      checkForUpdates(true);
+      return;
+    }
     checkForUpdates();
-  }, []);
+  }, [checkForUpdates, pendingPostUpdateNotice]);
 
   // 윈도우 타입
   useEffect(() => {
@@ -143,6 +178,7 @@ export default function App() {
     setLanguage,
     noteSettings,
     setNoteSettings,
+    autoUpdateEnabled,
     developerModeEnabled,
     shortcuts,
   } = useSettingsStore();
@@ -311,6 +347,39 @@ export default function App() {
       type: "alert",
       confirmText: confirmText || t("common.confirm"),
     });
+  };
+
+  const handleUpdatePrimaryAction = async () => {
+    if (!updateInfo) return;
+
+    if (!autoUpdateEnabled) {
+      try {
+        await window.api.app.openExternal(updateInfo.releaseUrl);
+      } catch (error) {
+        console.error("Failed to open release URL", error);
+      }
+      return;
+    }
+
+    try {
+      await runAutoUpdate(updateInfo.latestVersion);
+    } catch (error) {
+      const detail = getErrorMessage(error);
+      console.error("Automatic update failed:", error);
+      if (detail) {
+        showAlert(`${t("update.autoUpdateFailed")}\n${detail}`);
+        return;
+      }
+      showAlert(t("update.autoUpdateFailed"));
+    }
+  };
+
+  const handleUpdateModalClose = () => {
+    if (isLatestVersion && pendingPostUpdateNotice) {
+      clearPendingPostUpdateReleaseNotice();
+      setPendingPostUpdateNotice(false);
+    }
+    dismissUpdate();
   };
 
   const showConfirm = (
@@ -680,9 +749,18 @@ export default function App() {
         <UpdateModal
           isOpen={updateAvailable || isLatestVersion}
           updateInfo={updateInfo}
-          onClose={dismissUpdate}
+          onClose={handleUpdateModalClose}
           onSkipVersion={skipVersion}
           isLatestVersion={isLatestVersion}
+          onPrimaryAction={handleUpdatePrimaryAction}
+          primaryActionLabel={
+            autoUpdateEnabled
+              ? isAutoUpdating
+                ? t("update.autoUpdating")
+                : t("update.autoUpdate")
+              : t("update.goToRelease")
+          }
+          primaryActionDisabled={isAutoUpdating}
         />
       )}
     </div>
