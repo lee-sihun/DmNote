@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::models::{
-    CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, NoteSettings, NoteSettingsPatch,
-    FontType, SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
+    CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, FontType, NoteSettings, NoteSettingsPatch,
+    SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
 };
 use crate::store::AppStore;
 
@@ -38,6 +38,7 @@ impl SettingsService {
             state.laboratory_enabled = next.laboratory_enabled;
             state.developer_mode_enabled = next.developer_mode_enabled;
             state.tray_enabled = next.tray_enabled;
+            state.auto_update_enabled = next.auto_update_enabled;
             state.background_color = next.background_color.clone();
             state.use_custom_css = next.use_custom_css;
             state.custom_css = next.custom_css.clone();
@@ -96,6 +97,9 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
     }
     if let Some(value) = patch.tray_enabled {
         normalized.tray_enabled = Some(value);
+    }
+    if let Some(value) = patch.auto_update_enabled {
+        normalized.auto_update_enabled = Some(value);
     }
     if let Some(value) = patch.background_color.as_ref() {
         normalized.background_color = Some(value.clone());
@@ -206,6 +210,9 @@ fn apply_changes(mut current: SettingsState, patch: &SettingsPatch) -> SettingsS
     }
     if let Some(value) = patch.tray_enabled {
         current.tray_enabled = value;
+    }
+    if let Some(value) = patch.auto_update_enabled {
+        current.auto_update_enabled = value;
     }
     if let Some(value) = patch.background_color.as_ref() {
         current.background_color = value.clone();

@@ -17,6 +17,9 @@ interface UpdateModalProps {
   onClose: () => void;
   onSkipVersion: () => void;
   isLatestVersion?: boolean;
+  onPrimaryAction?: () => Promise<void> | void;
+  primaryActionLabel?: string;
+  primaryActionDisabled?: boolean;
 }
 
 export default function UpdateModal({
@@ -25,6 +28,9 @@ export default function UpdateModal({
   onClose,
   onSkipVersion,
   isLatestVersion = false,
+  onPrimaryAction,
+  primaryActionLabel,
+  primaryActionDisabled = false,
 }: UpdateModalProps) {
   const { t } = useTranslation();
   const [skipChecked, setSkipChecked] = useState(false);
@@ -61,6 +67,15 @@ export default function UpdateModal({
     } catch {
       return dateString;
     }
+  };
+
+  const handlePrimaryClick = async () => {
+    if (primaryActionDisabled) return;
+    if (onPrimaryAction) {
+      await onPrimaryAction();
+      return;
+    }
+    await handleGoToRelease();
   };
 
   return (
@@ -107,14 +122,23 @@ export default function UpdateModal({
               </div>
             </div>
 
-            {/* 확인 버튼 */}
-            <button
-              onClick={onClose}
-              className="w-full h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] 
-                         rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
-            >
-              {t("common.confirm")}
-            </button>
+            {/* 버튼 */}
+            <div className="flex gap-[10px]">
+              <button
+                onClick={handleGoToRelease}
+                className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46]
+                           rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors"
+              >
+                {t("update.goToRelease")}
+              </button>
+              <button
+                onClick={onClose}
+                className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
+                           rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
+              >
+                {t("common.confirm")}
+              </button>
+            </div>
           </>
         ) : (
           // 업데이트 있을 때 UI
@@ -194,15 +218,17 @@ export default function UpdateModal({
             {/* 버튼들 */}
             <div className="flex gap-[10px]">
               <button
-                onClick={handleGoToRelease}
-                className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46] 
-                           rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors"
+                onClick={handlePrimaryClick}
+                disabled={primaryActionDisabled}
+                className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46]
+                           rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors
+                           disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {t("update.goToRelease")}
+                {primaryActionLabel || t("update.goToRelease")}
               </button>
               <button
                 onClick={handleClose}
-                className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] 
+                className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
                            rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
               >
                 {t("update.later")}

@@ -4,11 +4,11 @@ mod app_state;
 mod commands;
 mod cursor;
 mod defaults;
+mod ipc;
 mod keyboard;
 mod keyboard_daemon;
 #[cfg(target_os = "windows")]
 mod keyboard_labels;
-mod ipc;
 mod models;
 mod services;
 mod store;
@@ -24,9 +24,8 @@ use std::{path::PathBuf, process::Command};
 use std::{fs, path::PathBuf};
 
 use tauri::{
-    ipc::CapabilityBuilder,
-    webview::PageLoadEvent,
-    LogicalSize, Manager, PhysicalPosition, Position,
+    ipc::CapabilityBuilder, webview::PageLoadEvent, LogicalSize, Manager, PhysicalPosition,
+    Position,
 };
 
 use dm_note::compute_compensating_zoom;
@@ -44,9 +43,9 @@ fn main() {
 
         // GPU/하드웨어 가속 강제 활성화 및 렌더링 최적화 플래그
         let gpu_flags = [
-            "--enable-gpu-rasterization",               // GPU 래스터화 강제 활성화
-            "--enable-zero-copy",                       // 제로 카피 래스터라이저 활성화
-            "--ignore-gpu-blocklist",                   // GPU 블랙리스트 무시 (강제 GPU 사용)
+            "--enable-gpu-rasterization", // GPU 래스터화 강제 활성화
+            "--enable-zero-copy",         // 제로 카피 래스터라이저 활성화
+            "--ignore-gpu-blocklist",     // GPU 블랙리스트 무시 (강제 GPU 사용)
         ];
         for flag in gpu_flags {
             apply_webview2_additional_args(flag);
@@ -103,7 +102,7 @@ fn main() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // macOS: 편집 메뉴 추가 (Cmd+Z/X/C/V/A 등 네이티브 편집 단축키 활성화)
-            // WKWebView에서 단축키들이 동작하려면 네이티브 Edit 메뉴가 필요 
+            // WKWebView에서 단축키들이 동작하려면 네이티브 Edit 메뉴가 필요
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
@@ -149,6 +148,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::app_bootstrap,
+            commands::update::app_auto_update,
             commands::settings::settings_get,
             commands::settings::settings_update,
             commands::keys::keys_get,
@@ -251,7 +251,7 @@ fn apply_webview2_additional_args(arg: &str) {
 fn apply_renderer_settings() {
     // Tauri 초기화 전이므로 직접 경로를 찾아야 함
     let store_path = get_store_path();
-    
+
     let angle_mode = if let Some(path) = store_path {
         read_angle_mode_from_store(&path).unwrap_or_else(|| "d3d11".to_string())
     } else {
@@ -424,9 +424,7 @@ fn apply_main_window_configuration(
 
     // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
     let zoom = compute_compensating_zoom();
-    log::info!(
-        "[zoom-guard] main window initial config: compensating zoom={zoom:.6}"
-    );
+    log::info!("[zoom-guard] main window initial config: compensating zoom={zoom:.6}");
     if let Err(err) = window.set_zoom(zoom) {
         log::warn!("failed to set main window compensating zoom: {err}");
     }
@@ -648,7 +646,10 @@ fn apply_embedded_webview2_fixed_runtime_override() {
     };
 
     let expected_version_file = extract_dir.join(VERSION_FILE);
-    let needs_extract = match (read_first_line_trimmed(&expected_version_file), is_valid_webview2_fixed_runtime_dir(&extract_dir)) {
+    let needs_extract = match (
+        read_first_line_trimmed(&expected_version_file),
+        is_valid_webview2_fixed_runtime_dir(&extract_dir),
+    ) {
         (Some(v), true) if v == embedded_version => false,
         _ => true,
     };
@@ -657,7 +658,10 @@ fn apply_embedded_webview2_fixed_runtime_override() {
         // Clean up previous attempts.
         let _ = fs::remove_dir_all(&extract_dir);
         if let Err(err) = fs::create_dir_all(&extract_dir) {
-            log::warn!("failed to create embedded webview2 dir {}: {err}", extract_dir.display());
+            log::warn!(
+                "failed to create embedded webview2 dir {}: {err}",
+                extract_dir.display()
+            );
             return;
         }
 
@@ -673,7 +677,10 @@ fn apply_embedded_webview2_fixed_runtime_override() {
 
     if is_valid_webview2_fixed_runtime_dir(&extract_dir) {
         env::set_var(KEY, &extract_dir);
-        log::info!("using embedded fixed WebView2 runtime: {}", extract_dir.display());
+        log::info!(
+            "using embedded fixed WebView2 runtime: {}",
+            extract_dir.display()
+        );
     }
 }
 
@@ -743,7 +750,7 @@ fn request_accessibility_permission() {
             num_values: isize,
             key_callbacks: *const c_void,
             value_callbacks: *const c_void,
-            ) -> *const c_void;
+        ) -> *const c_void;
         fn CFRelease(cf: *const c_void);
 
         static kCFBooleanTrue: *const c_void;
@@ -781,4 +788,3 @@ fn request_accessibility_permission() {
         }
     }
 }
-

@@ -54,6 +54,7 @@ import type {
   PluginDisplayElementInternal,
   RawInputPayload,
   KeyStatsPayload,
+  AppAutoUpdateResult,
 } from "@src/types/api";
 import type { BootstrapPayload } from "@src/types/app";
 import type { CustomCss } from "@src/types/css";
@@ -126,6 +127,8 @@ function subscribe<T>(
 const api: DMNoteAPI = {
   app: {
     bootstrap: () => invoke<BootstrapPayload>("app_bootstrap"),
+    autoUpdate: (tag: string) =>
+      invoke<AppAutoUpdateResult>("app_auto_update", { tag }),
     openExternal: (url: string) => invoke("app_open_external", { url }),
     restart: () => invoke("app_restart"),
     quit: () => invoke("app_quit"),

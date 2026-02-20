@@ -48,6 +48,7 @@ export interface SettingsState {
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
   trayEnabled: boolean;
+  autoUpdateEnabled: boolean;
   backgroundColor: string;
   useCustomCSS: boolean;
   customCSS: CustomCss;
@@ -71,6 +72,7 @@ export const DEFAULT_SETTINGS_STATE: SettingsState = {
   laboratoryEnabled: false,
   developerModeEnabled: false,
   trayEnabled: false,
+  autoUpdateEnabled: true,
   backgroundColor: "transparent",
   useCustomCSS: false,
   customCSS: { path: null, content: "" },

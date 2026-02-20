@@ -43,6 +43,7 @@ interface SettingsState {
   laboratoryEnabled: boolean;
   developerModeEnabled: boolean;
   trayEnabled: boolean;
+  autoUpdateEnabled: boolean;
   overlayResizeAnchor: OverlayResizeAnchor;
   keyCounterEnabled: boolean;
   gridSettings: GridSettings;
@@ -51,6 +52,7 @@ interface SettingsState {
   merge: (payload: Partial<SettingsStateSnapshot>) => void;
   setLaboratoryEnabled: (value: boolean) => void;
   setTrayEnabled: (value: boolean) => void;
+  setAutoUpdateEnabled: (value: boolean) => void;
   setDeveloperModeEnabled: (value: boolean) => void;
   setHardwareAcceleration: (value: boolean) => void;
   setAlwaysOnTop: (value: boolean) => void;
@@ -78,6 +80,7 @@ export type SettingsStateSnapshot = Omit<
   | "merge"
   | "setLaboratoryEnabled"
   | "setTrayEnabled"
+  | "setAutoUpdateEnabled"
   | "setHardwareAcceleration"
   | "setAlwaysOnTop"
   | "setUseCustomCSS"
@@ -117,6 +120,7 @@ const initialState: SettingsStateSnapshot = {
   laboratoryEnabled: false,
   developerModeEnabled: false,
   trayEnabled: false,
+  autoUpdateEnabled: true,
   overlayResizeAnchor: "top-left",
   keyCounterEnabled: false,
   gridSettings: DEFAULT_GRID_SETTINGS,
@@ -177,6 +181,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setAll: (payload) => set(() => mergeSnapshot(initialState, payload)),
   merge: (payload) => set((state) => mergeSnapshot(state, payload)),
   setDeveloperModeEnabled: (value) => set({ developerModeEnabled: value }),
+  setAutoUpdateEnabled: (value) => set({ autoUpdateEnabled: value }),
   setHardwareAcceleration: (value) => set({ hardwareAcceleration: value }),
   setAlwaysOnTop: (value) => set({ alwaysOnTop: value }),
   setUseCustomCSS: (value) => set({ useCustomCSS: value }),

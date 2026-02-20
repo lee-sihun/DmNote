@@ -48,6 +48,10 @@ windows = { version = "0.61.3", features = [
 	"Win32_Security",
 	"Win32_UI_Shell"
 ] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+semver = "1"
+self-replace = "1.5"
+tempfile = "3"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 rdev = "0.5.3"

@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
-use serde::ser::SerializeMap;
 use serde::de::Error as DeError;
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::path::Path;
 use uuid::Uuid;
@@ -377,18 +377,17 @@ impl KeyCounterSettings {
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
     pub fn migrate_legacy_defaults(&mut self) -> bool {
-        let looks_like_legacy_default =
-            self.fill.idle == "#FFFFFF"
-                && self.fill.active == "#000000"
-                && self.stroke.idle == "#000000"
-                && self.stroke.active == "#FFFFFF"
-                && self.gap == default_gap()
-                && self.font_size == default_counter_font_size()
-                && self.font_weight == 400
-                && self.font_family.is_none()
-                && !self.font_italic
-                && !self.font_underline
-                && !self.font_strikethrough;
+        let looks_like_legacy_default = self.fill.idle == "#FFFFFF"
+            && self.fill.active == "#000000"
+            && self.stroke.idle == "#000000"
+            && self.stroke.active == "#FFFFFF"
+            && self.gap == default_gap()
+            && self.font_size == default_counter_font_size()
+            && self.font_weight == 400
+            && self.font_family.is_none()
+            && !self.font_italic
+            && !self.font_underline
+            && !self.font_strikethrough;
 
         if !looks_like_legacy_default {
             return false;
@@ -401,17 +400,37 @@ impl KeyCounterSettings {
     }
 }
 
-fn default_gap() -> u32 { 6 }
-fn default_counter_font_size() -> u32 { 16 }
-fn default_counter_font_weight() -> u32 { 700 }
+fn default_gap() -> u32 {
+    6
+}
+fn default_counter_font_size() -> u32 {
+    16
+}
+fn default_counter_font_weight() -> u32 {
+    700
+}
 
-fn default_counter_enabled() -> bool { true }
-fn default_note_effect_enabled() -> bool { true }
-fn default_note_glow_enabled() -> bool { false }
-fn default_note_glow_size() -> u32 { 20 }
-fn default_note_glow_opacity() -> u32 { 70 }
-fn default_note_auto_y_correction() -> bool { true }
-fn default_note_frame_limit() -> u32 { 0 }
+fn default_counter_enabled() -> bool {
+    true
+}
+fn default_note_effect_enabled() -> bool {
+    true
+}
+fn default_note_glow_enabled() -> bool {
+    false
+}
+fn default_note_glow_size() -> u32 {
+    20
+}
+fn default_note_glow_opacity() -> u32 {
+    70
+}
+fn default_note_auto_y_correction() -> bool {
+    true
+}
+fn default_note_frame_limit() -> u32 {
+    0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -637,6 +656,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_auto_update_enabled() -> bool {
+    true
+}
+
 fn default_grid_snap_size() -> u32 {
     5
 }
@@ -720,6 +743,8 @@ pub struct AppStoreData {
     pub developer_mode_enabled: bool,
     #[serde(default)]
     pub tray_enabled: bool,
+    #[serde(default = "default_auto_update_enabled")]
+    pub auto_update_enabled: bool,
     #[serde(default)]
     pub main_window_hidden: bool,
     #[serde(default)]
@@ -784,6 +809,7 @@ impl Default for AppStoreData {
             laboratory_enabled: false,
             developer_mode_enabled: false,
             tray_enabled: false,
+            auto_update_enabled: default_auto_update_enabled(),
             main_window_hidden: false,
             keys: KeyMappings::new(),
             key_positions: KeyPositions::new(),
@@ -1042,6 +1068,8 @@ pub struct SettingsState {
     pub developer_mode_enabled: bool,
     #[serde(default)]
     pub tray_enabled: bool,
+    #[serde(default = "default_auto_update_enabled")]
+    pub auto_update_enabled: bool,
     pub background_color: String,
     #[serde(rename = "useCustomCSS")]
     pub use_custom_css: bool,
@@ -1081,6 +1109,7 @@ impl Default for SettingsState {
             laboratory_enabled: false,
             developer_mode_enabled: false,
             tray_enabled: false,
+            auto_update_enabled: default_auto_update_enabled(),
             background_color: "transparent".to_string(),
             use_custom_css: false,
             custom_css: CustomCss::default(),
@@ -1138,6 +1167,7 @@ pub struct SettingsPatchInput {
     pub laboratory_enabled: Option<bool>,
     pub developer_mode_enabled: Option<bool>,
     pub tray_enabled: Option<bool>,
+    pub auto_update_enabled: Option<bool>,
     pub background_color: Option<String>,
     #[serde(rename = "useCustomCSS")]
     pub use_custom_css: Option<bool>,
@@ -1197,6 +1227,7 @@ impl SettingsDiff {
             p.laboratory_enabled.is_some(),
             p.developer_mode_enabled.is_some(),
             p.tray_enabled.is_some(),
+            p.auto_update_enabled.is_some(),
             p.background_color.is_some(),
             p.use_custom_css.is_some(),
             p.custom_css.is_some(),
@@ -1237,6 +1268,8 @@ pub struct SettingsPatch {
     pub developer_mode_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tray_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update_enabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background_color: Option<String>,
     #[serde(rename = "useCustomCSS")]
