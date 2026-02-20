@@ -222,7 +222,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 드래그 상태
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dragOverItemDisplayIndex, setDragOverItemDisplayIndex] = useState<
+    number | null
+  >(null);
+  const [dragOverHeaderBottomGroupId, setDragOverHeaderBottomGroupId] =
+    useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<number | null>(
@@ -261,7 +265,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const dragStateRef = useRef<{
     startIndex: number;
     itemHeight: number;
-    currentOverIndex: number | null;
+    currentDropTarget: { toIndex: number; targetGroupId: string | undefined } | null;
   } | null>(null);
 
   // 그룹 드래그 상태 ref
@@ -301,7 +305,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     thumbRef.current.style.display = thumb.visible ? "block" : "none";
   }, [calculateThumb]);
 
-  const { scrollContainerRef: lenisRef } = useLenis({
+  const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
     onScroll: updateThumbDOM,
   });
 
@@ -490,6 +494,204 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   const displayItemsRef = useRef(displayItems);
   displayItemsRef.current = displayItems;
+
+  // 접기/펼치기 등으로 콘텐츠 높이가 바뀔 때 Lenis limit 갱신
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => {
+      lenisInstance.current?.resize();
+      updateThumbDOM();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [displayItems.length, collapsedGroups, lenisInstance, updateThumbDOM]);
+
+  // 아이템 드롭 타깃 계산 (display 슬롯 경계 기준)
+  const resolveItemDropTarget = useCallback(
+    (displaySlotIndex: number, draggingItemId: string) => {
+      const items = layerItemsRef.current;
+      const currentDisplay = displayItemsRef.current;
+      const safeSlotIndex = Math.max(
+        0,
+        Math.min(currentDisplay.length, displaySlotIndex),
+      );
+
+      // display 삽입 인덱스를 실제 layerItems 삽입 인덱스로 변환
+      let toIndex = items.length;
+      if (safeSlotIndex < currentDisplay.length) {
+        const targetDisplayItem = currentDisplay[safeSlotIndex];
+        if (targetDisplayItem.displayType === "layer") {
+          toIndex = targetDisplayItem.flatIndex;
+        } else {
+          const firstChildIndex = items.findIndex(
+            (item) => item.groupId === targetDisplayItem.groupId,
+          );
+          toIndex = firstChildIndex === -1 ? items.length : firstChildIndex;
+        }
+      }
+
+      // 그룹 판정도 보이는 이웃 기준으로 계산 (숨겨진 자식 배제)
+      const getDisplayItem = (index: number): DisplayItem | undefined =>
+        index >= 0 && index < currentDisplay.length
+          ? currentDisplay[index]
+          : undefined;
+
+      let prevDisplayItem = getDisplayItem(safeSlotIndex - 1);
+      let nextDisplayItem = getDisplayItem(safeSlotIndex);
+
+      if (
+        prevDisplayItem?.displayType === "layer" &&
+        prevDisplayItem.item.id === draggingItemId
+      ) {
+        prevDisplayItem = getDisplayItem(safeSlotIndex - 2);
+      }
+      if (
+        nextDisplayItem?.displayType === "layer" &&
+        nextDisplayItem.item.id === draggingItemId
+      ) {
+        nextDisplayItem = getDisplayItem(safeSlotIndex + 1);
+      }
+
+      let targetGroupId: string | undefined;
+      if (prevDisplayItem?.displayType === "group-header") {
+        const prevHeaderGroupId = prevDisplayItem.groupId;
+        // 헤더 바로 아래(= 같은 그룹 첫 자식 앞)에서만 해당 그룹으로 편입
+        if (
+          nextDisplayItem?.displayType === "layer" &&
+          nextDisplayItem.item.groupId === prevHeaderGroupId
+        ) {
+          targetGroupId = prevHeaderGroupId;
+        } else if (!nextDisplayItem) {
+          // 마지막 행이 그룹 헤더인 경우엔 하단 드롭 시 해당 그룹으로 편입
+          targetGroupId = prevHeaderGroupId;
+        } else {
+          // 헤더-헤더/헤더-비그룹레이어 경계는 그룹 자동 편입하지 않음
+          targetGroupId = undefined;
+        }
+      } else {
+        const prevGroupId =
+          prevDisplayItem?.displayType === "layer"
+            ? prevDisplayItem.item.groupId
+            : undefined;
+        // 다음 아이템은 "레이어 행"인 경우만 그룹 판정에 반영
+        // (그룹 헤더 바로 위는 해당 그룹으로 자동 편입되지 않도록 처리)
+        const nextGroupId =
+          nextDisplayItem?.displayType === "layer"
+            ? nextDisplayItem.item.groupId
+            : undefined;
+
+        if (prevGroupId && nextGroupId) {
+          targetGroupId = prevGroupId === nextGroupId ? prevGroupId : undefined;
+        } else if (prevGroupId) {
+          if (!nextDisplayItem) {
+            targetGroupId = prevGroupId;
+          } else if (
+            nextDisplayItem.displayType === "layer" &&
+            nextDisplayItem.item.groupId === prevGroupId
+          ) {
+            targetGroupId = prevGroupId;
+          } else {
+            targetGroupId = undefined;
+          }
+        } else if (nextGroupId) {
+          targetGroupId = undefined;
+        } else {
+          targetGroupId = undefined;
+        }
+      }
+
+      return { toIndex, targetGroupId };
+    },
+    [],
+  );
+
+  // 포인터 위치 기반 아이템 드롭 타깃 계산
+  const resolveItemDropTargetFromPointer = useCallback(
+    (relativeY: number, itemHeight: number, draggingItemId: string) => {
+      const currentDisplay = displayItemsRef.current;
+      const displayCount = currentDisplay.length;
+
+      if (displayCount === 0) {
+        const target = resolveItemDropTarget(0, draggingItemId);
+        return {
+          ...target,
+          indicatorDisplayIndex: 0,
+          indicatorHeaderBottomGroupId: null,
+        };
+      }
+
+      if (relativeY <= 0) {
+        const target = resolveItemDropTarget(0, draggingItemId);
+        return {
+          ...target,
+          indicatorDisplayIndex: 0,
+          indicatorHeaderBottomGroupId: null,
+        };
+      }
+
+      const totalHeight = displayCount * itemHeight;
+      if (relativeY >= totalHeight) {
+        const target = resolveItemDropTarget(displayCount, draggingItemId);
+        return {
+          ...target,
+          indicatorDisplayIndex: displayCount,
+          indicatorHeaderBottomGroupId: null,
+        };
+      }
+
+      const clampedY = relativeY;
+      const rowIndex = Math.min(
+        displayCount - 1,
+        Math.floor(clampedY / itemHeight),
+      );
+      const rowTop = rowIndex * itemHeight;
+      const offsetInRow = clampedY - rowTop;
+      const isBottomHalf = offsetInRow >= itemHeight / 2;
+      const row = currentDisplay[rowIndex];
+
+      // 그룹 헤더 하단 드롭:
+      // - 접힌 그룹: 헤더 하단 인디케이터 사용
+      // - 펼친 그룹: 첫 자식 위 슬롯 인디케이터로 통일
+      if (row.displayType === "group-header" && isBottomHalf) {
+        if (row.isCollapsed) {
+          const firstChildIndex = layerItemsRef.current.findIndex(
+            (item) => item.groupId === row.groupId,
+          );
+          const toIndex =
+            firstChildIndex === -1 ? layerItemsRef.current.length : firstChildIndex;
+
+          return {
+            toIndex,
+            targetGroupId: row.groupId,
+            indicatorDisplayIndex: null,
+            indicatorHeaderBottomGroupId: row.groupId,
+          };
+        }
+
+        const expandedGroupSlotIndex = rowIndex + 1;
+        const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingItemId);
+        return {
+          ...target,
+          indicatorDisplayIndex: expandedGroupSlotIndex,
+          indicatorHeaderBottomGroupId: null,
+        };
+      }
+
+      // 일반 슬롯 드롭: 행 상/하단 기준으로 슬롯 계산
+      const displaySlotIndex =
+        row.displayType === "group-header"
+          ? rowIndex
+          : isBottomHalf
+            ? rowIndex + 1
+            : rowIndex;
+      const target = resolveItemDropTarget(displaySlotIndex, draggingItemId);
+
+      return {
+        ...target,
+        indicatorDisplayIndex: displaySlotIndex,
+        indicatorHeaderBottomGroupId: null,
+      };
+    },
+    [resolveItemDropTarget],
+  );
 
   // 선택된 요소들 설정
   const setSelectedElements = useGridSelectionStore(
@@ -1560,7 +1762,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 드롭 처리
   const performDrop = useCallback(
-    async (fromIndex: number, toIndex: number) => {
+    async (
+      fromIndex: number,
+      toIndex: number,
+      dropContext?: { targetGroupId: string | undefined },
+    ) => {
       if (fromIndex === toIndex) return;
 
       const items = [...layerItemsRef.current];
@@ -1571,21 +1777,25 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const [removed] = items.splice(fromIndex, 1);
       items.splice(toIndex, 0, removed);
 
-      const previousItem = items[toIndex - 1];
-      const nextItem = items[toIndex + 1];
       let droppedGroupId: string | undefined = removed.groupId;
       if (removed.type !== "plugin") {
-        const prevGroupId = previousItem?.groupId;
-        const nextGroupId = nextItem?.groupId;
-        if (prevGroupId && nextGroupId) {
-          droppedGroupId =
-            prevGroupId === nextGroupId ? prevGroupId : undefined;
-        } else if (prevGroupId) {
-          droppedGroupId = prevGroupId;
-        } else if (nextGroupId) {
-          droppedGroupId = nextGroupId;
+        if (dropContext) {
+          droppedGroupId = dropContext.targetGroupId;
         } else {
-          droppedGroupId = undefined;
+          const previousItem = items[toIndex - 1];
+          const nextItem = items[toIndex + 1];
+          const prevGroupId = previousItem?.groupId;
+          const nextGroupId = nextItem?.groupId;
+          if (prevGroupId && nextGroupId) {
+            droppedGroupId =
+              prevGroupId === nextGroupId ? prevGroupId : undefined;
+          } else if (prevGroupId) {
+            droppedGroupId = prevGroupId;
+          } else if (nextGroupId) {
+            droppedGroupId = nextGroupId;
+          } else {
+            droppedGroupId = undefined;
+          }
         }
       }
 
@@ -1951,7 +2161,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       dragStateRef.current = {
         startIndex: index,
         itemHeight: rect.height,
-        currentOverIndex: null,
+        currentDropTarget: null,
       };
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
@@ -1983,29 +2193,34 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           moveEvent.clientY -
           scrollRect.top +
           scrollElementRef.current.scrollTop;
-        const newIndex = Math.max(
-          0,
-          Math.min(
-            layerItemsRef.current.length,
-            Math.floor(relativeY / dragStateRef.current.itemHeight),
-          ),
+        const target = resolveItemDropTargetFromPointer(
+          relativeY,
+          dragStateRef.current.itemHeight,
+          item.id,
         );
 
-        dragStateRef.current.currentOverIndex = newIndex;
-        setDragOverIndex(newIndex);
+        dragStateRef.current.currentDropTarget = {
+          toIndex: target.toIndex,
+          targetGroupId: target.targetGroupId,
+        };
+        setDragOverItemDisplayIndex(target.indicatorDisplayIndex);
+        setDragOverHeaderBottomGroupId(target.indicatorHeaderBottomGroupId);
       };
 
       // 마우스 업 이벤트 핸들러
       const handleMouseUp = () => {
         if (dragStateRef.current && isDraggingRef.current) {
           const fromIndex = dragStateRef.current.startIndex;
-          const toIndex = dragStateRef.current.currentOverIndex;
+          const target = dragStateRef.current.currentDropTarget;
 
-          if (toIndex !== null && fromIndex !== toIndex) {
+          if (target) {
             // 드롭 위치 계산: toIndex가 fromIndex보다 크면 -1
-            const actualToIndex = toIndex > fromIndex ? toIndex - 1 : toIndex;
+            const actualToIndex =
+              target.toIndex > fromIndex ? target.toIndex - 1 : target.toIndex;
             if (fromIndex !== actualToIndex) {
-              performDrop(fromIndex, actualToIndex);
+              performDrop(fromIndex, actualToIndex, {
+                targetGroupId: target.targetGroupId,
+              });
             }
           }
         }
@@ -2014,7 +2229,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         dragStartRef.current = null;
         isDraggingRef.current = false;
         setDraggedItemId(null);
-        setDragOverIndex(null);
+        setDragOverItemDisplayIndex(null);
+        setDragOverHeaderBottomGroupId(null);
         setIsDragging(false);
 
         document.removeEventListener("mousemove", handleMouseMove);
@@ -2024,7 +2240,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clearPendingDeselect, performDrop],
+    [clearPendingDeselect, performDrop, resolveItemDropTargetFromPointer],
   );
 
   // 그룹 헤더 드래그 시작 (그룹 단위 이동)
@@ -2189,6 +2405,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     `}
                   >
                     {/* 그룹 드래그 드롭 인디케이터 */}
+                    {draggedItemId &&
+                      dragOverItemDisplayIndex === displayIndex && (
+                        <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
+                      )}
+                    {draggedItemId &&
+                      dragOverHeaderBottomGroupId === gh.groupId && (
+                        <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+                      )}
+                    {/* 그룹 드래그 드롭 인디케이터 */}
                     {draggedGroupId &&
                       dragOverDisplayIndex === displayIndex &&
                       draggedGroupId !== gh.groupId && (
@@ -2312,7 +2537,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   `}
                 >
                   {/* 드롭 인디케이터 (피그마 스타일 선) - 위쪽 */}
-                  {dragOverIndex === flatIndex &&
+                  {draggedItemId &&
+                    dragOverItemDisplayIndex === displayIndex &&
                     draggedItemId !== item.id && (
                       <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
                     )}
@@ -2408,7 +2634,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             })}
 
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
-            {dragOverIndex === layerItems.length && (
+            {draggedItemId &&
+              dragOverItemDisplayIndex === displayItems.length && (
               <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
             )}
             {/* 그룹 드래그: 마지막 아이템 뒤 드롭 인디케이터 */}
