@@ -459,7 +459,12 @@
     "delete": "删除",
     "hideLayer": "隐藏",
     "showLayer": "显示",
-    "font": "字体"
+    "font": "字体",
+    "keySound": "按键声音",
+    "selectedSound": "已选音频",
+    "soundVolume": "音量",
+    "import": "导入",
+    "loading": "加载中..."
   },
   "fontPicker": {
     "searchPlaceholder": "搜索",

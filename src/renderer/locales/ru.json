@@ -444,7 +444,12 @@
     "delete": "Удалить",
     "hideLayer": "Скрыть",
     "showLayer": "Показать",
-    "font": "Шрифт"
+    "font": "Шрифт",
+    "keySound": "Звук клавиши",
+    "selectedSound": "Выбранный звук",
+    "soundVolume": "Громкость",
+    "import": "Импорт",
+    "loading": "Загрузка..."
   },
   "fontPicker": {
     "searchPlaceholder": "Поиск...",

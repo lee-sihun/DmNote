@@ -456,7 +456,12 @@
     "delete": "Delete",
     "hideLayer": "Hide",
     "showLayer": "Show",
-    "font": "Font"
+    "font": "Font",
+    "keySound": "Key Sound",
+    "selectedSound": "Selected Sound",
+    "soundVolume": "Sound Volume",
+    "import": "Import",
+    "loading": "Loading..."
   },
   "fontPicker": {
     "searchPlaceholder": "Search...",

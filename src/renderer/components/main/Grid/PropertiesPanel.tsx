@@ -2796,6 +2796,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div className="p-[12px] flex flex-col gap-[12px]">
                 <BatchStyleTabContent
                   selectedCount={selectedBatchStyleElements.length}
+                  showSoundControls={
+                    selectedKeyElements.length > 0 &&
+                    selectedKeyElements.length === selectedBatchStyleElements.length
+                  }
                   getMixedValue={styleMixedValueGetter}
                   getSelectedKeysData={styleSelectedDataGetter}
                   afterSizeContent={
@@ -3264,6 +3268,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 selectedCount={selectedGraphElements.length}
                 hideDisplayText
                 hideFontControls
+                showSoundControls={false}
                 afterSizeContent={
                   <>
                     <PropertyRow
@@ -4227,6 +4232,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   ? t("propertiesPanel.statType") || "Stat Type"
                   : undefined
               }
+              showSoundControls={!isSingleStat}
               showImagePicker={showImagePicker}
               onToggleImagePicker={() => setShowImagePicker(!showImagePicker)}
               imageButtonRef={imageButtonRef}

@@ -27,6 +27,7 @@ interface BatchStyleTabContentProps {
   selectedCount: number;
   hideDisplayText?: boolean;
   hideFontControls?: boolean;
+  showSoundControls?: boolean;
   afterSizeContent?: React.ReactNode;
   // getMixedValue 함수
   getMixedValue: <T>(
@@ -70,6 +71,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   selectedCount,
   hideDisplayText = false,
   hideFontControls = false,
+  showSoundControls = false,
   afterSizeContent,
   getMixedValue,
   getSelectedKeysData,
@@ -90,6 +92,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 }) => {
   const [colorState, setColorState] = useState<"idle" | "active">("idle");
   const [showFontPicker, setShowFontPicker] = useState(false);
+  const [isLoadingSound, setIsLoadingSound] = useState(false);
 
   // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
   const lastSpacingRef = useRef<number | null>(null);
@@ -187,6 +190,27 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
     return { isMixed, value: firstValue };
   };
+
+  const handleBatchSoundLoad = useCallback(async () => {
+    if (isLoadingSound) return;
+    setIsLoadingSound(true);
+    try {
+      const result = await window.api.sound.load();
+      if (!result.success || !result.soundPath) return;
+      handleBatchStyleChangeComplete("soundPath", result.soundPath);
+    } catch (error) {
+      console.error("Failed to load key sound", error);
+    } finally {
+      setIsLoadingSound(false);
+    }
+  }, [handleBatchStyleChangeComplete, isLoadingSound]);
+
+  const getSoundDisplayName = useCallback((soundPath?: string): string => {
+    if (!soundPath || !soundPath.trim()) return "";
+    const separators = /[\\/]/g;
+    const segments = soundPath.split(separators);
+    return segments[segments.length - 1] || soundPath;
+  }, []);
 
   return (
     <>
@@ -828,6 +852,70 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               }
               width="90px"
               isMixed={getMixedValue((pos) => pos.className, "").isMixed}
+            />
+          </PropertyRow>
+        </>
+      )}
+
+      {showSoundControls && (
+        <>
+          <SectionDivider />
+
+          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
+            {getMixedValue((pos) => pos.soundPath, "").isMixed ? (
+              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+            ) : null}
+            <div className="flex items-center gap-[4px]">
+              <button
+                type="button"
+                className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 disabled:opacity-60"
+                onClick={handleBatchSoundLoad}
+                disabled={isLoadingSound}
+              >
+                {isLoadingSound
+                  ? t("propertiesPanel.loading") || "로딩..."
+                  : t("propertiesPanel.import") || "가져오기"}
+              </button>
+              {getMixedValue((pos) => pos.soundPath, "").value ? (
+                <button
+                  type="button"
+                  className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4"
+                  onClick={() => handleBatchStyleChangeComplete("soundPath", "")}
+                >
+                  {t("tabCss.remove") || "삭제"}
+                </button>
+              ) : null}
+            </div>
+          </PropertyRow>
+
+          {(() => {
+            const soundPathState = getMixedValue((pos) => pos.soundPath, "");
+            if (soundPathState.isMixed || !soundPathState.value) return null;
+            return (
+              <PropertyRow label={t("propertiesPanel.selectedSound") || "선택 파일"}>
+                <span className="text-[#9FA3B2] text-style-4 max-w-[110px] truncate">
+                  {getSoundDisplayName(soundPathState.value)}
+                </span>
+              </PropertyRow>
+            );
+          })()}
+
+          <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
+            {getMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
+              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+            ) : null}
+            <NumberInput
+              value={getMixedValue((pos) => pos.soundVolume, 100).value}
+              onChange={(value) =>
+                handleBatchStyleChangeComplete(
+                  "soundVolume",
+                  Math.max(0, Math.min(100, value)),
+                )
+              }
+              suffix="%"
+              min={0}
+              max={100}
+              isMixed={getMixedValue((pos) => pos.soundVolume, 100).isMixed}
             />
           </PropertyRow>
         </>

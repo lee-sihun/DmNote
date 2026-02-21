@@ -472,7 +472,12 @@
     "delete": "刪除",
     "hideLayer": "隱藏",
     "showLayer": "顯示",
-    "font": "字體"
+    "font": "字體",
+    "keySound": "按鍵音效",
+    "selectedSound": "已選音檔",
+    "soundVolume": "音量",
+    "import": "匯入",
+    "loading": "載入中..."
   },
   "fontPicker": {
     "searchPlaceholder": "搜尋",

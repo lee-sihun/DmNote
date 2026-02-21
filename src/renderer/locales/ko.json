@@ -457,7 +457,12 @@
     "delete": "삭제",
     "hideLayer": "숨기기",
     "showLayer": "표시하기",
-    "font": "폰트"
+    "font": "폰트",
+    "keySound": "키 사운드",
+    "selectedSound": "선택 파일",
+    "soundVolume": "사운드 볼륨",
+    "import": "가져오기",
+    "loading": "로딩..."
   },
   "fontPicker": {
     "searchPlaceholder": "검색",

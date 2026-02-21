@@ -70,6 +70,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   mappingControlLayout,
   mappingLabel,
   hideDisplayText = false,
+  showSoundControls = true,
   showImagePicker = false,
   onToggleImagePicker,
   imageButtonRef,
@@ -107,6 +108,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   // 폰트 관리 모달 상태
   const [showFontManager, setShowFontManager] = useState(false);
+  const [isLoadingSound, setIsLoadingSound] = useState(false);
   // 폰트 스토어
   const { getAllFonts } = useFontStore();
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
@@ -405,6 +407,33 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     },
     [keyIndex, onKeyPreview, onKeyUpdate],
   );
+
+  const handleSoundLoad = useCallback(async () => {
+    if (isLoadingSound) return;
+    setIsLoadingSound(true);
+    try {
+      const result = await window.api.sound.load();
+      if (!result.success || !result.soundPath) return;
+      onKeyPreview?.(keyIndex, { soundPath: result.soundPath });
+      onKeyUpdate({ index: keyIndex, soundPath: result.soundPath });
+    } catch (error) {
+      console.error("Failed to load key sound", error);
+    } finally {
+      setIsLoadingSound(false);
+    }
+  }, [isLoadingSound, keyIndex, onKeyPreview, onKeyUpdate]);
+
+  const handleSoundReset = useCallback(() => {
+    onKeyPreview?.(keyIndex, { soundPath: "" });
+    onKeyUpdate({ index: keyIndex, soundPath: "" });
+  }, [keyIndex, onKeyPreview, onKeyUpdate]);
+
+  const getSoundDisplayName = useCallback((soundPath?: string): string => {
+    if (!soundPath || !soundPath.trim()) return "";
+    const separators = /[\\/]/g;
+    const segments = soundPath.split(separators);
+    return segments[segments.length - 1] || soundPath;
+  }, []);
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = useCallback(
@@ -721,6 +750,59 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               onBlur={handleClassNameBlur}
               placeholder="className"
               width="90px"
+            />
+          </PropertyRow>
+        </>
+      )}
+
+      {showSoundControls && (
+        <>
+          <SectionDivider />
+
+          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
+            <div className="flex items-center gap-[4px]">
+              <button
+                type="button"
+                className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 disabled:opacity-60"
+                onClick={handleSoundLoad}
+                disabled={isLoadingSound}
+              >
+                {isLoadingSound
+                  ? t("propertiesPanel.loading") || "로딩..."
+                  : t("propertiesPanel.import") || "가져오기"}
+              </button>
+              {keyPosition.soundPath ? (
+                <button
+                  type="button"
+                  className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4"
+                  onClick={handleSoundReset}
+                >
+                  {t("tabCss.remove") || "삭제"}
+                </button>
+              ) : null}
+            </div>
+          </PropertyRow>
+
+          {keyPosition.soundPath ? (
+            <PropertyRow label={t("propertiesPanel.selectedSound") || "선택 파일"}>
+              <span className="text-[#9FA3B2] text-style-4 max-w-[110px] truncate">
+                {getSoundDisplayName(keyPosition.soundPath)}
+              </span>
+            </PropertyRow>
+          ) : null}
+
+          <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
+            <NumberInput
+              value={keyPosition.soundVolume ?? 100}
+              onChange={(value) =>
+                handleStyleChangeComplete(
+                  "soundVolume",
+                  Math.max(0, Math.min(100, value)),
+                )
+              }
+              suffix="%"
+              min={0}
+              max={100}
             />
           </PropertyRow>
         </>
