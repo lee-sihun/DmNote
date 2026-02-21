@@ -1,16 +1,20 @@
 use std::{
     collections::HashMap,
     fs::File,
+    io::ErrorKind,
     path::Path,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result};
+#[cfg(debug_assertions)]
+use log::debug;
+use log::warn;
 use parking_lot::RwLock;
 use rodio::{OutputStream, PlayError, Sink, Source};
 use serde::{Deserialize, Serialize};
@@ -18,6 +22,7 @@ use symphonia::{
     core::{
         audio::SampleBuffer,
         codecs::Decoder,
+        errors::Error as SymphoniaError,
         formats::{FormatOptions, FormatReader, SeekMode, SeekTo},
         io::MediaSourceStream,
         probe::Hint,
@@ -25,6 +30,128 @@ use symphonia::{
     },
     default::{get_codecs, get_probe},
 };
+
+#[cfg(debug_assertions)]
+const LATENCY_SUMMARY_INTERVAL: u64 = 50;
+
+#[cfg(debug_assertions)]
+fn latency_measurement_available() -> bool {
+    true
+}
+
+#[cfg(not(debug_assertions))]
+fn latency_measurement_available() -> bool {
+    false
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy)]
+pub struct KeySoundDispatchTrace {
+    input_started_at: Instant,
+    dispatch_ms: f64,
+}
+
+#[cfg(not(debug_assertions))]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KeySoundDispatchTrace;
+
+#[cfg(debug_assertions)]
+impl KeySoundDispatchTrace {
+    pub fn new(input_started_at: Instant, dispatch_ms: f64) -> Self {
+        Self {
+            input_started_at,
+            dispatch_ms,
+        }
+    }
+
+    fn total_elapsed_ms(self) -> f64 {
+        self.input_started_at.elapsed().as_secs_f64() * 1000.0
+    }
+
+    fn dispatch_ms(self) -> f64 {
+        self.dispatch_ms
+    }
+}
+
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+#[derive(Debug, Clone, Copy, Default)]
+struct ClipLoadTrace {
+    cache_hit: bool,
+    decode_ms: f64,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, Default)]
+struct LatencySample {
+    dispatch_ms: f64,
+    queue_ms: f64,
+    cache_lookup_ms: f64,
+    decode_ms: f64,
+    sink_ms: f64,
+    append_ms: f64,
+    thread_ms: f64,
+    total_ms: f64,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, Default)]
+struct LatencySummary {
+    samples: u64,
+    cache_miss_samples: u64,
+    dispatch_sum: f64,
+    queue_sum: f64,
+    cache_lookup_sum: f64,
+    decode_sum: f64,
+    sink_sum: f64,
+    append_sum: f64,
+    thread_sum: f64,
+    total_sum: f64,
+    total_max: f64,
+}
+
+#[cfg(debug_assertions)]
+impl LatencySummary {
+    fn push(&mut self, sample: LatencySample, cache_miss: bool) {
+        self.samples += 1;
+        if cache_miss {
+            self.cache_miss_samples += 1;
+        }
+        self.dispatch_sum += sample.dispatch_ms;
+        self.queue_sum += sample.queue_ms;
+        self.cache_lookup_sum += sample.cache_lookup_ms;
+        self.decode_sum += sample.decode_ms;
+        self.sink_sum += sample.sink_ms;
+        self.append_sum += sample.append_ms;
+        self.thread_sum += sample.thread_ms;
+        self.total_sum += sample.total_ms;
+        self.total_max = self.total_max.max(sample.total_ms);
+    }
+
+    fn should_emit_summary(&self) -> bool {
+        self.samples > 0 && self.samples % LATENCY_SUMMARY_INTERVAL == 0
+    }
+
+    fn emit_summary(&self) {
+        let count = self.samples as f64;
+        if count <= 0.0 {
+            return;
+        }
+        debug!(
+            "[KeySound][Latency][Summary] samples={} cacheMisses={} avgDispatchMs={:.3} avgQueueMs={:.3} avgCacheLookupMs={:.3} avgDecodeMs={:.3} avgSinkMs={:.3} avgAppendMs={:.3} avgThreadMs={:.3} avgTotalMs={:.3} maxTotalMs={:.3}",
+            self.samples,
+            self.cache_miss_samples,
+            self.dispatch_sum / count,
+            self.queue_sum / count,
+            self.cache_lookup_sum / count,
+            self.decode_sum / count,
+            self.sink_sum / count,
+            self.append_sum / count,
+            self.thread_sum / count,
+            self.total_sum / count,
+            self.total_max
+        );
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,16 +161,18 @@ pub struct KeySoundStatus {
     pub loaded: bool,
     pub soundpack_dir: Option<String>,
     pub mapped_labels: usize,
+    pub latency_logging: bool,
 }
 
 impl Default for KeySoundStatus {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             volume: 1.0,
             loaded: false,
             soundpack_dir: None,
             mapped_labels: 0,
+            latency_logging: false,
         }
     }
 }
@@ -55,10 +184,28 @@ struct KeySoundRuntimeState {
 }
 
 enum AudioCommand {
-    PlayLabels(Vec<String>),
+    PlayLabels {
+        labels: Vec<String>,
+        queued_at: Instant,
+        trace: Option<KeySoundDispatchTrace>,
+    },
+    PlayFile {
+        path: String,
+        per_key_volume: f32,
+        queued_at: Instant,
+        trace: Option<KeySoundDispatchTrace>,
+    },
     SetEnabled(bool),
     SetVolume(f32),
+    SetLatencyLogging(bool),
     SetSoundpack(Option<Arc<LoadedSoundpack>>),
+}
+
+#[derive(Debug, Clone)]
+struct CachedAudioClip {
+    samples: Arc<[i16]>,
+    channels: u16,
+    sample_rate: u32,
 }
 
 pub struct KeySoundEngine {
@@ -109,6 +256,25 @@ impl KeySoundEngine {
         self.status()
     }
 
+    pub fn set_latency_logging(&self, enabled: bool) -> KeySoundStatus {
+        let enabled = enabled && latency_measurement_available();
+        {
+            let mut guard = self.state.write();
+            guard.status.latency_logging = enabled;
+        }
+        let _ = self.sender.send(AudioCommand::SetLatencyLogging(enabled));
+        self.status()
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn latency_logging_enabled(&self) -> bool {
+        latency_measurement_available() && self.state.read().status.latency_logging
+    }
+
+    pub fn latency_logging_available(&self) -> bool {
+        latency_measurement_available()
+    }
+
     pub fn load_soundpack_dir<P>(&self, soundpack_dir: P) -> Result<KeySoundStatus>
     where
         P: AsRef<Path>,
@@ -140,7 +306,11 @@ impl KeySoundEngine {
         self.status()
     }
 
-    pub fn play_labels(&self, labels: &[String]) {
+    pub fn play_labels(
+        &self,
+        labels: &[String],
+        trace: Option<KeySoundDispatchTrace>,
+    ) {
         if labels.is_empty() {
             return;
         }
@@ -148,9 +318,33 @@ impl KeySoundEngine {
             return;
         }
 
-        let _ = self
-            .sender
-            .send(AudioCommand::PlayLabels(labels.to_vec()));
+        let _ = self.sender.send(AudioCommand::PlayLabels {
+            labels: labels.to_vec(),
+            queued_at: Instant::now(),
+            trace,
+        });
+    }
+
+    pub fn play_file(
+        &self,
+        path: &str,
+        per_key_volume: f32,
+        trace: Option<KeySoundDispatchTrace>,
+    ) {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        if !self.state.read().status.enabled {
+            return;
+        }
+
+        let _ = self.sender.send(AudioCommand::PlayFile {
+            path: trimmed.to_string(),
+            per_key_volume: per_key_volume.clamp(0.0, 1.0),
+            queued_at: Instant::now(),
+            trace,
+        });
     }
 }
 
@@ -167,7 +361,12 @@ fn audio_thread(
     let mut enabled = state.read().status.enabled;
     let mut volume = state.read().status.volume;
     let mut soundpack = state.read().soundpack.clone();
+    #[cfg(debug_assertions)]
+    let mut latency_logging = state.read().status.latency_logging;
     let mut stream_handler = OutputStream::try_default().ok();
+    let mut file_cache: HashMap<String, Arc<CachedAudioClip>> = HashMap::new();
+    #[cfg(debug_assertions)]
+    let mut latency_summary = LatencySummary::default();
 
     while let Ok(command) = receiver.recv() {
         match command {
@@ -177,30 +376,199 @@ fn audio_thread(
             AudioCommand::SetVolume(value) => {
                 volume = value;
             }
+            AudioCommand::SetLatencyLogging(value) => {
+                #[cfg(debug_assertions)]
+                {
+                    latency_logging = value;
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    let _ = value;
+                }
+            }
             AudioCommand::SetSoundpack(pack) => {
                 soundpack = pack;
             }
-            AudioCommand::PlayLabels(labels) => {
+            AudioCommand::PlayLabels {
+                labels,
+                queued_at,
+                trace,
+            } => {
                 if !enabled {
                     continue;
                 }
                 let Some(pack) = soundpack.as_ref() else {
                     continue;
                 };
+                #[cfg(debug_assertions)]
+                let audio_started_at = latency_logging.then_some(Instant::now());
                 let Some(source) = pack.source_for_labels(&labels) else {
                     continue;
                 };
+                #[cfg(not(debug_assertions))]
+                let _ = (queued_at, trace);
 
                 if stream_handler.is_none() {
                     stream_handler = OutputStream::try_default().ok();
                 }
 
+                #[cfg(debug_assertions)]
+                let sink_started_at = latency_logging.then_some(Instant::now());
                 let Some(sink) = build_sink(&mut stream_handler) else {
                     continue;
                 };
+                #[cfg(debug_assertions)]
+                let sink_ms = sink_started_at
+                    .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                    .unwrap_or(0.0);
 
                 sink.set_volume(volume);
+                #[cfg(debug_assertions)]
+                let append_started_at = latency_logging.then_some(Instant::now());
                 sink.append(source);
+                #[cfg(debug_assertions)]
+                {
+                    let append_ms = append_started_at
+                        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                        .unwrap_or(0.0);
+                    if latency_logging {
+                        let queue_ms = queued_at.elapsed().as_secs_f64() * 1000.0;
+                        let dispatch_ms =
+                            trace.map(KeySoundDispatchTrace::dispatch_ms).unwrap_or(0.0);
+                        let thread_ms = audio_started_at
+                            .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                            .unwrap_or(0.0);
+                        let total_ms = trace
+                            .map(KeySoundDispatchTrace::total_elapsed_ms)
+                            .unwrap_or(dispatch_ms + queue_ms + thread_ms);
+                        debug!(
+                            "[KeySound][Latency] route=soundpack dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} sinkMs={sink_ms:.3} appendMs={append_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} labels={labels:?}"
+                        );
+                        latency_summary.push(
+                            LatencySample {
+                                dispatch_ms,
+                                queue_ms,
+                                sink_ms,
+                                append_ms,
+                                thread_ms,
+                                total_ms,
+                                ..Default::default()
+                            },
+                            false,
+                        );
+                        if latency_summary.should_emit_summary() {
+                            latency_summary.emit_summary();
+                        }
+                    }
+                }
+                sink.detach();
+            }
+            AudioCommand::PlayFile {
+                path,
+                per_key_volume,
+                queued_at,
+                trace,
+            } => {
+                if !enabled {
+                    continue;
+                }
+                #[cfg(debug_assertions)]
+                let audio_started_at = latency_logging.then_some(Instant::now());
+                #[cfg(not(debug_assertions))]
+                let _ = (queued_at, trace);
+
+                #[cfg(debug_assertions)]
+                let clip_lookup_started_at = latency_logging.then_some(Instant::now());
+                let (clip, clip_load_trace) = match get_or_load_cached_clip(
+                    &path,
+                    &mut file_cache,
+                    {
+                        #[cfg(debug_assertions)]
+                        {
+                            latency_logging
+                        }
+                        #[cfg(not(debug_assertions))]
+                        {
+                            false
+                        }
+                    },
+                ) {
+                        Some(result) => result,
+                        None => continue,
+                    };
+                #[cfg(debug_assertions)]
+                let cache_lookup_ms = clip_lookup_started_at
+                    .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                    .unwrap_or(0.0);
+                #[cfg(not(debug_assertions))]
+                let _ = clip_load_trace;
+
+                if stream_handler.is_none() {
+                    stream_handler = OutputStream::try_default().ok();
+                }
+
+                #[cfg(debug_assertions)]
+                let sink_started_at = latency_logging.then_some(Instant::now());
+                let Some(sink) = build_sink(&mut stream_handler) else {
+                    continue;
+                };
+                #[cfg(debug_assertions)]
+                let sink_ms = sink_started_at
+                    .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                    .unwrap_or(0.0);
+
+                let final_volume = (volume * per_key_volume).clamp(0.0, 1.0);
+                sink.set_volume(final_volume);
+                #[cfg(debug_assertions)]
+                let append_started_at = latency_logging.then_some(Instant::now());
+                sink.append(AudioSource::new(
+                    clip.samples.clone(),
+                    clip.channels,
+                    clip.sample_rate,
+                ));
+                #[cfg(debug_assertions)]
+                {
+                    let append_ms = append_started_at
+                        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                        .unwrap_or(0.0);
+                    if latency_logging {
+                        let queue_ms = queued_at.elapsed().as_secs_f64() * 1000.0;
+                        let dispatch_ms =
+                            trace.map(KeySoundDispatchTrace::dispatch_ms).unwrap_or(0.0);
+                        let thread_ms = audio_started_at
+                            .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                            .unwrap_or(0.0);
+                        let total_ms = trace
+                            .map(KeySoundDispatchTrace::total_elapsed_ms)
+                            .unwrap_or(dispatch_ms + queue_ms + thread_ms);
+                        let cache_label = if clip_load_trace.cache_hit {
+                            "hit"
+                        } else {
+                            "miss"
+                        };
+                        debug!(
+                            "[KeySound][Latency] route=key-file dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} cacheLookupMs={cache_lookup_ms:.3} decodeMs={:.3} sinkMs={sink_ms:.3} appendMs={append_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} cache={} volume={final_volume:.3} path={path}",
+                            clip_load_trace.decode_ms,
+                            cache_label
+                        );
+                        latency_summary.push(
+                            LatencySample {
+                                dispatch_ms,
+                                queue_ms,
+                                cache_lookup_ms,
+                                decode_ms: clip_load_trace.decode_ms,
+                                sink_ms,
+                                append_ms,
+                                thread_ms,
+                                total_ms,
+                            },
+                            !clip_load_trace.cache_hit,
+                        );
+                        if latency_summary.should_emit_summary() {
+                            latency_summary.emit_summary();
+                        }
+                    }
+                }
                 sink.detach();
             }
         }
@@ -221,6 +589,133 @@ fn build_sink(
         }
         Err(_) => None,
     }
+}
+
+fn get_or_load_cached_clip(
+    path: &str,
+    cache: &mut HashMap<String, Arc<CachedAudioClip>>,
+    measure_decode_ms: bool,
+) -> Option<(Arc<CachedAudioClip>, ClipLoadTrace)> {
+    if let Some(cached) = cache.get(path) {
+        return Some((
+            cached.clone(),
+            ClipLoadTrace {
+                cache_hit: true,
+                decode_ms: 0.0,
+            },
+        ));
+    }
+
+    #[cfg(debug_assertions)]
+    let decode_started_at = measure_decode_ms.then_some(Instant::now());
+    #[cfg(not(debug_assertions))]
+    let _ = measure_decode_ms;
+    match decode_audio_file_clip(path) {
+        Ok(clip) => {
+            let shared = Arc::new(clip);
+            cache.insert(path.to_string(), shared.clone());
+            Some((
+                shared,
+                ClipLoadTrace {
+                    cache_hit: false,
+                    #[cfg(debug_assertions)]
+                    decode_ms: decode_started_at
+                        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+                        .unwrap_or(0.0),
+                    #[cfg(not(debug_assertions))]
+                    decode_ms: 0.0,
+                },
+            ))
+        }
+        Err(error) => {
+            warn!("[KeySound] failed to decode key sound file '{}': {error:#}", path);
+            None
+        }
+    }
+}
+
+fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open key sound file: {}", path))?;
+    let media_source = MediaSourceStream::new(Box::new(file), Default::default());
+    let path_ref = Path::new(path);
+
+    let mut hint = Hint::new();
+    if let Some(ext) = path_ref.extension().and_then(|value| value.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    let probe = get_probe()
+        .format(
+            &hint,
+            media_source,
+            &FormatOptions::default(),
+            &Default::default(),
+        )
+        .context("failed to probe key sound file format")?;
+    let mut format = probe.format;
+    let track = format
+        .default_track()
+        .context("no default track in key sound file")?;
+    let track_id = track.id;
+    let mut decoder = get_codecs()
+        .make(&track.codec_params, &Default::default())
+        .context("failed to create key sound decoder")?;
+
+    let mut channels = track.codec_params.channels.map(|value| value.count() as u16);
+    let mut sample_rate = track.codec_params.sample_rate;
+    let mut samples: Vec<i16> = Vec::new();
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(SymphoniaError::IoError(io_error))
+                if io_error.kind() == ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(err) => {
+                return Err(anyhow::Error::new(err).context("failed to read key sound packet"));
+            }
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(decoded) => decoded,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(SymphoniaError::ResetRequired) => {
+                decoder.reset();
+                continue;
+            }
+            Err(err) => {
+                return Err(anyhow::Error::new(err).context("failed to decode key sound packet"));
+            }
+        };
+
+        channels.get_or_insert(decoded.spec().channels.count() as u16);
+        sample_rate.get_or_insert(decoded.spec().rate);
+
+        let mut sample_buffer =
+            SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
+        sample_buffer.copy_interleaved_ref(decoded);
+        samples.extend_from_slice(sample_buffer.samples());
+    }
+
+    if samples.is_empty() {
+        anyhow::bail!("decoded sample buffer is empty");
+    }
+
+    let channels = channels.context("missing channel count in key sound file")?;
+    let sample_rate = sample_rate.context("missing sample rate in key sound file")?;
+
+    Ok(CachedAudioClip {
+        samples: Arc::from(samples.into_boxed_slice()),
+        channels,
+        sample_rate,
+    })
 }
 
 #[derive(Debug)]

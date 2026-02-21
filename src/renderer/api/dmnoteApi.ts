@@ -308,6 +308,11 @@ const api: DMNoteAPI = {
   image: {
     load: () => invoke<import("@src/types/api").ImageLoadResult>("image_load"),
   },
+  sound: {
+    load: () => invoke<import("@src/types/api").SoundLoadResult>("sound_load"),
+    setLatencyLogging: (enabled: boolean) =>
+      invoke("key_sound_set_latency_logging", { enabled }).then(() => undefined),
+  },
   js: {
     get: () => invoke<CustomJs>("js_get"),
     getUse: () => invoke<boolean>("js_get_use"),

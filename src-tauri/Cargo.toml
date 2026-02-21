@@ -34,7 +34,7 @@ gif-dispose = "5.0.1"
 sha2 = "0.10"
 webp-animation = "0.9.0"
 rodio = { version = "0.19", default-features = false }
-symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "mp3", "isomp4", "aac"] }
+symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = [

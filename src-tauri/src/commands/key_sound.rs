@@ -35,3 +35,14 @@ pub fn key_sound_load_soundpack(
 pub fn key_sound_unload_soundpack(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
     Ok(state.key_sound_unload_soundpack())
 }
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn key_sound_set_latency_logging(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<KeySoundStatus, String> {
+    if enabled && !state.key_sound_latency_logging_available() {
+        return Err("Latency measurement is only available in tauri dev/debug builds".to_string());
+    }
+    Ok(state.key_sound_set_latency_logging(enabled))
+}

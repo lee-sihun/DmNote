@@ -9,6 +9,8 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
+#[cfg(debug_assertions)]
+use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
@@ -32,6 +34,8 @@ use crate::{
     services::{css_watcher::CssWatcher, settings::SettingsService},
     store::AppStore,
 };
+#[cfg(debug_assertions)]
+use crate::key_sound::KeySoundDispatchTrace;
 
 const OVERLAY_LABEL: &str = "overlay";
 const TRAY_ICON_ID: &str = "background-tray";
@@ -702,7 +706,72 @@ impl AppState {
                             if message.device == crate::ipc::InputDeviceKind::Keyboard
                                 && state == "DOWN"
                             {
-                                app_state.key_sound.play_labels(&message.labels);
+                                if let Some((sound_path, per_key_volume)) =
+                                    app_state.resolve_key_sound_binding(&mode, &key_label)
+                                {
+                                    #[cfg(debug_assertions)]
+                                    let key_sound_input_started_at = Instant::now();
+                                    #[cfg(debug_assertions)]
+                                    let key_sound_dispatch_started_at = Instant::now();
+                                    #[cfg(debug_assertions)]
+                                    let dispatch_ms =
+                                        key_sound_dispatch_started_at.elapsed().as_secs_f64()
+                                            * 1000.0;
+                                    #[cfg(debug_assertions)]
+                                    let trace = KeySoundDispatchTrace::new(
+                                        key_sound_input_started_at,
+                                        dispatch_ms,
+                                    );
+                                    app_state.key_sound.play_file(
+                                        &sound_path,
+                                        per_key_volume,
+                                        #[cfg(debug_assertions)]
+                                        Some(trace),
+                                        #[cfg(not(debug_assertions))]
+                                        None,
+                                    );
+                                    #[cfg(debug_assertions)]
+                                    if app_state.key_sound.latency_logging_enabled() {
+                                        log::debug!(
+                                            "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} volume={:.3} path={}",
+                                            mode,
+                                            key_label,
+                                            per_key_volume,
+                                            sound_path
+                                        );
+                                    }
+                                } else {
+                                    #[cfg(debug_assertions)]
+                                    let key_sound_input_started_at = Instant::now();
+                                    #[cfg(debug_assertions)]
+                                    let key_sound_dispatch_started_at = Instant::now();
+                                    #[cfg(debug_assertions)]
+                                    let dispatch_ms =
+                                        key_sound_dispatch_started_at.elapsed().as_secs_f64()
+                                            * 1000.0;
+                                    #[cfg(debug_assertions)]
+                                    let trace = KeySoundDispatchTrace::new(
+                                        key_sound_input_started_at,
+                                        dispatch_ms,
+                                    );
+                                    app_state
+                                        .key_sound
+                                        .play_labels(
+                                            &message.labels,
+                                            #[cfg(debug_assertions)]
+                                            Some(trace),
+                                            #[cfg(not(debug_assertions))]
+                                            None,
+                                        );
+                                    #[cfg(debug_assertions)]
+                                    if app_state.key_sound.latency_logging_enabled() {
+                                        log::debug!(
+                                            "[KeySound][Latency] route=dispatch dispatchMs={dispatch_ms:.3} mode={} key={} source=soundpack",
+                                            mode,
+                                            key_label
+                                        );
+                                    }
+                                }
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
 
@@ -1206,6 +1275,14 @@ impl AppState {
         self.key_sound.set_volume(volume)
     }
 
+    pub fn key_sound_set_latency_logging(&self, enabled: bool) -> KeySoundStatus {
+        self.key_sound.set_latency_logging(enabled)
+    }
+
+    pub fn key_sound_latency_logging_available(&self) -> bool {
+        self.key_sound.latency_logging_available()
+    }
+
     pub fn key_sound_load_soundpack(&self, soundpack_dir: &str) -> Result<KeySoundStatus, String> {
         self.key_sound
             .load_soundpack_dir(soundpack_dir)
@@ -1214,6 +1291,36 @@ impl AppState {
 
     pub fn key_sound_unload_soundpack(&self) -> KeySoundStatus {
         self.key_sound.unload_soundpack()
+    }
+
+    fn resolve_key_sound_binding(&self, mode: &str, key_label: &str) -> Option<(String, f32)> {
+        self.store.with_state(|state| {
+            let mappings = state.keys.get(mode)?;
+            let positions = state.key_positions.get(mode)?;
+
+            for (index, mapped_key) in mappings.iter().enumerate() {
+                if mapped_key != key_label {
+                    continue;
+                }
+
+                let Some(position) = positions.get(index) else {
+                    continue;
+                };
+                let Some(sound_path) = position.sound_path.as_ref() else {
+                    continue;
+                };
+                let trimmed_path = sound_path.trim();
+                if trimmed_path.is_empty() {
+                    continue;
+                }
+
+                let volume_percent = position.sound_volume.unwrap_or(100.0);
+                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 1.0) as f32;
+                return Some((trimmed_path.to_string(), per_key_volume));
+            }
+
+            None
+        })
     }
 
     // ========== CSS 핫리로딩 관련 메서드 ==========

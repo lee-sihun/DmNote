@@ -79,6 +79,12 @@ export type ImageLoadResult = {
   imagePath?: string;
 };
 
+export type SoundLoadResult = {
+  success: boolean;
+  error?: string;
+  soundPath?: string;
+};
+
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
@@ -717,6 +723,10 @@ export interface DMNoteAPI {
   };
   image: {
     load(): Promise<ImageLoadResult>;
+  };
+  sound: {
+    load(): Promise<SoundLoadResult>;
+    setLatencyLogging(enabled: boolean): Promise<void>;
   };
   js: {
     get(): Promise<CustomJs>;

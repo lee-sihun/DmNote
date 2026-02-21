@@ -8,10 +8,11 @@ import React, {
   useCallback,
 } from "react";
 import {
+  currentMonitor,
   getCurrentWindow,
   Window as TauriWindow,
 } from "@tauri-apps/api/window";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { LogicalPosition, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 import { isMac } from "@utils/platform";
 import { Key } from "@components/Key";
@@ -276,8 +277,6 @@ export default function App() {
   const snapToNearestEdge = useCallback(async () => {
     try {
       const win = getCurrentWindow();
-      const { currentMonitor } = await import("@tauri-apps/api/window");
-      const { PhysicalPosition } = await import("@tauri-apps/api/dpi");
       const [monitor, pos, size] = await Promise.all([
         currentMonitor(),
         win.outerPosition(),

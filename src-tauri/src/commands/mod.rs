@@ -11,6 +11,7 @@ pub mod overlay;
 pub mod plugin_storage;
 pub mod preset;
 pub mod settings;
+pub mod sound;
 pub mod stat_items;
 pub mod system;
 pub mod update;
