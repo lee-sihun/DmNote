@@ -200,6 +200,8 @@ fn main() {
             commands::sound::sound_set_enabled,
             commands::sound::sound_delete,
             commands::sound::sound_save_processed_wav,
+            commands::sound::sound_load_original,
+            commands::sound::sound_update_processed_wav,
             commands::js::js_get,
             commands::js::js_get_use,
             commands::js::js_toggle,

@@ -640,6 +640,14 @@ fn collect_local_sound_path_keys(data: &AppStoreData) -> HashSet<String> {
         }
     }
 
+    // 사운드 라이브러리에 등록된 파일도 보호 (키에 할당 안 되어도 유지)
+    for key in data.sound_library.keys() {
+        let normalized = PathBuf::from(key);
+        if normalized.is_absolute() {
+            paths.insert(path_lookup_key(&normalized));
+        }
+    }
+
     paths
 }
 

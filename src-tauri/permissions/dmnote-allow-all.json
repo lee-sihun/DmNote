@@ -42,6 +42,8 @@
           "sound_set_enabled",
           "sound_delete",
           "sound_save_processed_wav",
+          "sound_load_original",
+          "sound_update_processed_wav",
           "js_get",
           "js_get_use",
           "js_toggle",

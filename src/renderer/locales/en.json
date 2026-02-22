@@ -484,10 +484,12 @@
     "addSound": "Add",
     "loadFailed": "Failed to load sound list",
     "stateChangeFailed": "Failed to change sound state",
-    "deleteFailed": "Failed to delete sound"
+    "deleteFailed": "Failed to delete sound",
+    "editSound": "Edit"
   },
   "soundTrimModal": {
     "defaultTitle": "Add Sound",
+    "editTitle": "Edit Sound",
     "statusDecoding": "Decoding...",
     "statusWaiting": "Waiting for file",
     "statusReady": "Ready",
@@ -500,7 +502,10 @@
     "dragHint": "Drag to edit range",
     "saving": "Saving...",
     "submit": "Add",
+    "submitEdit": "Save",
     "cancel": "Cancel",
+    "statusLoading": "Loading...",
+    "loadOriginalError": "Unable to load the original audio.",
     "saveErrorDefault": "Failed to save the processed sound.",
     "saveErrorFailed": "Failed to save the processed sound."
   },

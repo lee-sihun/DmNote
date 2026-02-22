@@ -500,10 +500,12 @@
     "addSound": "添加",
     "loadFailed": "音效清單載入失敗",
     "stateChangeFailed": "音效狀態變更失敗",
-    "deleteFailed": "音效刪除失敗"
+    "deleteFailed": "音效刪除失敗",
+    "editSound": "編輯"
   },
   "soundTrimModal": {
     "defaultTitle": "新增音效",
+    "editTitle": "編輯音效",
     "statusDecoding": "解析中...",
     "statusWaiting": "等待檔案",
     "statusReady": "可使用",
@@ -516,7 +518,10 @@
     "dragHint": "拖曳以編輯範圍",
     "saving": "儲存中...",
     "submit": "新增",
+    "submitEdit": "儲存",
     "cancel": "取消",
+    "statusLoading": "載入中...",
+    "loadOriginalError": "無法載入原始音訊。",
     "saveErrorDefault": "無法儲存處理後的音效。",
     "saveErrorFailed": "儲存處理後的音效失敗。"
   },

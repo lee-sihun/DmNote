@@ -1293,6 +1293,10 @@ impl AppState {
         self.key_sound.unload_soundpack()
     }
 
+    pub fn key_sound_invalidate_file_cache(&self, path: &str) {
+        self.key_sound.invalidate_file_cache(path);
+    }
+
     fn resolve_key_sound_binding(&self, mode: &str, key_label: &str) -> Option<(String, f32)> {
         self.store.with_state(|state| {
             let mappings = state.keys.get(mode)?;

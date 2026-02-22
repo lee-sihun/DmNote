@@ -38,6 +38,7 @@ export default function SoundManagerModal({
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [showTrimModal, setShowTrimModal] = useState(false);
+  const [editingSoundPath, setEditingSoundPath] = useState<string | null>(null);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState({
@@ -48,10 +49,19 @@ export default function SoundManagerModal({
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
   const [isScrollable, setIsScrollable] = useState(false);
   const isFirstRender = useRef(true);
+  const hasLoadedRef = useRef(false);
 
   const normalizedSelectedSound = useMemo(
     () => (selectedSound || "").trim(),
     [selectedSound],
+  );
+
+  const editingSoundItem = useMemo(
+    () =>
+      editingSoundPath
+        ? sounds.find((s) => s.soundPath === editingSoundPath) ?? null
+        : null,
+    [editingSoundPath, sounds],
   );
 
   const loadSounds = useCallback(async () => {
@@ -66,6 +76,7 @@ export default function SoundManagerModal({
         t("soundManager.loadFailed") || "사운드 목록 로드 실패",
       );
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, [t]);
@@ -91,7 +102,11 @@ export default function SoundManagerModal({
   });
 
   useLayoutEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      isFirstRender.current = true;
+      hasLoadedRef.current = false;
+      return;
+    }
 
     setSkipShadowTransition(true);
     setScrollState({ hasTopShadow: false, hasBottomShadow: false });
@@ -124,7 +139,9 @@ export default function SoundManagerModal({
 
     const rafId = requestAnimationFrame(() => {
       setSkipShadowTransition(false);
-      isFirstRender.current = false;
+      if (hasLoadedRef.current) {
+        isFirstRender.current = false;
+      }
     });
 
     return () => {
@@ -184,6 +201,27 @@ export default function SoundManagerModal({
     [isSaving, loadSounds, normalizedSelectedSound, onSelectSound, t],
   );
 
+  const handleEditSound = useCallback((item: SoundListItem) => {
+    if (!item.originalPath) return;
+    setEditingSoundPath(item.soundPath);
+    setShowTrimModal(true);
+  }, []);
+
+  const handleCloseTrimModal = useCallback(() => {
+    setShowTrimModal(false);
+    setEditingSoundPath(null);
+  }, []);
+
+  const handleTrimSaved = useCallback(
+    (soundPath: string) => {
+      onSelectSound(soundPath);
+      setShowTrimModal(false);
+      setEditingSoundPath(null);
+      void loadSounds();
+    },
+    [loadSounds, onSelectSound],
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -220,9 +258,7 @@ export default function SoundManagerModal({
                     {t("soundManager.noSounds") || "사운드 없음"}
                   </div>
                 ) : (
-                  sounds.map((item) => {
-                    const isSelected = item.soundPath === normalizedSelectedSound;
-                    return (
+                  sounds.map((item) => (
                       <button
                         key={item.soundPath}
                         type="button"
@@ -230,7 +266,7 @@ export default function SoundManagerModal({
                         className="w-full min-w-0 flex items-center justify-between gap-[8px]"
                         style={{ transform: "translateZ(0)" }}
                       >
-                        <div className="flex items-center gap-[10px] h-[23px] flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-[10px] flex-1 min-w-0 overflow-hidden" style={{ height: "20px" }}>
                           <button
                             type="button"
                             className="flex-shrink-0 flex items-center justify-center transition-colors hover:opacity-80"
@@ -242,14 +278,28 @@ export default function SoundManagerModal({
                           >
                             <TrashIcon className="w-[14px] h-[15px]" />
                           </button>
-                          <span
-                            className={`text-style-2 truncate block ${
-                              isSelected ? "text-white" : "text-[#DBDEE8]"
-                            }`}
-                            title={item.fileName}
-                          >
-                            {item.fileName}
-                          </span>
+                          {item.originalPath ? (
+                            <button
+                              type="button"
+                              className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left whitespace-nowrap text-ellipsis overflow-hidden block cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
+                              style={{ lineHeight: "18px" }}
+                              title={t("soundManager.editSound") || "편집"}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleEditSound(item);
+                              }}
+                            >
+                              {item.displayName || item.fileName}
+                            </button>
+                          ) : (
+                            <span
+                              className="text-white text-style-2 whitespace-nowrap text-ellipsis overflow-hidden block"
+                              style={{ lineHeight: "18px" }}
+                              title={item.fileName}
+                            >
+                              {item.displayName || item.fileName}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-shrink-0 flex items-center justify-center w-[27px] h-[21px]">
                           <Checkbox
@@ -260,8 +310,7 @@ export default function SoundManagerModal({
                           />
                         </div>
                       </button>
-                    );
-                  })
+                  ))
                 )}
               </div>
             </div>
@@ -279,7 +328,10 @@ export default function SoundManagerModal({
             <button
               type="button"
               className="flex items-center justify-center w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors bg-[#2A2A30] hover:bg-[#34343c]"
-              onClick={() => setShowTrimModal(true)}
+              onClick={() => {
+                setEditingSoundPath(null);
+                setShowTrimModal(true);
+              }}
             >
               {`${t("soundManager.addSound") || "추가"} (${sounds.length})`}
             </button>
@@ -306,13 +358,13 @@ export default function SoundManagerModal({
 
       <SoundTrimModal
         isOpen={showTrimModal}
-        onClose={() => setShowTrimModal(false)}
-        onSaved={(soundPath) => {
-          onSelectSound(soundPath);
-          setShowTrimModal(false);
-          void loadSounds();
-        }}
+        onClose={handleCloseTrimModal}
+        onSaved={handleTrimSaved}
         previewVolume={previewVolume}
+        editingSoundPath={editingSoundPath}
+        editingTrimStartRatio={editingSoundItem?.trimStartRatio}
+        editingTrimEndRatio={editingSoundItem?.trimEndRatio}
+        editingDisplayName={editingSoundItem?.displayName}
       />
     </>
   );

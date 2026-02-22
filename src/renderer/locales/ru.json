@@ -472,10 +472,12 @@
     "addSound": "Добавить",
     "loadFailed": "Не удалось загрузить список звуков",
     "stateChangeFailed": "Не удалось изменить состояние звука",
-    "deleteFailed": "Не удалось удалить звук"
+    "deleteFailed": "Не удалось удалить звук",
+    "editSound": "Редактировать"
   },
   "soundTrimModal": {
     "defaultTitle": "Добавить звук",
+    "editTitle": "Редактирование звука",
     "statusDecoding": "Декодирование...",
     "statusWaiting": "Ожидание файла",
     "statusReady": "Готово",
@@ -488,7 +490,10 @@
     "dragHint": "Перетащите для редактирования диапазона",
     "saving": "Сохранение...",
     "submit": "Добавить",
+    "submitEdit": "Сохранить",
     "cancel": "Отмена",
+    "statusLoading": "Загрузка...",
+    "loadOriginalError": "Не удалось загрузить исходное аудио.",
     "saveErrorDefault": "Не удалось сохранить обработанный звук.",
     "saveErrorFailed": "Не удалось сохранить обработанный звук."
   },

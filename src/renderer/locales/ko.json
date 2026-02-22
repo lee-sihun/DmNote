@@ -485,10 +485,12 @@
     "addSound": "추가",
     "loadFailed": "사운드 목록 로드 실패",
     "stateChangeFailed": "사운드 상태 변경 실패",
-    "deleteFailed": "사운드 삭제 실패"
+    "deleteFailed": "사운드 삭제 실패",
+    "editSound": "편집"
   },
   "soundTrimModal": {
     "defaultTitle": "사운드 추가",
+    "editTitle": "사운드 편집",
     "statusDecoding": "해석 중...",
     "statusWaiting": "파일 대기",
     "statusReady": "사용 가능",
@@ -501,7 +503,10 @@
     "dragHint": "드래그하여 범위 편집",
     "saving": "저장 중...",
     "submit": "추가하기",
+    "submitEdit": "저장",
     "cancel": "취소",
+    "statusLoading": "불러오는 중...",
+    "loadOriginalError": "원본 오디오를 불러올 수 없습니다.",
     "saveErrorDefault": "편집된 사운드를 저장하지 못했습니다.",
     "saveErrorFailed": "편집된 사운드 저장에 실패했습니다."
   },

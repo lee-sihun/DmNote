@@ -487,10 +487,12 @@
     "addSound": "添加",
     "loadFailed": "音频列表加载失败",
     "stateChangeFailed": "音频状态变更失败",
-    "deleteFailed": "音频删除失败"
+    "deleteFailed": "音频删除失败",
+    "editSound": "编辑"
   },
   "soundTrimModal": {
     "defaultTitle": "添加音频",
+    "editTitle": "编辑音频",
     "statusDecoding": "解析中...",
     "statusWaiting": "等待文件",
     "statusReady": "可用",
@@ -503,7 +505,10 @@
     "dragHint": "拖动以编辑范围",
     "saving": "保存中...",
     "submit": "添加",
+    "submitEdit": "保存",
     "cancel": "取消",
+    "statusLoading": "加载中...",
+    "loadOriginalError": "无法加载原始音频。",
     "saveErrorDefault": "无法保存处理后的音频。",
     "saveErrorFailed": "保存处理后的音频失败。"
   },

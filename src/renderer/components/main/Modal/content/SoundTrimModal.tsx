@@ -13,6 +13,10 @@ interface SoundTrimModalProps {
   onClose: () => void;
   onSaved: (soundPath: string) => void;
   previewVolume?: number;
+  editingSoundPath?: string | null;
+  editingTrimStartRatio?: number;
+  editingTrimEndRatio?: number;
+  editingDisplayName?: string;
 }
 
 type DragTarget = "start" | "end" | null;
@@ -42,6 +46,17 @@ async function decodeAudioFile(file: File): Promise<AudioBuffer> {
   const context = createAudioContext();
   try {
     return await context.decodeAudioData(bytes.slice(0));
+  } finally {
+    void context.close();
+  }
+}
+
+async function decodeAudioFromArrayBuffer(
+  buffer: ArrayBuffer,
+): Promise<AudioBuffer> {
+  const context = createAudioContext();
+  try {
+    return await context.decodeAudioData(buffer.slice(0));
   } finally {
     void context.close();
   }
@@ -237,6 +252,26 @@ function encodeWavBase64(
   return btoa(binary);
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 function stripExtension(name: string): string {
   const lastDot = name.lastIndexOf(".");
   return lastDot > 0 ? name.slice(0, lastDot) : name;
@@ -247,12 +282,18 @@ export default function SoundTrimModal({
   onClose,
   onSaved,
   previewVolume = 100,
+  editingSoundPath,
+  editingTrimStartRatio,
+  editingTrimEndRatio,
+  editingDisplayName,
 }: SoundTrimModalProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragTargetRef = useRef<DragTarget>(null);
+
+  const isEditMode = !!editingSoundPath;
 
   const [originalFileName, setOriginalFileName] = useState("");
   const [soundName, setSoundName] = useState("");
@@ -264,6 +305,11 @@ export default function SoundTrimModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [errorText, setErrorText] = useState("");
+
+  const originalFileDataRef = useRef<{
+    base64: string;
+    extension: string;
+  } | null>(null);
 
   const playContextRef = useRef<AudioContext | null>(null);
   const playSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -421,6 +467,7 @@ export default function SoundTrimModal({
 
   const resetState = useCallback(() => {
     pausedAtRatioRef.current = null;
+    originalFileDataRef.current = null;
     stopPlayback();
     setOriginalFileName("");
     setSoundName("");
@@ -447,6 +494,52 @@ export default function SoundTrimModal({
       resetState();
     }
   }, [isOpen, resetState]);
+
+  // Edit mode: load original audio from backend
+  useEffect(() => {
+    if (!isOpen || !editingSoundPath) return;
+
+    let cancelled = false;
+    setIsDecoding(true);
+    setErrorText("");
+    setSoundName(editingDisplayName || "");
+    setOriginalFileName(editingDisplayName || "");
+
+    (async () => {
+      try {
+        const result = await window.api.sound.loadOriginal(editingSoundPath);
+        if (cancelled) return;
+
+        if (!result.success || !result.audioBase64) {
+          throw new Error(
+            result.error || "Failed to load original audio",
+          );
+        }
+
+        const arrayBuffer = base64ToArrayBuffer(result.audioBase64);
+        const decoded = await decodeAudioFromArrayBuffer(arrayBuffer);
+        if (cancelled) return;
+
+        setAudioBuffer(decoded);
+        setPeaks(extractWaveformPeaks(decoded));
+        setStartRatio(editingTrimStartRatio ?? 0);
+        setEndRatio(editingTrimEndRatio ?? 1);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load original audio:", error);
+          setErrorText(t("soundTrimModal.loadOriginalError"));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsDecoding(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, editingSoundPath, editingTrimStartRatio, editingTrimEndRatio, editingDisplayName, t]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -488,6 +581,14 @@ export default function SoundTrimModal({
       setSoundName(stripExtension(file.name));
 
       try {
+        // Capture original file data for backend storage
+        const arrayBuffer = await file.arrayBuffer();
+        const ext = file.name.split(".").pop()?.toLowerCase() || "wav";
+        originalFileDataRef.current = {
+          base64: arrayBufferToBase64(arrayBuffer),
+          extension: ext,
+        };
+
         const decoded = await decodeAudioFile(file);
         setAudioBuffer(decoded);
         setPeaks(extractWaveformPeaks(decoded));
@@ -499,12 +600,13 @@ export default function SoundTrimModal({
         setPeaks(new Float32Array());
         setOriginalFileName("");
         setSoundName("");
+        originalFileDataRef.current = null;
         setErrorText(t("soundTrimModal.decodeError"));
       } finally {
         setIsDecoding(false);
       }
     },
-    [stopPlayback],
+    [stopPlayback, t],
   );
 
   const updateFromClientX = useCallback(
@@ -609,19 +711,46 @@ export default function SoundTrimModal({
       );
       const wavBase64 = encodeWavBase64(audioBuffer, startFrame, endFrame);
       const trimmedName = soundName.trim() || undefined;
-      const response = await window.api.sound.saveProcessedWav(
-        wavBase64,
-        trimmedName,
-      );
 
-      if (!response.success || !response.soundPath) {
-        throw new Error(
-          response.error || t("soundTrimModal.saveErrorDefault"),
+      if (isEditMode && editingSoundPath) {
+        // Edit mode: update existing sound
+        const response = await window.api.sound.updateProcessedWav(
+          editingSoundPath,
+          wavBase64,
+          startRatio,
+          endRatio,
+          trimmedName,
         );
-      }
 
-      onSaved(response.soundPath);
-      resetState();
+        if (!response.success) {
+          throw new Error(
+            response.error || t("soundTrimModal.saveErrorDefault"),
+          );
+        }
+
+        onSaved(editingSoundPath);
+        resetState();
+      } else {
+        // Create mode: save new sound + original
+        const origData = originalFileDataRef.current;
+        const response = await window.api.sound.saveProcessedWav(
+          wavBase64,
+          trimmedName,
+          origData?.base64,
+          origData?.extension,
+          startRatio,
+          endRatio,
+        );
+
+        if (!response.success || !response.soundPath) {
+          throw new Error(
+            response.error || t("soundTrimModal.saveErrorDefault"),
+          );
+        }
+
+        onSaved(response.soundPath);
+        resetState();
+      }
     } catch (error) {
       console.error("Failed to save processed sound:", error);
       setErrorText(t("soundTrimModal.saveErrorFailed"));
@@ -630,23 +759,34 @@ export default function SoundTrimModal({
     }
   }, [
     audioBuffer,
+    editingSoundPath,
     endRatio,
     isDecoding,
+    isEditMode,
     isSaving,
     onSaved,
     resetState,
     soundName,
     startRatio,
     stopPlayback,
+    t,
   ]);
 
   const headerLabel = useMemo(() => {
     if (!audioBuffer) {
-      if (isDecoding) return t("soundTrimModal.statusDecoding");
+      if (isDecoding) {
+        return isEditMode
+          ? t("soundTrimModal.statusLoading")
+          : t("soundTrimModal.statusDecoding");
+      }
       return t("soundTrimModal.statusWaiting");
     }
     return t("soundTrimModal.statusReady");
-  }, [audioBuffer, isDecoding, t]);
+  }, [audioBuffer, isDecoding, isEditMode, t]);
+
+  const headerTitle = isEditMode
+    ? editingDisplayName || t("soundTrimModal.editTitle")
+    : originalFileName || t("soundTrimModal.defaultTitle");
 
   if (!isOpen) return null;
 
@@ -663,7 +803,7 @@ export default function SoundTrimModal({
               Sound
             </span>
             <span className="truncate text-[12px] leading-[16px] text-[#DBDEE8]">
-              {originalFileName || t("soundTrimModal.defaultTitle")}
+              {headerTitle}
             </span>
           </div>
           <span className="text-[11px] leading-[14px] text-[#8A8D99]">
@@ -762,7 +902,9 @@ export default function SoundTrimModal({
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[11px] text-[#6F6E7A]">
                     {isDecoding
-                      ? t("soundTrimModal.decodingMessage")
+                      ? isEditMode
+                        ? t("soundTrimModal.statusLoading")
+                        : t("soundTrimModal.decodingMessage")
                       : t("soundTrimModal.emptyMessage")}
                   </div>
                 )}
@@ -779,26 +921,32 @@ export default function SoundTrimModal({
 
         {/* Hint bar */}
         <div className="h-[28px] bg-[#2A2A30] border-t border-[#3A3943] px-[12px] flex items-center justify-between gap-[12px]">
-          <button
-            type="button"
-            className="text-[11px] leading-[14px] text-[#8CC2FF] hover:text-[#ACCFFF] transition-colors"
-            onClick={selectFile}
-            disabled={isDecoding || isSaving}
-          >
-            {t("soundTrimModal.loadFile")}
-          </button>
+          {!isEditMode ? (
+            <button
+              type="button"
+              className="text-[11px] leading-[14px] text-[#8CC2FF] hover:text-[#ACCFFF] transition-colors"
+              onClick={selectFile}
+              disabled={isDecoding || isSaving}
+            >
+              {t("soundTrimModal.loadFile")}
+            </button>
+          ) : (
+            <span />
+          )}
           <p className="shrink-0 text-[11px] leading-[14px] text-[#8A8D99]">
             {t("soundTrimModal.dragHint")}
           </p>
         </div>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+        {!isEditMode ? (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        ) : null}
 
         {/* Footer */}
         <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
@@ -814,7 +962,11 @@ export default function SoundTrimModal({
             }}
             disabled={!canSubmit}
           >
-            {isSaving ? t("soundTrimModal.saving") : t("soundTrimModal.submit")}
+            {isSaving
+              ? t("soundTrimModal.saving")
+              : isEditMode
+                ? t("soundTrimModal.submitEdit")
+                : t("soundTrimModal.submit")}
           </button>
           <button
             type="button"

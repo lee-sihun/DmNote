@@ -92,6 +92,10 @@ export type SoundListItem = {
   modifiedAtMs?: number;
   enabled: boolean;
   source: "local" | "builtin";
+  originalPath?: string;
+  trimStartRatio?: number;
+  trimEndRatio?: number;
+  displayName?: string;
 };
 
 export type SoundSaveProcessedWavResult = {
@@ -108,6 +112,18 @@ export type SoundSetEnabledResult = {
 
 export type SoundDeleteResult = {
   success: boolean;
+};
+
+export type SoundLoadOriginalResult = {
+  success: boolean;
+  error?: string;
+  audioBase64?: string;
+  originalExtension?: string;
+};
+
+export type SoundUpdateProcessedWavResult = {
+  success: boolean;
+  error?: string;
 };
 
 // 탭별 CSS 타입
@@ -760,7 +776,19 @@ export interface DMNoteAPI {
     saveProcessedWav(
       wavBase64: string,
       fileName?: string,
+      originalBase64?: string,
+      originalExtension?: string,
+      trimStartRatio?: number,
+      trimEndRatio?: number,
     ): Promise<SoundSaveProcessedWavResult>;
+    loadOriginal(soundPath: string): Promise<SoundLoadOriginalResult>;
+    updateProcessedWav(
+      soundPath: string,
+      wavBase64: string,
+      trimStartRatio?: number,
+      trimEndRatio?: number,
+      displayName?: string,
+    ): Promise<SoundUpdateProcessedWavResult>;
     setLatencyLogging(enabled: boolean): Promise<void>;
   };
   js: {

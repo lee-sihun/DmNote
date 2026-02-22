@@ -199,6 +199,7 @@ enum AudioCommand {
     SetVolume(f32),
     SetLatencyLogging(bool),
     SetSoundpack(Option<Arc<LoadedSoundpack>>),
+    InvalidateFileCache { path: String },
 }
 
 #[derive(Debug, Clone)]
@@ -325,6 +326,12 @@ impl KeySoundEngine {
         });
     }
 
+    pub fn invalidate_file_cache(&self, path: &str) {
+        let _ = self.sender.send(AudioCommand::InvalidateFileCache {
+            path: path.to_string(),
+        });
+    }
+
     pub fn play_file(
         &self,
         path: &str,
@@ -388,6 +395,9 @@ fn audio_thread(
             }
             AudioCommand::SetSoundpack(pack) => {
                 soundpack = pack;
+            }
+            AudioCommand::InvalidateFileCache { path } => {
+                file_cache.remove(&path);
             }
             AudioCommand::PlayLabels {
                 labels,
