@@ -39,6 +39,7 @@ export default function GraphItem({
   panX = 0,
   panY = 0,
   zIndex = 0,
+  isViewportTransforming = false,
 }) {
   if (position?.hidden) return null;
 
@@ -425,6 +426,7 @@ export default function GraphItem({
       withOffsetVars={true}
       interactive={true}
       dataEditing={isDraggingOrResizing}
+      isViewportTransforming={isViewportTransforming}
       onClick={handleClick}
       onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
       onContextMenu={handleContextMenu}

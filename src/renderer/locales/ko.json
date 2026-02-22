@@ -457,7 +457,13 @@
     "delete": "삭제",
     "hideLayer": "숨기기",
     "showLayer": "표시하기",
-    "font": "폰트"
+    "font": "폰트",
+    "keySound": "사운드 설정",
+    "keySoundEnabled": "키 사운드 사용",
+    "selectedSound": "선택 파일",
+    "soundVolume": "사운드 볼륨",
+    "import": "가져오기",
+    "loading": "로딩..."
   },
   "fontPicker": {
     "searchPlaceholder": "검색",
@@ -466,6 +472,43 @@
     "filterLocal": "로컬 폰트",
     "filterWeb": "웹 폰트",
     "noFonts": "폰트 없음"
+  },
+  "soundPicker": {
+    "searchPlaceholder": "검색",
+    "filterAll": "전체",
+    "filterLocal": "로컬 사운드",
+    "noSounds": "사운드 없음"
+  },
+  "soundManager": {
+    "title": "사운드",
+    "noSounds": "사운드가 없습니다",
+    "addSound": "추가",
+    "loadFailed": "사운드 목록 로드 실패",
+    "stateChangeFailed": "사운드 상태 변경 실패",
+    "deleteFailed": "사운드 삭제 실패",
+    "editSound": "편집"
+  },
+  "soundTrimModal": {
+    "defaultTitle": "사운드 추가",
+    "editTitle": "사운드 편집",
+    "statusDecoding": "해석 중...",
+    "statusWaiting": "파일 대기",
+    "statusReady": "사용 가능",
+    "nameLabel": "사운드 이름",
+    "namePlaceholder": "사운드 이름",
+    "decodeError": "오디오 파일을 해석할 수 없습니다.",
+    "decodingMessage": "오디오 해석 중...",
+    "emptyMessage": "파일을 선택하면 파형이 표시됩니다",
+    "loadFile": "파일 불러오기",
+    "dragHint": "드래그하여 범위 편집",
+    "saving": "저장 중...",
+    "submit": "추가하기",
+    "submitEdit": "저장",
+    "cancel": "취소",
+    "statusLoading": "불러오는 중...",
+    "loadOriginalError": "원본 오디오를 불러올 수 없습니다.",
+    "saveErrorDefault": "편집된 사운드를 저장하지 못했습니다.",
+    "saveErrorFailed": "편집된 사운드 저장에 실패했습니다."
   },
   "fontManager": {
     "localTab": "로컬 폰트",

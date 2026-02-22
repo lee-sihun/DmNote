@@ -33,6 +33,8 @@ gif = "0.13.3"
 gif-dispose = "5.0.1"
 sha2 = "0.10"
 webp-animation = "0.9.0"
+rodio = { version = "0.19", default-features = false }
+symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = [
@@ -48,6 +50,7 @@ windows = { version = "0.61.3", features = [
 	"Win32_Security",
 	"Win32_UI_Shell"
 ] }
+thread-priority = "1.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 semver = "1"
 self-replace = "1.5"
@@ -57,6 +60,7 @@ tempfile = "3"
 rdev = "0.5.3"
 objc = "0.2"
 objc-foundation = "0.1"
+thread-priority = "1.2"
 
 # objc 크레이트의 매크로에서 발생하는 cfg 경고 억제
 [lints.rust]

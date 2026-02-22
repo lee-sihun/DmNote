@@ -220,6 +220,8 @@ export function useKeyManager() {
           hidden: false,
           activeImage: "",
           inactiveImage: "",
+          soundPath: "",
+          soundVolume: 100,
           activeTransparent: false,
           idleTransparent: false,
           count: 0,
@@ -271,6 +273,8 @@ export function useKeyManager() {
           hidden: false,
           activeImage: "",
           inactiveImage: "",
+          soundPath: "",
+          soundVolume: 100,
           activeTransparent: false,
           idleTransparent: false,
           count: 0,
@@ -455,6 +459,8 @@ export function useKeyManager() {
     updates: Partial<{
       activeImage: string;
       inactiveImage: string;
+      soundPath: string;
+      soundVolume: number;
       activeTransparent: boolean;
       idleTransparent: boolean;
       width: number;
@@ -496,6 +502,14 @@ export function useKeyManager() {
                 updates.inactiveImage !== undefined
                   ? updates.inactiveImage
                   : pos.inactiveImage,
+              soundPath:
+                updates.soundPath !== undefined
+                  ? updates.soundPath
+                  : pos.soundPath,
+              soundVolume:
+                updates.soundVolume !== undefined
+                  ? updates.soundVolume
+                  : pos.soundVolume,
               activeTransparent:
                 updates.activeTransparent !== undefined
                   ? updates.activeTransparent
@@ -592,6 +606,8 @@ export function useKeyManager() {
       index: number;
       activeImage?: string;
       inactiveImage?: string;
+      soundPath?: string;
+      soundVolume?: number;
       activeTransparent?: boolean;
       idleTransparent?: boolean;
       width?: number;
@@ -648,6 +664,14 @@ export function useKeyManager() {
             update.inactiveImage !== undefined
               ? update.inactiveImage
               : pos.inactiveImage,
+          soundPath:
+            update.soundPath !== undefined
+              ? update.soundPath
+              : pos.soundPath,
+          soundVolume:
+            update.soundVolume !== undefined
+              ? update.soundVolume
+              : pos.soundVolume,
           activeTransparent:
             update.activeTransparent !== undefined
               ? update.activeTransparent

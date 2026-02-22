@@ -22,7 +22,7 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   label,
   children,
 }) => (
-  <div className="flex justify-between items-center w-full">
+  <div className="flex justify-between items-center w-full min-h-[23px]">
     <p className="text-white text-style-2">{label}</p>
     <div className="flex items-center gap-[10.5px]">{children}</div>
   </div>

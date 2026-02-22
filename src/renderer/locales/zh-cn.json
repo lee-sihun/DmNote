@@ -459,7 +459,13 @@
     "delete": "删除",
     "hideLayer": "隐藏",
     "showLayer": "显示",
-    "font": "字体"
+    "font": "字体",
+    "keySound": "声音设置",
+    "keySoundEnabled": "启用按键声音",
+    "selectedSound": "已选音频",
+    "soundVolume": "音量",
+    "import": "导入",
+    "loading": "加载中..."
   },
   "fontPicker": {
     "searchPlaceholder": "搜索",
@@ -468,6 +474,43 @@
     "filterLocal": "本地字体",
     "filterWeb": "网络字体",
     "noFonts": "无字体"
+  },
+  "soundPicker": {
+    "searchPlaceholder": "搜索",
+    "filterAll": "全部",
+    "filterLocal": "本地音频",
+    "noSounds": "无音频"
+  },
+  "soundManager": {
+    "title": "音频",
+    "noSounds": "无音频",
+    "addSound": "添加",
+    "loadFailed": "音频列表加载失败",
+    "stateChangeFailed": "音频状态变更失败",
+    "deleteFailed": "音频删除失败",
+    "editSound": "编辑"
+  },
+  "soundTrimModal": {
+    "defaultTitle": "添加音频",
+    "editTitle": "编辑音频",
+    "statusDecoding": "解析中...",
+    "statusWaiting": "等待文件",
+    "statusReady": "可用",
+    "nameLabel": "音频名称",
+    "namePlaceholder": "音频名称",
+    "decodeError": "无法解析音频文件。",
+    "decodingMessage": "正在解析音频...",
+    "emptyMessage": "选择文件后将显示波形",
+    "loadFile": "加载文件",
+    "dragHint": "拖动以编辑范围",
+    "saving": "保存中...",
+    "submit": "添加",
+    "submitEdit": "保存",
+    "cancel": "取消",
+    "statusLoading": "加载中...",
+    "loadOriginalError": "无法加载原始音频。",
+    "saveErrorDefault": "无法保存处理后的音频。",
+    "saveErrorFailed": "保存处理后的音频失败。"
   },
   "fontManager": {
     "localTab": "本地字体",

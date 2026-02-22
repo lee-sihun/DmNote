@@ -991,6 +991,8 @@ export default function Grid({
         hidden: false,
         activeImage: "",
         inactiveImage: "",
+        soundPath: "",
+        soundVolume: 100,
         activeTransparent: false,
         idleTransparent: false,
         count: 0,
@@ -1035,6 +1037,8 @@ export default function Grid({
         hidden: false,
         activeImage: "",
         inactiveImage: "",
+        soundPath: "",
+        soundVolume: 100,
         activeTransparent: false,
         idleTransparent: false,
         count: 0,
@@ -1720,6 +1724,7 @@ export default function Grid({
         zoom={zoom}
         panX={panX}
         panY={panY}
+        isViewportTransforming={isTransforming}
         setReferenceRef={(node) => {
           graphRefs.current[index] = node;
         }}

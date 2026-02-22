@@ -185,6 +185,7 @@ export interface StyleTabContentProps {
   mappingLabel?: string;
   // 표시 텍스트 입력 숨김 (통계 요소는 statType이 displayText 역할)
   hideDisplayText?: boolean;
+  showSoundControls?: boolean;
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;

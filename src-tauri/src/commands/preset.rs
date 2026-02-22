@@ -51,6 +51,7 @@ struct PresetFile {
     font_settings: Option<FontSettings>,
     embedded_local_fonts: Option<Vec<EmbeddedLocalFont>>,
     embedded_local_images: Option<Vec<EmbeddedLocalImage>>,
+    embedded_local_sounds: Option<Vec<EmbeddedLocalSound>>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -71,7 +72,17 @@ struct EmbeddedLocalImage {
     data_base64: String,
 }
 
+#[derive(Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EmbeddedLocalSound {
+    sound_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    extension: Option<String>,
+    data_base64: String,
+}
+
 const PRESET_LOCAL_IMAGE_PREFIX: &str = "dmnote-local-image://";
+const PRESET_LOCAL_SOUND_PREFIX: &str = "dmnote-local-sound://";
 
 #[tauri::command(permission = "dmnote-allow-all")]
 pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
@@ -101,6 +112,8 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
             &snapshot.stat_positions,
             &snapshot.graph_positions,
         )?;
+    let (key_positions, stat_positions, graph_positions, embedded_local_sounds) =
+        build_preset_sound_payload(&key_positions, &stat_positions, &graph_positions)?;
 
     let preset = PresetFile {
         keys: Some(snapshot.keys),
@@ -120,6 +133,7 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
         font_settings: Some(font_settings),
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
         embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
+        embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
     };
 
     let json = serde_json::to_string_pretty(&preset).map_err(|err| err.to_string())?;
@@ -192,6 +206,13 @@ pub fn preset_load(
         &mut stat_positions,
         &mut graph_positions,
         preset.embedded_local_images.as_deref(),
+    )?;
+    restore_preset_local_sounds(
+        &app,
+        &mut positions,
+        &mut stat_positions,
+        &mut graph_positions,
+        preset.embedded_local_sounds.as_deref(),
     )?;
 
     state
@@ -702,6 +723,150 @@ fn restore_preset_local_images(
     Ok(())
 }
 
+fn restore_preset_local_sounds(
+    app: &AppHandle,
+    key_positions: &mut KeyPositions,
+    stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
+    embedded_local_sounds: Option<&[EmbeddedLocalSound]>,
+) -> Result<(), String> {
+    let has_any_sounds = key_positions.values().any(|positions| {
+        positions
+            .iter()
+            .any(|position| option_has_non_empty_text(&position.sound_path))
+    }) || stat_positions.values().any(|positions| {
+        positions
+            .iter()
+            .any(|stat_position| option_has_non_empty_text(&stat_position.position.sound_path))
+    }) || graph_positions.values().any(|positions| {
+        positions
+            .iter()
+            .any(|graph_position| option_has_non_empty_text(&graph_position.position.sound_path))
+    });
+
+    if !has_any_sounds {
+        return Ok(());
+    }
+
+    let embedded_map: HashMap<&str, &EmbeddedLocalSound> = embedded_local_sounds
+        .unwrap_or(&[])
+        .iter()
+        .map(|sound| (sound.sound_id.as_str(), sound))
+        .collect();
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    let sounds_dir = app_data_dir.join("sounds");
+    fs::create_dir_all(&sounds_dir)
+        .map_err(|err| format!("failed to create sounds directory: {err}"))?;
+
+    let mut restored_path_cache: HashMap<String, String> = HashMap::new();
+
+    for positions in key_positions.values_mut() {
+        for position in positions.iter_mut() {
+            restore_position_sound_reference(
+                &sounds_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut position.sound_path,
+            )?;
+        }
+    }
+
+    for positions in stat_positions.values_mut() {
+        for stat_position in positions.iter_mut() {
+            restore_position_sound_reference(
+                &sounds_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut stat_position.position.sound_path,
+            )?;
+        }
+    }
+
+    for positions in graph_positions.values_mut() {
+        for graph_position in positions.iter_mut() {
+            restore_position_sound_reference(
+                &sounds_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut graph_position.position.sound_path,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn restore_position_sound_reference(
+    sounds_dir: &Path,
+    embedded_map: &HashMap<&str, &EmbeddedLocalSound>,
+    restored_path_cache: &mut HashMap<String, String>,
+    sound_ref: &mut Option<String>,
+) -> Result<(), String> {
+    let Some(current_value) = sound_ref.clone() else {
+        return Ok(());
+    };
+    let trimmed = current_value.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(sound_id) = trimmed.strip_prefix(PRESET_LOCAL_SOUND_PREFIX) {
+        if let Some(restored_path) = restored_path_cache.get(sound_id) {
+            *sound_ref = Some(restored_path.clone());
+            return Ok(());
+        }
+        let Some(embedded) = embedded_map.get(sound_id) else {
+            log::warn!(
+                "[Preset] Missing embedded sound payload for id '{}'; clearing sound reference",
+                sound_id
+            );
+            *sound_ref = None;
+            return Ok(());
+        };
+
+        let bytes = match BASE64_STANDARD.decode(embedded.data_base64.as_bytes()) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                log::warn!(
+                    "[Preset] Failed to decode embedded sound '{}': {err}",
+                    sound_id
+                );
+                *sound_ref = None;
+                return Ok(());
+            }
+        };
+
+        let extension = normalize_sound_extension(embedded.extension.as_deref());
+        let dest_path = sounds_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+        if let Err(err) = fs::write(&dest_path, bytes) {
+            log::warn!(
+                "[Preset] Failed to restore embedded sound '{}': {err}",
+                sound_id
+            );
+            *sound_ref = None;
+            return Ok(());
+        }
+        let restored = dest_path.to_string_lossy().to_string();
+        restored_path_cache.insert(sound_id.to_string(), restored.clone());
+        *sound_ref = Some(restored);
+        return Ok(());
+    }
+
+    // 레거시 호환: 절대 경로가 현재 기기에서 유효하면 그대로 유지.
+    let path = PathBuf::from(trimmed);
+    if path.is_absolute() && path.exists() {
+        return Ok(());
+    }
+
+    // 다른 기기에서 임포트된 프리셋: 경로를 해석할 수 없으면 초기화.
+    *sound_ref = None;
+    Ok(())
+}
+
 fn restore_position_image_reference(
     images_dir: &Path,
     embedded_map: &HashMap<&str, &EmbeddedLocalImage>,
@@ -843,6 +1008,118 @@ fn normalize_image_extension(extension: Option<&str>) -> String {
         "ico" => "ico".to_string(),
         "avif" => "avif".to_string(),
         _ => "png".to_string(),
+    }
+}
+
+fn build_preset_sound_payload(
+    key_positions: &KeyPositions,
+    stat_positions: &StatPositions,
+    graph_positions: &GraphPositions,
+) -> Result<(KeyPositions, StatPositions, GraphPositions, Vec<EmbeddedLocalSound>), String> {
+    let mut exported_key_positions = key_positions.clone();
+    let mut exported_stat_positions = stat_positions.clone();
+    let mut exported_graph_positions = graph_positions.clone();
+    let mut embedded_local_sounds = Vec::new();
+    let mut path_to_sound_id: HashMap<String, String> = HashMap::new();
+
+    for positions in exported_key_positions.values_mut() {
+        for position in positions.iter_mut() {
+            rewrite_position_sound_reference(
+                &mut position.sound_path,
+                &mut embedded_local_sounds,
+                &mut path_to_sound_id,
+            )?;
+        }
+    }
+
+    for positions in exported_stat_positions.values_mut() {
+        for stat_position in positions.iter_mut() {
+            rewrite_position_sound_reference(
+                &mut stat_position.position.sound_path,
+                &mut embedded_local_sounds,
+                &mut path_to_sound_id,
+            )?;
+        }
+    }
+
+    for positions in exported_graph_positions.values_mut() {
+        for graph_position in positions.iter_mut() {
+            rewrite_position_sound_reference(
+                &mut graph_position.position.sound_path,
+                &mut embedded_local_sounds,
+                &mut path_to_sound_id,
+            )?;
+        }
+    }
+
+    Ok((
+        exported_key_positions,
+        exported_stat_positions,
+        exported_graph_positions,
+        embedded_local_sounds,
+    ))
+}
+
+fn rewrite_position_sound_reference(
+    sound_ref: &mut Option<String>,
+    embedded_local_sounds: &mut Vec<EmbeddedLocalSound>,
+    path_to_sound_id: &mut HashMap<String, String>,
+) -> Result<(), String> {
+    let Some(current_value) = sound_ref.clone() else {
+        return Ok(());
+    };
+    let trimmed = current_value.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    let source_path = PathBuf::from(trimmed);
+    if !source_path.is_absolute() || !source_path.exists() {
+        return Ok(());
+    }
+
+    let source_key = source_path.to_string_lossy().to_string();
+    if let Some(existing_id) = path_to_sound_id.get(&source_key) {
+        *sound_ref = Some(format!("{PRESET_LOCAL_SOUND_PREFIX}{existing_id}"));
+        return Ok(());
+    }
+
+    let bytes = match fs::read(&source_path) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            log::warn!(
+                "[Preset] Failed to read local sound from '{}': {err}",
+                source_path.display()
+            );
+            return Ok(());
+        }
+    };
+
+    let extension = normalize_sound_extension(source_path.extension().and_then(|ext| ext.to_str()));
+    let sound_id = Uuid::new_v4().to_string();
+    embedded_local_sounds.push(EmbeddedLocalSound {
+        sound_id: sound_id.clone(),
+        extension: Some(extension),
+        data_base64: BASE64_STANDARD.encode(bytes),
+    });
+    path_to_sound_id.insert(source_key, sound_id.clone());
+    *sound_ref = Some(format!("{PRESET_LOCAL_SOUND_PREFIX}{sound_id}"));
+    Ok(())
+}
+
+fn normalize_sound_extension(extension: Option<&str>) -> String {
+    match extension
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "wav" => "wav".to_string(),
+        "mp3" => "mp3".to_string(),
+        "ogg" => "ogg".to_string(),
+        "flac" => "flac".to_string(),
+        "aac" => "aac".to_string(),
+        _ => "wav".to_string(),
     }
 }
 

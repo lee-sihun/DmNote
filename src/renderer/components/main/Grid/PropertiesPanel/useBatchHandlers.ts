@@ -1300,9 +1300,22 @@ export function useBatchHandlers({
     [dispatchKeyUpdates, selectedKeys],
   );
 
+  const handleKeyOnlyStyleChangeComplete = useCallback(
+    (property: keyof KeyPosition, value: any) => {
+      const keyUpdates = selectedKeys
+        .filter((el) => el.index !== undefined)
+        .map((el) => ({ index: el.index!, [property]: value })) as Array<
+        { index: number } & Partial<KeyPosition>
+      >;
+      dispatchKeyUpdates(keyUpdates, "commit");
+    },
+    [selectedKeys, dispatchKeyUpdates],
+  );
+
   return {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleKeyOnlyStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,

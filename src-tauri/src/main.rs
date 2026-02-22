@@ -7,6 +7,7 @@ mod defaults;
 mod ipc;
 mod keyboard;
 mod keyboard_daemon;
+mod key_sound;
 #[cfg(target_os = "windows")]
 mod keyboard_labels;
 mod models;
@@ -168,6 +169,12 @@ fn main() {
             commands::keys::keys_set_counters,
             commands::keys::raw_input_subscribe,
             commands::keys::raw_input_unsubscribe,
+            commands::key_sound::key_sound_get_status,
+            commands::key_sound::key_sound_set_enabled,
+            commands::key_sound::key_sound_set_volume,
+            commands::key_sound::key_sound_load_soundpack,
+            commands::key_sound::key_sound_unload_soundpack,
+            commands::key_sound::key_sound_set_latency_logging,
             commands::keys::custom_tabs_list,
             commands::keys::custom_tabs_create,
             commands::keys::custom_tabs_delete,
@@ -188,6 +195,13 @@ fn main() {
             commands::css::css_tab_toggle,
             commands::font::font_load,
             commands::image::image_load,
+            commands::sound::sound_load,
+            commands::sound::sound_list,
+            commands::sound::sound_set_enabled,
+            commands::sound::sound_delete,
+            commands::sound::sound_save_processed_wav,
+            commands::sound::sound_load_original,
+            commands::sound::sound_update_processed_wav,
             commands::js::js_get,
             commands::js::js_get_use,
             commands::js::js_toggle,

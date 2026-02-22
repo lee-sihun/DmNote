@@ -55,6 +55,51 @@ impl Default for FontSettings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SoundSource {
+    Builtin,
+    Local,
+}
+
+fn default_sound_source() -> SoundSource {
+    SoundSource::Local
+}
+
+fn default_sound_enabled() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundLibraryEntry {
+    #[serde(default = "default_sound_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_sound_source")]
+    pub source: SoundSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_start_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trim_end_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+impl Default for SoundLibraryEntry {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            source: SoundSource::Local,
+            original_path: None,
+            trim_start_ratio: None,
+            trim_end_ratio: None,
+            display_name: None,
+        }
+    }
+}
+
 // Serialize as:
 // - Solid: JSON string (e.g., "#FF00FF")
 // - Gradient: object with explicit type { type: "gradient", top, bottom }
@@ -123,6 +168,15 @@ pub struct KeyPosition {
     pub active_image: Option<String>,
     #[serde(default)]
     pub inactive_image: Option<String>,
+    /// 키별 사운드 활성화 여부 (기본값 false)
+    #[serde(default)]
+    pub sound_enabled: Option<bool>,
+    /// 키 입력 시 재생할 로컬 사운드 파일 경로
+    #[serde(default)]
+    pub sound_path: Option<String>,
+    /// 키별 사운드 볼륨 (0~100, 기본값 100)
+    #[serde(default)]
+    pub sound_volume: Option<f64>,
     #[serde(default)]
     pub active_transparent: bool,
     #[serde(default)]
@@ -785,6 +839,9 @@ pub struct AppStoreData {
     /// 단축키 설정
     #[serde(default)]
     pub shortcuts: ShortcutsState,
+    /// 사운드 라이브러리 메타데이터 (키: 절대 경로, 값: 메타데이터)
+    #[serde(default)]
+    pub sound_library: HashMap<String, SoundLibraryEntry>,
     /// 플러그인 데이터 저장소 (plugin_data_* 키로 저장)
     #[serde(default, flatten)]
     pub plugin_data: HashMap<String, serde_json::Value>,
@@ -831,6 +888,7 @@ impl Default for AppStoreData {
             key_counter_enabled: false,
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
+            sound_library: HashMap::new(),
             plugin_data: HashMap::new(),
         }
     }

@@ -308,6 +308,66 @@ const api: DMNoteAPI = {
   image: {
     load: () => invoke<import("@src/types/api").ImageLoadResult>("image_load"),
   },
+  sound: {
+    load: () => invoke<import("@src/types/api").SoundLoadResult>("sound_load"),
+    list: () => invoke<import("@src/types/api").SoundListItem[]>("sound_list"),
+    setEnabled: (soundPath: string, enabled: boolean) =>
+      invoke<import("@src/types/api").SoundSetEnabledResult>(
+        "sound_set_enabled",
+        { soundPath, enabled },
+      ),
+    remove: (soundPath: string) =>
+      invoke<import("@src/types/api").SoundDeleteResult>("sound_delete", {
+        soundPath,
+      }),
+    saveProcessedWav: (
+      wavBase64: string,
+      fileName?: string,
+      originalBase64?: string,
+      originalExtension?: string,
+      trimStartRatio?: number,
+      trimEndRatio?: number,
+    ) =>
+      invoke<import("@src/types/api").SoundSaveProcessedWavResult>(
+        "sound_save_processed_wav",
+        {
+          request: {
+            wavBase64,
+            fileName,
+            originalBase64,
+            originalExtension,
+            trimStartRatio,
+            trimEndRatio,
+          },
+        },
+      ),
+    loadOriginal: (soundPath: string) =>
+      invoke<import("@src/types/api").SoundLoadOriginalResult>(
+        "sound_load_original",
+        { soundPath },
+      ),
+    updateProcessedWav: (
+      soundPath: string,
+      wavBase64: string,
+      trimStartRatio?: number,
+      trimEndRatio?: number,
+      displayName?: string,
+    ) =>
+      invoke<import("@src/types/api").SoundUpdateProcessedWavResult>(
+        "sound_update_processed_wav",
+        {
+          request: {
+            soundPath,
+            wavBase64,
+            trimStartRatio,
+            trimEndRatio,
+            displayName,
+          },
+        },
+      ),
+    setLatencyLogging: (enabled: boolean) =>
+      invoke("key_sound_set_latency_logging", { enabled }).then(() => undefined),
+  },
   js: {
     get: () => invoke<CustomJs>("js_get"),
     getUse: () => invoke<boolean>("js_get_use"),

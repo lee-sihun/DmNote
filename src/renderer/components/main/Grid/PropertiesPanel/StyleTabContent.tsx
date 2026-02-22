@@ -18,8 +18,8 @@ import ImagePicker from "../../Modal/content/ImagePicker";
 import ColorPicker from "../../Modal/content/ColorPicker";
 import FontPicker from "../../Modal/content/FontPicker";
 import FontManagerModal from "../../Modal/content/FontManagerModal";
+import SoundPicker from "../../Modal/content/SoundPicker";
 import Checkbox from "../../common/Checkbox";
-import { useFontStore } from "@stores/useFontStore";
 
 // 피커 타겟 타입
 type PickerTarget =
@@ -70,6 +70,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   mappingControlLayout,
   mappingLabel,
   hideDisplayText = false,
+  showSoundControls = true,
   showImagePicker = false,
   onToggleImagePicker,
   imageButtonRef,
@@ -105,10 +106,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
   // 폰트 버튼 ref
   const fontButtonRef = useRef<HTMLButtonElement>(null);
+  const soundButtonRef = useRef<HTMLButtonElement>(null);
   // 폰트 관리 모달 상태
   const [showFontManager, setShowFontManager] = useState(false);
-  // 폰트 스토어
-  const { getAllFonts } = useFontStore();
+  const [showSoundPicker, setShowSoundPicker] = useState(false);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
@@ -726,6 +727,56 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         </>
       )}
 
+      {showSoundControls && (
+        <>
+          <SectionDivider />
+
+          <PropertyRow
+            label={t("propertiesPanel.keySoundEnabled") || "키 사운드 활성화"}
+          >
+            <Checkbox
+              checked={keyPosition.soundEnabled ?? false}
+              onChange={() => {
+                const nextEnabled = !(keyPosition.soundEnabled ?? false);
+                onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
+                onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
+              }}
+            />
+          </PropertyRow>
+
+          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
+            <button
+              ref={soundButtonRef}
+              type="button"
+              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                showSoundPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+              } text-[#DBDEE8] text-style-4`}
+              onClick={() => {
+                setPickerFor(null);
+                setShowSoundPicker((prev) => !prev);
+              }}
+            >
+              {t("propertiesPanel.configure") || "설정하기"}
+            </button>
+          </PropertyRow>
+
+          <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
+            <NumberInput
+              value={keyPosition.soundVolume ?? 100}
+              onChange={(value) =>
+                handleStyleChangeComplete(
+                  "soundVolume",
+                  Math.max(0, Math.min(100, value)),
+                )
+              }
+              suffix="%"
+              min={0}
+              max={100}
+            />
+          </PropertyRow>
+        </>
+      )}
+
       {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}
       {showImagePicker && onToggleImagePicker && imageButtonRef && (
         <ImagePicker
@@ -796,6 +847,24 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             setShowFontManager(true);
           }}
           interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* SoundPicker */}
+      {showSoundControls && showSoundPicker && (
+        <SoundPicker
+          open={true}
+          referenceRef={soundButtonRef}
+          panelElement={panelElement}
+          selectedSound={keyPosition.soundPath || null}
+          onSoundSelect={(soundPath) => {
+            const nextPath = soundPath || "";
+            onKeyPreview?.(keyIndex, { soundPath: nextPath });
+            onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+          }}
+          onClose={() => setShowSoundPicker(false)}
+          interactiveRefs={[soundButtonRef]}
+          previewVolume={keyPosition.soundVolume ?? 100}
         />
       )}
 

@@ -87,6 +87,11 @@ impl AppStore {
         self.state.read().clone()
     }
 
+    pub fn with_state<T>(&self, reader: impl FnOnce(&AppStoreData) -> T) -> T {
+        let guard = self.state.read();
+        reader(&guard)
+    }
+
     pub fn settings_snapshot(&self) -> SettingsState {
         settings_from_store(&self.state.read())
     }
@@ -247,7 +252,7 @@ impl AppStore {
     }
 
     /// 앱 종료 시점에 한 번 호출하는 자원 정리.
-    /// 현재 store에서 참조하지 않는 appData/fonts, appData/images 파일을 삭제합니다.
+    /// 현재 store에서 참조하지 않는 appData/fonts, appData/images, appData/sounds 파일을 삭제
     pub fn cleanup_orphan_assets_now(&self) -> Result<()> {
         let snapshot = self.state.read().clone();
         let app_data_dir = self
@@ -257,12 +262,15 @@ impl AppStore {
 
         let fonts_dir = app_data_dir.join("fonts");
         let images_dir = app_data_dir.join("images");
+        let sounds_dir = app_data_dir.join("sounds");
 
         let referenced_font_keys = collect_local_font_path_keys(&snapshot);
         let referenced_image_keys = collect_local_image_path_keys(&snapshot);
+        let referenced_sound_keys = collect_local_sound_path_keys(&snapshot);
 
         sweep_unreferenced_asset_files("Fonts", &fonts_dir, &referenced_font_keys)?;
         sweep_unreferenced_asset_files("Images", &images_dir, &referenced_image_keys)?;
+        sweep_unreferenced_asset_files("Sounds", &sounds_dir, &referenced_sound_keys)?;
         Ok(())
     }
 }
@@ -623,7 +631,37 @@ fn collect_local_image_path_keys(data: &AppStoreData) -> HashSet<String> {
     paths
 }
 
+fn collect_local_sound_path_keys(data: &AppStoreData) -> HashSet<String> {
+    let mut paths = HashSet::new();
+
+    for positions in data.key_positions.values() {
+        for position in positions {
+            collect_sound_path_from_option(&mut paths, position.sound_path.as_ref());
+        }
+    }
+
+    // 사운드 라이브러리에 등록된 파일도 보호 (키에 할당 안 되어도 유지)
+    for key in data.sound_library.keys() {
+        let normalized = PathBuf::from(key);
+        if normalized.is_absolute() {
+            paths.insert(path_lookup_key(&normalized));
+        }
+    }
+
+    paths
+}
+
 fn collect_image_path_from_option(paths: &mut HashSet<String>, value: Option<&String>) {
+    let Some(path) = value else {
+        return;
+    };
+    let Some(normalized) = normalize_local_asset_path(path) else {
+        return;
+    };
+    paths.insert(path_lookup_key(&normalized));
+}
+
+fn collect_sound_path_from_option(paths: &mut HashSet<String>, value: Option<&String>) {
     let Some(path) = value else {
         return;
     };
