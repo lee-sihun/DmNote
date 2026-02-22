@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use log::debug;
 use log::warn;
 use parking_lot::RwLock;
-use rodio::{OutputStream, PlayError, Sink, Source};
+use rodio::{OutputStream, PlayError, Source};
 use serde::{Deserialize, Serialize};
 use symphonia::{
     core::{
@@ -87,8 +87,7 @@ struct LatencySample {
     queue_ms: f64,
     cache_lookup_ms: f64,
     decode_ms: f64,
-    sink_ms: f64,
-    append_ms: f64,
+    play_ms: f64,
     thread_ms: f64,
     total_ms: f64,
 }
@@ -102,8 +101,7 @@ struct LatencySummary {
     queue_sum: f64,
     cache_lookup_sum: f64,
     decode_sum: f64,
-    sink_sum: f64,
-    append_sum: f64,
+    play_sum: f64,
     thread_sum: f64,
     total_sum: f64,
     total_max: f64,
@@ -120,8 +118,7 @@ impl LatencySummary {
         self.queue_sum += sample.queue_ms;
         self.cache_lookup_sum += sample.cache_lookup_ms;
         self.decode_sum += sample.decode_ms;
-        self.sink_sum += sample.sink_ms;
-        self.append_sum += sample.append_ms;
+        self.play_sum += sample.play_ms;
         self.thread_sum += sample.thread_ms;
         self.total_sum += sample.total_ms;
         self.total_max = self.total_max.max(sample.total_ms);
@@ -137,15 +134,14 @@ impl LatencySummary {
             return;
         }
         debug!(
-            "[KeySound][Latency][Summary] samples={} cacheMisses={} avgDispatchMs={:.3} avgQueueMs={:.3} avgCacheLookupMs={:.3} avgDecodeMs={:.3} avgSinkMs={:.3} avgAppendMs={:.3} avgThreadMs={:.3} avgTotalMs={:.3} maxTotalMs={:.3}",
+            "[KeySound][Latency][Summary] samples={} cacheMisses={} avgDispatchMs={:.3} avgQueueMs={:.3} avgCacheLookupMs={:.3} avgDecodeMs={:.3} avgPlayMs={:.3} avgThreadMs={:.3} avgTotalMs={:.3} maxTotalMs={:.3}",
             self.samples,
             self.cache_miss_samples,
             self.dispatch_sum / count,
             self.queue_sum / count,
             self.cache_lookup_sum / count,
             self.decode_sum / count,
-            self.sink_sum / count,
-            self.append_sum / count,
+            self.play_sum / count,
             self.thread_sum / count,
             self.total_sum / count,
             self.total_max
@@ -359,7 +355,7 @@ fn audio_thread(
     receiver: Receiver<AudioCommand>,
     state: Arc<RwLock<KeySoundRuntimeState>>,
 ) {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         use thread_priority::{set_current_thread_priority, ThreadPriority};
         let _ = set_current_thread_priority(ThreadPriority::Max);
@@ -423,22 +419,13 @@ fn audio_thread(
                 }
 
                 #[cfg(debug_assertions)]
-                let sink_started_at = latency_logging.then_some(Instant::now());
-                let Some(sink) = build_sink(&mut stream_handler) else {
+                let play_started_at = latency_logging.then_some(Instant::now());
+                if !play_on_stream(&mut stream_handler, source, volume) {
                     continue;
-                };
-                #[cfg(debug_assertions)]
-                let sink_ms = sink_started_at
-                    .map(|started| started.elapsed().as_secs_f64() * 1000.0)
-                    .unwrap_or(0.0);
-
-                sink.set_volume(volume);
-                #[cfg(debug_assertions)]
-                let append_started_at = latency_logging.then_some(Instant::now());
-                sink.append(source);
+                }
                 #[cfg(debug_assertions)]
                 {
-                    let append_ms = append_started_at
+                    let play_ms = play_started_at
                         .map(|started| started.elapsed().as_secs_f64() * 1000.0)
                         .unwrap_or(0.0);
                     if latency_logging {
@@ -452,14 +439,13 @@ fn audio_thread(
                             .map(KeySoundDispatchTrace::total_elapsed_ms)
                             .unwrap_or(dispatch_ms + queue_ms + thread_ms);
                         debug!(
-                            "[KeySound][Latency] route=soundpack dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} sinkMs={sink_ms:.3} appendMs={append_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} labels={labels:?}"
+                            "[KeySound][Latency] route=soundpack dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} playMs={play_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} labels={labels:?}"
                         );
                         latency_summary.push(
                             LatencySample {
                                 dispatch_ms,
                                 queue_ms,
-                                sink_ms,
-                                append_ms,
+                                play_ms,
                                 thread_ms,
                                 total_ms,
                                 ..Default::default()
@@ -471,7 +457,6 @@ fn audio_thread(
                         }
                     }
                 }
-                sink.detach();
             }
             AudioCommand::PlayFile {
                 path,
@@ -517,28 +502,21 @@ fn audio_thread(
                     stream_handler = OutputStream::try_default().ok();
                 }
 
-                #[cfg(debug_assertions)]
-                let sink_started_at = latency_logging.then_some(Instant::now());
-                let Some(sink) = build_sink(&mut stream_handler) else {
-                    continue;
-                };
-                #[cfg(debug_assertions)]
-                let sink_ms = sink_started_at
-                    .map(|started| started.elapsed().as_secs_f64() * 1000.0)
-                    .unwrap_or(0.0);
-
                 let final_volume = (volume * per_key_volume).clamp(0.0, 1.0);
-                sink.set_volume(final_volume);
-                #[cfg(debug_assertions)]
-                let append_started_at = latency_logging.then_some(Instant::now());
-                sink.append(AudioSource::new(
+                let source = AudioSource::new(
                     clip.samples.clone(),
                     clip.channels,
                     clip.sample_rate,
-                ));
+                );
+
+                #[cfg(debug_assertions)]
+                let play_started_at = latency_logging.then_some(Instant::now());
+                if !play_on_stream(&mut stream_handler, source, final_volume) {
+                    continue;
+                }
                 #[cfg(debug_assertions)]
                 {
-                    let append_ms = append_started_at
+                    let play_ms = play_started_at
                         .map(|started| started.elapsed().as_secs_f64() * 1000.0)
                         .unwrap_or(0.0);
                     if latency_logging {
@@ -557,7 +535,7 @@ fn audio_thread(
                             "miss"
                         };
                         debug!(
-                            "[KeySound][Latency] route=key-file dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} cacheLookupMs={cache_lookup_ms:.3} decodeMs={:.3} sinkMs={sink_ms:.3} appendMs={append_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} cache={} volume={final_volume:.3} path={path}",
+                            "[KeySound][Latency] route=key-file dispatchMs={dispatch_ms:.3} queueMs={queue_ms:.3} cacheLookupMs={cache_lookup_ms:.3} decodeMs={:.3} playMs={play_ms:.3} threadMs={thread_ms:.3} totalMs={total_ms:.3} cache={} volume={final_volume:.3} path={path}",
                             clip_load_trace.decode_ms,
                             cache_label
                         );
@@ -567,8 +545,7 @@ fn audio_thread(
                                 queue_ms,
                                 cache_lookup_ms,
                                 decode_ms: clip_load_trace.decode_ms,
-                                sink_ms,
-                                append_ms,
+                                play_ms,
                                 thread_ms,
                                 total_ms,
                             },
@@ -579,25 +556,37 @@ fn audio_thread(
                         }
                     }
                 }
-                sink.detach();
             }
         }
     }
 }
 
-fn build_sink(
+fn play_on_stream(
     stream_handler: &mut Option<(OutputStream, rodio::OutputStreamHandle)>,
-) -> Option<Sink> {
-    let handler = stream_handler.as_ref()?;
-    match Sink::try_new(&handler.1) {
-        Ok(sink) => Some(sink),
+    source: AudioSource,
+    volume: f32,
+) -> bool {
+    fn try_play(
+        handle: &rodio::OutputStreamHandle,
+        source: AudioSource,
+        volume: f32,
+    ) -> Result<(), PlayError> {
+        handle.play_raw(source.amplify(volume).convert_samples::<f32>())
+    }
+
+    let Some(handler) = stream_handler.as_ref() else {
+        return false;
+    };
+
+    match try_play(&handler.1, source.clone(), volume) {
+        Ok(()) => true,
         Err(PlayError::NoDevice) => {
             *stream_handler = OutputStream::try_default().ok();
             stream_handler
                 .as_ref()
-                .and_then(|new_handler| Sink::try_new(&new_handler.1).ok())
+                .map_or(false, |h| try_play(&h.1, source, volume).is_ok())
         }
-        Err(_) => None,
+        Err(_) => false,
     }
 }
 
