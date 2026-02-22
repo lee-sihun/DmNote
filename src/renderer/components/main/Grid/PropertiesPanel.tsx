@@ -1780,6 +1780,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const {
     handleBatchStyleChange,
     handleBatchStyleChangeComplete,
+    handleKeyOnlyStyleChangeComplete,
     handleBatchAlign,
     handleBatchDistribute,
     handleBatchSpacing,
@@ -2796,10 +2797,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div className="p-[12px] flex flex-col gap-[12px]">
                 <BatchStyleTabContent
                   selectedCount={selectedBatchStyleElements.length}
-                  showSoundControls={
-                    selectedKeyElements.length > 0 &&
-                    selectedKeyElements.length === selectedBatchStyleElements.length
-                  }
+                  showSoundControls={selectedKeyElements.length > 0}
                   getMixedValue={styleMixedValueGetter}
                   getSelectedKeysData={styleSelectedDataGetter}
                   afterSizeContent={
@@ -2918,6 +2916,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   handleBatchStyleChange={handleBatchStyleChange}
                   handleBatchStyleChangeComplete={
                     handleBatchStyleChangeComplete
+                  }
+                  getKeyOnlyMixedValue={getMixedValueKeysOnly}
+                  handleKeyOnlyStyleChangeComplete={
+                    handleKeyOnlyStyleChangeComplete
                   }
                   showBatchImagePicker={showBatchImagePicker}
                   onToggleBatchImagePicker={() =>

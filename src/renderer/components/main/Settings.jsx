@@ -765,8 +765,8 @@ export default function Settings({ showAlert, showConfirm }) {
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col p-[19px] bg-primary rounded-[7px] gap-[24px]">
-              <div className="flex flex-row justify-between items-center">
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.language")}
                 </p>
@@ -777,7 +777,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   placeholder={t("settings.selectLanguage")}
                 />
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.shortcuts")}
                 </p>
@@ -788,7 +788,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   {t("settings.configure")}
                 </button>
               </div>
-              <div className="flex flex-row justify-between items-center">
+              <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t("settings.graphicsOption")}
                 </p>
@@ -801,7 +801,7 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               <div
-                className="flex flex-row justify-between items-center h-[25px] cursor-pointer"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleAutoUpdateToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
@@ -813,7 +813,7 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               <div
-                className="flex flex-row justify-between items-center h-[25px] cursor-pointer"
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleDeveloperModeToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
@@ -825,7 +825,7 @@ export default function Settings({ showAlert, showConfirm }) {
                 />
               </div>
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px]">
+              <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px] mt-[7px] mb-[12px]">
                 <p className="text-style-3 text-[#FFFFFF]">
                   Ver {__APP_VERSION__}
                 </p>

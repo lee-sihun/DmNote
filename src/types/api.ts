@@ -85,6 +85,31 @@ export type SoundLoadResult = {
   soundPath?: string;
 };
 
+export type SoundListItem = {
+  soundPath: string;
+  fileName: string;
+  sizeBytes: number;
+  modifiedAtMs?: number;
+  enabled: boolean;
+  source: "local" | "builtin";
+};
+
+export type SoundSaveProcessedWavResult = {
+  success: boolean;
+  error?: string;
+  soundPath?: string;
+};
+
+export type SoundSetEnabledResult = {
+  success: boolean;
+  soundPath: string;
+  enabled: boolean;
+};
+
+export type SoundDeleteResult = {
+  success: boolean;
+};
+
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
@@ -726,6 +751,16 @@ export interface DMNoteAPI {
   };
   sound: {
     load(): Promise<SoundLoadResult>;
+    list(): Promise<SoundListItem[]>;
+    setEnabled(
+      soundPath: string,
+      enabled: boolean,
+    ): Promise<SoundSetEnabledResult>;
+    remove(soundPath: string): Promise<SoundDeleteResult>;
+    saveProcessedWav(
+      wavBase64: string,
+      fileName?: string,
+    ): Promise<SoundSaveProcessedWavResult>;
     setLatencyLogging(enabled: boolean): Promise<void>;
   };
   js: {

@@ -473,7 +473,8 @@
     "hideLayer": "隱藏",
     "showLayer": "顯示",
     "font": "字體",
-    "keySound": "按鍵音效",
+    "keySound": "聲音設定",
+    "keySoundEnabled": "啟用按鍵音效",
     "selectedSound": "已選音檔",
     "soundVolume": "音量",
     "import": "匯入",
@@ -486,6 +487,38 @@
     "filterLocal": "本地字體",
     "filterWeb": "網路字體",
     "noFonts": "無字體"
+  },
+  "soundPicker": {
+    "searchPlaceholder": "搜尋",
+    "filterAll": "全部",
+    "filterLocal": "本地音效",
+    "noSounds": "無音效"
+  },
+  "soundManager": {
+    "title": "音效",
+    "noSounds": "無音效",
+    "addSound": "添加",
+    "loadFailed": "音效清單載入失敗",
+    "stateChangeFailed": "音效狀態變更失敗",
+    "deleteFailed": "音效刪除失敗"
+  },
+  "soundTrimModal": {
+    "defaultTitle": "新增音效",
+    "statusDecoding": "解析中...",
+    "statusWaiting": "等待檔案",
+    "statusReady": "可使用",
+    "nameLabel": "音效名稱",
+    "namePlaceholder": "音效名稱",
+    "decodeError": "無法解析音訊檔案。",
+    "decodingMessage": "正在解析音訊...",
+    "emptyMessage": "選擇檔案後將顯示波形",
+    "loadFile": "載入檔案",
+    "dragHint": "拖曳以編輯範圍",
+    "saving": "儲存中...",
+    "submit": "新增",
+    "cancel": "取消",
+    "saveErrorDefault": "無法儲存處理後的音效。",
+    "saveErrorFailed": "儲存處理後的音效失敗。"
   },
   "fontManager": {
     "localTab": "本地字體",

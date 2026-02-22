@@ -445,7 +445,8 @@
     "hideLayer": "Скрыть",
     "showLayer": "Показать",
     "font": "Шрифт",
-    "keySound": "Звук клавиши",
+    "keySound": "Настройки звука",
+    "keySoundEnabled": "Включить звук клавиши",
     "selectedSound": "Выбранный звук",
     "soundVolume": "Громкость",
     "import": "Импорт",
@@ -458,6 +459,38 @@
     "filterLocal": "Локальные",
     "filterWeb": "Веб",
     "noFonts": "Нет шрифтов"
+  },
+  "soundPicker": {
+    "searchPlaceholder": "Поиск...",
+    "filterAll": "Все",
+    "filterLocal": "Локальные звуки",
+    "noSounds": "Звуков нет"
+  },
+  "soundManager": {
+    "title": "Звуки",
+    "noSounds": "Звуков нет",
+    "addSound": "Добавить",
+    "loadFailed": "Не удалось загрузить список звуков",
+    "stateChangeFailed": "Не удалось изменить состояние звука",
+    "deleteFailed": "Не удалось удалить звук"
+  },
+  "soundTrimModal": {
+    "defaultTitle": "Добавить звук",
+    "statusDecoding": "Декодирование...",
+    "statusWaiting": "Ожидание файла",
+    "statusReady": "Готово",
+    "nameLabel": "Название звука",
+    "namePlaceholder": "Название звука",
+    "decodeError": "Не удалось декодировать аудиофайл.",
+    "decodingMessage": "Декодирование аудио...",
+    "emptyMessage": "Выберите файл для отображения формы волны",
+    "loadFile": "Загрузить файл",
+    "dragHint": "Перетащите для редактирования диапазона",
+    "saving": "Сохранение...",
+    "submit": "Добавить",
+    "cancel": "Отмена",
+    "saveErrorDefault": "Не удалось сохранить обработанный звук.",
+    "saveErrorFailed": "Не удалось сохранить обработанный звук."
   },
   "fontManager": {
     "localTab": "Локальные",

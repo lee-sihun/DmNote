@@ -457,7 +457,8 @@
     "hideLayer": "Hide",
     "showLayer": "Show",
     "font": "Font",
-    "keySound": "Key Sound",
+    "keySound": "Sound Settings",
+    "keySoundEnabled": "Enable Key Sound",
     "selectedSound": "Selected Sound",
     "soundVolume": "Sound Volume",
     "import": "Import",
@@ -470,6 +471,38 @@
     "filterLocal": "Local",
     "filterWeb": "Web",
     "noFonts": "No fonts"
+  },
+  "soundPicker": {
+    "searchPlaceholder": "Search...",
+    "filterAll": "All",
+    "filterLocal": "Local Sounds",
+    "noSounds": "No sounds"
+  },
+  "soundManager": {
+    "title": "Sounds",
+    "noSounds": "No sounds",
+    "addSound": "Add",
+    "loadFailed": "Failed to load sound list",
+    "stateChangeFailed": "Failed to change sound state",
+    "deleteFailed": "Failed to delete sound"
+  },
+  "soundTrimModal": {
+    "defaultTitle": "Add Sound",
+    "statusDecoding": "Decoding...",
+    "statusWaiting": "Waiting for file",
+    "statusReady": "Ready",
+    "nameLabel": "Sound name",
+    "namePlaceholder": "Sound name",
+    "decodeError": "Unable to decode the audio file.",
+    "decodingMessage": "Decoding audio...",
+    "emptyMessage": "Select a file to display the waveform",
+    "loadFile": "Load file",
+    "dragHint": "Drag to edit range",
+    "saving": "Saving...",
+    "submit": "Add",
+    "cancel": "Cancel",
+    "saveErrorDefault": "Failed to save the processed sound.",
+    "saveErrorFailed": "Failed to save the processed sound."
   },
   "fontManager": {
     "localTab": "Local Fonts",

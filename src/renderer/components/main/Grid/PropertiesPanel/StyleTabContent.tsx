@@ -18,8 +18,8 @@ import ImagePicker from "../../Modal/content/ImagePicker";
 import ColorPicker from "../../Modal/content/ColorPicker";
 import FontPicker from "../../Modal/content/FontPicker";
 import FontManagerModal from "../../Modal/content/FontManagerModal";
+import SoundPicker from "../../Modal/content/SoundPicker";
 import Checkbox from "../../common/Checkbox";
-import { useFontStore } from "@stores/useFontStore";
 
 // 피커 타겟 타입
 type PickerTarget =
@@ -106,11 +106,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
   // 폰트 버튼 ref
   const fontButtonRef = useRef<HTMLButtonElement>(null);
+  const soundButtonRef = useRef<HTMLButtonElement>(null);
   // 폰트 관리 모달 상태
   const [showFontManager, setShowFontManager] = useState(false);
-  const [isLoadingSound, setIsLoadingSound] = useState(false);
-  // 폰트 스토어
-  const { getAllFonts } = useFontStore();
+  const [showSoundPicker, setShowSoundPicker] = useState(false);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
@@ -407,33 +406,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     },
     [keyIndex, onKeyPreview, onKeyUpdate],
   );
-
-  const handleSoundLoad = useCallback(async () => {
-    if (isLoadingSound) return;
-    setIsLoadingSound(true);
-    try {
-      const result = await window.api.sound.load();
-      if (!result.success || !result.soundPath) return;
-      onKeyPreview?.(keyIndex, { soundPath: result.soundPath });
-      onKeyUpdate({ index: keyIndex, soundPath: result.soundPath });
-    } catch (error) {
-      console.error("Failed to load key sound", error);
-    } finally {
-      setIsLoadingSound(false);
-    }
-  }, [isLoadingSound, keyIndex, onKeyPreview, onKeyUpdate]);
-
-  const handleSoundReset = useCallback(() => {
-    onKeyPreview?.(keyIndex, { soundPath: "" });
-    onKeyUpdate({ index: keyIndex, soundPath: "" });
-  }, [keyIndex, onKeyPreview, onKeyUpdate]);
-
-  const getSoundDisplayName = useCallback((soundPath?: string): string => {
-    if (!soundPath || !soundPath.trim()) return "";
-    const separators = /[\\/]/g;
-    const segments = soundPath.split(separators);
-    return segments[segments.length - 1] || soundPath;
-  }, []);
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = useCallback(
@@ -759,37 +731,34 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         <>
           <SectionDivider />
 
-          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
-            <div className="flex items-center gap-[4px]">
-              <button
-                type="button"
-                className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 disabled:opacity-60"
-                onClick={handleSoundLoad}
-                disabled={isLoadingSound}
-              >
-                {isLoadingSound
-                  ? t("propertiesPanel.loading") || "로딩..."
-                  : t("propertiesPanel.import") || "가져오기"}
-              </button>
-              {keyPosition.soundPath ? (
-                <button
-                  type="button"
-                  className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4"
-                  onClick={handleSoundReset}
-                >
-                  {t("tabCss.remove") || "삭제"}
-                </button>
-              ) : null}
-            </div>
+          <PropertyRow
+            label={t("propertiesPanel.keySoundEnabled") || "키 사운드 활성화"}
+          >
+            <Checkbox
+              checked={keyPosition.soundEnabled ?? false}
+              onChange={() => {
+                const nextEnabled = !(keyPosition.soundEnabled ?? false);
+                onKeyPreview?.(keyIndex, { soundEnabled: nextEnabled });
+                onKeyUpdate({ index: keyIndex, soundEnabled: nextEnabled });
+              }}
+            />
           </PropertyRow>
 
-          {keyPosition.soundPath ? (
-            <PropertyRow label={t("propertiesPanel.selectedSound") || "선택 파일"}>
-              <span className="text-[#9FA3B2] text-style-4 max-w-[110px] truncate">
-                {getSoundDisplayName(keyPosition.soundPath)}
-              </span>
-            </PropertyRow>
-          ) : null}
+          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
+            <button
+              ref={soundButtonRef}
+              type="button"
+              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                showSoundPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+              } text-[#DBDEE8] text-style-4`}
+              onClick={() => {
+                setPickerFor(null);
+                setShowSoundPicker((prev) => !prev);
+              }}
+            >
+              {t("propertiesPanel.configure") || "설정하기"}
+            </button>
+          </PropertyRow>
 
           <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
             <NumberInput
@@ -878,6 +847,24 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             setShowFontManager(true);
           }}
           interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* SoundPicker */}
+      {showSoundControls && showSoundPicker && (
+        <SoundPicker
+          open={true}
+          referenceRef={soundButtonRef}
+          panelElement={panelElement}
+          selectedSound={keyPosition.soundPath || null}
+          onSoundSelect={(soundPath) => {
+            const nextPath = soundPath || "";
+            onKeyPreview?.(keyIndex, { soundPath: nextPath });
+            onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+          }}
+          onClose={() => setShowSoundPicker(false)}
+          interactiveRefs={[soundButtonRef]}
+          previewVolume={keyPosition.soundVolume ?? 100}
         />
       )}
 

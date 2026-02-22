@@ -11,6 +11,7 @@ import {
 import Checkbox from "@components/main/common/Checkbox";
 import FontPicker from "@components/main/Modal/content/FontPicker";
 import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
+import SoundPicker from "@components/main/Modal/content/SoundPicker";
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;
@@ -57,6 +58,15 @@ interface BatchStyleTabContentProps {
     property: keyof KeyPosition,
     value: any,
   ) => void;
+  // 키 전용 (사운드 등)
+  getKeyOnlyMixedValue?: <T>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ) => { isMixed: boolean; value: T };
+  handleKeyOnlyStyleChangeComplete?: (
+    property: keyof KeyPosition,
+    value: any,
+  ) => void;
   // 이미지 피커
   showBatchImagePicker: boolean;
   onToggleBatchImagePicker: () => void;
@@ -83,6 +93,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
+  getKeyOnlyMixedValue,
+  handleKeyOnlyStyleChangeComplete,
   showBatchImagePicker,
   onToggleBatchImagePicker,
   batchImageButtonRef,
@@ -92,7 +104,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 }) => {
   const [colorState, setColorState] = useState<"idle" | "active">("idle");
   const [showFontPicker, setShowFontPicker] = useState(false);
-  const [isLoadingSound, setIsLoadingSound] = useState(false);
+  const [showSoundPicker, setShowSoundPicker] = useState(false);
 
   // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
   const lastSpacingRef = useRef<number | null>(null);
@@ -171,6 +183,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   }, []);
   const [showFontManager, setShowFontManager] = useState(false);
   const fontButtonRef = useRef<HTMLButtonElement>(null);
+  const soundButtonRef = useRef<HTMLButtonElement>(null);
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
@@ -190,27 +203,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
     return { isMixed, value: firstValue };
   };
-
-  const handleBatchSoundLoad = useCallback(async () => {
-    if (isLoadingSound) return;
-    setIsLoadingSound(true);
-    try {
-      const result = await window.api.sound.load();
-      if (!result.success || !result.soundPath) return;
-      handleBatchStyleChangeComplete("soundPath", result.soundPath);
-    } catch (error) {
-      console.error("Failed to load key sound", error);
-    } finally {
-      setIsLoadingSound(false);
-    }
-  }, [handleBatchStyleChangeComplete, isLoadingSound]);
-
-  const getSoundDisplayName = useCallback((soundPath?: string): string => {
-    if (!soundPath || !soundPath.trim()) return "";
-    const separators = /[\\/]/g;
-    const segments = soundPath.split(separators);
-    return segments[segments.length - 1] || soundPath;
-  }, []);
 
   return (
     <>
@@ -857,69 +849,68 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         </>
       )}
 
-      {showSoundControls && (
-        <>
-          <SectionDivider />
+      {showSoundControls && (() => {
+        const soundMixedValue = getKeyOnlyMixedValue ?? getMixedValue;
+        const soundChangeComplete = handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete;
+        return (
+          <>
+            <SectionDivider />
 
-          <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
-            {getMixedValue((pos) => pos.soundPath, "").isMixed ? (
-              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-            ) : null}
-            <div className="flex items-center gap-[4px]">
-              <button
-                type="button"
-                className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 disabled:opacity-60"
-                onClick={handleBatchSoundLoad}
-                disabled={isLoadingSound}
-              >
-                {isLoadingSound
-                  ? t("propertiesPanel.loading") || "로딩..."
-                  : t("propertiesPanel.import") || "가져오기"}
-              </button>
-              {getMixedValue((pos) => pos.soundPath, "").value ? (
-                <button
-                  type="button"
-                  className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4"
-                  onClick={() => handleBatchStyleChangeComplete("soundPath", "")}
-                >
-                  {t("tabCss.remove") || "삭제"}
-                </button>
+            <PropertyRow
+              label={t("propertiesPanel.keySoundEnabled") || "키 사운드 활성화"}
+            >
+              {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
+                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
               ) : null}
-            </div>
-          </PropertyRow>
+              <Checkbox
+                checked={soundMixedValue((pos) => pos.soundEnabled, false).value}
+                onChange={() => {
+                  const current = soundMixedValue(
+                    (pos) => pos.soundEnabled,
+                    false,
+                  ).value;
+                  soundChangeComplete("soundEnabled", !current);
+                }}
+              />
+            </PropertyRow>
 
-          {(() => {
-            const soundPathState = getMixedValue((pos) => pos.soundPath, "");
-            if (soundPathState.isMixed || !soundPathState.value) return null;
-            return (
-              <PropertyRow label={t("propertiesPanel.selectedSound") || "선택 파일"}>
-                <span className="text-[#9FA3B2] text-style-4 max-w-[110px] truncate">
-                  {getSoundDisplayName(soundPathState.value)}
-                </span>
-              </PropertyRow>
-            );
-          })()}
+            <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
+              {soundMixedValue((pos) => pos.soundPath, "").isMixed ? (
+                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+              ) : null}
+              <button
+                ref={soundButtonRef}
+                type="button"
+                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                  showSoundPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                } text-[#DBDEE8] text-style-4`}
+                onClick={() => setShowSoundPicker((prev) => !prev)}
+              >
+                {t("propertiesPanel.configure") || "설정하기"}
+              </button>
+            </PropertyRow>
 
-          <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
-            {getMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-            ) : null}
-            <NumberInput
-              value={getMixedValue((pos) => pos.soundVolume, 100).value}
-              onChange={(value) =>
-                handleBatchStyleChangeComplete(
-                  "soundVolume",
-                  Math.max(0, Math.min(100, value)),
-                )
-              }
-              suffix="%"
-              min={0}
-              max={100}
-              isMixed={getMixedValue((pos) => pos.soundVolume, 100).isMixed}
-            />
-          </PropertyRow>
-        </>
-      )}
+            <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
+              {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
+                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+              ) : null}
+              <NumberInput
+                value={soundMixedValue((pos) => pos.soundVolume, 100).value}
+                onChange={(value) =>
+                  soundChangeComplete(
+                    "soundVolume",
+                    Math.max(0, Math.min(100, value)),
+                  )
+                }
+                suffix="%"
+                min={0}
+                max={100}
+                isMixed={soundMixedValue((pos) => pos.soundVolume, 100).isMixed}
+              />
+            </PropertyRow>
+          </>
+        );
+      })()}
 
       {/* FontPicker */}
       {!hideFontControls && showFontPicker && (
@@ -936,6 +927,22 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             setShowFontManager(true);
           }}
           interactiveRefs={[fontButtonRef]}
+        />
+      )}
+
+      {/* SoundPicker */}
+      {showSoundControls && showSoundPicker && (
+        <SoundPicker
+          open={true}
+          referenceRef={soundButtonRef}
+          panelElement={panelElement}
+          selectedSound={(getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundPath, "").value || null}
+          onSoundSelect={(soundPath) => {
+            (handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete)("soundPath", soundPath || "");
+          }}
+          onClose={() => setShowSoundPicker(false)}
+          interactiveRefs={[soundButtonRef]}
+          previewVolume={(getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundVolume, 100).value}
         />
       )}
 

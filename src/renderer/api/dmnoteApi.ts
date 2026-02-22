@@ -310,6 +310,23 @@ const api: DMNoteAPI = {
   },
   sound: {
     load: () => invoke<import("@src/types/api").SoundLoadResult>("sound_load"),
+    list: () => invoke<import("@src/types/api").SoundListItem[]>("sound_list"),
+    setEnabled: (soundPath: string, enabled: boolean) =>
+      invoke<import("@src/types/api").SoundSetEnabledResult>(
+        "sound_set_enabled",
+        { soundPath, enabled },
+      ),
+    remove: (soundPath: string) =>
+      invoke<import("@src/types/api").SoundDeleteResult>("sound_delete", {
+        soundPath,
+      }),
+    saveProcessedWav: (wavBase64: string, fileName?: string) =>
+      invoke<import("@src/types/api").SoundSaveProcessedWavResult>(
+        "sound_save_processed_wav",
+        {
+          request: { wavBase64, fileName },
+        },
+      ),
     setLatencyLogging: (enabled: boolean) =>
       invoke("key_sound_set_latency_logging", { enabled }).then(() => undefined),
   },

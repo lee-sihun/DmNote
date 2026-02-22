@@ -123,6 +123,9 @@ pub struct KeyPosition {
     pub active_image: Option<String>,
     #[serde(default)]
     pub inactive_image: Option<String>,
+    /// 키별 사운드 활성화 여부 (기본값 false)
+    #[serde(default)]
+    pub sound_enabled: Option<bool>,
     /// 키 입력 시 재생할 로컬 사운드 파일 경로
     #[serde(default)]
     pub sound_path: Option<String>,

@@ -1306,6 +1306,10 @@ impl AppState {
                 let Some(position) = positions.get(index) else {
                     continue;
                 };
+
+                if !position.sound_enabled.unwrap_or(false) {
+                    continue;
+                }
                 let Some(sound_path) = position.sound_path.as_ref() else {
                     continue;
                 };
