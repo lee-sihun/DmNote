@@ -1724,6 +1724,7 @@ export default function Grid({
         zoom={zoom}
         panX={panX}
         panY={panY}
+        isViewportTransforming={isTransforming}
         setReferenceRef={(node) => {
           graphRefs.current[index] = node;
         }}

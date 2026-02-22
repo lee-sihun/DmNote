@@ -141,6 +141,7 @@ const GraphPanel = forwardRef(function GraphPanel(
     withOffsetVars = true,
     interactive = true,
     dataEditing,
+    isViewportTransforming = false,
     onClick,
     onMouseDown,
     onContextMenu,
@@ -377,7 +378,7 @@ const GraphPanel = forwardRef(function GraphPanel(
         cursor: interactive ? "pointer" : "default",
         fontFamily:
           "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
-        willChange: "transform",
+        willChange: (dataEditing || isViewportTransforming) ? "transform" : "auto",
         backfaceVisibility: "hidden",
         transformStyle: "preserve-3d",
         contain: "layout style paint",
