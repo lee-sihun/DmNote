@@ -789,7 +789,13 @@ export function useBatchHandlers({
             index: number;
           } & Partial<KeyPosition>;
         });
-      dispatchKeyUpdates(keyUpdates, "commit");
+      let hasSavedHistory = false;
+      if (keyUpdates.length > 0) {
+        dispatchKeyUpdates(keyUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
 
       const statUpdates = selectedStats
         .filter((el) => el.index !== undefined)
@@ -833,14 +839,23 @@ export function useBatchHandlers({
           }
           return { index, [property]: value } as any;
         });
-      dispatchStatUpdates(statUpdates, "commit");
+      if (statUpdates.length > 0) {
+        dispatchStatUpdates(statUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
 
       const graphUpdates = selectedGraphs
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [property]: value })) as Array<
         { index: number } & Partial<GraphItemPosition>
       >;
-      dispatchGraphUpdates(graphUpdates, "commit");
+      if (graphUpdates.length > 0) {
+        dispatchGraphUpdates(graphUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+      }
     },
     [
       keyPositions,
@@ -1113,26 +1128,42 @@ export function useBatchHandlers({
   // 일괄 크기 변경 핸들러
   const handleBatchResize = useCallback(
     (dimension: "width" | "height", value: number) => {
+      let hasSavedHistory = false;
+
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
         { index: number } & Partial<KeyPosition>
       >;
-      dispatchKeyUpdates(keyUpdates, "commit");
+      if (keyUpdates.length > 0) {
+        dispatchKeyUpdates(keyUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
 
       const statUpdates = selectedStats
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
         { index: number } & Partial<StatItemPosition>
       >;
-      dispatchStatUpdates(statUpdates, "commit");
+      if (statUpdates.length > 0) {
+        dispatchStatUpdates(statUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
 
       const graphUpdates = selectedGraphs
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
         { index: number } & Partial<GraphItemPosition>
       >;
-      dispatchGraphUpdates(graphUpdates, "commit");
+      if (graphUpdates.length > 0) {
+        dispatchGraphUpdates(graphUpdates, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+      }
     },
     [
       dispatchKeyUpdates,
@@ -1160,7 +1191,13 @@ export function useBatchHandlers({
           (update): update is { index: number; counter: KeyCounterSettings } =>
             update !== null,
         );
-      dispatchKeyUpdates(keyUpdates as any, "commit");
+      let hasSavedHistory = false;
+      if (keyUpdates.length > 0) {
+        dispatchKeyUpdates(keyUpdates as any, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+        hasSavedHistory = true;
+      }
 
       const statUpdates = selectedStats
         .filter((el) => el.index !== undefined)
@@ -1179,7 +1216,11 @@ export function useBatchHandlers({
           counter: KeyCounterSettings;
         } & Partial<StatItemPosition>
       >;
-      dispatchStatUpdates(statUpdates as any, "commit");
+      if (statUpdates.length > 0) {
+        dispatchStatUpdates(statUpdates as any, "commit", {
+          skipHistory: hasSavedHistory,
+        });
+      }
     },
     [
       dispatchKeyUpdates,
