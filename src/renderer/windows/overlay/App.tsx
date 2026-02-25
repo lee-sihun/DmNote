@@ -21,6 +21,7 @@ import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
 } from "@constants/overlayConfig";
+import { mergeNoteSettings } from "@src/types/noteSettings";
 import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
 import { useCustomJsInjection } from "@hooks/useCustomJsInjection";
 import { useBlockBrowserShortcuts } from "@hooks/useBlockBrowserShortcuts";
@@ -189,7 +190,12 @@ export default function App() {
   const alwaysOnTop = useSettingsStore((state) => state.alwaysOnTop);
   const trayEnabled = useSettingsStore((state) => state.trayEnabled);
   const setAlwaysOnTop = useSettingsStore((state) => state.setAlwaysOnTop);
-  const noteSettings = useSettingsStore((state) => state.noteSettings);
+  const globalNoteSettings = useSettingsStore((state) => state.noteSettings);
+  const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
+  const noteSettings = useMemo(
+    () => mergeNoteSettings(globalNoteSettings, tabNoteOverrides?.[selectedKeyType]),
+    [globalNoteSettings, tabNoteOverrides, selectedKeyType],
+  );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(

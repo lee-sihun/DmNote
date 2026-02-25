@@ -630,6 +630,7 @@ export default function App() {
               onKeyPreview={handleKeyPreview}
               onKeyBatchPreview={handleKeyBatchPreview}
               onKeyMappingChange={handleKeyMappingChange}
+              onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
             />
           </div>
         )}

@@ -34,6 +34,7 @@ interface UseGridContextMenuParams {
   positions: Record<string, any[]>;
   locale: string;
   t: (key: string) => string;
+  noteEffect?: boolean;
 }
 
 interface UseGridContextMenuReturn {
@@ -57,6 +58,7 @@ export function useGridContextMenu({
   positions,
   locale,
   t,
+  noteEffect,
 }: UseGridContextMenuParams): UseGridContextMenuReturn {
   // 플러그인 메뉴 아이템
   const pluginKeyMenuItems = usePluginMenuStore((state) => state.keyMenuItems);
@@ -182,6 +184,7 @@ export function useGridContextMenu({
       ];
       const bottomBaseItems: MenuItem[] = [
         { id: "tabCss", label: t("contextMenu.tabCssSetting") },
+        { id: "tabNote", label: t("contextMenu.tabNoteSetting"), disabled: !noteEffect },
       ];
 
       // 플러그인 메뉴 필터링
@@ -226,7 +229,7 @@ export function useGridContextMenu({
         ...bottomBaseItems,
       ];
     },
-    [selectedKeyType, t, pluginGridMenuItems, resolvePluginLabel]
+    [selectedKeyType, t, pluginGridMenuItems, resolvePluginLabel, noteEffect]
   );
 
   return {

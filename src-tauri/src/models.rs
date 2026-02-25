@@ -592,6 +592,49 @@ impl Default for TabCss {
 /// 탭별 CSS 오버라이드 맵 (키: 탭 ID, 값: TabCss)
 pub type TabCssOverrides = HashMap<String, TabCss>;
 
+/// 탭별 노트 트랙 설정 (전역 NoteSettings를 탭별로 오버라이드)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TabNoteSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverse: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_position: Option<FadePosition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delayed_note_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_note_threshold_ms: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_note_min_length_px: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_display_delay_ms: Option<u32>,
+}
+
+impl Default for TabNoteSettings {
+    fn default() -> Self {
+        Self {
+            frame_limit: None,
+            speed: None,
+            track_height: None,
+            reverse: None,
+            fade_position: None,
+            delayed_note_enabled: None,
+            short_note_threshold_ms: None,
+            short_note_min_length_px: None,
+            key_display_delay_ms: None,
+        }
+    }
+}
+
+/// 탭별 노트 트랙 설정 오버라이드 맵 (키: 탭 ID, 값: TabNoteSettings)
+pub type TabNoteOverrides = HashMap<String, TabNoteSettings>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct JsPlugin {
@@ -823,6 +866,9 @@ pub struct AppStoreData {
     /// 탭별 CSS 오버라이드 (전역 CSS 대신 사용)
     #[serde(default)]
     pub tab_css_overrides: TabCssOverrides,
+    /// 탭별 노트 트랙 설정 오버라이드
+    #[serde(default)]
+    pub tab_note_overrides: TabNoteOverrides,
     #[serde(default)]
     pub use_custom_js: bool,
     #[serde(default)]
@@ -880,6 +926,7 @@ impl Default for AppStoreData {
             custom_css: CustomCss::default(),
             font_settings: FontSettings::default(),
             tab_css_overrides: TabCssOverrides::new(),
+            tab_note_overrides: TabNoteOverrides::new(),
             use_custom_js: false,
             custom_js: CustomJs::default(),
             overlay_resize_anchor: OverlayResizeAnchor::TopLeft,

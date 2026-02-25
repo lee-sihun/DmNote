@@ -152,6 +152,21 @@ export type TabCssSetResult = {
   css?: import("@src/types/css").TabCss;
 };
 
+// 탭별 노트 트랙 설정 타입
+export type TabNoteResponse = {
+  tabId: string;
+  settings: import("@src/types/noteSettings").TabNoteSettings | null;
+};
+export type TabNoteClearResult = {
+  success: boolean;
+  tabId: string;
+};
+export type TabNoteSetResult = {
+  success: boolean;
+  tabId: string;
+  settings?: import("@src/types/noteSettings").TabNoteSettings;
+};
+
 export type JsTogglePayload = { enabled: boolean };
 export type JsSetContentResult = { success: boolean; error?: string };
 export type JsPluginError = { path: string; error: string };
@@ -758,6 +773,21 @@ export interface DMNoteAPI {
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
+  };
+  noteTab: {
+    getAll(): Promise<import("@src/types/noteSettings").TabNoteOverrides>;
+    get(tabId: string): Promise<TabNoteResponse>;
+    set(
+      tabId: string,
+      settings: import("@src/types/noteSettings").TabNoteSettings | null,
+    ): Promise<TabNoteSetResult>;
+    clear(tabId: string): Promise<TabNoteClearResult>;
+    onChanged(listener: (payload: TabNoteResponse) => void): Unsubscribe;
+    onChangedAll(
+      listener: (
+        payload: import("@src/types/noteSettings").TabNoteOverrides,
+      ) => void,
+    ): Unsubscribe;
   };
   font: {
     load(): Promise<FontLoadResult>;

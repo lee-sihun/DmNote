@@ -176,6 +176,7 @@ export function useAppBootstrap() {
         angleMode: bootstrap.settings.angleMode,
         noteEffect: bootstrap.settings.noteEffect,
         noteSettings: bootstrap.settings.noteSettings,
+        tabNoteOverrides: {},
         fontSettings: bootstrap.settings.fontSettings,
         useCustomCSS: bootstrap.settings.useCustomCSS,
         customCSSContent: bootstrap.settings.customCSS.content,
@@ -223,6 +224,16 @@ export function useAppBootstrap() {
         .get()
         .then((groups) => {
           useLayerGroupStore.getState().setLayerGroups(groups);
+        })
+        .catch(() => {});
+
+      // 탭별 노트 트랙 설정 오버라이드 로드
+      window.api.noteTab
+        .getAll()
+        .then((tabNoteOverrides) => {
+          if (!disposed) {
+            useSettingsStore.setState({ tabNoteOverrides });
+          }
         })
         .catch(() => {});
 
@@ -290,6 +301,25 @@ export function useAppBootstrap() {
           }));
         }
       ),
+      window.api.noteTab.onChanged(({ tabId, settings }) => {
+        if (disposed) return;
+        useSettingsStore.setState((state) => ({
+          tabNoteOverrides: {
+            ...state.tabNoteOverrides,
+            ...(settings
+              ? { [tabId]: settings }
+              : Object.fromEntries(
+                  Object.entries(state.tabNoteOverrides).filter(
+                    ([key]) => key !== tabId,
+                  ),
+                )),
+          },
+        }));
+      }),
+      window.api.noteTab.onChangedAll((tabNoteOverrides) => {
+        if (disposed) return;
+        useSettingsStore.setState({ tabNoteOverrides });
+      }),
       window.api.overlay.onLock(({ locked }) => {
         useSettingsStore.setState({ overlayLocked: locked });
       }),

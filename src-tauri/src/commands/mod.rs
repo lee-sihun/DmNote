@@ -7,6 +7,7 @@ pub mod image;
 pub mod js;
 pub mod key_sound;
 pub mod keys;
+pub mod note_tab;
 pub mod overlay;
 pub mod plugin_storage;
 pub mod preset;

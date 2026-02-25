@@ -17,7 +17,7 @@ type SettingToolProps = {
   onOpenSettings?: () => void;
   onCloseSettings?: () => void;
   showAlert?: (message: string) => void;
-  onOpenNoteSetting?: () => void;
+  // onOpenNoteSetting?: () => void;
 };
 
 const SettingTool = ({
@@ -25,16 +25,16 @@ const SettingTool = ({
   onOpenSettings,
   onCloseSettings,
   showAlert,
-  onOpenNoteSetting,
+  // onOpenNoteSetting,
 }: SettingToolProps) => {
   const { t } = useTranslation();
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [isExportImportOpenLocal, setIsExportImportOpenLocal] = useState(false);
-  const [isExtrasOpen, setIsExtrasOpenLocal] = useState(false);
+  // const [isExtrasOpen, setIsExtrasOpenLocal] = useState(false);
   const exportImportRef = useRef<HTMLButtonElement | null>(null);
-  const extrasRef = useRef<HTMLButtonElement | null>(null);
-  const { noteEffect } = useSettingsStore();
-  const setExtrasPopupOpen = useUIStore((state) => state.setExtrasPopupOpen);
+  // const extrasRef = useRef<HTMLButtonElement | null>(null);
+  // const { noteEffect } = useSettingsStore();
+  // const setExtrasPopupOpen = useUIStore((state) => state.setExtrasPopupOpen);
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen
   );
@@ -54,13 +54,13 @@ const SettingTool = ({
   const isExportImportOpen = isExportImportOpenLocal;
 
   // isExtrasOpen 상태를 설정하면서 전역 스토어에도 동기화
-  const setIsExtrasOpen = (value: boolean | ((prev: boolean) => boolean)) => {
-    setIsExtrasOpenLocal((prev) => {
-      const newValue = typeof value === "function" ? value(prev) : value;
-      setExtrasPopupOpen(newValue);
-      return newValue;
-    });
-  };
+  // const setIsExtrasOpen = (value: boolean | ((prev: boolean) => boolean)) => {
+  //   setIsExtrasOpenLocal((prev) => {
+  //     const newValue = typeof value === "function" ? value(prev) : value;
+  //     setExtrasPopupOpen(newValue);
+  //     return newValue;
+  //   });
+  // };
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -82,9 +82,9 @@ const SettingTool = ({
     };
   }, []);
 
-  const menuItems: ListItem[] = [
-    { id: "note", label: t("tooltip.noteSettings"), disabled: !noteEffect },
-  ];
+  // const menuItems: ListItem[] = [
+  //   { id: "note", label: t("tooltip.noteSettings"), disabled: !noteEffect },
+  // ];
 
   const toggleOverlay = () => {
     const next = !isOverlayVisible;
@@ -184,6 +184,8 @@ const SettingTool = ({
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
               />
             </FloatingTooltip>
+            {/* 기타 설정 extras 영역 주석처리 */}
+            {/*
             <>
               <FloatingTooltip
                 content={t("tooltip.etcSettings")}
@@ -210,6 +212,7 @@ const SettingTool = ({
                 />
               </div>
             </>
+            */}
           </div>
         </div>
       </TooltipGroup>
