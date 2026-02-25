@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from "ogl";
 import { animationScheduler } from "../../utils/animationScheduler";
+import { fadePositionToUniform } from "../../../types/noteSettings";
 import { MAX_NOTES } from "@stores/noteBuffer";
 import { isMac } from "@utils/platform";
 
@@ -167,16 +168,19 @@ const fragmentShader = `
     float trackRelativeY = gradientRatio;
 
     float fadePosFlag = uFadePosition;
-    bool fadeDisabled = fadePosFlag > 2.5;
+    bool fadeDisabled = abs(fadePosFlag - 3.0) < 0.1;
+    bool fadeBoth = fadePosFlag > 3.5;
     bool invertForFade = false;
-    if (!fadeDisabled && fadePosFlag < 0.5) {
-      invertForFade = (vReverse > 0.5);
-    } else if (!fadeDisabled && abs(fadePosFlag - 1.0) < 0.1) {
-      invertForFade = false;
-    } else if (!fadeDisabled) {
-      invertForFade = true;
+    if (!fadeDisabled && !fadeBoth) {
+      if (fadePosFlag < 0.5) {
+        invertForFade = (vReverse > 0.5);
+      } else if (abs(fadePosFlag - 1.0) < 0.1) {
+        invertForFade = false;
+      } else if (abs(fadePosFlag - 2.0) < 0.1) {
+        invertForFade = true;
+      }
     }
-    if (!fadeDisabled && invertForFade) {
+    if (!fadeDisabled && !fadeBoth && invertForFade) {
       trackRelativeY = 1.0 - trackRelativeY;
     }
 
@@ -202,7 +206,11 @@ const fragmentShader = `
     }
 
     float fadeMask = 1.0;
-    if (!fadeDisabled && trackRelativeY < fadeRatio) {
+    if (fadeBoth) {
+      float topFade = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
+      float bottomFade = clamp((1.0 - trackRelativeY) / fadeRatio, 0.0, 1.0);
+      fadeMask = min(topFade, bottomFade);
+    } else if (!fadeDisabled && trackRelativeY < fadeRatio) {
       fadeMask = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
     }
     bodyAlpha *= fadeMask;
@@ -435,14 +443,7 @@ export const WebGLTracksOGL = memo(
           uTrackHeight: { value: noteSettings.trackHeight || 150 },
           uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
           uFadePosition: {
-            value:
-              noteSettings.fadePosition === "top"
-                ? 1.0
-                : noteSettings.fadePosition === "bottom"
-                ? 2.0
-                : noteSettings.fadePosition === "none"
-                ? 3.0
-                : 0.0,
+            value: fadePositionToUniform(noteSettings.fadePosition),
           },
         },
       });
@@ -657,13 +658,7 @@ export const WebGLTracksOGL = memo(
       uniforms.uTrackHeight.value = noteSettings.trackHeight || 150;
       uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;
       uniforms.uFadePosition.value =
-        noteSettings.fadePosition === "top"
-          ? 1.0
-          : noteSettings.fadePosition === "bottom"
-          ? 2.0
-          : noteSettings.fadePosition === "none"
-          ? 3.0
-          : 0.0;
+        fadePositionToUniform(noteSettings.fadePosition);
     }, [noteSettings]);
 
     return (

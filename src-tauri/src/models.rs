@@ -512,6 +512,7 @@ pub enum FadePosition {
     Top,
     Bottom,
     None,
+    Both,
 }
 
 /// 이미지 맞춤 설정 (CSS object-fit과 동일)

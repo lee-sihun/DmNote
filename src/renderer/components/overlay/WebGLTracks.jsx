@@ -14,6 +14,7 @@ import {
   SRGBColorSpace,
 } from "three";
 import { animationScheduler } from "../../utils/animationScheduler";
+import { fadePositionToUniform } from "../../../types/noteSettings";
 
 const MAX_NOTES = 2048; // 씬에서 동시에 렌더링할 수 있는 최대 노트 수
 
@@ -235,16 +236,19 @@ const fragmentShader = `
     float trackRelativeY = gradientRatio;
 
     float fadePosFlag = uFadePosition;
-    bool fadeDisabled = fadePosFlag > 2.5;
+    bool fadeDisabled = abs(fadePosFlag - 3.0) < 0.1;
+    bool fadeBoth = fadePosFlag > 3.5;
     bool invertForFade = false;
-    if (!fadeDisabled && fadePosFlag < 0.5) {
-      invertForFade = (vReverse > 0.5);
-    } else if (!fadeDisabled && abs(fadePosFlag - 1.0) < 0.1) {
-      invertForFade = false;
-    } else if (!fadeDisabled) {
-      invertForFade = true;
+    if (!fadeDisabled && !fadeBoth) {
+      if (fadePosFlag < 0.5) {
+        invertForFade = (vReverse > 0.5);
+      } else if (abs(fadePosFlag - 1.0) < 0.1) {
+        invertForFade = false;
+      } else if (abs(fadePosFlag - 2.0) < 0.1) {
+        invertForFade = true;
+      }
     }
-    if (!fadeDisabled && invertForFade) {
+    if (!fadeDisabled && !fadeBoth && invertForFade) {
       trackRelativeY = 1.0 - trackRelativeY;
     }
 
@@ -267,8 +271,12 @@ const fragmentShader = `
       alpha *= smoothAlpha;
     }
 
-    // 트랙 페이드 영역 적용 (상단 또는 하단)
-    if (!fadeDisabled && trackRelativeY < fadeRatio) {
+    // 트랙 페이드 영역 적용
+    if (fadeBoth) {
+      float topFade = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
+      float bottomFade = clamp((1.0 - trackRelativeY) / fadeRatio, 0.0, 1.0);
+      alpha *= min(topFade, bottomFade);
+    } else if (!fadeDisabled && trackRelativeY < fadeRatio) {
       alpha *= clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
     }
 
@@ -350,16 +358,8 @@ export const WebGLTracks = memo(
           uDelayEnabled: {
             value: noteSettings.delayedNoteEnabled ? 1.0 : 0.0,
           },
-          // fadePosition: 'auto' | 'top' | 'bottom' | 'none' -> 0 | 1 | 2 | 3
           uFadePosition: {
-            value:
-              noteSettings.fadePosition === "top"
-                ? 1.0
-                : noteSettings.fadePosition === "bottom"
-                ? 2.0
-                : noteSettings.fadePosition === "none"
-                ? 3.0
-                : 0.0,
+            value: fadePositionToUniform(noteSettings.fadePosition),
           },
         },
         vertexShader,
@@ -700,13 +700,7 @@ export const WebGLTracks = memo(
         materialRef.current.uniforms.uDelayEnabled.value =
           noteSettings.delayedNoteEnabled ? 1.0 : 0.0;
         materialRef.current.uniforms.uFadePosition.value =
-          noteSettings.fadePosition === "top"
-            ? 1.0
-            : noteSettings.fadePosition === "bottom"
-            ? 2.0
-            : noteSettings.fadePosition === "none"
-            ? 3.0
-            : 0.0;
+          fadePositionToUniform(noteSettings.fadePosition);
       }
     }, [
       noteSettings.speed,

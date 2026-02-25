@@ -6,6 +6,7 @@ export const fadePositionSchema = z.union([
   z.literal("top"),
   z.literal("bottom"),
   z.literal("none"),
+  z.literal("both"),
 ]);
 
 export const noteSettingsSchema = z.object({
@@ -57,6 +58,19 @@ export const NOTE_SETTINGS_DEFAULTS: NoteSettings = Object.freeze({
   shortNoteMinLengthPx: NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.default,
   keyDisplayDelayMs: NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.default,
 });
+
+/** fadePosition 문자열을 셰이더 uniform 값으로 변환 */
+const FADE_POSITION_UNIFORM: Record<string, number> = {
+  auto: 0.0,
+  top: 1.0,
+  bottom: 2.0,
+  none: 3.0,
+  both: 4.0,
+};
+
+export function fadePositionToUniform(pos: string): number {
+  return FADE_POSITION_UNIFORM[pos] ?? 0.0;
+}
 
 export function normalizeNoteSettings(raw: unknown): NoteSettings {
   const parsed = noteSettingsSchema.safeParse({
