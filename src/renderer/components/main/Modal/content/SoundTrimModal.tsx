@@ -7,6 +7,12 @@ import React, {
 } from "react";
 import { useTranslation } from "@contexts/I18nContext";
 import Modal from "../Modal";
+import {
+  getCursor,
+  setCustomCursorHover,
+  lockCustomCursor,
+  unlockCustomCursor,
+} from "@utils/cursorUtils";
 
 interface SoundTrimModalProps {
   isOpen: boolean;
@@ -17,6 +23,7 @@ interface SoundTrimModalProps {
   editingTrimStartRatio?: number;
   editingTrimEndRatio?: number;
   editingDisplayName?: string;
+  initialFile?: File | null;
 }
 
 type DragTarget = "start" | "end" | null;
@@ -24,7 +31,8 @@ type DragTarget = "start" | "end" | null;
 const WAVEFORM_PEAK_COUNT = 1600;
 const WAVEFORM_PAD_X = 12;
 const HANDLE_PICK_PX = 10;
-const MIN_TRIM_MS = 0;
+const MIN_VIEW_ZOOM = 1;
+const MAX_VIEW_ZOOM = 16;
 
 function formatSecLabel(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
@@ -39,16 +47,6 @@ function clamp(value: number, min: number, max: number): number {
 function createAudioContext(): AudioContext {
   const ctor = window.AudioContext || (window as any).webkitAudioContext;
   return new ctor();
-}
-
-async function decodeAudioFile(file: File): Promise<AudioBuffer> {
-  const bytes = await file.arrayBuffer();
-  const context = createAudioContext();
-  try {
-    return await context.decodeAudioData(bytes.slice(0));
-  } finally {
-    void context.close();
-  }
 }
 
 async function decodeAudioFromArrayBuffer(
@@ -98,6 +96,8 @@ function drawWaveform(
   startRatio: number,
   endRatio: number,
   playbackRatio: number | null = null,
+  viewStart: number = 0,
+  viewEnd: number = 1,
 ) {
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
@@ -120,15 +120,26 @@ function drawWaveform(
   const drawableW = width - padX * 2;
   const minBarHeight = 1;
   const centerY = height / 2;
-  const startX = padX + startRatio * drawableW;
-  const endX = padX + endRatio * drawableW;
+  const viewSpan = Math.max(1e-9, viewEnd - viewStart);
 
-  ctx.fillStyle = "rgba(69, 155, 248, 0.10)";
-  ctx.fillRect(startX, 0, Math.max(1, endX - startX), height);
+  const audioToX = (ratio: number) =>
+    padX + ((ratio - viewStart) / viewSpan) * drawableW;
+
+  const startX = audioToX(startRatio);
+  const endX = audioToX(endRatio);
+
+  // Trim range highlight (clamped to visible area)
+  const visStartX = Math.max(padX, startX);
+  const visEndX = Math.min(padX + drawableW, endX);
+  if (visEndX > visStartX) {
+    ctx.fillStyle = "rgba(69, 155, 248, 0.10)";
+    ctx.fillRect(visStartX, 0, visEndX - visStartX, height);
+  }
 
   for (let px = 0; px < drawableW; px += 1) {
+    const audioRatio = viewStart + (px / Math.max(1, drawableW - 1)) * viewSpan;
     const peakIndex = Math.floor(
-      (px / Math.max(1, drawableW - 1)) * (peaks.length - 1),
+      clamp(audioRatio, 0, 1) * (peaks.length - 1),
     );
     const amplitude = peaks[peakIndex] ?? 0;
     const barHeight = Math.max(minBarHeight, amplitude * (height - 4));
@@ -157,16 +168,24 @@ function drawWaveform(
     ctx.fill();
   };
 
-  drawHandle(startX);
-  drawHandle(endX);
+  // Only draw handles if within visible canvas area
+  const handleMargin = gripW;
+  if (startX >= padX - handleMargin && startX <= padX + drawableW + handleMargin) {
+    drawHandle(startX);
+  }
+  if (endX >= padX - handleMargin && endX <= padX + drawableW + handleMargin) {
+    drawHandle(endX);
+  }
 
   // Playback position indicator
   if (playbackRatio !== null) {
-    const playX = padX + playbackRatio * drawableW;
-    ctx.fillStyle = "#FFFFFF";
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(playX - 0.5, 0, 1, height);
-    ctx.globalAlpha = 1;
+    const playX = audioToX(playbackRatio);
+    if (playX >= padX && playX <= padX + drawableW) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(playX - 0.5, 0, 1, height);
+      ctx.globalAlpha = 1;
+    }
   }
 }
 
@@ -242,14 +261,7 @@ function encodeWavBase64(
     }
   }
 
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
+  return arrayBufferToBase64(buffer);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -286,6 +298,7 @@ export default function SoundTrimModal({
   editingTrimStartRatio,
   editingTrimEndRatio,
   editingDisplayName,
+  initialFile,
 }: SoundTrimModalProps) {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -305,11 +318,16 @@ export default function SoundTrimModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [errorText, setErrorText] = useState("");
+  const [viewZoom, setViewZoom] = useState(1);
+  const [viewPanRatio, setViewPanRatio] = useState(0);
 
   const originalFileDataRef = useRef<{
     base64: string;
     extension: string;
   } | null>(null);
+
+  const audioBufferRef = useRef(audioBuffer);
+  audioBufferRef.current = audioBuffer;
 
   const playContextRef = useRef<AudioContext | null>(null);
   const playSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -319,14 +337,12 @@ export default function SoundTrimModal({
   const playEndRatioRef = useRef(1);
   const animFrameRef = useRef(0);
   const pausedAtRatioRef = useRef<number | null>(null);
+  const middleDragCleanupRef = useRef<(() => void) | null>(null);
+  const handleDragCleanupRef = useRef<(() => void) | null>(null);
 
   const durationMs = useMemo(
     () => (audioBuffer ? audioBuffer.duration * 1000 : 0),
     [audioBuffer],
-  );
-  const minRatioGap = useMemo(
-    () => (durationMs > 0 ? Math.min(1, MIN_TRIM_MS / durationMs) : 0),
-    [durationMs],
   );
   const trimDurationMs = Math.max(0, durationMs * endRatio - durationMs * startRatio);
 
@@ -334,8 +350,10 @@ export default function SoundTrimModal({
     !!audioBuffer &&
     !isDecoding &&
     !isSaving &&
-    trimDurationMs >= MIN_TRIM_MS &&
     soundName.trim().length > 0;
+
+  const viewStart = viewPanRatio;
+  const viewEnd = Math.min(1, viewPanRatio + 1 / viewZoom);
 
   const peaksRef = useRef(peaks);
   peaksRef.current = peaks;
@@ -343,6 +361,10 @@ export default function SoundTrimModal({
   startRatioRef.current = startRatio;
   const endRatioRef = useRef(endRatio);
   endRatioRef.current = endRatio;
+  const viewStartRef = useRef(viewStart);
+  viewStartRef.current = viewStart;
+  const viewEndRef = useRef(viewEnd);
+  viewEndRef.current = viewEnd;
 
   const teardownAudio = useCallback(() => {
     if (animFrameRef.current) {
@@ -375,6 +397,8 @@ export default function SoundTrimModal({
         startRatioRef.current,
         endRatioRef.current,
         pausedRatio ?? null,
+        viewStartRef.current,
+        viewEndRef.current,
       );
     }
   }, []);
@@ -456,7 +480,7 @@ export default function SoundTrimModal({
       const animER = playEndRatioRef.current;
       const playbackRatio = animSR + progress * (animER - animSR);
 
-      drawWaveform(canvas, currentPeaks, startRatioRef.current, endRatioRef.current, playbackRatio);
+      drawWaveform(canvas, currentPeaks, startRatioRef.current, endRatioRef.current, playbackRatio, viewStartRef.current, viewEndRef.current);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
@@ -475,10 +499,15 @@ export default function SoundTrimModal({
     setPeaks(new Float32Array());
     setStartRatio(0);
     setEndRatio(1);
+    setViewZoom(1);
+    setViewPanRatio(0);
     setIsDecoding(false);
     setIsSaving(false);
     setErrorText("");
     dragTargetRef.current = null;
+    middleDragCleanupRef.current?.();
+    handleDragCleanupRef.current?.();
+    setCustomCursorHover(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -495,6 +524,49 @@ export default function SoundTrimModal({
     }
   }, [isOpen, resetState]);
 
+  const processFile = useCallback(
+    async (file: File, signal?: { cancelled: boolean }) => {
+      stopPlayback();
+      setErrorText("");
+      setIsDecoding(true);
+      setViewZoom(1);
+      setViewPanRatio(0);
+      setOriginalFileName(file.name);
+      setSoundName(stripExtension(file.name));
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const ext = file.name.split(".").pop()?.toLowerCase() || "wav";
+        originalFileDataRef.current = {
+          base64: arrayBufferToBase64(arrayBuffer),
+          extension: ext,
+        };
+
+        const decoded = await decodeAudioFromArrayBuffer(arrayBuffer);
+        if (signal?.cancelled) return;
+
+        setAudioBuffer(decoded);
+        setPeaks(extractWaveformPeaks(decoded));
+        setStartRatio(0);
+        setEndRatio(1);
+      } catch (error) {
+        if (signal?.cancelled) return;
+        console.error("Failed to decode audio file:", error);
+        setAudioBuffer(null);
+        setPeaks(new Float32Array());
+        setOriginalFileName("");
+        setSoundName("");
+        originalFileDataRef.current = null;
+        setErrorText(t("soundTrimModal.decodeError"));
+      } finally {
+        if (!signal?.cancelled) {
+          setIsDecoding(false);
+        }
+      }
+    },
+    [stopPlayback, t],
+  );
+
   // Edit mode: load original audio from backend
   useEffect(() => {
     if (!isOpen || !editingSoundPath) return;
@@ -502,6 +574,8 @@ export default function SoundTrimModal({
     let cancelled = false;
     setIsDecoding(true);
     setErrorText("");
+    setViewZoom(1);
+    setViewPanRatio(0);
     setSoundName(editingDisplayName || "");
     setOriginalFileName(editingDisplayName || "");
 
@@ -541,13 +615,23 @@ export default function SoundTrimModal({
     };
   }, [isOpen, editingSoundPath, editingTrimStartRatio, editingTrimEndRatio, editingDisplayName, t]);
 
+  // Process initialFile when provided (from SoundManagerModal file picker)
+  useEffect(() => {
+    if (!isOpen || !initialFile || isEditMode) return;
+    const signal = { cancelled: false };
+    void processFile(initialFile, signal);
+    return () => {
+      signal.cancelled = true;
+    };
+  }, [isOpen, initialFile, isEditMode, processFile]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (isPlaying) return; // animation loop handles drawing during playback
     const canvas = canvasRef.current;
     if (!canvas || peaks.length === 0) return;
-    drawWaveform(canvas, peaks, startRatio, endRatio, pausedAtRatioRef.current);
-  }, [isOpen, isPlaying, peaks, startRatio, endRatio]);
+    drawWaveform(canvas, peaks, startRatio, endRatio, pausedAtRatioRef.current, viewStart, viewEnd);
+  }, [isOpen, isPlaying, peaks, startRatio, endRatio, viewStart, viewEnd]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -555,59 +639,189 @@ export default function SoundTrimModal({
     if (!node) return;
 
     const observer = new ResizeObserver(() => {
-      if (isPlaying) return; // animation loop handles drawing during playback
-      const canvas = canvasRef.current;
-      if (!canvas || peaks.length === 0) return;
-      drawWaveform(canvas, peaks, startRatio, endRatio, pausedAtRatioRef.current);
+      if (!isPlaying) {
+        redrawWaveformStatic(pausedAtRatioRef.current);
+      }
     });
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isOpen, isPlaying, peaks, startRatio, endRatio]);
+  }, [isOpen, isPlaying, redrawWaveformStatic]);
 
   const selectFile = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
   const handleFileChange = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-
-      stopPlayback();
-      setErrorText("");
-      setIsDecoding(true);
-      setOriginalFileName(file.name);
-      setSoundName(stripExtension(file.name));
-
-      try {
-        // Capture original file data for backend storage
-        const arrayBuffer = await file.arrayBuffer();
-        const ext = file.name.split(".").pop()?.toLowerCase() || "wav";
-        originalFileDataRef.current = {
-          base64: arrayBufferToBase64(arrayBuffer),
-          extension: ext,
-        };
-
-        const decoded = await decodeAudioFile(file);
-        setAudioBuffer(decoded);
-        setPeaks(extractWaveformPeaks(decoded));
-        setStartRatio(0);
-        setEndRatio(1);
-      } catch (error) {
-        console.error("Failed to decode audio file:", error);
-        setAudioBuffer(null);
-        setPeaks(new Float32Array());
-        setOriginalFileName("");
-        setSoundName("");
-        originalFileDataRef.current = null;
-        setErrorText(t("soundTrimModal.decodeError"));
-      } finally {
-        setIsDecoding(false);
-      }
+      void processFile(file);
     },
-    [stopPlayback, t],
+    [processFile],
   );
+
+  // Wheel zoom: zoom in/out centered on mouse position
+  const viewZoomRef = useRef(viewZoom);
+  viewZoomRef.current = viewZoom;
+  const viewPanRatioRef = useRef(viewPanRatio);
+  viewPanRatioRef.current = viewPanRatio;
+  const isWheelProcessingRef = useRef(false);
+
+  const handleWheel = useCallback(
+    (e: WheelEvent) => {
+      e.preventDefault();
+      if (!audioBuffer) return;
+      if (isWheelProcessingRef.current) return;
+      isWheelProcessingRef.current = true;
+      requestAnimationFrame(() => {
+        isWheelProcessingRef.current = false;
+      });
+
+      const host = waveformRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
+      const mouseScreenRatio = clamp(
+        (e.clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW),
+        0,
+        1,
+      );
+
+      const curZoom = viewZoomRef.current;
+      const curPan = viewPanRatioRef.current;
+      const curViewSpan = 1 / curZoom;
+      const mouseAudioRatio = curPan + mouseScreenRatio * curViewSpan;
+
+      const zoomFactor = e.deltaY > 0 ? 0.85 : 1.18;
+      const newZoom = clamp(curZoom * zoomFactor, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
+      const newViewSpan = 1 / newZoom;
+
+      let newPan = mouseAudioRatio - mouseScreenRatio * newViewSpan;
+      newPan = clamp(newPan, 0, Math.max(0, 1 - newViewSpan));
+
+      setViewZoom(newZoom);
+      setViewPanRatio(newPan);
+    },
+    [audioBuffer],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const node = waveformRef.current;
+    if (!node) return;
+    node.addEventListener("wheel", handleWheel, { passive: false });
+    return () => node.removeEventListener("wheel", handleWheel);
+  }, [isOpen, handleWheel]);
+
+  // Middle-click drag: horizontal pan when zoomed in
+  const handleMiddleDown = useCallback(
+    (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      if (!audioBufferRef.current) return;
+      e.preventDefault();
+
+      const host = waveformRef.current;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
+
+      const startX = e.clientX;
+      const startPan = viewPanRatioRef.current;
+      const curZoom = viewZoomRef.current;
+      const viewSpan = 1 / curZoom;
+
+      setCustomCursorHover(null);
+      const canvas = canvasRef.current;
+      if (canvas) canvas.style.cursor = "";
+      host.style.cursor = "grabbing";
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        let newPan = startPan - (deltaX / Math.max(1, drawableW)) * viewSpan;
+        newPan = clamp(newPan, 0, Math.max(0, 1 - viewSpan));
+        setViewPanRatio(newPan);
+      };
+
+      const cleanup = () => {
+        host.style.cursor = "";
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", cleanup);
+        middleDragCleanupRef.current = null;
+      };
+
+      middleDragCleanupRef.current = cleanup;
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", cleanup);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const node = waveformRef.current;
+    if (!node) return;
+    node.addEventListener("mousedown", handleMiddleDown);
+    return () => {
+      node.removeEventListener("mousedown", handleMiddleDown);
+      middleDragCleanupRef.current?.();
+    };
+  }, [isOpen, handleMiddleDown]);
+
+  // Ensure cursor overlay root is above modal portal in DOM order
+  useEffect(() => {
+    if (!isOpen) return;
+    const overlay = document.getElementById("dmn-cursor-overlay");
+    if (overlay?.parentNode) {
+      overlay.parentNode.appendChild(overlay);
+    }
+  }, [isOpen]);
+
+  // Canvas cursor hover: native addEventListener for macOS overlay cursor
+  useEffect(() => {
+    if (!isOpen || !audioBuffer) return;
+    const canvas = canvasRef.current;
+    const host = waveformRef.current;
+    if (!canvas || !host) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (dragTargetRef.current || middleDragCleanupRef.current) return;
+      const rect = host.getBoundingClientRect();
+      const drawableW = rect.width - WAVEFORM_PAD_X * 2;
+      const x = e.clientX - rect.left;
+      const vStart = viewStartRef.current;
+      const vEnd = viewEndRef.current;
+      const viewSpan = vEnd - vStart;
+      const sR = startRatioRef.current;
+      const eR = endRatioRef.current;
+      const startHandleX =
+        WAVEFORM_PAD_X + ((sR - vStart) / viewSpan) * drawableW;
+      const endHandleX =
+        WAVEFORM_PAD_X + ((eR - vStart) / viewSpan) * drawableW;
+      const nearHandle =
+        Math.abs(x - startHandleX) <= HANDLE_PICK_PX ||
+        Math.abs(x - endHandleX) <= HANDLE_PICK_PX;
+
+      // macOS: SVG overlay cursor / Windows: getCursor CSS fallback
+      setCustomCursorHover(nearHandle ? "ew-resize" : null, e);
+      canvas.style.cursor = nearHandle ? getCursor("ew-resize") : "";
+    };
+
+    const handleMouseLeave = () => {
+      if (!dragTargetRef.current && !middleDragCleanupRef.current) {
+        setCustomCursorHover(null);
+        canvas.style.cursor = "";
+      }
+    };
+
+    canvas.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      canvas.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mouseleave", handleMouseLeave);
+      setCustomCursorHover(null);
+    };
+  }, [isOpen, audioBuffer]);
 
   const updateFromClientX = useCallback(
     (clientX: number, target: DragTarget) => {
@@ -615,21 +829,18 @@ export default function SoundTrimModal({
       if (!host || !target) return;
       const rect = host.getBoundingClientRect();
       const drawableW = rect.width - WAVEFORM_PAD_X * 2;
-      const ratio = clamp(
-        (clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW),
-        0,
-        1,
-      );
+      const screenRatio = (clientX - rect.left - WAVEFORM_PAD_X) / Math.max(1, drawableW);
+      const vStart = viewStartRef.current;
+      const vEnd = viewEndRef.current;
+      const ratio = clamp(vStart + screenRatio * (vEnd - vStart), 0, 1);
 
       if (target === "start") {
-        const maxStart = Math.max(0, endRatio - minRatioGap);
-        setStartRatio(clamp(ratio, 0, maxStart));
+        setStartRatio(clamp(ratio, 0, endRatioRef.current));
       } else if (target === "end") {
-        const minEnd = Math.min(1, startRatio + minRatioGap);
-        setEndRatio(clamp(ratio, minEnd, 1));
+        setEndRatio(clamp(ratio, startRatioRef.current, 1));
       }
     },
-    [endRatio, minRatioGap, startRatio],
+    [],
   );
 
   const handlePointerMove = useCallback(
@@ -642,13 +853,12 @@ export default function SoundTrimModal({
   );
 
   const handlePointerUp = useCallback(() => {
-    dragTargetRef.current = null;
-    window.removeEventListener("pointermove", handlePointerMove);
-    window.removeEventListener("pointerup", handlePointerUp);
-  }, [handlePointerMove]);
+    handleDragCleanupRef.current?.();
+  }, []);
 
   const handleWaveformPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
       if (!audioBuffer) return;
       const host = waveformRef.current;
       if (!host) return;
@@ -662,8 +872,13 @@ export default function SoundTrimModal({
       const rect = host.getBoundingClientRect();
       const drawableW = rect.width - WAVEFORM_PAD_X * 2;
       const x = clamp(event.clientX - rect.left, 0, rect.width);
-      const startX = WAVEFORM_PAD_X + startRatio * drawableW;
-      const endX = WAVEFORM_PAD_X + endRatio * drawableW;
+      const vStart = viewStartRef.current;
+      const vEnd = viewEndRef.current;
+      const viewSpan = vEnd - vStart;
+      const sR = startRatioRef.current;
+      const eR = endRatioRef.current;
+      const startX = WAVEFORM_PAD_X + ((sR - vStart) / viewSpan) * drawableW;
+      const endX = WAVEFORM_PAD_X + ((eR - vStart) / viewSpan) * drawableW;
 
       const pickStart = Math.abs(x - startX) <= HANDLE_PICK_PX;
       const pickEnd = Math.abs(x - endX) <= HANDLE_PICK_PX;
@@ -681,17 +896,27 @@ export default function SoundTrimModal({
       }
 
       dragTargetRef.current = nextTarget;
+      lockCustomCursor("ew-resize", event.nativeEvent as unknown as MouseEvent);
       updateFromClientX(event.clientX, nextTarget);
 
-      window.addEventListener("pointermove", handlePointerMove);
-      window.addEventListener("pointerup", handlePointerUp);
+      const registeredMove = handlePointerMove;
+      const registeredUp = handlePointerUp;
+
+      handleDragCleanupRef.current = () => {
+        dragTargetRef.current = null;
+        unlockCustomCursor();
+        window.removeEventListener("pointermove", registeredMove);
+        window.removeEventListener("pointerup", registeredUp);
+        handleDragCleanupRef.current = null;
+      };
+
+      window.addEventListener("pointermove", registeredMove);
+      window.addEventListener("pointerup", registeredUp);
     },
     [
       audioBuffer,
-      endRatio,
       handlePointerMove,
       handlePointerUp,
-      startRatio,
       teardownAudio,
       updateFromClientX,
     ],
@@ -889,9 +1114,7 @@ export default function SoundTrimModal({
               {/* Waveform canvas */}
               <div
                 ref={waveformRef}
-                className={`flex-1 h-full ${
-                  audioBuffer ? "cursor-ew-resize" : "cursor-default"
-                }`}
+                className="flex-1 h-full"
                 onPointerDown={handleWaveformPointerDown}
               >
                 {audioBuffer ? (

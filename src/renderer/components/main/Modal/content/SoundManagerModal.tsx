@@ -1,4 +1,5 @@
 import React, {
+  type ChangeEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -39,6 +40,9 @@ export default function SoundManagerModal({
   const [loadError, setLoadError] = useState("");
   const [showTrimModal, setShowTrimModal] = useState(false);
   const [editingSoundPath, setEditingSoundPath] = useState<string | null>(null);
+
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [scrollState, setScrollState] = useState({
@@ -201,6 +205,20 @@ export default function SoundManagerModal({
     [isSaving, loadSounds, normalizedSelectedSound, onSelectSound, t],
   );
 
+  const handleAddFileChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (addFileInputRef.current) {
+        addFileInputRef.current.value = "";
+      }
+      if (!file) return;
+      setPendingFile(file);
+      setEditingSoundPath(null);
+      setShowTrimModal(true);
+    },
+    [],
+  );
+
   const handleEditSound = useCallback((item: SoundListItem) => {
     if (!item.originalPath) return;
     setEditingSoundPath(item.soundPath);
@@ -210,6 +228,7 @@ export default function SoundManagerModal({
   const handleCloseTrimModal = useCallback(() => {
     setShowTrimModal(false);
     setEditingSoundPath(null);
+    setPendingFile(null);
   }, []);
 
   const handleTrimSaved = useCallback(
@@ -217,6 +236,7 @@ export default function SoundManagerModal({
       onSelectSound(soundPath);
       setShowTrimModal(false);
       setEditingSoundPath(null);
+      setPendingFile(null);
       void loadSounds();
     },
     [loadSounds, onSelectSound],
@@ -329,12 +349,18 @@ export default function SoundManagerModal({
               type="button"
               className="flex items-center justify-center w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors bg-[#2A2A30] hover:bg-[#34343c]"
               onClick={() => {
-                setEditingSoundPath(null);
-                setShowTrimModal(true);
+                addFileInputRef.current?.click();
               }}
             >
               {`${t("soundManager.addSound") || "추가"} (${sounds.length})`}
             </button>
+            <input
+              ref={addFileInputRef}
+              type="file"
+              accept="audio/*"
+              className="hidden"
+              onChange={handleAddFileChange}
+            />
             <button
               type="button"
               className="flex items-center justify-center w-[75px] h-[30px] bg-[#2A2A30] rounded-[7px] text-style-3 text-[#DCDEE7] hover:bg-[#34343c] transition-colors"
@@ -365,6 +391,7 @@ export default function SoundManagerModal({
         editingTrimStartRatio={editingSoundItem?.trimStartRatio}
         editingTrimEndRatio={editingSoundItem?.trimEndRatio}
         editingDisplayName={editingSoundItem?.displayName}
+        initialFile={pendingFile}
       />
     </>
   );
