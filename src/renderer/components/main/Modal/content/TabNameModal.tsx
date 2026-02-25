@@ -61,7 +61,7 @@ export default function TabNameModal({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col justify-between p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-style-3 text-[#FFFFFF]">
@@ -74,15 +74,15 @@ export default function TabNameModal({
           onKeyDown={(e) => {
             if (e.key === "Enter") handleSubmit();
           }}
-          className="w-full h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
+          className="w-full min-w-0 h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
           placeholder={t("tabs.name.placeholder")}
         />
         {error && (
           <div className="text-[#ED6A5E] text-style-1 my-[-12px]">{error}</div>
         )}
-        <div className="flex gap-[8px] justify-end">
+        <div className="flex gap-[10.5px]">
           <button
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="flex-1 h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
             onClick={handleSubmit}
           >
             {t("tabs.create")}
