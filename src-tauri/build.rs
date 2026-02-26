@@ -5,7 +5,31 @@ fn main() {
     maybe_embed_webview2_fixed_runtime();
     #[cfg(target_os = "macos")]
     maybe_build_macos_dock_helper();
-    tauri_build::build()
+    build_tauri();
+}
+
+/// 빌드 프로필에 따라 tauri-build를 실행합니다.
+/// 릴리즈 빌드에서는 Windows 관리자 권한을 요청하는 manifest를 적용하고,
+/// 개발 서버(tauri dev)에서는 기본 설정을 사용합니다.
+fn build_tauri() {
+    #[cfg(target_os = "windows")]
+    {
+        println!("cargo:rerun-if-changed=app.release.manifest");
+        let profile = std::env::var("PROFILE").unwrap_or_default();
+        if profile == "release" {
+            let manifest_path = std::path::PathBuf::from("app.release.manifest");
+            if manifest_path.exists() {
+                tauri_build::try_build(
+                    tauri_build::Attributes::new().windows_attributes(
+                        tauri_build::WindowsAttributes::new().app_manifest(manifest_path),
+                    ),
+                )
+                .expect("tauri 빌드 실패");
+                return;
+            }
+        }
+    }
+    tauri_build::build();
 }
 
 #[cfg(target_os = "macos")]
