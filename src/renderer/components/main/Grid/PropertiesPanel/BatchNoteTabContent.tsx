@@ -3,6 +3,7 @@ import type { KeyPosition } from "@src/types/keys";
 import { PropertyRow, NumberInput, OptionalNumberInput, SectionDivider } from "./index";
 import Checkbox from "@components/main/common/Checkbox";
 import { NOTE_SETTINGS_CONSTRAINTS } from "@src/types/noteSettingsConstraints";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 interface BatchNoteTabContentProps {
   // getMixedValue 함수
@@ -47,6 +48,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   batchGlowColorButtonRef,
   t,
 }) => {
+  const { noteEffect } = useSettingsStore();
+
   const noteWidthMixed = getMixedValue((pos) => pos.noteWidth, undefined as any);
 
   return (

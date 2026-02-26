@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   NOTE_SETTINGS_DEFAULTS,
   type NoteSettings,
+  type TabNoteOverrides,
 } from "@src/types/noteSettings";
 import type { FontSettings } from "@src/types/fonts";
 import { DEFAULT_FONT_SETTINGS } from "@src/types/fonts";
@@ -32,6 +33,7 @@ interface SettingsState {
   angleMode: string;
   noteEffect: boolean;
   noteSettings: NoteSettings;
+  tabNoteOverrides: TabNoteOverrides;
   fontSettings: FontSettings;
   useCustomCSS: boolean;
   customCSSContent: string;
@@ -65,6 +67,7 @@ interface SettingsState {
   setAngleMode: (value: string) => void;
   setNoteEffect: (value: boolean) => void;
   setNoteSettings: (value: NoteSettings) => void;
+  setTabNoteOverrides: (value: TabNoteOverrides) => void;
   setFontSettings: (value: FontSettings) => void;
   setLanguage: (value: string) => void;
   setBackgroundColor: (value: string) => void;
@@ -92,6 +95,7 @@ export type SettingsStateSnapshot = Omit<
   | "setAngleMode"
   | "setNoteEffect"
   | "setNoteSettings"
+  | "setTabNoteOverrides"
   | "setFontSettings"
   | "setLanguage"
   | "setBackgroundColor"
@@ -109,6 +113,7 @@ const initialState: SettingsStateSnapshot = {
   angleMode: "d3d11",
   noteEffect: false,
   noteSettings: NOTE_SETTINGS_DEFAULTS,
+  tabNoteOverrides: {},
   fontSettings: DEFAULT_FONT_SETTINGS,
   useCustomCSS: false,
   customCSSContent: "",
@@ -193,6 +198,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setAngleMode: (value) => set({ angleMode: value }),
   setNoteEffect: (value) => set({ noteEffect: value }),
   setNoteSettings: (value) => set({ noteSettings: value }),
+  setTabNoteOverrides: (value) => set({ tabNoteOverrides: value }),
   setFontSettings: (value) => set({ fontSettings: value }),
   setLanguage: (value) => set({ language: value }),
   setLaboratoryEnabled: (value) => set({ laboratoryEnabled: value }),

@@ -183,6 +183,7 @@
     "settings": "설정",
     "etcSettings": "기타 설정",
     "noteSettings": "노트 설정",
+    "trackSettings": "트랙 설정",
     "laboratory": "실험적 기능",
     "gridSettings": "그리드 설정"
   },
@@ -270,6 +271,7 @@
     "bringForward": "앞으로",
     "sendBackward": "뒤로",
     "tabCssSetting": "현재 탭 CSS 설정",
+    "tabNoteSetting": "현재 탭 트랙 설정",
     "addKey": "키 추가",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",

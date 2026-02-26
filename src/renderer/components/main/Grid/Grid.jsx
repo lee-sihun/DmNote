@@ -10,6 +10,7 @@ import DraggableKey from "@components/Key";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
 import UnifiedKeySetting from "../Modal/content/UnifiedKeySetting";
 import TabCssModal from "../Modal/content/TabCssModal";
+import TabNoteSettingModal from "../Modal/content/TabNoteSettingModal";
 import ListPopup from "../Modal/ListPopup";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
@@ -90,9 +91,12 @@ export default function Grid({
   canRedo,
   toolbarAddRequest,
   onToolbarAddConsumed,
+  isNoteSettingOpen,
+  setIsNoteSettingOpen,
 }) {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyCounterEnabled = useSettingsStore((state) => state.keyCounterEnabled);
+  const noteEffect = useSettingsStore((state) => state.noteEffect);
   const minimapEnabled = useSettingsStore((state) => state.gridSettings.minimapEnabled);
   const gridSnapSize = useSettingsStore((state) => state.gridSettings?.gridSnapSize || 5);
   const { t, i18n } = useTranslation();
@@ -135,6 +139,7 @@ export default function Grid({
     positions,
     locale,
     t,
+    noteEffect,
   });
 
   // 선택 상태 관리
@@ -1124,6 +1129,13 @@ export default function Grid({
 
   // 탭 CSS 모달 상태
   const [isTabCssModalOpen, setIsTabCssModalOpen] = useState(false);
+  // 탭 노트 트랙 설정 모달 상태
+  const [isTabNoteModalOpen, setIsTabNoteModalOpen] = useState(false);
+
+  // 전역 트랙 설정 모달이 열리면 탭 트랙 설정 모달 닫기 (중복 방지)
+  useEffect(() => {
+    if (isNoteSettingOpen) setIsTabNoteModalOpen(false);
+  }, [isNoteSettingOpen]);
 
   // 그리드 영역 호버 상태 (미니맵 표시용) - useUIStore에서 관리
   const isGridAreaHovered = useUIStore((state) => state.isGridAreaHovered);
@@ -2636,6 +2648,9 @@ export default function Grid({
               addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === "tabCss") {
               setIsTabCssModalOpen(true);
+            } else if (id === "tabNote") {
+              setIsNoteSettingOpen(false);
+              setIsTabNoteModalOpen(true);
             }
             setIsGridContextOpen(false);
             setGridContextClientPos(null);
@@ -2865,6 +2880,11 @@ export default function Grid({
         isOpen={isTabCssModalOpen}
         onClose={() => setIsTabCssModalOpen(false)}
         showAlert={showAlert}
+      />
+      {/* 탭별 노트 트랙 설정 모달 */}
+      <TabNoteSettingModal
+        isOpen={isTabNoteModalOpen}
+        onClose={() => setIsTabNoteModalOpen(false)}
       />
     </div>
   );

@@ -183,6 +183,7 @@
     "settings": "Settings",
     "etcSettings": "Etc",
     "noteSettings": "Note Settings",
+    "trackSettings": "Track Settings",
     "laboratory": "Experimental",
     "gridSettings": "Grid Settings"
   },
@@ -269,6 +270,7 @@
     "bringForward": "Bring Forward",
     "sendBackward": "Send Backward",
     "tabCssSetting": "Tab CSS Settings",
+    "tabNoteSetting": "Tab Track Settings",
     "addKey": "Add Key",
     "addStat": "Add Stat",
     "addGraph": "Add Graph",

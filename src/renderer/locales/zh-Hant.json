@@ -183,6 +183,7 @@
     "settings": "設定",
     "etcSettings": "其他設定",
     "noteSettings": "音符設定",
+    "trackSettings": "軌道設定",
     "laboratory": "實驗性功能",
     "gridSettings": "網格設定"
   },
@@ -258,22 +259,10 @@
     "deleteKey": "刪除按鍵",
     "duplicateSelected": "複製所選項目",
     "deleteSelected": "刪除所選項目",
-
     "duplicateStat": "複製統計",
-
     "deleteStat": "刪除統計",
     "duplicateGraph": "複製圖表",
     "deleteGraph": "刪除圖表",
-    "noteSetting": "音符設定",
-  "contextMenu": {
-    "duplicateKey": "複製按鍵",
-    "deleteKey": "刪除按鍵",
-    "duplicateSelected": "複製所選項目",
-    "deleteSelected": "刪除所選項目",
-
-    "duplicateStat": "複製統計",
-
-    "deleteStat": "刪除統計",
     "noteSetting": "音符設定",
     "counterSetting": "計數器設定",
     "counterReset": "重置計數器",
@@ -282,13 +271,11 @@
     "bringForward": "上移一層",
     "sendBackward": "下移一層",
     "tabCssSetting": "標籤頁 CSS 設定",
+    "tabNoteSetting": "標籤頁軌道設定",
     "addKey": "新增按鍵",
     "addStat": "新增統計",
     "addGraph": "新增圖表",
-    "rename": "重新命名"
-  },
-    "tabCssSetting": "標籤頁 CSS 設定",
-    "addStat": "新增統計",
+    "rename": "重新命名",
     "quitApp": "退出程式",
     "snapToEdge": "貼靠螢幕邊緣",
     "selectTab": "選擇標籤頁",

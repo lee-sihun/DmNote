@@ -79,3 +79,28 @@ export function normalizeNoteSettings(raw: unknown): NoteSettings {
   });
   return parsed.success ? parsed.data : NOTE_SETTINGS_DEFAULTS;
 }
+
+/** 탭별 노트 트랙 설정 (모든 필드 optional → 전역 설정에 오버라이드) */
+export type TabNoteSettings = Partial<NoteSettings>;
+
+/** 탭별 노트 트랙 설정 오버라이드 맵 (키: 탭 ID) */
+export type TabNoteOverrides = Record<string, TabNoteSettings>;
+
+/** 전역 설정 + 탭별 오버라이드를 병합하여 최종 설정 반환 */
+export function mergeNoteSettings(
+  global: NoteSettings,
+  tabOverride?: TabNoteSettings | null,
+): NoteSettings {
+  if (!tabOverride) return global;
+  return {
+    frameLimit: tabOverride.frameLimit ?? global.frameLimit,
+    speed: tabOverride.speed ?? global.speed,
+    trackHeight: tabOverride.trackHeight ?? global.trackHeight,
+    reverse: tabOverride.reverse ?? global.reverse,
+    fadePosition: tabOverride.fadePosition ?? global.fadePosition,
+    delayedNoteEnabled: tabOverride.delayedNoteEnabled ?? global.delayedNoteEnabled,
+    shortNoteThresholdMs: tabOverride.shortNoteThresholdMs ?? global.shortNoteThresholdMs,
+    shortNoteMinLengthPx: tabOverride.shortNoteMinLengthPx ?? global.shortNoteMinLengthPx,
+    keyDisplayDelayMs: tabOverride.keyDisplayDelayMs ?? global.keyDisplayDelayMs,
+  };
+}

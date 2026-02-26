@@ -183,6 +183,7 @@
     "settings": "Настройки",
     "etcSettings": "Прочее",
     "noteSettings": "Настройки нот",
+    "trackSettings": "Настройки трека",
     "laboratory": "Эксперименты",
     "gridSettings": "Сетка"
   },
@@ -266,6 +267,7 @@
     "bringForward": "Выше",
     "sendBackward": "Ниже",
     "tabCssSetting": "CSS вкладки",
+    "tabNoteSetting": "Настройки трека вкладки",
     "addKey": "Добавить клавишу",
     "addStat": "Добавить стат.",
     "rename": "Переименовать",

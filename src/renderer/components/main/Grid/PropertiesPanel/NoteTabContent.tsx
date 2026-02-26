@@ -11,6 +11,7 @@ import Checkbox from "@components/main/common/Checkbox";
 import ColorPicker from "@components/main/Modal/content/ColorPicker";
 import { isGradientColor } from "@utils/colorUtils";
 import { NOTE_SETTINGS_CONSTRAINTS } from "@src/types/noteSettingsConstraints";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 const DEFAULT_NOTE_COLOR = "#FFFFFF";
 
@@ -37,6 +38,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   panelElement,
   t,
 }) => {
+  const { noteEffect } = useSettingsStore();
+
   // 통합 피커 상태 (카운터 탭 패턴)
   type PickerTarget = "note" | "glow" | null;
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);

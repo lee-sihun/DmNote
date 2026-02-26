@@ -16,7 +16,7 @@ use crate::{
     models::{
         CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, KeyMappings, KeyPositions,
         FontSettings, FontType, GraphPositions, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
-        StatPositions,
+        StatPositions, TabNoteOverrides,
     },
 };
 
@@ -49,6 +49,9 @@ struct PresetFile {
     #[serde(rename = "customJS")]
     custom_js: Option<CustomJs>,
     font_settings: Option<FontSettings>,
+    /// 탭별 노트 트랙 설정 오버라이드
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tab_note_overrides: Option<TabNoteOverrides>,
     embedded_local_fonts: Option<Vec<EmbeddedLocalFont>>,
     embedded_local_images: Option<Vec<EmbeddedLocalImage>>,
     embedded_local_sounds: Option<Vec<EmbeddedLocalSound>>,
@@ -131,6 +134,10 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
         use_custom_js: Some(snapshot.use_custom_js),
         custom_js: Some(snapshot.custom_js),
         font_settings: Some(font_settings),
+        tab_note_overrides: {
+            let overrides = snapshot.tab_note_overrides;
+            if overrides.is_empty() { None } else { Some(overrides) }
+        },
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
         embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
         embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
@@ -215,6 +222,9 @@ pub fn preset_load(
         preset.embedded_local_sounds.as_deref(),
     )?;
 
+    // 탭별 노트 설정 복원 (없으면 빈 맵으로 초기화 → 전역 폴백)
+    let tab_note_overrides = preset.tab_note_overrides.unwrap_or_default();
+
     state
         .store
         .update(|store| {
@@ -224,6 +234,7 @@ pub fn preset_load(
             store.graph_positions = graph_positions.clone();
             store.custom_tabs = custom_tabs.clone();
             store.selected_key_type = selected_key_type.clone();
+            store.tab_note_overrides = tab_note_overrides.clone();
         })
         .map_err(|err| err.to_string())?;
 
@@ -289,6 +300,8 @@ pub fn preset_load(
     app.emit("js:use", &serde_json::json!({ "enabled": js_use }))
         .map_err(|err| err.to_string())?;
     app.emit("js:content", &custom_js)
+        .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)
         .map_err(|err| err.to_string())?;
 
     Ok(PresetOperationResult {

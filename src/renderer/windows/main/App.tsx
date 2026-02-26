@@ -619,6 +619,8 @@ export default function App() {
               canRedo={canRedo}
               toolbarAddRequest={toolbarAddRequest}
               onToolbarAddConsumed={() => setToolbarAddRequest(null)}
+              isNoteSettingOpen={isNoteSettingOpen}
+              setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
             <PropertiesPanel
               onPositionChange={handlePositionChange}

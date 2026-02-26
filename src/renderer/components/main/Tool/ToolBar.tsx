@@ -3,9 +3,11 @@ import SettingTool from "./SettingTool";
 import TabTool from "./TabTool";
 import Github from "@assets/svgs/github.svg";
 import Bug from "@assets/svgs/code.svg";
+import NoteIcon from "@assets/svgs/note.svg";
 import { TooltipGroup } from "../Modal/TooltipGroup";
 import { useTranslation } from "@contexts/I18nContext";
 import FloatingTooltip from "../Modal/FloatingTooltip";
+import { useSettingsStore } from "@stores/useSettingsStore";
 
 type Props = {
   onAddItem: (type: "key" | "stat" | "graph") => void;
@@ -96,15 +98,44 @@ const ToolBar = ({
             primaryButtonRef={primaryButtonRef}
           />
         )}
+        {!isSettingsOpen && <TrackSettingButton onOpenNoteSetting={onOpenNoteSetting} t={t} />}
         <SettingTool
           isSettingsOpen={isSettingsOpen}
           onOpenSettings={onOpenSettings}
           onCloseSettings={onCloseSettings}
           showAlert={showAlert}
-          onOpenNoteSetting={onOpenNoteSetting}
+          // onOpenNoteSetting={onOpenNoteSetting}
         />
       </div>
     </div>
+  );
+};
+
+const TrackSettingButton = ({
+  onOpenNoteSetting,
+  t,
+}: {
+  onOpenNoteSetting?: () => void;
+  t: (key: string) => string;
+}) => {
+  const { noteEffect } = useSettingsStore();
+
+  if (!noteEffect) return null;
+
+  return (
+    <TooltipGroup>
+      <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px]">
+        <FloatingTooltip content={t("tooltip.trackSettings") || "트랙 설정"}>
+          <button
+            type="button"
+            onClick={onOpenNoteSetting}
+            className="flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors bg-button-primary hover:bg-button-hover active:bg-button-active"
+          >
+            <NoteIcon />
+          </button>
+        </FloatingTooltip>
+      </div>
+    </TooltipGroup>
   );
 };
 

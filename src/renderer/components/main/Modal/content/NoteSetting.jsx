@@ -35,11 +35,10 @@ function TabSwitch({ activeTab, onTabChange }) {
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-            activeTab === tab.id
+          className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${activeTab === tab.id
               ? "bg-[#3A3943] text-white"
               : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
-          }`}
+            }`}
         >
           {tab.label}
         </button>
@@ -56,7 +55,7 @@ function sanitizeNumericValue(value, key) {
   return clampValue(parsed, key);
 }
 
-export default function NoteSetting({ onClose, settings, onSave }) {
+export default function NoteSetting({ onClose, settings, onSave, title = null }) {
   const { t } = useTranslation();
   const initial = settings || {};
   const [activeTab, setActiveTab] = useState(NOTE_TAB);
@@ -347,6 +346,9 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
+        {title && (
+          <p className="text-white text-style-2 mb-[10px]">{title}</p>
+        )}
         <TabSwitch activeTab={activeTab} onTabChange={(tab) => {
           if (tab !== activeTab) {
             setIsAnimating(true);
