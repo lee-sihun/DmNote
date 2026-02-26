@@ -200,7 +200,17 @@
     "saveSuccess": "预设已保存.",
     "saveFail": "保存预设失败.",
     "loadSuccess": "预设已加载.",
-    "loadFail": "加载预设失败."
+    "loadFail": "加载预设失败.",
+    "importAll": "全部导入",
+    "importTab": "导入到当前标签",
+    "exportAll": "全部导出",
+    "exportTab": "导出当前标签",
+    "saveTabSuccess": "当前标签预设已保存.",
+    "saveTabFail": "保存当前标签预设失败.",
+    "loadTabSuccess": "预设已加载到当前标签.",
+    "loadTabFail": "加载当前标签预设失败.",
+    "loadTabInvalidPreset": "该文件无法作为当前标签预设导入.",
+    "loadTabAmbiguousSource": "该预设包含多个标签且无法匹配当前标签，请使用全部导入."
   },
   "mode": {
     "button4": "4 键",

@@ -200,7 +200,17 @@
     "saveSuccess": "프리셋이 저장되었습니다.",
     "saveFail": "프리셋 저장에 실패했습니다.",
     "loadSuccess": "프리셋이 로드되었습니다.",
-    "loadFail": "프리셋 로드에 실패했습니다."
+    "loadFail": "프리셋 로드에 실패했습니다.",
+    "importAll": "전체 불러오기",
+    "importTab": "현재 탭에 불러오기",
+    "exportAll": "전체 내보내기",
+    "exportTab": "현재 탭 내보내기",
+    "saveTabSuccess": "현재 탭 프리셋이 저장되었습니다.",
+    "saveTabFail": "현재 탭 프리셋 저장에 실패했습니다.",
+    "loadTabSuccess": "현재 탭에 프리셋이 로드되었습니다.",
+    "loadTabFail": "현재 탭 프리셋 로드에 실패했습니다.",
+    "loadTabInvalidPreset": "현재 탭 불러오기에 사용할 수 없는 프리셋 파일입니다.",
+    "loadTabAmbiguousSource": "다중 탭 프리셋이라 현재 탭과 매칭할 수 없습니다. 전체 불러오기를 사용해 주세요."
   },
   "mode": {
     "button4": "4버튼",

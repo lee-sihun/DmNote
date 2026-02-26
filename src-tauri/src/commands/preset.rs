@@ -310,6 +310,273 @@ pub fn preset_load(
     })
 }
 
+const BUILTIN_TAB_IDS: &[&str] = &["4key", "5key", "6key", "8key"];
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
+    let preset_path = FileDialog::new()
+        .set_file_name("preset-tab.json")
+        .add_filter("DM NOTE Preset", &["json"])
+        .save_file();
+
+    let Some(path) = preset_path else {
+        return Ok(PresetOperationResult {
+            success: false,
+            error: None,
+        });
+    };
+
+    let snapshot = state.store.snapshot();
+    let tab_id = snapshot.selected_key_type.clone();
+
+    // Build single-tab maps for embed helpers
+    let mut tab_key_positions: KeyPositions = HashMap::new();
+    if let Some(positions) = snapshot.key_positions.get(&tab_id) {
+        tab_key_positions.insert(tab_id.clone(), positions.clone());
+    }
+    let mut tab_stat_positions: StatPositions = HashMap::new();
+    if let Some(positions) = snapshot.stat_positions.get(&tab_id) {
+        tab_stat_positions.insert(tab_id.clone(), positions.clone());
+    }
+    let mut tab_graph_positions: GraphPositions = HashMap::new();
+    if let Some(positions) = snapshot.graph_positions.get(&tab_id) {
+        tab_graph_positions.insert(tab_id.clone(), positions.clone());
+    }
+
+    let used_font_families = collect_used_font_families(
+        &tab_key_positions,
+        &tab_stat_positions,
+        &tab_graph_positions,
+    );
+    let (_font_settings, embedded_local_fonts) =
+        build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
+    let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_images) =
+        build_preset_image_payload(&tab_key_positions, &tab_stat_positions, &tab_graph_positions)?;
+    let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_sounds) =
+        build_preset_sound_payload(&tab_key_positions, &tab_stat_positions, &tab_graph_positions)?;
+
+    // Single-tab keys map
+    let mut tab_keys: KeyMappings = HashMap::new();
+    if let Some(keys) = snapshot.keys.get(&tab_id) {
+        tab_keys.insert(tab_id.clone(), keys.clone());
+    }
+
+    // custom_tabs: only include if this is a custom (non-builtin) tab
+    let custom_tabs = if BUILTIN_TAB_IDS.contains(&tab_id.as_str()) {
+        None
+    } else {
+        let found = snapshot
+            .custom_tabs
+            .iter()
+            .find(|ct| ct.id == tab_id)
+            .cloned();
+        found.map(|ct| vec![ct])
+    };
+
+    // tab_note_overrides: only the current tab's entry
+    let tab_note_overrides = {
+        let mut m: TabNoteOverrides = HashMap::new();
+        if let Some(settings) = snapshot.tab_note_overrides.get(&tab_id) {
+            m.insert(tab_id.clone(), settings.clone());
+        }
+        if m.is_empty() { None } else { Some(m) }
+    };
+
+    let preset = PresetFile {
+        keys: Some(tab_keys),
+        key_positions: Some(tab_key_positions),
+        stat_positions: Some(tab_stat_positions),
+        graph_positions: Some(tab_graph_positions),
+        background_color: None,
+        note_settings: None,
+        note_effect: None,
+        laboratory_enabled: None,
+        custom_tabs,
+        selected_key_type: Some(tab_id),
+        use_custom_css: None,
+        custom_css: None,
+        use_custom_js: None,
+        custom_js: None,
+        font_settings: None,
+        tab_note_overrides,
+        embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
+        embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
+        embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
+    };
+
+    let json = serde_json::to_string_pretty(&preset).map_err(|err| err.to_string())?;
+    fs::write(&path, json).map_err(|err| err.to_string())?;
+
+    Ok(PresetOperationResult {
+        success: true,
+        error: None,
+    })
+}
+
+#[tauri::command(permission = "dmnote-allow-all")]
+pub fn preset_load_tab(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<PresetOperationResult, String> {
+    let picked = FileDialog::new()
+        .add_filter("DM NOTE Preset", &["json"])
+        .pick_file();
+
+    let Some(path) = picked else {
+        return Ok(PresetOperationResult {
+            success: false,
+            error: None,
+        });
+    };
+
+    let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let preset: PresetFile =
+        serde_json::from_str(&content).map_err(|_| "invalid-preset".to_string())?;
+
+    let PresetFile {
+        keys,
+        key_positions,
+        stat_positions,
+        graph_positions,
+        selected_key_type,
+        tab_note_overrides,
+        embedded_local_images,
+        embedded_local_sounds,
+        ..
+    } = preset;
+
+    let mut snapshot = state.store.snapshot();
+    let current_tab_id = snapshot.selected_key_type.clone();
+
+    let imported_keys = keys.unwrap_or_default();
+    let source_tab_id = choose_tab_preset_source_tab(
+        &imported_keys,
+        selected_key_type.as_deref(),
+        &current_tab_id,
+    )?;
+    let src_keys = imported_keys
+        .get(&source_tab_id)
+        .cloned()
+        .ok_or_else(|| "invalid-tab-preset".to_string())?;
+
+    let imported_key_positions = key_positions.unwrap_or_default();
+    let mut src_key_positions: KeyPositions = HashMap::new();
+    if let Some(v) = imported_key_positions.get(&source_tab_id) {
+        src_key_positions.insert(current_tab_id.clone(), v.clone());
+    }
+
+    let imported_stat_positions = stat_positions.unwrap_or_default();
+    let mut src_stat_positions: StatPositions = HashMap::new();
+    if let Some(v) = imported_stat_positions.get(&source_tab_id) {
+        src_stat_positions.insert(current_tab_id.clone(), v.clone());
+    }
+
+    let imported_graph_positions = graph_positions.unwrap_or_default();
+    let mut src_graph_positions: GraphPositions = HashMap::new();
+    if let Some(v) = imported_graph_positions.get(&source_tab_id) {
+        src_graph_positions.insert(current_tab_id.clone(), v.clone());
+    }
+
+    let imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
+
+    // Restore embedded assets
+    restore_preset_local_images(
+        &app,
+        &mut src_key_positions,
+        &mut src_stat_positions,
+        &mut src_graph_positions,
+        embedded_local_images.as_deref(),
+    )?;
+    restore_preset_local_sounds(
+        &app,
+        &mut src_key_positions,
+        &mut src_stat_positions,
+        &mut src_graph_positions,
+        embedded_local_sounds.as_deref(),
+    )?;
+
+    // Merge into full store snapshot
+    snapshot.keys.insert(current_tab_id.clone(), src_keys.clone());
+    if let Some(v) = src_key_positions.remove(&current_tab_id) {
+        snapshot.key_positions.insert(current_tab_id.clone(), v);
+    }
+    if let Some(v) = src_stat_positions.remove(&current_tab_id) {
+        snapshot.stat_positions.insert(current_tab_id.clone(), v);
+    }
+    if let Some(v) = src_graph_positions.remove(&current_tab_id) {
+        snapshot.graph_positions.insert(current_tab_id.clone(), v);
+    }
+    let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
+    if let Some(override_settings) = imported_override {
+        snapshot.tab_note_overrides.insert(current_tab_id.clone(), override_settings);
+    } else {
+        snapshot.tab_note_overrides.remove(&current_tab_id);
+    }
+
+    let full_keys = snapshot.keys.clone();
+    let full_positions = snapshot.key_positions.clone();
+    let full_stat_positions = snapshot.stat_positions.clone();
+    let full_graph_positions = snapshot.graph_positions.clone();
+    let full_tab_note_overrides = snapshot.tab_note_overrides.clone();
+
+    state
+        .store
+        .update(|store| {
+            store.keys = full_keys.clone();
+            store.key_positions = full_positions.clone();
+            store.stat_positions = full_stat_positions.clone();
+            store.graph_positions = full_graph_positions.clone();
+            store.tab_note_overrides = full_tab_note_overrides.clone();
+        })
+        .map_err(|err| err.to_string())?;
+
+    state.keyboard.update_mappings(full_keys.clone());
+
+    app.emit("keys:changed", &full_keys)
+        .map_err(|err| err.to_string())?;
+    app.emit("positions:changed", &full_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("statPositions:changed", &full_stat_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("graphPositions:changed", &full_graph_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed_all", &full_tab_note_overrides)
+        .map_err(|err| err.to_string())?;
+
+    Ok(PresetOperationResult {
+        success: true,
+        error: None,
+    })
+}
+
+fn choose_tab_preset_source_tab(
+    keys: &KeyMappings,
+    selected_key_type: Option<&str>,
+    current_tab_id: &str,
+) -> Result<String, String> {
+    if keys.is_empty() {
+        return Err("invalid-tab-preset".to_string());
+    }
+
+    if keys.contains_key(current_tab_id) {
+        return Ok(current_tab_id.to_string());
+    }
+
+    if let Some(selected) = selected_key_type {
+        if keys.contains_key(selected) {
+            return Ok(selected.to_string());
+        }
+    }
+
+    if keys.len() == 1 {
+        if let Some(only) = keys.keys().next() {
+            return Ok(only.clone());
+        }
+    }
+
+    Err("tab-preset-ambiguous-source".to_string())
+}
+
 fn collect_used_font_families(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,

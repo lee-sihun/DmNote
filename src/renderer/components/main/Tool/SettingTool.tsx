@@ -118,6 +118,54 @@ const SettingTool = ({
     }
   };
 
+  const handlePresetSaveTab = async () => {
+    try {
+      const result = await window.api.presets.saveTab();
+      showAlert?.(
+        result?.success
+          ? t("preset.saveTabSuccess")
+          : t("preset.saveTabFail")
+      );
+    } catch (error) {
+      console.error("Failed to save tab preset", error);
+      showAlert?.(t("preset.saveTabFail"));
+    }
+  };
+
+  const resolvePresetLoadTabErrorMessage = (error: unknown): string => {
+    let code = "";
+    if (typeof error === "string") {
+      code = error;
+    } else if (error && typeof error === "object") {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === "string") {
+        code = message;
+      }
+    }
+
+    if (code.includes("tab-preset-ambiguous-source")) {
+      return t("preset.loadTabAmbiguousSource");
+    }
+    if (code.includes("invalid-tab-preset") || code.includes("invalid-preset")) {
+      return t("preset.loadTabInvalidPreset");
+    }
+    return t("preset.loadTabFail");
+  };
+
+  const handlePresetLoadTab = async () => {
+    try {
+      const result = await window.api.presets.loadTab();
+      showAlert?.(
+        result?.success
+          ? t("preset.loadTabSuccess")
+          : t("preset.loadTabFail")
+      );
+    } catch (error) {
+      console.error("Failed to load tab preset", error);
+      showAlert?.(resolvePresetLoadTabErrorMessage(error));
+    }
+  };
+
   return (
     <div className="flex gap-[10px]">
       {!isSettingsOpen && (
@@ -142,15 +190,34 @@ const SettingTool = ({
                 open={isExportImportOpen}
                 referenceRef={exportImportRef}
                 onClose={() => setIsExportImportOpen(false)}
+                textAlign="left"
                 items={[
-                  { id: "import", label: t("preset.import") },
-                  { id: "export", label: t("preset.export") },
+                  {
+                    id: "import",
+                    label: t("preset.import"),
+                    children: [
+                      { id: "import-all", label: t("preset.importAll") },
+                      { id: "import-tab", label: t("preset.importTab") },
+                    ],
+                  },
+                  {
+                    id: "export",
+                    label: t("preset.export"),
+                    children: [
+                      { id: "export-all", label: t("preset.exportAll") },
+                      { id: "export-tab", label: t("preset.exportTab") },
+                    ],
+                  },
                 ]}
                 onSelect={async (id) => {
-                  if (id === "import") {
+                  if (id === "import-all") {
                     await handlePresetLoad();
-                  } else if (id === "export") {
+                  } else if (id === "import-tab") {
+                    await handlePresetLoadTab();
+                  } else if (id === "export-all") {
                     await handlePresetSave();
+                  } else if (id === "export-tab") {
+                    await handlePresetSaveTab();
                   }
                   setIsExportImportOpen(false);
                 }}

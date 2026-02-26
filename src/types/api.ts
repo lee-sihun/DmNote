@@ -840,6 +840,8 @@ export interface DMNoteAPI {
   presets: {
     save(): Promise<PresetOperationResult>;
     load(): Promise<PresetOperationResult>;
+    saveTab(): Promise<PresetOperationResult>;
+    loadTab(): Promise<PresetOperationResult>;
   };
   bridge: {
     send(type: string, data?: any): Promise<void>;

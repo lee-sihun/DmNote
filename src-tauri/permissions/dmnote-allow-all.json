@@ -82,6 +82,8 @@
           "custom_tabs_select",
           "preset_save",
           "preset_load",
+          "preset_save_tab",
+          "preset_load_tab",
           "plugin_bridge_send",
           "plugin_bridge_send_to",
           "plugin_storage_get",

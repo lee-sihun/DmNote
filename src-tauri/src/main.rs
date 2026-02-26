@@ -217,6 +217,8 @@ fn main() {
             commands::js::js_set_plugin_enabled,
             commands::preset::preset_save,
             commands::preset::preset_load,
+            commands::preset::preset_save_tab,
+            commands::preset::preset_load_tab,
             commands::overlay::overlay_get,
             commands::overlay::overlay_set_visible,
             commands::overlay::overlay_set_lock,

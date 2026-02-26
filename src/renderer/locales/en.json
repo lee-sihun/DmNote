@@ -200,7 +200,17 @@
     "saveSuccess": "Preset saved.",
     "saveFail": "Failed to save preset.",
     "loadSuccess": "Preset loaded.",
-    "loadFail": "Failed to load preset."
+    "loadFail": "Failed to load preset.",
+    "importAll": "Import All",
+    "importTab": "Import to Current Tab",
+    "exportAll": "Export All",
+    "exportTab": "Export Current Tab",
+    "saveTabSuccess": "Current tab preset saved.",
+    "saveTabFail": "Failed to save current tab preset.",
+    "loadTabSuccess": "Preset loaded to current tab.",
+    "loadTabFail": "Failed to load preset to current tab.",
+    "loadTabInvalidPreset": "This file cannot be loaded as a current-tab preset.",
+    "loadTabAmbiguousSource": "This preset contains multiple tabs and does not match the current tab. Use Import All."
   },
   "mode": {
     "button4": "Button 4",

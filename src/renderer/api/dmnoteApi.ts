@@ -427,6 +427,8 @@ const api: DMNoteAPI = {
   presets: {
     save: () => invoke<PresetOperationResult>("preset_save"),
     load: () => invoke<PresetOperationResult>("preset_load"),
+    saveTab: () => invoke<PresetOperationResult>("preset_save_tab"),
+    loadTab: () => invoke<PresetOperationResult>("preset_load_tab"),
   },
   bridge: (() => {
     const listeners = new Map<string, Set<BridgeMessageListener>>();

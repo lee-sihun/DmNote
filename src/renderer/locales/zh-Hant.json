@@ -200,7 +200,17 @@
     "saveSuccess": "預設已儲存.",
     "saveFail": "儲存預設失敗.",
     "loadSuccess": "預設已載入.",
-    "loadFail": "載入預設失敗."
+    "loadFail": "載入預設失敗.",
+    "importAll": "全部導入",
+    "importTab": "導入到當前標籤",
+    "exportAll": "全部導出",
+    "exportTab": "導出當前標籤",
+    "saveTabSuccess": "當前標籤預設已儲存.",
+    "saveTabFail": "儲存當前標籤預設失敗.",
+    "loadTabSuccess": "預設已載入到當前標籤.",
+    "loadTabFail": "載入當前標籤預設失敗.",
+    "loadTabInvalidPreset": "此檔案無法作為當前標籤預設匯入.",
+    "loadTabAmbiguousSource": "此預設包含多個標籤且無法匹配目前標籤，請使用全部匯入."
   },
   "mode": {
     "button4": "4 鍵",

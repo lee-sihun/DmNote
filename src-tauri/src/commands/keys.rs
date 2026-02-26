@@ -136,18 +136,32 @@ pub fn keys_reset_all(
 ) -> Result<ResetAllResponse, String> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
+    let stat_positions = crate::models::StatPositions::new();
+    let graph_positions = crate::models::GraphPositions::new();
+    let layer_groups = LayerGroups::new();
+    let tab_note_overrides = crate::models::TabNoteOverrides::new();
     let selected_key_type = "4key".to_string();
     let custom_tabs: Vec<CustomTab> = Vec::new();
+    let cleared_tab_css_ids: Vec<String> = state.store.snapshot().tab_css_overrides.keys().cloned().collect();
 
     state
         .store
         .update(|store| {
             store.keys = keys.clone();
             store.key_positions = positions.clone();
+            store.stat_positions = stat_positions.clone();
+            store.graph_positions = graph_positions.clone();
+            store.layer_groups = layer_groups.clone();
             store.custom_tabs = custom_tabs.clone();
             store.selected_key_type = selected_key_type.clone();
+            store.tab_note_overrides = tab_note_overrides.clone();
+            store.tab_css_overrides.clear();
         })
         .map_err(|err| err.to_string())?;
+
+    for tab_id in &cleared_tab_css_ids {
+        state.unwatch_tab_css(tab_id);
+    }
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(selected_key_type.clone());
@@ -193,6 +207,12 @@ pub fn keys_reset_all(
         .map_err(|err| err.to_string())?;
     app.emit("positions:changed", &positions)
         .map_err(|err| err.to_string())?;
+    app.emit("statPositions:changed", &stat_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("graphPositions:changed", &graph_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("layerGroups:changed", &layer_groups)
+        .map_err(|err| err.to_string())?;
     app.emit(
         "customTabs:changed",
         &CustomTabChangePayload {
@@ -213,6 +233,15 @@ pub fn keys_reset_all(
         &serde_json::json!({ "path": serde_json::Value::Null, "content": "" }),
     )
     .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)
+        .map_err(|err| err.to_string())?;
+    for tab_id in cleared_tab_css_ids {
+        app.emit(
+            "tabCss:changed",
+            &crate::commands::css::TabCssResponse { tab_id, css: None },
+        )
+        .map_err(|err| err.to_string())?;
+    }
     app.emit("keys:counters", &counters_snapshot)
         .map_err(|err| err.to_string())?;
 
@@ -240,22 +269,42 @@ pub fn keys_reset_mode(
 
     let default_pos = default_positions();
 
-    let mut keys = state.store.snapshot().keys;
+    let snapshot = state.store.snapshot();
+    let mut keys = snapshot.keys;
     if let Some(value) = defaults.get(&mode) {
         keys.insert(mode.clone(), value.clone());
     }
-    let mut positions = state.store.snapshot().key_positions;
+    let mut positions = snapshot.key_positions;
     if let Some(value) = default_pos.get(&mode) {
         positions.insert(mode.clone(), value.clone());
     }
+    let mut stat_positions = snapshot.stat_positions;
+    stat_positions.insert(mode.clone(), Vec::new());
+    let mut graph_positions = snapshot.graph_positions;
+    graph_positions.insert(mode.clone(), Vec::new());
+    let mut layer_groups = snapshot.layer_groups;
+    layer_groups.remove(&mode);
+    let mut tab_note_overrides = snapshot.tab_note_overrides;
+    tab_note_overrides.remove(&mode);
+    let mut tab_css_overrides = snapshot.tab_css_overrides;
+    let cleared_tab_css = tab_css_overrides.remove(&mode).is_some();
 
     state
         .store
         .update(|store| {
             store.keys = keys.clone();
             store.key_positions = positions.clone();
+            store.stat_positions = stat_positions.clone();
+            store.graph_positions = graph_positions.clone();
+            store.layer_groups = layer_groups.clone();
+            store.tab_note_overrides = tab_note_overrides.clone();
+            store.tab_css_overrides = tab_css_overrides.clone();
         })
         .map_err(|err| err.to_string())?;
+
+    if cleared_tab_css {
+        state.unwatch_tab_css(&mode);
+    }
 
     state.keyboard.update_mappings(keys.clone());
     state.sync_counters_with_keys(&keys);
@@ -268,6 +317,24 @@ pub fn keys_reset_mode(
         .map_err(|err| err.to_string())?;
     app.emit("positions:changed", &positions)
         .map_err(|err| err.to_string())?;
+    app.emit("statPositions:changed", &stat_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("graphPositions:changed", &graph_positions)
+        .map_err(|err| err.to_string())?;
+    app.emit("layerGroups:changed", &layer_groups)
+        .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)
+        .map_err(|err| err.to_string())?;
+    if cleared_tab_css {
+        app.emit(
+            "tabCss:changed",
+            &crate::commands::css::TabCssResponse {
+                tab_id: mode.clone(),
+                css: None,
+            },
+        )
+        .map_err(|err| err.to_string())?;
+    }
     app.emit("keys:counters", &state.snapshot_key_counters())
         .map_err(|err| err.to_string())?;
 

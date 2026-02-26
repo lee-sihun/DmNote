@@ -11,3 +11,6 @@ src-tauri/target
 # WebView2 FixedVersionRuntime (downloaded locally; keep placeholder)
 src-tauri/webview2-fixed-runtime/*
 !src-tauri/webview2-fixed-runtime/placeholder.txt
+
+.claude
+.omc
