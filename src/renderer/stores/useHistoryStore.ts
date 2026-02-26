@@ -33,7 +33,8 @@ interface HistoryStore {
     statPositions: StatItemPositions,
     graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[],
-    layerGroups?: LayerGroups
+    layerGroups?: LayerGroups,
+    keyCounters?: KeyCounters
   ) => void;
   undo: (
     currentKeyMappings: KeyMappings,
@@ -90,7 +91,8 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     statPositions: StatItemPositions,
     graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[],
-    layerGroups?: LayerGroups
+    layerGroups?: LayerGroups,
+    keyCounters?: KeyCounters
   ) => {
     set((state) => {
       const newState: HistoryState = {
@@ -104,7 +106,9 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
         layerGroups: layerGroups
           ? JSON.parse(JSON.stringify(layerGroups))
           : undefined,
-        keyCounters: getCounterSnapshot(),
+        keyCounters: keyCounters
+          ? JSON.parse(JSON.stringify(keyCounters))
+          : getCounterSnapshot(),
       };
 
       const newPast = [...state.past, newState];

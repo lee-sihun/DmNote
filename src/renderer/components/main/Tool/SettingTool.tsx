@@ -10,7 +10,13 @@ import TurnIcon from "@assets/svgs/turn_arrow.svg";
 import FloatingTooltip from "../Modal/FloatingTooltip";
 import ListPopup, { ListItem } from "../Modal/ListPopup";
 import { TooltipGroup } from "../Modal/TooltipGroup";
-import { useSettingsStore } from "@stores/useSettingsStore";
+import { useHistoryStore } from "@stores/useHistoryStore";
+import { useKeyStore } from "@stores/useKeyStore";
+import { useStatItemStore } from "@stores/useStatItemStore";
+import { useGraphItemStore } from "@stores/useGraphItemStore";
+import { useLayerGroupStore } from "@stores/useLayerGroupStore";
+import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
+import { getCounterSnapshot } from "@stores/keyCounterSignals";
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;
@@ -38,6 +44,7 @@ const SettingTool = ({
   const setExportImportPopupOpen = useUIStore(
     (state) => state.setExportImportPopupOpen
   );
+  const pushHistoryState = useHistoryStore((state) => state.pushState);
 
   // isExportImportOpen 상태를 설정하면서 전역 스토어에도 동기화
   const setIsExportImportOpen = (
@@ -106,9 +113,31 @@ const SettingTool = ({
     }
   };
 
+  const captureHistorySnapshot = () => ({
+    keyMappings: useKeyStore.getState().keyMappings,
+    positions: useKeyStore.getState().positions,
+    statPositions: useStatItemStore.getState().positions,
+    graphPositions: useGraphItemStore.getState().positions,
+    pluginElements: usePluginDisplayElementStore.getState().elements,
+    layerGroups: useLayerGroupStore.getState().layerGroups,
+    keyCounters: getCounterSnapshot(),
+  });
+
   const handlePresetLoad = async () => {
     try {
+      const before = captureHistorySnapshot();
       const result = await window.api.presets.load();
+      if (result?.success) {
+        pushHistoryState(
+          before.keyMappings,
+          before.positions,
+          before.statPositions,
+          before.graphPositions,
+          before.pluginElements,
+          before.layerGroups,
+          before.keyCounters
+        );
+      }
       showAlert?.(
         result?.success ? t("preset.loadSuccess") : t("preset.loadFail")
       );
@@ -154,7 +183,19 @@ const SettingTool = ({
 
   const handlePresetLoadTab = async () => {
     try {
+      const before = captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
+      if (result?.success) {
+        pushHistoryState(
+          before.keyMappings,
+          before.positions,
+          before.statPositions,
+          before.graphPositions,
+          before.pluginElements,
+          before.layerGroups,
+          before.keyCounters
+        );
+      }
       showAlert?.(
         result?.success
           ? t("preset.loadTabSuccess")
