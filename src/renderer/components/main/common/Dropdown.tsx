@@ -27,7 +27,6 @@ const Dropdown: React.FC<DropdownProps> = ({
   const [openUpward, setOpenUpward] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // 드롭다운 열릴 때 위치 계산
   useEffect(() => {
@@ -97,9 +96,8 @@ const Dropdown: React.FC<DropdownProps> = ({
         </svg>
       </button>
       {open && (
-        <div 
-          ref={menuRef}
-          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-hidden gap-[2px] max-h-[200px] overflow-y-auto ${fullWidth ? "right-0" : ""} ${
+        <div
+          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${fullWidth ? "right-0" : ""} ${
             openUpward ? "bottom-[25px]" : "top-[25px]"
           }`}
         >

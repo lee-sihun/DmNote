@@ -94,11 +94,12 @@ export default function NoteSetting({ onClose, settings, onSave }) {
   const tabContentRef = useRef(null);
   const [tabContentHeight, setTabContentHeight] = useState(null);
   const [disableHeightTransition, setDisableHeightTransition] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   const updateTabContentHeight = useCallback(() => {
     const element = tabContentRef.current;
     if (!element) return;
-    const nextHeight = element.scrollHeight;
+    const nextHeight = element.offsetHeight;
     setTabContentHeight((prev) => (prev === nextHeight ? prev : nextHeight));
   }, []);
 
@@ -106,6 +107,7 @@ export default function NoteSetting({ onClose, settings, onSave }) {
     { label: t("noteSetting.auto"), value: "auto" },
     { label: t("noteSetting.top"), value: "top" },
     { label: t("noteSetting.bottom"), value: "bottom" },
+    { label: t("noteSetting.both"), value: "both" },
     { label: t("noteSetting.none"), value: "none" },
   ];
 
@@ -149,6 +151,20 @@ export default function NoteSetting({ onClose, settings, onSave }) {
     });
     return () => cancelAnimationFrame(rafId);
   }, []);
+
+  // transitionend 미발화 시 (높이 동일, 트랜지션 비활성 등) 안전 해제
+  useEffect(() => {
+    if (!isAnimating) return;
+    const timer = setTimeout(() => setIsAnimating(false), 150);
+    return () => clearTimeout(timer);
+  }, [isAnimating]);
+
+  // overflow-hidden 제거 후 BFC 변경으로 인한 높이 차이 보정
+  useEffect(() => {
+    if (!isAnimating && !disableHeightTransition) {
+      requestAnimationFrame(() => updateTabContentHeight());
+    }
+  }, [isAnimating, disableHeightTransition, updateTabContentHeight]);
 
   const handleSave = async () => {
     const normalized = {
@@ -331,14 +347,24 @@ export default function NoteSetting({ onClose, settings, onSave }) {
         className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
-        <TabSwitch activeTab={activeTab} onTabChange={setActiveTab} />
+        <TabSwitch activeTab={activeTab} onTabChange={(tab) => {
+          if (tab !== activeTab) {
+            setIsAnimating(true);
+            setActiveTab(tab);
+          }
+        }} />
 
         <div
-          className={`overflow-hidden ${
+          className={`${isAnimating ? "overflow-hidden" : ""} ${
             disableHeightTransition ? "" : "transition-[height] duration-100 ease-in-out"
           }`}
           style={{
             height: tabContentHeight !== null ? `${tabContentHeight}px` : "auto",
+          }}
+          onTransitionEnd={(e) => {
+            if (e.propertyName === "height") {
+              setIsAnimating(false);
+            }
           }}
         >
           <div ref={tabContentRef}>
