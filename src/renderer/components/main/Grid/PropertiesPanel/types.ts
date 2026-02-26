@@ -200,7 +200,6 @@ export interface NoteTabContentProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   panelElement?: HTMLElement | null;
-  onOpenNoteSetting?: () => void;
   t: (key: string) => string;
 }
 

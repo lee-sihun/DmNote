@@ -91,6 +91,8 @@ export default function Grid({
   canRedo,
   toolbarAddRequest,
   onToolbarAddConsumed,
+  isNoteSettingOpen,
+  setIsNoteSettingOpen,
 }) {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyCounterEnabled = useSettingsStore((state) => state.keyCounterEnabled);
@@ -1129,6 +1131,11 @@ export default function Grid({
   const [isTabCssModalOpen, setIsTabCssModalOpen] = useState(false);
   // 탭 노트 트랙 설정 모달 상태
   const [isTabNoteModalOpen, setIsTabNoteModalOpen] = useState(false);
+
+  // 전역 트랙 설정 모달이 열리면 탭 트랙 설정 모달 닫기 (중복 방지)
+  useEffect(() => {
+    if (isNoteSettingOpen) setIsTabNoteModalOpen(false);
+  }, [isNoteSettingOpen]);
 
   // 그리드 영역 호버 상태 (미니맵 표시용) - useUIStore에서 관리
   const isGridAreaHovered = useUIStore((state) => state.isGridAreaHovered);
@@ -2642,6 +2649,7 @@ export default function Grid({
             } else if (id === "tabCss") {
               setIsTabCssModalOpen(true);
             } else if (id === "tabNote") {
+              setIsNoteSettingOpen(false);
               setIsTabNoteModalOpen(true);
             }
             setIsGridContextOpen(false);

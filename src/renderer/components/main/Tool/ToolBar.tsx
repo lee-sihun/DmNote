@@ -125,7 +125,7 @@ const TrackSettingButton = ({
   return (
     <TooltipGroup>
       <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px]">
-        <FloatingTooltip content={t("tooltip.trackSettings") || "노트 트랙 설정"}>
+        <FloatingTooltip content={t("tooltip.trackSettings") || "트랙 설정"}>
           <button
             type="button"
             onClick={onOpenNoteSetting}

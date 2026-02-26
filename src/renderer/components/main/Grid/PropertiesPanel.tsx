@@ -106,7 +106,6 @@ interface PropertiesPanelProps {
     updates: Array<{ index: number } & Partial<KeyPosition>>,
   ) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
-  onOpenNoteSetting?: () => void;
 }
 
 // ============================================================================
@@ -120,7 +119,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onKeyPreview,
   onKeyBatchPreview,
   onKeyMappingChange,
-  onOpenNoteSetting,
 }) => {
   const { t, i18n } = useTranslation();
   const selectedElements = useGridSelectionStore(
@@ -2968,7 +2966,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     isGlowColorPickerOpen={batchPickerFor === "glowColor"}
                     batchNoteColorButtonRef={batchNoteColorButtonRef}
                     batchGlowColorButtonRef={batchGlowColorButtonRef}
-                    onOpenNoteSetting={onOpenNoteSetting}
                     t={t}
                   />
                 </div>
@@ -4287,7 +4284,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 onKeyUpdate={onKeyUpdate}
                 onKeyPreview={onKeyPreview}
                 panelElement={panelElement}
-                onOpenNoteSetting={onOpenNoteSetting}
                 t={t}
               />
             </div>

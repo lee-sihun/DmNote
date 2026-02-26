@@ -31,8 +31,6 @@ interface BatchNoteTabContentProps {
   isGlowColorPickerOpen: boolean;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement>;
-  // 트랙 설정 모달 열기
-  onOpenNoteSetting?: () => void;
   // 번역
   t: (key: string) => string;
 }
@@ -48,7 +46,6 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   isGlowColorPickerOpen,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
-  onOpenNoteSetting,
   t,
 }) => {
   const { noteEffect } = useSettingsStore();
@@ -57,22 +54,6 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
   return (
     <>
-      {/* 트랙 설정 버튼 */}
-      <button
-        type="button"
-        onClick={onOpenNoteSetting}
-        disabled={!noteEffect || !onOpenNoteSetting}
-        className={`w-full h-[28px] flex items-center justify-center rounded-[7px] text-style-2 transition-colors ${
-          noteEffect && onOpenNoteSetting
-            ? "bg-[#2A2A30] hover:bg-[#32323A] border border-[#3A3943] text-[#DBDEE8] cursor-pointer"
-            : "bg-[#2A2A30] border border-[#3A3943] text-[#6B6D75] opacity-50 cursor-not-allowed"
-        }`}
-      >
-        {t("tooltip.trackSettings") || "노트 트랙 설정"}
-      </button>
-
-      <SectionDivider />
-
       {/* 노트 효과 표시 */}
       <div className="flex justify-between items-center w-full h-[23px]">
         <p className="text-white text-style-2">

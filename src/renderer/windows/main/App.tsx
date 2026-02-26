@@ -619,6 +619,8 @@ export default function App() {
               canRedo={canRedo}
               toolbarAddRequest={toolbarAddRequest}
               onToolbarAddConsumed={() => setToolbarAddRequest(null)}
+              isNoteSettingOpen={isNoteSettingOpen}
+              setIsNoteSettingOpen={setIsNoteSettingOpen}
             />
             <PropertiesPanel
               onPositionChange={handlePositionChange}
@@ -630,7 +632,6 @@ export default function App() {
               onKeyPreview={handleKeyPreview}
               onKeyBatchPreview={handleKeyBatchPreview}
               onKeyMappingChange={handleKeyMappingChange}
-              onOpenNoteSetting={() => setIsNoteSettingOpen(true)}
             />
           </div>
         )}

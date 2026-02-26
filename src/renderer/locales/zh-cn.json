@@ -183,7 +183,7 @@
     "settings": "设置",
     "etcSettings": "其他设置",
     "noteSettings": "音符设置",
-    "trackSettings": "音符轨道设置",
+    "trackSettings": "轨道设置",
     "laboratory": "实验性功能",
     "gridSettings": "网格设置"
   },
@@ -273,7 +273,7 @@
     "bringForward": "上移一层",
     "sendBackward": "下移一层",
     "tabCssSetting": "标签页 CSS 设置",
-    "tabNoteSetting": "标签页音符轨道设置",
+    "tabNoteSetting": "标签页轨道设置",
     "addKey": "添加按键",
     "addStat": "添加统计",
     "addGraph": "添加图表",
