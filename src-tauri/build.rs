@@ -17,11 +17,13 @@ fn build_tauri() {
         println!("cargo:rerun-if-changed=app.release.manifest");
         let profile = std::env::var("PROFILE").unwrap_or_default();
         if profile == "release" {
-            let manifest_path = std::path::PathBuf::from("app.release.manifest");
+            let manifest_path = std::path::Path::new("app.release.manifest");
             if manifest_path.exists() {
+                let manifest = std::fs::read_to_string(manifest_path)
+                    .expect("app.release.manifest 읽기 실패");
                 tauri_build::try_build(
                     tauri_build::Attributes::new().windows_attributes(
-                        tauri_build::WindowsAttributes::new().app_manifest(manifest_path),
+                        tauri_build::WindowsAttributes::new().app_manifest(manifest),
                     ),
                 )
                 .expect("tauri 빌드 실패");
