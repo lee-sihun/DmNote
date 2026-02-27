@@ -591,6 +591,10 @@ export default function DraggableKey({
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}
         fontStrikethrough={counterSettings.fontStrikethrough}
+        animationEnabled={counterSettings.animation.enabled}
+        animationBezier={counterSettings.animation.bezier}
+        animationScale={counterSettings.animation.scale}
+        animationDurationMs={counterSettings.animation.durationMs}
       />
     );
 
@@ -930,6 +934,10 @@ export const Key = memo(
           fontItalic={counterSettings.fontItalic}
           fontUnderline={counterSettings.fontUnderline}
           fontStrikethrough={counterSettings.fontStrikethrough}
+          animationEnabled={counterSettings.animation.enabled}
+          animationBezier={counterSettings.animation.bezier}
+          animationScale={counterSettings.animation.scale}
+          animationDurationMs={counterSettings.animation.durationMs}
         />
       );
 
@@ -1075,7 +1083,21 @@ export const Key = memo(
       (prevProps.position.counter?.fontUnderline ?? false) ===
         (nextProps.position.counter?.fontUnderline ?? false) &&
       (prevProps.position.counter?.fontStrikethrough ?? false) ===
-        (nextProps.position.counter?.fontStrikethrough ?? false)
+        (nextProps.position.counter?.fontStrikethrough ?? false) &&
+      (prevProps.position.counter?.animation?.enabled ?? true) ===
+        (nextProps.position.counter?.animation?.enabled ?? true) &&
+      (prevProps.position.counter?.animation?.durationMs ?? 300) ===
+        (nextProps.position.counter?.animation?.durationMs ?? 300) &&
+      (prevProps.position.counter?.animation?.scale ?? 1.1) ===
+        (nextProps.position.counter?.animation?.scale ?? 1.1) &&
+      (prevProps.position.counter?.animation?.bezier?.[0] ?? 0.25) ===
+        (nextProps.position.counter?.animation?.bezier?.[0] ?? 0.25) &&
+      (prevProps.position.counter?.animation?.bezier?.[1] ?? 0.46) ===
+        (nextProps.position.counter?.animation?.bezier?.[1] ?? 0.46) &&
+      (prevProps.position.counter?.animation?.bezier?.[2] ?? 0.45) ===
+        (nextProps.position.counter?.animation?.bezier?.[2] ?? 0.45) &&
+      (prevProps.position.counter?.animation?.bezier?.[3] ?? 0.94) ===
+        (nextProps.position.counter?.animation?.bezier?.[3] ?? 0.94)
     );
   },
 );

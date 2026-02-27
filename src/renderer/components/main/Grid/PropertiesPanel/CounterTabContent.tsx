@@ -6,7 +6,10 @@ import React, {
   useState,
 } from "react";
 import type { CounterTabContentProps } from "./types";
-import type { KeyCounterSettings } from "@src/types/keys";
+import type {
+  KeyCounterAnimationSettings,
+  KeyCounterSettings,
+} from "@src/types/keys";
 import { normalizeCounterSettings } from "@src/types/keys";
 import {
   PropertyRow,
@@ -19,6 +22,7 @@ import Dropdown from "@components/main/common/Dropdown";
 import ColorPicker from "@components/main/Modal/content/ColorPicker";
 import FontPicker from "@components/main/Modal/content/FontPicker";
 import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
+import CounterAnimationPicker from "@components/main/Modal/content/CounterAnimationPicker";
 
 type PickerTarget = "fill" | "stroke" | "font" | null;
 type ColorState = "idle" | "active";
@@ -33,11 +37,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const fillBtnRef = useRef<HTMLButtonElement>(null);
   const strokeBtnRef = useRef<HTMLButtonElement>(null);
   const fontBtnRef = useRef<HTMLButtonElement>(null);
+  const animationBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null && pickerFor !== "font";
   const [colorState, setColorState] = useState<ColorState>("idle");
   const [showFontManager, setShowFontManager] = useState(false);
+  const [showAnimationPicker, setShowAnimationPicker] = useState(false);
 
   const counterSettings = normalizeCounterSettings(keyPosition.counter);
 
@@ -79,6 +85,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
       onKeyUpdate({ index: keyIndex, counter: newSettings });
     },
     [keyIndex, keyPosition.counter, onKeyUpdate],
+  );
+
+  const handleAnimationUpdate = useCallback(
+    (nextAnimation: KeyCounterAnimationSettings) => {
+      handleCounterUpdate({ animation: nextAnimation });
+    },
+    [handleCounterUpdate],
   );
 
   const handlePickerToggle = useCallback(
@@ -194,6 +207,36 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           }
         />
       </div>
+
+      <div className="flex justify-between items-center w-full h-[23px]">
+        <p className="text-white text-style-2">
+          {t("counterSetting.animationEnabled") || "애니메이션 사용"}
+        </p>
+        <Checkbox
+          checked={counterSettings.animation.enabled}
+          onChange={() =>
+            handleCounterUpdate({
+              animation: {
+                ...counterSettings.animation,
+                enabled: !counterSettings.animation.enabled,
+              },
+            })
+          }
+        />
+      </div>
+
+      <PropertyRow label={t("counterSetting.animation") || "애니메이션"}>
+        <button
+          ref={animationBtnRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            showAnimationPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => setShowAnimationPicker((prev) => !prev)}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
 
       <SectionDivider />
 
@@ -404,6 +447,19 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           isOpen={showFontManager}
           onClose={() => setShowFontManager(false)}
           t={t}
+        />
+      )}
+
+      {showAnimationPicker && (
+        <CounterAnimationPicker
+          open={showAnimationPicker}
+          referenceRef={animationBtnRef}
+          panelElement={panelElement}
+          animation={counterSettings.animation}
+          onAnimationChange={handleAnimationUpdate}
+          onClose={() => setShowAnimationPicker(false)}
+          t={t}
+          interactiveRefs={[animationBtnRef]}
         />
       )}
     </>

@@ -368,6 +368,59 @@ impl Default for KeyCounterColor {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct KeyCounterAnimationSettings {
+    #[serde(default = "default_counter_animation_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_counter_animation_bezier")]
+    pub bezier: [f64; 4],
+    #[serde(default = "default_counter_animation_scale")]
+    pub scale: f64,
+    #[serde(default = "default_counter_animation_duration_ms")]
+    pub duration_ms: u32,
+}
+
+impl Default for KeyCounterAnimationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_counter_animation_enabled(),
+            bezier: default_counter_animation_bezier(),
+            scale: default_counter_animation_scale(),
+            duration_ms: default_counter_animation_duration_ms(),
+        }
+    }
+}
+
+impl KeyCounterAnimationSettings {
+    pub fn normalize(&mut self) {
+        let fallback = default_counter_animation_bezier();
+        for i in [0, 2] {
+            let value = self.bezier[i];
+            self.bezier[i] = if value.is_finite() {
+                value.clamp(0.0, 1.0)
+            } else {
+                fallback[i]
+            };
+        }
+        for i in [1, 3] {
+            let value = self.bezier[i];
+            self.bezier[i] = if value.is_finite() {
+                value.clamp(-2.0, 2.0)
+            } else {
+                fallback[i]
+            };
+        }
+
+        self.scale = if self.scale.is_finite() {
+            self.scale
+        } else {
+            default_counter_animation_scale()
+        };
+        self.duration_ms = self.duration_ms.clamp(1, 5000);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct KeyCounterSettings {
     #[serde(default = "default_counter_enabled")]
     pub enabled: bool,
@@ -396,6 +449,8 @@ pub struct KeyCounterSettings {
     pub font_underline: bool,
     #[serde(default)]
     pub font_strikethrough: bool,
+    #[serde(default)]
+    pub animation: KeyCounterAnimationSettings,
 }
 
 fn default_stroke_color() -> KeyCounterColor {
@@ -422,11 +477,16 @@ impl Default for KeyCounterSettings {
             font_italic: false,
             font_underline: false,
             font_strikethrough: false,
+            animation: KeyCounterAnimationSettings::default(),
         }
     }
 }
 
 impl KeyCounterSettings {
+    pub fn normalize(&mut self) {
+        self.animation.normalize();
+    }
+
     /// Migrate legacy defaults that were previously serialized into store.json.
     /// This keeps existing user customizations intact, while fixing the old default
     /// active fill/stroke values (black text / outlined) that diverged from the renderer.
@@ -444,14 +504,33 @@ impl KeyCounterSettings {
             && !self.font_strikethrough;
 
         if !looks_like_legacy_default {
+            self.normalize();
             return false;
         }
 
         self.fill = KeyCounterColor::default();
         self.stroke = default_stroke_color();
         self.font_weight = default_counter_font_weight();
+        self.animation = KeyCounterAnimationSettings::default();
+        self.normalize();
         true
     }
+}
+
+fn default_counter_animation_enabled() -> bool {
+    true
+}
+
+fn default_counter_animation_bezier() -> [f64; 4] {
+    [0.25, 0.46, 0.45, 0.94]
+}
+
+fn default_counter_animation_scale() -> f64 {
+    1.1
+}
+
+fn default_counter_animation_duration_ms() -> u32 {
+    300
 }
 
 fn default_gap() -> u32 {

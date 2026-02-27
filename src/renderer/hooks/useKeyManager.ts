@@ -322,13 +322,23 @@ export function useKeyManager() {
         ? { ...sourcePosition.noteColor }
         : sourcePosition.noteColor;
 
-    const clonedCounter = sourcePosition.counter
-      ? {
-          ...sourcePosition.counter,
-          fill: { ...sourcePosition.counter.fill },
-          stroke: { ...sourcePosition.counter.stroke },
-        }
+    const sourceCounter = sourcePosition.counter
+      ? normalizeCounterSettings(sourcePosition.counter)
       : createDefaultCounterSettings();
+    const clonedCounter = {
+      ...sourceCounter,
+      fill: { ...sourceCounter.fill },
+      stroke: { ...sourceCounter.stroke },
+      animation: {
+        ...sourceCounter.animation,
+        bezier: [
+          Number(sourceCounter.animation.bezier[0]),
+          Number(sourceCounter.animation.bezier[1]),
+          Number(sourceCounter.animation.bezier[2]),
+          Number(sourceCounter.animation.bezier[3]),
+        ],
+      },
+    };
 
     const snappedDx = Math.round(dx);
     const snappedDy = Math.round(dy);

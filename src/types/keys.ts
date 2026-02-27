@@ -23,6 +23,20 @@ export const keyCounterColorSchema = z.object({
   active: z.string(),
 });
 
+export const counterAnimationBezierSchema = z.tuple([
+  z.number(),
+  z.number(),
+  z.number(),
+  z.number(),
+]);
+
+export const keyCounterAnimationSchema = z.object({
+  enabled: z.boolean(),
+  bezier: counterAnimationBezierSchema,
+  scale: z.number(),
+  durationMs: z.number().int().min(1).max(5000),
+});
+
 const keyCounterSettingsInputSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -38,6 +52,7 @@ const keyCounterSettingsInputSchema = z
     fontItalic: z.boolean().optional(),
     fontUnderline: z.boolean().optional(),
     fontStrikethrough: z.boolean().optional(),
+    animation: keyCounterAnimationSchema.partial().optional(),
   })
   .partial();
 
@@ -45,6 +60,14 @@ export type KeyCounterPlacement = z.infer<typeof keyCounterPlacementSchema>;
 export type KeyCounterAlign = z.infer<typeof keyCounterAlignSchema>;
 export type KeyCounterAlignMode = z.infer<typeof keyCounterAlignModeSchema>;
 export type KeyCounterColor = z.infer<typeof keyCounterColorSchema>;
+export type CounterAnimationBezier = z.infer<typeof counterAnimationBezierSchema>;
+
+export interface KeyCounterAnimationSettings {
+  enabled: boolean;
+  bezier: CounterAnimationBezier;
+  scale: number;
+  durationMs: number;
+}
 
 export interface KeyCounterSettings {
   enabled: boolean;
@@ -60,6 +83,7 @@ export interface KeyCounterSettings {
   fontItalic: boolean;
   fontUnderline: boolean;
   fontStrikethrough: boolean;
+  animation: KeyCounterAnimationSettings;
 }
 
 const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
@@ -78,6 +102,12 @@ const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
   fontItalic: false,
   fontUnderline: false,
   fontStrikethrough: false,
+  animation: Object.freeze({
+    enabled: true,
+    bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
+    scale: 1.1,
+    durationMs: 300,
+  }),
 });
 
 export function createDefaultCounterSettings(): KeyCounterSettings {
@@ -101,6 +131,12 @@ export function createDefaultCounterSettings(): KeyCounterSettings {
     fontItalic: COUNTER_DEFAULTS.fontItalic,
     fontUnderline: COUNTER_DEFAULTS.fontUnderline,
     fontStrikethrough: COUNTER_DEFAULTS.fontStrikethrough,
+    animation: {
+      enabled: COUNTER_DEFAULTS.animation.enabled,
+      bezier: [...COUNTER_DEFAULTS.animation.bezier] as CounterAnimationBezier,
+      scale: COUNTER_DEFAULTS.animation.scale,
+      durationMs: COUNTER_DEFAULTS.animation.durationMs,
+    },
   };
 }
 
@@ -125,7 +161,23 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
     fontItalic,
     fontUnderline,
     fontStrikethrough,
+    animation,
   } = parsed.data;
+  const normalizedBezier: CounterAnimationBezier = [
+    Number.isFinite(animation?.bezier?.[0])
+      ? Math.min(Math.max(animation!.bezier[0], 0), 1)
+      : fallback.animation.bezier[0],
+    Number.isFinite(animation?.bezier?.[1])
+      ? Math.min(Math.max(animation!.bezier[1], -2), 2)
+      : fallback.animation.bezier[1],
+    Number.isFinite(animation?.bezier?.[2])
+      ? Math.min(Math.max(animation!.bezier[2], 0), 1)
+      : fallback.animation.bezier[2],
+    Number.isFinite(animation?.bezier?.[3])
+      ? Math.min(Math.max(animation!.bezier[3], -2), 2)
+      : fallback.animation.bezier[3],
+  ];
+
   return {
     enabled: typeof enabled === "boolean" ? enabled : fallback.enabled,
     placement: placement ?? fallback.placement,
@@ -163,6 +215,22 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       typeof fontStrikethrough === "boolean"
         ? fontStrikethrough
         : fallback.fontStrikethrough,
+    animation: {
+      enabled:
+        typeof animation?.enabled === "boolean"
+          ? animation.enabled
+          : fallback.animation.enabled,
+      bezier: normalizedBezier,
+      scale:
+        typeof animation?.scale === "number" && Number.isFinite(animation.scale)
+          ? animation.scale
+          : fallback.animation.scale,
+      durationMs:
+        typeof animation?.durationMs === "number" &&
+        Number.isFinite(animation.durationMs)
+          ? Math.min(Math.max(Math.round(animation.durationMs), 1), 5000)
+          : fallback.animation.durationMs,
+    },
   };
 }
 

@@ -115,6 +115,10 @@ const KeyCounter = memo(({ globalKey, position, mode }) => {
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}
         fontStrikethrough={counterSettings.fontStrikethrough}
+        animationEnabled={counterSettings.animation.enabled}
+        animationBezier={counterSettings.animation.bezier}
+        animationScale={counterSettings.animation.scale}
+        animationDurationMs={counterSettings.animation.durationMs}
       />
     </div>
   );

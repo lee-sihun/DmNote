@@ -241,6 +241,10 @@ export default memo(function StatItem({
         fontItalic={counterSettings.fontItalic}
         fontUnderline={counterSettings.fontUnderline}
         fontStrikethrough={counterSettings.fontStrikethrough}
+        animationEnabled={counterSettings.animation.enabled}
+        animationBezier={counterSettings.animation.bezier}
+        animationScale={counterSettings.animation.scale}
+        animationDurationMs={counterSettings.animation.durationMs}
       />
     );
 

@@ -690,6 +690,14 @@ export default function Grid({
             ...position.counter,
             fill: { ...position.counter.fill },
             stroke: { ...position.counter.stroke },
+            ...(position.counter.animation
+              ? {
+                  animation: {
+                    ...position.counter.animation,
+                    bezier: [...position.counter.animation.bezier],
+                  },
+                }
+              : {}),
           }
         : null;
 
@@ -2518,6 +2526,14 @@ export default function Grid({
                       ...position.counter,
                       fill: { ...position.counter.fill },
                       stroke: { ...position.counter.stroke },
+                      ...(position.counter.animation
+                        ? {
+                            animation: {
+                              ...position.counter.animation,
+                              bezier: [...position.counter.animation.bezier],
+                            },
+                          }
+                        : {}),
                     }
                   : null;
                 let initialCursor = null;
