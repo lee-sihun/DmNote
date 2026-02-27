@@ -9,13 +9,13 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from "@src/types/keys";
-import { toCssRgba } from "@utils/colorUtils";
 import { useSmartGuidesElements } from "@hooks/Grid";
 import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
 import { useSettingsStore } from "@stores/useSettingsStore";
 import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { resolveImageSource } from "@utils/imageSource";
 import { warmupImageSource } from "@utils/imageWarmup";
+import CountDisplay from "@components/overlay/CountDisplay";
 import {
   calculateBounds,
   calculateSnapPoints,
@@ -569,8 +569,6 @@ export default function DraggableKey({
   const contentGap = Number.isFinite(counterSettings.gap)
     ? counterSettings.gap
     : 6;
-  const fillColorCss = toCssRgba(counterFillColor, "#FFFFFF");
-  const strokeColorCss = toCssRgba(counterStrokeColor, "transparent");
 
   const renderInsideCounterPreview = () => {
     if (!showInsideCounter) {
@@ -579,37 +577,21 @@ export default function DraggableKey({
 
     const displayValue =
       (counterValueSignal?.value ?? counterPreviewValue ?? 0) | 0;
-    const strokeWidth = strokeColorCss.alpha > 0 ? "1px" : "0px";
-
-    const counterDecorations = [];
-    if (counterSettings.fontUnderline) counterDecorations.push("underline");
-    if (counterSettings.fontStrikethrough)
-      counterDecorations.push("line-through");
-    const counterTextDecoration =
-      counterDecorations.length > 0 ? counterDecorations.join(" ") : "none";
 
     const counterElement = (
-      <span
+      <CountDisplay
         key="counter"
-        className="counter pointer-events-none select-none"
-        data-text={displayValue}
-        data-counter-state="inactive"
-        style={{
-          fontSize: `${counterSettings.fontSize ?? 16}px`,
-          fontFamily: counterSettings.fontFamily
-            ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
-            : undefined,
-          fontWeight: counterSettings.fontWeight ?? 400,
-          fontStyle: counterSettings.fontItalic ? "italic" : "normal",
-          textDecoration: counterTextDecoration,
-          lineHeight: 1,
-          "--counter-color-default": fillColorCss.css,
-          "--counter-stroke-color-default": strokeColorCss.css,
-          "--counter-stroke-width-default": strokeWidth,
-        }}
-      >
-        {displayValue}
-      </span>
+        count={displayValue}
+        fillColor={counterFillColor}
+        strokeColor={counterStrokeColor}
+        active={false}
+        fontSize={counterSettings.fontSize}
+        fontFamily={counterSettings.fontFamily}
+        fontWeight={counterSettings.fontWeight}
+        fontItalic={counterSettings.fontItalic}
+        fontUnderline={counterSettings.fontUnderline}
+        fontStrikethrough={counterSettings.fontStrikethrough}
+      />
     );
 
     const nameElement = (
@@ -928,46 +910,27 @@ export const Key = memo(
       ? counterSettings.gap
       : 6;
 
-    const fillColorCss = toCssRgba(counterFillColor, "#FFFFFF");
-    const strokeColorCss = toCssRgba(counterStrokeColor, "transparent");
-
     const renderInsideLayout = () => {
       if (!showInsideCounter) {
         return null;
       }
 
       const displayValue = counterValue || 0;
-      const strokeWidth = strokeColorCss.alpha > 0 ? "1px" : "0px";
-
-      const counterDecorations = [];
-      if (counterSettings.fontUnderline) counterDecorations.push("underline");
-      if (counterSettings.fontStrikethrough)
-        counterDecorations.push("line-through");
-      const counterTextDecoration =
-        counterDecorations.length > 0 ? counterDecorations.join(" ") : "none";
 
       const counterElement = (
-        <span
+        <CountDisplay
           key="counter"
-          className="counter pointer-events-none select-none"
-          data-text={displayValue}
-          data-counter-state={active ? "active" : "inactive"}
-          style={{
-            fontSize: `${counterSettings.fontSize ?? 16}px`,
-            fontFamily: counterSettings.fontFamily
-              ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
-              : undefined,
-            fontWeight: counterSettings.fontWeight ?? 400,
-            fontStyle: counterSettings.fontItalic ? "italic" : "normal",
-            textDecoration: counterTextDecoration,
-            lineHeight: 1,
-            "--counter-color-default": fillColorCss.css,
-            "--counter-stroke-color-default": strokeColorCss.css,
-            "--counter-stroke-width-default": strokeWidth,
-          }}
-        >
-          {displayValue}
-        </span>
+          count={displayValue}
+          fillColor={counterFillColor}
+          strokeColor={counterStrokeColor}
+          active={active}
+          fontSize={counterSettings.fontSize}
+          fontFamily={counterSettings.fontFamily}
+          fontWeight={counterSettings.fontWeight}
+          fontItalic={counterSettings.fontItalic}
+          fontUnderline={counterSettings.fontUnderline}
+          fontStrikethrough={counterSettings.fontStrikethrough}
+        />
       );
 
       const nameElement = (

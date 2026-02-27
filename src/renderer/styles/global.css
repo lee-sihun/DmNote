@@ -254,6 +254,42 @@ input[type="number"]::-webkit-outer-spin-button {
   color: transparent;
 }
 
+@keyframes counterScalePulseA {
+  from {
+    transform: scale(1.1);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes counterScalePulseB {
+  from {
+    transform: scale(1.1);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+.counter-animated {
+  transform-origin: center bottom;
+  animation-duration: var(--counter-animation-duration, 300ms);
+  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation-fill-mode: both;
+  animation-iteration-count: 1;
+}
+
+.counter-animated[data-counter-animation="a"] {
+  animation-name: counterScalePulseA;
+}
+
+.counter-animated[data-counter-animation="b"] {
+  animation-name: counterScalePulseB;
+}
+
 .text-safe-inline {
   box-sizing: border-box;
   padding-inline: var(--dmn-text-safe-inline, 2px);
