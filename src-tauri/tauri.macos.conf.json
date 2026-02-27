@@ -6,8 +6,7 @@
     "icon": ["icons/icon.icns"],
     "resources": ["target/dmnote-helper/DM NOTE.app"],
     "macOS": {
-      "entitlements": null,
-      "infoPlist": "Info.macos.plist"
+      "entitlements": null
     }
   }
 }

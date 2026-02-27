@@ -800,18 +800,20 @@ export default function Settings({ showAlert, showConfirm }) {
                   disabled={isMacOS}
                 />
               </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onClick={handleAutoUpdateToggle}
-              >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.autoUpdate")}
-                </p>
-                <Checkbox
-                  checked={autoUpdateEnabled}
-                  onChange={handleAutoUpdateToggle}
-                />
-              </div>
+              {!isMacOS && (
+                <div
+                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+                  onClick={handleAutoUpdateToggle}
+                >
+                  <p className="text-style-3 text-[#FFFFFF]">
+                    {t("settings.autoUpdate")}
+                  </p>
+                  <Checkbox
+                    checked={autoUpdateEnabled}
+                    onChange={handleAutoUpdateToggle}
+                  />
+                </div>
+              )}
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleDeveloperModeToggle}
