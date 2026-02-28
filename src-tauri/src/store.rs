@@ -801,6 +801,9 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
 
     merge_default_counters(&mut data.key_counters, &data.keys);
 
+    data.counter_animation_presets =
+        crate::models::normalize_user_counter_animation_presets(data.counter_animation_presets);
+
     // Migration: old default counter settings were persisted with inverted active colors
     // (black text / outlined). Align them with the renderer defaults if they still match
     // the legacy pattern (to avoid overwriting user customizations).
@@ -917,6 +920,12 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
         {
             data.custom_tabs = v;
+        }
+        if let Some(v) = obj
+            .get("counterAnimationPresets")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+        {
+            data.counter_animation_presets = v;
         }
         if let Some(v) = obj.get("angleMode").and_then(Value::as_str) {
             data.angle_mode = v.to_string();

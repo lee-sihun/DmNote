@@ -49,13 +49,18 @@ const SubMenu = ({
   anchorRect: DOMRect | null;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const siblingActiveRef = useRef<{ id: string | null; close: (() => void) | null }>({ id: null, close: null });
+  const [pos, setPos] = useState<{
+    left?: number;
+    right?: number;
+    top: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!anchorRect) return;
 
     const padding = 5;
-    let left = anchorRect.right + 2;
+    const normalLeft = anchorRect.right + 2;
     let top = anchorRect.top;
 
     // 서브메뉴의 대략적인 높이 추정
@@ -64,10 +69,9 @@ const SubMenu = ({
     const estimatedHeight = itemCount * 28 + separatorCount * 9 + 10;
     const estimatedWidth = 160;
 
-    // 오른쪽 경계 체크
-    if (left + estimatedWidth > window.innerWidth - padding) {
-      left = anchorRect.left - estimatedWidth - 2;
-    }
+    // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
+    const flipToLeft =
+      normalLeft + estimatedWidth > window.innerWidth - padding;
 
     // 아래쪽 경계 체크
     if (top + estimatedHeight > window.innerHeight - padding) {
@@ -75,7 +79,11 @@ const SubMenu = ({
     }
     if (top < padding) top = padding;
 
-    setPos({ left, top });
+    if (flipToLeft) {
+      setPos({ right: window.innerWidth - anchorRect.left + 2, top });
+    } else {
+      setPos({ left: normalLeft, top });
+    }
   }, [anchorRect, items]);
 
   if (!pos) return null;
@@ -104,6 +112,7 @@ const SubMenu = ({
       className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${needsScroll ? " listpopup-scroll" : ""}`}
       style={{
         left: pos.left,
+        right: pos.right,
         top: pos.top,
         ...(maxHeight
           ? { maxHeight, overflowY: "auto", overflowX: "hidden" }
@@ -117,6 +126,7 @@ const SubMenu = ({
           textAlign={textAlign}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
+          siblingActiveRef={siblingActiveRef}
         />
       ))}
     </div>
@@ -129,11 +139,14 @@ const MenuItemRow = ({
   textAlign,
   onSelect,
   onCloseAll,
+  siblingActiveRef,
 }: {
   item: ListItem;
   textAlign: "left" | "center";
   onSelect?: (id: string) => void;
   onCloseAll?: () => void;
+  /** 형제 항목 중 활성 서브메뉴를 추적하는 ref (즉시 전환용) */
+  siblingActiveRef?: React.RefObject<{ id: string | null; close: (() => void) | null }>;
 }) => {
   const [subMenuOpen, setSubMenuOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
@@ -145,20 +158,35 @@ const MenuItemRow = ({
   const handleMouseEnter = useCallback(() => {
     if (!hasChildren) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    const active = siblingActiveRef?.current;
+    const hasActiveSibling = active?.id != null;
+    const delay = hasActiveSibling ? 0 : 150;
+
+    // 다른 형제의 서브메뉴가 열려있으면 즉시 닫기
+    if (hasActiveSibling && active?.id !== item.id && active?.close) {
+      active.close();
+    }
+
     hoverTimerRef.current = setTimeout(() => {
       if (rowRef.current) {
         setRowRect(rowRef.current.getBoundingClientRect());
       }
       setSubMenuOpen(true);
-    }, 150);
-  }, [hasChildren]);
+      if (siblingActiveRef) {
+        siblingActiveRef.current = { id: item.id, close: () => setSubMenuOpen(false) };
+      }
+    }, delay);
+  }, [hasChildren, siblingActiveRef, item.id]);
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
       setSubMenuOpen(false);
+      if (siblingActiveRef?.current.id === item.id) {
+        siblingActiveRef.current = { id: null, close: null };
+      }
     }, 200);
-  }, []);
+  }, [siblingActiveRef, item.id]);
 
   useEffect(() => {
     return () => {
@@ -319,6 +347,8 @@ const ListPopup = ({
     ? maxVisibleItems * itemHeight + separatorCount * 9 + 10
     : undefined;
 
+  const siblingActiveRef = useRef<{ id: string | null; close: (() => void) | null }>({ id: null, close: null });
+
   const { scrollContainerRef: lenisRef } = useLenis({
     duration: 0.5,
     wheelMultiplier: 0.7,
@@ -353,6 +383,7 @@ const ListPopup = ({
             textAlign={textAlign}
             onSelect={onSelect}
             onCloseAll={onClose}
+            siblingActiveRef={siblingActiveRef}
           />
         ))}
       </div>

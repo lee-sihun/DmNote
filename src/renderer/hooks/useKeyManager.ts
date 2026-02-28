@@ -8,6 +8,7 @@ import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementSto
 import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
 import { applyCounterSnapshot } from "@stores/keyCounterSignals";
 import type {
+  CounterAnimationBezier,
   KeyMappings,
   KeyPositions,
   NoteColor,
@@ -331,12 +332,13 @@ export function useKeyManager() {
       stroke: { ...sourceCounter.stroke },
       animation: {
         ...sourceCounter.animation,
+        presetId: sourceCounter.animation.presetId ?? null,
         bezier: [
           Number(sourceCounter.animation.bezier[0]),
           Number(sourceCounter.animation.bezier[1]),
           Number(sourceCounter.animation.bezier[2]),
           Number(sourceCounter.animation.bezier[3]),
-        ],
+        ] as CounterAnimationBezier,
       },
     };
 

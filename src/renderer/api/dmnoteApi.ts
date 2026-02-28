@@ -406,6 +406,36 @@ const api: DMNoteAPI = {
     setLatencyLogging: (enabled: boolean) =>
       invoke("key_sound_set_latency_logging", { enabled }).then(() => undefined),
   },
+  counterAnimation: {
+    list: () =>
+      invoke<import("@src/types/api").CounterAnimationListResponse>(
+        "counter_animation_list",
+      ),
+    create: (request: import("@src/types/api").CounterAnimationCreateRequest) =>
+      invoke<import("@src/types/api").CounterAnimationUpsertResponse>(
+        "counter_animation_create",
+        { request },
+      ),
+    update: (request: import("@src/types/api").CounterAnimationUpdateRequest) =>
+      invoke<import("@src/types/api").CounterAnimationUpsertResponse>(
+        "counter_animation_update",
+        { request },
+      ),
+    remove: (id: string) =>
+      invoke<import("@src/types/api").CounterAnimationDeleteResponse>(
+        "counter_animation_delete",
+        { id },
+      ),
+    onChanged: (
+      listener: (
+        payload: import("@src/types/api").CounterAnimationListResponse,
+      ) => void,
+    ) =>
+      subscribe<import("@src/types/api").CounterAnimationListResponse>(
+        "counterAnimation:changed",
+        listener,
+      ),
+  },
   js: {
     get: () => invoke<CustomJs>("js_get"),
     getUse: () => invoke<boolean>("js_get_use"),

@@ -126,6 +126,48 @@ export type SoundUpdateProcessedWavResult = {
   error?: string;
 };
 
+export type CounterAnimationPreset = {
+  id: string;
+  name: string;
+  source: "builtin" | "user";
+  labelKey?: string;
+  bezier: [number, number, number, number];
+  scale: number;
+  durationMs: number;
+};
+
+export type CounterAnimationListResponse = {
+  builtinPresets: CounterAnimationPreset[];
+  userPresets: CounterAnimationPreset[];
+};
+
+export type CounterAnimationCreateRequest = {
+  name: string;
+  bezier: [number, number, number, number];
+  scale: number;
+  durationMs: number;
+};
+
+export type CounterAnimationUpdateRequest = {
+  id: string;
+  name: string;
+  bezier: [number, number, number, number];
+  scale: number;
+  durationMs: number;
+};
+
+export type CounterAnimationUpsertResponse = {
+  preset: CounterAnimationPreset;
+  affectedUsageCount: number;
+};
+
+export type CounterAnimationDeleteResponse = {
+  success: boolean;
+  id: string;
+  affectedUsageCount: number;
+  fallbackPresetId: string;
+};
+
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
@@ -820,6 +862,19 @@ export interface DMNoteAPI {
       displayName?: string,
     ): Promise<SoundUpdateProcessedWavResult>;
     setLatencyLogging(enabled: boolean): Promise<void>;
+  };
+  counterAnimation: {
+    list(): Promise<CounterAnimationListResponse>;
+    create(
+      request: CounterAnimationCreateRequest,
+    ): Promise<CounterAnimationUpsertResponse>;
+    update(
+      request: CounterAnimationUpdateRequest,
+    ): Promise<CounterAnimationUpsertResponse>;
+    remove(id: string): Promise<CounterAnimationDeleteResponse>;
+    onChanged(
+      listener: (payload: CounterAnimationListResponse) => void,
+    ): Unsubscribe;
   };
   js: {
     get(): Promise<CustomJs>;

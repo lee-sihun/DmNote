@@ -208,36 +208,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         />
       </div>
 
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
-          {t("counterSetting.animationEnabled") || "애니메이션 사용"}
-        </p>
-        <Checkbox
-          checked={counterSettings.animation.enabled}
-          onChange={() =>
-            handleCounterUpdate({
-              animation: {
-                ...counterSettings.animation,
-                enabled: !counterSettings.animation.enabled,
-              },
-            })
-          }
-        />
-      </div>
-
-      <PropertyRow label={t("counterSetting.animation") || "애니메이션"}>
-        <button
-          ref={animationBtnRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showAnimationPicker ? "border-[#459BF8]" : "border-[#3A3943]"
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => setShowAnimationPicker((prev) => !prev)}
-        >
-          {t("propertiesPanel.configure") || "설정하기"}
-        </button>
-      </PropertyRow>
-
       <SectionDivider />
 
       {/* 배치 영역 */}
@@ -407,6 +377,39 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         />
       </PropertyRow>
 
+      <SectionDivider />
+
+      {/* 카운터 애니메이션 */}
+      <div className="flex justify-between items-center w-full h-[23px]">
+        <p className="text-white text-style-2">
+          {t("counterSetting.animationEnabled") || "카운터 애니메이션"}
+        </p>
+        <Checkbox
+          checked={counterSettings.animation.enabled}
+          onChange={() =>
+            handleCounterUpdate({
+              animation: {
+                ...counterSettings.animation,
+                enabled: !counterSettings.animation.enabled,
+              },
+            })
+          }
+        />
+      </div>
+
+      <PropertyRow label={t("counterSetting.animation") || "애니메이션 설정"}>
+        <button
+          ref={animationBtnRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            showAnimationPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => setShowAnimationPicker((prev) => !prev)}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
+
       {pickerFor && pickerFor !== "font" && (
         <ColorPicker
           open={pickerOpen}
@@ -456,6 +459,23 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           referenceRef={animationBtnRef}
           panelElement={panelElement}
           animation={counterSettings.animation}
+          counterSettings={counterSettings}
+          keyVisual={{
+            width: keyPosition.width,
+            height: keyPosition.height,
+            backgroundColor: keyPosition.backgroundColor,
+            borderColor: keyPosition.borderColor,
+            borderWidth: keyPosition.borderWidth,
+            borderRadius: keyPosition.borderRadius,
+            fontColor: keyPosition.fontColor,
+            fontSize: keyPosition.fontSize,
+            fontWeight: keyPosition.fontWeight,
+            fontFamily: keyPosition.fontFamily,
+            fontItalic: keyPosition.fontItalic,
+            fontUnderline: keyPosition.fontUnderline,
+            fontStrikethrough: keyPosition.fontStrikethrough,
+            displayText: keyPosition.displayText,
+          }}
           onAnimationChange={handleAnimationUpdate}
           onClose={() => setShowAnimationPicker(false)}
           t={t}

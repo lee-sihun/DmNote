@@ -2617,6 +2617,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const batchCounterSettings = keysData[0]?.position
       ? normalizeCounterSettings(keysData[0].position.counter)
       : createDefaultCounterSettings();
+    const firstPos = keysData[0]?.position;
+    const batchKeyVisual = firstPos
+      ? {
+          width: firstPos.width,
+          height: firstPos.height,
+          backgroundColor: firstPos.backgroundColor,
+          borderColor: firstPos.borderColor,
+          borderWidth: firstPos.borderWidth,
+          borderRadius: firstPos.borderRadius,
+          fontColor: firstPos.fontColor,
+          fontSize: firstPos.fontSize,
+          fontWeight: firstPos.fontWeight,
+          fontFamily: firstPos.fontFamily,
+          fontItalic: firstPos.fontItalic,
+          fontUnderline: firstPos.fontUnderline,
+          fontStrikethrough: firstPos.fontStrikethrough,
+          displayText: firstPos.displayText,
+        }
+      : undefined;
     const noteOpacityMixed = getMixedValue(
       (pos) => pos.noteOpacity,
       80,
@@ -2989,6 +3008,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div className="p-[12px] flex flex-col gap-[12px]">
                 <BatchCounterTabContent
                   batchCounterSettings={batchCounterSettings}
+                  keyVisual={batchKeyVisual}
                   handleBatchCounterUpdate={handleBatchCounterUpdate}
                   colorState={batchCounterColorState}
                   getCounterColorDisplay={getCounterColorDisplay}

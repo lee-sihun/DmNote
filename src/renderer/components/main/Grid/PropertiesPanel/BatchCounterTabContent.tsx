@@ -12,9 +12,28 @@ import FontPicker from "@components/main/Modal/content/FontPicker";
 import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
 import CounterAnimationPicker from "@components/main/Modal/content/CounterAnimationPicker";
 
+interface BatchKeyVisual {
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  fontColor?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  fontFamily?: string;
+  fontItalic?: boolean;
+  fontUnderline?: boolean;
+  fontStrikethrough?: boolean;
+  displayText?: string;
+}
+
 interface BatchCounterTabContentProps {
   // 카운터 설정 (첫 번째 선택 키 기준)
   batchCounterSettings: KeyCounterSettings;
+  // 첫 번째 선택 키의 시각 정보 (프리뷰용)
+  keyVisual?: BatchKeyVisual;
   // 핸들러
   handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
   // 컬러 디스플레이 (현재 상태 기준)
@@ -36,6 +55,7 @@ interface BatchCounterTabContentProps {
 
 const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterSettings,
+  keyVisual,
   handleBatchCounterUpdate,
   colorState,
   getCounterColorDisplay,
@@ -84,36 +104,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           }
         />
       </div>
-
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
-          {t("counterSetting.animationEnabled") || "애니메이션 사용"}
-        </p>
-        <Checkbox
-          checked={batchCounterSettings.animation.enabled}
-          onChange={() =>
-            handleBatchCounterUpdate({
-              animation: {
-                ...batchCounterSettings.animation,
-                enabled: !batchCounterSettings.animation.enabled,
-              },
-            })
-          }
-        />
-      </div>
-
-      <PropertyRow label={t("counterSetting.animation") || "애니메이션"}>
-        <button
-          ref={animationButtonRef}
-          type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showAnimationPicker ? "border-[#459BF8]" : "border-[#3A3943]"
-          } text-[#DBDEE8] text-style-4`}
-          onClick={() => setShowAnimationPicker((prev) => !prev)}
-        >
-          {t("propertiesPanel.configure") || "설정하기"}
-        </button>
-      </PropertyRow>
 
       <SectionDivider />
 
@@ -297,6 +287,39 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         />
       </PropertyRow>
 
+      <SectionDivider />
+
+      {/* 카운터 애니메이션 */}
+      <div className="flex justify-between items-center w-full h-[23px]">
+        <p className="text-white text-style-2">
+          {t("counterSetting.animationEnabled") || "카운터 애니메이션"}
+        </p>
+        <Checkbox
+          checked={batchCounterSettings.animation.enabled}
+          onChange={() =>
+            handleBatchCounterUpdate({
+              animation: {
+                ...batchCounterSettings.animation,
+                enabled: !batchCounterSettings.animation.enabled,
+              },
+            })
+          }
+        />
+      </div>
+
+      <PropertyRow label={t("counterSetting.animation") || "애니메이션 설정"}>
+        <button
+          ref={animationButtonRef}
+          type="button"
+          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+            showAnimationPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+          } text-[#DBDEE8] text-style-4`}
+          onClick={() => setShowAnimationPicker((prev) => !prev)}
+        >
+          {t("propertiesPanel.configure") || "설정하기"}
+        </button>
+      </PropertyRow>
+
       {/* FontPicker */}
       {showFontPicker && (
         <FontPicker
@@ -330,6 +353,8 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           referenceRef={animationButtonRef}
           panelElement={panelElement}
           animation={batchCounterSettings.animation}
+          counterSettings={batchCounterSettings}
+          keyVisual={keyVisual}
           onAnimationChange={handleAnimationUpdate}
           onClose={() => setShowAnimationPicker(false)}
           t={t}

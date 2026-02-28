@@ -32,6 +32,7 @@ export const counterAnimationBezierSchema = z.tuple([
 
 export const keyCounterAnimationSchema = z.object({
   enabled: z.boolean(),
+  presetId: z.string().trim().min(1).nullable().optional(),
   bezier: counterAnimationBezierSchema,
   scale: z.number(),
   durationMs: z.number().int().min(1).max(5000),
@@ -60,14 +61,17 @@ export type KeyCounterPlacement = z.infer<typeof keyCounterPlacementSchema>;
 export type KeyCounterAlign = z.infer<typeof keyCounterAlignSchema>;
 export type KeyCounterAlignMode = z.infer<typeof keyCounterAlignModeSchema>;
 export type KeyCounterColor = z.infer<typeof keyCounterColorSchema>;
-export type CounterAnimationBezier = z.infer<typeof counterAnimationBezierSchema>;
+export type CounterAnimationBezier = [number, number, number, number];
 
 export interface KeyCounterAnimationSettings {
   enabled: boolean;
+  presetId: string | null;
   bezier: CounterAnimationBezier;
   scale: number;
   durationMs: number;
 }
+
+export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = "builtin-ease-out";
 
 export interface KeyCounterSettings {
   enabled: boolean;
@@ -104,6 +108,7 @@ const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
   fontStrikethrough: false,
   animation: Object.freeze({
     enabled: true,
+    presetId: DEFAULT_COUNTER_ANIMATION_PRESET_ID,
     bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
     scale: 1.1,
     durationMs: 300,
@@ -133,6 +138,7 @@ export function createDefaultCounterSettings(): KeyCounterSettings {
     fontStrikethrough: COUNTER_DEFAULTS.fontStrikethrough,
     animation: {
       enabled: COUNTER_DEFAULTS.animation.enabled,
+      presetId: COUNTER_DEFAULTS.animation.presetId,
       bezier: [...COUNTER_DEFAULTS.animation.bezier] as CounterAnimationBezier,
       scale: COUNTER_DEFAULTS.animation.scale,
       durationMs: COUNTER_DEFAULTS.animation.durationMs,
@@ -220,6 +226,11 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
         typeof animation?.enabled === "boolean"
           ? animation.enabled
           : fallback.animation.enabled,
+      presetId:
+        typeof animation?.presetId === "string" &&
+        animation.presetId.trim().length > 0
+          ? animation.presetId.trim()
+          : fallback.animation.presetId,
       bezier: normalizedBezier,
       scale:
         typeof animation?.scale === "number" && Number.isFinite(animation.scale)

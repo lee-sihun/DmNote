@@ -27,6 +27,9 @@ interface CommonListPickerPopupProps<T> {
   onFilterChange?: (value: string) => void;
   items: T[];
   renderItem: (item: T) => React.ReactNode;
+  renderItemActions?: (item: T) => React.ReactNode;
+  itemRowClassName?: string;
+  getItemKey?: (item: T, index: number) => React.Key;
   emptyText: string;
   isLoading?: boolean;
   loadingText?: string;
@@ -53,6 +56,9 @@ export default function CommonListPickerPopup<T>({
   onFilterChange,
   items,
   renderItem,
+  renderItemActions,
+  itemRowClassName = "",
+  getItemKey,
   emptyText,
   isLoading = false,
   loadingText = "로딩...",
@@ -221,7 +227,25 @@ export default function CommonListPickerPopup<T>({
                 {emptyText}
               </div>
             ) : (
-              items.map((item) => renderItem(item))
+              items.map((item, index) => {
+                const node = renderItem(item);
+                if (!renderItemActions) {
+                  return node;
+                }
+
+                const key = getItemKey ? getItemKey(item, index) : index;
+                return (
+                  <div
+                    key={key}
+                    className={`w-full h-[24px] flex items-center gap-[4px] ${itemRowClassName}`.trim()}
+                  >
+                    <div className="flex-1 min-w-0">{node}</div>
+                    <div className="ml-auto shrink-0 flex items-center justify-end gap-[2px]">
+                      {renderItemActions(item)}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

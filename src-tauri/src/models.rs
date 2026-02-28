@@ -366,11 +366,168 @@ impl Default for KeyCounterColor {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CounterAnimationSource {
+    Builtin,
+    User,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CounterAnimationPreset {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "source")]
+    pub source: CounterAnimationSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label_key: Option<String>,
+    pub bezier: [f64; 4],
+    pub scale: f64,
+    pub duration_ms: u32,
+}
+
+impl CounterAnimationPreset {
+    pub fn normalize(&mut self) {
+        let mut animation = KeyCounterAnimationSettings {
+            enabled: true,
+            preset_id: None,
+            bezier: self.bezier,
+            scale: self.scale,
+            duration_ms: self.duration_ms,
+        };
+        animation.normalize();
+        self.bezier = animation.bezier;
+        self.scale = animation.scale;
+        self.duration_ms = animation.duration_ms;
+        self.name = self.name.trim().to_string();
+    }
+
+    pub fn is_valid_user_entry(&self) -> bool {
+        self.source == CounterAnimationSource::User
+            && !self.id.trim().is_empty()
+            && !self.name.trim().is_empty()
+    }
+}
+
+fn builtin_counter_animation_presets() -> Vec<CounterAnimationPreset> {
+    vec![
+        CounterAnimationPreset {
+            id: "builtin-ease-out".to_string(),
+            name: "Ease Out".to_string(),
+            source: CounterAnimationSource::Builtin,
+            label_key: Some("counterSetting.presetEaseOut".to_string()),
+            bezier: [0.25, 0.46, 0.45, 0.94],
+            scale: 1.1,
+            duration_ms: 300,
+        },
+        CounterAnimationPreset {
+            id: "builtin-linear".to_string(),
+            name: "Linear".to_string(),
+            source: CounterAnimationSource::Builtin,
+            label_key: Some("counterSetting.presetLinear".to_string()),
+            bezier: [0.0, 0.0, 1.0, 1.0],
+            scale: 1.1,
+            duration_ms: 300,
+        },
+        CounterAnimationPreset {
+            id: "builtin-ease-in".to_string(),
+            name: "Ease In".to_string(),
+            source: CounterAnimationSource::Builtin,
+            label_key: Some("counterSetting.presetEaseIn".to_string()),
+            bezier: [0.42, 0.0, 1.0, 1.0],
+            scale: 1.1,
+            duration_ms: 300,
+        },
+        CounterAnimationPreset {
+            id: "builtin-ease-in-out".to_string(),
+            name: "Ease In-Out".to_string(),
+            source: CounterAnimationSource::Builtin,
+            label_key: Some("counterSetting.presetEaseInOut".to_string()),
+            bezier: [0.42, 0.0, 0.58, 1.0],
+            scale: 1.1,
+            duration_ms: 300,
+        },
+        CounterAnimationPreset {
+            id: "builtin-overshoot".to_string(),
+            name: "Overshoot".to_string(),
+            source: CounterAnimationSource::Builtin,
+            label_key: Some("counterSetting.presetOvershoot".to_string()),
+            bezier: [0.34, 1.56, 0.64, 1.0],
+            scale: 1.15,
+            duration_ms: 360,
+        },
+    ]
+}
+
+pub fn default_counter_animation_preset_id() -> &'static str {
+    "builtin-ease-out"
+}
+
+pub fn default_counter_animation_builtin_presets() -> Vec<CounterAnimationPreset> {
+    builtin_counter_animation_presets()
+}
+
+pub fn find_builtin_counter_animation_preset_by_id(id: &str) -> Option<CounterAnimationPreset> {
+    builtin_counter_animation_presets()
+        .into_iter()
+        .find(|preset| preset.id == id)
+}
+
+pub fn infer_builtin_counter_animation_preset_id(
+    bezier: [f64; 4],
+    scale: f64,
+    duration_ms: u32,
+) -> Option<String> {
+    const BEZIER_EPSILON: f64 = 0.001;
+    const SCALE_EPSILON: f64 = 0.001;
+
+    builtin_counter_animation_presets()
+        .into_iter()
+        .find(|preset| {
+            let bezier_matches = preset
+                .bezier
+                .iter()
+                .zip(bezier.iter())
+                .all(|(a, b)| (*a - *b).abs() <= BEZIER_EPSILON);
+            let scale_matches = (preset.scale - scale).abs() <= SCALE_EPSILON;
+            let duration_matches = preset.duration_ms == duration_ms;
+            bezier_matches && scale_matches && duration_matches
+        })
+        .map(|preset| preset.id)
+}
+
+pub fn normalize_user_counter_animation_presets(
+    presets: Vec<CounterAnimationPreset>,
+) -> Vec<CounterAnimationPreset> {
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut normalized: Vec<CounterAnimationPreset> = presets
+        .into_iter()
+        .filter_map(|mut preset| {
+            preset.normalize();
+            if !preset.is_valid_user_entry() {
+                return None;
+            }
+            if !seen_ids.insert(preset.id.clone()) {
+                return None;
+            }
+            preset.source = CounterAnimationSource::User;
+            preset.label_key = None;
+            Some(preset)
+        })
+        .collect();
+
+    normalized.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    normalized
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyCounterAnimationSettings {
     #[serde(default = "default_counter_animation_enabled")]
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_id: Option<String>,
     #[serde(default = "default_counter_animation_bezier")]
     pub bezier: [f64; 4],
     #[serde(default = "default_counter_animation_scale")]
@@ -383,6 +540,7 @@ impl Default for KeyCounterAnimationSettings {
     fn default() -> Self {
         Self {
             enabled: default_counter_animation_enabled(),
+            preset_id: Some(default_counter_animation_preset_id().to_string()),
             bezier: default_counter_animation_bezier(),
             scale: default_counter_animation_scale(),
             duration_ms: default_counter_animation_duration_ms(),
@@ -416,6 +574,20 @@ impl KeyCounterAnimationSettings {
             default_counter_animation_scale()
         };
         self.duration_ms = self.duration_ms.clamp(1, 5000);
+
+        self.preset_id = self
+            .preset_id
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        if self.preset_id.is_none() {
+            self.preset_id = infer_builtin_counter_animation_preset_id(
+                self.bezier,
+                self.scale,
+                self.duration_ms,
+            );
+        }
     }
 }
 
@@ -942,6 +1114,8 @@ pub struct AppStoreData {
     pub custom_css: CustomCss,
     #[serde(default)]
     pub font_settings: FontSettings,
+    #[serde(default)]
+    pub counter_animation_presets: Vec<CounterAnimationPreset>,
     /// 탭별 CSS 오버라이드 (전역 CSS 대신 사용)
     #[serde(default)]
     pub tab_css_overrides: TabCssOverrides,
@@ -1004,6 +1178,7 @@ impl Default for AppStoreData {
             use_custom_css: false,
             custom_css: CustomCss::default(),
             font_settings: FontSettings::default(),
+            counter_animation_presets: Vec::new(),
             tab_css_overrides: TabCssOverrides::new(),
             tab_note_overrides: TabNoteOverrides::new(),
             use_custom_js: false,

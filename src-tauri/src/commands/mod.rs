@@ -1,5 +1,6 @@
 pub mod app;
 pub mod bridge;
+pub mod counter_animation;
 pub mod css;
 pub mod font;
 pub mod graph_items;
