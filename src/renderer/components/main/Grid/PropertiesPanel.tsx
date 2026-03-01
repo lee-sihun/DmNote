@@ -1984,18 +1984,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const rows = Object.entries(schema).map(([key, setting]) => {
         const schemaValue = setting as PluginSettingSchema;
 
-        // ── when 조건부 visibility ──
-        if (schemaValue.when) {
-          const { key: wKey, value: wVal, not: wNot } = schemaValue.when;
-          const current = values[wKey];
-          if (wVal !== undefined) {
-            const match = Array.isArray(wVal) ? wVal.includes(current) : current === wVal;
-            if (!match) return null;
-          }
-          if (wNot !== undefined) {
-            const excluded = Array.isArray(wNot) ? wNot.includes(current) : current === wNot;
-            if (excluded) return null;
-          }
+        // ── 조건부 visibility ──
+        if (schemaValue.visible !== undefined) {
+          const vis =
+            typeof schemaValue.visible === "function"
+              ? schemaValue.visible(values)
+              : schemaValue.visible;
+          if (!vis) return null;
         }
 
         if (schemaValue.type === "divider") {

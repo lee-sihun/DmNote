@@ -9,7 +9,6 @@ import { translatePluginMessage } from "@utils/pluginI18n";
 import { handlerRegistry } from "../handlers";
 import type { NamespacedStorage } from "../context";
 import type {
-  PluginSettingWhenCondition,
   PluginSettingsDefinition,
   PluginSettingsInstance,
   Unsubscribe,
@@ -157,35 +156,24 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         notifyOverlay(currentSettings);
       };
 
-      // ── when 조건부 visibility 헬퍼 ──
-      const _evalWhen = (
-        when: PluginSettingWhenCondition | undefined,
+      // ── 조건부 visibility 헬퍼 ──
+      const _evalVisible = (
+        visible: boolean | ((settings: Record<string, any>) => boolean) | undefined,
         settings: Record<string, any>,
       ): boolean => {
-        if (!when) return true;
-        const current = settings[when.key];
-        if (when.value !== undefined) {
-          return Array.isArray(when.value)
-            ? when.value.includes(current)
-            : current === when.value;
-        }
-        if (when.not !== undefined) {
-          return Array.isArray(when.not)
-            ? !when.not.includes(current)
-            : current !== when.not;
-        }
-        return true;
+        if (visible === undefined) return true;
+        return typeof visible === "function" ? visible(settings) : visible;
       };
 
       const _updateVisibility = () => {
         if (!definition.settings) return;
         for (const [k, s] of Object.entries(definition.settings)) {
-          if (!s.when) continue;
+          if (s.visible === undefined) continue;
           const el = document.querySelector(
             `[data-setting-key="${k}"]`,
           ) as HTMLElement | null;
           if (el)
-            el.style.display = _evalWhen(s.when, dialogSettings) ? "" : "none";
+            el.style.display = _evalVisible(s.visible, dialogSettings) ? "" : "none";
         }
       };
 
@@ -194,7 +182,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
       if (definition.settings && Object.keys(definition.settings).length > 0) {
         for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalWhen(schema.when, dialogSettings);
+          const _vis = _evalVisible(schema.visible, dialogSettings);
           if (schema.type === "divider") {
             htmlContent += `<div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {

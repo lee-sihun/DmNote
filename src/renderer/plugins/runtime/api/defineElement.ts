@@ -15,7 +15,6 @@ import type { NamespacedStorage } from "../context";
 import type {
   PluginDefinition,
   PluginDefinitionInternal,
-  PluginSettingWhenCondition,
 } from "@src/types/api";
 
 interface DefineElementDependencies {
@@ -242,40 +241,29 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       let htmlContent =
         '<div class="flex flex-col gap-[19px] w-full text-left">';
 
-      const _evalWhen = (
-        when: PluginSettingWhenCondition | undefined,
+      const _evalVisible = (
+        visible: boolean | ((settings: Record<string, any>) => boolean) | undefined,
         settings: Record<string, any>,
       ): boolean => {
-        if (!when) return true;
-        const current = settings[when.key];
-        if (when.value !== undefined) {
-          return Array.isArray(when.value)
-            ? when.value.includes(current)
-            : current === when.value;
-        }
-        if (when.not !== undefined) {
-          return Array.isArray(when.not)
-            ? !when.not.includes(current)
-            : current !== when.not;
-        }
-        return true;
+        if (visible === undefined) return true;
+        return typeof visible === "function" ? visible(settings) : visible;
       };
 
       const _updateVisibility = () => {
         if (!definition.settings) return;
         for (const [k, s] of Object.entries(definition.settings)) {
-          if (!s.when) continue;
+          if (s.visible === undefined) continue;
           const el = document.querySelector(
             `[data-setting-key="${k}"]`,
           ) as HTMLElement | null;
           if (el)
-            el.style.display = _evalWhen(s.when, currentSettings) ? "" : "none";
+            el.style.display = _evalVisible(s.visible, currentSettings) ? "" : "none";
         }
       };
 
       if (definition.settings) {
         for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalWhen(schema.when, currentSettings);
+          const _vis = _evalVisible(schema.visible, currentSettings);
           if (schema.type === "divider") {
             htmlContent += `<div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
