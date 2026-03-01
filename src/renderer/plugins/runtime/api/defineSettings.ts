@@ -156,13 +156,35 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         notifyOverlay(currentSettings);
       };
 
+      // ── 조건부 visibility 헬퍼 ──
+      const _evalVisible = (
+        visible: boolean | ((settings: Record<string, any>) => boolean) | undefined,
+        settings: Record<string, any>,
+      ): boolean => {
+        if (visible === undefined) return true;
+        return typeof visible === "function" ? visible(settings) : visible;
+      };
+
+      const _updateVisibility = () => {
+        if (!definition.settings) return;
+        for (const [k, s] of Object.entries(definition.settings)) {
+          if (s.visible === undefined) continue;
+          const el = document.querySelector(
+            `[data-setting-key="${k}"]`,
+          ) as HTMLElement | null;
+          if (el)
+            el.style.display = _evalVisible(s.visible, dialogSettings) ? "" : "none";
+        }
+      };
+
       let htmlContent =
         '<div class="flex flex-col gap-[19px] w-full text-left">';
 
       if (definition.settings && Object.keys(definition.settings).length > 0) {
         for (const [key, schema] of Object.entries(definition.settings)) {
+          const _vis = _evalVisible(schema.visible, dialogSettings);
           if (schema.type === "divider") {
-            htmlContent += `<div class="w-full h-[1px] bg-[#3A3943]"></div>`;
+            htmlContent += `<div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
             const value =
               dialogSettings[key] !== undefined
@@ -183,6 +205,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 dialogSettings[key] = newValue;
                 // 실시간 미리보기 적용
                 applyPreview(dialogSettings);
+                _updateVisibility();
               } finally {
                 (window as any).__dmn_current_plugin_id = prev;
               }
@@ -289,7 +312,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             }
 
             htmlContent += `
-            <div class="flex justify-between w-full items-center">
+            <div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="flex justify-between w-full items-center">
               <p class="text-white text-style-2">${labelText}</p>
               ${componentHtml}
             </div>

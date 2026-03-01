@@ -405,6 +405,9 @@ export type PluginSettingSchema =
   | {
       type: "divider";
       label?: string;
+      visible?:
+        | boolean
+        | ((settings: Record<string, any>) => boolean);
     }
   | {
       type: Exclude<PluginSettingType, "divider">;
@@ -415,6 +418,9 @@ export type PluginSettingSchema =
       step?: number; // for number
       options?: { label: string; value: any }[]; // for select
       placeholder?: string; // for string/number
+      visible?:
+        | boolean
+        | ((settings: Record<string, any>) => boolean);
     };
 
 export interface PluginDefinitionHookContext {

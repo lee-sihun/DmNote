@@ -1983,6 +1983,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const wrap = options?.wrap !== false;
       const rows = Object.entries(schema).map(([key, setting]) => {
         const schemaValue = setting as PluginSettingSchema;
+
+        // ── 조건부 visibility ──
+        if (schemaValue.visible !== undefined) {
+          const vis =
+            typeof schemaValue.visible === "function"
+              ? schemaValue.visible(values)
+              : schemaValue.visible;
+          if (!vis) return null;
+        }
+
         if (schemaValue.type === "divider") {
           return <SectionDivider key={`divider-${key}`} />;
         }
@@ -2099,11 +2109,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         );
       });
 
+      const filtered = rows.filter(Boolean);
+
       if (!wrap) {
-        return <>{rows}</>;
+        return <>{filtered}</>;
       }
 
-      return <div className="flex flex-col gap-[12px]">{rows}</div>;
+      return <div className="flex flex-col gap-[12px]">{filtered}</div>;
     },
     [locale, panelElement, t],
   );
