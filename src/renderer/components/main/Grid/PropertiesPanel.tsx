@@ -1983,6 +1983,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const wrap = options?.wrap !== false;
       const rows = Object.entries(schema).map(([key, setting]) => {
         const schemaValue = setting as PluginSettingSchema;
+
+        // ── when 조건부 visibility ──
+        if (schemaValue.when) {
+          const { key: wKey, value: wVal, not: wNot } = schemaValue.when;
+          const current = values[wKey];
+          if (wVal !== undefined) {
+            const match = Array.isArray(wVal) ? wVal.includes(current) : current === wVal;
+            if (!match) return null;
+          }
+          if (wNot !== undefined) {
+            const excluded = Array.isArray(wNot) ? wNot.includes(current) : current === wNot;
+            if (excluded) return null;
+          }
+        }
+
         if (schemaValue.type === "divider") {
           return <SectionDivider key={`divider-${key}`} />;
         }
@@ -2099,11 +2114,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         );
       });
 
+      const filtered = rows.filter(Boolean);
+
       if (!wrap) {
-        return <>{rows}</>;
+        return <>{filtered}</>;
       }
 
-      return <div className="flex flex-col gap-[12px]">{rows}</div>;
+      return <div className="flex flex-col gap-[12px]">{filtered}</div>;
     },
     [locale, panelElement, t],
   );
