@@ -15,6 +15,7 @@ import type { NamespacedStorage } from "../context";
 import type {
   PluginDefinition,
   PluginDefinitionInternal,
+  PluginSettingWhenCondition,
 } from "@src/types/api";
 
 interface DefineElementDependencies {
@@ -241,10 +242,42 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       let htmlContent =
         '<div class="flex flex-col gap-[19px] w-full text-left">';
 
+      const _evalWhen = (
+        when: PluginSettingWhenCondition | undefined,
+        settings: Record<string, any>,
+      ): boolean => {
+        if (!when) return true;
+        const current = settings[when.key];
+        if (when.value !== undefined) {
+          return Array.isArray(when.value)
+            ? when.value.includes(current)
+            : current === when.value;
+        }
+        if (when.not !== undefined) {
+          return Array.isArray(when.not)
+            ? !when.not.includes(current)
+            : current !== when.not;
+        }
+        return true;
+      };
+
+      const _updateVisibility = () => {
+        if (!definition.settings) return;
+        for (const [k, s] of Object.entries(definition.settings)) {
+          if (!s.when) continue;
+          const el = document.querySelector(
+            `[data-setting-key="${k}"]`,
+          ) as HTMLElement | null;
+          if (el)
+            el.style.display = _evalWhen(s.when, currentSettings) ? "" : "none";
+        }
+      };
+
       if (definition.settings) {
         for (const [key, schema] of Object.entries(definition.settings)) {
+          const _vis = _evalWhen(schema.when, currentSettings);
           if (schema.type === "divider") {
-            htmlContent += `<div class="w-full h-[1px] bg-[#3A3943]"></div>`;
+            htmlContent += `<div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
             const value =
               currentSettings[key] !== undefined
@@ -264,6 +297,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               window.api.ui.displayElement.update(instanceId, {
                 settings: newSettings,
               });
+              _updateVisibility();
             };
 
             const wrappedChange = wrapFunctionWithContext(handleChange);
@@ -366,7 +400,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
 
             htmlContent += `
-            <div class="flex justify-between w-full items-center">
+            <div data-setting-key="${key}" style="${_vis ? "" : "display:none"}" class="flex justify-between w-full items-center">
               <p class="text-white text-style-2">${labelText}</p>
               ${componentHtml}
             </div>
