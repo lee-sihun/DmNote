@@ -67,6 +67,15 @@
       "contributions": [
         "translation"
       ]
+    },
+    {
+      "login": "dotoritos-kim",
+      "name": "Dotoritos",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14037015?v=4",
+      "profile": "https://github.com/dotoritos-kim",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
