@@ -401,11 +401,17 @@ export type PluginSettingType =
   | "select"
   | "divider";
 
+export type PluginSettingWhenCondition = {
+  key: string;
+  value?: string | number | boolean | (string | number | boolean)[];
+  not?: string | number | boolean | (string | number | boolean)[];
+};
+
 export type PluginSettingSchema =
   | {
       type: "divider";
       label?: string;
-      when?: { key: string; value?: any; not?: any };
+      when?: PluginSettingWhenCondition;
     }
   | {
       type: Exclude<PluginSettingType, "divider">;
@@ -416,7 +422,7 @@ export type PluginSettingSchema =
       step?: number; // for number
       options?: { label: string; value: any }[]; // for select
       placeholder?: string; // for string/number
-      when?: { key: string; value?: any; not?: any };
+      when?: PluginSettingWhenCondition;
     };
 
 export interface PluginDefinitionHookContext {

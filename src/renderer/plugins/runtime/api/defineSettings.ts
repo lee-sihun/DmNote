@@ -9,6 +9,7 @@ import { translatePluginMessage } from "@utils/pluginI18n";
 import { handlerRegistry } from "../handlers";
 import type { NamespacedStorage } from "../context";
 import type {
+  PluginSettingWhenCondition,
   PluginSettingsDefinition,
   PluginSettingsInstance,
   Unsubscribe,
@@ -158,7 +159,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
       // ── when 조건부 visibility 헬퍼 ──
       const _evalWhen = (
-        when: { key: string; value?: any; not?: any } | undefined,
+        when: PluginSettingWhenCondition | undefined,
         settings: Record<string, any>,
       ): boolean => {
         if (!when) return true;
