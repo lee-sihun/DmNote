@@ -39,6 +39,26 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
     max: 9999,
     default: 0,
   },
+  fadeTopPx: {
+    min: 0,
+    max: 500,
+    default: 50,
+  },
+  fadeBottomPx: {
+    min: 0,
+    max: 500,
+    default: 0,
+  },
+  reverseFadeTopPx: {
+    min: 0,
+    max: 500,
+    default: 0,
+  },
+  reverseFadeBottomPx: {
+    min: 0,
+    max: 500,
+    default: 50,
+  },
 } as const;
 
 /**

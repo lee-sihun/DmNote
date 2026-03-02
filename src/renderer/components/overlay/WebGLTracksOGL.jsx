@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from "ogl";
 import { animationScheduler } from "../../utils/animationScheduler";
-import { fadePositionToUniform } from "../../../types/noteSettings";
+import { resolvedFadeValues } from "../../../types/noteSettings";
 import { MAX_NOTES } from "@stores/noteBuffer";
 import { isMac } from "@utils/platform";
 
@@ -141,7 +141,8 @@ const fragmentShader = `
 
   uniform float uScreenHeight;
   uniform float uDpr;
-  uniform float uFadePosition;
+  uniform float uFadeTopPx;
+  uniform float uFadeBottomPx;
 
   varying vec4 vColorTop;
   varying vec4 vColorBottom;
@@ -154,7 +155,6 @@ const fragmentShader = `
   varying vec3 vGlowColorBottom;
   varying float vTrackTopY;
   varying float vTrackBottomY;
-  varying float vReverse;
   varying float vNoteTopY;
   varying float vNoteBottomY;
 
@@ -167,28 +167,9 @@ const fragmentShader = `
     float gradientRatio = clamp((currentDOMY - vTrackTopY) / trackHeight, 0.0, 1.0);
     float trackRelativeY = gradientRatio;
 
-    float fadePosFlag = uFadePosition;
-    bool fadeDisabled = abs(fadePosFlag - 3.0) < 0.1;
-    bool fadeBoth = fadePosFlag > 3.5;
-    bool invertForFade = false;
-    if (!fadeDisabled && !fadeBoth) {
-      if (fadePosFlag < 0.5) {
-        invertForFade = (vReverse > 0.5);
-      } else if (abs(fadePosFlag - 1.0) < 0.1) {
-        invertForFade = false;
-      } else if (abs(fadePosFlag - 2.0) < 0.1) {
-        invertForFade = true;
-      }
-    }
-    if (!fadeDisabled && !fadeBoth && invertForFade) {
-      trackRelativeY = 1.0 - trackRelativeY;
-    }
-
     vec4 baseColor = mix(vColorTop, vColorBottom, gradientRatio);
     vec3 glowColor = mix(vGlowColorTop, vGlowColorBottom, gradientRatio);
     float glowOpacity = mix(vGlowOpacity.x, vGlowOpacity.y, gradientRatio);
-    float fadeZone = 50.0;
-    float fadeRatio = fadeZone / trackHeight;
 
     float r = clamp(vRadius, 0.0, min(vHalfSize.x, vHalfSize.y));
     vec2 q = abs(vLocalPos) - (vHalfSize - vec2(r));
@@ -206,12 +187,13 @@ const fragmentShader = `
     }
 
     float fadeMask = 1.0;
-    if (fadeBoth) {
-      float topFade = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
-      float bottomFade = clamp((1.0 - trackRelativeY) / fadeRatio, 0.0, 1.0);
-      fadeMask = min(topFade, bottomFade);
-    } else if (!fadeDisabled && trackRelativeY < fadeRatio) {
-      fadeMask = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
+    if (uFadeTopPx > 0.0) {
+      float topFadeRatio = uFadeTopPx / trackHeight;
+      fadeMask = min(fadeMask, clamp(trackRelativeY / topFadeRatio, 0.0, 1.0));
+    }
+    if (uFadeBottomPx > 0.0) {
+      float bottomFadeRatio = uFadeBottomPx / trackHeight;
+      fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
     }
     bodyAlpha *= fadeMask;
     glowAlpha *= fadeMask;
@@ -442,9 +424,8 @@ export const WebGLTracksOGL = memo(
           uDpr: { value: initialDpr },
           uTrackHeight: { value: noteSettings.trackHeight || 150 },
           uReverse: { value: noteSettings.reverse ? 1.0 : 0.0 },
-          uFadePosition: {
-            value: fadePositionToUniform(noteSettings.fadePosition),
-          },
+          uFadeTopPx: { value: resolvedFadeValues(noteSettings).topPx },
+          uFadeBottomPx: { value: resolvedFadeValues(noteSettings).bottomPx },
         },
       });
       programRef.current = program;
@@ -657,9 +638,19 @@ export const WebGLTracksOGL = memo(
       uniforms.uFlowSpeed.value = noteSettings.speed || 180;
       uniforms.uTrackHeight.value = noteSettings.trackHeight || 150;
       uniforms.uReverse.value = noteSettings.reverse ? 1.0 : 0.0;
-      uniforms.uFadePosition.value =
-        fadePositionToUniform(noteSettings.fadePosition);
-    }, [noteSettings]);
+      const fade = resolvedFadeValues(noteSettings);
+      uniforms.uFadeTopPx.value = fade.topPx;
+      uniforms.uFadeBottomPx.value = fade.bottomPx;
+    }, [
+      noteSettings.speed,
+      noteSettings.trackHeight,
+      noteSettings.reverse,
+      noteSettings.frameLimit,
+      noteSettings.fadeTopPx,
+      noteSettings.fadeBottomPx,
+      noteSettings.reverseFadeTopPx,
+      noteSettings.reverseFadeBottomPx,
+    ]);
 
     return (
       <canvas

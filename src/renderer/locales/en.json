@@ -151,12 +151,7 @@
     "frameLimit": "Frame Limit",
     "speed": "Speed",
     "trackHeight": "Track Height",
-    "fadePosition": "Fade Position",
-    "auto": "Auto",
-    "top": "Top",
-    "bottom": "Bottom",
-    "none": "None",
-    "both": "Full",
+    "fade": "Fade",
     "reverseEffect": "Reverse Effect",
     "save": "Apply",
     "cancel": "Cancel"

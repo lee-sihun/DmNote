@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import Checkbox from "@components/main/common/Checkbox";
-import Dropdown from "@components/main/common/Dropdown";
 import Modal from "../Modal";
 import { useTranslation } from "@contexts/I18nContext";
 import {
@@ -70,8 +69,17 @@ export default function NoteSetting({ onClose, settings, onSave, title = null })
     String(sanitizeNumericValue(initial.trackHeight, "trackHeight"))
   );
   const [reverse, setReverse] = useState(Boolean(initial.reverse || false));
-  const [fadePosition, setFadePosition] = useState(
-    initial.fadePosition || "auto"
+  const [fadeTopPx, setFadeTopPx] = useState(
+    String(sanitizeNumericValue(initial.fadeTopPx, "fadeTopPx"))
+  );
+  const [fadeBottomPx, setFadeBottomPx] = useState(
+    String(sanitizeNumericValue(initial.fadeBottomPx, "fadeBottomPx"))
+  );
+  const [reverseFadeTopPx, setReverseFadeTopPx] = useState(
+    String(sanitizeNumericValue(initial.reverseFadeTopPx, "reverseFadeTopPx"))
+  );
+  const [reverseFadeBottomPx, setReverseFadeBottomPx] = useState(
+    String(sanitizeNumericValue(initial.reverseFadeBottomPx, "reverseFadeBottomPx"))
   );
 
   const [delayedNoteEnabled, setDelayedNoteEnabled] = useState(
@@ -101,14 +109,6 @@ export default function NoteSetting({ onClose, settings, onSave, title = null })
     const nextHeight = element.offsetHeight;
     setTabContentHeight((prev) => (prev === nextHeight ? prev : nextHeight));
   }, []);
-
-  const fadeOptions = [
-    { label: t("noteSetting.auto"), value: "auto" },
-    { label: t("noteSetting.top"), value: "top" },
-    { label: t("noteSetting.bottom"), value: "bottom" },
-    { label: t("noteSetting.both"), value: "both" },
-    { label: t("noteSetting.none"), value: "none" },
-  ];
 
   const calculatedDelay = useMemo(() => {
     const safeSpeed = sanitizeNumericValue(speed, "speed");
@@ -172,7 +172,10 @@ export default function NoteSetting({ onClose, settings, onSave, title = null })
       speed: sanitizeNumericValue(speed, "speed"),
       trackHeight: sanitizeNumericValue(trackHeight, "trackHeight"),
       reverse,
-      fadePosition,
+      fadeTopPx: sanitizeNumericValue(fadeTopPx, "fadeTopPx"),
+      fadeBottomPx: sanitizeNumericValue(fadeBottomPx, "fadeBottomPx"),
+      reverseFadeTopPx: sanitizeNumericValue(reverseFadeTopPx, "reverseFadeTopPx"),
+      reverseFadeBottomPx: sanitizeNumericValue(reverseFadeBottomPx, "reverseFadeBottomPx"),
       delayedNoteEnabled,
       shortNoteThresholdMs: sanitizeNumericValue(
         shortNoteThresholdMs,
@@ -242,19 +245,53 @@ export default function NoteSetting({ onClose, settings, onSave, title = null })
         />
       </div>
 
-      <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t("noteSetting.fadePosition")}</p>
-        <Dropdown
-          options={fadeOptions}
-          value={fadePosition}
-          onChange={setFadePosition}
-          placeholder={t("noteSetting.select")}
-        />
-      </div>
-
       <div className="flex justify-between w-full items-center h-[23px]">
         <p className="text-white text-style-2">{t("noteSetting.reverseEffect")}</p>
         <Checkbox checked={reverse} onChange={() => setReverse((prev) => !prev)} />
+      </div>
+
+      <div className="flex justify-between w-full items-center min-h-[23px]">
+        <p className="text-white text-style-2">{t("noteSetting.fade")}{reverse ? " (R)" : ""}</p>
+        <div className="flex items-center gap-[10.5px]">
+          <div className="relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]" style={{ width: "54px" }}>
+            <svg className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none" width="12" height="12" viewBox="0 0 14 14" fill="#97999E">
+              <rect x="2" y="2" width="10" height="2" opacity="0.2" rx="1" />
+              <rect x="2" y="6" width="10" height="2" opacity="0.6" rx="1" />
+              <rect x="2" y="10" width="10" height="2" opacity="1" rx="1" />
+            </svg>
+            <input
+              type="number"
+              min={NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.min}
+              max={NOTE_SETTINGS_CONSTRAINTS.fadeTopPx.max}
+              value={reverse ? reverseFadeTopPx : fadeTopPx}
+              onChange={(e) => reverse ? setReverseFadeTopPx(e.target.value) : setFadeTopPx(e.target.value)}
+              onBlur={() => {
+                if (reverse) setReverseFadeTopPx(String(sanitizeNumericValue(reverseFadeTopPx, "reverseFadeTopPx")));
+                else setFadeTopPx(String(sanitizeNumericValue(fadeTopPx, "fadeTopPx")));
+              }}
+              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-center"
+            />
+          </div>
+          <div className="relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]" style={{ width: "54px" }}>
+            <svg className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none" width="12" height="12" viewBox="0 0 14 14" fill="#97999E">
+              <rect x="2" y="2" width="10" height="2" opacity="1" rx="1" />
+              <rect x="2" y="6" width="10" height="2" opacity="0.6" rx="1" />
+              <rect x="2" y="10" width="10" height="2" opacity="0.2" rx="1" />
+            </svg>
+            <input
+              type="number"
+              min={NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.min}
+              max={NOTE_SETTINGS_CONSTRAINTS.fadeBottomPx.max}
+              value={reverse ? reverseFadeBottomPx : fadeBottomPx}
+              onChange={(e) => reverse ? setReverseFadeBottomPx(e.target.value) : setFadeBottomPx(e.target.value)}
+              onBlur={() => {
+                if (reverse) setReverseFadeBottomPx(String(sanitizeNumericValue(reverseFadeBottomPx, "reverseFadeBottomPx")));
+                else setFadeBottomPx(String(sanitizeNumericValue(fadeBottomPx, "fadeBottomPx")));
+              }}
+              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-center"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
