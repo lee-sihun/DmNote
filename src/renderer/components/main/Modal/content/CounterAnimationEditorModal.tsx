@@ -76,9 +76,11 @@ const HANDLE_RADIUS = 6;
 const HANDLE_HIT_RADIUS = 10;
 const PAN_MARGIN = 14;
 const MAX_DURATION = 5000;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.002;
+const AUTO_FIT_MARGIN = 14;
+const AUTO_FIT_DURATION = 260;
 
 const normalizeScale = (value: number) => {
   if (!Number.isFinite(value)) return 1.1;
@@ -169,6 +171,7 @@ export default function CounterAnimationEditorModal({
   const pinchStartScaleRef = useRef(1);
   const pinchStartOffsetRef = useRef({ x: 0, y: 0 });
   const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
+  const autoFitRafRef = useRef<number | null>(null);
 
   const [nameInput, setNameInput] = useState("");
   const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>([
@@ -187,6 +190,76 @@ export default function CounterAnimationEditorModal({
   const [previewActive, setPreviewActive] = useState(false);
   const [previewCss, setPreviewCss] = useState("");
 
+  const cancelAutoFit = useCallback(() => {
+    if (autoFitRafRef.current) {
+      cancelAnimationFrame(autoFitRafRef.current);
+      autoFitRafRef.current = null;
+    }
+  }, []);
+
+  const applyView = useCallback(
+    (offset: { x: number; y: number }, scale: number) => {
+      viewOffsetRef.current = offset;
+      viewScaleRef.current = scale;
+      setViewOffset(offset);
+      setViewScale(scale);
+    },
+    [],
+  );
+
+  const computeAutoFit = useCallback((bezier: CounterAnimationBezier) => {
+    const pts = [
+      { x: EDITOR_PADDING, y: EDITOR_PADDING + EDITOR_SIZE },
+      { x: EDITOR_PADDING + EDITOR_SIZE, y: EDITOR_PADDING },
+      { x: EDITOR_PADDING + bezier[0] * EDITOR_SIZE, y: EDITOR_PADDING + (1 - bezier[1]) * EDITOR_SIZE },
+      { x: EDITOR_PADDING + bezier[2] * EDITOR_SIZE, y: EDITOR_PADDING + (1 - bezier[3]) * EDITOR_SIZE },
+    ];
+
+    const ptsMinX = Math.min(...pts.map((p) => p.x));
+    const ptsMaxX = Math.max(...pts.map((p) => p.x));
+    const ptsMinY = Math.min(...pts.map((p) => p.y));
+    const ptsMaxY = Math.max(...pts.map((p) => p.y));
+
+    const minX = Math.min(ptsMinX, EDITOR_PADDING);
+    const maxX = Math.max(ptsMaxX, EDITOR_PADDING + EDITOR_SIZE);
+    const minY = Math.min(ptsMinY, EDITOR_PADDING);
+    const maxY = Math.max(ptsMaxY, EDITOR_PADDING + EDITOR_SIZE);
+
+    const defaultBox = { minX: 0, minY: 0, maxX: TOTAL_SIZE, maxY: TOTAL_SIZE };
+
+    if (minX >= defaultBox.minX && maxX <= defaultBox.maxX &&
+      minY >= defaultBox.minY && maxY <= defaultBox.maxY) {
+      return { offset: { x: 0, y: 0 }, scale: 1 };
+    }
+
+    const rawW = maxX - minX;
+    const rawH = maxY - minY;
+    const rawSize = Math.max(rawW, rawH, TOTAL_SIZE);
+    const estHandleR = HANDLE_RADIUS * rawSize / TOTAL_SIZE;
+    const margin = AUTO_FIT_MARGIN + estHandleR;
+
+    const fitMinX = minX - margin;
+    const fitMaxX = maxX + margin;
+    const fitMinY = minY - margin;
+    const fitMaxY = maxY + margin;
+
+    const needW = fitMaxX - fitMinX;
+    const needH = fitMaxY - fitMinY;
+    const needSize = Math.max(needW, needH, TOTAL_SIZE);
+
+    const maxVB = TOTAL_SIZE / MIN_ZOOM;
+    const vbSize = Math.min(needSize, maxVB);
+    const fitScale = TOTAL_SIZE / vbSize;
+
+    const cx = (fitMinX + fitMaxX) / 2;
+    const cy = (fitMinY + fitMaxY) / 2;
+
+    return {
+      offset: { x: cx - vbSize / 2, y: cy - vbSize / 2 },
+      scale: fitScale,
+    };
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const initial = toInitialState(initialPreset);
@@ -197,16 +270,19 @@ export default function CounterAnimationEditorModal({
     setScaleInput(String(Math.round(initial.scale * 100) / 100));
     setDurationInput(String(initial.durationMs));
     setErrorText("");
-    setViewOffset({ x: 0, y: 0 });
-    setViewScale(1);
-    viewOffsetRef.current = { x: 0, y: 0 };
-    viewScaleRef.current = 1;
+
+    // edit 모드: 컨트롤 포인트가 기본 뷰 밖이면 auto-fit, 아니면 기본 뷰
+    // create 모드: 항상 기본 뷰
+    const fit = mode === "edit" && initialPreset
+      ? computeAutoFit(initial.bezier)
+      : { offset: { x: 0, y: 0 }, scale: 1 };
+    applyView(fit.offset, fit.scale);
     isPanningRef.current = false;
     activePointersRef.current.clear();
     pinchStartDistRef.current = 0;
     setPreviewCount(0);
     setPreviewActive(false);
-  }, [initialPreset, isOpen, t]);
+  }, [applyView, computeAutoFit, initialPreset, isOpen, mode]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -215,7 +291,10 @@ export default function CounterAnimationEditorModal({
     spaceHeldRef.current = false;
     activePointersRef.current.clear();
     pinchStartDistRef.current = 0;
-  }, [isOpen]);
+    cancelAutoFit();
+  }, [cancelAutoFit, isOpen]);
+
+  useEffect(() => () => cancelAutoFit(), [cancelAutoFit]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -284,8 +363,10 @@ export default function CounterAnimationEditorModal({
     void loadCss();
   }, [isOpen]);
 
+  // window 리스너는 pointerup/pointercancel 시 자가 정리돼서 클린업 추가 안 해뒀어요
+
   const handlePreviewPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
+    (event: React.PointerEvent<HTMLElement>) => {
       event.preventDefault();
       setPreviewActive(true);
       setPreviewCount((prev) => prev + 1);
@@ -300,6 +381,46 @@ export default function CounterAnimationEditorModal({
     },
     [],
   );
+
+  const animateViewToFit = useCallback((bezier: CounterAnimationBezier) => {
+    cancelAutoFit();
+
+    const target = computeAutoFit(bezier);
+    const fromOffset = { ...viewOffsetRef.current };
+    const fromScale = viewScaleRef.current;
+
+    const EPS = 1e-3;
+    if (Math.abs(target.offset.x - fromOffset.x) < EPS &&
+      Math.abs(target.offset.y - fromOffset.y) < EPS &&
+      Math.abs(target.scale - fromScale) < EPS) {
+      return;
+    }
+
+    const start = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
+      const k = easeOutCubic(t);
+
+      const newOffset = {
+        x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
+        y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
+      };
+      const newScale = fromScale + (target.scale - fromScale) * k;
+
+      applyView(newOffset, newScale);
+
+      if (t < 1) {
+        autoFitRafRef.current = requestAnimationFrame(tick);
+      } else {
+        autoFitRafRef.current = null;
+      }
+    };
+
+    autoFitRafRef.current = requestAnimationFrame(tick);
+  }, [cancelAutoFit, applyView, computeAutoFit]);
 
   const updateBezierFromClient = useCallback(
     (clientX: number, clientY: number, target: DragTarget) => {
@@ -323,17 +444,17 @@ export default function CounterAnimationEditorModal({
       const nextBezier: CounterAnimationBezier =
         target === "p1"
           ? [
-              Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -4), 4),
-              current[2],
-              current[3],
-            ]
+            Math.min(Math.max(bezierX, 0), 1),
+            Math.min(Math.max(bezierY, -4), 4),
+            current[2],
+            current[3],
+          ]
           : [
-              current[0],
-              current[1],
-              Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -4), 4),
-            ];
+            current[0],
+            current[1],
+            Math.min(Math.max(bezierX, 0), 1),
+            Math.min(Math.max(bezierY, -4), 4),
+          ];
 
       const clamped = clampCounterBezier(nextBezier);
       localBezierRef.current = clamped;
@@ -348,7 +469,9 @@ export default function CounterAnimationEditorModal({
         EDITOR_PADDING +
         (1 - (target === "p1" ? clamped[1] : clamped[3])) * EDITOR_SIZE;
 
-      const margin = PAN_MARGIN / scale;
+      // cap margin so auto-pan doesn't overshoot when zoomed out
+      const effectiveScale = Math.max(scale, 0.8);
+      const margin = PAN_MARGIN / effectiveScale;
       let nx = offset.x;
       let ny = offset.y;
 
@@ -406,10 +529,7 @@ export default function CounterAnimationEditorModal({
           y: worldY - fracY * newVB,
         };
 
-        viewScaleRef.current = newScale;
-        viewOffsetRef.current = newOff;
-        setViewScale(newScale);
-        setViewOffset(newOff);
+        applyView(newOff, newScale);
         return;
       }
 
@@ -456,6 +576,11 @@ export default function CounterAnimationEditorModal({
         return;
       }
 
+      // auto-fit after control point drag ends
+      if (dragTargetRef.current) {
+        animateViewToFit(localBezierRef.current);
+      }
+
       draggedBezierRef.current = null;
       dragTargetRef.current = null;
     };
@@ -469,21 +594,23 @@ export default function CounterAnimationEditorModal({
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [isOpen, updateBezierFromClient]);
+  }, [isOpen, applyView, updateBezierFromClient, animateViewToFit]);
 
   const handlePointPointerDown = useCallback(
     (event: React.PointerEvent<SVGCircleElement>, target: DragTarget) => {
       if (event.button !== 0 || spaceHeldRef.current) return;
       event.preventDefault();
       event.stopPropagation();
+      cancelAutoFit();
       dragTargetRef.current = target;
     },
-    [],
+    [cancelAutoFit],
   );
 
   const handleWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    cancelAutoFit();
     const svg = svgRef.current;
     if (!svg) return;
 
@@ -512,10 +639,7 @@ export default function CounterAnimationEditorModal({
         y: worldY - fracY * newVB,
       };
 
-      viewScaleRef.current = newScale;
-      viewOffsetRef.current = newOff;
-      setViewScale(newScale);
-      setViewOffset(newOff);
+      applyView(newOff, newScale);
       return;
     }
 
@@ -529,10 +653,11 @@ export default function CounterAnimationEditorModal({
     const newOff = { x: off.x + dx, y: off.y + dy };
     viewOffsetRef.current = newOff;
     setViewOffset(newOff);
-  }, []);
+  }, [applyView, cancelAutoFit]);
 
   const handleSvgPointerDown = useCallback(
     (event: React.PointerEvent<SVGSVGElement>) => {
+      cancelAutoFit();
       activePointersRef.current.set(event.pointerId, {
         clientX: event.clientX,
         clientY: event.clientY,
@@ -577,17 +702,15 @@ export default function CounterAnimationEditorModal({
         }
       }
     },
-    [],
+    [cancelAutoFit],
   );
 
   const handleDoubleClick = useCallback(
     (_event: React.MouseEvent<SVGSVGElement>) => {
-      viewOffsetRef.current = { x: 0, y: 0 };
-      viewScaleRef.current = 1;
-      setViewOffset({ x: 0, y: 0 });
-      setViewScale(1);
+      cancelAutoFit();
+      applyView({ x: 0, y: 0 }, 1);
     },
-    [],
+    [cancelAutoFit, applyView],
   );
 
   const selectedPreset = useMemo(
@@ -616,7 +739,10 @@ export default function CounterAnimationEditorModal({
     localBezierRef.current = nextBezier;
     setLocalBezier(nextBezier);
     setBezierInput(formatBezierInput(nextBezier));
-  }, []);
+
+    cancelAutoFit();
+    applyView({ x: 0, y: 0 }, 1);
+  }, [cancelAutoFit, applyView]);
 
   const gridLines = useMemo(() => {
     const lines: React.ReactElement[] = [];
@@ -692,9 +818,9 @@ export default function CounterAnimationEditorModal({
       const response =
         mode === "edit" && initialPreset
           ? await window.api.counterAnimation.update({
-              id: initialPreset.id,
-              ...requestBase,
-            })
+            id: initialPreset.id,
+            ...requestBase,
+          })
           : await window.api.counterAnimation.create(requestBase);
 
       onSaved({
@@ -707,7 +833,7 @@ export default function CounterAnimationEditorModal({
       console.error("Failed to save counter animation preset", error);
       setErrorText(
         t("counterSetting.saveAnimationFailed") ||
-          "모션 저장에 실패했습니다.",
+        "모션 저장에 실패했습니다.",
       );
     } finally {
       setIsSaving(false);
@@ -757,13 +883,6 @@ export default function CounterAnimationEditorModal({
               {headerTitle}
             </span>
           </div>
-          <button
-            type="button"
-            className="text-[11px] leading-[14px] text-[#8A8D99] hover:text-[#DBDEE8] active:text-[#FFFFFF] transition-colors select-none"
-            onPointerDown={handlePreviewPointerDown}
-          >
-            {t("counterSetting.previewPlay") || "미리보기 재생"}
-          </button>
         </div>
 
         <div className="flex-1 p-[16px] flex gap-[16px] bg-[#121116] min-h-0">
@@ -1004,31 +1123,10 @@ export default function CounterAnimationEditorModal({
           </div>
 
           <div className="flex-1 flex flex-col min-w-0 bg-[#0B0B0E] rounded-[10px] border border-[#2A2A30] overflow-hidden shadow-inner relative">
-            <div className="h-[32px] bg-[#16151A] border-b border-[#2A2A30] px-[12px] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-[5px] h-full">
-                <svg
-                  className="shrink-0"
-                  width="8"
-                  height="10"
-                  viewBox="0 0 8 10"
-                  fill="#8A8D99"
-                >
-                  <path d="M1 0.5a1 1 0 0 0 0 9l5.5-3.5a1 1 0 0 0 0-2L1 0.5z" />
-                </svg>
-                <span className="text-[12px] leading-[14px] text-[#A0A2A8]">
-                  {t("counterSetting.preview") || "미리보기"}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="h-[21px] px-[10px] rounded-[6px] bg-[#24232A] hover:bg-[#2E2D35] active:bg-[#3A3943] text-[11px] text-[#B0B2B8] hover:text-[#DBDEE8] transition-colors select-none"
-                onPointerDown={handlePreviewPointerDown}
-              >
-                {t("counterSetting.pressToPreview") || "누르기"}
-              </button>
-            </div>
-
-            <div className="flex-1 min-h-0 flex items-center justify-center relative bg-[#0F0F13]">
+            <div
+              className="flex-1 min-h-0 flex items-center justify-center relative bg-[#0F0F13] rounded-[10px] cursor-pointer select-none"
+              onPointerDown={handlePreviewPointerDown}
+            >
               {previewCss && (
                 <style
                   dangerouslySetInnerHTML={{ __html: previewCss }}
@@ -1182,36 +1280,36 @@ export default function CounterAnimationEditorModal({
                   const outsideStyle: React.CSSProperties | undefined =
                     !isInside
                       ? {
-                          position: "absolute",
-                          pointerEvents: "none",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          ...(align === "top" && {
-                            bottom: "100%",
-                            left: "50%",
-                            transform: "translateX(-50%)",
-                            paddingBottom: `${gap}px`,
-                          }),
-                          ...(align === "bottom" && {
-                            top: "100%",
-                            left: "50%",
-                            transform: "translateX(-50%)",
-                            paddingTop: `${gap}px`,
-                          }),
-                          ...(align === "left" && {
-                            right: "100%",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            paddingRight: `${gap}px`,
-                          }),
-                          ...(align === "right" && {
-                            left: "100%",
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            paddingLeft: `${gap}px`,
-                          }),
-                        }
+                        position: "absolute",
+                        pointerEvents: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        ...(align === "top" && {
+                          bottom: "100%",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          paddingBottom: `${gap}px`,
+                        }),
+                        ...(align === "bottom" && {
+                          top: "100%",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          paddingTop: `${gap}px`,
+                        }),
+                        ...(align === "left" && {
+                          right: "100%",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          paddingRight: `${gap}px`,
+                        }),
+                        ...(align === "right" && {
+                          left: "100%",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          paddingLeft: `${gap}px`,
+                        }),
+                      }
                       : undefined;
 
                   return (
@@ -1220,9 +1318,9 @@ export default function CounterAnimationEditorModal({
                       style={
                         fitScale < 1
                           ? {
-                              transform: `scale(${fitScale})`,
-                              transformOrigin: "center",
-                            }
+                            transform: `scale(${fitScale})`,
+                            transformOrigin: "center",
+                          }
                           : undefined
                       }
                     >
@@ -1263,18 +1361,32 @@ export default function CounterAnimationEditorModal({
                   );
                 })()}
               </div>
+              <div
+                className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"
+              >
+                <span className="mb-2.5 text-white/70 text-[12px] font-medium tracking-wide">
+                  {t("counterSetting.pressToPreview") || "눌러서 미리보기"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
+        <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center gap-[10.5px]">
+          <div className="flex items-center gap-1.5 mr-auto">
+            <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="#8A8D99">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            <span className="text-[11px] text-[#8A8D99] tracking-wide">
+              {t("counterSetting.motionPerformanceNotice") || "모션 효과는 시스템 리소스를 추가로 사용합니다"}
+            </span>
+          </div>
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 transition-colors ${
-              canSave
-                ? "bg-[#2A2A30] text-[#DCDEE7] hover:bg-[#34343c]"
-                : "bg-[#222228] text-[#777986] cursor-not-allowed"
-            }`}
+            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 transition-colors ${canSave
+              ? "bg-[#2A2A30] text-[#DCDEE7] hover:bg-[#34343c]"
+              : "bg-[#222228] text-[#777986] cursor-not-allowed"
+              }`}
             disabled={!canSave}
             onClick={() => {
               void handleSave();
