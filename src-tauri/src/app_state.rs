@@ -425,9 +425,11 @@ impl AppState {
                         _ => new_y -= delta,
                     }
                 }
-                let _ = self.store.update(|state| {
+                if let Err(err) = self.store.update(|state| {
                     state.overlay_last_content_top_offset = Some(offset);
-                })?;
+                }) {
+                    log::warn!("failed to persist overlay content top offset: {err}");
+                }
             }
         }
 
@@ -441,10 +443,12 @@ impl AppState {
             height,
         };
 
-        let _ = self.store.update(|state| {
+        if let Err(err) = self.store.update(|state| {
             state.overlay_bounds = Some(bounds.clone());
             state.overlay_bounds_are_logical = true;
-        })?;
+        }) {
+            log::warn!("failed to persist overlay bounds after resize: {err}");
+        }
 
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
