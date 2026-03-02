@@ -35,6 +35,13 @@ interface CounterAnimationPickerProps {
     fontUnderline?: boolean;
     fontStrikethrough?: boolean;
     displayText?: string;
+    displayName?: string;
+    className?: string;
+    activeBackgroundColor?: string;
+    activeBorderColor?: string;
+    activeFontColor?: string;
+    useInlineStyles?: boolean;
+    isStat?: boolean;
   };
   onAnimationChange: (next: KeyCounterAnimationSettings) => void;
   onClose: () => void;

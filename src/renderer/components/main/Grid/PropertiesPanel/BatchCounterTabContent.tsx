@@ -27,6 +27,13 @@ interface BatchKeyVisual {
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
   displayText?: string;
+  displayName?: string;
+  className?: string;
+  activeBackgroundColor?: string;
+  activeBorderColor?: string;
+  activeFontColor?: string;
+  useInlineStyles?: boolean;
+  isStat?: boolean;
 }
 
 interface BatchCounterTabContentProps {

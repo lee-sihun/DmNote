@@ -30,6 +30,8 @@ type ColorState = "idle" | "active";
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
   keyIndex,
   keyPosition,
+  keyDisplayName,
+  isStat,
   onKeyUpdate,
   panelElement,
   t,
@@ -475,6 +477,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             fontUnderline: keyPosition.fontUnderline,
             fontStrikethrough: keyPosition.fontStrikethrough,
             displayText: keyPosition.displayText,
+            displayName: keyDisplayName,
+            className: keyPosition.className,
+            activeBackgroundColor: keyPosition.activeBackgroundColor,
+            activeBorderColor: keyPosition.activeBorderColor,
+            activeFontColor: keyPosition.activeFontColor,
+            useInlineStyles: keyPosition.useInlineStyles,
+            isStat,
           }}
           onAnimationChange={handleAnimationUpdate}
           onClose={() => setShowAnimationPicker(false)}

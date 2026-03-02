@@ -2646,6 +2646,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           fontUnderline: firstPos.fontUnderline,
           fontStrikethrough: firstPos.fontStrikethrough,
           displayText: firstPos.displayText,
+          displayName: keysData[0]?.keyInfo?.displayName,
+          className: firstPos.className,
+          activeBackgroundColor: firstPos.activeBackgroundColor,
+          activeBorderColor: firstPos.activeBorderColor,
+          activeFontColor: firstPos.activeFontColor,
+          useInlineStyles: firstPos.useInlineStyles,
+          isStat: selectedKeyLikeElements[0]?.type === "stat",
         }
       : undefined;
     const noteOpacityMixed = getMixedValue(
@@ -4340,6 +4347,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <CounterTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
+              keyDisplayName={keyLikeInfo?.displayName}
+              isStat={isSingleStat}
               onKeyUpdate={handleKeyLikeUpdate}
               panelElement={panelElement}
               t={t}

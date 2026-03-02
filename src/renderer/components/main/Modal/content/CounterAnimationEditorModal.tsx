@@ -1,14 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CounterAnimationBezier, KeyCounterSettings } from "@src/types/keys";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type {
+  CounterAnimationBezier,
+  KeyCounterSettings,
+} from "@src/types/keys";
 import type { CounterAnimationPreset } from "@src/types/counterAnimation";
 import Modal from "@components/main/Modal/Modal";
 import Dropdown from "@components/main/common/Dropdown";
+import {
+  TextInput,
+  NumberInput,
+} from "@components/main/Grid/PropertiesPanel/PropertyInputs";
 import CountDisplay from "@components/overlay/CountDisplay";
 import {
   COUNTER_BEZIER_PRESETS,
   clampCounterBezier,
   findBezierPresetId,
 } from "@utils/cubicBezier";
+import { useKeyStore } from "@stores/useKeyStore";
 
 type EditorMode = "create" | "edit";
 
@@ -27,6 +41,13 @@ interface KeyVisualProps {
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
   displayText?: string;
+  displayName?: string;
+  className?: string;
+  activeBackgroundColor?: string;
+  activeBorderColor?: string;
+  activeFontColor?: string;
+  useInlineStyles?: boolean;
+  isStat?: boolean;
 }
 
 interface CounterAnimationEditorModalProps {
@@ -46,7 +67,7 @@ interface CounterAnimationEditorModalProps {
 
 type DragTarget = "p1" | "p2" | null;
 
-const EDITOR_SIZE = 140;
+const EDITOR_SIZE = 110;
 const EDITOR_PADDING = 20;
 const TOTAL_SIZE = EDITOR_SIZE + EDITOR_PADDING * 2;
 const GRID_SUB = EDITOR_SIZE / 4;
@@ -97,14 +118,10 @@ const parseBezierInput = (raw: string): CounterAnimationBezier | null => {
 
 const toInitialState = (
   preset: CounterAnimationPreset | null | undefined,
-  t: (key: string) => string,
 ) => {
-  const fallbackName =
-    t("counterSetting.newAnimationDefaultName") || "새 애니메이션";
-
   if (!preset) {
     return {
-      name: fallbackName,
+      name: "",
       bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
       scale: 1.1,
       durationMs: 300,
@@ -112,7 +129,7 @@ const toInitialState = (
   }
 
   return {
-    name: preset.name || fallbackName,
+    name: preset.name || "",
     bezier: clampCounterBezier(preset.bezier),
     scale: normalizeScale(preset.scale),
     durationMs: clampDuration(preset.durationMs),
@@ -131,15 +148,32 @@ export default function CounterAnimationEditorModal({
 }: CounterAnimationEditorModalProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragTargetRef = useRef<DragTarget>(null);
-  const localBezierRef = useRef<CounterAnimationBezier>([0.25, 0.46, 0.45, 0.94]);
+  const localBezierRef = useRef<CounterAnimationBezier>([
+    0.25, 0.46, 0.45, 0.94,
+  ]);
   const draggedBezierRef = useRef<CounterAnimationBezier | null>(null);
   const viewOffsetRef = useRef({ x: 0, y: 0 });
   const viewScaleRef = useRef(1);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({
+    clientX: 0,
+    clientY: 0,
+    offsetX: 0,
+    offsetY: 0,
+  });
+  const spaceHeldRef = useRef(false);
+  const activePointersRef = useRef<
+    Map<number, { clientX: number; clientY: number }>
+  >(new Map());
+  const pinchStartDistRef = useRef(0);
+  const pinchStartScaleRef = useRef(1);
+  const pinchStartOffsetRef = useRef({ x: 0, y: 0 });
+  const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
 
   const [nameInput, setNameInput] = useState("");
-  const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>(
-    [0.25, 0.46, 0.45, 0.94],
-  );
+  const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>([
+    0.25, 0.46, 0.45, 0.94,
+  ]);
   const [bezierInput, setBezierInput] = useState("0.25, 0.46, 0.45, 0.94");
   const [scaleInput, setScaleInput] = useState("1.1");
   const [durationInput, setDurationInput] = useState("300");
@@ -151,11 +185,11 @@ export default function CounterAnimationEditorModal({
 
   const [previewCount, setPreviewCount] = useState(0);
   const [previewActive, setPreviewActive] = useState(false);
-  const previewTimeoutRef = useRef<number | null>(null);
+  const [previewCss, setPreviewCss] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
-    const initial = toInitialState(initialPreset, t);
+    const initial = toInitialState(initialPreset);
     localBezierRef.current = initial.bezier;
     setNameInput(initial.name);
     setLocalBezier(initial.bezier);
@@ -167,35 +201,105 @@ export default function CounterAnimationEditorModal({
     setViewScale(1);
     viewOffsetRef.current = { x: 0, y: 0 };
     viewScaleRef.current = 1;
+    isPanningRef.current = false;
+    activePointersRef.current.clear();
+    pinchStartDistRef.current = 0;
     setPreviewCount(0);
     setPreviewActive(false);
   }, [initialPreset, isOpen, t]);
 
   useEffect(() => {
     if (isOpen) return;
-    if (previewTimeoutRef.current) {
-      window.clearTimeout(previewTimeoutRef.current);
-      previewTimeoutRef.current = null;
-    }
+    setPreviewActive(false);
+    isPanningRef.current = false;
+    spaceHeldRef.current = false;
+    activePointersRef.current.clear();
+    pinchStartDistRef.current = 0;
   }, [isOpen]);
 
-  const triggerPreview = useCallback(() => {
-    const parsedDuration = parseNumber(durationInput);
-    const durationMs = clampDuration(parsedDuration ?? 300);
+  useEffect(() => {
+    if (!isOpen) return;
 
-    if (previewTimeoutRef.current) {
-      window.clearTimeout(previewTimeoutRef.current);
-      previewTimeoutRef.current = null;
-    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) {
+        spaceHeldRef.current = true;
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag !== "INPUT" && tag !== "TEXTAREA") {
+          e.preventDefault();
+        }
+        if (svgRef.current) {
+          svgRef.current.style.cursor = "grab";
+        }
+      }
+    };
 
-    setPreviewActive(true);
-    setPreviewCount((prev) => prev + 1);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        spaceHeldRef.current = false;
+        if (svgRef.current && !isPanningRef.current) {
+          svgRef.current.style.cursor = "default";
+        }
+      }
+    };
 
-    previewTimeoutRef.current = window.setTimeout(() => {
-      setPreviewActive(false);
-      previewTimeoutRef.current = null;
-    }, Math.max(200, durationMs));
-  }, [durationInput]);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      spaceHeldRef.current = false;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadCss = async () => {
+      try {
+        const [globalCss, globalUse, tabOverrides] = await Promise.all([
+          window.api.css.get(),
+          window.api.css.getUse(),
+          window.api.css.tab.getAll(),
+        ]);
+        if (!globalUse) {
+          setPreviewCss("");
+          return;
+        }
+        const currentTab = useKeyStore.getState().selectedKeyType;
+        const tabCss = tabOverrides[currentTab];
+        if (tabCss) {
+          if (!tabCss.enabled) {
+            setPreviewCss("");
+            return;
+          }
+          if (tabCss.path && tabCss.content) {
+            setPreviewCss(tabCss.content);
+            return;
+          }
+        }
+        setPreviewCss(globalCss.content || "");
+      } catch {
+        setPreviewCss("");
+      }
+    };
+    void loadCss();
+  }, [isOpen]);
+
+  const handlePreviewPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      setPreviewActive(true);
+      setPreviewCount((prev) => prev + 1);
+
+      const handleUp = () => {
+        setPreviewActive(false);
+        window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleUp);
+      };
+      window.addEventListener("pointerup", handleUp);
+      window.addEventListener("pointercancel", handleUp);
+    },
+    [],
+  );
 
   const updateBezierFromClient = useCallback(
     (clientX: number, clientY: number, target: DragTarget) => {
@@ -220,7 +324,7 @@ export default function CounterAnimationEditorModal({
         target === "p1"
           ? [
               Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -2), 2),
+              Math.min(Math.max(bezierY, -4), 4),
               current[2],
               current[3],
             ]
@@ -228,7 +332,7 @@ export default function CounterAnimationEditorModal({
               current[0],
               current[1],
               Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -2), 2),
+              Math.min(Math.max(bezierY, -4), 4),
             ];
 
       const clamped = clampCounterBezier(nextBezier);
@@ -238,9 +342,11 @@ export default function CounterAnimationEditorModal({
       draggedBezierRef.current = clamped;
 
       const hx =
-        EDITOR_PADDING + (target === "p1" ? clamped[0] : clamped[2]) * EDITOR_SIZE;
+        EDITOR_PADDING +
+        (target === "p1" ? clamped[0] : clamped[2]) * EDITOR_SIZE;
       const hy =
-        EDITOR_PADDING + (1 - (target === "p1" ? clamped[1] : clamped[3])) * EDITOR_SIZE;
+        EDITOR_PADDING +
+        (1 - (target === "p1" ? clamped[1] : clamped[3])) * EDITOR_SIZE;
 
       const margin = PAN_MARGIN / scale;
       let nx = offset.x;
@@ -264,10 +370,92 @@ export default function CounterAnimationEditorModal({
     if (!isOpen) return;
 
     const handlePointerMove = (event: PointerEvent) => {
-      updateBezierFromClient(event.clientX, event.clientY, dragTargetRef.current);
+      if (activePointersRef.current.has(event.pointerId)) {
+        activePointersRef.current.set(event.pointerId, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+      }
+
+      if (
+        activePointersRef.current.size === 2 &&
+        pinchStartDistRef.current > 0
+      ) {
+        const svg = svgRef.current;
+        if (!svg) return;
+        const pointers = Array.from(activePointersRef.current.values());
+        const dx = pointers[1].clientX - pointers[0].clientX;
+        const dy = pointers[1].clientY - pointers[0].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = dist / pinchStartDistRef.current;
+        const oldScale = pinchStartScaleRef.current;
+        const newScale = Math.min(
+          Math.max(oldScale * ratio, MIN_ZOOM),
+          MAX_ZOOM,
+        );
+
+        const fracX = pinchStartMidFracRef.current.x;
+        const fracY = pinchStartMidFracRef.current.y;
+        const oldVB = TOTAL_SIZE / oldScale;
+        const newVB = TOTAL_SIZE / newScale;
+        const startOff = pinchStartOffsetRef.current;
+        const worldX = startOff.x + fracX * oldVB;
+        const worldY = startOff.y + fracY * oldVB;
+        const newOff = {
+          x: worldX - fracX * newVB,
+          y: worldY - fracY * newVB,
+        };
+
+        viewScaleRef.current = newScale;
+        viewOffsetRef.current = newOff;
+        setViewScale(newScale);
+        setViewOffset(newOff);
+        return;
+      }
+
+      if (isPanningRef.current) {
+        const svg = svgRef.current;
+        if (!svg) return;
+        const rect = svg.getBoundingClientRect();
+        const scale = viewScaleRef.current;
+        const vbSize = TOTAL_SIZE / scale;
+        const dxClient = event.clientX - panStartRef.current.clientX;
+        const dyClient = event.clientY - panStartRef.current.clientY;
+        const dxWorld = -(dxClient / rect.width) * vbSize;
+        const dyWorld = -(dyClient / rect.height) * vbSize;
+
+        const newOffset = {
+          x: panStartRef.current.offsetX + dxWorld,
+          y: panStartRef.current.offsetY + dyWorld,
+        };
+        viewOffsetRef.current = newOffset;
+        setViewOffset(newOffset);
+        return;
+      }
+
+      updateBezierFromClient(
+        event.clientX,
+        event.clientY,
+        dragTargetRef.current,
+      );
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
+      activePointersRef.current.delete(event.pointerId);
+      if (activePointersRef.current.size < 2) {
+        pinchStartDistRef.current = 0;
+      }
+
+      if (isPanningRef.current) {
+        isPanningRef.current = false;
+        if (svgRef.current) {
+          svgRef.current.style.cursor = spaceHeldRef.current
+            ? "grab"
+            : "default";
+        }
+        return;
+      }
+
       draggedBezierRef.current = null;
       dragTargetRef.current = null;
     };
@@ -285,7 +473,9 @@ export default function CounterAnimationEditorModal({
 
   const handlePointPointerDown = useCallback(
     (event: React.PointerEvent<SVGCircleElement>, target: DragTarget) => {
+      if (event.button !== 0 || spaceHeldRef.current) return;
       event.preventDefault();
+      event.stopPropagation();
       dragTargetRef.current = target;
     },
     [],
@@ -298,42 +488,125 @@ export default function CounterAnimationEditorModal({
     if (!svg) return;
 
     const rect = svg.getBoundingClientRect();
-    const fracX = (event.clientX - rect.left) / rect.width;
-    const fracY = (event.clientY - rect.top) / rect.height;
+    const scale = viewScaleRef.current;
+    const vbSize = TOTAL_SIZE / scale;
 
-    const oldScale = viewScaleRef.current;
-    const oldVB = TOTAL_SIZE / oldScale;
+    if (event.ctrlKey || event.metaKey) {
+      const fracX = (event.clientX - rect.left) / rect.width;
+      const fracY = (event.clientY - rect.top) / rect.height;
 
-    const delta = -event.deltaY * ZOOM_SENSITIVITY;
-    const factor = Math.exp(delta);
-    const newScale = Math.min(Math.max(oldScale * factor, MIN_ZOOM), MAX_ZOOM);
-    const newVB = TOTAL_SIZE / newScale;
+      const oldVB = vbSize;
+      const delta = -event.deltaY * ZOOM_SENSITIVITY;
+      const factor = Math.exp(delta);
+      const newScale = Math.min(
+        Math.max(scale * factor, MIN_ZOOM),
+        MAX_ZOOM,
+      );
+      const newVB = TOTAL_SIZE / newScale;
+
+      const off = viewOffsetRef.current;
+      const worldX = off.x + fracX * oldVB;
+      const worldY = off.y + fracY * oldVB;
+      const newOff = {
+        x: worldX - fracX * newVB,
+        y: worldY - fracY * newVB,
+      };
+
+      viewScaleRef.current = newScale;
+      viewOffsetRef.current = newOff;
+      setViewScale(newScale);
+      setViewOffset(newOff);
+      return;
+    }
 
     const off = viewOffsetRef.current;
-    const worldX = off.x + fracX * oldVB;
-    const worldY = off.y + fracY * oldVB;
-    const newOff = { x: worldX - fracX * newVB, y: worldY - fracY * newVB };
-
-    viewScaleRef.current = newScale;
+    const dx = (event.shiftKey
+      ? (event.deltaX || event.deltaY)
+      : event.deltaX) / rect.width * vbSize;
+    const dy = (event.shiftKey && !event.deltaX
+      ? 0
+      : event.deltaY) / rect.height * vbSize;
+    const newOff = { x: off.x + dx, y: off.y + dy };
     viewOffsetRef.current = newOff;
-    setViewScale(newScale);
     setViewOffset(newOff);
   }, []);
 
-  const selectedPreset = useMemo(() => findBezierPresetId(localBezier), [localBezier]);
+  const handleSvgPointerDown = useCallback(
+    (event: React.PointerEvent<SVGSVGElement>) => {
+      activePointersRef.current.set(event.pointerId, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+
+      if (activePointersRef.current.size === 2) {
+        dragTargetRef.current = null;
+        isPanningRef.current = false;
+        const pointers = Array.from(activePointersRef.current.values());
+        const dx = pointers[1].clientX - pointers[0].clientX;
+        const dy = pointers[1].clientY - pointers[0].clientY;
+        pinchStartDistRef.current = Math.sqrt(dx * dx + dy * dy);
+        pinchStartScaleRef.current = viewScaleRef.current;
+        pinchStartOffsetRef.current = { ...viewOffsetRef.current };
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (rect) {
+          const midX = (pointers[0].clientX + pointers[1].clientX) / 2;
+          const midY = (pointers[0].clientY + pointers[1].clientY) / 2;
+          pinchStartMidFracRef.current = {
+            x: (midX - rect.left) / rect.width,
+            y: (midY - rect.top) / rect.height,
+          };
+        }
+        return;
+      }
+
+      if (
+        event.button === 1 ||
+        (event.button === 0 && spaceHeldRef.current)
+      ) {
+        event.preventDefault();
+        if (dragTargetRef.current) return;
+        isPanningRef.current = true;
+        panStartRef.current = {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          offsetX: viewOffsetRef.current.x,
+          offsetY: viewOffsetRef.current.y,
+        };
+        if (svgRef.current) {
+          svgRef.current.style.cursor = "grabbing";
+        }
+      }
+    },
+    [],
+  );
+
+  const handleDoubleClick = useCallback(
+    (_event: React.MouseEvent<SVGSVGElement>) => {
+      viewOffsetRef.current = { x: 0, y: 0 };
+      viewScaleRef.current = 1;
+      setViewOffset({ x: 0, y: 0 });
+      setViewScale(1);
+    },
+    [],
+  );
+
+  const selectedPreset = useMemo(
+    () => findBezierPresetId(localBezier),
+    [localBezier],
+  );
+
+  const customLabel = t("counterSetting.presetCustom") || "Custom";
 
   const presetOptions = useMemo(() => {
-    return [
-      {
-        value: "custom",
-        label: t("counterSetting.presetCustom") || "Custom",
-      },
-      ...COUNTER_BEZIER_PRESETS.map((preset) => ({
-        value: preset.id,
-        label: t(preset.labelKey) || preset.fallbackLabel,
-      })),
-    ];
-  }, [t]);
+    const base = COUNTER_BEZIER_PRESETS.map((preset) => ({
+      value: preset.id,
+      label: preset.fallbackLabel,
+    }));
+    if (selectedPreset === "custom") {
+      return [{ value: "custom", label: customLabel }, ...base];
+    }
+    return base;
+  }, [customLabel, selectedPreset]);
 
   const handlePresetChange = useCallback((value: string) => {
     if (value === "custom") return;
@@ -433,7 +706,8 @@ export default function CounterAnimationEditorModal({
     } catch (error) {
       console.error("Failed to save counter animation preset", error);
       setErrorText(
-        t("counterSetting.saveAnimationFailed") || "애니메이션 저장에 실패했습니다.",
+        t("counterSetting.saveAnimationFailed") ||
+          "모션 저장에 실패했습니다.",
       );
     } finally {
       setIsSaving(false);
@@ -465,19 +739,19 @@ export default function CounterAnimationEditorModal({
 
   const headerTitle =
     mode === "edit"
-      ? t("counterSetting.editAnimationTitle") || "애니메이션 편집"
-      : t("counterSetting.createAnimationTitle") || "애니메이션 추가";
+      ? t("counterSetting.editAnimationTitle") || "모션 편집"
+      : t("counterSetting.createAnimationTitle") || "모션 추가";
 
   return (
     <Modal onClick={onClose}>
       <div
-        className="w-[760px] max-w-[calc(100vw-80px)] h-[355px] flex flex-col bg-[#1A191E] rounded-[10px] border border-[#2A2A30] overflow-hidden"
+        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-[#1A191E] rounded-[12px] border border-[#2A2A30] shadow-2xl overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="h-[37px] bg-[#2A2A30] border-b border-[#3A3943] px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
             <span className="px-[6px] h-[18px] rounded-[4px] border border-[#3A3943] bg-[#1A191E] text-[10px] leading-[18px] font-semibold tracking-[0.2px] text-[#8CC2FF]">
-              Animation
+              Motion
             </span>
             <span className="truncate text-[12px] leading-[16px] text-[#DBDEE8]">
               {headerTitle}
@@ -485,336 +759,428 @@ export default function CounterAnimationEditorModal({
           </div>
           <button
             type="button"
-            className="text-[11px] leading-[14px] text-[#8A8D99] hover:text-[#DBDEE8] transition-colors"
-            onClick={triggerPreview}
+            className="text-[11px] leading-[14px] text-[#8A8D99] hover:text-[#DBDEE8] active:text-[#FFFFFF] transition-colors select-none"
+            onPointerDown={handlePreviewPointerDown}
           >
             {t("counterSetting.previewPlay") || "미리보기 재생"}
           </button>
         </div>
 
-        <div className="flex-1 p-[12px] grid grid-cols-[1.35fr_1fr] gap-[12px] min-h-0">
-          <div className="min-h-0 flex flex-col gap-[8px]">
+        <div className="flex-1 p-[16px] flex gap-[16px] bg-[#121116] min-h-0">
+          <div className="w-[390px] flex flex-col gap-[16px] min-h-0 shrink-0">
             <div>
-              <label className="block text-[11px] leading-[14px] text-[#8A8D99] mb-[4px]">
-                {t("counterSetting.animationName") || "애니메이션 이름"}
-              </label>
               <input
                 type="text"
                 value={nameInput}
                 onChange={(event) => setNameInput(event.target.value)}
                 placeholder={
-                  t("counterSetting.animationNamePlaceholder") || "이름 입력"
+                  t("counterSetting.animationNamePlaceholder") || "모션 이름"
                 }
-                className="w-full h-[30px] px-[10px] rounded-[7px] border border-[#3A3943] bg-[#1E1E1E] text-[12px] leading-[16px] text-[#DBDEE8] placeholder-[#6F6E7A] outline-none focus:border-[#459BF8] transition-colors"
+                className="w-full h-[32px] px-[12px] rounded-[8px] border border-[#2A2A30] bg-[#0A0A0C] text-[12px] leading-[16px] text-[#DBDEE8] placeholder-[#5A5C66] outline-none focus:border-[#459BF8] focus:ring-1 focus:ring-[#459BF8]/20 transition-all font-medium shadow-inner"
               />
             </div>
 
-            <div className="flex items-start gap-[8px]">
-              <div
-                className="rounded-[9px] border border-[#2A2A30] bg-[#17161A] overflow-hidden"
-                style={{
-                  width: `${TOTAL_SIZE + 14}px`,
-                  height: `${TOTAL_SIZE + 14}px`,
-                  padding: "7px",
-                }}
-              >
+            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-[#1A191E] border border-[#2A2A30] shadow-sm min-h-0 items-center">
+              <div className="shrink-0 flex flex-col">
                 <div
-                  className="relative rounded-[7px] overflow-hidden"
-                  style={{ width: `${TOTAL_SIZE}px`, height: `${TOTAL_SIZE}px` }}
+                  className="rounded-[8px] border border-[#2A2A30] bg-[#0F0F13] overflow-hidden"
+                  style={{
+                    width: `${TOTAL_SIZE + 16}px`,
+                    height: `${TOTAL_SIZE + 16}px`,
+                    padding: "8px",
+                  }}
                 >
-                  <svg
-                    ref={svgRef}
-                    className="absolute inset-0"
-                    width={TOTAL_SIZE}
-                    height={TOTAL_SIZE}
-                    viewBox={viewBoxStr}
-                    onWheel={handleWheel}
-                    style={{ cursor: "default", touchAction: "none" }}
+                  <div
+                    className="relative rounded-[6px] overflow-hidden"
+                    style={{
+                      width: `${TOTAL_SIZE}px`,
+                      height: `${TOTAL_SIZE}px`,
+                    }}
                   >
-                    <rect
-                      x={viewOffset.x}
-                      y={viewOffset.y}
-                      width={vbSize}
-                      height={vbSize}
-                      fill="#17161A"
-                    />
-                    <rect x={P} y={P} width={S} height={S} fill="#1F1E23" rx={7 * ns} ry={7 * ns} />
-                    {gridLines}
-                    <rect
-                      x={P}
-                      y={P}
-                      width={S}
-                      height={S}
-                      fill="none"
-                      stroke="#3A3943"
-                      strokeWidth="1"
-                      vectorEffect="non-scaling-stroke"
-                      rx={7 * ns}
-                      ry={7 * ns}
-                    />
-                    <line
-                      x1={P}
-                      y1={P + S}
-                      x2={P + S}
-                      y2={P}
-                      stroke="#34343D"
-                      strokeWidth="1"
-                      vectorEffect="non-scaling-stroke"
-                      strokeDasharray="3 3"
-                    />
-                    <line
-                      x1={startW.x}
-                      y1={startW.y}
-                      x2={p1w.x}
-                      y2={p1w.y}
-                      stroke="#505058"
-                      strokeWidth="1.2"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <line
-                      x1={endW.x}
-                      y1={endW.y}
-                      x2={p2w.x}
-                      y2={p2w.y}
-                      stroke="#505058"
-                      strokeWidth="1.2"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <path
-                      d={`M ${startW.x} ${startW.y} C ${p1w.x} ${p1w.y}, ${p2w.x} ${p2w.y}, ${endW.x} ${endW.y}`}
-                      fill="none"
-                      stroke="#459BF8"
-                      strokeWidth="1.8"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <circle
-                      cx={p1w.x}
-                      cy={p1w.y}
-                      r={HANDLE_HIT_RADIUS * ns}
-                      fill="transparent"
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) => handlePointPointerDown(e, "p1")}
-                    />
-                    <circle
-                      cx={p1w.x}
-                      cy={p1w.y}
-                      r={HANDLE_RADIUS * ns}
-                      fill="#1A191E"
-                      stroke="#459BF8"
-                      strokeWidth={2 * ns}
-                      style={{ pointerEvents: "none" }}
-                    />
-                    <circle
-                      cx={p2w.x}
-                      cy={p2w.y}
-                      r={HANDLE_HIT_RADIUS * ns}
-                      fill="transparent"
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) => handlePointPointerDown(e, "p2")}
-                    />
-                    <circle
-                      cx={p2w.x}
-                      cy={p2w.y}
-                      r={HANDLE_RADIUS * ns}
-                      fill="#1A191E"
-                      stroke="#FFB400"
-                      strokeWidth={2 * ns}
-                      style={{ pointerEvents: "none" }}
-                    />
-                  </svg>
+                    <svg
+                      ref={svgRef}
+                      className="absolute inset-0"
+                      width={TOTAL_SIZE}
+                      height={TOTAL_SIZE}
+                      viewBox={viewBoxStr}
+                      onWheel={handleWheel}
+                      onPointerDown={handleSvgPointerDown}
+                      onDoubleClick={handleDoubleClick}
+                      style={{ cursor: "default", touchAction: "none" }}
+                    >
+                      <rect
+                        x={viewOffset.x}
+                        y={viewOffset.y}
+                        width={vbSize}
+                        height={vbSize}
+                        fill="#0F0F13"
+                      />
+                      <rect
+                        x={P}
+                        y={P}
+                        width={S}
+                        height={S}
+                        fill="#18181D"
+                        rx={6 * ns}
+                        ry={6 * ns}
+                      />
+                      {gridLines}
+                      <rect
+                        x={P}
+                        y={P}
+                        width={S}
+                        height={S}
+                        fill="none"
+                        stroke="#2A2A30"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                        rx={6 * ns}
+                        ry={6 * ns}
+                      />
+                      <line
+                        x1={P}
+                        y1={P + S}
+                        x2={P + S}
+                        y2={P}
+                        stroke="#34343D"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                        strokeDasharray="3 3"
+                      />
+                      <line
+                        x1={startW.x}
+                        y1={startW.y}
+                        x2={p1w.x}
+                        y2={p1w.y}
+                        stroke="#505058"
+                        strokeWidth="1.2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <line
+                        x1={endW.x}
+                        y1={endW.y}
+                        x2={p2w.x}
+                        y2={p2w.y}
+                        stroke="#505058"
+                        strokeWidth="1.2"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <path
+                        d={`M ${startW.x} ${startW.y} C ${p1w.x} ${p1w.y}, ${p2w.x} ${p2w.y}, ${endW.x} ${endW.y}`}
+                        fill="none"
+                        stroke="#459BF8"
+                        strokeWidth="1.8"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <circle
+                        cx={p1w.x}
+                        cy={p1w.y}
+                        r={HANDLE_HIT_RADIUS * ns}
+                        fill="transparent"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) => handlePointPointerDown(e, "p1")}
+                      />
+                      <circle
+                        cx={p1w.x}
+                        cy={p1w.y}
+                        r={HANDLE_RADIUS * ns}
+                        fill="#1A191E"
+                        stroke="#459BF8"
+                        strokeWidth={2 * ns}
+                        style={{ pointerEvents: "none" }}
+                      />
+                      <circle
+                        cx={p2w.x}
+                        cy={p2w.y}
+                        r={HANDLE_HIT_RADIUS * ns}
+                        fill="transparent"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) => handlePointPointerDown(e, "p2")}
+                      />
+                      <circle
+                        cx={p2w.x}
+                        cy={p2w.y}
+                        r={HANDLE_RADIUS * ns}
+                        fill="#1A191E"
+                        stroke="#FFB400"
+                        strokeWidth={2 * ns}
+                        style={{ pointerEvents: "none" }}
+                      />
+                    </svg>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 min-w-0 flex flex-col gap-[6px]">
-                <label className="text-[11px] leading-[14px] text-[#8A8D99]">
-                  {t("counterSetting.curvePreset") || "곡선 프리셋"}
-                </label>
-                <Dropdown
-                  options={presetOptions}
-                  value={selectedPreset}
-                  onChange={handlePresetChange}
-                  fullWidth
-                />
-
-                <input
-                  type="text"
-                  value={bezierInput}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    setBezierInput(raw);
-                    const parsed = parseBezierInput(raw);
-                    if (!parsed) return;
-                    localBezierRef.current = parsed;
-                    setLocalBezier(parsed);
-                  }}
-                  onBlur={() => {
-                    const parsed = parseBezierInput(bezierInput);
-                    if (!parsed) {
-                      setBezierInput(formatBezierInput(localBezierRef.current));
-                      return;
-                    }
-                    localBezierRef.current = parsed;
-                    setLocalBezier(parsed);
-                    setBezierInput(formatBezierInput(parsed));
-                  }}
-                  className="w-full h-[26px] rounded-[7px] border border-[#3A3943] bg-[#2A2A30] px-[7px] text-[#DBDEE8] text-style-4 text-center outline-none focus:border-[#459BF8]"
-                  placeholder="0.25, 0.46, 0.45, 0.94"
-                />
-
-                <div>
-                  <label className="text-[11px] leading-[14px] text-[#8A8D99] block mb-[3px]">
-                    {t("counterSetting.scale") || "스케일"}
+              <div className="flex-1 min-w-0 flex flex-col gap-[12px] justify-start pt-[2px]">
+                <div className="flex flex-col gap-[6px] [&>div]:w-full [&_button]:w-full">
+                  <label className="text-[11px] font-medium text-[#8A8D99]">
+                    Preset
                   </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={scaleInput}
-                    onChange={(event) => {
-                      const raw = event.target.value.replace(/[^0-9.-]/g, "");
-                      setScaleInput(raw);
-                    }}
-                    onBlur={() => {
-                      const parsed = parseNumber(scaleInput);
-                      const normalized = normalizeScale(parsed ?? 1.1);
-                      setScaleInput(String(Math.round(normalized * 100) / 100));
-                    }}
-                    className="w-full h-[26px] rounded-[7px] border border-[#3A3943] bg-[#2A2A30] text-[#DBDEE8] text-style-4 text-center outline-none focus:border-[#459BF8]"
+                  <Dropdown
+                    options={presetOptions}
+                    value={selectedPreset}
+                    onChange={(val) => handlePresetChange(String(val))}
+                    fullWidth
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] leading-[14px] text-[#8A8D99] block mb-[3px]">
-                    {t("counterSetting.duration") || "지속 시간 (ms)"}
+                <div className="flex flex-col gap-[6px]">
+                  <label className="text-[11px] font-medium text-[#8A8D99]">
+                    Cubic Bezier
                   </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={durationInput}
-                    onChange={(event) => {
-                      const raw = event.target.value.replace(/[^0-9]/g, "");
-                      setDurationInput(raw);
+                  <TextInput
+                    value={bezierInput}
+                    onChange={(raw) => {
+                      setBezierInput(raw);
+                      const parsed = parseBezierInput(raw);
+                      if (!parsed) return;
+                      localBezierRef.current = parsed;
+                      setLocalBezier(parsed);
                     }}
                     onBlur={() => {
-                      const parsed = parseNumber(durationInput);
-                      const normalized = clampDuration(parsed ?? 300);
-                      setDurationInput(String(normalized));
+                      const parsed = parseBezierInput(bezierInput);
+                      if (!parsed) {
+                        setBezierInput(
+                          formatBezierInput(localBezierRef.current),
+                        );
+                        return;
+                      }
+                      localBezierRef.current = parsed;
+                      setLocalBezier(parsed);
+                      setBezierInput(formatBezierInput(parsed));
                     }}
-                    className="w-full h-[26px] rounded-[7px] border border-[#3A3943] bg-[#2A2A30] text-[#DBDEE8] text-style-4 text-center outline-none focus:border-[#459BF8]"
+                    placeholder="0.25, 0.46, 0.45, 0.94"
+                    width="100%"
                   />
+                </div>
+
+                <div className="flex gap-[12px]">
+                  <div className="flex-1 flex flex-col gap-[6px]">
+                    <label className="text-[11px] font-medium text-[#8A8D99]">
+                      {t("counterSetting.scale") || "스케일"}
+                    </label>
+                    <NumberInput
+                      value={parsedScale}
+                      onChange={(val) => setScaleInput(String(val))}
+                      onBlur={() => {
+                        const parsed = parseNumber(scaleInput);
+                        const normalized = normalizeScale(parsed ?? 1.1);
+                        setScaleInput(
+                          String(Math.round(normalized * 100) / 100),
+                        );
+                      }}
+                      allowDecimal={true}
+                      decimalScale={2}
+                      width="100%"
+                    />
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-[6px]">
+                    <label className="text-[11px] font-medium text-[#8A8D99]">
+                      {t("counterSetting.duration") || "지속 시간"}
+                    </label>
+                    <NumberInput
+                      value={parsedDuration}
+                      onChange={(val) => setDurationInput(String(val))}
+                      onBlur={() => {
+                        const parsed = parseNumber(durationInput);
+                        const normalized = clampDuration(parsed ?? 300);
+                        setDurationInput(String(normalized));
+                      }}
+                      width="100%"
+                      min={100}
+                      max={5000}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+
+            {errorText ? (
+              <p className="text-[11px] leading-[14px] text-[#E6A7A7] mt-[-8px] ml-[2px]">
+                {errorText}
+              </p>
+            ) : null}
           </div>
 
-          <div className="min-h-0 flex flex-col gap-[8px]">
-            <div className="rounded-[8px] border border-[#3A3943] bg-[#141419] flex-1 min-h-0 p-[10px]">
-              <div className="h-full flex flex-col gap-[8px]">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] leading-[14px] text-[#8A8D99]">
-                    {t("counterSetting.preview") || "미리보기"}
-                  </p>
-                  <button
-                    type="button"
-                    className="px-[10px] h-[22px] rounded-[6px] bg-[#2A2A30] hover:bg-[#34343c] text-[11px] leading-[14px] text-[#DBDEE8] transition-colors"
-                    onClick={triggerPreview}
-                  >
-                    {t("counterSetting.play") || "재생"}
-                  </button>
-                </div>
+          <div className="flex-1 flex flex-col min-w-0 bg-[#0B0B0E] rounded-[10px] border border-[#2A2A30] overflow-hidden shadow-inner relative">
+            <div className="h-[32px] bg-[#16151A] border-b border-[#2A2A30] px-[12px] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-[5px] h-full">
+                <svg
+                  className="shrink-0"
+                  width="8"
+                  height="10"
+                  viewBox="0 0 8 10"
+                  fill="#8A8D99"
+                >
+                  <path d="M1 0.5a1 1 0 0 0 0 9l5.5-3.5a1 1 0 0 0 0-2L1 0.5z" />
+                </svg>
+                <span className="text-[12px] leading-[14px] text-[#A0A2A8]">
+                  {t("counterSetting.preview") || "미리보기"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="h-[21px] px-[10px] rounded-[6px] bg-[#24232A] hover:bg-[#2E2D35] active:bg-[#3A3943] text-[11px] text-[#B0B2B8] hover:text-[#DBDEE8] transition-colors select-none"
+                onPointerDown={handlePreviewPointerDown}
+              >
+                {t("counterSetting.pressToPreview") || "누르기"}
+              </button>
+            </div>
 
-                <div className="flex-1 min-h-0 flex items-center justify-center">
-                  {(() => {
-                    const PREVIEW_MAX_W = 200;
-                    const PREVIEW_MAX_H = 160;
+            <div className="flex-1 min-h-0 flex items-center justify-center relative bg-[#0F0F13]">
+              {previewCss && (
+                <style
+                  dangerouslySetInnerHTML={{ __html: previewCss }}
+                />
+              )}
+              <div
+                className="absolute inset-0 opacity-[0.15] pointer-events-none"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(#2A2A30 1px, transparent 1px), linear-gradient(90deg, #2A2A30 1px, transparent 1px)",
+                  backgroundSize: "20px 20px",
+                  backgroundPosition: "center center",
+                }}
+              />
+              <div className="relative z-10 w-full h-full flex items-center justify-center">
+                {(() => {
+                  const PREVIEW_MAX_W = 200;
+                  const PREVIEW_MAX_H = 160;
 
-                    const placement = counterSettings?.placement ?? "inside";
-                    const align = counterSettings?.align ?? "top";
-                    const alignMode = counterSettings?.alignMode ?? "center";
-                    const gap = counterSettings?.gap ?? 6;
-                    const isInside = placement === "inside";
-                    const isHorizontal = align === "left" || align === "right";
-                    const isBetween = alignMode === "between";
+                  const placement = counterSettings?.placement ?? "inside";
+                  const align = counterSettings?.align ?? "top";
+                  const alignMode = counterSettings?.alignMode ?? "center";
+                  const gap = counterSettings?.gap ?? 6;
+                  const isInside = placement === "inside";
+                  const isHorizontal = align === "left" || align === "right";
+                  const isBetween = alignMode === "between";
 
-                    const keyW = keyVisual?.width ?? 60;
-                    const keyH = keyVisual?.height ?? 60;
-                    const counterExtra = (counterSettings?.fontSize ?? 16) + gap;
+                  const keyW = keyVisual?.width ?? 60;
+                  const keyH = keyVisual?.height ?? 60;
+                  const counterExtra = (counterSettings?.fontSize ?? 16) + gap;
 
-                    let totalW = keyW;
-                    let totalH = keyH;
-                    if (!isInside) {
-                      if (align === "left" || align === "right") totalW += counterExtra;
-                      else totalH += counterExtra;
-                    }
+                  let totalW = keyW;
+                  let totalH = keyH;
+                  if (!isInside) {
+                    if (align === "left" || align === "right")
+                      totalW += counterExtra;
+                    else totalH += counterExtra;
+                  }
 
-                    const fitScale = Math.min(
-                      PREVIEW_MAX_W / totalW,
-                      PREVIEW_MAX_H / totalH,
-                      1,
-                    );
+                  const fitScale = Math.min(
+                    PREVIEW_MAX_W / totalW,
+                    PREVIEW_MAX_H / totalH,
+                    1,
+                  );
 
-                    const keyLabelDecorations: string[] = [];
-                    if (keyVisual?.fontUnderline) keyLabelDecorations.push("underline");
-                    if (keyVisual?.fontStrikethrough) keyLabelDecorations.push("line-through");
+                  const keyLabelDecorations: string[] = [];
+                  if (keyVisual?.fontUnderline)
+                    keyLabelDecorations.push("underline");
+                  if (keyVisual?.fontStrikethrough)
+                    keyLabelDecorations.push("line-through");
 
-                    const labelEl = (
-                      <span
-                        className="pointer-events-none select-none leading-none"
-                        style={{
-                          fontSize: `${keyVisual?.fontSize ?? 14}px`,
-                          fontFamily: keyVisual?.fontFamily
-                            ? `"${keyVisual.fontFamily}", "SUIT-Regular", sans-serif`
-                            : undefined,
-                          fontWeight: keyVisual?.fontWeight ?? 700,
-                          fontStyle: keyVisual?.fontItalic ? "italic" : "normal",
-                          textDecoration: keyLabelDecorations.length > 0
+                  const labelEl = (
+                    <span
+                      className="pointer-events-none select-none leading-none"
+                      style={{
+                        fontSize: `${keyVisual?.fontSize ?? 14}px`,
+                        fontFamily: keyVisual?.fontFamily
+                          ? `"${keyVisual.fontFamily}", "SUIT-Regular", sans-serif`
+                          : undefined,
+                        fontWeight: keyVisual?.fontWeight ?? 700,
+                        fontStyle: keyVisual?.fontItalic ? "italic" : "normal",
+                        textDecoration:
+                          keyLabelDecorations.length > 0
                             ? keyLabelDecorations.join(" ")
                             : "none",
-                          color: keyVisual?.fontColor ?? "rgba(121, 121, 121, 0.9)",
-                        }}
-                      >
-                        {keyVisual?.displayText || "A"}
-                      </span>
-                    );
+                      }}
+                    >
+                      {keyVisual?.displayText || keyVisual?.displayName || "A"}
+                    </span>
+                  );
 
-                    const counterEl = (
-                      <CountDisplay
-                        count={previewCount}
-                        fillColor={
-                          previewActive
-                            ? (counterSettings?.fill.active ?? "#FFFFFF")
-                            : (counterSettings?.fill.idle ?? "rgba(121, 121, 121, 0.9)")
-                        }
-                        strokeColor={
-                          previewActive
-                            ? (counterSettings?.stroke.active ?? "transparent")
-                            : (counterSettings?.stroke.idle ?? "transparent")
-                        }
-                        globalKey="preview"
-                        active={previewActive}
-                        fontSize={counterSettings?.fontSize ?? 16}
-                        fontFamily={counterSettings?.fontFamily ?? null}
-                        fontWeight={counterSettings?.fontWeight ?? 700}
-                        fontItalic={counterSettings?.fontItalic ?? false}
-                        fontUnderline={counterSettings?.fontUnderline ?? false}
-                        fontStrikethrough={counterSettings?.fontStrikethrough ?? false}
-                        animationEnabled={true}
-                        animationBezier={localBezier}
-                        animationScale={parsedScale}
-                        animationDurationMs={parsedDuration}
-                      />
-                    );
+                  const counterEl = (
+                    <CountDisplay
+                      count={previewCount}
+                      fillColor={
+                        previewActive
+                          ? (counterSettings?.fill.active ?? "#FFFFFF")
+                          : (counterSettings?.fill.idle ??
+                            "rgba(121, 121, 121, 0.9)")
+                      }
+                      strokeColor={
+                        previewActive
+                          ? (counterSettings?.stroke.active ?? "transparent")
+                          : (counterSettings?.stroke.idle ?? "transparent")
+                      }
+                      globalKey="preview"
+                      active={previewActive}
+                      fontSize={counterSettings?.fontSize ?? 16}
+                      fontFamily={counterSettings?.fontFamily ?? null}
+                      fontWeight={counterSettings?.fontWeight ?? 700}
+                      fontItalic={counterSettings?.fontItalic ?? false}
+                      fontUnderline={counterSettings?.fontUnderline ?? false}
+                      fontStrikethrough={
+                        counterSettings?.fontStrikethrough ?? false
+                      }
+                      animationEnabled={true}
+                      animationBezier={localBezier}
+                      animationScale={parsedScale}
+                      animationDurationMs={parsedDuration}
+                    />
+                  );
 
-                    const keyBoxStyle: React.CSSProperties = {
-                      width: `${keyW}px`,
-                      height: `${keyH}px`,
-                      backgroundColor: keyVisual?.backgroundColor ?? "rgba(46, 46, 47, 0.9)",
-                      border: `${keyVisual?.borderWidth ?? 3}px solid ${keyVisual?.borderColor ?? "rgba(113, 113, 113, 0.9)"}`,
-                      borderRadius: `${keyVisual?.borderRadius ?? 10}px`,
-                      boxSizing: "border-box",
-                      overflow: "hidden",
-                    };
+                  // Replicate Key.jsx style logic for CSS variable compatibility
+                  // 통계항목은 키 비주얼에 active 상태 변화를 주지 않음
+                  const useInline = keyVisual?.useInlineStyles === true;
+                  const keyActive = previewActive && !keyVisual?.isStat;
+                  const stateBackgroundColor = keyActive
+                    ? (keyVisual?.activeBackgroundColor ?? keyVisual?.backgroundColor)
+                    : keyVisual?.backgroundColor;
+                  const stateBorderColor = keyActive
+                    ? (keyVisual?.activeBorderColor ?? keyVisual?.borderColor)
+                    : keyVisual?.borderColor;
+                  const stateFontColor = keyActive
+                    ? (keyVisual?.activeFontColor ?? keyVisual?.fontColor)
+                    : keyVisual?.fontColor;
+                  const defaultBgColor = keyActive
+                    ? "rgba(121, 121, 121, 0.9)"
+                    : "rgba(46, 46, 47, 0.9)";
+                  const defaultBorderColor = keyActive
+                    ? "rgba(255, 255, 255, 0.9)"
+                    : "rgba(113, 113, 113, 0.9)";
+                  const defaultTextColor = keyActive
+                    ? "#FFFFFF"
+                    : "rgba(121, 121, 121, 0.9)";
+                  const bw = keyVisual?.borderWidth ?? 3;
+                  const br = keyVisual?.borderRadius ?? 10;
 
-                    const outsideStyle: React.CSSProperties | undefined = !isInside
+                  const keyBoxStyle: React.CSSProperties = {
+                    width: `${keyW}px`,
+                    height: `${keyH}px`,
+                    backgroundColor:
+                      useInline && stateBackgroundColor
+                        ? stateBackgroundColor
+                        : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
+                    borderRadius:
+                      useInline
+                        ? `${br}px`
+                        : `var(--key-radius, ${br}px)`,
+                    border:
+                      useInline
+                        ? `${bw}px solid ${stateBorderColor || defaultBorderColor}`
+                        : `var(--key-border, ${bw}px solid ${stateBorderColor || defaultBorderColor})`,
+                    color:
+                      useInline && stateFontColor
+                        ? stateFontColor
+                        : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
+                    boxSizing: "border-box",
+                    overflow: "hidden",
+                  };
+
+                  const outsideStyle: React.CSSProperties | undefined =
+                    !isInside
                       ? {
                           position: "absolute",
                           pointerEvents: "none",
@@ -848,49 +1214,56 @@ export default function CounterAnimationEditorModal({
                         }
                       : undefined;
 
-                    return (
+                  return (
+                    <div
+                      className="relative"
+                      style={
+                        fitScale < 1
+                          ? {
+                              transform: `scale(${fitScale})`,
+                              transformOrigin: "center",
+                            }
+                          : undefined
+                      }
+                    >
                       <div
-                        className="relative"
-                        style={fitScale < 1 ? { transform: `scale(${fitScale})`, transformOrigin: "center" } : undefined}
+                        className={`flex items-center justify-center shadow-2xl ${keyVisual?.className || ""}`}
+                        style={keyBoxStyle}
+                        data-state={keyActive ? "active" : "inactive"}
+                        data-key-element="true"
                       >
-                        <div
-                          className="flex items-center justify-center"
-                          style={keyBoxStyle}
-                        >
-                          {isInside ? (
-                            <div
-                              className={`flex ${isHorizontal ? "" : "flex-col"} w-full h-full items-center pointer-events-none select-none`}
-                              style={{
-                                justifyContent: isBetween ? "space-between" : "center",
-                                padding: isBetween
-                                  ? isHorizontal
-                                    ? `0 ${gap}px`
-                                    : `${gap}px 0`
-                                  : "0",
-                                gap: isBetween ? undefined : `${gap}px`,
-                              }}
-                            >
-                              {(align === "top" || align === "left") && counterEl}
-                              {labelEl}
-                              {(align === "bottom" || align === "right") && counterEl}
-                            </div>
-                          ) : (
-                            labelEl
-                          )}
-                        </div>
-                        {!isInside && outsideStyle && (
-                          <div style={outsideStyle}>{counterEl}</div>
+                        {isInside ? (
+                          <div
+                            className={`flex ${isHorizontal ? "" : "flex-col"} w-full h-full items-center pointer-events-none select-none`}
+                            style={{
+                              justifyContent: isBetween
+                                ? "space-between"
+                                : "center",
+                              padding: isBetween
+                                ? isHorizontal
+                                  ? `0 ${gap}px`
+                                  : `${gap}px 0`
+                                : "0",
+                              gap: isBetween ? undefined : `${gap}px`,
+                            }}
+                          >
+                            {(align === "top" || align === "left") && counterEl}
+                            {labelEl}
+                            {(align === "bottom" || align === "right") &&
+                              counterEl}
+                          </div>
+                        ) : (
+                          labelEl
                         )}
                       </div>
-                    );
-                  })()}
-                </div>
+                      {!isInside && outsideStyle && (
+                        <div style={outsideStyle}>{counterEl}</div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
-
-            {errorText ? (
-              <p className="text-[11px] leading-[14px] text-[#E6A7A7]">{errorText}</p>
-            ) : null}
           </div>
         </div>
 

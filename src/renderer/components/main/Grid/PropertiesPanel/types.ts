@@ -206,6 +206,8 @@ export interface NoteTabContentProps {
 export interface CounterTabContentProps {
   keyIndex: number;
   keyPosition: KeyPosition;
+  keyDisplayName?: string;
+  isStat?: boolean;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   panelElement?: HTMLElement | null;
   t: (key: string) => string;
