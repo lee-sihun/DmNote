@@ -178,9 +178,14 @@ pub fn keys_reset_all(
     note_patch.track_height = Some(defaults.track_height);
     note_patch.reverse = Some(defaults.reverse);
     note_patch.fade_position = Some(defaults.fade_position.clone());
+    note_patch.fade_top_px = Some(defaults.fade_top_px);
+    note_patch.fade_bottom_px = Some(defaults.fade_bottom_px);
+    note_patch.reverse_fade_top_px = Some(defaults.reverse_fade_top_px);
+    note_patch.reverse_fade_bottom_px = Some(defaults.reverse_fade_bottom_px);
     note_patch.delayed_note_enabled = Some(defaults.delayed_note_enabled);
     note_patch.short_note_threshold_ms = Some(defaults.short_note_threshold_ms);
     note_patch.short_note_min_length_px = Some(defaults.short_note_min_length_px);
+    note_patch.key_display_delay_ms = Some(defaults.key_display_delay_ms);
 
     let settings_diff = state
         .settings

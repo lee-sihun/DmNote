@@ -799,6 +799,12 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         }
     }
 
+    // Legacy migration: fadePosition enum -> per-direction pixel fade values
+    data.note_settings.migrate_fade_position();
+    for tab in data.tab_note_overrides.values_mut() {
+        tab.migrate_fade_position();
+    }
+
     merge_default_counters(&mut data.key_counters, &data.keys);
 
     data.counter_animation_presets =

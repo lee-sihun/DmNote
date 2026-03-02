@@ -151,12 +151,7 @@
     "frameLimit": "프레임 제한",
     "speed": "속도",
     "trackHeight": "트랙 높이",
-    "fadePosition": "페이드 위치",
-    "auto": "자동",
-    "top": "상단",
-    "bottom": "하단",
-    "none": "없음",
-    "both": "전체",
+    "fade": "페이드",
     "reverseEffect": "리버스 효과",
     "save": "저장",
     "cancel": "취소"

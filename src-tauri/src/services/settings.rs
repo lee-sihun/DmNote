@@ -263,6 +263,18 @@ fn apply_note_patch(mut settings: NoteSettings, patch: &NoteSettingsPatch) -> No
     if let Some(value) = patch.fade_position.as_ref() {
         settings.fade_position = value.clone();
     }
+    if let Some(value) = patch.fade_top_px {
+        settings.fade_top_px = value;
+    }
+    if let Some(value) = patch.fade_bottom_px {
+        settings.fade_bottom_px = value;
+    }
+    if let Some(value) = patch.reverse_fade_top_px {
+        settings.reverse_fade_top_px = value;
+    }
+    if let Some(value) = patch.reverse_fade_bottom_px {
+        settings.reverse_fade_bottom_px = value;
+    }
     if let Some(value) = patch.delayed_note_enabled {
         settings.delayed_note_enabled = value;
     }
