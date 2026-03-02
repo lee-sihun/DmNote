@@ -469,12 +469,6 @@ export default function Settings({ showAlert, showConfirm }) {
     setDeveloperModeEnabled(next);
     try {
       await window.api.settings.update({ developerModeEnabled: next });
-      // 개발자 모드가 활성화되면 즉시 DevTools 오픈 (메인 & 오버레이)
-      if (next) {
-        try {
-          await window.api.window.openDevtoolsAll?.();
-        } catch (e) {}
-      }
     } catch (error) {
       console.error("Failed to toggle developer mode", error);
     }

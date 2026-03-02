@@ -68,7 +68,6 @@ pub fn window_open_devtools_all(app: AppHandle) -> Result<(), String> {
     }
     if let Some(overlay) = app.get_webview_window("overlay") {
         let _ = overlay.open_devtools();
-        let _ = overlay.show();
     }
     Ok(())
 }

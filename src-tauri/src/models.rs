@@ -1088,6 +1088,8 @@ pub struct AppStoreData {
     pub hardware_acceleration: bool,
     pub always_on_top: bool,
     pub overlay_locked: bool,
+    #[serde(default = "default_true")]
+    pub overlay_visible: bool,
     pub note_effect: bool,
     #[serde(default)]
     pub note_settings: NoteSettings,
@@ -1162,6 +1164,7 @@ impl Default for AppStoreData {
             hardware_acceleration: true,
             always_on_top: true,
             overlay_locked: false,
+            overlay_visible: true,
             note_effect: false,
             note_settings: NoteSettings::default(),
             selected_key_type: "4key".to_string(),
