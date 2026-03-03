@@ -903,9 +903,6 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
         if let Some(v) = obj.get("overlayLocked").and_then(Value::as_bool) {
             data.overlay_locked = v;
         }
-        if let Some(v) = obj.get("overlayVisible").and_then(Value::as_bool) {
-            data.overlay_visible = v;
-        }
         if let Some(v) = obj.get("noteEffect").and_then(Value::as_bool) {
             data.note_effect = v;
         }

@@ -80,7 +80,7 @@ impl AppState {
             store,
             settings,
             keyboard,
-            overlay_visible: Arc::new(RwLock::new(snapshot.overlay_visible)),
+            overlay_visible: Arc::new(RwLock::new(false)),
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             keyboard_task: RwLock::new(None),
             key_counters,
@@ -94,12 +94,9 @@ impl AppState {
 
     pub fn initialize_runtime(&self, app: &AppHandle) -> Result<()> {
         self.attach_main_window_handlers(app);
-        // 저장된 오버레이 가시성 상태에 따라 조건부 생성
-        let snapshot = self.store.snapshot();
-        if snapshot.overlay_visible {
-            self.ensure_overlay_window(app)?;
-        }
+        self.ensure_overlay_window(app)?;
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
+        let snapshot = self.store.snapshot();
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
                 let _ = main.open_devtools();
@@ -283,11 +280,6 @@ impl AppState {
         }
 
         *self.overlay_visible.write() = visible;
-        if let Err(err) = self.store.update(|state| {
-            state.overlay_visible = visible;
-        }) {
-            log::warn!("failed to persist overlay visibility: {err}");
-        }
         app.emit("overlay:visibility", &json!({ "visible": visible }))?;
         Ok(())
     }
@@ -425,11 +417,9 @@ impl AppState {
                         _ => new_y -= delta,
                     }
                 }
-                if let Err(err) = self.store.update(|state| {
+                let _ = self.store.update(|state| {
                     state.overlay_last_content_top_offset = Some(offset);
-                }) {
-                    log::warn!("failed to persist overlay content top offset: {err}");
-                }
+                })?;
             }
         }
 
@@ -443,12 +433,10 @@ impl AppState {
             height,
         };
 
-        if let Err(err) = self.store.update(|state| {
+        let _ = self.store.update(|state| {
             state.overlay_bounds = Some(bounds.clone());
             state.overlay_bounds_are_logical = true;
-        }) {
-            log::warn!("failed to persist overlay bounds after resize: {err}");
-        }
+        })?;
 
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
@@ -981,12 +969,10 @@ impl AppState {
 
         *self.overlay_visible.write() = true;
 
-        if let Err(err) = self.store.update(|state| {
+        let _ = self.store.update(|state| {
             state.overlay_bounds = Some(bounds.clone());
             state.overlay_bounds_are_logical = bounds_are_logical;
-        }) {
-            log::warn!("failed to persist initial overlay bounds: {err}");
-        }
+        })?;
 
         self.configure_overlay_window(&window, app);
 
@@ -1006,9 +992,14 @@ impl AppState {
                     *overlay_visible.write() = false;
                 } else {
                     api.prevent_close();
-                    let state = app_handle.state::<AppState>();
-                    if let Err(err) = state.set_overlay_visibility(&app_handle, false) {
+                    if let Err(err) = overlay_window.hide() {
                         log::error!("failed to hide overlay window on close: {err}");
+                    }
+                    *overlay_visible.write() = false;
+                    if let Err(err) =
+                        app_handle.emit("overlay:visibility", &json!({ "visible": false }))
+                    {
+                        log::error!("failed to emit overlay visibility change: {err}");
                     }
                 }
             }
