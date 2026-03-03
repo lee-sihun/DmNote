@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { useTranslation } from "@contexts/I18nContext";
 import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
+import { useGridSelectionStore } from "@stores/useGridSelectionStore";
 import { SidebarToggleIcon, ModeToggleIcon } from "./PropertyInputs";
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from "./types";
 import LayerTabContent from "./LayerTabContent";
@@ -75,10 +76,27 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
   const { t } = useTranslation();
   const activeTab = usePropertiesPanelStore((state) => state.canvasPanelActiveTab);
   const setActiveTab = usePropertiesPanelStore((state) => state.setCanvasPanelActiveTab);
+  const clearSelection = useGridSelectionStore((state) => state.clearSelection);
+
+  // 헤더/탭 영역 빈 공간 클릭 시 선택 해제
+  const handleHeaderEmptyClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      // 버튼, 입력 등 인터랙티브 요소 클릭은 무시
+      if (target.closest("button, input")) return;
+      // 레이어 리스트 영역은 자체 핸들러가 있으므로 무시
+      if (target.closest(".properties-panel-overlay-scroll")) return;
+      onSelectionFromPanel?.();
+      clearSelection();
+    },
+    [clearSelection, onSelectionFromPanel],
+  );
 
   return (
-    <div 
+    <div
       className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      onMouseDown={handleHeaderEmptyClick}
     >
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0 border-b border-[#3A3943]">

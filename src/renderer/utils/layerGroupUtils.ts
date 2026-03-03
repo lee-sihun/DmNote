@@ -3,6 +3,7 @@ import type { KeyPositions } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
 import type { GraphItemPositions } from "@src/types/graphItems";
 import type { LayerGroups, LayerGroupDef } from "@src/types/layerGroups";
+import type { PluginDisplayElementInternal } from "@src/types/api";
 
 type Groupable = SelectedElement & {
   type: "key" | "stat" | "graph";
@@ -215,13 +216,13 @@ export function normalizeLayerGroupsForMode(params: {
   const groupsToDissolve = new Set<string>();
 
   initialCounts.forEach((count, groupId) => {
-    if (count < 2) {
+    if (count === 0) {
       groupsToDissolve.add(groupId);
     }
   });
   currentModeGroups.forEach((group) => {
     const count = initialCounts.get(group.id) || 0;
-    if (count < 2) {
+    if (count === 0) {
       groupsToDissolve.add(group.id);
     }
   });
@@ -261,7 +262,7 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged ? nextGraphPositions : graphPositions,
   );
   const nextModeGroups = currentModeGroups.filter(
-    (group) => (finalCounts.get(group.id) || 0) >= 2,
+    (group) => (finalCounts.get(group.id) || 0) >= 1,
   );
   const removedGroupIds = currentModeGroups
     .filter((group) => !nextModeGroups.some((next) => next.id === group.id))
@@ -283,5 +284,148 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged,
     groupsChanged,
     removedGroupIds,
+  };
+}
+
+// ============================================================================
+// 레이어 순서 유틸 (paste / reorder 공용)
+// ============================================================================
+
+export interface LayerItemForOrder {
+  type: "key" | "stat" | "graph" | "plugin";
+  id: string;
+  index?: number;
+  zIndex: number;
+  groupId?: string;
+}
+
+/** 4개 스토어에서 아이템을 수집하고 zIndex 내림차순 정렬 */
+export function buildLayerItemsForMode(
+  mode: string,
+  keyPositions: KeyPositions,
+  statPositions: StatItemPositions,
+  graphPositions: GraphItemPositions,
+  pluginElements: PluginDisplayElementInternal[],
+): LayerItemForOrder[] {
+  const items: LayerItemForOrder[] = [];
+
+  (keyPositions[mode] || []).forEach((pos, index) => {
+    items.push({
+      type: "key",
+      id: `key-${index}`,
+      index,
+      zIndex: pos.zIndex ?? index,
+      groupId: pos.groupId,
+    });
+  });
+
+  (statPositions[mode] || []).forEach((pos, index) => {
+    items.push({
+      type: "stat",
+      id: `stat-${index}`,
+      index,
+      zIndex: pos.zIndex ?? index,
+      groupId: (pos as any).groupId,
+    });
+  });
+
+  (graphPositions[mode] || []).forEach((pos, index) => {
+    items.push({
+      type: "graph",
+      id: `graph-${index}`,
+      index,
+      zIndex: pos.zIndex ?? index,
+      groupId: (pos as any).groupId,
+    });
+  });
+
+  pluginElements
+    .filter((el) => (el as any).tabId === mode)
+    .forEach((el) => {
+      items.push({
+        type: "plugin",
+        id: el.fullId,
+        zIndex: el.zIndex ?? 0,
+        groupId: (el as any).groupId,
+      });
+    });
+
+  items.sort((a, b) => b.zIndex - a.zIndex);
+  return items;
+}
+
+/** 선택 상태 기반으로 paste 앵커 위치 결정 (선택된 레이어 바로 위에 삽입) */
+export function findPasteAnchorIndex(
+  orderedItems: LayerItemForOrder[],
+  selectedElements: SelectedElement[],
+  selectedGroupIds: string[],
+): number {
+  if (orderedItems.length === 0) return 0;
+
+  const idToIndex = new Map<string, number>();
+  const groupTopIndex = new Map<string, number>();
+
+  orderedItems.forEach((item, idx) => {
+    idToIndex.set(item.id, idx);
+    // 그룹의 첫 자식 = zIndex 내림차순에서 가장 위
+    if (item.groupId && !groupTopIndex.has(item.groupId)) {
+      groupTopIndex.set(item.groupId, idx);
+    }
+  });
+
+  let anchor = Number.POSITIVE_INFINITY;
+
+  for (const el of selectedElements) {
+    const idx = idToIndex.get(el.id);
+    if (idx !== undefined && idx < anchor) anchor = idx;
+  }
+
+  for (const gid of selectedGroupIds) {
+    const idx = groupTopIndex.get(gid);
+    if (idx !== undefined && idx < anchor) anchor = idx;
+  }
+
+  return Number.isFinite(anchor) ? anchor : 0;
+}
+
+export interface ZIndexPatchResult {
+  keyPositions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  pluginUpdates: Array<{ fullId: string; zIndex: number }>;
+}
+
+/** 정렬된 아이템 배열에 maxZIndex - idx 패턴으로 zIndex 일괄 재부여 */
+export function applyZIndexToLayerOrder(
+  orderedItems: LayerItemForOrder[],
+  mode: string,
+  keyPositions: KeyPositions,
+  statPositions: StatItemPositions,
+  graphPositions: GraphItemPositions,
+): ZIndexPatchResult {
+  const maxZIndex = orderedItems.length - 1;
+  const keyMode = [...(keyPositions[mode] || [])];
+  const statMode = [...(statPositions[mode] || [])];
+  const graphMode = [...(graphPositions[mode] || [])];
+  const pluginUpdates: Array<{ fullId: string; zIndex: number }> = [];
+
+  orderedItems.forEach((item, idx) => {
+    const z = maxZIndex - idx;
+    if (item.type === "key" && item.index !== undefined && keyMode[item.index]) {
+      keyMode[item.index] = { ...keyMode[item.index], zIndex: z };
+    } else if (item.type === "stat" && item.index !== undefined && statMode[item.index]) {
+      statMode[item.index] = { ...statMode[item.index], zIndex: z };
+    } else if (item.type === "graph" && item.index !== undefined && graphMode[item.index]) {
+      graphMode[item.index] = { ...graphMode[item.index], zIndex: z };
+    } else if (item.type === "plugin") {
+      pluginUpdates.push({ fullId: item.id, zIndex: z });
+    }
+  });
+
+  return {
+    keyPositions: { ...keyPositions, [mode]: keyMode },
+    statPositions: { ...statPositions, [mode]: statMode },
+    graphPositions: { ...graphPositions, [mode]: graphMode },
+    pluginUpdates,
   };
 }

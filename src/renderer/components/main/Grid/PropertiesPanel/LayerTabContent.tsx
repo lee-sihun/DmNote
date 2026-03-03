@@ -7,13 +7,17 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@contexts/I18nContext";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
+import {
+  useGridSelectionStore,
+  type SelectedElement,
+} from "@stores/useGridSelectionStore";
 import { useKeyStore } from "@stores/useKeyStore";
 import { useStatItemStore } from "@stores/useStatItemStore";
 import { useGraphItemStore } from "@stores/useGraphItemStore";
 import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
 import { useHistoryStore } from "@stores/useHistoryStore";
 import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+import { isMac } from "@utils/platform";
 import { useLenis } from "@hooks/useLenis";
 import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
 import CloseEyeIcon from "@assets/svgs/close_eye.svg";
@@ -62,6 +66,14 @@ interface LayerDisplayItem {
 }
 
 type DisplayItem = GroupHeaderItem | LayerDisplayItem;
+
+function layerItemToSelectedElement(item: LayerItem): SelectedElement {
+  return {
+    type: item.type,
+    id: item.id,
+    ...(item.index !== undefined ? { index: item.index } : {}),
+  };
+}
 
 // ============================================================================
 // 그룹 폴더 아이콘
@@ -219,7 +231,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const toggleSelection = useGridSelectionStore(
     (state) => state.toggleSelection,
   );
-
+  const selectedGroupIds = useGridSelectionStore(
+    (state) => state.selectedGroupIds,
+  );
+  const setFullSelection = useGridSelectionStore(
+    (state) => state.setFullSelection,
+  );
   // 드래그 상태
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemDisplayIndex, setDragOverItemDisplayIndex] = useState<
@@ -238,6 +255,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // Shift 선택을 위한 마지막 클릭 인덱스
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+  const [lastClickedDisplayIndex, setLastClickedDisplayIndex] = useState<number | null>(null);
 
   // 더블클릭과 클릭(특히 '이미 선택된 아이템 클릭 시 선택 해제') 충돌 방지용 타이머
   const pendingDeselectTimerRef = useRef<number | null>(null);
@@ -263,10 +281,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 드래그 상태를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const dragStateRef = useRef<{
-    startIndex: number;
     itemHeight: number;
-    currentDropTarget: { toIndex: number; targetGroupId: string | undefined } | null;
+    currentDropTarget: { toDisplayIndex: number; targetGroupId: string | undefined } | null;
   } | null>(null);
+  const draggedItemIdsRef = useRef<string[]>([]);
 
   // 그룹 드래그 상태 ref
   const groupDragStateRef = useRef<{
@@ -504,9 +522,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [displayItems.length, collapsedGroups, lenisInstance, updateThumbDOM]);
 
+  // 접기/펼치기 시 displayIndex 앵커 리셋 (stale 인덱스 방지)
+  useEffect(() => {
+    setLastClickedDisplayIndex(null);
+  }, [collapsedGroups]);
+
   // 아이템 드롭 타깃 계산 (display 슬롯 경계 기준)
   const resolveItemDropTarget = useCallback(
-    (displaySlotIndex: number, draggingItemId: string) => {
+    (displaySlotIndex: number, draggingItemIds: ReadonlySet<string>) => {
       const items = layerItemsRef.current;
       const currentDisplay = displayItemsRef.current;
       const safeSlotIndex = Math.max(
@@ -528,27 +551,32 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         }
       }
 
-      // 그룹 판정도 보이는 이웃 기준으로 계산 (숨겨진 자식 배제)
+      // 그룹 판정도 보이는 이웃 기준으로 계산 (드래그 중인 아이템은 skip)
       const getDisplayItem = (index: number): DisplayItem | undefined =>
         index >= 0 && index < currentDisplay.length
           ? currentDisplay[index]
           : undefined;
 
-      let prevDisplayItem = getDisplayItem(safeSlotIndex - 1);
-      let nextDisplayItem = getDisplayItem(safeSlotIndex);
+      // 드래그 중인 아이템을 연속으로 건너뛰기
+      let prevIdx = safeSlotIndex - 1;
+      while (
+        prevIdx >= 0 &&
+        getDisplayItem(prevIdx)?.displayType === "layer" &&
+        draggingItemIds.has((getDisplayItem(prevIdx) as any).item.id)
+      ) {
+        prevIdx--;
+      }
+      let prevDisplayItem = getDisplayItem(prevIdx);
 
-      if (
-        prevDisplayItem?.displayType === "layer" &&
-        prevDisplayItem.item.id === draggingItemId
+      let nextIdx = safeSlotIndex;
+      while (
+        nextIdx < currentDisplay.length &&
+        getDisplayItem(nextIdx)?.displayType === "layer" &&
+        draggingItemIds.has((getDisplayItem(nextIdx) as any).item.id)
       ) {
-        prevDisplayItem = getDisplayItem(safeSlotIndex - 2);
+        nextIdx++;
       }
-      if (
-        nextDisplayItem?.displayType === "layer" &&
-        nextDisplayItem.item.id === draggingItemId
-      ) {
-        nextDisplayItem = getDisplayItem(safeSlotIndex + 1);
-      }
+      let nextDisplayItem = getDisplayItem(nextIdx);
 
       let targetGroupId: string | undefined;
       if (prevDisplayItem?.displayType === "group-header") {
@@ -571,28 +599,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           prevDisplayItem?.displayType === "layer"
             ? prevDisplayItem.item.groupId
             : undefined;
-        // 다음 아이템은 "레이어 행"인 경우만 그룹 판정에 반영
-        // (그룹 헤더 바로 위는 해당 그룹으로 자동 편입되지 않도록 처리)
-        const nextGroupId =
-          nextDisplayItem?.displayType === "layer"
-            ? nextDisplayItem.item.groupId
-            : undefined;
 
-        if (prevGroupId && nextGroupId) {
-          targetGroupId = prevGroupId === nextGroupId ? prevGroupId : undefined;
-        } else if (prevGroupId) {
-          if (!nextDisplayItem) {
-            targetGroupId = prevGroupId;
-          } else if (
-            nextDisplayItem.displayType === "layer" &&
-            nextDisplayItem.item.groupId === prevGroupId
-          ) {
-            targetGroupId = prevGroupId;
-          } else {
-            targetGroupId = undefined;
-          }
-        } else if (nextGroupId) {
-          targetGroupId = undefined;
+        if (prevGroupId) {
+          // 이전 아이템이 그룹 내 아이템이면 해당 그룹 영역 안에 있는 것
+          // 그룹을 벗어나려면 그룹 헤더 위로 드래그해야 함 (위 분기에서 처리)
+          targetGroupId = prevGroupId;
         } else {
           targetGroupId = undefined;
         }
@@ -605,12 +616,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 포인터 위치 기반 아이템 드롭 타깃 계산
   const resolveItemDropTargetFromPointer = useCallback(
-    (relativeY: number, itemHeight: number, draggingItemId: string) => {
+    (relativeY: number, itemHeight: number, draggingIds: ReadonlySet<string>) => {
       const currentDisplay = displayItemsRef.current;
       const displayCount = currentDisplay.length;
 
       if (displayCount === 0) {
-        const target = resolveItemDropTarget(0, draggingItemId);
+        const target = resolveItemDropTarget(0, draggingIds);
         return {
           ...target,
           indicatorDisplayIndex: 0,
@@ -619,7 +630,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       if (relativeY <= 0) {
-        const target = resolveItemDropTarget(0, draggingItemId);
+        const target = resolveItemDropTarget(0, draggingIds);
         return {
           ...target,
           indicatorDisplayIndex: 0,
@@ -629,7 +640,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       const totalHeight = displayCount * itemHeight;
       if (relativeY >= totalHeight) {
-        const target = resolveItemDropTarget(displayCount, draggingItemId);
+        const target = resolveItemDropTarget(displayCount, draggingIds);
         return {
           ...target,
           indicatorDisplayIndex: displayCount,
@@ -667,7 +678,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         }
 
         const expandedGroupSlotIndex = rowIndex + 1;
-        const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingItemId);
+        const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingIds);
         return {
           ...target,
           indicatorDisplayIndex: expandedGroupSlotIndex,
@@ -682,7 +693,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           : isBottomHalf
             ? rowIndex + 1
             : rowIndex;
-      const target = resolveItemDropTarget(displaySlotIndex, draggingItemId);
+      const target = resolveItemDropTarget(displaySlotIndex, draggingIds);
 
       return {
         ...target,
@@ -714,18 +725,16 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 더블클릭 시에는 해당 아이템을 확실히 선택한 뒤 속성 패널로 전환
       clearSelection();
-      if (item.type === "key" && item.index !== undefined) {
-        toggleSelection({ type: "key", id: item.id, index: item.index });
-      } else if (item.type === "stat" && item.index !== undefined) {
-        toggleSelection({ type: "stat", id: item.id, index: item.index });
-      } else if (item.type === "graph" && item.index !== undefined) {
-        toggleSelection({ type: "graph", id: item.id, index: item.index });
-      } else if (item.type === "plugin") {
-        toggleSelection({ type: "plugin", id: item.id });
-      }
+      toggleSelection(layerItemToSelectedElement(item));
 
       onSwitchToProperty?.();
       setLastClickedIndex(index);
+
+      // displayItems 기반 앵커 설정 (Shift+클릭 범위 선택용)
+      const displayIdx = displayItemsRef.current.findIndex(
+        (di) => di.displayType === "layer" && di.item.id === item.id,
+      );
+      setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
     },
     [
       clearPendingDeselect,
@@ -752,134 +761,145 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 레이어 패널에서 선택했음을 알림 (모드 전환 방지)
       onSelectionFromPanel?.();
 
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      const isPrimaryModifierPressed = isMac ? e.metaKey : e.ctrlKey;
+      const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
       const isShiftPressed = e.shiftKey;
 
-      // Shift+클릭: 범위 선택
-      if (isShiftPressed && lastClickedIndex !== null) {
-        const startIdx = Math.min(lastClickedIndex, index);
-        const endIdx = Math.max(lastClickedIndex, index);
-        const currentItems = layerItemsRef.current;
+      // Shift+클릭: 범위 선택 (displayItems 기반)
+      if (isShiftPressed && (lastClickedDisplayIndex !== null || lastClickedIndex !== null)) {
+        const thisDisplayIdx = displayItemsRef.current.findIndex(
+          (di) => di.displayType === "layer" && di.item.id === item.id,
+        );
 
-        // 범위 내의 모든 아이템 선택
-        const rangeElements: typeof selectedElements = [];
-        for (let i = startIdx; i <= endIdx; i++) {
-          const rangeItem = currentItems[i];
-          if (rangeItem.type === "key" && rangeItem.index !== undefined) {
-            rangeElements.push({
-              type: "key",
-              id: rangeItem.id,
-              index: rangeItem.index,
-            });
-          } else if (rangeItem.type === "stat" && rangeItem.index !== undefined) {
-            rangeElements.push({
-              type: "stat",
-              id: rangeItem.id,
-              index: rangeItem.index,
-            });
-          } else if (rangeItem.type === "graph" && rangeItem.index !== undefined) {
-            rangeElements.push({
-              type: "graph",
-              id: rangeItem.id,
-              index: rangeItem.index,
-            });
-          } else if (rangeItem.type === "plugin") {
-            rangeElements.push({ type: "plugin", id: rangeItem.id });
+        // displayItems 기반 범위 선택 (그룹 헤더 포함 가능)
+        if (lastClickedDisplayIndex !== null && thisDisplayIdx !== -1) {
+          const startIdx = Math.min(lastClickedDisplayIndex, thisDisplayIdx);
+          const endIdx = Math.max(lastClickedDisplayIndex, thisDisplayIdx);
+          const currentDisplay = displayItemsRef.current;
+
+          const rangeElements: SelectedElement[] = [];
+          const rangeGroupIds: string[] = [];
+
+          for (let i = startIdx; i <= endIdx; i++) {
+            const di = currentDisplay[i];
+            if (!di) continue;
+            if (di.displayType === "group-header") {
+              rangeGroupIds.push(di.groupId);
+              const groupChildren = layerItemsRef.current.filter(
+                (it) => it.groupId === di.groupId,
+              );
+              groupChildren.forEach((child) => {
+                rangeElements.push(layerItemToSelectedElement(child));
+              });
+            } else {
+              rangeElements.push(layerItemToSelectedElement(di.item));
+            }
           }
+
+          // id 기준 dedupe
+          const seen = new Set<string>();
+          const deduped = rangeElements.filter((el) => {
+            if (seen.has(el.id)) return false;
+            seen.add(el.id);
+            return true;
+          });
+
+          if (isPrimaryModifierPressed) {
+            const existingIds = new Set(selectedElements.map((el) => el.id));
+            const newEls = deduped.filter((el) => !existingIds.has(el.id));
+            const mergedElements = [...selectedElements, ...newEls];
+            const existingGroupIds = new Set(selectedGroupIds);
+            const newGroupIds = rangeGroupIds.filter(
+              (id) => !existingGroupIds.has(id),
+            );
+            setFullSelection(mergedElements, [...selectedGroupIds, ...newGroupIds]);
+          } else {
+            setFullSelection(deduped, rangeGroupIds);
+          }
+          return;
         }
 
-        if (isPrimaryModifierPressed) {
-          // Ctrl+Shift+클릭: 기존 선택에 범위 추가
-          const existingIds = new Set(selectedElements.map((el) => el.id));
-          const newElements = rangeElements.filter(
-            (el) => !existingIds.has(el.id),
-          );
-          setSelectedElements([...selectedElements, ...newElements]);
-        } else {
-          // Shift+클릭: 범위만 선택
-          setSelectedElements(rangeElements);
+        // fallback: layerItems 인덱스 기반 (lastClickedDisplayIndex가 없는 경우)
+        if (lastClickedIndex !== null) {
+          const startIdx = Math.min(lastClickedIndex, index);
+          const endIdx = Math.max(lastClickedIndex, index);
+          const currentItems = layerItemsRef.current;
+
+          const rangeElements: SelectedElement[] = [];
+          for (let i = startIdx; i <= endIdx; i++) {
+            const rangeItem = currentItems[i];
+            if (rangeItem) {
+              rangeElements.push(layerItemToSelectedElement(rangeItem));
+            }
+          }
+
+          if (isPrimaryModifierPressed) {
+            const existingIds = new Set(selectedElements.map((el) => el.id));
+            const newElements = rangeElements.filter(
+              (el) => !existingIds.has(el.id),
+            );
+            setSelectedElements([...selectedElements, ...newElements]);
+          } else {
+            setSelectedElements(rangeElements);
+          }
+          return;
         }
-        // Shift 선택 시에는 lastClickedIndex를 유지
-        return;
       }
 
       // Ctrl+클릭 또는 일반 클릭
       const isAlreadySelected = selectedElements.some(
         (el) => el.id === item.id,
       );
+      const element = layerItemToSelectedElement(item);
 
-      if (item.type === "key" && item.index !== undefined) {
-        if (isPrimaryModifierPressed) {
-          // Ctrl+클릭: 다중 선택/해제 토글
-          toggleSelection({ type: "key", id: item.id, index: item.index });
+      if (isPrimaryModifierPressed) {
+        // Ctrl+클릭: 토글 + selectedGroupIds 보존
+        const exists = selectedElements.some((el) => el.id === element.id);
+        if (exists) {
+          setFullSelection(
+            selectedElements.filter((el) => el.id !== element.id),
+            selectedGroupIds,
+          );
         } else {
-          // 일반 클릭: 이미 선택된 경우 해제, 아니면 단일 선택
-          if (isAlreadySelected) {
-            // 더블클릭과 충돌 방지: 선택 해제는 잠깐 지연하고, 더블클릭이면 취소됨
-            pendingDeselectTimerRef.current = window.setTimeout(() => {
-              clearSelection();
-              pendingDeselectTimerRef.current = null;
-            }, 50);
-          } else {
-            clearSelection();
-            toggleSelection({ type: "key", id: item.id, index: item.index });
-          }
+          setFullSelection([...selectedElements, element], selectedGroupIds);
         }
-      } else if (item.type === "stat" && item.index !== undefined) {
-        if (isPrimaryModifierPressed) {
-          toggleSelection({ type: "stat", id: item.id, index: item.index });
-        } else {
-          if (isAlreadySelected) {
-            pendingDeselectTimerRef.current = window.setTimeout(() => {
-              clearSelection();
-              pendingDeselectTimerRef.current = null;
-            }, 50);
-          } else {
+      } else {
+        // 일반 클릭: 단일 선택
+        if (isAlreadySelected && selectedElements.length > 1) {
+          // 다중 선택(그룹 포함) 상태에서 이미 선택된 아이템 클릭 → 해당 아이템만 단일 선택
+          // 더블클릭과 충돌 방지: 지연 처리
+          pendingDeselectTimerRef.current = window.setTimeout(() => {
+            setFullSelection([element], []);
+            pendingDeselectTimerRef.current = null;
+          }, 50);
+        } else if (isAlreadySelected) {
+          // 단일 선택 상태에서 같은 아이템 재클릭 → 선택 해제
+          pendingDeselectTimerRef.current = window.setTimeout(() => {
             clearSelection();
-            toggleSelection({ type: "stat", id: item.id, index: item.index });
-          }
-        }
-      } else if (item.type === "graph" && item.index !== undefined) {
-        if (isPrimaryModifierPressed) {
-          toggleSelection({ type: "graph", id: item.id, index: item.index });
+            pendingDeselectTimerRef.current = null;
+          }, 50);
         } else {
-          if (isAlreadySelected) {
-            pendingDeselectTimerRef.current = window.setTimeout(() => {
-              clearSelection();
-              pendingDeselectTimerRef.current = null;
-            }, 50);
-          } else {
-            clearSelection();
-            toggleSelection({ type: "graph", id: item.id, index: item.index });
-          }
-        }
-      } else if (item.type === "plugin") {
-        if (isPrimaryModifierPressed) {
-          toggleSelection({ type: "plugin", id: item.id });
-        } else {
-          if (isAlreadySelected) {
-            pendingDeselectTimerRef.current = window.setTimeout(() => {
-              clearSelection();
-              pendingDeselectTimerRef.current = null;
-            }, 50);
-          } else {
-            clearSelection();
-            toggleSelection({ type: "plugin", id: item.id });
-          }
+          clearSelection();
+          toggleSelection(element);
         }
       }
 
       // 마지막 클릭 인덱스 업데이트 (Shift 선택의 기준점)
       setLastClickedIndex(index);
+      const displayIdx = displayItemsRef.current.findIndex(
+        (di) => di.displayType === "layer" && di.item.id === item.id,
+      );
+      setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
     },
     [
       clearPendingDeselect,
       clearSelection,
       lastClickedIndex,
+      lastClickedDisplayIndex,
       onSelectionFromPanel,
       selectedElements,
+      selectedGroupIds,
       setSelectedElements,
+      setFullSelection,
       toggleSelection,
     ],
   );
@@ -1020,6 +1040,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     [selectedElements],
   );
 
+  const selectedGroupIdSet = useMemo(
+    () => new Set(selectedGroupIds),
+    [selectedGroupIds],
+  );
+
   const isItemSelected = useCallback(
     (item: LayerItem) => {
       return selectedElementIdSet.has(item.id);
@@ -1029,11 +1054,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   const isGroupHeaderSelected = useCallback(
     (groupId: string) => {
-      return layerItems.some(
-        (item) => item.groupId === groupId && selectedElementIdSet.has(item.id),
-      );
+      return selectedGroupIdSet.has(groupId);
     },
-    [layerItems, selectedElementIdSet],
+    [selectedGroupIdSet],
   );
 
   // 인라인 이름 변경 상태 (레이어 + 그룹 공용)
@@ -1108,6 +1131,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           toggleSelection({ type: "plugin", id: item.id });
         }
         setLastClickedIndex(index);
+        // Shift 클릭 앵커도 갱신 (우클릭→Shift 클릭 시 stale 방지)
+        const displayIdx = displayItemsRef.current.findIndex(
+          (di) => di.displayType === "layer" && di.item.id === item.id,
+        );
+        setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
       }
 
       setContextMenuItem(item);
@@ -1760,45 +1788,177 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     ],
   );
 
-  // 드롭 처리
-  const performDrop = useCallback(
+  // 다중 아이템 드롭 처리 (filter-then-rebuild 패턴)
+  const performMultiDrop = useCallback(
     async (
-      fromIndex: number,
-      toIndex: number,
-      dropContext?: { targetGroupId: string | undefined },
+      draggedIds: string[],
+      toDisplayIndex: number,
+      dropContext?: { targetGroupId: string | undefined; preserveFullGroups?: boolean },
     ) => {
-      if (fromIndex === toIndex) return;
-
       const items = [...layerItemsRef.current];
+      const currentDisplay = displayItemsRef.current;
+      const draggedIdSet = new Set(draggedIds);
 
-      if (fromIndex === -1 || fromIndex === toIndex) return;
+      // 드래그 아이템과 나머지 분리
+      const draggedItems = items.filter((item) => draggedIdSet.has(item.id));
+      const remainingItems = items.filter((item) => !draggedIdSet.has(item.id));
 
-      // 아이템 재정렬
-      const [removed] = items.splice(fromIndex, 1);
-      items.splice(toIndex, 0, removed);
+      if (draggedItems.length === 0) return;
 
-      let droppedGroupId: string | undefined = removed.groupId;
-      if (removed.type !== "plugin") {
-        if (dropContext) {
-          droppedGroupId = dropContext.targetGroupId;
-        } else {
-          const previousItem = items[toIndex - 1];
-          const nextItem = items[toIndex + 1];
-          const prevGroupId = previousItem?.groupId;
-          const nextGroupId = nextItem?.groupId;
-          if (prevGroupId && nextGroupId) {
-            droppedGroupId =
-              prevGroupId === nextGroupId ? prevGroupId : undefined;
-          } else if (prevGroupId) {
-            droppedGroupId = prevGroupId;
-          } else if (nextGroupId) {
-            droppedGroupId = nextGroupId;
-          } else {
-            droppedGroupId = undefined;
+      // 그룹별 멤버 맵 (성능 최적화)
+      const groupMemberIds = new Map<string, Set<string>>();
+      for (const item of items) {
+        if (item.groupId) {
+          let memberSet = groupMemberIds.get(item.groupId);
+          if (!memberSet) {
+            memberSet = new Set();
+            groupMemberIds.set(item.groupId, memberSet);
+          }
+          memberSet.add(item.id);
+        }
+      }
+
+      // 그룹의 모든 멤버가 드래그 대상인지 확인
+      const isFullGroupDragged = (groupId: string): boolean => {
+        const members = groupMemberIds.get(groupId);
+        if (!members) return false;
+        for (const id of members) {
+          if (!draggedIdSet.has(id)) return false;
+        }
+        return true;
+      };
+
+      // 드래그 아이템 제외한 필터 타겟 인덱스 계산
+      let offset = 0;
+      for (let i = 0; i < toDisplayIndex && i < currentDisplay.length; i++) {
+        const di = currentDisplay[i];
+        if (di.displayType === "layer" && draggedIdSet.has(di.item.id)) {
+          offset++;
+        } else if (
+          di.displayType === "group-header" &&
+          isFullGroupDragged(di.groupId)
+        ) {
+          offset++;
+        }
+      }
+      const filteredTargetIndex = toDisplayIndex - offset;
+
+      // 필터 디스플레이 목록 (드래그 아이템 제외)
+      const filteredDisplay = currentDisplay.filter((di) => {
+        if (di.displayType === "layer" && draggedIdSet.has(di.item.id))
+          return false;
+        if (
+          di.displayType === "group-header" &&
+          isFullGroupDragged(di.groupId)
+        )
+          return false;
+        return true;
+      });
+
+      // remainingItems를 display 순서로 재정렬
+      // (zIndex 순서와 그룹 클러스터링 순서가 다를 수 있으므로)
+      const orderedRemaining: LayerItem[] = [];
+      const addedIds = new Set<string>();
+      for (const di of filteredDisplay) {
+        if (di.displayType === "layer") {
+          const item = remainingItems.find((ri) => ri.id === di.item.id);
+          if (item && !addedIds.has(item.id)) {
+            orderedRemaining.push(item);
+            addedIds.add(item.id);
+          }
+        } else if (di.displayType === "group-header") {
+          // 그룹의 모든 자식 추가 (접힌 그룹 자식 포함)
+          for (const item of remainingItems) {
+            if (item.groupId === di.groupId && !addedIds.has(item.id)) {
+              orderedRemaining.push(item);
+              addedIds.add(item.id);
+            }
+          }
+        }
+      }
+      // filteredDisplay에 없는 나머지 아이템 추가
+      for (const item of remainingItems) {
+        if (!addedIds.has(item.id)) {
+          orderedRemaining.push(item);
+          addedIds.add(item.id);
+        }
+      }
+
+      // orderedRemaining 내 삽입 위치 결정
+      let insertionIndex = orderedRemaining.length;
+      if (filteredTargetIndex < filteredDisplay.length) {
+        const targetDI = filteredDisplay[filteredTargetIndex];
+        if (targetDI.displayType === "layer") {
+          const idx = orderedRemaining.findIndex(
+            (i) => i.id === targetDI.item.id,
+          );
+          if (idx !== -1) insertionIndex = idx;
+        } else if (targetDI.displayType === "group-header") {
+          const firstChild = orderedRemaining.find(
+            (i) => i.groupId === targetDI.groupId,
+          );
+          if (firstChild) {
+            const idx = orderedRemaining.indexOf(firstChild);
+            if (idx !== -1) insertionIndex = idx;
           }
         }
       }
 
+      // 새 groupId 결정
+      let newGroupId: string | undefined;
+      if (dropContext) {
+        newGroupId = dropContext.targetGroupId;
+      } else {
+        const prevItem = orderedRemaining[insertionIndex - 1];
+        const nextItem = orderedRemaining[insertionIndex];
+        if (
+          prevItem?.groupId &&
+          nextItem?.groupId &&
+          prevItem.groupId === nextItem.groupId
+        ) {
+          newGroupId = prevItem.groupId;
+        } else if (prevItem?.groupId && !nextItem?.groupId) {
+          newGroupId = prevItem.groupId;
+        } else {
+          newGroupId = undefined;
+        }
+      }
+
+      // 전체 그룹이 드래그된 경우 groupId 보존 대상 계산
+      // 그룹 헤더 드래그 시에만 적용 (개별 아이템 드래그 시에는 보존 안 함)
+      const preserveGroupIds = new Set<string>();
+      if (dropContext?.preserveFullGroups) {
+        for (const item of draggedItems) {
+          if (item.groupId && isFullGroupDragged(item.groupId)) {
+            preserveGroupIds.add(item.id);
+          }
+        }
+      }
+
+      // 드래그 아이템에 groupId 적용 (plugin, 전체 그룹 드래그 제외)
+      const updatedDraggedItems = draggedItems.map((item) => {
+        if (item.type === "plugin") return item;
+        if (preserveGroupIds.has(item.id)) return item;
+        return { ...item, groupId: newGroupId };
+      });
+
+      // 새 순서 구성
+      const newItems = [
+        ...orderedRemaining.slice(0, insertionIndex),
+        ...updatedDraggedItems,
+        ...orderedRemaining.slice(insertionIndex),
+      ];
+
+      // 변경 여부 확인
+      const orderChanged = newItems.some(
+        (item, idx) => item.id !== items[idx]?.id,
+      );
+      const groupChanged = draggedItems.some(
+        (orig, i) => orig.groupId !== updatedDraggedItems[i].groupId,
+      );
+      if (!orderChanged && !groupChanged) return;
+
+      // 히스토리 저장
       const currentPositions = useKeyStore.getState().positions;
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
@@ -1817,74 +1977,61 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           currentLayerGroups,
         );
 
-      // 새 z-index 계산 및 적용
-      const maxZIndex = items.length - 1;
+      // z-index 재계산 및 적용
+      const maxZIndex = newItems.length - 1;
 
-      // 키 positions 복사 및 업데이트
       const updatedPositions = { ...currentPositions };
       const currentModePositions = [
         ...(updatedPositions[selectedKeyType] || []),
       ];
-
-      // 통계 positions 복사 및 업데이트
       const updatedStatPositions = { ...currentStatPositions };
       const currentStatModePositions = [
         ...(updatedStatPositions[selectedKeyType] || []),
       ];
-      // 그래프 positions 복사 및 업데이트
-      const updatedGraphPositions = {
-        ...currentGraphPositions,
-      };
+      const updatedGraphPositions = { ...currentGraphPositions };
       const currentGraphModePositions = [
         ...(updatedGraphPositions[selectedKeyType] || []),
       ];
 
-      items.forEach((item, idx) => {
-        const newZIndex = maxZIndex - idx; // 맨 위가 가장 높은 z-index
+      newItems.forEach((item, idx) => {
+        const newZIndex = maxZIndex - idx;
+        const isDraggedItem = draggedIdSet.has(item.id);
 
         if (item.type === "key" && item.index !== undefined) {
-          // 키 z-index 업데이트
           if (currentModePositions[item.index]) {
-            const isDroppedItem = item.id === removed.id;
             currentModePositions[item.index] = {
               ...currentModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
             };
           }
         } else if (item.type === "stat" && item.index !== undefined) {
           if (currentStatModePositions[item.index]) {
-            const isDroppedItem = item.id === removed.id;
             currentStatModePositions[item.index] = {
               ...currentStatModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
             };
           }
         } else if (item.type === "graph" && item.index !== undefined) {
           if (currentGraphModePositions[item.index]) {
-            const isDroppedItem = item.id === removed.id;
             currentGraphModePositions[item.index] = {
               ...currentGraphModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDroppedItem ? { groupId: droppedGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
             };
           }
         } else if (item.type === "plugin") {
-          // 플러그인 z-index 업데이트
           usePluginDisplayElementStore.getState().updateElement(item.id, {
             zIndex: newZIndex,
           });
         }
       });
 
-      // 키 positions 일괄 업데이트
       updatedPositions[selectedKeyType] = currentModePositions;
-
-      // 통계 positions 일괄 업데이트
       updatedStatPositions[selectedKeyType] = currentStatModePositions;
-      // 그래프 positions 일괄 업데이트
       updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
+
       const normalized = normalizeLayerGroupsForMode({
         mode: selectedKeyType,
         keyPositions: updatedPositions,
@@ -1900,7 +2047,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
 
-      // 백엔드/오버레이 동기화 (레이어 정렬 결과 즉시 반영)
+      // 백엔드/오버레이 동기화
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
@@ -1926,7 +2073,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } catch {
         // ignore
       }
-
       try {
         window.api.bridge.sendTo("overlay", "statPositions:sync", {
           positions: normalized.statPositions,
@@ -1941,12 +2087,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } catch {
         // ignore
       }
-
       try {
-        const currentPluginElements =
+        const pluginEls =
           usePluginDisplayElementStore.getState().elements;
         window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
-          elements: currentPluginElements,
+          elements: pluginEls,
         });
       } catch {
         // ignore
@@ -2150,7 +2295,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 드래그 시작 (마우스 다운)
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent, item: LayerItem, index: number) => {
+    (e: React.MouseEvent, item: LayerItem, _index: number) => {
       if (e.button !== 0) return;
 
       clearPendingDeselect();
@@ -2159,7 +2304,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const rect = target.getBoundingClientRect();
 
       dragStateRef.current = {
-        startIndex: index,
         itemHeight: rect.height,
         currentDropTarget: null,
       };
@@ -2182,6 +2326,31 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
           isDraggingRef.current = true;
           didDragRef.current = true;
+
+          // 다중 선택 드래그: 클릭 아이템이 선택에 포함되면 전체 선택 드래그
+          const currentSel = useGridSelectionStore.getState().selectedElements;
+          const isInSelection = currentSel.some((el) => el.id === item.id);
+          if (isInSelection && currentSel.length > 1) {
+            // 그룹 전체가 선택된 상태에서 자식 하나를 드래그하면 해당 아이템만 이동
+            // selectedGroupIds 대신 실제 선택 상태로 판단 (stale 방지)
+            const isFullGroupSelected = (() => {
+              if (!item.groupId) return false;
+              const groupChildren = layerItemsRef.current.filter(
+                (li) => li.groupId === item.groupId,
+              );
+              if (groupChildren.length === 0) return false;
+              const selIds = new Set(currentSel.map((el) => el.id));
+              return groupChildren.every((child) => selIds.has(child.id));
+            })();
+            if (isFullGroupSelected) {
+              draggedItemIdsRef.current = [item.id];
+            } else {
+              draggedItemIdsRef.current = currentSel.map((el) => el.id);
+            }
+          } else {
+            draggedItemIdsRef.current = [item.id];
+          }
+
           setDraggedItemId(item.id);
           setIsDragging(true);
         }
@@ -2189,18 +2358,37 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         moveEvent.preventDefault();
 
         const scrollRect = scrollElementRef.current.getBoundingClientRect();
-        const relativeY =
-          moveEvent.clientY -
-          scrollRect.top +
-          scrollElementRef.current.scrollTop;
+        // 마우스가 스크롤 컨테이너 밖에 있으면 맨 위/아래로 강제 드롭
+        let relativeY: number;
+        if (moveEvent.clientY < scrollRect.top) {
+          relativeY = -1;
+        } else if (moveEvent.clientY > scrollRect.bottom) {
+          relativeY = displayItemsRef.current.length * dragStateRef.current.itemHeight + 1;
+        } else {
+          relativeY = moveEvent.clientY - scrollRect.top + scrollElementRef.current.scrollTop;
+        }
+        const draggingSet = new Set(draggedItemIdsRef.current);
         const target = resolveItemDropTargetFromPointer(
           relativeY,
           dragStateRef.current.itemHeight,
-          item.id,
+          draggingSet,
         );
 
+        // display index 결정: 접힌 그룹 하단 드롭 시 indicatorDisplayIndex가 null
+        let dropDisplayIndex = target.indicatorDisplayIndex;
+        if (dropDisplayIndex == null && target.indicatorHeaderBottomGroupId) {
+          // 접힌 그룹 헤더의 display index + 1을 사용
+          const headerIdx = displayItemsRef.current.findIndex(
+            (di) =>
+              di.displayType === "group-header" &&
+              di.groupId === target.indicatorHeaderBottomGroupId,
+          );
+          dropDisplayIndex = headerIdx !== -1 ? headerIdx + 1 : target.toIndex;
+        } else if (dropDisplayIndex == null) {
+          dropDisplayIndex = target.toIndex;
+        }
         dragStateRef.current.currentDropTarget = {
-          toIndex: target.toIndex,
+          toDisplayIndex: dropDisplayIndex,
           targetGroupId: target.targetGroupId,
         };
         setDragOverItemDisplayIndex(target.indicatorDisplayIndex);
@@ -2210,24 +2398,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 마우스 업 이벤트 핸들러
       const handleMouseUp = () => {
         if (dragStateRef.current && isDraggingRef.current) {
-          const fromIndex = dragStateRef.current.startIndex;
           const target = dragStateRef.current.currentDropTarget;
 
           if (target) {
-            // 드롭 위치 계산: toIndex가 fromIndex보다 크면 -1
-            const actualToIndex =
-              target.toIndex > fromIndex ? target.toIndex - 1 : target.toIndex;
-            if (fromIndex !== actualToIndex) {
-              performDrop(fromIndex, actualToIndex, {
-                targetGroupId: target.targetGroupId,
-              });
-            }
+            const draggedIds = draggedItemIdsRef.current;
+            performMultiDrop(draggedIds, target.toDisplayIndex, {
+              targetGroupId: target.targetGroupId,
+            });
           }
         }
 
         dragStateRef.current = null;
         dragStartRef.current = null;
         isDraggingRef.current = false;
+        draggedItemIdsRef.current = [];
         setDraggedItemId(null);
         setDragOverItemDisplayIndex(null);
         setDragOverHeaderBottomGroupId(null);
@@ -2240,7 +2424,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clearPendingDeselect, performDrop, resolveItemDropTargetFromPointer],
+    [clearPendingDeselect, performMultiDrop, resolveItemDropTargetFromPointer],
   );
 
   // 그룹 헤더 드래그 시작 (그룹 단위 이동)
@@ -2282,11 +2466,16 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         moveEvent.preventDefault();
 
         const scrollRect = scrollElementRef.current.getBoundingClientRect();
-        const relativeY =
-          moveEvent.clientY -
-          scrollRect.top +
-          scrollElementRef.current.scrollTop;
         const displayCount = displayItemsRef.current.length;
+        // 마우스가 스크롤 컨테이너 밖에 있으면 맨 위/아래로 강제 드롭
+        let relativeY: number;
+        if (moveEvent.clientY < scrollRect.top) {
+          relativeY = -1;
+        } else if (moveEvent.clientY > scrollRect.bottom) {
+          relativeY = displayCount * groupDragStateRef.current.itemHeight + 1;
+        } else {
+          relativeY = moveEvent.clientY - scrollRect.top + scrollElementRef.current.scrollTop;
+        }
         const newIndex = Math.max(
           0,
           Math.min(
@@ -2303,7 +2492,41 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         if (groupDragStateRef.current && isDraggingRef.current) {
           const targetIdx = groupDragStateRef.current.currentOverIndex;
           if (targetIdx !== null) {
-            performGroupDrop(groupId, targetIdx);
+            // 이 그룹이 명시적으로 선택되어 있고 추가 선택 아이템이 있는지 확인
+            const currentSel = useGridSelectionStore.getState().selectedElements;
+            const currentGroupIds = useGridSelectionStore.getState().selectedGroupIds;
+            const isGroupSelected = currentGroupIds.includes(groupId);
+
+            if (isGroupSelected && currentSel.length > 0) {
+              // 그룹 전체 자식 + 기타 선택 아이템을 합쳐서 multi-drop
+              const groupChildIds = new Set(
+                layerItemsRef.current
+                  .filter((item) => item.groupId === groupId)
+                  .map((c) => c.id),
+              );
+              const hasExtraSelection = currentSel.some(
+                (el) => !groupChildIds.has(el.id),
+              );
+
+              if (hasExtraSelection) {
+                // 그룹 자식 전체 + 기타 선택 아이템
+                const allIds = [
+                  ...layerItemsRef.current
+                    .filter((item) => item.groupId === groupId)
+                    .map((c) => c.id),
+                  ...currentSel
+                    .filter((el) => !groupChildIds.has(el.id))
+                    .map((el) => el.id),
+                ];
+                // 포인터 기반 드롭 타겟 계산으로 정확한 groupId 결정
+                const dropTarget = resolveItemDropTarget(targetIdx, new Set(allIds));
+                performMultiDrop(allIds, targetIdx, { targetGroupId: dropTarget.targetGroupId, preserveFullGroups: true });
+              } else {
+                performGroupDrop(groupId, targetIdx);
+              }
+            } else {
+              performGroupDrop(groupId, targetIdx);
+            }
           }
         }
 
@@ -2321,23 +2544,125 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clearPendingDeselect, performGroupDrop],
+    [clearPendingDeselect, performGroupDrop, performMultiDrop, resolveItemDropTarget],
   );
 
   // 그룹 헤더 클릭 → 그룹 소속 아이템 전체 선택
   const handleGroupHeaderClick = useCallback(
-    (groupId: string) => {
+    (groupId: string, e: React.MouseEvent) => {
       onSelectionFromPanel?.();
+      clearPendingDeselect();
+
+      if (didDragRef.current) {
+        didDragRef.current = false;
+        return;
+      }
+      if (isDraggingRef.current) return;
+
+      const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
+      const isShiftPressed = e.shiftKey;
+
       const children = layerItems.filter((item) => item.groupId === groupId);
-      const elements = children.map((child) => ({
-        type: child.type as any,
-        id: child.id,
-        index: child.index,
-      }));
-      clearSelection();
-      setSelectedElements(elements);
+      const childElements = children.map(layerItemToSelectedElement);
+
+      const thisDisplayIdx = displayItemsRef.current.findIndex(
+        (di) => di.displayType === "group-header" && di.groupId === groupId,
+      );
+      if (thisDisplayIdx < 0) return;
+
+      if (isShiftPressed && lastClickedDisplayIndex !== null) {
+        // Shift+click: displayItems 기반 범위 선택
+        const startIdx = Math.min(lastClickedDisplayIndex, thisDisplayIdx);
+        const endIdx = Math.max(lastClickedDisplayIndex, thisDisplayIdx);
+        const currentDisplay = displayItemsRef.current;
+
+        const rangeElements: SelectedElement[] = [];
+        const rangeGroupIds: string[] = [];
+
+        for (let i = startIdx; i <= endIdx; i++) {
+          const di = currentDisplay[i];
+          if (!di) continue;
+          if (di.displayType === "group-header") {
+            rangeGroupIds.push(di.groupId);
+            const groupChildren = layerItemsRef.current.filter(
+              (item) => item.groupId === di.groupId,
+            );
+            groupChildren.forEach((child) => {
+              rangeElements.push(layerItemToSelectedElement(child));
+            });
+          } else {
+            rangeElements.push(layerItemToSelectedElement(di.item));
+          }
+        }
+
+        // id 기준 dedupe
+        const seen = new Set<string>();
+        const deduped = rangeElements.filter((el) => {
+          if (seen.has(el.id)) return false;
+          seen.add(el.id);
+          return true;
+        });
+
+        if (isPrimaryModifierPressed) {
+          // Ctrl+Shift: 기존 선택에 범위 추가
+          const existingIds = new Set(selectedElements.map((el) => el.id));
+          const newEls = deduped.filter((el) => !existingIds.has(el.id));
+          const mergedElements = [...selectedElements, ...newEls];
+          const existingGroupIds = new Set(selectedGroupIds);
+          const newGroupIds = rangeGroupIds.filter(
+            (id) => !existingGroupIds.has(id),
+          );
+          const mergedGroupIds = [...selectedGroupIds, ...newGroupIds];
+          setFullSelection(mergedElements, mergedGroupIds);
+        } else {
+          // Shift: 범위만 선택
+          setFullSelection(deduped, rangeGroupIds);
+        }
+        // Shift 선택 시 앵커 유지
+        return;
+      }
+
+      if (isPrimaryModifierPressed) {
+        // Ctrl+click: 그룹 토글
+        const isCurrentlySelected = selectedGroupIdSet.has(groupId);
+        if (isCurrentlySelected) {
+          // 그룹 해제: 자식들도 선택에서 제거
+          const childIds = new Set(children.map((c) => c.id));
+          const remaining = selectedElements.filter(
+            (el) => !childIds.has(el.id),
+          );
+          const remainingGroups = selectedGroupIds.filter(
+            (id) => id !== groupId,
+          );
+          setFullSelection(remaining, remainingGroups);
+        } else {
+          // 그룹 추가
+          const existingIds = new Set(selectedElements.map((el) => el.id));
+          const newEls = childElements.filter(
+            (el) => !existingIds.has(el.id),
+          );
+          const mergedElements = [...selectedElements, ...newEls];
+          const mergedGroupIds = [...selectedGroupIds, groupId];
+          setFullSelection(mergedElements, mergedGroupIds);
+        }
+      } else {
+        // 일반 클릭: 이 그룹만 선택
+        setFullSelection(childElements, [groupId]);
+      }
+
+      setLastClickedDisplayIndex(thisDisplayIdx);
+      setLastClickedIndex(null);
     },
-    [layerItems, clearSelection, setSelectedElements, onSelectionFromPanel],
+    [
+      layerItems,
+      clearPendingDeselect,
+      selectedElements,
+      selectedGroupIds,
+      selectedGroupIdSet,
+      setFullSelection,
+      onSelectionFromPanel,
+      lastClickedDisplayIndex,
+    ],
   );
 
   // 그룹 헤더 우클릭 핸들러
@@ -2354,9 +2679,30 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     [clearPendingDeselect],
   );
 
+  // 빈 공간 클릭 시 선택 해제 (사이드바는 유지)
+  const handleEmptySpaceMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.button !== 0) return;
+      clearPendingDeselect();
+      onSelectionFromPanel?.();
+      clearSelection();
+      setLastClickedIndex(null);
+      setLastClickedDisplayIndex(null);
+    },
+    [clearPendingDeselect, clearSelection, onSelectionFromPanel],
+  );
+
   return (
-    <div className="flex-1 properties-panel-overlay-scroll">
-      <div ref={setScrollRef} className="properties-panel-overlay-viewport">
+    <div
+      className="flex-1 properties-panel-overlay-scroll"
+      onMouseDown={handleEmptySpaceMouseDown}
+    >
+      <div
+        ref={setScrollRef}
+        className="properties-panel-overlay-viewport"
+        onMouseDown={handleEmptySpaceMouseDown}
+      >
         {layerItems.length === 0 ? (
           <div className="flex items-center justify-center h-full p-[16px]">
             <p className="text-[#6B6D75] text-style-4 text-center">
@@ -2383,15 +2729,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     onContextMenu={(e) =>
                       handleGroupHeaderContextMenu(e, gh.groupId)
                     }
-                    onClick={() => {
-                      if (didDragRef.current) {
-                        didDragRef.current = false;
-                        return;
-                      }
-                      handleGroupHeaderClick(gh.groupId);
+                    onClick={(e) => {
+                      handleGroupHeaderClick(gh.groupId, e);
                     }}
                     className={`
-                      relative flex items-center gap-[8px] px-[12px] h-[34px]
+                      group relative flex items-center gap-[8px] pl-[12px] pr-[4px] h-[34px]
                       select-none cursor-grab
                       ${gh.allHidden && !isBeingDragged ? "opacity-60" : ""}
                       ${isBeingDragged ? "opacity-30" : ""}
@@ -2419,18 +2761,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       draggedGroupId !== gh.groupId && (
                         <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
                       )}
-                    {/* 접기/펼치기 토글 (아이콘 왼쪽 좁은 영역) */}
+                    {/* 접기/펼치기 토글 (텍스트 왼쪽 전체 영역) */}
                     <div
-                      className="absolute left-0 top-0 bottom-0 w-[12px] flex items-center justify-center cursor-pointer z-[1]"
+                      className="absolute left-0 top-0 bottom-0 w-[34px] flex items-center pl-[1px] cursor-pointer z-[1]"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleCollapsed(gh.groupId);
                       }}
                     >
-                      <ChevronIcon collapsed={gh.isCollapsed} />
+                      <div className="opacity-0 group-hover:opacity-60 hover:!opacity-100">
+                        <ChevronIcon collapsed={gh.isCollapsed} />
+                      </div>
                     </div>
 
-                    {/* 폴더 아이콘 (다른 요소 아이콘과 같은 X 위치) */}
+                    {/* 폴더 아이콘 (클릭은 위 absolute div에서 처리) */}
                     <div className="flex-shrink-0">
                       <FolderIcon open={!gh.isCollapsed} />
                     </div>
@@ -2484,7 +2828,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         e.stopPropagation();
                         handleToggleGroupVisibility(e, gh.groupId);
                       }}
-                      className="flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
+                        gh.allHidden
+                          ? ""
+                          : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                      }`}
                     >
                       {gh.allHidden ? (
                         <CloseEyeIcon
@@ -2523,7 +2871,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   onContextMenu={(e) => handleContextMenu(e, item, flatIndex)}
                   style={{ paddingLeft }}
                   className={`
-                    relative flex items-center gap-[8px] pr-[12px] h-[34px]
+                    group relative flex items-center gap-[8px] pr-[4px] h-[34px]
                     select-none cursor-grab
                     ${item.hidden && !isInDraggedGroup ? "opacity-60" : ""}
                     ${isInDraggedGroup ? "opacity-30" : ""}
@@ -2536,10 +2884,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     }
                   `}
                 >
-                  {/* 드롭 인디케이터 (피그마 스타일 선) - 위쪽 */}
+                  {/* 드롭 인디케이터 - 위쪽 */}
                   {draggedItemId &&
                     dragOverItemDisplayIndex === displayIndex &&
-                    draggedItemId !== item.id && (
+                    !draggedItemIdsRef.current.includes(item.id) && (
                       <div className="absolute left-0 right-0 top-0 h-[2px] bg-[#3B82F6] z-10" />
                     )}
                   {/* 그룹 드래그 드롭 인디케이터 */}
@@ -2613,7 +2961,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         ? t("propertiesPanel.showLayer") || "Show"
                         : t("propertiesPanel.hideLayer") || "Hide"
                     }
-                    className="flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
+                      item.hidden
+                        ? ""
+                        : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                    }`}
                   >
                     {item.hidden ? (
                       <CloseEyeIcon
