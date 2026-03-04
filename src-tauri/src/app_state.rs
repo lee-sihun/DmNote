@@ -280,6 +280,11 @@ impl AppState {
         }
 
         *self.overlay_visible.write() = visible;
+        if let Err(err) = self.store.update(|state| {
+            state.overlay_visible = visible;
+        }) {
+            log::warn!("failed to persist overlay visibility: {err}");
+        }
         app.emit("overlay:visibility", &json!({ "visible": visible }))?;
         Ok(())
     }
@@ -925,7 +930,7 @@ impl AppState {
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
-            .visible(true)
+            .visible(false)
             .inner_size(bounds.width, bounds.height)
             .position(bounds.x, bounds.y)
             .shadow(false)
@@ -967,14 +972,23 @@ impl AppState {
 
         self.overlay_force_close.store(false, Ordering::SeqCst);
 
-        *self.overlay_visible.write() = true;
+        self.configure_overlay_window(&window, app);
 
-        let _ = self.store.update(|state| {
+        if let Err(err) = self.store.update(|state| {
             state.overlay_bounds = Some(bounds.clone());
             state.overlay_bounds_are_logical = bounds_are_logical;
-        })?;
+        }) {
+            log::warn!("failed to persist initial overlay bounds: {err}");
+        }
 
-        self.configure_overlay_window(&window, app);
+        // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
+        // store의 overlay_visible 상태에 따라 조건부 표시
+        if snapshot.overlay_visible {
+            show_overlay_window(&window, snapshot.always_on_top)?;
+            *self.overlay_visible.write() = true;
+        } else {
+            *self.overlay_visible.write() = false;
+        }
 
         Ok(window)
     }
@@ -996,6 +1010,11 @@ impl AppState {
                         log::error!("failed to hide overlay window on close: {err}");
                     }
                     *overlay_visible.write() = false;
+                    if let Err(err) = store.update(|state| {
+                        state.overlay_visible = false;
+                    }) {
+                        log::warn!("failed to persist overlay visibility on close: {err}");
+                    }
                     if let Err(err) =
                         app_handle.emit("overlay:visibility", &json!({ "visible": false }))
                     {
