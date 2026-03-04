@@ -19,7 +19,13 @@ import {
 } from "@stores/useGridSelectionStore";
 import { PASTE_OFFSET } from "./constants";
 import type { KeyMappings, KeyPositions, KeyPosition } from "@src/types/keys";
-import { normalizeLayerGroupsForMode } from "@utils/layerGroupUtils";
+import {
+  normalizeLayerGroupsForMode,
+  buildNextLayerGroupName,
+  buildLayerItemsForMode,
+  findPasteAnchorIndex,
+  applyZIndexToLayerOrder,
+} from "@utils/layerGroupUtils";
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -530,7 +536,27 @@ export function useGridSelection({
     }
 
     if (clipboardItems.length > 0) {
-      setClipboard(clipboardItems);
+      // 그룹 헤더가 선택된 경우 그룹 정보도 함께 저장
+      const selectedGroupIds = useGridSelectionStore.getState().selectedGroupIds;
+      const clipboardGroups: { id: string; name: string; collapsed?: boolean }[] = [];
+
+      if (selectedGroupIds.length > 0) {
+        const layerGroups =
+          useLayerGroupStore.getState().getGroupsForMode(selectedKeyType);
+        const collapsedGroups = useLayerGroupStore.getState().collapsedGroups;
+        for (const gid of selectedGroupIds) {
+          const group = layerGroups.find((g) => g.id === gid);
+          if (group) {
+            clipboardGroups.push({
+              id: gid,
+              name: group.name,
+              collapsed: collapsedGroups.has(gid) || undefined,
+            });
+          }
+        }
+      }
+
+      setClipboard(clipboardItems, clipboardGroups);
     }
   }, [selectedElements, selectedKeyType, setClipboard]);
 
@@ -539,22 +565,65 @@ export function useGridSelection({
     // 최신 클립보드 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
     const currentClipboard = useGridSelectionStore.getState().clipboard;
     if (currentClipboard.length === 0) return;
+    const clipboardGroups = useGridSelectionStore.getState().clipboardGroups;
 
     // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
     const { keyMappings: km, positions: pos } = useKeyStore.getState();
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
     const currentGraphPositions = useGraphItemStore.getState().positions;
+    const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
-    // 히스토리 저장
+    // 현재 선택 상태 캡처 (paste 후 선택이 바뀌기 전에 앵커 계산용)
+    const currentSelectedElements = useGridSelectionStore.getState().selectedElements;
+    const currentSelectedGroupIds = useGridSelectionStore.getState().selectedGroupIds;
+
+    // 히스토리 저장 (layerGroups 포함)
     const historyStore = useHistoryStore.getState();
     historyStore.pushState(
       { ...km },
       { ...pos },
       { ...(useStatItemStore.getState().positions as any) },
       { ...(currentGraphPositions as any) },
-      [...currentPluginElements]
+      [...currentPluginElements],
+      { ...currentLayerGroups }
     );
+
+    // 그룹 복사인 경우: 새 그룹 생성 + groupId 매핑
+    const groupIdMap = new Map<string, string>();
+    if (clipboardGroups.length > 0) {
+      const modeGroups = [...(currentLayerGroups[selectedKeyType] || [])];
+      for (const cg of clipboardGroups) {
+        const newGroupId = crypto.randomUUID();
+        const newGroupName = buildNextLayerGroupName(cg.name, modeGroups);
+        groupIdMap.set(cg.id, newGroupId);
+        modeGroups.push({ id: newGroupId, name: newGroupName });
+      }
+      const updatedLayerGroups = {
+        ...currentLayerGroups,
+        [selectedKeyType]: modeGroups,
+      };
+      useLayerGroupStore.getState().setLayerGroups(updatedLayerGroups);
+      window.api.layerGroups.update(updatedLayerGroups).catch(() => {});
+
+      // 원본 그룹의 collapsed 상태 복원
+      for (const cg of clipboardGroups) {
+        if (cg.collapsed) {
+          const newGroupId = groupIdMap.get(cg.id);
+          if (newGroupId) {
+            useLayerGroupStore.getState().setCollapsed(newGroupId, true);
+          }
+        }
+      }
+    }
+
+    // groupId 리매핑 헬퍼 (삭제된 그룹 참조 방지)
+    const modeGroups = currentLayerGroups[selectedKeyType] || [];
+    const remapGroupId = (groupId: string | undefined) => {
+      if (!groupId) return groupId;
+      if (groupIdMap.has(groupId)) return groupIdMap.get(groupId);
+      return modeGroups.some((g) => g.id === groupId) ? groupId : undefined;
+    };
 
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
     const statsToAdd: { position: any }[] = [];
@@ -567,6 +636,7 @@ export function useGridSelection({
           keyCode: item.keyCode,
           position: {
             ...item.position,
+            groupId: remapGroupId((item.position as any).groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -575,6 +645,7 @@ export function useGridSelection({
         statsToAdd.push({
           position: {
             ...item.position,
+            groupId: remapGroupId((item.position as any).groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -583,6 +654,7 @@ export function useGridSelection({
         graphsToAdd.push({
           position: {
             ...item.position,
+            groupId: remapGroupId((item.position as any).groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -590,11 +662,12 @@ export function useGridSelection({
       } else if (item.type === "plugin") {
         pluginsToAdd.push({
           ...item.element,
+          groupId: remapGroupId((item.element as any).groupId),
           position: {
             x: ((item.element as any).position?.x || 0) + PASTE_OFFSET,
             y: ((item.element as any).position?.y || 0) + PASTE_OFFSET,
           },
-          tabId: selectedKeyType, // 현재 탭으로 업데이트
+          tabId: selectedKeyType,
         });
       }
     }
@@ -624,29 +697,14 @@ export function useGridSelection({
       const updatedMappings = { ...km, [selectedKeyType]: mapping };
       const updatedPositions = { ...pos, [selectedKeyType]: posArray };
 
-      // 로컬 업데이트 플래그 설정
-      useKeyStore.getState().setLocalUpdateInProgress(true);
-
       useKeyStore
         .getState()
         .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
 
-      try {
-        await window.api.keys.update(updatedMappings);
-        await window.api.keys.updatePositions(updatedPositions);
-      } catch (error) {
-        console.error("Failed to paste keys", error);
-      } finally {
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      try {
-        window.api.bridge.sendTo("overlay", "positions:sync", {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
-      }
+      // 키 매핑 sync (동기 흐름을 깨지 않도록 fire-and-forget)
+      window.api.keys.update(updatedMappings).catch((error) => {
+        console.error("Failed to paste key mappings", error);
+      });
     }
 
     // 통계 요소 추가
@@ -665,25 +723,7 @@ export function useGridSelection({
       }
 
       const updatedPositions = { ...current, [selectedKeyType]: posArray };
-
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setPositions(updatedPositions as any);
-
-      try {
-        await window.api.statItems.updatePositions(updatedPositions as any);
-      } catch (error) {
-        console.error("Failed to paste stat items", error);
-      } finally {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
-      }
     }
 
     // 그래프 요소 추가
@@ -702,25 +742,7 @@ export function useGridSelection({
       }
 
       const updatedPositions = { ...current, [selectedKeyType]: posArray };
-
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setPositions(updatedPositions as any);
-
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions as any);
-      } catch (error) {
-        console.error("Failed to paste graph items", error);
-      } finally {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
-      }
     }
 
     // 플러그인 요소 추가
@@ -745,20 +767,112 @@ export function useGridSelection({
       }
 
       usePluginDisplayElementStore.getState().setElements(newElements);
+    }
 
-      try {
-        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
-          elements: newElements,
-        });
-      } catch {
-        // ignore
+    // === Phase 2: paste 위치 결정 + zIndex 재계산 ===
+    const freshKeyPos = useKeyStore.getState().positions;
+    const freshStatPos = useStatItemStore.getState().positions;
+    const freshGraphPos = useGraphItemStore.getState().positions;
+    const freshPluginEls = usePluginDisplayElementStore.getState().elements;
+
+    // 전체 레이어 목록 구성 (새로 push된 아이템 포함)
+    const allItems = buildLayerItemsForMode(
+      selectedKeyType,
+      freshKeyPos,
+      freshStatPos,
+      freshGraphPos,
+      freshPluginEls,
+    );
+
+    // 새 아이템과 기존 아이템 분리
+    const newIds = new Set(newSelectedElements.map((el) => el.id));
+    const existing = allItems.filter((item) => !newIds.has(item.id));
+    const pasted = allItems.filter((item) => newIds.has(item.id));
+
+    // 앵커 위치 계산 (paste 전 선택 기준)
+    const anchor = findPasteAnchorIndex(
+      existing,
+      currentSelectedElements,
+      currentSelectedGroupIds,
+    );
+
+    // 새 아이템을 앵커 위치에 삽입
+    const reordered = [
+      ...existing.slice(0, anchor),
+      ...pasted,
+      ...existing.slice(anchor),
+    ];
+
+    // zIndex 일괄 재부여
+    const patch = applyZIndexToLayerOrder(
+      reordered,
+      selectedKeyType,
+      freshKeyPos,
+      freshStatPos,
+      freshGraphPos,
+    );
+
+    // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
+    useKeyStore.getState().setPositions(patch.keyPositions);
+    useStatItemStore.getState().setPositions(patch.statPositions as any);
+    useGraphItemStore.getState().setPositions(patch.graphPositions as any);
+    for (const { fullId, zIndex } of patch.pluginUpdates) {
+      usePluginDisplayElementStore
+        .getState()
+        .updateElement(fullId, { zIndex }, { skipSync: true });
+    }
+
+    // 선택 업데이트도 동기 구간에서 처리 (await 전에 실행해야 깜빡임 방지)
+    if (newSelectedElements.length > 0) {
+      useGridSelectionStore.getState().setSkipPanelModeSwitch(true);
+      if (groupIdMap.size > 0) {
+        const newGroupIds = Array.from(groupIdMap.values());
+        useGridSelectionStore
+          .getState()
+          .setFullSelection(newSelectedElements, newGroupIds);
+      } else {
+        setSelectedElements(newSelectedElements);
       }
     }
 
-    // 붙여넣기된 요소들 선택
-    if (newSelectedElements.length > 0) {
-      setSelectedElements(newSelectedElements);
+    // 백엔드/오버레이 통합 동기화 (async — UI는 이미 반영됨)
+    useKeyStore.getState().setLocalUpdateInProgress(true);
+    useStatItemStore.getState().setLocalUpdateInProgress(true);
+    useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    try {
+      await window.api.keys.updatePositions(patch.keyPositions);
+      await window.api.statItems.updatePositions(patch.statPositions);
+      await window.api.graphItems.updatePositions(patch.graphPositions);
+    } catch (error) {
+      console.error("Failed to sync zIndex after paste", error);
+    } finally {
+      useKeyStore.getState().setLocalUpdateInProgress(false);
+      useStatItemStore.getState().setLocalUpdateInProgress(false);
+      useGraphItemStore.getState().setLocalUpdateInProgress(false);
     }
+
+    try {
+      window.api.bridge.sendTo("overlay", "positions:sync", {
+        positions: patch.keyPositions,
+      });
+    } catch {}
+    try {
+      window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        positions: patch.statPositions,
+      });
+    } catch {}
+    try {
+      window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        positions: patch.graphPositions,
+      });
+    } catch {}
+    try {
+      const pluginEls =
+        usePluginDisplayElementStore.getState().elements;
+      window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+        elements: pluginEls,
+      });
+    } catch {}
   }, [clipboard, selectedKeyType, setSelectedElements]);
 
   return {

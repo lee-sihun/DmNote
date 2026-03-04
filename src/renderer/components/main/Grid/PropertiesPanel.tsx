@@ -783,8 +783,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       selectedKeyElements.length > 0 || selectedElements.length > 0;
     const hadSelection = prevHasSelectionRef.current;
 
+    // 키보드 동작(paste 등)에서 선택이 바뀐 경우 패널 모드 전환 건너뛰기
+    const skipFromKeyboard =
+      useGridSelectionStore.getState()._skipPanelModeSwitch;
+
     if (pluginSettingsPanel) {
       prevHasSelectionRef.current = hasSelection;
+      if (skipFromKeyboard) useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
       return;
     }
 
@@ -798,7 +803,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           setIsPanelVisible(true);
         } else if (
           panelModeRef.current === "layer" &&
-          !selectionFromLayerPanelRef.current
+          !selectionFromLayerPanelRef.current &&
+          !skipFromKeyboard
         ) {
           // 레이어 패널이 열린 상태에서 그리드에서 첫 선택 → 속성 패널로 전환
           setPanelMode("property");
@@ -810,6 +816,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       } else if (
         panelModeRef.current === "layer" &&
         !selectionFromLayerPanelRef.current &&
+        !skipFromKeyboard &&
         isPanelVisible
       ) {
         // 레이어 패널 열린 상태에서 그리드에서 선택하면 → 속성 패널로 전환
@@ -822,8 +829,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (keyTypeChangedRef.current && isPanelVisible) {
         // 탭 전환으로 인한 선택 해제 → 패널 닫지 않고 레이어 모드로 전환
         setPanelMode("layer");
-      } else if (selectionFromLayerPanelRef.current && isPanelVisible) {
-        // 레이어 패널에서 선택 해제 → 패널 닫지 않고 레이어 모드 유지
+      } else if (
+        isPanelVisible &&
+        (selectionFromLayerPanelRef.current ||
+          panelModeRef.current === "layer")
+      ) {
+        // 레이어 모드에서 선택 해제(Delete, 레이어 패널 내 동작 등) → 레이어 모드 유지
         setPanelMode("layer");
       } else if (!manuallyClosedRef.current) {
         // 일반적인 선택 해제 → 패널 닫기
@@ -836,6 +847,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // 플래그 리셋
     selectionFromLayerPanelRef.current = false;
     keyTypeChangedRef.current = false;
+    if (skipFromKeyboard) useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
 
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
@@ -844,10 +856,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [
     singleKeyIndex,
     selectedKeyElements.length,
-    selectedElements.length,
+    selectedElements,
     isPanelVisible,
     pluginSettingsPanel,
   ]);
+
+  // 언마운트 시 키보드 플래그 오염 방지
+  useEffect(() => {
+    return () => {
+      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
+    };
+  }, []);
 
   // 다중 선택 시 패널 자동 열기
   useEffect(() => {

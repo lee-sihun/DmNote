@@ -151,12 +151,7 @@
     "frameLimit": "帧率限制",
     "speed": "速度",
     "trackHeight": "轨道高度",
-    "fadePosition": "淡出位置",
-    "auto": "自动",
-    "top": "顶部",
-    "bottom": "底部",
-    "none": "无",
-    "both": "全部",
+    "fade": "淡出",
     "reverseEffect": "反向键雨",
     "save": "应用",
     "cancel": "取消"

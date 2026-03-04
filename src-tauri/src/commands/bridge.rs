@@ -53,16 +53,13 @@ pub async fn plugin_bridge_send_to(
         _ => return Err(format!("Unknown target window: {}", target)),
     };
 
-    // 특정 윈도우에만 이벤트 전송 (윈도우가 없으면 무시)
+    // 특정 윈도우에만 이벤트 전송
     if let Some(window) = app.get_webview_window(window_label) {
         window
             .emit("plugin-bridge:message", payload)
             .map_err(|e| e.to_string())?;
+        Ok(())
     } else {
-        log::trace!(
-            "[IPC] plugin_bridge_send_to: target window '{}' not found, ignoring",
-            window_label
-        );
+        Err(format!("Window '{}' not found", window_label))
     }
-    Ok(())
 }

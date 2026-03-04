@@ -113,8 +113,8 @@ const TabList = ({ onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center max-w-[154px] bg-[#1A191E] rounded-[7px] border border-[#2A2A30]">
-      <div className="min-h-[39px] w-full border-b-[1px] border-[#2A2A30] flex flex-col items-center justify-center p-[8px] gap-[8px]">
+    <div className="flex flex-col items-center justify-center max-w-[154px] bg-button-primary rounded-[7px] border border-button-hover">
+      <div className="min-h-[39px] w-full border-b-[1px] border-button-hover flex flex-col items-center justify-center p-[8px] gap-[8px]">
         {customTabs.length === 0 ? (
           <span className="text-style-2 text-[#DBDEE8]">{t("tabs.empty")}</span>
         ) : (
@@ -147,8 +147,8 @@ const TabList = ({ onClose }: TabListProps) => {
                 .map((tab) => (
                   <button
                     key={tab.id}
-                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-[#26262C] active:bg-[#2A2A31] ${
-                      selectedKeyType === tab.id ? "bg-[#26262C]" : ""
+                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-button-hover active:bg-button-active ${
+                      selectedKeyType === tab.id ? "bg-button-hover" : ""
                     }`}
                     onClick={() => handleSelect(tab.id)}
                   >
@@ -162,7 +162,7 @@ const TabList = ({ onClose }: TabListProps) => {
       <div className="flex flex-row p-[8px] w-[154px] gap-[8px]">
         {!maxReached && (
           <button
-            className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]"
+            className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] bg-button-hover hover:bg-button-active active:bg-[#333333]"
             onClick={() => setShowNameModal(true)}
           >
             <PlusIcon />
@@ -173,7 +173,7 @@ const TabList = ({ onClose }: TabListProps) => {
             className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] ${
               isCustomSelected
                 ? "bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929]"
-                : "bg-[#2A2A30] opacity-50 cursor-not-allowed"
+                : "bg-button-hover opacity-50 cursor-not-allowed"
             }`}
             disabled={!isCustomSelected}
             onClick={() => setAskDelete(true)}

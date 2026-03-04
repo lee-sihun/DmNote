@@ -799,6 +799,12 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         }
     }
 
+    // Legacy migration: fadePosition enum -> per-direction pixel fade values
+    data.note_settings.migrate_fade_position();
+    for tab in data.tab_note_overrides.values_mut() {
+        tab.migrate_fade_position();
+    }
+
     merge_default_counters(&mut data.key_counters, &data.keys);
 
     data.counter_animation_presets =
@@ -902,9 +908,6 @@ fn repair_legacy_state(raw: &str) -> AppStoreData {
         }
         if let Some(v) = obj.get("overlayLocked").and_then(Value::as_bool) {
             data.overlay_locked = v;
-        }
-        if let Some(v) = obj.get("overlayVisible").and_then(Value::as_bool) {
-            data.overlay_visible = v;
         }
         if let Some(v) = obj.get("noteEffect").and_then(Value::as_bool) {
             data.note_effect = v;

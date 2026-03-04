@@ -14,7 +14,7 @@ import {
   SRGBColorSpace,
 } from "three";
 import { animationScheduler } from "../../utils/animationScheduler";
-import { fadePositionToUniform } from "../../../types/noteSettings";
+import { resolvedFadeValues } from "../../../types/noteSettings";
 
 const MAX_NOTES = 2048; // 씬에서 동시에 렌더링할 수 있는 최대 노트 수
 
@@ -216,7 +216,8 @@ const vertexShader = `
 // gl_FragCoord.y 는 하단=0, 상단=screenHeight 이므로 distanceFromTop = uScreenHeight - gl_FragCoord.y
 const fragmentShader = `
   uniform float uScreenHeight;
-  uniform float uFadePosition;
+  uniform float uFadeTopPx;
+  uniform float uFadeBottomPx;
   varying vec4 vColorTop;
   varying vec4 vColorBottom;
   varying vec2 vLocalPos;
@@ -224,7 +225,6 @@ const fragmentShader = `
   varying float vRadius;
   varying float vTrackTopY;
   varying float vTrackBottomY;
-  varying float vReverse;
   varying float vNoteTopY;
   varying float vNoteBottomY;
 
@@ -235,26 +235,7 @@ const fragmentShader = `
     float gradientRatio = clamp((currentDOMY - vTrackTopY) / trackHeight, 0.0, 1.0);
     float trackRelativeY = gradientRatio;
 
-    float fadePosFlag = uFadePosition;
-    bool fadeDisabled = abs(fadePosFlag - 3.0) < 0.1;
-    bool fadeBoth = fadePosFlag > 3.5;
-    bool invertForFade = false;
-    if (!fadeDisabled && !fadeBoth) {
-      if (fadePosFlag < 0.5) {
-        invertForFade = (vReverse > 0.5);
-      } else if (abs(fadePosFlag - 1.0) < 0.1) {
-        invertForFade = false;
-      } else if (abs(fadePosFlag - 2.0) < 0.1) {
-        invertForFade = true;
-      }
-    }
-    if (!fadeDisabled && !fadeBoth && invertForFade) {
-      trackRelativeY = 1.0 - trackRelativeY;
-    }
-
     vec4 baseColor = mix(vColorTop, vColorBottom, gradientRatio);
-    float fadeZone = 50.0; // 페이드 영역 50px
-    float fadeRatio = fadeZone / trackHeight; // 트랙 높이 대비 페이드 영역 비율
 
     float alpha = baseColor.a;
 
@@ -271,14 +252,17 @@ const fragmentShader = `
       alpha *= smoothAlpha;
     }
 
-    // 트랙 페이드 영역 적용
-    if (fadeBoth) {
-      float topFade = clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
-      float bottomFade = clamp((1.0 - trackRelativeY) / fadeRatio, 0.0, 1.0);
-      alpha *= min(topFade, bottomFade);
-    } else if (!fadeDisabled && trackRelativeY < fadeRatio) {
-      alpha *= clamp(trackRelativeY / fadeRatio, 0.0, 1.0);
+    // fade mask
+    float fadeMask = 1.0;
+    if (uFadeTopPx > 0.0) {
+      float topFadeRatio = uFadeTopPx / trackHeight;
+      fadeMask = min(fadeMask, clamp(trackRelativeY / topFadeRatio, 0.0, 1.0));
     }
+    if (uFadeBottomPx > 0.0) {
+      float bottomFadeRatio = uFadeBottomPx / trackHeight;
+      fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
+    }
+    alpha *= fadeMask;
 
     gl_FragColor = vec4(baseColor.rgb, alpha);
   }
@@ -358,9 +342,8 @@ export const WebGLTracks = memo(
           uDelayEnabled: {
             value: noteSettings.delayedNoteEnabled ? 1.0 : 0.0,
           },
-          uFadePosition: {
-            value: fadePositionToUniform(noteSettings.fadePosition),
-          },
+          uFadeTopPx: { value: resolvedFadeValues(noteSettings).topPx },
+          uFadeBottomPx: { value: resolvedFadeValues(noteSettings).bottomPx },
         },
         vertexShader,
         fragmentShader,
@@ -699,8 +682,9 @@ export const WebGLTracks = memo(
           noteSettings.shortNoteMinLengthPx || 10;
         materialRef.current.uniforms.uDelayEnabled.value =
           noteSettings.delayedNoteEnabled ? 1.0 : 0.0;
-        materialRef.current.uniforms.uFadePosition.value =
-          fadePositionToUniform(noteSettings.fadePosition);
+        const fade = resolvedFadeValues(noteSettings);
+        materialRef.current.uniforms.uFadeTopPx.value = fade.topPx;
+        materialRef.current.uniforms.uFadeBottomPx.value = fade.bottomPx;
       }
     }, [
       noteSettings.speed,
@@ -709,7 +693,10 @@ export const WebGLTracks = memo(
       noteSettings.shortNoteThresholdMs,
       noteSettings.shortNoteMinLengthPx,
       noteSettings.delayedNoteEnabled,
-      noteSettings.fadePosition,
+      noteSettings.fadeTopPx,
+      noteSettings.fadeBottomPx,
+      noteSettings.reverseFadeTopPx,
+      noteSettings.reverseFadeBottomPx,
     ]);
 
     // 4. 윈도우 리사이즈 처리

@@ -38,7 +38,7 @@ export default function Palette({ color, onColorChange }) {
 
   return (
     <div
-      className="flex flex-col justify-between rounded-[13px] bg-[#1A191E] border-[#2A2A30] border-[1px] p-[8px]"
+      className="flex flex-col justify-between rounded-[13px] bg-button-primary border-button-hover border-[1px] p-[8px]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="grid grid-cols-5 gap-x-[8px] gap-y-[8px]">
@@ -55,7 +55,7 @@ export default function Palette({ color, onColorChange }) {
         placeholder="#FFFFFF"
         value={color}
         onChange={(e) => handleColorChange(e.target.value)}
-        className="w-[142px] h-[22px] mt-[10px] rounded-[7px] bg-[#2A2A30] border-[#3A3943] border-[1px] px-[10px] flex items-center text-style-3 text-[#DBDEE8]"
+        className="w-[142px] h-[22px] mt-[10px] rounded-[7px] bg-button-hover border-button-active border-[1px] px-[10px] flex items-center text-style-3 text-[#DBDEE8]"
       />
     </div>
   );
@@ -64,7 +64,7 @@ export default function Palette({ color, onColorChange }) {
 function Color({ color, onClick }) {
   return (
     <button
-      className="w-[22px] h-[22px] border-[1px] border-[#3A3943] rounded-[7px]"
+      className="w-[22px] h-[22px] border-[1px] border-button-active rounded-[7px]"
       style={{ backgroundColor: color }}
       onClick={onClick}
     />

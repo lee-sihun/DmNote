@@ -46,12 +46,16 @@ export type ClipboardItem =
 interface GridSelectionState {
   // 선택된 요소들
   selectedElements: SelectedElement[];
+  // 명시적으로 선택된 그룹 ID들 (그룹 헤더 클릭으로 선택된 경우)
+  selectedGroupIds: string[];
 
   // 마지막으로 선택된 키의 좌표 (Shift+클릭 범위 선택용)
   lastSelectedKeyBounds: { x: number; y: number; width: number; height: number } | null;
 
   // 클립보드 (복사된 요소들)
   clipboard: ClipboardItem[];
+  // 클립보드에 포함된 그룹 정보 (그룹 헤더 선택 후 복사 시)
+  clipboardGroups: { id: string; name: string; collapsed?: boolean }[];
 
   // 마퀴 선택 상태
   isMarqueeSelecting: boolean;
@@ -64,17 +68,21 @@ interface GridSelectionState {
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용)
   isDraggingOrResizing: boolean;
 
+  // 키보드 동작(paste 등)에서 선택 변경 시 패널 모드 전환 건너뛰기
+  _skipPanelModeSwitch: boolean;
+
   // Actions
   selectElement: (element: SelectedElement, addToSelection?: boolean) => void;
   toggleSelection: (element: SelectedElement) => void;
   deselectElement: (id: string) => void;
   clearSelection: () => void;
   setSelectedElements: (elements: SelectedElement[]) => void;
+  setFullSelection: (elements: SelectedElement[], groupIds: string[]) => void;
   isSelected: (id: string) => boolean;
   setLastSelectedKeyBounds: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
 
   // 클립보드 Actions
-  setClipboard: (items: ClipboardItem[]) => void;
+  setClipboard: (items: ClipboardItem[], groups?: { id: string; name: string; collapsed?: boolean }[]) => void;
   clearClipboard: () => void;
 
   // 마퀴 선택 Actions
@@ -88,24 +96,29 @@ interface GridSelectionState {
   // 드래그/리사이즈 상태 설정
   setDraggingOrResizing: (isDragging: boolean) => void;
 
+  // 패널 모드 전환 건너뛰기 설정
+  setSkipPanelModeSwitch: (skip: boolean) => void;
+
   // 선택된 요소들 일괄 이동
   moveSelectedElements: (deltaX: number, deltaY: number) => void;
 }
 
 export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   selectedElements: [],
+  selectedGroupIds: [],
   lastSelectedKeyBounds: null,
   clipboard: [],
+  clipboardGroups: [],
   isMarqueeSelecting: false,
   marqueeStart: null,
   marqueeEnd: null,
   isMiddleButtonDragging: false,
   isDraggingOrResizing: false,
+  _skipPanelModeSwitch: false,
 
   selectElement: (element, addToSelection = false) => {
     set((state) => {
       if (addToSelection) {
-        // 이미 선택되어 있으면 토글 (선택 해제)
         const existingIndex = state.selectedElements.findIndex(
           (el) => el.id === element.id
         );
@@ -114,16 +127,17 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
             selectedElements: state.selectedElements.filter(
               (el) => el.id !== element.id
             ),
+            selectedGroupIds: [],
           };
         }
-        // 선택에 추가
         return {
           selectedElements: [...state.selectedElements, element],
+          selectedGroupIds: [],
         };
       }
-      // 단일 선택 (기존 선택 대체)
       return {
         selectedElements: [element],
+        selectedGroupIds: [],
       };
     });
   },
@@ -134,16 +148,16 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
         (el) => el.id === element.id
       );
       if (existingIndex >= 0) {
-        // 이미 선택되어 있으면 선택 해제
         return {
           selectedElements: state.selectedElements.filter(
             (el) => el.id !== element.id
           ),
+          selectedGroupIds: [],
         };
       }
-      // 선택에 추가
       return {
         selectedElements: [...state.selectedElements, element],
+        selectedGroupIds: [],
       };
     });
   },
@@ -151,15 +165,20 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   deselectElement: (id) => {
     set((state) => ({
       selectedElements: state.selectedElements.filter((el) => el.id !== id),
+      selectedGroupIds: [],
     }));
   },
 
   clearSelection: () => {
-    set({ selectedElements: [] });
+    set({ selectedElements: [], selectedGroupIds: [] });
   },
 
   setSelectedElements: (elements) => {
-    set({ selectedElements: elements });
+    set({ selectedElements: elements, selectedGroupIds: [] });
+  },
+
+  setFullSelection: (elements, groupIds) => {
+    set({ selectedElements: elements, selectedGroupIds: groupIds });
   },
 
   isSelected: (id) => {
@@ -170,12 +189,12 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
     set({ lastSelectedKeyBounds: bounds });
   },
 
-  setClipboard: (items) => {
-    set({ clipboard: items });
+  setClipboard: (items, groups) => {
+    set({ clipboard: items, clipboardGroups: groups || [] });
   },
 
   clearClipboard: () => {
-    set({ clipboard: [] });
+    set({ clipboard: [], clipboardGroups: [] });
   },
 
   startMarqueeSelection: (x, y) => {
@@ -204,6 +223,10 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
 
   setDraggingOrResizing: (isDragging) => {
     set({ isDraggingOrResizing: isDragging });
+  },
+
+  setSkipPanelModeSwitch: (skip) => {
+    set({ _skipPanelModeSwitch: skip });
   },
 
   moveSelectedElements: (_deltaX, _deltaY) => {
