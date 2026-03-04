@@ -2695,7 +2695,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   return (
     <div
-      className="flex-1 properties-panel-overlay-scroll"
+      className="flex-1 properties-panel-overlay-scroll group/panel"
       onMouseDown={handleEmptySpaceMouseDown}
     >
       <div
@@ -2769,7 +2769,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         toggleCollapsed(gh.groupId);
                       }}
                     >
-                      <div className="opacity-0 group-hover:opacity-60 hover:!opacity-100">
+                      <div className="opacity-0 group-hover/panel:opacity-60 hover:!opacity-100">
                         <ChevronIcon collapsed={gh.isCollapsed} />
                       </div>
                     </div>
