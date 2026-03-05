@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   BUILTIN_FONTS,
-  DEFAULT_FONT_SETTINGS,
   type CustomFont,
   type FontSettings,
   type FontType,

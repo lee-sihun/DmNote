@@ -1,14 +1,15 @@
 import { create } from "zustand";
-import {
-  NOTE_SETTINGS_DEFAULTS,
-  type NoteSettings,
-  type TabNoteOverrides,
-} from "@src/types/noteSettings";
+import type { NoteSettings, TabNoteOverrides } from "@src/types/noteSettings";
 import type { FontSettings } from "@src/types/fonts";
-import { DEFAULT_FONT_SETTINGS } from "@src/types/fonts";
 import type { OverlayResizeAnchor } from "@src/types/settings";
 import type { JsPlugin } from "@src/types/js";
-import { DEFAULT_SHORTCUTS, type ShortcutsState } from "@src/types/shortcuts";
+import type { ShortcutsState } from "@src/types/shortcuts";
+import {
+  getDefaultNoteSettings,
+  getDefaultFontSettings,
+  getDefaultGridSettings,
+  getDefaultShortcuts,
+} from "@src/renderer/defaults";
 
 export interface GridSettings {
   alignmentGuides: boolean;
@@ -17,14 +18,6 @@ export interface GridSettings {
   minimapEnabled: boolean;
   gridSnapSize: number; // 그리드 스냅 크기 (1-10px)
 }
-
-const DEFAULT_GRID_SETTINGS: GridSettings = {
-  alignmentGuides: true,
-  spacingGuides: true,
-  sizeMatchGuides: true,
-  minimapEnabled: false,
-  gridSnapSize: 5,
-};
 
 interface SettingsState {
   hardwareAcceleration: boolean;
@@ -112,9 +105,9 @@ const initialState: SettingsStateSnapshot = {
   overlayLocked: false,
   angleMode: "d3d11",
   noteEffect: false,
-  noteSettings: NOTE_SETTINGS_DEFAULTS,
+  noteSettings: getDefaultNoteSettings(),
   tabNoteOverrides: {},
-  fontSettings: DEFAULT_FONT_SETTINGS,
+  fontSettings: getDefaultFontSettings(),
   useCustomCSS: false,
   customCSSContent: "",
   customCSSPath: null,
@@ -128,8 +121,8 @@ const initialState: SettingsStateSnapshot = {
   autoUpdateEnabled: true,
   overlayResizeAnchor: "top-left",
   keyCounterEnabled: false,
-  gridSettings: DEFAULT_GRID_SETTINGS,
-  shortcuts: DEFAULT_SHORTCUTS,
+  gridSettings: getDefaultGridSettings(),
+  shortcuts: getDefaultShortcuts(),
 };
 
 function mergeSnapshot(

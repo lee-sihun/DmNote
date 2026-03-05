@@ -699,7 +699,7 @@ impl KeyCounterSettings {
 }
 
 fn default_counter_animation_enabled() -> bool {
-    true
+    false
 }
 
 fn default_counter_animation_bezier() -> [f64; 4] {
@@ -1542,6 +1542,7 @@ pub struct BootstrapOverlayState {
 #[serde(rename_all = "camelCase")]
 pub struct BootstrapPayload {
     pub settings: SettingsState,
+    pub defaults: DefaultsPayload,
     pub keys: KeyMappings,
     pub positions: KeyPositions,
     pub stat_positions: StatPositions,
@@ -1551,6 +1552,13 @@ pub struct BootstrapPayload {
     pub current_mode: String,
     pub overlay: BootstrapOverlayState,
     pub key_counters: KeyCounters,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultsPayload {
+    pub settings: SettingsState,
+    pub counter_settings: KeyCounterSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

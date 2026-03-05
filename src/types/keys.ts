@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NOTE_SETTINGS_CONSTRAINTS } from "./noteSettingsConstraints";
+import { getDefaultCounterSettings } from "@src/renderer/defaults";
 
 export const keyCounterPlacementSchema = z.union([
   z.literal("inside"),
@@ -71,8 +72,6 @@ export interface KeyCounterAnimationSettings {
   durationMs: number;
 }
 
-export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = "builtin-ease-out";
-
 export interface KeyCounterSettings {
   enabled: boolean;
   placement: KeyCounterPlacement;
@@ -90,64 +89,13 @@ export interface KeyCounterSettings {
   animation: KeyCounterAnimationSettings;
 }
 
-const COUNTER_DEFAULTS: KeyCounterSettings = Object.freeze({
-  enabled: true,
-  placement: "inside" as KeyCounterPlacement,
-  align: "top" as KeyCounterAlign,
-  alignMode: "center" as KeyCounterAlignMode,
-  // fill: match key text colors (idle/active)
-  fill: Object.freeze({ idle: "rgba(121, 121, 121, 0.9)", active: "#FFFFFF" }),
-  // stroke: transparent (no outline)
-  stroke: Object.freeze({ idle: "transparent", active: "transparent" }),
-  gap: 6,
-  fontSize: 16,
-  fontWeight: 700,
-  fontFamily: null,
-  fontItalic: false,
-  fontUnderline: false,
-  fontStrikethrough: false,
-  animation: Object.freeze({
-    enabled: true,
-    presetId: DEFAULT_COUNTER_ANIMATION_PRESET_ID,
-    bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
-    scale: 1.1,
-    durationMs: 300,
-  }),
-});
+/** @deprecated Use getDefaultCounterAnimationPresetId() from @src/renderer/defaults */
+export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = "builtin-ease-out";
 
-export function createDefaultCounterSettings(): KeyCounterSettings {
-  return {
-    enabled: COUNTER_DEFAULTS.enabled,
-    placement: COUNTER_DEFAULTS.placement,
-    align: COUNTER_DEFAULTS.align,
-    alignMode: COUNTER_DEFAULTS.alignMode,
-    fill: {
-      idle: COUNTER_DEFAULTS.fill.idle,
-      active: COUNTER_DEFAULTS.fill.active,
-    },
-    stroke: {
-      idle: COUNTER_DEFAULTS.stroke.idle,
-      active: COUNTER_DEFAULTS.stroke.active,
-    },
-    gap: COUNTER_DEFAULTS.gap,
-    fontSize: COUNTER_DEFAULTS.fontSize,
-    fontWeight: COUNTER_DEFAULTS.fontWeight,
-    fontFamily: COUNTER_DEFAULTS.fontFamily,
-    fontItalic: COUNTER_DEFAULTS.fontItalic,
-    fontUnderline: COUNTER_DEFAULTS.fontUnderline,
-    fontStrikethrough: COUNTER_DEFAULTS.fontStrikethrough,
-    animation: {
-      enabled: COUNTER_DEFAULTS.animation.enabled,
-      presetId: COUNTER_DEFAULTS.animation.presetId,
-      bezier: [...COUNTER_DEFAULTS.animation.bezier] as CounterAnimationBezier,
-      scale: COUNTER_DEFAULTS.animation.scale,
-      durationMs: COUNTER_DEFAULTS.animation.durationMs,
-    },
-  };
-}
+export { getDefaultCounterSettings as createDefaultCounterSettings };
 
 export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
-  const fallback = createDefaultCounterSettings();
+  const fallback = getDefaultCounterSettings();
   const parsed = keyCounterSettingsInputSchema.safeParse(raw);
   if (!parsed.success) {
     return fallback;
@@ -321,7 +269,7 @@ export const keyPositionSchema = z.object({
   counter: z
     .any()
     .transform((value) => normalizeCounterSettings(value))
-    .default(createDefaultCounterSettings()),
+    .default(getDefaultCounterSettings()),
   // 스타일 관련 속성들
   backgroundColor: z.string().optional(),
   activeBackgroundColor: z.string().optional(),

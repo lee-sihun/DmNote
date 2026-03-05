@@ -17,49 +17,7 @@ export type ShortcutsState = {
   resetZoom: ShortcutBinding;
 };
 
-export const DEFAULT_SHORTCUTS: ShortcutsState = {
-  toggleOverlay: {
-    key: "KeyO",
-    ctrl: true,
-    shift: true,
-    alt: false,
-    meta: false,
-  },
-  toggleOverlayLock: { key: "" },
-  toggleAlwaysOnTop: { key: "" },
-  switchKeyMode: {
-    key: "Tab",
-    ctrl: false,
-    shift: false,
-    alt: false,
-    meta: false,
-  },
-  toggleSettingsPanel: {
-    key: "KeyB",
-    ctrl: true,
-    shift: false,
-    alt: false,
-    meta: false,
-  },
-  zoomIn: {
-    key: "Equal",
-    ctrl: true,
-    shift: false,
-    alt: false,
-    meta: false,
-  },
-  zoomOut: {
-    key: "Minus",
-    ctrl: true,
-    shift: false,
-    alt: false,
-    meta: false,
-  },
-  resetZoom: {
-    key: "Digit0",
-    ctrl: true,
-    shift: false,
-    alt: false,
-    meta: false,
-  },
-};
+import { getDefaultShortcuts } from "@src/renderer/defaults";
+
+/** @deprecated Use getDefaultShortcuts() from @src/renderer/defaults */
+export const DEFAULT_SHORTCUTS: ShortcutsState = getDefaultShortcuts();

@@ -7,9 +7,11 @@ import {
 } from "@src/types/keys";
 import type { StatItemPositions } from "@src/types/statItems";
 import type { GraphItemPositions } from "@src/types/graphItems";
+import type { DefaultsPayload } from "@src/renderer/defaults";
 
 export interface BootstrapPayload {
   settings: SettingsState;
+  defaults: DefaultsPayload;
   keys: KeyMappings;
   positions: KeyPositions;
   statPositions: StatItemPositions;

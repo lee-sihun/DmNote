@@ -28,8 +28,9 @@ use crate::{
     key_sound::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, KeyCounters,
-        KeyMappings, OverlayBounds, OverlayResizeAnchor, SettingsDiff, SettingsState,
+        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload,
+        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds,
+        OverlayResizeAnchor, SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, settings::SettingsService},
     store::AppStore,
@@ -193,6 +194,10 @@ impl AppState {
         let mut custom_js = state.custom_js.clone();
         let _ = custom_js.normalize();
         BootstrapPayload {
+            defaults: DefaultsPayload {
+                settings: SettingsState::default(),
+                counter_settings: KeyCounterSettings::default(),
+            },
             settings: SettingsState {
                 hardware_acceleration: state.hardware_acceleration,
                 always_on_top: state.always_on_top,

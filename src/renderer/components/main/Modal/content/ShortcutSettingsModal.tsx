@@ -6,11 +6,8 @@ import { isMac } from "@utils/platform";
 // import { TooltipGroup } from "@components/main/Modal/TooltipGroup";
 // import FloatingTooltip from "@components/main/Modal/FloatingTooltip";
 import { getScrollShadowState } from "@utils/scrollShadow";
-import {
-  DEFAULT_SHORTCUTS,
-  type ShortcutBinding,
-  type ShortcutsState,
-} from "@src/types/shortcuts";
+import type { ShortcutBinding, ShortcutsState } from "@src/types/shortcuts";
+import { getDefaultShortcuts } from "@src/renderer/defaults";
 
 type ShortcutKey = keyof ShortcutsState;
 
@@ -66,31 +63,32 @@ function isSameShortcut(a: ShortcutBinding, b: ShortcutBinding): boolean {
 }
 
 function getPlatformDefaults(macOS: boolean): ShortcutsState {
-  if (!macOS) return DEFAULT_SHORTCUTS;
+  const defaults = getDefaultShortcuts();
+  if (!macOS) return defaults;
   return {
-    ...DEFAULT_SHORTCUTS,
+    ...defaults,
     toggleOverlay: {
-      ...DEFAULT_SHORTCUTS.toggleOverlay,
+      ...defaults.toggleOverlay,
       ctrl: false,
       meta: true,
     },
     toggleSettingsPanel: {
-      ...DEFAULT_SHORTCUTS.toggleSettingsPanel,
+      ...defaults.toggleSettingsPanel,
       ctrl: false,
       meta: true,
     },
     zoomIn: {
-      ...DEFAULT_SHORTCUTS.zoomIn,
+      ...defaults.zoomIn,
       ctrl: false,
       meta: true,
     },
     zoomOut: {
-      ...DEFAULT_SHORTCUTS.zoomOut,
+      ...defaults.zoomOut,
       ctrl: false,
       meta: true,
     },
     resetZoom: {
-      ...DEFAULT_SHORTCUTS.resetZoom,
+      ...defaults.resetZoom,
       ctrl: false,
       meta: true,
     },

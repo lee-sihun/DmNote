@@ -96,10 +96,10 @@ export const BUILTIN_FONTS: CustomFont[] = [
   },
 ];
 
-// 기본 폰트 설정
-export const DEFAULT_FONT_SETTINGS: FontSettings = {
-  customFonts: [],
-};
+import { getDefaultFontSettings } from "@src/renderer/defaults";
+
+/** @deprecated Use getDefaultFontSettings() from @src/renderer/defaults */
+export const DEFAULT_FONT_SETTINGS: FontSettings = getDefaultFontSettings();
 
 function stripOuterQuotes(value: string): string {
   const trimmed = value.trim();
@@ -307,11 +307,12 @@ function extractFontFaceBodies(css: string): { bodies: string[]; malformed: bool
 
 // 폰트 설정 정규화 함수
 export function normalizeFontSettings(raw: unknown): FontSettings {
+  const defaults = getDefaultFontSettings();
   const parsed = fontSettingsSchema.safeParse({
-    ...DEFAULT_FONT_SETTINGS,
+    ...defaults,
     ...(typeof raw === "object" && raw !== null ? raw : {}),
   });
-  return parsed.success ? parsed.data : DEFAULT_FONT_SETTINGS;
+  return parsed.success ? parsed.data : defaults;
 }
 
 function createValidationResult(

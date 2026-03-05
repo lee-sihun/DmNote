@@ -47,7 +47,10 @@ export interface CounterAnimationDeleteResponse {
   fallbackPresetId: string;
 }
 
-export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = "builtin-ease-out";
+import { getDefaultCounterAnimationPresetId } from "@src/renderer/defaults";
+
+/** @deprecated Use getDefaultCounterAnimationPresetId() from @src/renderer/defaults */
+export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = getDefaultCounterAnimationPresetId();
 
 export function clampCounterAnimationBezier(
   bezier: CounterAnimationBezier | number[],

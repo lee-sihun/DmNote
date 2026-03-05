@@ -10,9 +10,8 @@ import {
 } from "@stores/useSettingsStore";
 import { applyCounterSnapshot, setKeyCounter } from "@stores/keyCounterSignals";
 import { getUndoRedoInProgress } from "@api/pluginDisplayElements";
-import { DEFAULT_GRID_SETTINGS, type SettingsDiff } from "@src/types/settings";
-import type { OverlayResizeAnchor } from "@src/types/settings";
-import { DEFAULT_SHORTCUTS } from "@src/types/shortcuts";
+import type { SettingsDiff, OverlayResizeAnchor } from "@src/types/settings";
+import { initDefaults, getDefaultGridSettings, getDefaultShortcuts } from "@src/renderer/defaults";
 import { initializeCursorSystem, refreshCursorSettings } from "@utils/cursorUtils";
 import type { CustomJs, JsPlugin } from "@src/types/js";
 
@@ -169,6 +168,7 @@ export function useAppBootstrap() {
     (async () => {
       const bootstrap = await window.api.app.bootstrap();
       if (disposed) return;
+      initDefaults(bootstrap.defaults);
       setAll({
         hardwareAcceleration: bootstrap.settings.hardwareAcceleration,
         alwaysOnTop: bootstrap.settings.alwaysOnTop,
@@ -193,8 +193,8 @@ export function useAppBootstrap() {
           (bootstrap.settings as any).autoUpdateEnabled ?? true,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
-        gridSettings: bootstrap.settings.gridSettings ?? DEFAULT_GRID_SETTINGS,
-        shortcuts: bootstrap.settings.shortcuts ?? DEFAULT_SHORTCUTS,
+        gridSettings: bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
+        shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
       });
       useFontStore.setState({
         customFonts: bootstrap.settings.fontSettings.customFonts.map(

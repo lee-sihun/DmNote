@@ -1,16 +1,18 @@
 import {
-  NOTE_SETTINGS_DEFAULTS,
   type NoteSettings,
   normalizeNoteSettings,
 } from "@src/types/noteSettings";
 import {
-  DEFAULT_FONT_SETTINGS,
   type FontSettings,
   normalizeFontSettings,
 } from "@src/types/fonts";
 import { type CustomCss } from "@src/types/css";
 import { type CustomJs } from "@src/types/js";
-import { DEFAULT_SHORTCUTS, type ShortcutsState } from "@src/types/shortcuts";
+import type { ShortcutsState } from "@src/types/shortcuts";
+import {
+  getDefaultSettingsState,
+  getDefaultGridSettings,
+} from "@src/renderer/defaults";
 
 export type OverlayResizeAnchor =
   | "top-left"
@@ -28,13 +30,8 @@ export interface GridSettings {
   gridSnapSize: number; // 그리드 스냅 크기 (1-10px)
 }
 
-export const DEFAULT_GRID_SETTINGS: GridSettings = {
-  alignmentGuides: true,
-  spacingGuides: true,
-  sizeMatchGuides: true,
-  minimapEnabled: false,
-  gridSnapSize: 5,
-};
+/** @deprecated Use getDefaultGridSettings() from @src/renderer/defaults */
+export const DEFAULT_GRID_SETTINGS: GridSettings = getDefaultGridSettings();
 
 export interface SettingsState {
   hardwareAcceleration: boolean;
@@ -60,29 +57,8 @@ export interface SettingsState {
   shortcuts: ShortcutsState;
 }
 
-export const DEFAULT_SETTINGS_STATE: SettingsState = {
-  hardwareAcceleration: true,
-  alwaysOnTop: true,
-  overlayLocked: false,
-  noteEffect: false,
-  noteSettings: NOTE_SETTINGS_DEFAULTS,
-  fontSettings: DEFAULT_FONT_SETTINGS,
-  angleMode: "d3d11",
-  language: "ko",
-  laboratoryEnabled: false,
-  developerModeEnabled: false,
-  trayEnabled: false,
-  autoUpdateEnabled: true,
-  backgroundColor: "transparent",
-  useCustomCSS: false,
-  customCSS: { path: null, content: "" },
-  useCustomJS: false,
-  customJS: { path: null, content: "", plugins: [] },
-  overlayResizeAnchor: "top-left",
-  keyCounterEnabled: false,
-  gridSettings: DEFAULT_GRID_SETTINGS,
-  shortcuts: DEFAULT_SHORTCUTS,
-};
+/** @deprecated Use getDefaultSettingsState() from @src/renderer/defaults */
+export const DEFAULT_SETTINGS_STATE: SettingsState = getDefaultSettingsState();
 
 export type SettingsPatchInput = Partial<
   Omit<

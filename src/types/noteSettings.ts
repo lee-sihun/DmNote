@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NOTE_SETTINGS_CONSTRAINTS } from "./noteSettingsConstraints";
+import { getDefaultNoteSettings } from "@src/renderer/defaults";
 
 export const fadePositionSchema = z.union([
   z.literal("auto"),
@@ -68,6 +69,7 @@ export const noteSettingsSchema = z.object({
 
 export type NoteSettings = z.infer<typeof noteSettingsSchema>;
 
+/** @deprecated Use getDefaultNoteSettings() from @src/renderer/defaults */
 export const NOTE_SETTINGS_DEFAULTS: NoteSettings = Object.freeze({
   frameLimit: NOTE_SETTINGS_CONSTRAINTS.frameLimit.default,
   speed: NOTE_SETTINGS_CONSTRAINTS.speed.default,
@@ -94,11 +96,12 @@ export function resolvedFadeValues(
 }
 
 export function normalizeNoteSettings(raw: unknown): NoteSettings {
+  const defaults = getDefaultNoteSettings();
   const parsed = noteSettingsSchema.safeParse({
-    ...NOTE_SETTINGS_DEFAULTS,
+    ...defaults,
     ...(typeof raw === "object" && raw !== null ? raw : {}),
   });
-  return parsed.success ? parsed.data : NOTE_SETTINGS_DEFAULTS;
+  return parsed.success ? parsed.data : defaults;
 }
 
 /** 탭별 노트 트랙 설정 (모든 필드 optional → 전역 설정에 오버라이드) */
