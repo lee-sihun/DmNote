@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .icon-btn {
+    @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-[#303036] rounded-[4px] transition-colors;
+  }
+  .input-field {
+    @apply text-center h-[23px] bg-[#2A2A30] rounded-[7px] border border-[#3A3943] focus:border-[#459BF8] text-[11px] text-[#D7D8DB];
+  }
+  .btn-danger {
+    @apply bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB];
+  }
+  .btn-secondary {
+    @apply bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#D7D8DB];
+  }
+  .btn-default {
+    @apply px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[11px];
+  }
+}
+
 @font-face {
   font-family: 'SUIT-Regular';
   src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2')

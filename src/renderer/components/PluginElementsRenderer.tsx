@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { PluginElement } from './PluginElement';

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/useKeyStore';
-import type { TabCss, TabCssOverrides } from '@src/types/css';
+import type { TabCssOverrides } from '@src/types/css';
 import type { CustomCss } from '@src/types/css';
 
 const STYLE_ELEMENT_ID = 'dmn-custom-css';
@@ -135,6 +135,6 @@ export function useCustomCssInjection() {
     };
   }, []);
 
-  // Note: selectedKeyType 변경 시 CSS 재적용은 위의 unsubKeyStore에서 처리됨
-  // 별도의 useEffect는 불필요하며 중복 실행을 방지하기 위해 제거됨
+  // 참고: selectedKeyType 변경 시 CSS 재적용은 위 unsubKeyStore에서 처리
+  // 별도 useEffect 불필요, 중복 실행 방지를 위해 제거됨
 }

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -170,7 +171,7 @@ const FloatingPopup = ({
 
     const referenceEl = referenceRef?.current ?? null;
 
-    const handlePointerDownInside = () => {
+    const _handlePointerDownInside = () => {
       pointerCapturedInside = true;
     };
 

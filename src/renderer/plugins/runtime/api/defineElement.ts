@@ -3,14 +3,12 @@
  * 플러그인에서 커스텀 UI 요소를 정의하는 기능을 제공합니다.
  */
 
-import { usePluginMenuStore } from '@stores/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { translatePluginMessage } from '@utils/pluginI18n';
+import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
-import { displayElementInstanceRegistry } from '../displayElement';
 import type { NamespacedStorage } from '../context';
 import type {
   PluginDefinition,
@@ -357,8 +355,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               </button>
             `;
             } else if (schema.type === 'string' || schema.type === 'number') {
-              let inputWidth = 200;
               const strVal = String(value);
+              let inputWidth: number;
 
               if (schema.type === 'number') {
                 inputWidth = 60;
@@ -576,7 +574,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
 
             instancesToRestore.forEach((inst) => {
-              // 각 add 호출 직전에 plugin context 재설정 (async race condition 방지)
+              // 각 add 호출 직전에 plugin context 재설정 (비동기 경합 방지)
               (window as any).__dmn_current_plugin_id = pluginId;
 
               window.api.ui.displayElement.add({

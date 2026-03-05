@@ -1,7 +1,6 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, {
-  useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -14,8 +13,8 @@ import {
   SectionDivider,
 } from './PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
-import ColorPicker from '@components/main/Modal/content/ColorPicker';
-import { isGradientColor } from '@utils/colorUtils';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import { isGradientColor } from '@utils/color/colorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
@@ -44,7 +43,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   panelElement,
   t,
 }) => {
-  const { noteEffect } = useSettingsStore();
+  const { noteEffect: _noteEffect } = useSettingsStore();
 
   // 통합 피커 상태 (카운터 탭 패턴)
   type PickerTarget = 'note' | 'glow' | null;
@@ -257,13 +256,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     pickerFor,
   ]);
 
-  const interactiveRefs = useMemo(
-    () => [noteColorButtonRef, glowColorButtonRef],
-    [],
-  );
+  const interactiveRefs = [noteColorButtonRef, glowColorButtonRef];
 
   // 노트 색상 헬퍼 함수 (내부 상태 기반으로 실시간 반영)
-  const getNoteColorDisplay = useCallback(() => {
+  const getNoteColorDisplay = () => {
     if (noteColorMode === COLOR_MODES.gradient) {
       return {
         style: {
@@ -276,9 +272,9 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       style: { backgroundColor: noteColorTop },
       label: noteColorTop.replace(/^#/, ''),
     };
-  }, [noteColorMode, noteColorTop, noteGradientBottom]);
+  };
 
-  const getGlowColorDisplay = useCallback(() => {
+  const getGlowColorDisplay = () => {
     if (glowColorMode === COLOR_MODES.gradient) {
       return {
         style: {
@@ -291,11 +287,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
       style: { backgroundColor: glowColorTop },
       label: glowColorTop.replace(/^#/, ''),
     };
-  }, [glowColorMode, glowColorTop, glowGradientBottom]);
+  };
 
   // 통합 색상 변경 핸들러 (pickerFor 기반)
-  const handleColorChange = useCallback(
-    (target: 'note' | 'glow', newColor: any) => {
+  const handleColorChange = (target: 'note' | 'glow', newColor: any) => {
       if (target === 'note') {
         if (
           newColor &&
@@ -325,12 +320,9 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           setGlowGradientBottom(newColor);
         }
       }
-    },
-    [],
-  );
+    };
 
-  const handleColorChangeComplete = useCallback(
-    (target: 'note' | 'glow', newColor: any) => {
+  const handleColorChangeComplete = (target: 'note' | 'glow', newColor: any) => {
       let colorValue: NoteColor;
 
       if (target === 'note') {
@@ -378,37 +370,32 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
         onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
       }
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
   // ColorPicker에 전달할 색상 (내부 상태 기반)
-  const notePickerColor = useMemo(() => {
+  const notePickerColor = (() => {
     if (noteColorMode === COLOR_MODES.gradient) {
       return toGradient(noteColorTop, noteGradientBottom);
     }
     return noteColorTop;
-  }, [noteColorMode, noteColorTop, noteGradientBottom]);
+  })();
 
-  const glowPickerColor = useMemo(() => {
+  const glowPickerColor = (() => {
     if (glowColorMode === COLOR_MODES.gradient) {
       return toGradient(glowColorTop, glowGradientBottom);
     }
     return glowColorTop;
-  }, [glowColorMode, glowColorTop, glowGradientBottom]);
+  })();
 
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
-  const handlePickerToggle = useCallback((target: 'note' | 'glow') => {
+  const handlePickerToggle = (target: 'note' | 'glow') => {
     setPickerFor((prev) => (prev === target ? null : target));
-  }, []);
+  };
 
   // 스타일 변경 완료 핸들러
-  const handleStyleChangeComplete = useCallback(
-    (property: keyof KeyPosition, value: any) => {
+  const handleStyleChangeComplete = (property: keyof KeyPosition, value: any) => {
       onKeyUpdate({ index: keyIndex, [property]: value });
-    },
-    [keyIndex, onKeyUpdate],
-  );
+    };
 
   return (
     <>

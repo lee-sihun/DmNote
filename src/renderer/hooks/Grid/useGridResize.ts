@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
@@ -10,11 +10,11 @@ import {
   calculateBounds,
   calculateSnapPoints,
   calculateSizeSnap,
-} from '@utils/smartGuides';
+} from '@utils/grid/smartGuides';
 import type { SelectedElement } from '@stores/useGridSelectionStore';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/keys';
-import type { ElementBounds } from '@utils/smartGuides';
+import type { ElementBounds } from '@utils/grid/smartGuides';
 
 interface ResizeHandle {
   id: string;
@@ -78,7 +78,7 @@ export function useGridResize({
   } | null>(null);
 
   // 리사이즈 시작 시 히스토리 저장
-  const handleResizeStart = useCallback((handle?: ResizeHandle) => {
+  const handleResizeStart = (_handle?: ResizeHandle) => {
     if (resizeStartRef.current) return;
     resizeStartRef.current = true;
 
@@ -103,11 +103,10 @@ export function useGridResize({
         currentGraphPositions,
         currentPluginElements,
       );
-  }, []);
+  };
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)
-  const handleElementResizePreview = useCallback(
-    (
+  const handleElementResizePreview = (
       elementId: string,
       newBounds: {
         x: number;
@@ -414,12 +413,9 @@ export function useGridResize({
       };
       setPreviewBounds(previewData);
       finalBoundsRef.current = previewData;
-    },
-    [getOtherElements],
-  );
+    };
 
-  const handleKeyResizePreview = useCallback(
-    (
+  const handleKeyResizePreview = (
       index: number,
       newBounds: {
         x: number;
@@ -430,12 +426,9 @@ export function useGridResize({
       },
     ) => {
       handleElementResizePreview(`key-${index}`, newBounds);
-    },
-    [handleElementResizePreview],
-  );
+    };
 
-  const handleStatResizePreview = useCallback(
-    (
+  const handleStatResizePreview = (
       index: number,
       newBounds: {
         x: number;
@@ -446,12 +439,9 @@ export function useGridResize({
       },
     ) => {
       handleElementResizePreview(`stat-${index}`, newBounds);
-    },
-    [handleElementResizePreview],
-  );
+    };
 
-  const handleGraphResizePreview = useCallback(
-    (
+  const handleGraphResizePreview = (
       index: number,
       newBounds: {
         x: number;
@@ -462,13 +452,10 @@ export function useGridResize({
       },
     ) => {
       handleElementResizePreview(`graph-${index}`, newBounds);
-    },
-    [handleElementResizePreview],
-  );
+    };
 
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
-  const handlePluginResizePreview = useCallback(
-    (
+  const handlePluginResizePreview = (
       fullId: string,
       newBounds: {
         x: number;
@@ -767,13 +754,10 @@ export function useGridResize({
       };
       setPreviewBounds(previewData);
       finalBoundsRef.current = previewData;
-    },
-    [getOtherElements],
-  );
+    };
 
   // 통합 리사이즈 핸들러 (키 및 플러그인 요소 지원) - 프리뷰 모드
-  const handleResize = useCallback(
-    (newBounds: {
+  const handleResize = (newBounds: {
       x: number;
       y: number;
       width: number;
@@ -792,18 +776,10 @@ export function useGridResize({
       } else if (element.type === 'plugin') {
         handlePluginResizePreview(element.id, newBounds);
       }
-    },
-    [
-      selectedElements,
-      handleKeyResizePreview,
-      handleStatResizePreview,
-      handleGraphResizePreview,
-      handlePluginResizePreview,
-    ],
-  );
+    };
 
   // 리사이즈 종료 처리 - 실제 요소에 최종 bounds 적용
-  const handleResizeComplete = useCallback(() => {
+  const handleResizeComplete = () => {
     resizeStartRef.current = false;
 
     // 스마트 가이드 클리어
@@ -904,20 +880,20 @@ export function useGridResize({
     finalBoundsRef.current = null;
 
     onResizeEnd?.();
-  }, [selectedElements, selectedKeyType, onResizeEnd]);
+  };
 
   // 그룹 리사이즈 핸들러 - 프리뷰 모드
-  const handleGroupResize = useCallback((result: GroupResizeResult) => {
+  const handleGroupResize = (result: GroupResizeResult) => {
     setPreviewGroupBounds(result.groupBounds);
     setPreviewElementBounds(result.elementBounds);
     finalGroupBoundsRef.current = {
       groupBounds: result.groupBounds,
       elementBounds: result.elementBounds,
     };
-  }, []);
+  };
 
   // 그룹 리사이즈 완료 처리 - 실제 요소들에 최종 bounds 적용
-  const handleGroupResizeComplete = useCallback(() => {
+  const handleGroupResizeComplete = () => {
     resizeStartRef.current = false;
 
     // 스마트 가이드 클리어
@@ -1072,7 +1048,7 @@ export function useGridResize({
     finalGroupBoundsRef.current = null;
 
     onResizeEnd?.();
-  }, [selectedKeyType, onResizeEnd]);
+  };
 
   return {
     handleResizeStart,

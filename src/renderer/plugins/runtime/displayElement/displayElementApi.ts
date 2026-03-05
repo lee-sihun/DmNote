@@ -6,8 +6,8 @@
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { DisplayElementInstance } from '@utils/displayElementInstance';
-import { html } from '@utils/templateEngine';
-import { createPluginTranslator } from '@utils/pluginI18n';
+import { html } from '@utils/core/templateEngine';
+import { createPluginTranslator } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
 import {
   registerDisplayElementInstance,

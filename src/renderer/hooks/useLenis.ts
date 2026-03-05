@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+/* eslint-disable react-hooks/refs */
+import { useEffect, useRef, useState } from 'react';
 import Lenis from 'lenis';
 import { LENIS_CONFIG } from '@config/lenis';
 
@@ -57,17 +58,17 @@ export function useLenis(options: UseLenisOptions = {}) {
   } = options;
 
   // callback ref - DOM 요소가 마운트/언마운트될 때 호출됨
-  const scrollContainerRef = useCallback((node: HTMLElement | null) => {
+  const scrollContainerRef = (node: HTMLElement | null) => {
     if (wrapperRef.current === node) return;
     wrapperRef.current = node;
     setWrapper(node);
-  }, []);
+  };
 
   useEffect(() => {
     if (!wrapper) return;
 
     const computeScrollbarWidth = () => {
-      // offsetWidth includes scrollbar, clientWidth excludes it
+      // offsetWidth는 스크롤바 포함, clientWidth는 스크롤바 제외
       const width = Math.max(0, wrapper.offsetWidth - wrapper.clientWidth);
       setScrollbarWidth((prev) => (prev === width ? prev : width));
     };
@@ -81,8 +82,8 @@ export function useLenis(options: UseLenisOptions = {}) {
     }
 
     // Lenis 인스턴스 생성
-    // NOTE: Lenis의 autoResize는 ResizeObserver로 content 변화를 감지한다.
-    // wrapper를 content로 지정하면(=same node) 콘텐츠 높이 변화가 관측되지 않아
+    // 참고: Lenis의 autoResize는 ResizeObserver로 content 변화를 감지한다.
+    // wrapper를 content로 지정하면(=동일 노드) 콘텐츠 높이 변화가 관측되지 않아
     // limit 계산이 갱신되지 않고 스크롤이 중간에 멈출 수 있다.
     const contentEl =
       wrapper.childElementCount === 1
@@ -135,7 +136,7 @@ export function useLenis(options: UseLenisOptions = {}) {
 
   return {
     scrollContainerRef,
-    /** 스크롤 컨테이너 DOM 요소 (상태로 관리됨) */
+    /** 스크롤 컨테이너 DOM 요소 (state로 관리됨) */
     wrapperElement: wrapper,
     lenisInstance: lenisRef,
     /** wrapper의 실제 스크롤바 너비(px). overlay 스크롤바인 경우 0일 수 있음 */

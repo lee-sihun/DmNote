@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { KeyPosition } from '@src/types/keys';
 import {
   PropertyRow,
@@ -9,9 +9,9 @@ import {
   FontStyleToggle,
 } from './index';
 import Checkbox from '@components/main/common/Checkbox';
-import FontPicker from '@components/main/Modal/content/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/FontManagerModal';
-import SoundPicker from '@components/main/Modal/content/SoundPicker';
+import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
+import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;
@@ -114,51 +114,42 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   );
   const spacingHistorySeededRef = useRef(false);
 
-  const isSameSpacingValue = useCallback(
-    (a: number | null, b: number | null): boolean => {
-      if (a === null || b === null) return false;
-      return Math.abs(a - b) < SPACING_COMMIT_EPSILON;
-    },
-    [],
-  );
+  const isSameSpacingValue = (a: number | null, b: number | null): boolean => {
+    if (a === null || b === null) return false;
+    return Math.abs(a - b) < SPACING_COMMIT_EPSILON;
+  };
 
-  const commitSpacing = useCallback(
-    (spacing: number) => {
-      const options = spacingHistorySeededRef.current
-        ? { skipHistory: true }
-        : undefined;
+  const commitSpacing = (spacing: number) => {
+    const options = spacingHistorySeededRef.current
+      ? { skipHistory: true }
+      : undefined;
 
-      if (handleBatchSpacingCommit) {
-        handleBatchSpacingCommit(spacing, options);
-      } else {
-        handleBatchSpacing(spacing, options);
-      }
+    if (handleBatchSpacingCommit) {
+      handleBatchSpacingCommit(spacing, options);
+    } else {
+      handleBatchSpacing(spacing, options);
+    }
 
-      spacingHistorySeededRef.current = true;
-      lastCommittedSpacingRef.current = spacing;
-    },
-    [handleBatchSpacingCommit, handleBatchSpacing],
-  );
+    spacingHistorySeededRef.current = true;
+    lastCommittedSpacingRef.current = spacing;
+  };
 
-  const onSpacingChange = useCallback(
-    (value: number) => {
-      lastSpacingRef.current = value;
-      if (spacingDebounceTimerRef.current) {
-        clearTimeout(spacingDebounceTimerRef.current);
-      }
-      spacingDebounceTimerRef.current = setTimeout(() => {
-        spacingDebounceTimerRef.current = null;
-        const spacing = lastSpacingRef.current;
-        if (spacing === null) return;
-        if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing))
-          return;
-        commitSpacing(spacing);
-      }, SPACING_COMMIT_DEBOUNCE_MS);
-    },
-    [commitSpacing, isSameSpacingValue],
-  );
+  const onSpacingChange = (value: number) => {
+    lastSpacingRef.current = value;
+    if (spacingDebounceTimerRef.current) {
+      clearTimeout(spacingDebounceTimerRef.current);
+    }
+    spacingDebounceTimerRef.current = setTimeout(() => {
+      spacingDebounceTimerRef.current = null;
+      const spacing = lastSpacingRef.current;
+      if (spacing === null) return;
+      if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing))
+        return;
+      commitSpacing(spacing);
+    }, SPACING_COMMIT_DEBOUNCE_MS);
+  };
 
-  const onSpacingBlur = useCallback(() => {
+  const onSpacingBlur = () => {
     if (spacingDebounceTimerRef.current) {
       clearTimeout(spacingDebounceTimerRef.current);
       spacingDebounceTimerRef.current = null;
@@ -178,7 +169,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
     lastSpacingRef.current = null;
     lastCommittedSpacingRef.current = null;
     spacingHistorySeededRef.current = false;
-  }, [commitSpacing, isSameSpacingValue]);
+  };
 
   useEffect(() => {
     return () => {

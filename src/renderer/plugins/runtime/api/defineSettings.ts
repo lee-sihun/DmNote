@@ -5,7 +5,7 @@
 
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
-import { translatePluginMessage } from '@utils/pluginI18n';
+import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
 import type { NamespacedStorage } from '../context';
 import type {
@@ -281,8 +281,8 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
               </button>
             `;
             } else if (schema.type === 'string' || schema.type === 'number') {
-              let inputWidth = 200;
               const strVal = String(value);
+              let inputWidth: number;
 
               if (schema.type === 'number') {
                 inputWidth = 60;

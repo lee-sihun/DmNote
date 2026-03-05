@@ -1,12 +1,10 @@
 import React, {
   useRef,
   useEffect,
-  useMemo,
   useState,
-  useCallback,
-} from 'react';
+  } from 'react';
 import { createPortal } from 'react-dom';
-import { isMac } from '@utils/platform';
+import { isMac } from '@utils/core/platform';
 import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
@@ -23,7 +21,7 @@ import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
-} from '@utils/smartGuides';
+} from '@utils/grid/smartGuides';
 import {
   useGridSelectionStore,
   SelectedElement,
@@ -33,13 +31,13 @@ import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementSto
 import { useKeyStore } from '@stores/useKeyStore';
 import { useTranslation } from '@contexts/I18nContext';
 import ListPopup, { ListItem } from './main/Modal/ListPopup';
-import { html, styleMap, css } from '@utils/templateEngine';
-import { translatePluginMessage } from '@utils/pluginI18n';
+import { html, styleMap, css } from '@utils/core/templateEngine';
+import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {
   registerExposedActions,
   clearExposedActions,
 } from '@utils/displayElementActions';
-import { setupPluginDropdownInteractions } from '@utils/pluginDropdownManager';
+import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
 
 /**
  * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
@@ -185,8 +183,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     localeRef.current = locale;
   }, [locale]);
 
-  const pluginTranslate = useCallback(
-    (
+  const pluginTranslate = (
       key: string,
       params?: Record<string, string | number>,
       fallback?: string,
@@ -197,12 +194,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         key,
         params,
         fallback,
-      }),
-    [definition?.messages, locale],
-  );
+      });
 
-  const pluginTranslateStable = useCallback(
-    (
+  const pluginTranslateStable = (
       key: string,
       params?: Record<string, string | number>,
       fallback?: string,
@@ -213,9 +207,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         key,
         params,
         fallback,
-      }),
-    [definition?.messages],
-  );
+      });
 
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
@@ -372,7 +364,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   });
 
   // 앵커 기반 위치 계산
-  const calculatedPosition = useMemo(() => {
+  const calculatedPosition = (() => {
     let baseX = element.position.x;
     let baseY = element.position.y;
 
@@ -399,16 +391,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       x: baseX + positionOffset.x,
       y: baseY + positionOffset.y,
     };
-  }, [
-    element.anchor,
-    element.position,
-    positions,
-    selectedKeyType,
-    positionOffset,
-  ]);
+  })();
 
   // 히스토리 저장 함수 (드래그 시작 시 호출)
-  const saveToHistory = useCallback(() => {
+  const saveToHistory = () => {
     if (windowType !== 'main') return;
 
     const { keyMappings, positions } = useKeyStoreForHistory.getState();
@@ -424,7 +410,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         graphPositions,
         pluginElements,
       );
-  }, [windowType]);
+  };
 
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기
   const { getOtherElements } = useSmartGuidesElements();
@@ -496,8 +482,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   });
 
   // 선택 요소 드래그 핸들러 (스마트 가이드 포함)
-  const handleSelectionDragMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
       if (!isSelectionMode || e.button !== 0) return;
 
       e.preventDefault();
@@ -631,8 +616,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
               )
             : null;
 
-          let finalX = newX;
-          let finalY = newY;
+          let finalX: number;
+          let finalY: number;
 
           // 스마트 가이드 스냅 적용
           if (snapResult?.didSnapX) {
@@ -748,22 +733,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       document.addEventListener('mouseup', handleMouseUp);
       // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
       window.addEventListener('blur', handleMouseUp);
-    },
-    [
-      isSelectionMode,
-      zoom,
-      onMultiDrag,
-      onMultiDragStart,
-      onMultiDragEnd,
-      element.position.x,
-      element.position.y,
-      element.measuredSize,
-      element.estimatedSize,
-      element.fullId,
-      getOtherElements,
-      selectedElements,
-    ],
-  );
+    };
 
   const { ref: draggableRef, dx: renderX, dy: renderY } = draggable;
 
@@ -780,7 +750,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           });
           setShadowRoot(root);
         }
-      } catch (err) {
+      } catch {
         console.warn(
           `[PluginElement] Shadow DOM already attached for ${element.fullId}`,
         );
@@ -789,7 +759,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   }, [element.scoped, element.fullId, shadowRoot]);
 
   // 템플릿 렌더링 결과 계산
-  const renderedContent = useMemo(() => {
+  const renderedContent = (() => {
     if (definition && definition.template) {
       const state = element.state || {};
       const settings = element.settings || {};
@@ -813,14 +783,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       }
     }
     return null;
-  }, [
-    definition,
-    element.state,
-    element.settings,
-    windowType,
-    locale,
-    pluginTranslate,
-  ]);
+  })();
 
   // 이벤트 위임 (메인 윈도우에서만)
   useEffect(() => {
@@ -1071,9 +1034,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       target.addEventListener('click', handleEvent);
       target.addEventListener('change', handleEvent);
       target.addEventListener('input', handleEvent);
-      target.addEventListener('blur', handleInputBlur, true); // capture phase
+      target.addEventListener('blur', handleInputBlur, true); // capture 단계
 
-      // cleanup
+      // 정리
       return () => {
         target.removeEventListener('click', handleCheckboxToggle);
         target.removeEventListener('click', handleEvent);
@@ -1098,7 +1061,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     definition?.resizeAnchor,
   ]);
 
-  // Overlay Logic (onMount)
+  // Overlay 로직 (onMount)
   useEffect(() => {
     if (windowType !== 'overlay') return;
 
@@ -1110,7 +1073,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     if (!definition.onMount) return;
 
-    // reset previously exposed actions for this element
+    // 이전 expose 액션 초기화
     exposedActionsRef.current = {};
     clearExposedActions(element.fullId);
 
@@ -1161,7 +1124,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // console.log(`[PluginElement] onHook registered for ${event}`);
         if (event === 'key') {
           // 백엔드 재구독 대신 키 이벤트 버스 사용
-          import('@utils/keyEventBus').then(({ keyEventBus }) => {
+          import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
             const unsub = keyEventBus.subscribe((payload) => {
               // console.log(`[PluginElement] Key event received via hook`, payload);
               callback(payload);
@@ -1170,7 +1133,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           });
         } else if (event === 'rawKey') {
           // Raw key 이벤트 버스 사용 (구독 기반 - 구독자가 있을 때만 백엔드가 emit)
-          import('@utils/rawKeyEventBus').then(({ rawKeyEventBus }) => {
+          import('@utils/core/rawKeyEventBus').then(({ rawKeyEventBus }) => {
             rawKeyEventBus
               .subscribe((payload) => {
                 callback(payload);
@@ -1224,7 +1187,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       },
     };
 
-    console.log(`[PluginElement] Mounting ${element.fullId}`);
+    console.warn(`[PluginElement] Mounting ${element.fullId}`);
 
     const mountCleanup = definition.onMount(context);
     if (typeof mountCleanup === 'function') {
@@ -1244,7 +1207,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     updateElementBatched,
   ]);
 
-  const elementStyle: React.CSSProperties = useMemo(() => {
+  const elementStyle: React.CSSProperties = (() => {
     const shouldPromoteTransformLayer =
       windowType === 'overlay' ||
       (windowType === 'main' &&
@@ -1280,24 +1243,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
 
     return { ...baseStyle, ...element.style };
-  }, [
-    renderX,
-    renderY,
-    element.zIndex,
-    element.draggable,
-    element.onClick,
-    element.style,
-    element.measuredSize,
-    definition?.resizable,
-    windowType,
-    isDraggingOrResizing,
-    isViewportTransforming,
-    arrayIndex,
-    keyCount,
-  ]);
+  })();
 
-  const attachRef = useCallback(
-    (node: HTMLDivElement | null) => {
+  const attachRef = (node: HTMLDivElement | null) => {
       if (node) {
         containerRef.current = node;
         // 선택 모드가 아닐 때만 드래그 ref 연결
@@ -1305,9 +1253,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           draggableRef(node);
         }
       }
-    },
-    [element.draggable, windowType, draggableRef, isSelectionMode],
-  );
+    };
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -1337,7 +1283,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     setContextMenuOpen(true);
   };
 
-  const deletePluginElement = useCallback(() => {
+  const deletePluginElement = () => {
     // onDelete 핸들러 호출 (자동 래핑되어 있음)
     if (element.onDelete && typeof element.onDelete === 'string') {
       const handler = (window as any)[element.onDelete];
@@ -1351,7 +1297,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     } else {
       usePluginDisplayElementStore.getState().removeElement(element.fullId);
     }
-  }, [element]);
+  };
 
   // onClick 핸들러
   const handleClick = (e: React.MouseEvent) => {
@@ -1518,7 +1464,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   };
 
   // 컨텍스트 메뉴 항목 생성
-  const contextMenuItems = useMemo<ListItem[]>(() => {
+  const contextMenuItems: ListItem[] = (() => {
     if (!element.contextMenu) return [];
 
     const {
@@ -1552,10 +1498,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     );
 
     return items;
-  }, [element.contextMenu, pluginTranslate, t]);
+  })();
 
-  const createActionsProxy = useCallback(
-    (elementId: string) =>
+  const createActionsProxy = (elementId: string) =>
       new Proxy(
         {},
         {
@@ -1581,9 +1526,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             };
           },
         },
-      ),
-    [],
-  );
+      );
 
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {

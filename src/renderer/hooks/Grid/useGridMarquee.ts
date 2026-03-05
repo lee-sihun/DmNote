@@ -2,7 +2,7 @@
  * Grid 마퀴(범위 선택) 관련 로직 훅
  */
 
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -63,20 +63,17 @@ export function useGridMarquee({
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
   // 마퀴 선택 중 마우스 이동 핸들러
-  const handleMarqueeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isMarqueeSelecting) return;
+  const handleMarqueeMouseMove = (e: MouseEvent) => {
+    if (!isMarqueeSelecting) return;
 
-      const gridCoords = clientToGridCoords(e.clientX, e.clientY);
-      if (gridCoords) {
-        updateMarqueeSelection(gridCoords.x, gridCoords.y);
-      }
-    },
-    [isMarqueeSelecting, clientToGridCoords, updateMarqueeSelection],
-  );
+    const gridCoords = clientToGridCoords(e.clientX, e.clientY);
+    if (gridCoords) {
+      updateMarqueeSelection(gridCoords.x, gridCoords.y);
+    }
+  };
 
   // 마퀴 선택 완료 시 요소 선택 처리
-  const handleMarqueeMouseUp = useCallback(() => {
+  const handleMarqueeMouseUp = () => {
     if (!isMarqueeSelecting) return;
 
     const rect = getMarqueeRect(marqueeStart, marqueeEnd);
@@ -169,19 +166,7 @@ export function useGridMarquee({
     }
 
     endMarqueeSelection();
-  }, [
-    isMarqueeSelecting,
-    marqueeStart,
-    marqueeEnd,
-    positions,
-    statPositions,
-    graphPositions,
-    selectedKeyType,
-    pluginElements,
-    setSelectedElements,
-    clearSelection,
-    endMarqueeSelection,
-  ]);
+  };
 
   // 마퀴 선택 이벤트 등록
   useEffect(() => {

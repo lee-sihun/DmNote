@@ -1,0 +1,16 @@
+import { invoke } from '@tauri-apps/api/core';
+import { subscribe } from './shared';
+
+import type {
+  SettingsState,
+  SettingsPatchInput,
+  SettingsDiff,
+} from '@src/types/settings';
+
+export const settingsApi = {
+  get: () => invoke<SettingsState>('settings_get'),
+  update: (patch: SettingsPatchInput) =>
+    invoke<SettingsState>('settings_update', { patch }),
+  onChanged: (listener: (diff: SettingsDiff) => void) =>
+    subscribe<SettingsDiff>('settings:changed', listener),
+};

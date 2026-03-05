@@ -76,7 +76,7 @@ interface GridSelectionState {
   // 키보드 동작(paste 등)에서 선택 변경 시 패널 모드 전환 건너뛰기
   _skipPanelModeSwitch: boolean;
 
-  // Actions
+  // 액션
   selectElement: (element: SelectedElement, addToSelection?: boolean) => void;
   toggleSelection: (element: SelectedElement) => void;
   deselectElement: (id: string) => void;

@@ -21,7 +21,7 @@ interface PluginMenuState {
   clearAll: () => void;
 }
 
-export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
+export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
   keyMenuItems: [],
   gridMenuItems: [],
 

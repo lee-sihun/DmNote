@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import type {
   KeyPosition,
   NoteColor,
@@ -97,7 +96,7 @@ const sortByPrimaryAxis = (
       getPrimaryAxisValue(a, direction) - getPrimaryAxisValue(b, direction),
   );
 
-const getAxisSpan = (
+const _getAxisSpan = (
   elements: LayoutElement[],
   direction: AxisDirection,
 ): number => {
@@ -527,17 +526,15 @@ export function useBatchHandlers({
     (el) => el.type === 'graph',
   );
 
-  const getKeyLikePosition = useCallback(
+  const getKeyLikePosition = 
     (type: KeyLikeType, index: number) => {
       if (type === 'key') return keyPositions[selectedKeyType]?.[index] ?? null;
       if (type === 'stat')
         return statPositions[selectedKeyType]?.[index] ?? null;
       return graphPositions?.[selectedKeyType]?.[index] ?? null;
-    },
-    [keyPositions, statPositions, graphPositions, selectedKeyType],
-  );
+    };
 
-  const dispatchKeyUpdates = useCallback(
+  const dispatchKeyUpdates = 
     (
       updates: Array<{ index: number } & Partial<KeyPosition>>,
       kind: 'preview' | 'commit',
@@ -561,11 +558,9 @@ export function useBatchHandlers({
         return;
       }
       updates.forEach((update) => onKeyUpdate(update));
-    },
-    [onKeyBatchPreview, onKeyPreview, onKeyBatchUpdate, onKeyUpdate],
-  );
+    };
 
-  const dispatchStatUpdates = useCallback(
+  const dispatchStatUpdates = 
     (
       updates: Array<{ index: number } & Partial<StatItemPosition>>,
       kind: 'preview' | 'commit',
@@ -591,11 +586,9 @@ export function useBatchHandlers({
         return;
       }
       updates.forEach((update) => onStatUpdate(update));
-    },
-    [onStatBatchPreview, onStatPreview, onStatBatchUpdate, onStatUpdate],
-  );
+    };
 
-  const dispatchGraphUpdates = useCallback(
+  const dispatchGraphUpdates = 
     (
       updates: Array<{ index: number } & Partial<GraphItemPosition>>,
       kind: 'preview' | 'commit',
@@ -624,11 +617,9 @@ export function useBatchHandlers({
       if (onGraphUpdate) {
         updates.forEach((update) => onGraphUpdate(update));
       }
-    },
-    [onGraphBatchPreview, onGraphPreview, onGraphBatchUpdate, onGraphUpdate],
-  );
+    };
 
-  const getSelectedLayoutElements = useCallback((): LayoutElement[] => {
+  const getSelectedLayoutElements = (): LayoutElement[] => {
     return selectedKeyLikeElements
       .filter(
         (el): el is { type: KeyLikeType; index: number } =>
@@ -647,9 +638,9 @@ export function useBatchHandlers({
         };
       })
       .filter((element): element is LayoutElement => element !== null);
-  }, [getKeyLikePosition, selectedKeyLikeElements]);
+  };
 
-  const dispatchKeyLikeUpdates = useCallback(
+  const dispatchKeyLikeUpdates = 
     (
       updates: KeyLikeBatchUpdate[],
       kind: 'preview' | 'commit' = 'commit',
@@ -696,12 +687,10 @@ export function useBatchHandlers({
           skipHistory: hasSavedHistory,
         });
       }
-    },
-    [dispatchKeyUpdates, dispatchStatUpdates, dispatchGraphUpdates],
-  );
+    };
 
   // 스타일 변경 (프리뷰)
-  const handleBatchStyleChange = useCallback(
+  const handleBatchStyleChange = 
     (property: keyof KeyPosition, value: any) => {
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
@@ -723,19 +712,10 @@ export function useBatchHandlers({
         { index: number } & Partial<GraphItemPosition>
       >;
       dispatchGraphUpdates(graphUpdates, 'preview');
-    },
-    [
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      dispatchGraphUpdates,
-      selectedKeys,
-      selectedStats,
-      selectedGraphs,
-    ],
-  );
+    };
 
   // 스타일 변경 완료 (저장)
-  const handleBatchStyleChangeComplete = useCallback(
+  const handleBatchStyleChangeComplete = 
     (property: keyof KeyPosition, value: any) => {
       const currentKeys = keyPositions[selectedKeyType] || [];
       const currentStats = statPositions[selectedKeyType] || [];
@@ -851,22 +831,10 @@ export function useBatchHandlers({
           skipHistory: hasSavedHistory,
         });
       }
-    },
-    [
-      keyPositions,
-      statPositions,
-      selectedKeyType,
-      selectedKeys,
-      selectedStats,
-      selectedGraphs,
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      dispatchGraphUpdates,
-    ],
-  );
+    };
 
   // 정렬 핸들러
-  const handleBatchAlign = useCallback(
+  const handleBatchAlign = 
     (
       direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
     ) => {
@@ -931,18 +899,16 @@ export function useBatchHandlers({
       }
 
       dispatchKeyLikeUpdates(updates);
-    },
-    [dispatchKeyLikeUpdates, getSelectedLayoutElements],
-  );
+    };
 
   // 분배 핸들러
-  const handleBatchDistribute = useCallback(
+  const handleBatchDistribute = 
     (direction: 'horizontal' | 'vertical') => {
       const elements = getSelectedLayoutElements();
 
       if (elements.length < 3) return;
 
-      let updates: KeyLikeBatchUpdate[] = [];
+      let updates: KeyLikeBatchUpdate[];
 
       if (direction === 'horizontal') {
         const sorted = [...elements].sort((a, b) => a.x - b.x);
@@ -975,15 +941,13 @@ export function useBatchHandlers({
       }
 
       dispatchKeyLikeUpdates(updates);
-    },
-    [dispatchKeyLikeUpdates, getSelectedLayoutElements],
-  );
+    };
 
   /**
    * 간격 적용 공통 로직 (preview/commit 공용)
    * 반환: 변경이 필요한 업데이트 배열 (없으면 빈 배열)
    */
-  const computeSpacingUpdates = useCallback(
+  const computeSpacingUpdates = 
     (spacing: number): KeyLikeBatchUpdate[] => {
       const originalElements = getSelectedLayoutElements();
       if (originalElements.length < 2) return [];
@@ -1049,39 +1013,31 @@ export function useBatchHandlers({
 
         return dxChanged || dyChanged;
       });
-    },
-    [getSelectedLayoutElements],
-  );
+    };
 
   // 간격 프리뷰 (타이핑 중 시각적 반영, 히스토리 미저장)
-  const handleBatchSpacingPreview = useCallback(
+  const handleBatchSpacingPreview = 
     (spacing: number) => {
       const updates = computeSpacingUpdates(spacing);
       if (updates.length === 0) return;
       dispatchKeyLikeUpdates(updates, 'preview');
-    },
-    [computeSpacingUpdates, dispatchKeyLikeUpdates],
-  );
+    };
 
   // 간격 커밋
-  const handleBatchSpacingCommit = useCallback(
+  const handleBatchSpacingCommit = 
     (spacing: number, options?: BatchCommitOptions) => {
       const updates = computeSpacingUpdates(spacing);
       if (updates.length === 0) return;
       dispatchKeyLikeUpdates(updates, 'commit', options);
-    },
-    [computeSpacingUpdates, dispatchKeyLikeUpdates],
-  );
+    };
 
   // 기존 호환용 (외부에서 직접 호출 시 commit 모드)
-  const handleBatchSpacing = useCallback(
+  const handleBatchSpacing = 
     (spacing: number, options?: BatchCommitOptions) => {
       handleBatchSpacingCommit(spacing, options);
-    },
-    [handleBatchSpacingCommit],
-  );
+    };
 
-  const getBatchSpacingValue = useCallback(() => {
+  const getBatchSpacingValue = () => {
     const elements = getSelectedLayoutElements();
     if (elements.length < 2) {
       return { isMixed: false, value: 0 };
@@ -1118,10 +1074,10 @@ export function useBatchHandlers({
     const firstGap = gaps[0];
     const isMixed = gaps.some((gap) => Math.abs(gap - firstGap) > 0.05);
     return { isMixed, value: firstGap };
-  }, [getSelectedLayoutElements]);
+  };
 
   // 일괄 크기 변경 핸들러
-  const handleBatchResize = useCallback(
+  const handleBatchResize = 
     (dimension: 'width' | 'height', value: number) => {
       let hasSavedHistory = false;
 
@@ -1159,19 +1115,10 @@ export function useBatchHandlers({
           skipHistory: hasSavedHistory,
         });
       }
-    },
-    [
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      dispatchGraphUpdates,
-      selectedKeys,
-      selectedStats,
-      selectedGraphs,
-    ],
-  );
+    };
 
   // 카운터 업데이트 핸들러
-  const handleBatchCounterUpdate = useCallback(
+  const handleBatchCounterUpdate = 
     (updates: Partial<KeyCounterSettings>) => {
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
@@ -1216,20 +1163,10 @@ export function useBatchHandlers({
           skipHistory: hasSavedHistory,
         });
       }
-    },
-    [
-      dispatchKeyUpdates,
-      dispatchStatUpdates,
-      keyPositions,
-      statPositions,
-      selectedKeyType,
-      selectedKeys,
-      selectedStats,
-    ],
-  );
+    };
 
   // 노트 색상 변경 (프리뷰) - 키 요소만
-  const handleBatchNoteColorChange = useCallback(
+  const handleBatchNoteColorChange = 
     (newColor: any) => {
       let colorValue: NoteColor;
       if (
@@ -1251,12 +1188,10 @@ export function useBatchHandlers({
         .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
       dispatchKeyUpdates(updates as any, 'preview');
-    },
-    [dispatchKeyUpdates, selectedKeys],
-  );
+    };
 
   // 노트 색상 변경 완료 (저장) - 키 요소만
-  const handleBatchNoteColorChangeComplete = useCallback(
+  const handleBatchNoteColorChangeComplete = 
     (newColor: any) => {
       let colorValue: NoteColor;
       if (
@@ -1278,12 +1213,10 @@ export function useBatchHandlers({
         .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
       dispatchKeyUpdates(updates as any, 'commit');
-    },
-    [dispatchKeyUpdates, selectedKeys],
-  );
+    };
 
   // 글로우 색상 변경 (프리뷰) - 키 요소만
-  const handleBatchGlowColorChange = useCallback(
+  const handleBatchGlowColorChange = 
     (newColor: any) => {
       let colorValue: NoteColor;
       if (
@@ -1305,12 +1238,10 @@ export function useBatchHandlers({
         .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
       dispatchKeyUpdates(updates as any, 'preview');
-    },
-    [dispatchKeyUpdates, selectedKeys],
-  );
+    };
 
   // 글로우 색상 변경 완료 (저장) - 키 요소만
-  const handleBatchGlowColorChangeComplete = useCallback(
+  const handleBatchGlowColorChangeComplete = 
     (newColor: any) => {
       let colorValue: NoteColor;
       if (
@@ -1332,11 +1263,9 @@ export function useBatchHandlers({
         .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
       dispatchKeyUpdates(updates as any, 'commit');
-    },
-    [dispatchKeyUpdates, selectedKeys],
-  );
+    };
 
-  const handleKeyOnlyStyleChangeComplete = useCallback(
+  const handleKeyOnlyStyleChangeComplete = 
     (property: keyof KeyPosition, value: any) => {
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
@@ -1344,9 +1273,7 @@ export function useBatchHandlers({
         { index: number } & Partial<KeyPosition>
       >;
       dispatchKeyUpdates(keyUpdates, 'commit');
-    },
-    [selectedKeys, dispatchKeyUpdates],
-  );
+    };
 
   return {
     handleBatchStyleChange,

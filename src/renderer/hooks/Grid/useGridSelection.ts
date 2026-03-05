@@ -5,7 +5,6 @@
  * - 복사/붙여넣기
  */
 
-import { useCallback } from 'react';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
@@ -54,8 +53,8 @@ interface UseGridSelectionReturn {
 export function useGridSelection({
   selectedElements,
   selectedKeyType,
-  keyMappings,
-  positions,
+  keyMappings: _keyMappings,
+  positions: _positions,
 }: UseGridSelectionParams): UseGridSelectionReturn {
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
   const setSelectedElements = useGridSelectionStore(
@@ -65,7 +64,7 @@ export function useGridSelection({
   const setClipboard = useGridSelectionStore((state) => state.setClipboard);
 
   // 선택된 요소들의 위치를 오버레이에 동기화하는 함수
-  const syncSelectedElementsToOverlay = useCallback(() => {
+  const syncSelectedElementsToOverlay = () => {
     // 키 위치 동기화
     const currentPositions = useKeyStore.getState().positions;
     window.api.keys.updatePositions(currentPositions).catch((error: Error) => {
@@ -119,11 +118,10 @@ export function useGridSelection({
     } catch (error) {
       console.error('Failed to sync plugin elements to overlay', error);
     }
-  }, []);
+  };
 
   // 선택된 요소들 일괄 이동 함수 (배치 업데이트)
-  const moveSelectedElements = useCallback(
-    (
+  const moveSelectedElements = (
       deltaX: number,
       deltaY: number,
       saveHistory = false,
@@ -276,12 +274,10 @@ export function useGridSelection({
           .getState()
           .setElements(newElements, { skipSync: !syncToOverlay });
       }
-    },
-    [selectedElements, selectedKeyType],
-  );
+    };
 
   // 선택된 요소들 삭제 함수 (배치 삭제)
-  const deleteSelectedElements = useCallback(async () => {
+  const deleteSelectedElements = async () => {
     if (selectedElements.length === 0) return;
 
     const keysToDelete = selectedElements
@@ -350,7 +346,7 @@ export function useGridSelection({
       // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
       useKeyStore.getState().setLocalUpdateInProgress(true);
 
-      // Atomic update: mappings와 positions를 동시에 업데이트하여 중간 상태 방지
+      // Atomic update: mappings, positions 동시 업데이트로 중간 상태 방지
       useKeyStore
         .getState()
         .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
@@ -403,7 +399,7 @@ export function useGridSelection({
           positions: updatedPositions,
         });
       } catch {
-        // ignore
+        // 무시
       }
     }
 
@@ -432,7 +428,7 @@ export function useGridSelection({
           positions: updatedPositions,
         });
       } catch {
-        // ignore
+        // 무시
       }
     }
 
@@ -476,10 +472,10 @@ export function useGridSelection({
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
     }
-  }, [selectedElements, selectedKeyType, clearSelection]);
+  };
 
   // 선택된 요소들 복사
-  const copySelectedElements = useCallback(() => {
+  const copySelectedElements = () => {
     if (selectedElements.length === 0) return;
 
     // 최신 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
@@ -528,7 +524,7 @@ export function useGridSelection({
         );
         if (pluginElement) {
           // fullId를 제외한 나머지 데이터 복사
-          const { fullId, ...elementData } = pluginElement;
+          const { fullId: _fullId, ...elementData } = pluginElement;
           clipboardItems.push({
             type: 'plugin',
             element: elementData,
@@ -566,10 +562,10 @@ export function useGridSelection({
 
       setClipboard(clipboardItems, clipboardGroups);
     }
-  }, [selectedElements, selectedKeyType, setClipboard]);
+  };
 
   // 클립보드에서 붙여넣기
-  const pasteElements = useCallback(async () => {
+  const pasteElements = async () => {
     // 최신 클립보드 상태를 직접 스토어에서 가져오기 (클로저 문제 방지)
     const currentClipboard = useGridSelectionStore.getState().clipboard;
     if (currentClipboard.length === 0) return;
@@ -882,7 +878,7 @@ export function useGridSelection({
         elements: pluginEls,
       });
     } catch {}
-  }, [clipboard, selectedKeyType, setSelectedElements]);
+  };
 
   return {
     moveSelectedElements,

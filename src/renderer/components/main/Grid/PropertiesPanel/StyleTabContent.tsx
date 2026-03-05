@@ -1,9 +1,8 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, {
   useState,
   useRef,
-  useCallback,
   useEffect,
-  useMemo,
 } from 'react';
 import type { StyleTabContentProps } from './types';
 import type { ImageFit, KeyPosition } from '@src/types/keys';
@@ -14,11 +13,11 @@ import {
   FontStyleToggle,
   SectionDivider,
 } from './PropertyInputs';
-import ImagePicker from '../../Modal/content/ImagePicker';
-import ColorPicker from '../../Modal/content/ColorPicker';
-import FontPicker from '../../Modal/content/FontPicker';
-import FontManagerModal from '../../Modal/content/FontManagerModal';
-import SoundPicker from '../../Modal/content/SoundPicker';
+import ImagePicker from '../../Modal/content/pickers/ImagePicker';
+import ColorPicker from '../../Modal/content/pickers/ColorPicker';
+import FontPicker from '../../Modal/content/pickers/FontPicker';
+import FontManagerModal from '../../Modal/content/managers/FontManagerModal';
+import SoundPicker from '../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../common/Checkbox';
 
 // 피커 타겟 타입
@@ -58,12 +57,12 @@ interface StyleTabContentInternalProps extends StyleTabContentProps {
 const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   keyIndex,
   keyPosition,
-  keyCode,
+  keyCode: _keyCode,
   keyInfo,
   onPositionChange,
   onKeyUpdate,
   onKeyPreview,
-  onKeyMappingChange,
+  onKeyMappingChange: _onKeyMappingChange,
   isListening = false,
   onKeyListen,
   mappingControl,
@@ -180,31 +179,27 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   ]);
 
   // interactiveRefs
-  const colorPickerInteractiveRefs = useMemo(
-    () => [bgColorBtnRef, borderColorBtnRef, fontColorBtnRef],
-    [],
-  );
+  const colorPickerInteractiveRefs = [bgColorBtnRef, borderColorBtnRef, fontColorBtnRef];
 
   // 실제 사용할 이미지 버튼 ref (외부에서 제공되면 외부 것 사용)
-  const actualImageButtonRef = imageButtonRef || internalImageButtonRef;
+  const _actualImageButtonRef = imageButtonRef || internalImageButtonRef;
 
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
-  const handlePickerToggle = useCallback((target: PickerTarget) => {
+  const handlePickerToggle = (target: PickerTarget) => {
     setPickerFor((prev) => (prev === target ? null : target));
-  }, []);
+  };
 
   // 이미지 피커 토글 (외부 핸들러가 있으면 사용, 없으면 내부 상태 사용)
-  const handleImagePickerToggle = useCallback(() => {
+  const _handleImagePickerToggle = () => {
     if (onToggleImagePicker) {
       onToggleImagePicker();
       setPickerFor(null); // 다른 피커 닫기
     } else {
       handlePickerToggle('image');
     }
-  }, [onToggleImagePicker, handlePickerToggle]);
+  };
 
-  const resolveColorProperty = useCallback(
-    (target: StyleColorTarget): StyleColorProperty => {
+  const resolveColorProperty = (target: StyleColorTarget): StyleColorProperty => {
       if (colorState !== 'active') return target;
       switch (target) {
         case 'backgroundColor':
@@ -216,12 +211,9 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         default:
           return target;
       }
-    },
-    [colorState],
-  );
+    };
 
-  const activeColorPropertyFor = useCallback(
-    (target: StyleColorTarget): ActiveStyleColorProperty => {
+  const activeColorPropertyFor = (target: StyleColorTarget): ActiveStyleColorProperty => {
       switch (target) {
         case 'backgroundColor':
           return 'activeBackgroundColor';
@@ -230,33 +222,24 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         case 'fontColor':
           return 'activeFontColor';
       }
-    },
-    [],
-  );
+    };
 
   const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
   // 현재 피커 색상값 가져오기
-  const colorValueFor = useCallback(
-    (target: StyleColorTarget): string => {
+  const colorValueFor = (target: StyleColorTarget): string => {
       return localColors[resolveColorProperty(target)];
-    },
-    [localColors, resolveColorProperty],
-  );
+    };
 
   // 드래그 중 로컬 상태만 업데이트
-  const handleColorChange = useCallback(
-    (target: StyleColorTarget, color: string) => {
+  const handleColorChange = (target: StyleColorTarget, color: string) => {
       const prop = resolveColorProperty(target);
       setLocalColors((prev) => ({ ...prev, [prop]: color }));
-    },
-    [resolveColorProperty],
-  );
+    };
 
   // 드래그 완료 시 부모에게 전달
-  const handleColorChangeComplete = useCallback(
-    (target: StyleColorTarget, color: string) => {
+  const handleColorChangeComplete = (target: StyleColorTarget, color: string) => {
       const prop = resolveColorProperty(target);
       setLocalColors((prev) => ({ ...prev, [prop]: color }));
 
@@ -275,167 +258,115 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       }
 
       onKeyUpdate({ index: keyIndex, ...updates });
-    },
-    [
-      activeColorPropertyFor,
-      colorState,
-      keyIndex,
-      keyPosition,
-      localColors,
-      onKeyUpdate,
-      resolveColorProperty,
-    ],
-  );
+    };
 
   // 위치 변경 핸들러
-  const handlePositionXChange = useCallback(
-    (value: number) => {
+  const handlePositionXChange = (value: number) => {
       if (onLocalDxChange) {
         onLocalDxChange(value);
       }
       onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
-    },
-    [keyIndex, localDy, keyPosition.dy, onPositionChange, onLocalDxChange],
-  );
+    };
 
-  const handlePositionYChange = useCallback(
-    (value: number) => {
+  const handlePositionYChange = (value: number) => {
       if (onLocalDyChange) {
         onLocalDyChange(value);
       }
       onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
-    },
-    [keyIndex, localDx, keyPosition.dx, onPositionChange, onLocalDyChange],
-  );
+    };
 
   // 크기 변경 핸들러
-  const handleWidthChange = useCallback(
-    (value: number) => {
+  const handleWidthChange = (value: number) => {
       if (onLocalWidthChange) {
         onLocalWidthChange(value);
         onKeyPreview?.(keyIndex, { width: value });
       } else {
         onKeyUpdate({ index: keyIndex, width: value });
       }
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate, onLocalWidthChange],
-  );
+    };
 
-  const handleHeightChange = useCallback(
-    (value: number) => {
+  const handleHeightChange = (value: number) => {
       if (onLocalHeightChange) {
         onLocalHeightChange(value);
         onKeyPreview?.(keyIndex, { height: value });
       } else {
         onKeyUpdate({ index: keyIndex, height: value });
       }
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate, onLocalHeightChange],
-  );
+    };
 
   // 스타일 변경 핸들러
-  const handleStyleChange = useCallback(
-    (property: keyof KeyPosition, value: any) => {
+  const _handleStyleChange = (property: keyof KeyPosition, value: any) => {
       onKeyPreview?.(keyIndex, { [property]: value });
-    },
-    [keyIndex, onKeyPreview],
-  );
+    };
 
-  const handleStyleChangeComplete = useCallback(
-    (property: keyof KeyPosition, value: any) => {
+  const handleStyleChangeComplete = (property: keyof KeyPosition, value: any) => {
       onKeyUpdate({ index: keyIndex, [property]: value });
-    },
-    [keyIndex, onKeyUpdate],
-  );
+    };
 
   // 이미지 변경 핸들러
-  const handleIdleImageChange = useCallback(
-    (imageUrl: string) => {
+  const handleIdleImageChange = (imageUrl: string) => {
       onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
       onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
-  const handleActiveImageChange = useCallback(
-    (imageUrl: string) => {
+  const handleActiveImageChange = (imageUrl: string) => {
       onKeyPreview?.(keyIndex, { activeImage: imageUrl });
       onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
-  const handleIdleTransparentChange = useCallback(
-    (checked: boolean) => {
+  const handleIdleTransparentChange = (checked: boolean) => {
       onKeyPreview?.(keyIndex, { idleTransparent: checked });
       onKeyUpdate({ index: keyIndex, idleTransparent: checked });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
-  const handleActiveTransparentChange = useCallback(
-    (checked: boolean) => {
+  const handleActiveTransparentChange = (checked: boolean) => {
       onKeyPreview?.(keyIndex, { activeTransparent: checked });
       onKeyUpdate({ index: keyIndex, activeTransparent: checked });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
-  const handleIdleImageReset = useCallback(() => {
+  const handleIdleImageReset = () => {
     onKeyPreview?.(keyIndex, { inactiveImage: '' });
     onKeyUpdate({ index: keyIndex, inactiveImage: '' });
-  }, [keyIndex, onKeyPreview, onKeyUpdate]);
+  };
 
-  const handleActiveImageReset = useCallback(() => {
+  const handleActiveImageReset = () => {
     onKeyPreview?.(keyIndex, { activeImage: '' });
     onKeyUpdate({ index: keyIndex, activeImage: '' });
-  }, [keyIndex, onKeyPreview, onKeyUpdate]);
+  };
 
-  const handleIdleImageFitChange = useCallback(
-    (fit: ImageFit) => {
+  const handleIdleImageFitChange = (fit: ImageFit) => {
       onKeyPreview?.(keyIndex, { idleImageFit: fit });
       onKeyUpdate({ index: keyIndex, idleImageFit: fit });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
-  const handleActiveImageFitChange = useCallback(
-    (fit: ImageFit) => {
+  const handleActiveImageFitChange = (fit: ImageFit) => {
       onKeyPreview?.(keyIndex, { activeImageFit: fit });
       onKeyUpdate({ index: keyIndex, activeImageFit: fit });
-    },
-    [keyIndex, onKeyPreview, onKeyUpdate],
-  );
+    };
 
   // 표시 텍스트 핸들러
-  const handleDisplayTextChange = useCallback(
-    (value: string) => {
+  const handleDisplayTextChange = (value: string) => {
       onKeyPreview?.(keyIndex, { displayText: value });
-    },
-    [keyIndex, onKeyPreview],
-  );
+    };
 
-  const handleDisplayTextBlur = useCallback(() => {
+  const handleDisplayTextBlur = () => {
     onKeyUpdate({
       index: keyIndex,
       displayText: keyPosition.displayText || '',
     });
-  }, [keyIndex, keyPosition.displayText, onKeyUpdate]);
+  };
 
   // 클래스명 핸들러
-  const handleClassNameChange = useCallback(
-    (value: string) => {
+  const handleClassNameChange = (value: string) => {
       onKeyPreview?.(keyIndex, { className: value });
-    },
-    [keyIndex, onKeyPreview],
-  );
+    };
 
-  const handleClassNameBlur = useCallback(() => {
+  const handleClassNameBlur = () => {
     onKeyUpdate({ index: keyIndex, className: keyPosition.className || '' });
-  }, [keyIndex, keyPosition.className, onKeyUpdate]);
+  };
 
   // 이미지 피커 열림 상태 (외부 또는 내부)
-  const isImagePickerOpen = onToggleImagePicker
+  const _isImagePickerOpen = onToggleImagePicker
     ? showImagePicker
     : pickerFor === 'image';
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, } from 'react';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
@@ -6,7 +6,7 @@ import { useLayerGroupStore } from '@stores/useLayerGroupStore';
 import { useHistoryStore } from '@stores/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
-import { applyCounterSnapshot } from '@stores/keyCounterSignals';
+import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import type {
   CounterAnimationBezier,
   KeyMappings,
@@ -91,7 +91,7 @@ export function useKeyManager() {
   );
 
   // 히스토리에 현재 상태 저장 (플러그인 요소 포함)
-  const saveToHistory = useCallback(() => {
+  const saveToHistory = () => {
     pushState(
       keyMappings,
       positions,
@@ -99,14 +99,7 @@ export function useKeyManager() {
       graphPositions,
       pluginElements,
     );
-  }, [
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    pluginElements,
-    pushState,
-  ]);
+  };
 
   const handlePositionChange = (index: number, dx: number, dy: number) => {
     const current = positions[selectedKeyType] || [];
@@ -1107,7 +1100,7 @@ export function useKeyManager() {
     }
   };
 
-  const handleUndo = useCallback(async () => {
+  const handleUndo = async () => {
     setUndoRedoInProgress(true);
     try {
       // 현재 상태를 가져와서 undo 호출 시 전달
@@ -1246,14 +1239,14 @@ export function useKeyManager() {
               positions: previousState.statPositions,
             });
           } catch {
-            // ignore
+            // 무시
           }
           try {
             window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
               positions: previousState.graphPositions,
             });
           } catch {
-            // ignore
+            // 무시
           }
         } catch (error) {
           console.error('Failed to apply undo', error);
@@ -1262,18 +1255,9 @@ export function useKeyManager() {
     } finally {
       setUndoRedoInProgress(false);
     }
-  }, [
-    undo,
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    setKeyMappings,
-    setPositions,
-    setPluginElements,
-  ]);
+  };
 
-  const handleRedo = useCallback(async () => {
+  const handleRedo = async () => {
     setUndoRedoInProgress(true);
     try {
       // 현재 상태를 가져와서 redo 호출 시 전달
@@ -1401,14 +1385,14 @@ export function useKeyManager() {
               positions: nextState.statPositions,
             });
           } catch {
-            // ignore
+            // 무시
           }
           try {
             window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
               positions: nextState.graphPositions,
             });
           } catch {
-            // ignore
+            // 무시
           }
         } catch (error) {
           console.error('Failed to apply redo', error);
@@ -1417,20 +1401,10 @@ export function useKeyManager() {
     } finally {
       setUndoRedoInProgress(false);
     }
-  }, [
-    redo,
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    setKeyMappings,
-    setPositions,
-    setPluginElements,
-  ]);
+  };
 
   // 속성 패널에서 키 매핑 변경 (인덱스로 키 코드 업데이트)
-  const handleKeyMappingChange = useCallback(
-    (index: number, newKey: string) => {
+  const handleKeyMappingChange = (index: number, newKey: string) => {
       saveToHistory();
 
       const mapping = keyMappings[selectedKeyType] || [];
@@ -1445,13 +1419,10 @@ export function useKeyManager() {
       window.api.keys.update(updatedMappings).catch((error) => {
         console.error('Failed to update key mapping', error);
       });
-    },
-    [selectedKeyType, keyMappings, saveToHistory, setKeyMappings],
-  );
+    };
 
   // 속성 패널에서 인덱스로 키 속성 업데이트 (히스토리 포함)
-  const handleKeyStyleUpdate = useCallback(
-    (index: number, updates: Partial<KeyPositions[string][number]>) => {
+  const handleKeyStyleUpdate = (index: number, updates: Partial<KeyPositions[string][number]>) => {
       const state = useKeyStore.getState();
       const mode = state.selectedKeyType || selectedKeyType;
       const currentPositions = state.positions;
@@ -1479,13 +1450,10 @@ export function useKeyManager() {
         .finally(() => {
           setLocalUpdateInProgress(false);
         });
-    },
-    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
-  );
+    };
 
   // 다중 선택 시 여러 키를 한 번에 업데이트 (배치 업데이트)
-  const handleKeyBatchStyleUpdate = useCallback(
-    (
+  const handleKeyBatchStyleUpdate = (
       updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
       options?: { skipHistory?: boolean },
     ) => {
@@ -1533,9 +1501,7 @@ export function useKeyManager() {
         .finally(() => {
           setLocalUpdateInProgress(false);
         });
-    },
-    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
-  );
+    };
 
   return {
     selectedKey,

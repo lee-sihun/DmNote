@@ -1,6 +1,6 @@
 import type { PluginDisplayElement } from '@src/types/api';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { html, styleMap, css } from '@src/renderer/utils/templateEngine';
+import { html, styleMap, css } from '@utils/core/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateHelpers,
@@ -226,7 +226,7 @@ export class DisplayElementInstance extends String {
 
   private renderFromTemplate(): void {
     if (!this.template || !this.state) return;
-    let output: any = '';
+    let output: any;
     try {
       output = this.template({ ...this.state }, this.templateHelpers);
     } catch (error) {

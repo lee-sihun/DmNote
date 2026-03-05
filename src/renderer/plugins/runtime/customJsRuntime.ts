@@ -1,5 +1,5 @@
 /**
- * Custom JS Runtime
+ * 커스텀 JS 런타임
  * 플러그인 JS 파일을 로드하고 실행하는 런타임입니다.
  *
  * 이 파일은 모듈화된 플러그인 시스템의 진입점으로,
@@ -14,7 +14,7 @@
 
 import { usePluginMenuStore } from '@stores/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { extractPluginId } from '@utils/pluginUtils';
+import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
 import {
   displayElementInstanceRegistry,
@@ -215,7 +215,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   };
   
   try {
-    // User code is automatically wrapped in a function scope for isolation
+    // 사용자 코드를 격리를 위한 함수 스코프로 자동 래핑
     (function(){
 ${plugin.content}
     })();
@@ -239,7 +239,7 @@ ${plugin.content}
         delete (anyWindow as any).__dmn_plugin_window_proxy;
         delete (anyWindow as any).__dmn_current_plugin_id;
       } catch {
-        // noop
+        // 무시
       }
 
       if (previousCleanup) {

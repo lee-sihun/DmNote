@@ -2,24 +2,24 @@ import { create } from 'zustand';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 
 interface LayerGroupStoreState {
-  /** Per-mode layer group definitions (persisted via backend) */
+  /** 모드별 레이어 그룹 정의 (백엔드 통해 영속화) */
   layerGroups: LayerGroups;
-  /** UI-only collapsed state: Set of group IDs that are collapsed */
+  /** UI 전용 접기 상태: 접힌 그룹 ID Set */
   collapsedGroups: Set<string>;
 
-  // Setters
+  // Setter
   setLayerGroups: (groups: LayerGroups) => void;
 
-  // Group CRUD operations
+  // 그룹 CRUD 연산
   addGroup: (mode: string, group: LayerGroupDef) => LayerGroups;
   removeGroup: (mode: string, groupId: string) => LayerGroups;
   renameGroup: (mode: string, groupId: string, newName: string) => LayerGroups;
 
-  // Collapse/expand (UI only)
+  // 접기/펼치기 (UI 전용)
   toggleCollapsed: (groupId: string) => void;
   setCollapsed: (groupId: string, collapsed: boolean) => void;
 
-  // Helpers
+  // 헬퍼
   getGroupsForMode: (mode: string) => LayerGroupDef[];
   getGroupById: (mode: string, groupId: string) => LayerGroupDef | undefined;
 }
@@ -59,7 +59,7 @@ export const useLayerGroupStore = create<LayerGroupStoreState>((set, get) => ({
       [mode]: modeGroups.filter((g) => g.id !== groupId),
     };
     set({ layerGroups: updated });
-    // Also remove from collapsed
+    // 접기 상태에서도 제거
     const collapsed = new Set(get().collapsedGroups);
     collapsed.delete(groupId);
     set({ collapsedGroups: collapsed });

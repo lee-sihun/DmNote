@@ -19,7 +19,7 @@ import { useGraphItemStore } from '@stores/useGraphItemStore';
 import { useHistoryStore } from '@stores/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { ARROW_KEY_HISTORY_DELAY } from './constants';
-import { isMac } from '@utils/platform';
+import { isMac } from '@utils/core/platform';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
@@ -89,7 +89,7 @@ export function useGridKeyboard({
 
       const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
 
-      // Ctrl/Cmd + G: Group selected
+      // Ctrl/Cmd + G: 선택 요소 그룹화
       if (isPrimaryModifierPressed && !e.shiftKey && e.code === 'KeyG') {
         e.preventDefault();
         if (selectedElements.length < 2) return;
@@ -186,7 +186,7 @@ export function useGridKeyboard({
         return;
       }
 
-      // Ctrl/Cmd + Shift + G: Ungroup selected
+      // Ctrl/Cmd + Shift + G: 선택 요소 그룹 해제
       if (isPrimaryModifierPressed && e.shiftKey && e.code === 'KeyG') {
         e.preventDefault();
         if (selectedElements.length === 0) return;
@@ -318,14 +318,14 @@ export function useGridKeyboard({
         return;
       }
 
-      // ] 키로 앞으로 (bring forward)
+      // ] 키로 앞으로 이동
       if (e.key === ']' && typeof onMoveForward === 'function') {
         e.preventDefault();
         onMoveForward();
         return;
       }
 
-      // [ 키로 뒤로 (send backward)
+      // [ 키로 뒤로 이동
       if (e.key === '[' && typeof onMoveBackward === 'function') {
         e.preventDefault();
         onMoveBackward();
@@ -347,7 +347,7 @@ export function useGridKeyboard({
     newGroupLabel,
   ]);
 
-  // Undo/Redo 단축키 핸들러
+  // Undo/Redo 단축키 처리
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -368,7 +368,7 @@ export function useGridKeyboard({
 
       const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
 
-      // Ctrl+Z: Undo
+      // Ctrl+Z: 실행 취소
       if (
         isPrimaryModifierPressed &&
         !e.shiftKey &&
@@ -379,7 +379,7 @@ export function useGridKeyboard({
           onUndo();
         }
       }
-      // Ctrl+Shift+Z: Redo
+      // Ctrl+Shift+Z: 다시 실행
       else if (
         isPrimaryModifierPressed &&
         e.shiftKey &&

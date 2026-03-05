@@ -36,7 +36,7 @@ export {
   type NamespacedStorage,
 } from './context';
 
-// API
+// API 모듈
 export {
   createDefineElement,
   createDefineSettings,

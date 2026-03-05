@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/I18nContext';
 import MoveIcon from '@assets/svgs/move.svg';

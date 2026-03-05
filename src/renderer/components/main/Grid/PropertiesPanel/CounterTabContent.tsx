@@ -1,7 +1,6 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, {
-  useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -19,10 +18,10 @@ import {
 } from './PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import ColorPicker from '@components/main/Modal/content/ColorPicker';
-import FontPicker from '@components/main/Modal/content/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/FontManagerModal';
-import CounterAnimationPicker from '@components/main/Modal/content/CounterAnimationPicker';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
+import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 
 type PickerTarget = 'fill' | 'stroke' | 'font' | null;
 type ColorState = 'idle' | 'active';
@@ -75,81 +74,57 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     counterSettings.stroke.active,
   ]);
 
-  const colorPickerInteractiveRefs = useMemo(
-    () => [fillBtnRef, strokeBtnRef],
-    [],
-  );
+  const colorPickerInteractiveRefs = [fillBtnRef, strokeBtnRef];
 
-  const handleCounterUpdate = useCallback(
-    (updates: Partial<KeyCounterSettings>) => {
-      const currentSettings = normalizeCounterSettings(keyPosition.counter);
-      const newSettings = { ...currentSettings, ...updates };
-      onKeyUpdate({ index: keyIndex, counter: newSettings });
-    },
-    [keyIndex, keyPosition.counter, onKeyUpdate],
-  );
+  const handleCounterUpdate = (updates: Partial<KeyCounterSettings>) => {
+    const currentSettings = normalizeCounterSettings(keyPosition.counter);
+    const newSettings = { ...currentSettings, ...updates };
+    onKeyUpdate({ index: keyIndex, counter: newSettings });
+  };
 
-  const handleAnimationUpdate = useCallback(
-    (nextAnimation: KeyCounterAnimationSettings) => {
-      handleCounterUpdate({ animation: nextAnimation });
-    },
-    [handleCounterUpdate],
-  );
+  const handleAnimationUpdate = (nextAnimation: KeyCounterAnimationSettings) => {
+    handleCounterUpdate({ animation: nextAnimation });
+  };
 
-  const handlePickerToggle = useCallback(
-    (target: Exclude<PickerTarget, null>) => {
-      setPickerFor((prev) => (prev === target ? null : target));
-    },
-    [],
-  );
+  const handlePickerToggle = (target: Exclude<PickerTarget, null>) => {
+    setPickerFor((prev) => (prev === target ? null : target));
+  };
 
-  const getDisplayColor = useCallback((color: string): string => {
+  const getDisplayColor = (color: string): string => {
     if (!color) return '#ffffff';
     if (color.startsWith('rgba') || color.startsWith('rgb')) return color;
     if (color.startsWith('#')) return color;
     return '#ffffff';
-  }, []);
+  };
 
-  const activeColorFor = useCallback(
-    (target: Exclude<PickerTarget, null>, state: ColorState): string => {
-      if (target === 'fill') {
-        return state === 'active'
-          ? localColors.fillActive
-          : localColors.fillIdle;
-      }
+  const activeColorFor = (target: Exclude<PickerTarget, null>, state: ColorState): string => {
+    if (target === 'fill') {
       return state === 'active'
-        ? localColors.strokeActive
-        : localColors.strokeIdle;
-    },
-    [
-      localColors.fillActive,
-      localColors.fillIdle,
-      localColors.strokeActive,
-      localColors.strokeIdle,
-    ],
-  );
+        ? localColors.fillActive
+        : localColors.fillIdle;
+    }
+    return state === 'active'
+      ? localColors.strokeActive
+      : localColors.strokeIdle;
+  };
 
   // 드래그 중 로컬 상태만 업데이트 (부모에게 전달 안함)
-  const handleColorChange = useCallback(
-    (color: string) => {
-      if (!pickerFor) return;
-      const key =
-        pickerFor === 'fill'
-          ? colorState === 'active'
-            ? 'fillActive'
-            : 'fillIdle'
-          : colorState === 'active'
-            ? 'strokeActive'
-            : 'strokeIdle';
+  const handleColorChange = (color: string) => {
+    if (!pickerFor) return;
+    const key =
+      pickerFor === 'fill'
+        ? colorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle'
+        : colorState === 'active'
+          ? 'strokeActive'
+          : 'strokeIdle';
 
-      setLocalColors((prev) => ({ ...prev, [key]: color }));
-    },
-    [colorState, pickerFor],
-  );
+    setLocalColors((prev) => ({ ...prev, [key]: color }));
+  };
 
   // 드래그 완료 시 부모에게 전달
-  const handleColorChangeComplete = useCallback(
-    (color: string) => {
+  const handleColorChangeComplete = (color: string) => {
       if (!pickerFor) return;
 
       const key =
@@ -185,15 +160,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           stroke: { ...counterSettings.stroke, idle: color },
         });
       }
-    },
-    [
-      colorState,
-      counterSettings.fill,
-      counterSettings.stroke,
-      handleCounterUpdate,
-      pickerFor,
-    ],
-  );
+    };
 
   return (
     <>
@@ -422,7 +389,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           solidOnly={true}
           interactiveRefs={colorPickerInteractiveRefs}
           stateMode={colorState}
-          onStateModeChange={setColorState}
+          onStateModeChange={setColorState as any}
         />
       )}
 

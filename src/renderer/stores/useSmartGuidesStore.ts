@@ -4,7 +4,7 @@ import type {
   ElementBounds,
   SpacingGuide,
   SizeMatchGuide,
-} from '@utils/smartGuides';
+} from '@utils/grid/smartGuides';
 
 interface SmartGuidesState {
   // 현재 활성화된 가이드라인들
@@ -18,7 +18,7 @@ interface SmartGuidesState {
   // 스마트 가이드 활성화 여부
   isActive: boolean;
 
-  // Actions
+  // 액션
   setActiveGuides: (guides: GuideLine[]) => void;
   setSpacingGuides: (guides: SpacingGuide[]) => void;
   setSizeMatchGuides: (guides: SizeMatchGuide[]) => void;

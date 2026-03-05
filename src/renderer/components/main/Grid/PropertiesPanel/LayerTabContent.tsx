@@ -1,6 +1,4 @@
 import React, {
-  useCallback,
-  useMemo,
   useRef,
   useState,
   useEffect,
@@ -16,8 +14,8 @@ import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/useHistoryStore';
-import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
-import { isMac } from '@utils/platform';
+import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
@@ -261,12 +259,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 더블클릭과 클릭(특히 '이미 선택된 아이템 클릭 시 선택 해제') 충돌 방지용 타이머
   const pendingDeselectTimerRef = useRef<number | null>(null);
-  const clearPendingDeselect = useCallback(() => {
+  const clearPendingDeselect = () => {
     if (pendingDeselectTimerRef.current !== null) {
       window.clearTimeout(pendingDeselectTimerRef.current);
       pendingDeselectTimerRef.current = null;
     }
-  }, []);
+  };
   useEffect(() => {
     return () => clearPendingDeselect();
   }, [clearPendingDeselect]);
@@ -303,7 +301,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const thumbRef = useRef<HTMLDivElement | null>(null);
 
   // Lenis 스크롤 적용
-  const calculateThumb = useCallback((el: HTMLDivElement) => {
+  const calculateThumb = (el: HTMLDivElement) => {
     const { scrollTop, scrollHeight, clientHeight } = el;
     const canScroll = scrollHeight > clientHeight + 1;
     if (!canScroll) return { top: 0, height: 0, visible: false };
@@ -318,27 +316,24 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
 
     return { top, height, visible: true };
-  }, []);
+  };
 
-  const updateThumbDOM = useCallback(() => {
+  const updateThumbDOM = () => {
     if (!thumbRef.current || !scrollElementRef.current) return;
     const thumb = calculateThumb(scrollElementRef.current);
     thumbRef.current.style.top = `${thumb.top}px`;
     thumbRef.current.style.height = `${thumb.height}px`;
     thumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  }, [calculateThumb]);
+  };
 
   const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
     onScroll: updateThumbDOM,
   });
 
-  const setScrollRef = useCallback(
-    (node: HTMLDivElement | null) => {
+  const setScrollRef = (node: HTMLDivElement | null) => {
       scrollElementRef.current = node;
       lenisRef(node);
-    },
-    [lenisRef],
-  );
+    };
 
   // 초기 thumb 업데이트
   useEffect(() => {
@@ -346,8 +341,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   }, [updateThumbDOM]);
 
   // 레이어 아이템 목록 생성 (z-index 순서로 정렬)
-  const layerItems = useMemo(() => {
-    const items: LayerItem[] = [];
+  const layerItems = (() => {
+const items: LayerItem[] = [];
 
     // 키 아이템 추가
     const currentPositions = positions[selectedKeyType] || [];
@@ -428,26 +423,16 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     items.sort((a, b) => b.zIndex - a.zIndex);
 
     return items;
-  }, [
-    positions,
-    statPositions,
-    graphPositions,
-    selectedKeyType,
-    keyMappings,
-    pluginElements,
-  ]);
+})();
 
   // 레이어 그룹 스토어 (안정적인 참조 유지: 셀렉터에서 새 객체를 생성하지 않음)
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
-  const layerGroupsForMode = useMemo(
-    () => allLayerGroups[selectedKeyType] || [],
-    [allLayerGroups, selectedKeyType],
-  );
+  const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const collapsedGroups = useLayerGroupStore((state) => state.collapsedGroups);
   const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
 
   // 디스플레이 아이템: 그룹 헤더가 삽입된 목록
-  const displayItems = useMemo((): DisplayItem[] => {
+  const displayItems = ((): DisplayItem[] => {
     const result: DisplayItem[] = [];
     const seenGroups = new Set<string>();
     // 그룹별 자식 아이템 사전 수집
@@ -509,7 +494,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     });
 
     return result;
-  }, [layerItems, layerGroupsForMode, collapsedGroups, t]);
+  })();
 
   // layerItems를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const layerItemsRef = useRef(layerItems);
@@ -533,8 +518,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   }, [collapsedGroups]);
 
   // 아이템 드롭 타깃 계산 (display 슬롯 경계 기준)
-  const resolveItemDropTarget = useCallback(
-    (displaySlotIndex: number, draggingItemIds: ReadonlySet<string>) => {
+  const resolveItemDropTarget = (displaySlotIndex: number, draggingItemIds: ReadonlySet<string>) => {
       const items = layerItemsRef.current;
       const currentDisplay = displayItemsRef.current;
       const safeSlotIndex = Math.max(
@@ -615,13 +599,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       return { toIndex, targetGroupId };
-    },
-    [],
-  );
+    };
 
   // 포인터 위치 기반 아이템 드롭 타깃 계산
-  const resolveItemDropTargetFromPointer = useCallback(
-    (
+  const resolveItemDropTargetFromPointer = (
       relativeY: number,
       itemHeight: number,
       draggingIds: ReadonlySet<string>,
@@ -714,9 +695,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         indicatorDisplayIndex: displaySlotIndex,
         indicatorHeaderBottomGroupId: null,
       };
-    },
-    [resolveItemDropTarget],
-  );
+    };
 
   // 선택된 요소들 설정
   const setSelectedElements = useGridSelectionStore(
@@ -724,8 +703,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   );
 
   // 더블클릭 핸들러 - 속성 패널로 전환 (클릭과 충돌 방지)
-  const handleItemDoubleClick = useCallback(
-    (item: LayerItem, index: number, e: React.MouseEvent) => {
+  const handleItemDoubleClick = (item: LayerItem, index: number, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -749,19 +727,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         (di) => di.displayType === 'layer' && di.item.id === item.id,
       );
       setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
-    },
-    [
-      clearPendingDeselect,
-      clearSelection,
-      onSelectionFromPanel,
-      onSwitchToProperty,
-      toggleSelection,
-    ],
-  );
+    };
 
   // 아이템 클릭 핸들러 (드래그 중이 아닐 때만 선택)
-  const handleItemClick = useCallback(
-    (item: LayerItem, index: number, e: React.MouseEvent) => {
+  const handleItemClick = (item: LayerItem, index: number, e: React.MouseEvent) => {
       // 이전 클릭에서 예약된 선택 해제(더블클릭/빠른 연속 클릭 충돌 방지)
       clearPendingDeselect();
 
@@ -909,23 +878,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         (di) => di.displayType === 'layer' && di.item.id === item.id,
       );
       setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
-    },
-    [
-      clearPendingDeselect,
-      clearSelection,
-      lastClickedIndex,
-      lastClickedDisplayIndex,
-      onSelectionFromPanel,
-      selectedElements,
-      selectedGroupIds,
-      setSelectedElements,
-      setFullSelection,
-      toggleSelection,
-    ],
-  );
+    };
 
-  const handleToggleVisibility = useCallback(
-    async (e: React.MouseEvent, item: LayerItem) => {
+  const handleToggleVisibility = async (e: React.MouseEvent, item: LayerItem) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -1050,34 +1005,20 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           .getState()
           .updateElement(item.id, { hidden: !el.hidden });
       }
-    },
-    [clearPendingDeselect, onSelectionFromPanel, selectedKeyType],
-  );
+    };
 
   // 아이템이 선택되었는지 확인
-  const selectedElementIdSet = useMemo(
-    () => new Set(selectedElements.map((el) => el.id)),
-    [selectedElements],
-  );
+  const selectedElementIdSet = new Set(selectedElements.map((el) => el.id));
 
-  const selectedGroupIdSet = useMemo(
-    () => new Set(selectedGroupIds),
-    [selectedGroupIds],
-  );
+  const selectedGroupIdSet = new Set(selectedGroupIds);
 
-  const isItemSelected = useCallback(
-    (item: LayerItem) => {
+  const isItemSelected = (item: LayerItem) => {
       return selectedElementIdSet.has(item.id);
-    },
-    [selectedElementIdSet],
-  );
+    };
 
-  const isGroupHeaderSelected = useCallback(
-    (groupId: string) => {
+  const isGroupHeaderSelected = (groupId: string) => {
       return selectedGroupIdSet.has(groupId);
-    },
-    [selectedGroupIdSet],
-  );
+    };
 
   // 인라인 이름 변경 상태 (레이어 + 그룹 공용)
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
@@ -1091,7 +1032,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   );
 
   // 컨텍스트 메뉴 아이템 (동적 생성)
-  const contextMenuItems = useMemo<ListItem[]>(() => {
+  const contextMenuItems: ListItem[] = (() => {
     // 그룹 헤더 우클릭
     if (contextMenuGroupId) {
       return [
@@ -1130,11 +1071,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     });
 
     return items;
-  }, [t, selectedElements.length, contextMenuItem, contextMenuGroupId]);
+  })();
 
   // 우클릭 핸들러
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, item: LayerItem, index: number) => {
+  const handleContextMenu = (e: React.MouseEvent, item: LayerItem, index: number) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -1166,26 +1106,17 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       setContextMenuItem(item);
       setContextMenuPosition({ x: e.clientX, y: e.clientY });
       setContextMenuOpen(true);
-    },
-    [
-      clearPendingDeselect,
-      clearSelection,
-      isItemSelected,
-      onSelectionFromPanel,
-      toggleSelection,
-    ],
-  );
+    };
 
   // 레이어 이름 변경 커밋
-  const handleLayerRenameCommit = useCallback(
-    async (item: LayerItem, value: string) => {
+  const handleLayerRenameCommit = async (item: LayerItem, value: string) => {
       setRenamingItemId(null);
       const trimmed = value.trim();
       // 빈 문자열이면 layerName 제거 (기본 이름으로 복원)
       const newLayerName = trimmed === '' ? undefined : trimmed;
 
       if (item.type === 'key' && item.index !== undefined) {
-        const { keyMappings: km, positions: pos } = useKeyStore.getState();
+        const { positions: pos } = useKeyStore.getState();
         const currentPositions = pos[selectedKeyType] || [];
         const current = currentPositions[item.index];
         if (!current) return;
@@ -1248,13 +1179,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
-    },
-    [selectedKeyType],
-  );
+    };
 
   // 선택된 레이어들에 groupId 설정하는 유틸리티
-  const setGroupIdOnSelected = useCallback(
-    async (
+  const setGroupIdOnSelected = async (
       targetGroupId: string | undefined,
       elementsOverride?: typeof selectedElements,
       options?: {
@@ -1340,13 +1268,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       return true;
-    },
-    [selectedElements, selectedKeyType],
-  );
+    };
 
   // 그룹 이름 변경 커밋
-  const handleGroupRenameCommit = useCallback(
-    async (groupId: string, value: string) => {
+  const handleGroupRenameCommit = async (groupId: string, value: string) => {
       setRenamingItemId(null);
       const trimmed = value.trim();
       if (trimmed === '') return;
@@ -1386,13 +1311,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } catch (error) {
         console.error('Failed to rename group', error);
       }
-    },
-    [selectedKeyType],
-  );
+    };
 
   // 그룹 전체 표시/숨김 토글
-  const handleToggleGroupVisibility = useCallback(
-    async (e: React.MouseEvent, groupId: string) => {
+  const handleToggleGroupVisibility = async (e: React.MouseEvent, groupId: string) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -1507,13 +1429,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           .getState()
           .updateElement(c.id, { hidden: newHidden });
       });
-    },
-    [layerItems, selectedKeyType],
-  );
+    };
 
   // 컨텍스트 메뉴 선택 핸들러
-  const handleContextMenuSelect = useCallback(
-    async (itemId: string) => {
+  const handleContextMenuSelect = async (itemId: string) => {
       // 그룹 헤더 컨텍스트 메뉴 처리
       if (contextMenuGroupId) {
         if (itemId === 'renameGroup') {
@@ -1831,24 +1750,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       setContextMenuOpen(false);
-    },
-    [
-      selectedElements,
-      selectedKeyType,
-      clearSelection,
-      contextMenuItem,
-      contextMenuGroupId,
-      layerGroupsForMode,
-      layerItems,
-      onSelectionFromPanel,
-      setGroupIdOnSelected,
-      t,
-    ],
-  );
+    };
 
   // 다중 아이템 드롭 처리 (filter-then-rebuild 패턴)
-  const performMultiDrop = useCallback(
-    async (
+  const performMultiDrop = async (
       draggedIds: string[],
       toDisplayIndex: number,
       dropContext?: {
@@ -2159,13 +2064,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } catch {
         // ignore
       }
-    },
-    [selectedKeyType],
-  );
+    };
 
   // 그룹 드롭 처리 (그룹 단위 이동)
-  const performGroupDrop = useCallback(
-    async (groupId: string, targetDisplayIndex: number) => {
+  const performGroupDrop = async (groupId: string, targetDisplayIndex: number) => {
       const items = [...layerItemsRef.current];
       const currentDisplay = displayItemsRef.current;
 
@@ -2356,13 +2258,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } catch {
         // ignore
       }
-    },
-    [selectedKeyType],
-  );
+    };
 
   // 드래그 시작 (마우스 다운)
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent, item: LayerItem, _index: number) => {
+  const handleMouseDown = (e: React.MouseEvent, item: LayerItem, _index: number) => {
       if (e.button !== 0) return;
 
       clearPendingDeselect();
@@ -2495,13 +2394,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-    },
-    [clearPendingDeselect, performMultiDrop, resolveItemDropTargetFromPointer],
-  );
+    };
 
   // 그룹 헤더 드래그 시작 (그룹 단위 이동)
-  const handleGroupMouseDown = useCallback(
-    (e: React.MouseEvent, groupId: string) => {
+  const handleGroupMouseDown = (e: React.MouseEvent, groupId: string) => {
       if (e.button !== 0) return;
       clearPendingDeselect();
 
@@ -2626,18 +2522,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
-    },
-    [
-      clearPendingDeselect,
-      performGroupDrop,
-      performMultiDrop,
-      resolveItemDropTarget,
-    ],
-  );
+    };
 
   // 그룹 헤더 클릭 → 그룹 소속 아이템 전체 선택
-  const handleGroupHeaderClick = useCallback(
-    (groupId: string, e: React.MouseEvent) => {
+  const handleGroupHeaderClick = (groupId: string, e: React.MouseEvent) => {
       onSelectionFromPanel?.();
       clearPendingDeselect();
 
@@ -2738,22 +2626,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       setLastClickedDisplayIndex(thisDisplayIdx);
       setLastClickedIndex(null);
-    },
-    [
-      layerItems,
-      clearPendingDeselect,
-      selectedElements,
-      selectedGroupIds,
-      selectedGroupIdSet,
-      setFullSelection,
-      onSelectionFromPanel,
-      lastClickedDisplayIndex,
-    ],
-  );
+    };
 
   // 그룹 헤더 우클릭 핸들러
-  const handleGroupHeaderContextMenu = useCallback(
-    (e: React.MouseEvent, groupId: string) => {
+  const handleGroupHeaderContextMenu = (e: React.MouseEvent, groupId: string) => {
       e.preventDefault();
       e.stopPropagation();
       clearPendingDeselect();
@@ -2761,13 +2637,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       setContextMenuItem(null);
       setContextMenuPosition({ x: e.clientX, y: e.clientY });
       setContextMenuOpen(true);
-    },
-    [clearPendingDeselect],
-  );
+    };
 
   // 빈 공간 클릭 시 선택 해제 (사이드바는 유지)
-  const handleEmptySpaceMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handleEmptySpaceMouseDown = (e: React.MouseEvent) => {
       if (e.target !== e.currentTarget) return;
       if (e.button !== 0) return;
       clearPendingDeselect();
@@ -2775,9 +2648,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       clearSelection();
       setLastClickedIndex(null);
       setLastClickedDisplayIndex(null);
-    },
-    [clearPendingDeselect, clearSelection, onSelectionFromPanel],
-  );
+    };
 
   return (
     <div

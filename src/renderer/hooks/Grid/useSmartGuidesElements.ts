@@ -1,12 +1,13 @@
 /**
  * 스마트 가이드를 위한 모든 요소의 bounds를 제공하는 훅
  */
-import { useCallback } from 'react';
+
+
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { calculateBounds, type ElementBounds } from '@utils/smartGuides';
+import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
 
 /**
  * 현재 탭의 모든 요소(키 + 플러그인 요소)의 bounds를 반환하는 함수를 제공하는 훅
@@ -24,8 +25,7 @@ export function useSmartGuidesElements() {
    * 특정 요소를 제외한 모든 요소의 bounds를 반환
    * @param excludeIds 제외할 요소의 ID (단일 문자열 또는 문자열 배열)
    */
-  const getOtherElements = useCallback(
-    (excludeIds: string | string[]): ElementBounds[] => {
+  const getOtherElements = (excludeIds: string | string[]): ElementBounds[] => {
       const bounds: ElementBounds[] = [];
       // 배열로 정규화
       const excludeSet = new Set(
@@ -111,9 +111,7 @@ export function useSmartGuidesElements() {
       });
 
       return bounds;
-    },
-    [positions, statPositions, graphPositions, selectedKeyType, pluginElements],
-  );
+    };
 
   return { getOtherElements };
 }

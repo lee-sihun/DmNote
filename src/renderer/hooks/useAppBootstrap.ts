@@ -8,7 +8,7 @@ import {
   useSettingsStore,
   type SettingsStateSnapshot,
 } from '@stores/useSettingsStore';
-import { applyCounterSnapshot, setKeyCounter } from '@stores/keyCounterSignals';
+import { applyCounterSnapshot, setKeyCounter } from '@stores/signals/keyCounterSignals';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import type { SettingsDiff, OverlayResizeAnchor } from '@src/types/settings';
 import {
@@ -19,7 +19,7 @@ import {
 import {
   initializeCursorSystem,
   refreshCursorSettings,
-} from '@utils/cursorUtils';
+} from '@utils/grid/cursorUtils';
 import type { CustomJs, JsPlugin } from '@src/types/js';
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
@@ -52,7 +52,7 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
 export function useAppBootstrap() {
   useEffect(() => {
     let disposed = false;
-    // Delay counter updates to keep them in sync with the key display delay
+    // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
     const counterDelayTimers = new Map<
       string,
       Set<ReturnType<typeof setTimeout>>
@@ -156,10 +156,10 @@ export function useAppBootstrap() {
         });
       }
       const {
-        noteSettings,
+        noteSettings: _noteSettings,
         fontSettings: _fontSettings,
-        customCSS,
-        customJS,
+        customCSS: _customCSS,
+        customJS: _customJS,
         ...rest
       } = diff.changed;
       const sanitized = Object.fromEntries(
@@ -378,7 +378,7 @@ export function useAppBootstrap() {
         try {
           unsubscribe();
         } catch (error) {
-          console.error('Failed to unsubscribe', error);
+          console.error('구독 해제 실패', error);
         }
       });
       clearCounterDelayTimers();

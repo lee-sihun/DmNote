@@ -1,7 +1,7 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
-import { isGradientColor, normalizeColorInput } from '@utils/colorUtils';
+import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { isGradientColor, normalizeColorInput } from '@utils/color/colorUtils';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -321,12 +321,8 @@ export function useUnifiedKeySettingState({
   );
 
   // 카운터 탭 상태
-  const resolvedCounterSettings = useMemo(
-    () =>
-      normalizeCounterSettings(
-        initialCounterSettings ?? createDefaultCounterSettings(),
-      ),
-    [initialCounterSettings],
+  const _resolvedCounterSettings = normalizeCounterSettings(
+    initialCounterSettings ?? createDefaultCounterSettings(),
   );
 
   const [counterState, setCounterState] = useState<CounterTabState>(() =>
@@ -334,38 +330,29 @@ export function useUnifiedKeySettingState({
   );
 
   // 미리보기 핸들러
-  const handleKeyPreview = useCallback(
-    (updates: Omit<KeyPreviewData, 'type'>) => {
-      if (!onPreview) return;
-      onPreview({
-        type: 'key',
-        ...updates,
-      });
-    },
-    [onPreview],
-  );
+  const handleKeyPreview = (updates: Omit<KeyPreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'key',
+      ...updates,
+    });
+  };
 
-  const handleNotePreview = useCallback(
-    (updates: Omit<NotePreviewData, 'type'>) => {
-      if (!onPreview) return;
-      onPreview({
-        type: 'note',
-        ...updates,
-      });
-    },
-    [onPreview],
-  );
+  const handleNotePreview = (updates: Omit<NotePreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'note',
+      ...updates,
+    });
+  };
 
-  const handleCounterPreview = useCallback(
-    (updates: Omit<CounterPreviewData, 'type'>) => {
-      if (!onPreview) return;
-      onPreview({
-        type: 'counter',
-        ...updates,
-      });
-    },
-    [onPreview],
-  );
+  const handleCounterPreview = (updates: Omit<CounterPreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'counter',
+      ...updates,
+    });
+  };
 
   // 백그라운드 GIF 최적화 완료 시(원본 -> WebP 치환) 편집 중 상태도 동기화
   useEffect(() => {
@@ -422,7 +409,7 @@ export function useUnifiedKeySettingState({
   }, [onPreview]);
 
   // 저장 핸들러
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = () => {
     const noteColorValue =
       noteState.colorMode === COLOR_MODES.gradient
         ? toGradient(noteState.noteColor, noteState.gradientBottom)
@@ -475,10 +462,10 @@ export function useUnifiedKeySettingState({
         },
       }),
     });
-  }, [keyState, noteState, counterState, onSave]);
+  };
 
   // 취소 핸들러 (원본으로 롤백)
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (onPreview) {
       const original = originalDataRef.current;
       onPreview({
@@ -488,7 +475,7 @@ export function useUnifiedKeySettingState({
       });
     }
     onClose();
-  }, [onPreview, onClose]);
+  };
 
   return {
     // 탭 상태

@@ -1,8 +1,5 @@
 import type {
   KeyPosition,
-  ImageFit,
-  NoteColor,
-  KeyCounterSettings,
 } from '@src/types/keys';
 
 // ============================================================================

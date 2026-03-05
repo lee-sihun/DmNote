@@ -2,10 +2,8 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useState,
-  useCallback,
-} from 'react';
+  } from 'react';
 import type { ReactNode } from 'react';
 import type { SettingsDiff, SettingsState } from '@src/types/settings';
 
@@ -227,17 +225,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const changeLocale = useCallback((next: SupportedLocale) => {
+  const changeLocale = (next: SupportedLocale) => {
     setLocaleState(next);
     safeLocalStorageSet(STORAGE_KEY, next);
     window.api.settings.update({ language: next }).catch((error) => {
       console.error('Failed to update language', error);
     });
-  }, []);
+  };
 
-  const t = useMemo(
-    () =>
-      function translate(
+  const t = function translate(
         key: string,
         params?: Record<string, string | number>,
       ): string {
@@ -249,18 +245,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           return String(raw);
         }
         return key;
-      },
-    [messages],
-  );
+      };
 
-  const value = useMemo<I18nContextValue>(
-    () => ({
-      locale,
-      setLocale: changeLocale,
-      t,
-    }),
-    [locale, changeLocale, t],
-  );
+  const value: I18nContextValue = {
+    locale,
+    setLocale: changeLocale,
+    t,
+  };
 
   if (!hasInitialized) return null;
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import FloatingPopup from './FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 
@@ -161,7 +161,7 @@ const MenuItemRow = ({
 
   const hasChildren = item.children && item.children.length > 0;
 
-  const handleMouseEnter = useCallback(() => {
+  const handleMouseEnter = () => {
     if (!hasChildren) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     const active = siblingActiveRef?.current;
@@ -185,9 +185,9 @@ const MenuItemRow = ({
         };
       }
     }, delay);
-  }, [hasChildren, siblingActiveRef, item.id]);
+  };
 
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseLeave = () => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     hoverTimerRef.current = setTimeout(() => {
       setSubMenuOpen(false);
@@ -195,7 +195,7 @@ const MenuItemRow = ({
         siblingActiveRef.current = { id: null, close: null };
       }
     }, 200);
-  }, [siblingActiveRef, item.id]);
+  };
 
   useEffect(() => {
     return () => {

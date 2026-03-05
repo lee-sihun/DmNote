@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getCounterSnapshot } from '@stores/keyCounterSignals';
+import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import type { KeyCounters, KeyMappings, KeyPositions } from '@src/types/keys';
 import type { PluginDisplayElementInternal } from '@src/types/api';
 import type { StatItemPositions } from '@src/types/statItems';
@@ -65,10 +65,10 @@ function serializePluginElements(
   return elements.map((el) => {
     // 함수 핸들러와 contextMenu 제외한 순수 데이터만 복사
     const {
-      onClick,
-      onPositionChange,
-      onDelete,
-      contextMenu,
+      onClick: _onClick,
+      onPositionChange: _onPositionChange,
+      onDelete: _onDelete,
+      contextMenu: _contextMenu,
       _onClickId,
       _onPositionChangeId,
       _onDeleteId,

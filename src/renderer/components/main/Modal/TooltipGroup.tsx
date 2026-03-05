@@ -1,4 +1,4 @@
-import React, { createContext, useMemo, useRef } from 'react';
+import React, { createContext, useRef } from 'react';
 
 export type TooltipGroupContextType = {
   getEffectiveDelay: (baseDelay: number) => number;
@@ -10,19 +10,19 @@ export const TooltipGroupContext =
   createContext<TooltipGroupContextType | null>(null);
 
 /**
- * TooltipGroup: Wrap a cluster of tooltip triggers so that
- * - The first hover within the group waits `delay` ms
- * - Moving between triggers within the group uses the remaining delay (often 0)
- * - Leaving the group resets the delay requirement
+ * TooltipGroup: 툴팁 트리거 그룹 래핑
+ * - 그룹 내 첫 hover 시 `delay`ms 대기
+ * - 그룹 내 트리거 간 이동 시 잔여 딜레이 사용 (보통 0)
+ * - 그룹 이탈 시 딜레이 초기화
  */
 export const TooltipGroup: React.FC<{
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
 }> = ({ children, className, style }) => {
-  // Timestamp when the pointer first entered the group; null means not inside
+  // 그룹 최초 진입 시각; null이면 그룹 외부
   const enteredAtRef = useRef<number | null>(null);
-  // Whether first tooltip animation has been consumed within this enter
+  // 현재 진입에서 첫 툴팁 애니메이션 소비 여부
   const firstAnimationConsumedRef = useRef<boolean>(false);
 
   const onMouseEnter: React.MouseEventHandler<HTMLDivElement> = () => {
@@ -37,24 +37,21 @@ export const TooltipGroup: React.FC<{
     firstAnimationConsumedRef.current = false;
   };
 
-  const ctxValue = useMemo<TooltipGroupContextType>(
-    () => ({
-      getEffectiveDelay(baseDelay: number) {
-        const enteredAt = enteredAtRef.current;
-        if (enteredAt == null) return baseDelay;
-        const elapsed = Date.now() - enteredAt;
-        const remaining = Math.max(0, baseDelay - elapsed);
-        return remaining;
-      },
-      shouldAnimate() {
-        return !firstAnimationConsumedRef.current;
-      },
-      consumeAnimation() {
-        firstAnimationConsumedRef.current = true;
-      },
-    }),
-    [],
-  );
+  const ctxValue: TooltipGroupContextType = {
+    getEffectiveDelay(baseDelay: number) {
+      const enteredAt = enteredAtRef.current;
+      if (enteredAt == null) return baseDelay;
+      const elapsed = Date.now() - enteredAt;
+      const remaining = Math.max(0, baseDelay - elapsed);
+      return remaining;
+    },
+    shouldAnimate() {
+      return !firstAnimationConsumedRef.current;
+    },
+    consumeAnimation() {
+      firstAnimationConsumedRef.current = true;
+    },
+  };
 
   return (
     <TooltipGroupContext.Provider value={ctxValue}>

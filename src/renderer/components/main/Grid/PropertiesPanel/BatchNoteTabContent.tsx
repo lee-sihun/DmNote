@@ -56,7 +56,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   batchGlowColorButtonRef,
   t,
 }) => {
-  const { noteEffect } = useSettingsStore();
+  const { noteEffect: _noteEffect } = useSettingsStore();
 
   const noteWidthMixed = getMixedValue(
     (pos) => pos.noteWidth,

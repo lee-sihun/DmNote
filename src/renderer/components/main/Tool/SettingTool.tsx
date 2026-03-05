@@ -8,7 +8,7 @@ import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import ChevronDownIcon from '@assets/svgs/chevron-down.svg';
 import TurnIcon from '@assets/svgs/turn_arrow.svg';
 import FloatingTooltip from '../Modal/FloatingTooltip';
-import ListPopup, { ListItem } from '../Modal/ListPopup';
+import ListPopup from '../Modal/ListPopup';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import { useHistoryStore } from '@stores/useHistoryStore';
 import { useKeyStore } from '@stores/useKeyStore';
@@ -16,7 +16,7 @@ import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
 import { useLayerGroupStore } from '@stores/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { getCounterSnapshot } from '@stores/keyCounterSignals';
+import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;

@@ -3,10 +3,8 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   BUILTIN_FONTS,
   type CustomFont,
-  type FontSettings,
   type FontType,
   generateFontId,
-  extractFontFamilyFromCSS,
 } from '@src/types/fonts';
 
 interface FontState {
@@ -20,7 +18,7 @@ interface FontState {
   selectedKeyFont: string | null;
   selectedCounterFont: string | null;
 
-  // Actions
+  // 액션
   setAll: (fonts: CustomFont[]) => void;
   addFont: (font: Omit<CustomFont, 'id'>) => CustomFont;
   removeFont: (id: string) => void;
@@ -28,7 +26,7 @@ interface FontState {
   setSelectedKeyFont: (fontName: string | null) => void;
   setSelectedCounterFont: (fontName: string | null) => void;
 
-  // Computed
+  // 계산된 값
   getAllFonts: () => CustomFont[];
   getEnabledFonts: () => CustomFont[];
   getFontsByType: (type: FontType | 'all') => CustomFont[];
@@ -170,7 +168,7 @@ export function syncFontCSS(): void {
     }
   });
 
-  // Warm up font faces to minimize FOUT when opening the picker or applying fonts.
+  // 폰트 피커 열기 및 폰트 적용 시 FOUT 최소화를 위한 폰트 사전 로드
   void preloadFontFaces(fonts.map((font) => font.name));
 }
 

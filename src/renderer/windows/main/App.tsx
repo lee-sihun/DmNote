@@ -9,15 +9,15 @@ import Grid from '@components/main/Grid';
 import SettingTab from '@components/main/Settings';
 import { useKeyManager } from '@hooks/useKeyManager';
 import { usePalette } from '@hooks/usePalette';
-import CustomAlert from '@components/main/Modal/content/Alert';
-import NoteSettingModal from '@components/main/Modal/content/NoteSetting';
-import UpdateModal from '@components/main/Modal/content/UpdateModal';
+import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
+import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
+import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import type { ShortcutBinding } from '@src/types/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
-import Palette from '@components/main/Modal/content/Palette';
-import ColorPicker from '@components/main/Modal/content/ColorPicker';
+import Palette from '@components/main/Modal/content/pickers/Palette';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useAppBootstrap } from '@hooks/useAppBootstrap';
 import {
@@ -90,14 +90,14 @@ export default function App() {
   useEffect(() => {
     try {
       (window as any).__dmn_window_type = 'main';
-    } catch (e) {
-      // ignore
+    } catch {
+      // 무시
     }
     return () => {
       try {
         delete (window as any).__dmn_window_type;
-      } catch (e) {
-        // ignore
+      } catch {
+        // 무시
       }
     };
   }, []);
@@ -172,10 +172,10 @@ export default function App() {
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const {
     noteEffect,
-    angleMode,
-    setAngleMode,
-    language: storeLanguage,
-    setLanguage,
+    angleMode: _angleMode,
+    setAngleMode: _setAngleMode,
+    language: _storeLanguage,
+    setLanguage: _setLanguage,
     noteSettings,
     setNoteSettings,
     autoUpdateEnabled,
@@ -183,23 +183,20 @@ export default function App() {
     shortcuts,
   } = useSettingsStore();
 
-  const matchesShortcut = React.useCallback(
-    (event: KeyboardEvent, binding?: ShortcutBinding) => {
-      if (!binding?.key) return false;
-      const ctrl = !!binding.ctrl;
-      const shift = !!binding.shift;
-      const alt = !!binding.alt;
-      const meta = !!binding.meta;
-      return (
-        event.code === binding.key &&
-        event.ctrlKey === ctrl &&
-        event.shiftKey === shift &&
-        event.altKey === alt &&
-        event.metaKey === meta
-      );
-    },
-    [],
-  );
+  const matchesShortcut = (event: KeyboardEvent, binding?: ShortcutBinding) => {
+    if (!binding?.key) return false;
+    const ctrl = !!binding.ctrl;
+    const shift = !!binding.shift;
+    const alt = !!binding.alt;
+    const meta = !!binding.meta;
+    return (
+      event.code === binding.key &&
+      event.ctrlKey === ctrl &&
+      event.shiftKey === shift &&
+      event.altKey === alt &&
+      event.metaKey === meta
+    );
+  };
 
   // 개발자 모드 비활성 시 DevTools 단축키 차단
   useEffect(() => {
@@ -574,7 +571,7 @@ export default function App() {
       <div className="flex-1 bg-[#2A2A31] overflow-hidden flex">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
-            <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
+            <SettingTab showAlert={showAlert} showConfirm={showConfirm as any} />
           </div>
         ) : (
           <div

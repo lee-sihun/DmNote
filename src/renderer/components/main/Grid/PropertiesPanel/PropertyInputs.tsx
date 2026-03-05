@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import React, { useState, useEffect, useRef } from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -12,10 +13,10 @@ import type {
   FontStyleToggleProps,
 } from './types';
 import { TABS } from './types';
-import ColorPicker from '@components/main/Modal/content/ColorPicker';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 
 // ============================================================================
-// PropertyRow
+// 속성 행
 // ============================================================================
 
 export const PropertyRow: React.FC<PropertyRowProps> = ({
@@ -29,7 +30,7 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
 );
 
 // ============================================================================
-// NumberInput
+// 숫자 입력
 // ============================================================================
 
 export const NumberInput: React.FC<NumberInputProps> = ({
@@ -276,7 +277,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 };
 
 // ============================================================================
-// OptionalNumberInput (allows empty -> undefined, supports placeholder)
+// OptionalNumberInput (빈 값 -> undefined 허용, placeholder 지원)
 // ============================================================================
 
 export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
@@ -318,7 +319,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     }
   }, [value, isFocused, isMixed, hasSuffix, suffix]);
 
-  // Digits/backspace/delete/arrows/tab/enter/home/end only (no minus, no decimals)
+  // 숫자/백스페이스/삭제/방향키/탭/엔터/홈/엔드만 허용 (마이너스, 소수점 불가)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
       'Backspace',
@@ -445,7 +446,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 };
 
 // ============================================================================
-// TextInput
+// 텍스트 입력
 // ============================================================================
 
 export const TextInput: React.FC<TextInputProps> = ({
@@ -492,7 +493,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 };
 
 // ============================================================================
-// ColorInput
+// 컬러 입력
 // ============================================================================
 
 export const ColorInput: React.FC<ColorInputProps> = ({
@@ -547,12 +548,9 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   }, [value, activeValue, open]);
 
   // colorId가 없으면 value 기반으로 생성
-  const stableId = useMemo(
-    () => colorId || `color-input-${value?.replace(/[^a-zA-Z0-9]/g, '')}`,
-    [colorId, value],
-  );
+  const _stableId = colorId || `color-input-${value?.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-  const interactiveRefs = useMemo(() => [buttonRef], []);
+  const interactiveRefs = [buttonRef];
 
   const handleToggle = () => {
     if (isControlled) {
@@ -650,7 +648,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 };
 
 // ============================================================================
-// SelectInput
+// 선택 입력
 // ============================================================================
 
 export const SelectInput: React.FC<SelectInputProps> = ({
@@ -716,7 +714,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
 };
 
 // ============================================================================
-// ToggleSwitch
+// 토글 스위치
 // ============================================================================
 
 export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
@@ -740,7 +738,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 };
 
 // ============================================================================
-// SectionDivider
+// 섹션 구분선
 // ============================================================================
 
 export const SectionDivider: React.FC = () => (
@@ -847,7 +845,7 @@ const StrikethroughIcon: React.FC = () => (
 );
 
 // ============================================================================
-// FontStyleToggle
+// 글꼴 스타일 토글
 // ============================================================================
 
 export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
@@ -902,7 +900,7 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 };
 
 // ============================================================================
-// TabButton & Tabs
+// 탭 버튼 & 탭
 // ============================================================================
 
 const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (

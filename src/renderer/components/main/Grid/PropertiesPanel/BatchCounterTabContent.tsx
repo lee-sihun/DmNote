@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { KeyCounterSettings } from '@src/types/keys';
 import {
   PropertyRow,
@@ -8,9 +8,9 @@ import {
 } from './index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import FontPicker from '@components/main/Modal/content/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/FontManagerModal';
-import CounterAnimationPicker from '@components/main/Modal/content/CounterAnimationPicker';
+import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
+import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
+import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 
 interface BatchKeyVisual {
   width?: number;
@@ -49,7 +49,7 @@ interface BatchCounterTabContentProps {
   // 컬러 피커 토글
   onFillPickerToggle: () => void;
   onStrokePickerToggle: () => void;
-  // Refs
+  // ref 목록
   batchCounterFillButtonRef: React.RefObject<HTMLButtonElement>;
   batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement>;
   isFillPickerOpen: boolean;
@@ -81,12 +81,9 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   const [showFontManager, setShowFontManager] = useState(false);
   const [showAnimationPicker, setShowAnimationPicker] = useState(false);
 
-  const handleAnimationUpdate = useCallback(
-    (nextAnimation: KeyCounterSettings['animation']) => {
+  const handleAnimationUpdate = (nextAnimation: KeyCounterSettings['animation']) => {
       handleBatchCounterUpdate({ animation: nextAnimation });
-    },
-    [handleBatchCounterUpdate],
-  );
+    };
 
   const getDisplayColor = (color: string): string => {
     if (!color) return '#ffffff';

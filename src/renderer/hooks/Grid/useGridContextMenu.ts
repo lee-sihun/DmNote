@@ -4,10 +4,9 @@
  * - 그리드 컨텍스트 메뉴 항목 생성
  */
 
-import { useCallback, useMemo } from 'react';
 import { usePluginMenuStore } from '@stores/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { translatePluginMessage } from '@utils/pluginI18n';
+import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 
 interface MenuItem {
   id: string;
@@ -69,7 +68,7 @@ export function useGridContextMenu({
     (state) => state.definitions,
   );
 
-  const pluginMessagesById = useMemo(() => {
+  const pluginMessagesById = (() => {
     const map = new Map<string, any>();
     pluginDefinitions.forEach((def) => {
       if (!map.has(def.pluginId)) {
@@ -77,22 +76,18 @@ export function useGridContextMenu({
       }
     });
     return map;
-  }, [pluginDefinitions]);
+  })();
 
-  const resolvePluginLabel = useCallback(
-    (pluginId: string, rawLabel: string) =>
+  const resolvePluginLabel = (pluginId: string, rawLabel: string) =>
       translatePluginMessage({
         messages: pluginMessagesById.get(pluginId),
         locale,
         key: rawLabel,
         fallback: rawLabel,
-      }),
-    [pluginMessagesById, locale],
-  );
+      });
 
   // 키 메뉴 아이템 생성 (기본 + 플러그인)
-  const getKeyMenuItems = useCallback(
-    (contextIndex: number | null): MenuItem[] => {
+  const getKeyMenuItems = (contextIndex: number | null): MenuItem[] => {
       const baseItems: MenuItem[] = [
         { id: 'delete', label: t('contextMenu.deleteKey') },
         { id: 'duplicate', label: t('contextMenu.duplicateKey') },
@@ -143,40 +138,24 @@ export function useGridContextMenu({
       );
 
       return [...topPluginItems, ...baseItems, ...bottomPluginItems];
-    },
-    [
-      selectedKeyType,
-      keyMappings,
-      positions,
-      t,
-      pluginKeyMenuItems,
-      resolvePluginLabel,
-    ],
-  );
+    };
 
   // 그리드 메뉴 아이템 생성 (기본 + 플러그인)
-  const getStatMenuItems = useCallback(
-    (_contextIndex: number | null): MenuItem[] => [
+  const getStatMenuItems = (_contextIndex: number | null): MenuItem[] => [
       { id: 'delete', label: t('contextMenu.deleteStat') },
       { id: 'duplicate', label: t('contextMenu.duplicateStat') },
       { id: 'bringToFront', label: t('contextMenu.bringToFront') },
       { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    ],
-    [t],
-  );
+    ];
 
-  const getGraphMenuItems = useCallback(
-    (_contextIndex: number | null): MenuItem[] => [
+  const getGraphMenuItems = (_contextIndex: number | null): MenuItem[] => [
       { id: 'delete', label: t('contextMenu.deleteGraph') },
       { id: 'duplicate', label: t('contextMenu.duplicateGraph') },
       { id: 'bringToFront', label: t('contextMenu.bringToFront') },
       { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    ],
-    [t],
-  );
+    ];
 
-  const getGridMenuItems = useCallback(
-    (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
+  const getGridMenuItems = (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
         { id: 'add', label: t('contextMenu.addKey') },
         { id: 'addStat', label: t('contextMenu.addStat') },
@@ -232,9 +211,7 @@ export function useGridContextMenu({
         ...bottomPluginItems,
         ...bottomBaseItems,
       ];
-    },
-    [selectedKeyType, t, pluginGridMenuItems, resolvePluginLabel, noteEffect],
-  );
+    };
 
   return {
     getKeyMenuItems,

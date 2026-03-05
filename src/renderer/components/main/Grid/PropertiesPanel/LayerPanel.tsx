@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import { useTranslation } from '@contexts/I18nContext';
 import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
@@ -96,8 +96,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
   // 헤더/탭 영역 빈 공간 클릭 시 선택 해제
-  const handleHeaderEmptyClick = useCallback(
-    (e: React.MouseEvent) => {
+  const handleHeaderEmptyClick = (e: React.MouseEvent) => {
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
       // 버튼, 입력 등 인터랙티브 요소 클릭은 무시
@@ -106,9 +105,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       if (target.closest('.properties-panel-overlay-scroll')) return;
       onSelectionFromPanel?.();
       clearSelection();
-    },
-    [clearSelection, onSelectionFromPanel],
-  );
+    };
 
   return (
     <div

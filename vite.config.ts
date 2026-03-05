@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import preact from "@preact/preset-vite";
+import react from "@vitejs/plugin-react";
 import svgr from "vite-plugin-svgr";
 import path from "path";
 import { visualizer } from "rollup-plugin-visualizer";
@@ -21,7 +21,19 @@ export default defineConfig(() => {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
     plugins: [
-      preact(),
+      react({
+        babel: {
+          plugins: [
+            ["babel-plugin-react-compiler", {
+              // signals 파일 제외
+              sources: (filename: string) => {
+                if (filename.includes('stores/signals/')) return false;
+                return true;
+              },
+            }],
+          ],
+        },
+      }),
       svgr({
         include: "**/*.svg",
         svgrOptions: {
@@ -54,10 +66,6 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        react: "preact/compat",
-        "react-dom": "preact/compat",
-        "react-dom/test-utils": "preact/test-utils",
-        "react/jsx-runtime": "preact/jsx-runtime",
         "@components": path.resolve(rendererRoot, "components"),
         "@styles": path.resolve(rendererRoot, "styles"),
         "@windows": path.resolve(rendererRoot, "windows"),

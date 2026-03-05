@@ -3,7 +3,7 @@ import GridIcon from '@assets/svgs/grid.svg';
 import { useTranslation } from '@contexts/I18nContext';
 import { useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
-import TabList from '../Modal/content/TabList';
+import TabList from '../Modal/content/settings/TabList';
 
 const TabTool = () => {
   const keyTypes = ['4key', '5key', '6key', '8key'];

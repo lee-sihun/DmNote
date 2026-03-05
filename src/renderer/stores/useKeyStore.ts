@@ -40,7 +40,7 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
   setKeyMappings: (mappings) => set({ keyMappings: mappings }),
   setPositions: (positions) => set({ positions }),
   setBootstrapped: (value) => set({ isBootstrapped: value }),
-  // Batch 업데이트 (키 삭제 등에서 atomic update 필요)
+  // 일괄 업데이트 (키 삭제 등에서 atomic 업데이트 필요)
   setKeyMappingsAndPositions: (mappings, positions) =>
     set({ keyMappings: mappings, positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),
