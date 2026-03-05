@@ -14,9 +14,9 @@ use crate::{
     app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
-        CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, KeyMappings, KeyPositions,
-        FontSettings, FontType, GraphPositions, NoteSettings, NoteSettingsPatch, SettingsPatchInput,
-        StatPositions, TabNoteOverrides,
+        CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, FontSettings, FontType,
+        GraphPositions, KeyMappings, KeyPositions, NoteSettings, NoteSettingsPatch,
+        SettingsPatchInput, StatPositions, TabNoteOverrides,
     },
 };
 
@@ -136,7 +136,11 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
         font_settings: Some(font_settings),
         tab_note_overrides: {
             let overrides = snapshot.tab_note_overrides;
-            if overrides.is_empty() { None } else { Some(overrides) }
+            if overrides.is_empty() {
+                None
+            } else {
+                Some(overrides)
+            }
         },
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
         embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
@@ -173,7 +177,9 @@ pub fn preset_load(
         serde_json::from_str(&content).map_err(|_| "invalid-preset".to_string())?;
 
     let keys = preset.keys.unwrap_or_else(|| default_keys().clone());
-    let mut positions = preset.key_positions.unwrap_or_else(|| default_positions().clone());
+    let mut positions = preset
+        .key_positions
+        .unwrap_or_else(|| default_positions().clone());
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
     let custom_tabs = preset
@@ -360,9 +366,17 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
     let (_font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
     let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_images) =
-        build_preset_image_payload(&tab_key_positions, &tab_stat_positions, &tab_graph_positions)?;
+        build_preset_image_payload(
+            &tab_key_positions,
+            &tab_stat_positions,
+            &tab_graph_positions,
+        )?;
     let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_sounds) =
-        build_preset_sound_payload(&tab_key_positions, &tab_stat_positions, &tab_graph_positions)?;
+        build_preset_sound_payload(
+            &tab_key_positions,
+            &tab_stat_positions,
+            &tab_graph_positions,
+        )?;
 
     // Single-tab keys map
     let mut tab_keys: KeyMappings = HashMap::new();
@@ -388,7 +402,11 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
         if let Some(settings) = snapshot.tab_note_overrides.get(&tab_id) {
             m.insert(tab_id.clone(), settings.clone());
         }
-        if m.is_empty() { None } else { Some(m) }
+        if m.is_empty() {
+            None
+        } else {
+            Some(m)
+        }
     };
 
     let preset = PresetFile {
@@ -508,7 +526,9 @@ pub fn preset_load_tab(
     )?;
 
     // Merge into full store snapshot
-    snapshot.keys.insert(current_tab_id.clone(), src_keys.clone());
+    snapshot
+        .keys
+        .insert(current_tab_id.clone(), src_keys.clone());
     if let Some(v) = src_key_positions.remove(&current_tab_id) {
         snapshot.key_positions.insert(current_tab_id.clone(), v);
     }
@@ -520,7 +540,9 @@ pub fn preset_load_tab(
     }
     let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
     if let Some(override_settings) = imported_override {
-        snapshot.tab_note_overrides.insert(current_tab_id.clone(), override_settings);
+        snapshot
+            .tab_note_overrides
+            .insert(current_tab_id.clone(), override_settings);
     } else {
         snapshot.tab_note_overrides.remove(&current_tab_id);
     }
@@ -606,14 +628,20 @@ fn collect_used_font_families(
     for positions in stat_positions.values() {
         for stat_position in positions {
             maybe_insert_font_family(stat_position.position.font_family.as_ref(), &mut used);
-            maybe_insert_font_family(stat_position.position.counter.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(
+                stat_position.position.counter.font_family.as_ref(),
+                &mut used,
+            );
         }
     }
 
     for positions in graph_positions.values() {
         for graph_position in positions {
             maybe_insert_font_family(graph_position.position.font_family.as_ref(), &mut used);
-            maybe_insert_font_family(graph_position.position.counter.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(
+                graph_position.position.counter.font_family.as_ref(),
+                &mut used,
+            );
         }
     }
 
@@ -676,7 +704,8 @@ fn build_preset_font_payload(
                 }
             };
 
-            let extension = normalize_font_extension(source_path.extension().and_then(|ext| ext.to_str()));
+            let extension =
+                normalize_font_extension(source_path.extension().and_then(|ext| ext.to_str()));
             embedded_local_fonts.push(EmbeddedLocalFont {
                 font_id: next_font.id.clone(),
                 extension: Some(extension),
@@ -691,7 +720,12 @@ fn build_preset_font_payload(
         exported_fonts.push(next_font);
     }
 
-    Ok((FontSettings { custom_fonts: exported_fonts }, embedded_local_fonts))
+    Ok((
+        FontSettings {
+            custom_fonts: exported_fonts,
+        },
+        embedded_local_fonts,
+    ))
 }
 
 fn restore_preset_local_fonts(
@@ -793,7 +827,15 @@ fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
-) -> Result<(KeyPositions, StatPositions, GraphPositions, Vec<EmbeddedLocalImage>), String> {
+) -> Result<
+    (
+        KeyPositions,
+        StatPositions,
+        GraphPositions,
+        Vec<EmbeddedLocalImage>,
+    ),
+    String,
+> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
@@ -1307,7 +1349,15 @@ fn build_preset_sound_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
-) -> Result<(KeyPositions, StatPositions, GraphPositions, Vec<EmbeddedLocalSound>), String> {
+) -> Result<
+    (
+        KeyPositions,
+        StatPositions,
+        GraphPositions,
+        Vec<EmbeddedLocalSound>,
+    ),
+    String,
+> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();

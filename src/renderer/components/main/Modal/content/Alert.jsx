@@ -1,13 +1,13 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { useLenis } from "@hooks/useLenis";
-import { useTranslation } from "@contexts/I18nContext";
-import Modal from "../Modal";
-import { getScrollShadowState } from "@utils/scrollShadow";
+import React, { useState, useCallback, useEffect } from 'react';
+import { useLenis } from '@hooks/useLenis';
+import { useTranslation } from '@contexts/I18nContext';
+import Modal from '../Modal';
+import { getScrollShadowState } from '@utils/scrollShadow';
 
 export default function Alert({
   isOpen,
   message,
-  type = "alert", // "alert", "confirm", or "custom"
+  type = 'alert', // "alert", "confirm", or "custom"
   confirmText,
   cancelText,
   showCancel,
@@ -17,11 +17,11 @@ export default function Alert({
   if (!isOpen) return null;
 
   const { t } = useTranslation();
-  const confirmLabel = confirmText || t("common.confirm");
-  const cancelLabel = cancelText || t("common.cancel");
+  const confirmLabel = confirmText || t('common.confirm');
+  const cancelLabel = cancelText || t('common.cancel');
 
-  const isConfirm = type === "confirm";
-  const isCustom = type === "custom";
+  const isConfirm = type === 'confirm';
+  const isCustom = type === 'custom';
   const shouldShowCancel = isConfirm || (isCustom && showCancel);
 
   const [scrollState, setScrollState] = useState({
@@ -37,7 +37,7 @@ export default function Alert({
       prev.hasTopShadow === nextState.hasTopShadow &&
       prev.hasBottomShadow === nextState.hasBottomShadow
         ? prev
-        : nextState
+        : nextState,
     );
   }, []);
 
@@ -74,7 +74,7 @@ export default function Alert({
             {/* 상단 그림자 */}
             <div
               className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
-                scrollState.hasTopShadow ? "opacity-100" : "opacity-0"
+                scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
               }`}
             />
 
@@ -101,7 +101,7 @@ export default function Alert({
             {/* 하단 그림자 */}
             <div
               className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
-                scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"
+                scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </div>
@@ -114,13 +114,13 @@ export default function Alert({
         {/* 버튼들 */}
         <div
           className={`flex ${
-            !shouldShowCancel ? "justify-center" : ""
+            !shouldShowCancel ? 'justify-center' : ''
           } gap-[10.5px] mt-[19px] pr-[14px]`}
         >
           <button
             onClick={onConfirm}
             className={`w-${
-              shouldShowCancel ? "[150px]" : "full"
+              shouldShowCancel ? '[150px]' : 'full'
             } h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3`}
           >
             {confirmLabel}

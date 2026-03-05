@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import Modal from "../Modal";
-import Checkbox from "@components/main/common/Checkbox";
-import { useTranslation } from "@contexts/I18nContext";
-import { useSettingsStore, type GridSettings } from "@stores/useSettingsStore";
+import React, { useState } from 'react';
+import Modal from '../Modal';
+import Checkbox from '@components/main/common/Checkbox';
+import { useTranslation } from '@contexts/I18nContext';
+import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
 
 interface GridSettingsModalProps {
   onClose: () => void;
@@ -14,13 +14,13 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
 
   // 로컬 상태로 관리 (저장 버튼 누를 때만 적용)
   const [alignmentGuides, setAlignmentGuides] = useState(
-    gridSettings.alignmentGuides
+    gridSettings.alignmentGuides,
   );
   const [spacingGuides, setSpacingGuides] = useState(
-    gridSettings.spacingGuides
+    gridSettings.spacingGuides,
   );
   const [sizeMatchGuides, setSizeMatchGuides] = useState(
-    gridSettings.sizeMatchGuides
+    gridSettings.sizeMatchGuides,
   );
 
   const handleSave = async () => {
@@ -35,7 +35,7 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
     try {
       await window.api.settings.update({ gridSettings: newSettings });
     } catch (error) {
-      console.error("Failed to update grid settings", error);
+      console.error('Failed to update grid settings', error);
     } finally {
       onClose();
     }
@@ -50,7 +50,7 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
         {/* 정렬 가이드 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("gridSettings.alignmentGuides")}
+            {t('gridSettings.alignmentGuides')}
           </p>
           <Checkbox
             checked={alignmentGuides}
@@ -61,7 +61,7 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
         {/* 간격 일치 가이드 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("gridSettings.spacingGuides")}
+            {t('gridSettings.spacingGuides')}
           </p>
           <Checkbox
             checked={spacingGuides}
@@ -72,7 +72,7 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
         {/* 크기 일치 가이드 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("gridSettings.sizeMatchGuides")}
+            {t('gridSettings.sizeMatchGuides')}
           </p>
           <Checkbox
             checked={sizeMatchGuides}
@@ -86,13 +86,13 @@ export default function GridSettingsModal({ onClose }: GridSettingsModalProps) {
             onClick={handleSave}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {t("gridSettings.save")}
+            {t('gridSettings.save')}
           </button>
           <button
             onClick={onClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            {t("gridSettings.cancel")}
+            {t('gridSettings.cancel')}
           </button>
         </div>
       </div>

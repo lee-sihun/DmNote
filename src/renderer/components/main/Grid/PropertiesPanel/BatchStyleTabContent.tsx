@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import type { KeyPosition } from "@src/types/keys";
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type { KeyPosition } from '@src/types/keys';
 import {
   PropertyRow,
   NumberInput,
@@ -7,11 +7,11 @@ import {
   TextInput,
   SectionDivider,
   FontStyleToggle,
-} from "./index";
-import Checkbox from "@components/main/common/Checkbox";
-import FontPicker from "@components/main/Modal/content/FontPicker";
-import FontManagerModal from "@components/main/Modal/content/FontManagerModal";
-import SoundPicker from "@components/main/Modal/content/SoundPicker";
+} from './index';
+import Checkbox from '@components/main/common/Checkbox';
+import FontPicker from '@components/main/Modal/content/FontPicker';
+import FontManagerModal from '@components/main/Modal/content/FontManagerModal';
+import SoundPicker from '@components/main/Modal/content/SoundPicker';
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;
@@ -39,9 +39,9 @@ interface BatchStyleTabContentProps {
   getSelectedKeysData: () => KeyData[];
   // 핸들러
   handleBatchAlign: (
-    direction: "left" | "centerH" | "right" | "top" | "centerV" | "bottom",
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
   ) => void;
-  handleBatchDistribute: (direction: "horizontal" | "vertical") => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
   handleBatchSpacing: (
     spacing: number,
     options?: { skipHistory?: boolean },
@@ -52,7 +52,7 @@ interface BatchStyleTabContentProps {
     options?: { skipHistory?: boolean },
   ) => void;
   batchSpacing: { isMixed: boolean; value: number };
-  handleBatchResize: (dimension: "width" | "height", value: number) => void;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
   handleBatchStyleChange: (property: keyof KeyPosition, value: any) => void;
   handleBatchStyleChangeComplete: (
     property: keyof KeyPosition,
@@ -102,7 +102,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   useCustomCSS,
   t,
 }) => {
-  const [colorState, setColorState] = useState<"idle" | "active">("idle");
+  const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
   const [showFontPicker, setShowFontPicker] = useState(false);
   const [showSoundPicker, setShowSoundPicker] = useState(false);
 
@@ -150,7 +150,8 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         spacingDebounceTimerRef.current = null;
         const spacing = lastSpacingRef.current;
         if (spacing === null) return;
-        if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing)) return;
+        if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing))
+          return;
         commitSpacing(spacing);
       }, SPACING_COMMIT_DEBOUNCE_MS);
     },
@@ -162,7 +163,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       clearTimeout(spacingDebounceTimerRef.current);
       spacingDebounceTimerRef.current = null;
     }
-    if (!isSameSpacingValue(lastCommittedSpacingRef.current, lastSpacingRef.current)) {
+    if (
+      !isSameSpacingValue(
+        lastCommittedSpacingRef.current,
+        lastSpacingRef.current,
+      )
+    ) {
       const spacing = lastSpacingRef.current;
       if (spacing !== null) {
         commitSpacing(spacing);
@@ -188,12 +194,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
     const keysData = getSelectedKeysData();
-    if (keysData.length === 0) return { isMixed: false, value: "" };
+    if (keysData.length === 0) return { isMixed: false, value: '' };
 
     const getEffectiveDisplayText = (data: KeyData): string => {
       const displayText = data.position?.displayText;
       if (displayText) return displayText;
-      return data.keyInfo?.displayName || "";
+      return data.keyInfo?.displayName || '';
     };
 
     const firstValue = getEffectiveDisplayText(keysData[0]);
@@ -207,15 +213,15 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   return (
     <>
       {/* 정렬 */}
-      <PropertyRow label={t("propertiesPanel.alignment") || "정렬"}>
+      <PropertyRow label={t('propertiesPanel.alignment') || '정렬'}>
         <div className="flex gap-[4px]">
           {/* 수평 정렬 */}
           <div className="flex">
             <button
               type="button"
-              onClick={() => handleBatchAlign("left")}
+              onClick={() => handleBatchAlign('left')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignLeft") || "왼쪽 정렬"}
+              title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -244,9 +250,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleBatchAlign("centerH")}
+              onClick={() => handleBatchAlign('centerH')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignCenterH") || "수평 중앙 정렬"}
+              title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -275,9 +281,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleBatchAlign("right")}
+              onClick={() => handleBatchAlign('right')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-r-[7px] flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignRight") || "오른쪽 정렬"}
+              title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -309,9 +315,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           <div className="flex">
             <button
               type="button"
-              onClick={() => handleBatchAlign("top")}
+              onClick={() => handleBatchAlign('top')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignTop") || "위쪽 정렬"}
+              title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -340,9 +346,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleBatchAlign("centerV")}
+              onClick={() => handleBatchAlign('centerV')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignCenterV") || "수직 중앙 정렬"}
+              title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -371,9 +377,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleBatchAlign("bottom")}
+              onClick={() => handleBatchAlign('bottom')}
               className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-r-[7px] flex items-center justify-center hover:bg-[#353540] transition-colors"
-              title={t("propertiesPanel.alignBottom") || "아래쪽 정렬"}
+              title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
@@ -405,18 +411,18 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertyRow>
 
       {/* 분배 */}
-      <PropertyRow label={t("propertiesPanel.distribution") || "분배"}>
+      <PropertyRow label={t('propertiesPanel.distribution') || '분배'}>
         <div className="flex gap-[4px]">
           <button
             type="button"
-            onClick={() => handleBatchDistribute("horizontal")}
+            onClick={() => handleBatchDistribute('horizontal')}
             disabled={selectedCount < 3}
             className={`w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] flex items-center justify-center transition-colors ${
               selectedCount < 3
-                ? "opacity-40 cursor-not-allowed"
-                : "hover:bg-[#353540]"
+                ? 'opacity-40 cursor-not-allowed'
+                : 'hover:bg-[#353540]'
             }`}
-            title={t("propertiesPanel.distributeH") || "수평 분배"}
+            title={t('propertiesPanel.distributeH') || '수평 분배'}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <rect
@@ -447,14 +453,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => handleBatchDistribute("vertical")}
+            onClick={() => handleBatchDistribute('vertical')}
             disabled={selectedCount < 3}
             className={`w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] flex items-center justify-center transition-colors ${
               selectedCount < 3
-                ? "opacity-40 cursor-not-allowed"
-                : "hover:bg-[#353540]"
+                ? 'opacity-40 cursor-not-allowed'
+                : 'hover:bg-[#353540]'
             }`}
-            title={t("propertiesPanel.distributeV") || "수직 분배"}
+            title={t('propertiesPanel.distributeV') || '수직 분배'}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <rect
@@ -487,7 +493,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertyRow>
 
       {/* 간격 */}
-      <PropertyRow label={t("propertiesPanel.spacing") || "간격"}>
+      <PropertyRow label={t('propertiesPanel.spacing') || '간격'}>
         <NumberInput
           value={batchSpacing.value}
           onChange={onSpacingChange}
@@ -502,10 +508,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertyRow>
 
       {/* 크기 */}
-      <PropertyRow label={t("propertiesPanel.size") || "크기"}>
+      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
         <NumberInput
           value={getMixedValue((pos) => pos.width, 60).value}
-          onChange={(value) => handleBatchResize("width", value)}
+          onChange={(value) => handleBatchResize('width', value)}
           prefix="W"
           min={10}
           max={500}
@@ -515,7 +521,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         />
         <NumberInput
           value={getMixedValue((pos) => pos.height, 60).value}
-          onChange={(value) => handleBatchResize("height", value)}
+          onChange={(value) => handleBatchResize('height', value)}
           prefix="H"
           min={10}
           max={500}
@@ -536,100 +542,100 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       )}
 
       {/* 배경색 */}
-      <PropertyRow label={t("propertiesPanel.backgroundColor") || "배경색"}>
+      <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
         {(
-          colorState === "active"
+          colorState === 'active'
             ? getMixedValue(
                 (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-                "rgba(121, 121, 121, 0.9)",
+                'rgba(121, 121, 121, 0.9)',
               ).isMixed
             : getMixedValue(
                 (pos) => pos.backgroundColor,
-                "rgba(46, 46, 47, 0.9)",
+                'rgba(46, 46, 47, 0.9)',
               ).isMixed
         ) ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
-            getMixedValue((pos) => pos.backgroundColor, "rgba(46, 46, 47, 0.9)")
+            getMixedValue((pos) => pos.backgroundColor, 'rgba(46, 46, 47, 0.9)')
               .value
           }
           activeValue={
             getMixedValue(
               (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-              "rgba(121, 121, 121, 0.9)",
+              'rgba(121, 121, 121, 0.9)',
             ).value
           }
           showStateTabs
           stateMode={colorState}
           onStateModeChange={setColorState}
-          onChange={(color) => handleBatchStyleChange("backgroundColor", color)}
+          onChange={(color) => handleBatchStyleChange('backgroundColor', color)}
           onChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("backgroundColor", color)
+            handleBatchStyleChangeComplete('backgroundColor', color)
           }
           onActiveChange={(color) =>
-            handleBatchStyleChange("activeBackgroundColor", color)
+            handleBatchStyleChange('activeBackgroundColor', color)
           }
           onActiveChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("activeBackgroundColor", color)
+            handleBatchStyleChangeComplete('activeBackgroundColor', color)
           }
           panelElement={panelElement}
         />
       </PropertyRow>
 
       {/* 테두리 색상 */}
-      <PropertyRow label={t("propertiesPanel.borderColor") || "테두리 색상"}>
+      <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
         {(
-          colorState === "active"
+          colorState === 'active'
             ? getMixedValue(
                 (pos) => pos.activeBorderColor ?? pos.borderColor,
-                "rgba(255, 255, 255, 0.9)",
+                'rgba(255, 255, 255, 0.9)',
               ).isMixed
             : getMixedValue(
                 (pos) => pos.borderColor,
-                "rgba(113, 113, 113, 0.9)",
+                'rgba(113, 113, 113, 0.9)',
               ).isMixed
         ) ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
-            getMixedValue((pos) => pos.borderColor, "rgba(113, 113, 113, 0.9)")
+            getMixedValue((pos) => pos.borderColor, 'rgba(113, 113, 113, 0.9)')
               .value
           }
           activeValue={
             getMixedValue(
               (pos) => pos.activeBorderColor ?? pos.borderColor,
-              "rgba(255, 255, 255, 0.9)",
+              'rgba(255, 255, 255, 0.9)',
             ).value
           }
           showStateTabs
           stateMode={colorState}
           onStateModeChange={setColorState}
-          onChange={(color) => handleBatchStyleChange("borderColor", color)}
+          onChange={(color) => handleBatchStyleChange('borderColor', color)}
           onChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("borderColor", color)
+            handleBatchStyleChangeComplete('borderColor', color)
           }
           onActiveChange={(color) =>
-            handleBatchStyleChange("activeBorderColor", color)
+            handleBatchStyleChange('activeBorderColor', color)
           }
           onActiveChangeComplete={(color) =>
-            handleBatchStyleChangeComplete("activeBorderColor", color)
+            handleBatchStyleChangeComplete('activeBorderColor', color)
           }
           panelElement={panelElement}
         />
       </PropertyRow>
 
       {/* 테두리 두께 */}
-      <PropertyRow label={t("propertiesPanel.borderWidth") || "테두리 두께"}>
+      <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
         {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderWidth, 3).value}
           onChange={(value) =>
-            handleBatchStyleChangeComplete("borderWidth", value)
+            handleBatchStyleChangeComplete('borderWidth', value)
           }
           suffix="px"
           min={0}
@@ -638,14 +644,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertyRow>
 
       {/* 모서리 반경 */}
-      <PropertyRow label={t("propertiesPanel.borderRadius") || "모서리 반경"}>
+      <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
         {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderRadius, 10).value}
           onChange={(value) =>
-            handleBatchStyleChangeComplete("borderRadius", value)
+            handleBatchStyleChangeComplete('borderRadius', value)
           }
           suffix="px"
           min={0}
@@ -654,16 +660,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       </PropertyRow>
 
       {/* 커스텀 이미지 */}
-      <PropertyRow label={t("propertiesPanel.customImage") || "커스텀 이미지"}>
+      <PropertyRow label={t('propertiesPanel.customImage') || '커스텀 이미지'}>
         <button
           ref={batchImageButtonRef}
           type="button"
           className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showBatchImagePicker ? "border-[#459BF8]" : "border-[#3A3943]"
+            showBatchImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
           } text-[#DBDEE8] text-style-4`}
           onClick={onToggleBatchImagePicker}
         >
-          {t("propertiesPanel.configure") || "설정하기"}
+          {t('propertiesPanel.configure') || '설정하기'}
         </button>
       </PropertyRow>
 
@@ -671,21 +677,21 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
       {/* 표시 텍스트 */}
       {!hideDisplayText && (
-        <PropertyRow label={t("propertiesPanel.displayText") || "표시 텍스트"}>
+        <PropertyRow label={t('propertiesPanel.displayText') || '표시 텍스트'}>
           {(() => {
             const { isMixed, value } = getDisplayTextMixed();
             const displayTextValue = getMixedValue(
               (pos) => pos.displayText,
-              "",
+              '',
             ).value;
             // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
             return (
               <TextInput
-                value={isMixed ? "" : displayTextValue}
+                value={isMixed ? '' : displayTextValue}
                 onChange={(v) =>
-                  handleBatchStyleChangeComplete("displayText", v)
+                  handleBatchStyleChangeComplete('displayText', v)
                 }
-                placeholder={isMixed ? "Mixed" : value}
+                placeholder={isMixed ? 'Mixed' : value}
                 width="54px"
                 isMixed={isMixed}
               />
@@ -697,7 +703,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {!hideFontControls && (
         <>
           {/* 폰트 */}
-          <PropertyRow label={t("propertiesPanel.font") || "폰트"}>
+          <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
             {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
               <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
             ) : null}
@@ -705,23 +711,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ref={fontButtonRef}
               type="button"
               className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showFontPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                showFontPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
               } text-[#DBDEE8] text-style-4`}
               onClick={() => setShowFontPicker(!showFontPicker)}
             >
-              {t("propertiesPanel.configure") || "설정하기"}
+              {t('propertiesPanel.configure') || '설정하기'}
             </button>
           </PropertyRow>
 
           {/* 글꼴 크기 */}
-          <PropertyRow label={t("propertiesPanel.fontSize") || "글꼴 크기"}>
+          <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
             {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
               <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
             ) : null}
             <NumberInput
               value={getMixedValue((pos) => pos.fontSize, 14).value}
               onChange={(value) =>
-                handleBatchStyleChangeComplete("fontSize", value)
+                handleBatchStyleChangeComplete('fontSize', value)
               }
               suffix="px"
               min={8}
@@ -730,71 +736,75 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           </PropertyRow>
 
           {/* 글꼴 색상 */}
-          <PropertyRow label={t("propertiesPanel.fontColor") || "글꼴 색상"}>
+          <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
             {(
-              colorState === "active"
+              colorState === 'active'
                 ? getMixedValue(
                     (pos) => pos.activeFontColor ?? pos.fontColor,
-                    "#FFFFFF",
+                    '#FFFFFF',
                   ).isMixed
                 : getMixedValue(
                     (pos) => pos.fontColor,
-                    "rgba(121, 121, 121, 0.9)",
+                    'rgba(121, 121, 121, 0.9)',
                   ).isMixed
             ) ? (
               <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
             ) : null}
             <ColorInput
               value={
-                getMixedValue((pos) => pos.fontColor, "rgba(121, 121, 121, 0.9)")
-                  .value
+                getMixedValue(
+                  (pos) => pos.fontColor,
+                  'rgba(121, 121, 121, 0.9)',
+                ).value
               }
               activeValue={
                 getMixedValue(
                   (pos) => pos.activeFontColor ?? pos.fontColor,
-                  "#FFFFFF",
+                  '#FFFFFF',
                 ).value
               }
               showStateTabs
               stateMode={colorState}
               onStateModeChange={setColorState}
-              onChange={(color) => handleBatchStyleChange("fontColor", color)}
+              onChange={(color) => handleBatchStyleChange('fontColor', color)}
               onChangeComplete={(color) =>
-                handleBatchStyleChangeComplete("fontColor", color)
+                handleBatchStyleChangeComplete('fontColor', color)
               }
               onActiveChange={(color) =>
-                handleBatchStyleChange("activeFontColor", color)
+                handleBatchStyleChange('activeFontColor', color)
               }
               onActiveChangeComplete={(color) =>
-                handleBatchStyleChangeComplete("activeFontColor", color)
+                handleBatchStyleChangeComplete('activeFontColor', color)
               }
               panelElement={panelElement}
             />
           </PropertyRow>
 
           {/* 글꼴 스타일 */}
-          <PropertyRow label={t("propertiesPanel.fontStyle") || "글꼴 스타일"}>
+          <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
             <FontStyleToggle
               isBold={
                 getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true)
                   .value
               }
               isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
-              isUnderline={getMixedValue((pos) => pos.fontUnderline, false).value}
+              isUnderline={
+                getMixedValue((pos) => pos.fontUnderline, false).value
+              }
               isStrikethrough={
                 getMixedValue((pos) => pos.fontStrikethrough, false).value
               }
               onBoldChange={(value) =>
-                handleBatchStyleChangeComplete("fontWeight", value ? 700 : 400)
+                handleBatchStyleChangeComplete('fontWeight', value ? 700 : 400)
               }
               onItalicChange={(value) =>
-                handleBatchStyleChangeComplete("fontItalic", value)
+                handleBatchStyleChangeComplete('fontItalic', value)
               }
               onUnderlineChange={(value) =>
-                handleBatchStyleChangeComplete("fontUnderline", value)
+                handleBatchStyleChangeComplete('fontUnderline', value)
               }
               onStrikethroughChange={(value) =>
-                handleBatchStyleChangeComplete("fontStrikethrough", value)
+                handleBatchStyleChangeComplete('fontStrikethrough', value)
               }
             />
           </PropertyRow>
@@ -809,7 +819,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           {/* CSS 우선순위 토글 */}
           <div className="flex justify-between items-center w-full h-[23px]">
             <p className="text-white text-style-2">
-              {t("propertiesPanel.useInlineStyles") || "인라인 스타일 우선"}
+              {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
               checked={getMixedValue((pos) => pos.useInlineStyles, false).value}
@@ -819,7 +829,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   false,
                 ).value;
                 handleBatchStyleChangeComplete(
-                  "useInlineStyles",
+                  'useInlineStyles',
                   !currentValue,
                 );
               }}
@@ -827,90 +837,106 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           </div>
 
           {/* 클래스명 */}
-          <PropertyRow label={t("propertiesPanel.className") || "클래스"}>
+          <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
             <TextInput
               value={
-                getMixedValue((pos) => pos.className, "").isMixed
-                  ? ""
-                  : getMixedValue((pos) => pos.className, "").value
+                getMixedValue((pos) => pos.className, '').isMixed
+                  ? ''
+                  : getMixedValue((pos) => pos.className, '').value
               }
               onChange={(value) => {
-                handleBatchStyleChangeComplete("className", value);
+                handleBatchStyleChangeComplete('className', value);
               }}
               placeholder={
-                getMixedValue((pos) => pos.className, "").isMixed
-                  ? "Mixed"
-                  : "className"
+                getMixedValue((pos) => pos.className, '').isMixed
+                  ? 'Mixed'
+                  : 'className'
               }
               width="90px"
-              isMixed={getMixedValue((pos) => pos.className, "").isMixed}
+              isMixed={getMixedValue((pos) => pos.className, '').isMixed}
             />
           </PropertyRow>
         </>
       )}
 
-      {showSoundControls && (() => {
-        const soundMixedValue = getKeyOnlyMixedValue ?? getMixedValue;
-        const soundChangeComplete = handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete;
-        return (
-          <>
-            <SectionDivider />
+      {showSoundControls &&
+        (() => {
+          const soundMixedValue = getKeyOnlyMixedValue ?? getMixedValue;
+          const soundChangeComplete =
+            handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete;
+          return (
+            <>
+              <SectionDivider />
 
-            <PropertyRow
-              label={t("propertiesPanel.keySoundEnabled") || "키 사운드 활성화"}
-            >
-              {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
-                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-              ) : null}
-              <Checkbox
-                checked={soundMixedValue((pos) => pos.soundEnabled, false).value}
-                onChange={() => {
-                  const current = soundMixedValue(
-                    (pos) => pos.soundEnabled,
-                    false,
-                  ).value;
-                  soundChangeComplete("soundEnabled", !current);
-                }}
-              />
-            </PropertyRow>
-
-            <PropertyRow label={t("propertiesPanel.keySound") || "키 사운드"}>
-              {soundMixedValue((pos) => pos.soundPath, "").isMixed ? (
-                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-              ) : null}
-              <button
-                ref={soundButtonRef}
-                type="button"
-                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                  showSoundPicker ? "border-[#459BF8]" : "border-[#3A3943]"
-                } text-[#DBDEE8] text-style-4`}
-                onClick={() => setShowSoundPicker((prev) => !prev)}
-              >
-                {t("propertiesPanel.configure") || "설정하기"}
-              </button>
-            </PropertyRow>
-
-            <PropertyRow label={t("propertiesPanel.soundVolume") || "사운드 볼륨"}>
-              {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-                <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-              ) : null}
-              <NumberInput
-                value={soundMixedValue((pos) => pos.soundVolume, 100).value}
-                onChange={(value) =>
-                  soundChangeComplete(
-                    "soundVolume",
-                    Math.max(0, Math.min(100, value)),
-                  )
+              <PropertyRow
+                label={
+                  t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'
                 }
-                suffix="%"
-                min={0}
-                max={100}
-                isMixed={soundMixedValue((pos) => pos.soundVolume, 100).isMixed}
-              />
-            </PropertyRow>
-          </>
-        );
-      })()}
+              >
+                {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
+                  <span className="text-[#6B6D75] text-style-4 italic">
+                    Mixed
+                  </span>
+                ) : null}
+                <Checkbox
+                  checked={
+                    soundMixedValue((pos) => pos.soundEnabled, false).value
+                  }
+                  onChange={() => {
+                    const current = soundMixedValue(
+                      (pos) => pos.soundEnabled,
+                      false,
+                    ).value;
+                    soundChangeComplete('soundEnabled', !current);
+                  }}
+                />
+              </PropertyRow>
+
+              <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
+                {soundMixedValue((pos) => pos.soundPath, '').isMixed ? (
+                  <span className="text-[#6B6D75] text-style-4 italic">
+                    Mixed
+                  </span>
+                ) : null}
+                <button
+                  ref={soundButtonRef}
+                  type="button"
+                  className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                    showSoundPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
+                  } text-[#DBDEE8] text-style-4`}
+                  onClick={() => setShowSoundPicker((prev) => !prev)}
+                >
+                  {t('propertiesPanel.configure') || '설정하기'}
+                </button>
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
+              >
+                {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
+                  <span className="text-[#6B6D75] text-style-4 italic">
+                    Mixed
+                  </span>
+                ) : null}
+                <NumberInput
+                  value={soundMixedValue((pos) => pos.soundVolume, 100).value}
+                  onChange={(value) =>
+                    soundChangeComplete(
+                      'soundVolume',
+                      Math.max(0, Math.min(100, value)),
+                    )
+                  }
+                  suffix="%"
+                  min={0}
+                  max={100}
+                  isMixed={
+                    soundMixedValue((pos) => pos.soundVolume, 100).isMixed
+                  }
+                />
+              </PropertyRow>
+            </>
+          );
+        })()}
 
       {/* FontPicker */}
       {!hideFontControls && showFontPicker && (
@@ -920,7 +946,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           panelElement={panelElement}
           selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
           onFontSelect={(fontName) => {
-            handleBatchStyleChangeComplete("fontFamily", fontName);
+            handleBatchStyleChangeComplete('fontFamily', fontName);
           }}
           onClose={() => setShowFontPicker(false)}
           onOpenManager={() => {
@@ -936,13 +962,23 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           open={true}
           referenceRef={soundButtonRef}
           panelElement={panelElement}
-          selectedSound={(getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundPath, "").value || null}
+          selectedSound={
+            (getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundPath, '')
+              .value || null
+          }
           onSoundSelect={(soundPath) => {
-            (handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete)("soundPath", soundPath || "");
+            (
+              handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete
+            )('soundPath', soundPath || '');
           }}
           onClose={() => setShowSoundPicker(false)}
           interactiveRefs={[soundButtonRef]}
-          previewVolume={(getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundVolume, 100).value}
+          previewVolume={
+            (getKeyOnlyMixedValue ?? getMixedValue)(
+              (pos) => pos.soundVolume,
+              100,
+            ).value
+          }
         />
       )}
 

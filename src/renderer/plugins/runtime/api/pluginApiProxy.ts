@@ -7,9 +7,9 @@ import {
   createNamespacedStorage,
   wrapApiValue,
   wrapFunctionWithContext,
-} from "../context";
-import { createDefineElement } from "./defineElement";
-import { createDefineSettings } from "./defineSettings";
+} from '../context';
+import { createDefineElement } from './defineElement';
+import { createDefineSettings } from './defineSettings';
 
 interface CreatePluginApiProxyOptions {
   pluginId: string;
@@ -21,7 +21,7 @@ interface CreatePluginApiProxyOptions {
  * 플러그인용 API 프록시를 생성합니다.
  */
 export const createPluginApiProxy = (
-  options: CreatePluginApiProxyOptions
+  options: CreatePluginApiProxyOptions,
 ): typeof window.api => {
   const { pluginId, registerCleanup, isReloading } = options;
 
@@ -50,7 +50,7 @@ export const createPluginApiProxy = (
     ...wrappedApi,
     window: {
       ...(wrappedApi.window || {}),
-      type: (window as any).__dmn_window_type as "main" | "overlay",
+      type: (window as any).__dmn_window_type as 'main' | 'overlay',
     },
     plugin: {
       ...(wrappedApi.plugin || {}),
@@ -68,12 +68,12 @@ export const createPluginApiProxy = (
  * 플러그인용 Window 프록시를 생성합니다.
  */
 export const createPluginWindowProxy = (
-  proxiedApi: typeof window.api
+  proxiedApi: typeof window.api,
 ): Window => {
   return new Proxy(window, {
     get(target, prop: string | symbol, receiver) {
-      if (prop === "api") return proxiedApi;
-      if (prop === "dmn") return proxiedApi; // dmn 별칭도 프록시된 API 반환
+      if (prop === 'api') return proxiedApi;
+      if (prop === 'dmn') return proxiedApi; // dmn 별칭도 프록시된 API 반환
       return Reflect.get(target as any, prop, receiver);
     },
     set(target, prop: string | symbol, value, receiver) {

@@ -6,7 +6,7 @@
  */
 
 // 핸들러 레지스트리
-export { handlerRegistry } from "@plugins/runtime/handlers";
+export { handlerRegistry } from '@plugins/runtime/handlers';
 
 // 디스플레이 요소 API
 export {
@@ -15,4 +15,4 @@ export {
   setUndoRedoInProgress,
   getUndoRedoInProgress,
   setInitialLoading,
-} from "@plugins/runtime/displayElement";
+} from '@plugins/runtime/displayElement';

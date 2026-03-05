@@ -1,4 +1,4 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 const imageSrcCache = new Map<string, string>();
 
@@ -11,12 +11,12 @@ function isLikelyLocalPath(value: string): boolean {
   if (PASSTHROUGH_PREFIX.test(value)) return false;
   if (WINDOWS_ABSOLUTE_PATH.test(value)) return true;
   if (WINDOWS_UNC_PATH.test(value)) return true;
-  if (value.startsWith("/")) return true;
+  if (value.startsWith('/')) return true;
   return false;
 }
 
 export function resolveImageSource(value?: string | null): string | null {
-  const raw = typeof value === "string" ? value.trim() : "";
+  const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return null;
 
   if (!isLikelyLocalPath(raw)) {
@@ -36,4 +36,3 @@ export function resolveImageSource(value?: string | null): string | null {
     return raw;
   }
 }
-

@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
-import Modal from "../Modal";
-import Checkbox from "@components/main/common/Checkbox";
-import { useTranslation } from "@contexts/I18nContext";
+import React, { useState, useMemo } from 'react';
+import Modal from '../Modal';
+import Checkbox from '@components/main/common/Checkbox';
+import { useTranslation } from '@contexts/I18nContext';
 
 interface LaboratoryProps {
   delayEnabled: boolean;
@@ -57,15 +57,15 @@ export default function LaboratoryModal({
   const handleSave = async () => {
     const sanitizedThreshold = Math.max(
       0,
-      Math.min(parseInt(String(threshold), 10) || 0, 2000)
+      Math.min(parseInt(String(threshold), 10) || 0, 2000),
     );
     const sanitizedMinimum = Math.max(
       1,
-      Math.min(parseInt(String(minimum), 10) || 1, 100)
+      Math.min(parseInt(String(minimum), 10) || 1, 100),
     );
     const sanitizedKeyDelay = Math.max(
       0,
-      Math.min(parseInt(String(keyDelay), 10) || 0, 5000)
+      Math.min(parseInt(String(keyDelay), 10) || 0, 5000),
     );
 
     try {
@@ -88,7 +88,7 @@ export default function LaboratoryModal({
       >
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("laboratory.delayToggle")}
+            {t('laboratory.delayToggle')}
           </p>
           <Checkbox
             checked={enforceShort}
@@ -97,7 +97,7 @@ export default function LaboratoryModal({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("laboratory.minLength")}</p>
+          <p className="text-white text-style-2">{t('laboratory.minLength')}</p>
           <input
             type="number"
             min={1}
@@ -107,7 +107,7 @@ export default function LaboratoryModal({
             onBlur={() => {
               const sanitized = Math.max(
                 1,
-                Math.min(Number(minimum) || 1, 100)
+                Math.min(Number(minimum) || 1, 100),
               );
               setMinimum(String(sanitized));
             }}
@@ -116,7 +116,7 @@ export default function LaboratoryModal({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("laboratory.threshold")}</p>
+          <p className="text-white text-style-2">{t('laboratory.threshold')}</p>
           <input
             type="number"
             min={0}
@@ -126,7 +126,7 @@ export default function LaboratoryModal({
             onBlur={() => {
               const sanitized = Math.max(
                 0,
-                Math.min(Number(threshold) || 0, 2000)
+                Math.min(Number(threshold) || 0, 2000),
               );
               setThreshold(String(sanitized));
             }}
@@ -139,7 +139,7 @@ export default function LaboratoryModal({
 
         {/* 키 딜레이 설정 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("laboratory.keyDelay")}</p>
+          <p className="text-white text-style-2">{t('laboratory.keyDelay')}</p>
           <div className="flex items-center gap-[8px]">
             <input
               type="number"
@@ -150,7 +150,7 @@ export default function LaboratoryModal({
               onBlur={() => {
                 const sanitized = Math.max(
                   0,
-                  Math.min(Number(keyDelay) || 0, 5000)
+                  Math.min(Number(keyDelay) || 0, 5000),
                 );
                 setKeyDelay(String(sanitized));
               }}
@@ -161,13 +161,13 @@ export default function LaboratoryModal({
 
         <div className="flex justify-between w-full items-center">
           <p className="text-[#717178] text-style-4">
-            {t("laboratory.keyDelayAuto", { value: calculatedDelay })}
+            {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
           </p>
           <button
             onClick={handleAutoCalculate}
             className="px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-4"
           >
-            {t("laboratory.autoCalc")}
+            {t('laboratory.autoCalc')}
           </button>
         </div>
 
@@ -176,13 +176,13 @@ export default function LaboratoryModal({
             onClick={handleSave}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {t("laboratory.save")}
+            {t('laboratory.save')}
           </button>
           <button
             onClick={onClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            {t("laboratory.cancel")}
+            {t('laboratory.cancel')}
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { NOTE_SETTINGS_CONSTRAINTS } from "../../types/noteSettingsConstraints";
+import { NOTE_SETTINGS_CONSTRAINTS } from '../../types/noteSettingsConstraints';
 
 export const DEFAULT_NOTE_BORDER_RADIUS =
   NOTE_SETTINGS_CONSTRAINTS.borderRadius.default;
@@ -23,4 +23,4 @@ export const DEFAULT_NOTE_SETTINGS = {
 export const TRACK_HEIGHT = DEFAULT_NOTE_SETTINGS.trackHeight;
 
 // 제약 값 export
-export { NOTE_SETTINGS_CONSTRAINTS } from "../../types/noteSettingsConstraints";
+export { NOTE_SETTINGS_CONSTRAINTS } from '../../types/noteSettingsConstraints';

@@ -3,7 +3,7 @@
  * 플러그인의 디스플레이 요소 인스턴스들을 관리합니다.
  */
 
-import { DisplayElementInstance } from "@utils/displayElementInstance";
+import { DisplayElementInstance } from '@utils/displayElementInstance';
 
 const displayElementInstances = new Map<string, DisplayElementInstance>();
 const displayElementInstancesByPlugin = new Map<string, Set<string>>();
@@ -12,7 +12,7 @@ const displayElementInstancesByPlugin = new Map<string, Set<string>>();
  * 디스플레이 요소 인스턴스를 등록합니다.
  */
 export const registerDisplayElementInstance = (
-  instance: DisplayElementInstance
+  instance: DisplayElementInstance,
 ): void => {
   displayElementInstances.set(instance.id, instance);
   if (!displayElementInstancesByPlugin.has(instance.pluginId)) {
@@ -52,7 +52,7 @@ export const clearInstancesByPlugin = (pluginId: string): void => {
  */
 export const clearAllInstances = (): void => {
   Array.from(displayElementInstances.keys()).forEach((id) =>
-    unregisterDisplayElementInstance(id)
+    unregisterDisplayElementInstance(id),
   );
   displayElementInstancesByPlugin.clear();
 };
@@ -61,7 +61,7 @@ export const clearAllInstances = (): void => {
  * fullId로 인스턴스를 조회합니다.
  */
 export const getDisplayElementInstance = (
-  fullId: string
+  fullId: string,
 ): DisplayElementInstance | undefined => {
   return displayElementInstances.get(fullId);
 };

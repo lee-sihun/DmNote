@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import Modal from "../Modal";
-import { useTranslation } from "@contexts/I18nContext";
+import React, { useEffect, useMemo, useState } from 'react';
+import Modal from '../Modal';
+import { useTranslation } from '@contexts/I18nContext';
 
 type Props = {
   isOpen: boolean;
@@ -16,23 +16,23 @@ export default function TabNameModal({
   existingNames = [],
 }: Props) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
+  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setName("");
+      setName('');
       setError(null);
     }
   }, [isOpen]);
 
   const validate = useMemo(() => {
     return (v: string) => {
-      if (!v || !v.trim()) return t("tabs.name.required");
-      if (v.length > 10) return t("tabs.name.max");
-      if (["4key", "5key", "6key", "8key"].includes(v))
-        return t("tabs.name.reserved");
-      if (existingNames.includes(v)) return t("tabs.name.duplicate");
+      if (!v || !v.trim()) return t('tabs.name.required');
+      if (v.length > 10) return t('tabs.name.max');
+      if (['4key', '5key', '6key', '8key'].includes(v))
+        return t('tabs.name.reserved');
+      if (existingNames.includes(v)) return t('tabs.name.duplicate');
       return null;
     };
   }, [existingNames]);
@@ -46,11 +46,11 @@ export default function TabNameModal({
     const res = await onSubmit(name.trim());
     if (res?.error) {
       const map: Record<string, string> = {
-        "max-reached": t("tabs.errors.max"),
-        "duplicate-name": t("tabs.name.duplicate"),
-        "invalid-name": t("tabs.errors.invalid"),
+        'max-reached': t('tabs.errors.max'),
+        'duplicate-name': t('tabs.name.duplicate'),
+        'invalid-name': t('tabs.errors.invalid'),
       };
-      setError(map[res.error] || t("tabs.errors.createFail"));
+      setError(map[res.error] || t('tabs.errors.createFail'));
       return;
     }
     onClose();
@@ -65,17 +65,17 @@ export default function TabNameModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-style-3 text-[#FFFFFF]">
-          {t("tabs.createTitle")}
+          {t('tabs.createTitle')}
         </div>
         <input
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
+            if (e.key === 'Enter') handleSubmit();
           }}
           className="w-full min-w-0 h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
-          placeholder={t("tabs.name.placeholder")}
+          placeholder={t('tabs.name.placeholder')}
         />
         {error && (
           <div className="text-[#ED6A5E] text-style-1 my-[-12px]">{error}</div>
@@ -85,13 +85,13 @@ export default function TabNameModal({
             className="flex-1 h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
             onClick={handleSubmit}
           >
-            {t("tabs.create")}
+            {t('tabs.create')}
           </button>
           <button
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             onClick={onClose}
           >
-            {t("common.cancel")}
+            {t('common.cancel')}
           </button>
         </div>
       </div>

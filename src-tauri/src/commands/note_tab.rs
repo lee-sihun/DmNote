@@ -1,7 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{app_state::AppState, models::{TabNoteSettings, TabNoteOverrides}};
+use crate::{
+    app_state::AppState,
+    models::{TabNoteOverrides, TabNoteSettings},
+};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -52,7 +55,9 @@ pub fn note_tab_set(
         state
             .store
             .update(|store| {
-                store.tab_note_overrides.insert(tab_id.clone(), note_settings.clone());
+                store
+                    .tab_note_overrides
+                    .insert(tab_id.clone(), note_settings.clone());
             })
             .map_err(|err| err.to_string())?;
     } else {

@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { useFontStore } from "@stores/useFontStore";
-import type { CustomFont } from "@src/types/fonts";
-import PlusIcon from "@assets/svgs/plus2.svg";
-import CommonListPickerPopup from "./CommonListPickerPopup";
+import React, { useState, useMemo, useCallback } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { useFontStore } from '@stores/useFontStore';
+import type { CustomFont } from '@src/types/fonts';
+import PlusIcon from '@assets/svgs/plus2.svg';
+import CommonListPickerPopup from './CommonListPickerPopup';
 
 interface FontPickerProps {
   open: boolean;
@@ -16,7 +16,7 @@ interface FontPickerProps {
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
 }
 
-type FilterType = "all" | "builtin" | "local" | "web";
+type FilterType = 'all' | 'builtin' | 'local' | 'web';
 
 export default function FontPicker({
   open,
@@ -29,8 +29,8 @@ export default function FontPicker({
   interactiveRefs = [],
 }: FontPickerProps) {
   const { t } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<FilterType>("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<FilterType>('all');
 
   const { builtinFonts, customFonts } = useFontStore();
 
@@ -41,7 +41,7 @@ export default function FontPicker({
     );
 
     // 타입 필터
-    if (filterType !== "all") {
+    if (filterType !== 'all') {
       fonts = fonts.filter((f) => f.type === filterType);
     }
 
@@ -71,10 +71,10 @@ export default function FontPicker({
   // 필터 옵션
   const filterOptions = useMemo(
     () => [
-      { value: "all", label: t("fontPicker.filterAll") || "전체" },
-      { value: "builtin", label: t("fontPicker.filterBuiltin") || "내장" },
-      { value: "web", label: t("fontPicker.filterWeb") || "웹" },
-      { value: "local", label: t("fontPicker.filterLocal") || "로컬" },
+      { value: 'all', label: t('fontPicker.filterAll') || '전체' },
+      { value: 'builtin', label: t('fontPicker.filterBuiltin') || '내장' },
+      { value: 'web', label: t('fontPicker.filterWeb') || '웹' },
+      { value: 'local', label: t('fontPicker.filterLocal') || '로컬' },
     ],
     [t],
   );
@@ -98,7 +98,7 @@ export default function FontPicker({
       estimatedHeight={280}
       searchQuery={searchQuery}
       onSearchQueryChange={setSearchQuery}
-      searchPlaceholder={t("fontPicker.searchPlaceholder") || "검색..."}
+      searchPlaceholder={t('fontPicker.searchPlaceholder') || '검색...'}
       filterOptions={filterOptions}
       filterValue={filterType}
       onFilterChange={(value) => setFilterType(value as FilterType)}
@@ -106,15 +106,15 @@ export default function FontPicker({
       renderItem={(font) => {
         const isSelected = effectiveSelectedFont
           ? effectiveSelectedFont === font.name
-          : font.name === "SUIT-Regular";
+          : font.name === 'SUIT-Regular';
         return (
           <button
             key={font.id}
             type="button"
             className={`w-full min-h-[24px] h-[24px] flex-shrink-0 px-[8px] rounded-[7px] text-left text-style-4 transition-colors truncate ${
               isSelected
-                ? "bg-[#2E2D33] text-[#FFFFFF]"
-                : "text-[#DBDEE8] hover:bg-[#26262C]"
+                ? 'bg-[#2E2D33] text-[#FFFFFF]'
+                : 'text-[#DBDEE8] hover:bg-[#26262C]'
             }`}
             style={{ fontFamily: font.name }}
             onClick={() => handleFontClick(font)}
@@ -124,7 +124,7 @@ export default function FontPicker({
           </button>
         );
       }}
-      emptyText={t("fontPicker.noFonts") || "폰트 없음"}
+      emptyText={t('fontPicker.noFonts') || '폰트 없음'}
       onAdd={onOpenManager}
       addButtonContent={<PlusIcon />}
     />

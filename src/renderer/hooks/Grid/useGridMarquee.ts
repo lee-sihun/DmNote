@@ -2,14 +2,14 @@
  * Grid 마퀴(범위 선택) 관련 로직 훅
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect } from 'react';
 import {
   useGridSelectionStore,
   isElementInMarquee,
   getMarqueeRect,
   type SelectedElement,
-} from "@stores/useGridSelectionStore";
-import type { PluginDisplayElementInternal } from "@src/types/api";
+} from '@stores/useGridSelectionStore';
+import type { PluginDisplayElementInternal } from '@src/types/api';
 
 interface UseGridMarqueeParams {
   positions: Record<string, any[]>;
@@ -19,7 +19,7 @@ interface UseGridMarqueeParams {
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
     clientX: number,
-    clientY: number
+    clientY: number,
   ) => { x: number; y: number } | null;
 }
 
@@ -44,21 +44,21 @@ export function useGridMarquee({
   clientToGridCoords,
 }: UseGridMarqueeParams): UseGridMarqueeReturn {
   const isMarqueeSelecting = useGridSelectionStore(
-    (state) => state.isMarqueeSelecting
+    (state) => state.isMarqueeSelecting,
   );
   const startMarqueeSelection = useGridSelectionStore(
-    (state) => state.startMarqueeSelection
+    (state) => state.startMarqueeSelection,
   );
   const updateMarqueeSelection = useGridSelectionStore(
-    (state) => state.updateMarqueeSelection
+    (state) => state.updateMarqueeSelection,
   );
   const endMarqueeSelection = useGridSelectionStore(
-    (state) => state.endMarqueeSelection
+    (state) => state.endMarqueeSelection,
   );
   const marqueeStart = useGridSelectionStore((state) => state.marqueeStart);
   const marqueeEnd = useGridSelectionStore((state) => state.marqueeEnd);
   const setSelectedElements = useGridSelectionStore(
-    (state) => state.setSelectedElements
+    (state) => state.setSelectedElements,
   );
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
@@ -72,7 +72,7 @@ export function useGridMarquee({
         updateMarqueeSelection(gridCoords.x, gridCoords.y);
       }
     },
-    [isMarqueeSelecting, clientToGridCoords, updateMarqueeSelection]
+    [isMarqueeSelecting, clientToGridCoords, updateMarqueeSelection],
   );
 
   // 마퀴 선택 완료 시 요소 선택 처리
@@ -97,7 +97,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "key",
+            type: 'key',
             id: `key-${index}`,
             index,
           });
@@ -116,7 +116,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "stat",
+            type: 'stat',
             id: `stat-${index}`,
             index,
           });
@@ -135,7 +135,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "graph",
+            type: 'graph',
             id: `graph-${index}`,
             index,
           });
@@ -155,7 +155,7 @@ export function useGridMarquee({
           };
           if (isElementInMarquee(elementBounds, rect)) {
             newSelectedElements.push({
-              type: "plugin",
+              type: 'plugin',
               id: el.fullId,
             });
           }
@@ -186,12 +186,12 @@ export function useGridMarquee({
   // 마퀴 선택 이벤트 등록
   useEffect(() => {
     if (isMarqueeSelecting) {
-      document.addEventListener("mousemove", handleMarqueeMouseMove);
-      document.addEventListener("mouseup", handleMarqueeMouseUp);
+      document.addEventListener('mousemove', handleMarqueeMouseMove);
+      document.addEventListener('mouseup', handleMarqueeMouseUp);
 
       return () => {
-        document.removeEventListener("mousemove", handleMarqueeMouseMove);
-        document.removeEventListener("mouseup", handleMarqueeMouseUp);
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
       };
     }
   }, [isMarqueeSelecting, handleMarqueeMouseMove, handleMarqueeMouseUp]);

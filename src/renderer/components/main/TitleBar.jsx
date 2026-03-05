@@ -1,8 +1,8 @@
-import React from "react";
-import Close from "@assets/svgs/close.svg";
-import Minimize from "@assets/svgs/minimize.svg";
-import Logo from "@assets/svgs/logo.svg";
-import { isMac } from "@utils/platform";
+import React from 'react';
+import Close from '@assets/svgs/close.svg';
+import Minimize from '@assets/svgs/minimize.svg';
+import Logo from '@assets/svgs/logo.svg';
+import { isMac } from '@utils/platform';
 
 export default function TitleBar() {
   const isMacOS = isMac();
@@ -18,7 +18,7 @@ export default function TitleBar() {
     <div
       data-tauri-drag-region
       className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-primary rounded-t-[6px] [app-region:drag]"
-      style={{ WebkitAppRegion: "drag" }}
+      style={{ WebkitAppRegion: 'drag' }}
     >
       <div className="flex items-center gap-[6px]">
         <Logo className="w-[12px] h-[12px]" />
@@ -30,7 +30,7 @@ export default function TitleBar() {
         <div
           data-tauri-drag-region="false"
           className="absolute right-0 flex h-full [app-region:no-drag]"
-          style={{ WebkitAppRegion: "no-drag" }}
+          style={{ WebkitAppRegion: 'no-drag' }}
         >
           <button
             onClick={handleMinimize}

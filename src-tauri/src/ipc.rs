@@ -55,8 +55,13 @@ pub enum HookKeyState {
 #[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{GetLastError, ERROR_PIPE_CONNECTED},
-    Storage::FileSystem::{CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_INBOUND},
-    System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT},
+    Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        PIPE_ACCESS_INBOUND,
+    },
+    System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+    },
 };
 
 #[cfg(target_os = "windows")]

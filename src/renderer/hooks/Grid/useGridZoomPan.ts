@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,
   MIN_ZOOM,
   MAX_ZOOM,
   ZOOM_STEP,
   clampZoom,
-} from "@stores/useGridViewStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import { isMac } from "@utils/platform";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import type { ShortcutBinding } from "@src/types/shortcuts";
+} from '@stores/useGridViewStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { isMac } from '@utils/platform';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import type { ShortcutBinding } from '@src/types/shortcuts';
 
 interface UseGridZoomPanOptions {
   mode: string;
@@ -68,7 +68,7 @@ export function useGridZoomPan({
       const localY = (clientY - rect.top - panY) / zoom;
       return { x: localX, y: localY };
     },
-    [containerRef, zoom, panX, panY]
+    [containerRef, zoom, panX, panY],
   );
 
   /**
@@ -82,7 +82,7 @@ export function useGridZoomPan({
       const clientY = gridY * zoom + panY + rect.top;
       return { x: clientX, y: clientY };
     },
-    [containerRef, zoom, panX, panY]
+    [containerRef, zoom, panX, panY],
   );
 
   /**
@@ -109,7 +109,7 @@ export function useGridZoomPan({
       setZoom(mode, clampedZoom);
       setPan(mode, newPanX, newPanY);
     },
-    [containerRef, zoom, panX, panY, mode, setZoom, setPan, touchTransforming]
+    [containerRef, zoom, panX, panY, mode, setZoom, setPan, touchTransforming],
   );
 
   /**
@@ -149,7 +149,7 @@ export function useGridZoomPan({
       touchTransforming();
       setPan(mode, panX + deltaX, panY + deltaY);
     },
-    [mode, panX, panY, setPan, touchTransforming]
+    [mode, panX, panY, setPan, touchTransforming],
   );
 
   /**
@@ -188,7 +188,7 @@ export function useGridZoomPan({
         }
       }
     },
-    [macOS, zoom, zoomAtPoint, pan]
+    [macOS, zoom, zoomAtPoint, pan],
   );
 
   /**
@@ -199,14 +199,17 @@ export function useGridZoomPan({
       // 입력 요소에서는 단축키 무시
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
         target.isContentEditable
       ) {
         return;
       }
 
-      const matchesShortcut = (event: KeyboardEvent, binding?: ShortcutBinding) => {
+      const matchesShortcut = (
+        event: KeyboardEvent,
+        binding?: ShortcutBinding,
+      ) => {
         if (!binding?.key) return false;
         const ctrl = !!binding.ctrl;
         const shift = !!binding.shift;
@@ -238,7 +241,7 @@ export function useGridZoomPan({
         return;
       }
     },
-    [resetZoom, zoomIn, zoomOut]
+    [resetZoom, zoomIn, zoomOut],
   );
 
   /**
@@ -259,12 +262,12 @@ export function useGridZoomPan({
       // 드래그 중 커서를 grabbing으로 변경하고 요소들의 pointer-events를 비활성화
       const container = containerRef.current;
       if (container) {
-        container.style.cursor = "grabbing";
+        container.style.cursor = 'grabbing';
       }
       // contentRef 내의 요소들이 마우스 이벤트를 받지 않도록 설정
       const content = contentRef.current;
       if (content) {
-        content.style.pointerEvents = "none";
+        content.style.pointerEvents = 'none';
       }
 
       const startX = e.clientX;
@@ -288,17 +291,17 @@ export function useGridZoomPan({
         setMiddleButtonDragging(false);
         // 커서 및 pointer-events 복원
         if (container) {
-          container.style.cursor = "";
+          container.style.cursor = '';
         }
         if (content) {
-          content.style.pointerEvents = "";
+          content.style.pointerEvents = '';
         }
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     },
     [
       containerRef,
@@ -309,7 +312,7 @@ export function useGridZoomPan({
       setPan,
       touchTransforming,
       setTransformingState,
-    ]
+    ],
   );
 
   // 휠 이벤트 등록
@@ -317,10 +320,10 @@ export function useGridZoomPan({
     const container = containerRef.current;
     if (!container) return;
 
-    container.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
-      container.removeEventListener("wheel", handleWheel);
+      container.removeEventListener('wheel', handleWheel);
     };
   }, [containerRef, handleWheel]);
 
@@ -329,18 +332,18 @@ export function useGridZoomPan({
     const container = containerRef.current;
     if (!container) return;
 
-    container.addEventListener("mousedown", handleMiddleMouseDown, true);
+    container.addEventListener('mousedown', handleMiddleMouseDown, true);
 
     return () => {
-      container.removeEventListener("mousedown", handleMiddleMouseDown, true);
+      container.removeEventListener('mousedown', handleMiddleMouseDown, true);
     };
   }, [containerRef, handleMiddleMouseDown]);
 
   // 키보드 이벤트 등록
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
 

@@ -19,13 +19,11 @@ fn build_tauri() {
         if profile == "release" {
             let manifest_path = std::path::Path::new("app.release.manifest");
             if manifest_path.exists() {
-                let manifest = std::fs::read_to_string(manifest_path)
-                    .expect("app.release.manifest 읽기 실패");
-                tauri_build::try_build(
-                    tauri_build::Attributes::new().windows_attributes(
-                        tauri_build::WindowsAttributes::new().app_manifest(manifest),
-                    ),
-                )
+                let manifest =
+                    std::fs::read_to_string(manifest_path).expect("app.release.manifest 읽기 실패");
+                tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(
+                    tauri_build::WindowsAttributes::new().app_manifest(manifest),
+                ))
                 .expect("tauri 빌드 실패");
                 return;
             }
@@ -120,7 +118,9 @@ fn maybe_embed_webview2_fixed_runtime() {
 
     println!("cargo:rerun-if-env-changed=DMNOTE_EMBED_WEBVIEW2_FIXED_RUNTIME");
     println!("cargo:rerun-if-changed=webview2-fixed-runtime\\msedgewebview2.exe");
-    println!("cargo:rerun-if-changed=webview2-fixed-runtime\\dmnote-webview2-fixed-runtime-version.txt");
+    println!(
+        "cargo:rerun-if-changed=webview2-fixed-runtime\\dmnote-webview2-fixed-runtime-version.txt"
+    );
 
     if !enabled {
         return;
@@ -157,9 +157,7 @@ fn maybe_embed_webview2_fixed_runtime() {
     let zip_path = out_dir.join("dmnote_webview2_fixed_runtime.zip");
 
     if let Err(err) = create_zip_from_dir(&runtime_dir, &zip_path) {
-        println!(
-            "cargo:warning=failed to create embedded WebView2 runtime zip: {err}"
-        );
+        println!("cargo:warning=failed to create embedded WebView2 runtime zip: {err}");
         return;
     }
 
@@ -168,14 +166,15 @@ fn maybe_embed_webview2_fixed_runtime() {
         "cargo:rustc-env=DMNOTE_WEBVIEW2_EMBEDDED_ZIP={}",
         zip_path.display()
     );
-    println!(
-        "cargo:rustc-env=DMNOTE_WEBVIEW2_EMBEDDED_VERSION={version}"
-    );
+    println!("cargo:rustc-env=DMNOTE_WEBVIEW2_EMBEDDED_VERSION={version}");
     println!("cargo:rustc-env=DMNOTE_WEBVIEW2_EMBEDDED_ARCH={arch}");
 }
 
 #[cfg(target_os = "windows")]
-fn create_zip_from_dir(src_dir: &std::path::Path, dest_zip: &std::path::Path) -> std::io::Result<()> {
+fn create_zip_from_dir(
+    src_dir: &std::path::Path,
+    dest_zip: &std::path::Path,
+) -> std::io::Result<()> {
     use std::io::{Read, Write};
 
     use walkdir::WalkDir;

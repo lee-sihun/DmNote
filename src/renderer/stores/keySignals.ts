@@ -1,4 +1,4 @@
-import { signal, type Signal } from "@preact/signals-react";
+import { signal, type Signal } from '@preact/signals-react';
 
 // Map of globalKey -> Signal<boolean>
 const keySignals = new Map<string, Signal<boolean>>();

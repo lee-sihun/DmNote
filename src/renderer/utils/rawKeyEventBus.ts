@@ -4,11 +4,11 @@
  * 구독자가 있을 때만 백엔드가 이벤트를 emit하도록 최적화
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 export type RawInputPayload = {
-  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
   label: string;
   labels: string[];
   state: string;
@@ -32,22 +32,22 @@ class RawKeyEventBus {
     try {
       // 백엔드 이벤트 리스너 등록
       const unlisten = await listen<RawInputPayload>(
-        "input:raw",
+        'input:raw',
         ({ payload }) => {
           // 모든 리스너에게 브로드캐스트
           this.listeners.forEach((listener) => {
             try {
               listener(payload);
             } catch (error) {
-              console.error("[RawKeyEventBus] Listener error:", error);
+              console.error('[RawKeyEventBus] Listener error:', error);
             }
           });
-        }
+        },
       );
 
       this.unlistenFn = unlisten;
     } catch (error) {
-      console.error("[RawKeyEventBus] Failed to initialize:", error);
+      console.error('[RawKeyEventBus] Failed to initialize:', error);
       this.initialized = false;
     }
   }
@@ -64,11 +64,11 @@ class RawKeyEventBus {
     if (wasEmpty) {
       await this.initialize();
       try {
-        await invoke("raw_input_subscribe");
+        await invoke('raw_input_subscribe');
       } catch (error) {
         console.error(
-          "[RawKeyEventBus] Failed to subscribe to backend:",
-          error
+          '[RawKeyEventBus] Failed to subscribe to backend:',
+          error,
         );
       }
     }
@@ -89,11 +89,11 @@ class RawKeyEventBus {
     // 마지막 구독자가 제거되면 백엔드에 알림
     if (this.listeners.size === 0) {
       try {
-        await invoke("raw_input_unsubscribe");
+        await invoke('raw_input_unsubscribe');
       } catch (error) {
         console.error(
-          "[RawKeyEventBus] Failed to unsubscribe from backend:",
-          error
+          '[RawKeyEventBus] Failed to unsubscribe from backend:',
+          error,
         );
       }
     }
@@ -115,7 +115,7 @@ class RawKeyEventBus {
 
     if (hadListeners) {
       try {
-        await invoke("raw_input_unsubscribe");
+        await invoke('raw_input_unsubscribe');
       } catch (error) {
         // 무시 - 앱 종료 시 발생할 수 있음
       }

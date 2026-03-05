@@ -8,7 +8,7 @@
  * 비동기 함수의 경우 Promise가 완료될 때까지 컨텍스트를 유지합니다.
  */
 export const wrapFunctionWithContext = (fn: any, pluginId: string) => {
-  if (typeof fn !== "function") return fn;
+  if (typeof fn !== 'function') return fn;
   if (fn.__dmn_plugin_wrapped__) return fn;
 
   const wrapped = function (this: any, ...args: any[]) {
@@ -22,12 +22,12 @@ export const wrapFunctionWithContext = (fn: any, pluginId: string) => {
       threw = true;
       throw error;
     } finally {
-      if (threw || !result || typeof result.then !== "function") {
+      if (threw || !result || typeof result.then !== 'function') {
         (window as any).__dmn_current_plugin_id = prev;
       }
     }
 
-    if (result && typeof result.then === "function") {
+    if (result && typeof result.then === 'function') {
       return result.finally(() => {
         (window as any).__dmn_current_plugin_id = prev;
       });
@@ -37,7 +37,7 @@ export const wrapFunctionWithContext = (fn: any, pluginId: string) => {
   };
 
   try {
-    Object.defineProperty(wrapped, "name", {
+    Object.defineProperty(wrapped, 'name', {
       value: fn.name,
       configurable: true,
     });
@@ -45,7 +45,7 @@ export const wrapFunctionWithContext = (fn: any, pluginId: string) => {
     // noop
   }
 
-  Object.defineProperty(wrapped, "__dmn_plugin_wrapped__", {
+  Object.defineProperty(wrapped, '__dmn_plugin_wrapped__', {
     value: true,
     configurable: false,
   });
@@ -57,11 +57,11 @@ export const wrapFunctionWithContext = (fn: any, pluginId: string) => {
  * 객체/배열의 모든 함수를 재귀적으로 래핑합니다.
  */
 export const wrapApiValue = (value: any, pluginId: string): any => {
-  if (typeof value === "function") {
+  if (typeof value === 'function') {
     return wrapFunctionWithContext(value, pluginId);
   }
 
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     const clone: any = Array.isArray(value) ? [] : {};
     Object.keys(value).forEach((key) => {
       clone[key] = wrapApiValue(value[key], pluginId);

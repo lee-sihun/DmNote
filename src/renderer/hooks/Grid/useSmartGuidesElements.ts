@@ -1,12 +1,12 @@
 /**
  * 스마트 가이드를 위한 모든 요소의 bounds를 제공하는 훅
  */
-import { useCallback } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { calculateBounds, type ElementBounds } from "@utils/smartGuides";
+import { useCallback } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { calculateBounds, type ElementBounds } from '@utils/smartGuides';
 
 /**
  * 현재 탭의 모든 요소(키 + 플러그인 요소)의 bounds를 반환하는 함수를 제공하는 훅
@@ -17,7 +17,7 @@ export function useSmartGuidesElements() {
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
 
   /**
@@ -29,7 +29,7 @@ export function useSmartGuidesElements() {
       const bounds: ElementBounds[] = [];
       // 배열로 정규화
       const excludeSet = new Set(
-        Array.isArray(excludeIds) ? excludeIds : [excludeIds]
+        Array.isArray(excludeIds) ? excludeIds : [excludeIds],
       );
 
       // 키 요소 bounds
@@ -44,8 +44,8 @@ export function useSmartGuidesElements() {
               pos.dy,
               pos.width || 60,
               pos.height || 60,
-              id
-            )
+              id,
+            ),
           );
         }
       });
@@ -62,8 +62,8 @@ export function useSmartGuidesElements() {
               pos.dy,
               pos.width || 60,
               pos.height || 60,
-              id
-            )
+              id,
+            ),
           );
         }
       });
@@ -80,8 +80,8 @@ export function useSmartGuidesElements() {
               pos.dy,
               pos.width || 200,
               pos.height || 100,
-              id
-            )
+              id,
+            ),
           );
         }
       });
@@ -104,15 +104,15 @@ export function useSmartGuidesElements() {
               el.position.y,
               el.measuredSize.width,
               el.measuredSize.height,
-              el.fullId
-            )
+              el.fullId,
+            ),
           );
         }
       });
 
       return bounds;
     },
-    [positions, statPositions, graphPositions, selectedKeyType, pluginElements]
+    [positions, statPositions, graphPositions, selectedKeyType, pluginElements],
   );
 
   return { getOtherElements };

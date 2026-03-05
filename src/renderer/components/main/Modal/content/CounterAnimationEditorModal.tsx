@@ -4,27 +4,27 @@ import React, {
   useMemo,
   useRef,
   useState,
-} from "react";
+} from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
-} from "@src/types/keys";
-import type { CounterAnimationPreset } from "@src/types/counterAnimation";
-import Modal from "@components/main/Modal/Modal";
-import Dropdown from "@components/main/common/Dropdown";
+} from '@src/types/keys';
+import type { CounterAnimationPreset } from '@src/types/counterAnimation';
+import Modal from '@components/main/Modal/Modal';
+import Dropdown from '@components/main/common/Dropdown';
 import {
   TextInput,
   NumberInput,
-} from "@components/main/Grid/PropertiesPanel/PropertyInputs";
-import CountDisplay from "@components/overlay/CountDisplay";
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
+import CountDisplay from '@components/overlay/CountDisplay';
 import {
   COUNTER_BEZIER_PRESETS,
   clampCounterBezier,
   findBezierPresetId,
-} from "@utils/cubicBezier";
-import { useKeyStore } from "@stores/useKeyStore";
+} from '@utils/cubicBezier';
+import { useKeyStore } from '@stores/useKeyStore';
 
-type EditorMode = "create" | "edit";
+type EditorMode = 'create' | 'edit';
 
 interface KeyVisualProps {
   width?: number;
@@ -65,7 +65,7 @@ interface CounterAnimationEditorModalProps {
   t: (key: string) => string;
 }
 
-type DragTarget = "p1" | "p2" | null;
+type DragTarget = 'p1' | 'p2' | null;
 
 const EDITOR_SIZE = 110;
 const EDITOR_PADDING = 20;
@@ -93,17 +93,17 @@ const clampDuration = (value: number) => {
 };
 
 const parseNumber = (raw: string): number | null => {
-  if (!raw || raw === "-" || raw === "." || raw === "-.") return null;
+  if (!raw || raw === '-' || raw === '.' || raw === '-.') return null;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
 };
 
 const formatBezierInput = (bezier: CounterAnimationBezier): string =>
-  bezier.map((value) => Number(Number(value).toFixed(2))).join(", ");
+  bezier.map((value) => Number(Number(value).toFixed(2))).join(', ');
 
 const parseBezierInput = (raw: string): CounterAnimationBezier | null => {
   const values = raw
-    .split(",")
+    .split(',')
     .map((token) => token.trim())
     .filter((token) => token.length > 0);
   if (values.length !== 4) return null;
@@ -118,12 +118,10 @@ const parseBezierInput = (raw: string): CounterAnimationBezier | null => {
   return [clamped[0], clamped[1], clamped[2], clamped[3]];
 };
 
-const toInitialState = (
-  preset: CounterAnimationPreset | null | undefined,
-) => {
+const toInitialState = (preset: CounterAnimationPreset | null | undefined) => {
   if (!preset) {
     return {
-      name: "",
+      name: '',
       bezier: [0.25, 0.46, 0.45, 0.94] as CounterAnimationBezier,
       scale: 1.1,
       durationMs: 300,
@@ -131,7 +129,7 @@ const toInitialState = (
   }
 
   return {
-    name: preset.name || "",
+    name: preset.name || '',
     bezier: clampCounterBezier(preset.bezier),
     scale: normalizeScale(preset.scale),
     durationMs: clampDuration(preset.durationMs),
@@ -173,22 +171,22 @@ export default function CounterAnimationEditorModal({
   const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
   const autoFitRafRef = useRef<number | null>(null);
 
-  const [nameInput, setNameInput] = useState("");
+  const [nameInput, setNameInput] = useState('');
   const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>([
     0.25, 0.46, 0.45, 0.94,
   ]);
-  const [bezierInput, setBezierInput] = useState("0.25, 0.46, 0.45, 0.94");
-  const [scaleInput, setScaleInput] = useState("1.1");
-  const [durationInput, setDurationInput] = useState("300");
+  const [bezierInput, setBezierInput] = useState('0.25, 0.46, 0.45, 0.94');
+  const [scaleInput, setScaleInput] = useState('1.1');
+  const [durationInput, setDurationInput] = useState('300');
   const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
   const [viewScale, setViewScale] = useState(1);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [errorText, setErrorText] = useState("");
+  const [errorText, setErrorText] = useState('');
 
   const [previewCount, setPreviewCount] = useState(0);
   const [previewActive, setPreviewActive] = useState(false);
-  const [previewCss, setPreviewCss] = useState("");
+  const [previewCss, setPreviewCss] = useState('');
 
   const cancelAutoFit = useCallback(() => {
     if (autoFitRafRef.current) {
@@ -211,8 +209,14 @@ export default function CounterAnimationEditorModal({
     const pts = [
       { x: EDITOR_PADDING, y: EDITOR_PADDING + EDITOR_SIZE },
       { x: EDITOR_PADDING + EDITOR_SIZE, y: EDITOR_PADDING },
-      { x: EDITOR_PADDING + bezier[0] * EDITOR_SIZE, y: EDITOR_PADDING + (1 - bezier[1]) * EDITOR_SIZE },
-      { x: EDITOR_PADDING + bezier[2] * EDITOR_SIZE, y: EDITOR_PADDING + (1 - bezier[3]) * EDITOR_SIZE },
+      {
+        x: EDITOR_PADDING + bezier[0] * EDITOR_SIZE,
+        y: EDITOR_PADDING + (1 - bezier[1]) * EDITOR_SIZE,
+      },
+      {
+        x: EDITOR_PADDING + bezier[2] * EDITOR_SIZE,
+        y: EDITOR_PADDING + (1 - bezier[3]) * EDITOR_SIZE,
+      },
     ];
 
     const ptsMinX = Math.min(...pts.map((p) => p.x));
@@ -227,15 +231,19 @@ export default function CounterAnimationEditorModal({
 
     const defaultBox = { minX: 0, minY: 0, maxX: TOTAL_SIZE, maxY: TOTAL_SIZE };
 
-    if (minX >= defaultBox.minX && maxX <= defaultBox.maxX &&
-      minY >= defaultBox.minY && maxY <= defaultBox.maxY) {
+    if (
+      minX >= defaultBox.minX &&
+      maxX <= defaultBox.maxX &&
+      minY >= defaultBox.minY &&
+      maxY <= defaultBox.maxY
+    ) {
       return { offset: { x: 0, y: 0 }, scale: 1 };
     }
 
     const rawW = maxX - minX;
     const rawH = maxY - minY;
     const rawSize = Math.max(rawW, rawH, TOTAL_SIZE);
-    const estHandleR = HANDLE_RADIUS * rawSize / TOTAL_SIZE;
+    const estHandleR = (HANDLE_RADIUS * rawSize) / TOTAL_SIZE;
     const margin = AUTO_FIT_MARGIN + estHandleR;
 
     const fitMinX = minX - margin;
@@ -269,13 +277,14 @@ export default function CounterAnimationEditorModal({
     setBezierInput(formatBezierInput(initial.bezier));
     setScaleInput(String(Math.round(initial.scale * 100) / 100));
     setDurationInput(String(initial.durationMs));
-    setErrorText("");
+    setErrorText('');
 
     // edit 모드: 컨트롤 포인트가 기본 뷰 밖이면 auto-fit, 아니면 기본 뷰
     // create 모드: 항상 기본 뷰
-    const fit = mode === "edit" && initialPreset
-      ? computeAutoFit(initial.bezier)
-      : { offset: { x: 0, y: 0 }, scale: 1 };
+    const fit =
+      mode === 'edit' && initialPreset
+        ? computeAutoFit(initial.bezier)
+        : { offset: { x: 0, y: 0 }, scale: 1 };
     applyView(fit.offset, fit.scale);
     isPanningRef.current = false;
     activePointersRef.current.clear();
@@ -300,32 +309,32 @@ export default function CounterAnimationEditorModal({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat) {
+      if (e.code === 'Space' && !e.repeat) {
         spaceHeldRef.current = true;
         const tag = (e.target as HTMLElement)?.tagName;
-        if (tag !== "INPUT" && tag !== "TEXTAREA") {
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
           e.preventDefault();
         }
         if (svgRef.current) {
-          svgRef.current.style.cursor = "grab";
+          svgRef.current.style.cursor = 'grab';
         }
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
+      if (e.code === 'Space') {
         spaceHeldRef.current = false;
         if (svgRef.current && !isPanningRef.current) {
-          svgRef.current.style.cursor = "default";
+          svgRef.current.style.cursor = 'default';
         }
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       spaceHeldRef.current = false;
     };
   }, [isOpen]);
@@ -340,14 +349,14 @@ export default function CounterAnimationEditorModal({
           window.api.css.tab.getAll(),
         ]);
         if (!globalUse) {
-          setPreviewCss("");
+          setPreviewCss('');
           return;
         }
         const currentTab = useKeyStore.getState().selectedKeyType;
         const tabCss = tabOverrides[currentTab];
         if (tabCss) {
           if (!tabCss.enabled) {
-            setPreviewCss("");
+            setPreviewCss('');
             return;
           }
           if (tabCss.path && tabCss.content) {
@@ -355,9 +364,9 @@ export default function CounterAnimationEditorModal({
             return;
           }
         }
-        setPreviewCss(globalCss.content || "");
+        setPreviewCss(globalCss.content || '');
       } catch {
-        setPreviewCss("");
+        setPreviewCss('');
       }
     };
     void loadCss();
@@ -373,54 +382,59 @@ export default function CounterAnimationEditorModal({
 
       const handleUp = () => {
         setPreviewActive(false);
-        window.removeEventListener("pointerup", handleUp);
-        window.removeEventListener("pointercancel", handleUp);
+        window.removeEventListener('pointerup', handleUp);
+        window.removeEventListener('pointercancel', handleUp);
       };
-      window.addEventListener("pointerup", handleUp);
-      window.addEventListener("pointercancel", handleUp);
+      window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleUp);
     },
     [],
   );
 
-  const animateViewToFit = useCallback((bezier: CounterAnimationBezier) => {
-    cancelAutoFit();
+  const animateViewToFit = useCallback(
+    (bezier: CounterAnimationBezier) => {
+      cancelAutoFit();
 
-    const target = computeAutoFit(bezier);
-    const fromOffset = { ...viewOffsetRef.current };
-    const fromScale = viewScaleRef.current;
+      const target = computeAutoFit(bezier);
+      const fromOffset = { ...viewOffsetRef.current };
+      const fromScale = viewScaleRef.current;
 
-    const EPS = 1e-3;
-    if (Math.abs(target.offset.x - fromOffset.x) < EPS &&
-      Math.abs(target.offset.y - fromOffset.y) < EPS &&
-      Math.abs(target.scale - fromScale) < EPS) {
-      return;
-    }
-
-    const start = performance.now();
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
-      const k = easeOutCubic(t);
-
-      const newOffset = {
-        x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
-        y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
-      };
-      const newScale = fromScale + (target.scale - fromScale) * k;
-
-      applyView(newOffset, newScale);
-
-      if (t < 1) {
-        autoFitRafRef.current = requestAnimationFrame(tick);
-      } else {
-        autoFitRafRef.current = null;
+      const EPS = 1e-3;
+      if (
+        Math.abs(target.offset.x - fromOffset.x) < EPS &&
+        Math.abs(target.offset.y - fromOffset.y) < EPS &&
+        Math.abs(target.scale - fromScale) < EPS
+      ) {
+        return;
       }
-    };
 
-    autoFitRafRef.current = requestAnimationFrame(tick);
-  }, [cancelAutoFit, applyView, computeAutoFit]);
+      const start = performance.now();
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+      const tick = (now: number) => {
+        const elapsed = now - start;
+        const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
+        const k = easeOutCubic(t);
+
+        const newOffset = {
+          x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
+          y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
+        };
+        const newScale = fromScale + (target.scale - fromScale) * k;
+
+        applyView(newOffset, newScale);
+
+        if (t < 1) {
+          autoFitRafRef.current = requestAnimationFrame(tick);
+        } else {
+          autoFitRafRef.current = null;
+        }
+      };
+
+      autoFitRafRef.current = requestAnimationFrame(tick);
+    },
+    [cancelAutoFit, applyView, computeAutoFit],
+  );
 
   const updateBezierFromClient = useCallback(
     (clientX: number, clientY: number, target: DragTarget) => {
@@ -442,19 +456,19 @@ export default function CounterAnimationEditorModal({
 
       const current = localBezierRef.current;
       const nextBezier: CounterAnimationBezier =
-        target === "p1"
+        target === 'p1'
           ? [
-            Math.min(Math.max(bezierX, 0), 1),
-            Math.min(Math.max(bezierY, -4), 4),
-            current[2],
-            current[3],
-          ]
+              Math.min(Math.max(bezierX, 0), 1),
+              Math.min(Math.max(bezierY, -4), 4),
+              current[2],
+              current[3],
+            ]
           : [
-            current[0],
-            current[1],
-            Math.min(Math.max(bezierX, 0), 1),
-            Math.min(Math.max(bezierY, -4), 4),
-          ];
+              current[0],
+              current[1],
+              Math.min(Math.max(bezierX, 0), 1),
+              Math.min(Math.max(bezierY, -4), 4),
+            ];
 
       const clamped = clampCounterBezier(nextBezier);
       localBezierRef.current = clamped;
@@ -464,10 +478,10 @@ export default function CounterAnimationEditorModal({
 
       const hx =
         EDITOR_PADDING +
-        (target === "p1" ? clamped[0] : clamped[2]) * EDITOR_SIZE;
+        (target === 'p1' ? clamped[0] : clamped[2]) * EDITOR_SIZE;
       const hy =
         EDITOR_PADDING +
-        (1 - (target === "p1" ? clamped[1] : clamped[3])) * EDITOR_SIZE;
+        (1 - (target === 'p1' ? clamped[1] : clamped[3])) * EDITOR_SIZE;
 
       // cap margin so auto-pan doesn't overshoot when zoomed out
       const effectiveScale = Math.max(scale, 0.8);
@@ -570,8 +584,8 @@ export default function CounterAnimationEditorModal({
         isPanningRef.current = false;
         if (svgRef.current) {
           svgRef.current.style.cursor = spaceHeldRef.current
-            ? "grab"
-            : "default";
+            ? 'grab'
+            : 'default';
         }
         return;
       }
@@ -585,14 +599,14 @@ export default function CounterAnimationEditorModal({
       dragTargetRef.current = null;
     };
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isOpen, applyView, updateBezierFromClient, animateViewToFit]);
 
@@ -607,53 +621,54 @@ export default function CounterAnimationEditorModal({
     [cancelAutoFit],
   );
 
-  const handleWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    cancelAutoFit();
-    const svg = svgRef.current;
-    if (!svg) return;
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<SVGSVGElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelAutoFit();
+      const svg = svgRef.current;
+      if (!svg) return;
 
-    const rect = svg.getBoundingClientRect();
-    const scale = viewScaleRef.current;
-    const vbSize = TOTAL_SIZE / scale;
+      const rect = svg.getBoundingClientRect();
+      const scale = viewScaleRef.current;
+      const vbSize = TOTAL_SIZE / scale;
 
-    if (event.ctrlKey || event.metaKey) {
-      const fracX = (event.clientX - rect.left) / rect.width;
-      const fracY = (event.clientY - rect.top) / rect.height;
+      if (event.ctrlKey || event.metaKey) {
+        const fracX = (event.clientX - rect.left) / rect.width;
+        const fracY = (event.clientY - rect.top) / rect.height;
 
-      const oldVB = vbSize;
-      const delta = -event.deltaY * ZOOM_SENSITIVITY;
-      const factor = Math.exp(delta);
-      const newScale = Math.min(
-        Math.max(scale * factor, MIN_ZOOM),
-        MAX_ZOOM,
-      );
-      const newVB = TOTAL_SIZE / newScale;
+        const oldVB = vbSize;
+        const delta = -event.deltaY * ZOOM_SENSITIVITY;
+        const factor = Math.exp(delta);
+        const newScale = Math.min(Math.max(scale * factor, MIN_ZOOM), MAX_ZOOM);
+        const newVB = TOTAL_SIZE / newScale;
+
+        const off = viewOffsetRef.current;
+        const worldX = off.x + fracX * oldVB;
+        const worldY = off.y + fracY * oldVB;
+        const newOff = {
+          x: worldX - fracX * newVB,
+          y: worldY - fracY * newVB,
+        };
+
+        applyView(newOff, newScale);
+        return;
+      }
 
       const off = viewOffsetRef.current;
-      const worldX = off.x + fracX * oldVB;
-      const worldY = off.y + fracY * oldVB;
-      const newOff = {
-        x: worldX - fracX * newVB,
-        y: worldY - fracY * newVB,
-      };
-
-      applyView(newOff, newScale);
-      return;
-    }
-
-    const off = viewOffsetRef.current;
-    const dx = (event.shiftKey
-      ? (event.deltaX || event.deltaY)
-      : event.deltaX) / rect.width * vbSize;
-    const dy = (event.shiftKey && !event.deltaX
-      ? 0
-      : event.deltaY) / rect.height * vbSize;
-    const newOff = { x: off.x + dx, y: off.y + dy };
-    viewOffsetRef.current = newOff;
-    setViewOffset(newOff);
-  }, [applyView, cancelAutoFit]);
+      const dx =
+        ((event.shiftKey ? event.deltaX || event.deltaY : event.deltaX) /
+          rect.width) *
+        vbSize;
+      const dy =
+        ((event.shiftKey && !event.deltaX ? 0 : event.deltaY) / rect.height) *
+        vbSize;
+      const newOff = { x: off.x + dx, y: off.y + dy };
+      viewOffsetRef.current = newOff;
+      setViewOffset(newOff);
+    },
+    [applyView, cancelAutoFit],
+  );
 
   const handleSvgPointerDown = useCallback(
     (event: React.PointerEvent<SVGSVGElement>) => {
@@ -684,10 +699,7 @@ export default function CounterAnimationEditorModal({
         return;
       }
 
-      if (
-        event.button === 1 ||
-        (event.button === 0 && spaceHeldRef.current)
-      ) {
+      if (event.button === 1 || (event.button === 0 && spaceHeldRef.current)) {
         event.preventDefault();
         if (dragTargetRef.current) return;
         isPanningRef.current = true;
@@ -698,7 +710,7 @@ export default function CounterAnimationEditorModal({
           offsetY: viewOffsetRef.current.y,
         };
         if (svgRef.current) {
-          svgRef.current.style.cursor = "grabbing";
+          svgRef.current.style.cursor = 'grabbing';
         }
       }
     },
@@ -718,31 +730,34 @@ export default function CounterAnimationEditorModal({
     [localBezier],
   );
 
-  const customLabel = t("counterSetting.presetCustom") || "Custom";
+  const customLabel = t('counterSetting.presetCustom') || 'Custom';
 
   const presetOptions = useMemo(() => {
     const base = COUNTER_BEZIER_PRESETS.map((preset) => ({
       value: preset.id,
       label: preset.fallbackLabel,
     }));
-    if (selectedPreset === "custom") {
-      return [{ value: "custom", label: customLabel }, ...base];
+    if (selectedPreset === 'custom') {
+      return [{ value: 'custom', label: customLabel }, ...base];
     }
     return base;
   }, [customLabel, selectedPreset]);
 
-  const handlePresetChange = useCallback((value: string) => {
-    if (value === "custom") return;
-    const preset = COUNTER_BEZIER_PRESETS.find((item) => item.id === value);
-    if (!preset) return;
-    const nextBezier = clampCounterBezier(preset.bezier);
-    localBezierRef.current = nextBezier;
-    setLocalBezier(nextBezier);
-    setBezierInput(formatBezierInput(nextBezier));
+  const handlePresetChange = useCallback(
+    (value: string) => {
+      if (value === 'custom') return;
+      const preset = COUNTER_BEZIER_PRESETS.find((item) => item.id === value);
+      if (!preset) return;
+      const nextBezier = clampCounterBezier(preset.bezier);
+      localBezierRef.current = nextBezier;
+      setLocalBezier(nextBezier);
+      setBezierInput(formatBezierInput(nextBezier));
 
-    cancelAutoFit();
-    applyView({ x: 0, y: 0 }, 1);
-  }, [cancelAutoFit, applyView]);
+      cancelAutoFit();
+      applyView({ x: 0, y: 0 }, 1);
+    },
+    [cancelAutoFit, applyView],
+  );
 
   const gridLines = useMemo(() => {
     const lines: React.ReactElement[] = [];
@@ -750,7 +765,7 @@ export default function CounterAnimationEditorModal({
     for (let i = -GRID_EXTENT; i <= GRID_EXTENT; i++) {
       const pos = EDITOR_PADDING + i * GRID_SUB;
       const isMajor = i % 4 === 0;
-      const color = isMajor ? "#3A3943" : "#2D2D35";
+      const color = isMajor ? '#3A3943' : '#2D2D35';
       lines.push(
         <line
           key={`gv${i}`}
@@ -812,15 +827,15 @@ export default function CounterAnimationEditorModal({
       durationMs: parsedDuration,
     };
 
-    setErrorText("");
+    setErrorText('');
     setIsSaving(true);
     try {
       const response =
-        mode === "edit" && initialPreset
+        mode === 'edit' && initialPreset
           ? await window.api.counterAnimation.update({
-            id: initialPreset.id,
-            ...requestBase,
-          })
+              id: initialPreset.id,
+              ...requestBase,
+            })
           : await window.api.counterAnimation.create(requestBase);
 
       onSaved({
@@ -830,10 +845,9 @@ export default function CounterAnimationEditorModal({
       });
       onClose();
     } catch (error) {
-      console.error("Failed to save counter animation preset", error);
+      console.error('Failed to save counter animation preset', error);
       setErrorText(
-        t("counterSetting.saveAnimationFailed") ||
-        "모션 저장에 실패했습니다.",
+        t('counterSetting.saveAnimationFailed') || '모션 저장에 실패했습니다.',
       );
     } finally {
       setIsSaving(false);
@@ -864,9 +878,9 @@ export default function CounterAnimationEditorModal({
   const ns = 1 / viewScale;
 
   const headerTitle =
-    mode === "edit"
-      ? t("counterSetting.editAnimationTitle") || "모션 편집"
-      : t("counterSetting.createAnimationTitle") || "모션 추가";
+    mode === 'edit'
+      ? t('counterSetting.editAnimationTitle') || '모션 편집'
+      : t('counterSetting.createAnimationTitle') || '모션 추가';
 
   return (
     <Modal onClick={onClose}>
@@ -893,7 +907,7 @@ export default function CounterAnimationEditorModal({
                 value={nameInput}
                 onChange={(event) => setNameInput(event.target.value)}
                 placeholder={
-                  t("counterSetting.animationNamePlaceholder") || "모션 이름"
+                  t('counterSetting.animationNamePlaceholder') || '모션 이름'
                 }
                 className="w-full h-[32px] px-[12px] rounded-[8px] border border-[#2A2A30] bg-[#0A0A0C] text-[12px] leading-[16px] text-[#DBDEE8] placeholder-[#5A5C66] outline-none focus:border-[#459BF8] focus:ring-1 focus:ring-[#459BF8]/20 transition-all font-medium shadow-inner"
               />
@@ -906,7 +920,7 @@ export default function CounterAnimationEditorModal({
                   style={{
                     width: `${TOTAL_SIZE + 16}px`,
                     height: `${TOTAL_SIZE + 16}px`,
-                    padding: "8px",
+                    padding: '8px',
                   }}
                 >
                   <div
@@ -925,7 +939,7 @@ export default function CounterAnimationEditorModal({
                       onWheel={handleWheel}
                       onPointerDown={handleSvgPointerDown}
                       onDoubleClick={handleDoubleClick}
-                      style={{ cursor: "default", touchAction: "none" }}
+                      style={{ cursor: 'default', touchAction: 'none' }}
                     >
                       <rect
                         x={viewOffset.x}
@@ -996,8 +1010,8 @@ export default function CounterAnimationEditorModal({
                         cy={p1w.y}
                         r={HANDLE_HIT_RADIUS * ns}
                         fill="transparent"
-                        style={{ cursor: "grab" }}
-                        onPointerDown={(e) => handlePointPointerDown(e, "p1")}
+                        style={{ cursor: 'grab' }}
+                        onPointerDown={(e) => handlePointPointerDown(e, 'p1')}
                       />
                       <circle
                         cx={p1w.x}
@@ -1006,15 +1020,15 @@ export default function CounterAnimationEditorModal({
                         fill="#1A191E"
                         stroke="#459BF8"
                         strokeWidth={2 * ns}
-                        style={{ pointerEvents: "none" }}
+                        style={{ pointerEvents: 'none' }}
                       />
                       <circle
                         cx={p2w.x}
                         cy={p2w.y}
                         r={HANDLE_HIT_RADIUS * ns}
                         fill="transparent"
-                        style={{ cursor: "grab" }}
-                        onPointerDown={(e) => handlePointPointerDown(e, "p2")}
+                        style={{ cursor: 'grab' }}
+                        onPointerDown={(e) => handlePointPointerDown(e, 'p2')}
                       />
                       <circle
                         cx={p2w.x}
@@ -1023,7 +1037,7 @@ export default function CounterAnimationEditorModal({
                         fill="#1A191E"
                         stroke="#FFB400"
                         strokeWidth={2 * ns}
-                        style={{ pointerEvents: "none" }}
+                        style={{ pointerEvents: 'none' }}
                       />
                     </svg>
                   </div>
@@ -1076,7 +1090,7 @@ export default function CounterAnimationEditorModal({
                 <div className="flex gap-[12px]">
                   <div className="flex-1 flex flex-col gap-[6px]">
                     <label className="text-[11px] font-medium text-[#8A8D99]">
-                      {t("counterSetting.scale") || "스케일"}
+                      {t('counterSetting.scale') || '스케일'}
                     </label>
                     <NumberInput
                       value={parsedScale}
@@ -1096,7 +1110,7 @@ export default function CounterAnimationEditorModal({
 
                   <div className="flex-1 flex flex-col gap-[6px]">
                     <label className="text-[11px] font-medium text-[#8A8D99]">
-                      {t("counterSetting.duration") || "지속 시간"}
+                      {t('counterSetting.duration') || '지속 시간'}
                     </label>
                     <NumberInput
                       value={parsedDuration}
@@ -1128,17 +1142,15 @@ export default function CounterAnimationEditorModal({
               onPointerDown={handlePreviewPointerDown}
             >
               {previewCss && (
-                <style
-                  dangerouslySetInnerHTML={{ __html: previewCss }}
-                />
+                <style dangerouslySetInnerHTML={{ __html: previewCss }} />
               )}
               <div
                 className="absolute inset-0 opacity-[0.15] pointer-events-none"
                 style={{
                   backgroundImage:
-                    "linear-gradient(#2A2A30 1px, transparent 1px), linear-gradient(90deg, #2A2A30 1px, transparent 1px)",
-                  backgroundSize: "20px 20px",
-                  backgroundPosition: "center center",
+                    'linear-gradient(#2A2A30 1px, transparent 1px), linear-gradient(90deg, #2A2A30 1px, transparent 1px)',
+                  backgroundSize: '20px 20px',
+                  backgroundPosition: 'center center',
                 }}
               />
               <div className="relative z-10 w-full h-full flex items-center justify-center">
@@ -1146,13 +1158,13 @@ export default function CounterAnimationEditorModal({
                   const PREVIEW_MAX_W = 200;
                   const PREVIEW_MAX_H = 160;
 
-                  const placement = counterSettings?.placement ?? "inside";
-                  const align = counterSettings?.align ?? "top";
-                  const alignMode = counterSettings?.alignMode ?? "center";
+                  const placement = counterSettings?.placement ?? 'inside';
+                  const align = counterSettings?.align ?? 'top';
+                  const alignMode = counterSettings?.alignMode ?? 'center';
                   const gap = counterSettings?.gap ?? 6;
-                  const isInside = placement === "inside";
-                  const isHorizontal = align === "left" || align === "right";
-                  const isBetween = alignMode === "between";
+                  const isInside = placement === 'inside';
+                  const isHorizontal = align === 'left' || align === 'right';
+                  const isBetween = alignMode === 'between';
 
                   const keyW = keyVisual?.width ?? 60;
                   const keyH = keyVisual?.height ?? 60;
@@ -1161,7 +1173,7 @@ export default function CounterAnimationEditorModal({
                   let totalW = keyW;
                   let totalH = keyH;
                   if (!isInside) {
-                    if (align === "left" || align === "right")
+                    if (align === 'left' || align === 'right')
                       totalW += counterExtra;
                     else totalH += counterExtra;
                   }
@@ -1174,9 +1186,9 @@ export default function CounterAnimationEditorModal({
 
                   const keyLabelDecorations: string[] = [];
                   if (keyVisual?.fontUnderline)
-                    keyLabelDecorations.push("underline");
+                    keyLabelDecorations.push('underline');
                   if (keyVisual?.fontStrikethrough)
-                    keyLabelDecorations.push("line-through");
+                    keyLabelDecorations.push('line-through');
 
                   const labelEl = (
                     <span
@@ -1187,14 +1199,14 @@ export default function CounterAnimationEditorModal({
                           ? `"${keyVisual.fontFamily}", "SUIT-Regular", sans-serif`
                           : undefined,
                         fontWeight: keyVisual?.fontWeight ?? 700,
-                        fontStyle: keyVisual?.fontItalic ? "italic" : "normal",
+                        fontStyle: keyVisual?.fontItalic ? 'italic' : 'normal',
                         textDecoration:
                           keyLabelDecorations.length > 0
-                            ? keyLabelDecorations.join(" ")
-                            : "none",
+                            ? keyLabelDecorations.join(' ')
+                            : 'none',
                       }}
                     >
-                      {keyVisual?.displayText || keyVisual?.displayName || "A"}
+                      {keyVisual?.displayText || keyVisual?.displayName || 'A'}
                     </span>
                   );
 
@@ -1203,14 +1215,14 @@ export default function CounterAnimationEditorModal({
                       count={previewCount}
                       fillColor={
                         previewActive
-                          ? (counterSettings?.fill.active ?? "#FFFFFF")
+                          ? (counterSettings?.fill.active ?? '#FFFFFF')
                           : (counterSettings?.fill.idle ??
-                            "rgba(121, 121, 121, 0.9)")
+                            'rgba(121, 121, 121, 0.9)')
                       }
                       strokeColor={
                         previewActive
-                          ? (counterSettings?.stroke.active ?? "transparent")
-                          : (counterSettings?.stroke.idle ?? "transparent")
+                          ? (counterSettings?.stroke.active ?? 'transparent')
+                          : (counterSettings?.stroke.idle ?? 'transparent')
                       }
                       globalKey="preview"
                       active={previewActive}
@@ -1234,7 +1246,8 @@ export default function CounterAnimationEditorModal({
                   const useInline = keyVisual?.useInlineStyles === true;
                   const keyActive = previewActive && !keyVisual?.isStat;
                   const stateBackgroundColor = keyActive
-                    ? (keyVisual?.activeBackgroundColor ?? keyVisual?.backgroundColor)
+                    ? (keyVisual?.activeBackgroundColor ??
+                      keyVisual?.backgroundColor)
                     : keyVisual?.backgroundColor;
                   const stateBorderColor = keyActive
                     ? (keyVisual?.activeBorderColor ?? keyVisual?.borderColor)
@@ -1243,14 +1256,14 @@ export default function CounterAnimationEditorModal({
                     ? (keyVisual?.activeFontColor ?? keyVisual?.fontColor)
                     : keyVisual?.fontColor;
                   const defaultBgColor = keyActive
-                    ? "rgba(121, 121, 121, 0.9)"
-                    : "rgba(46, 46, 47, 0.9)";
+                    ? 'rgba(121, 121, 121, 0.9)'
+                    : 'rgba(46, 46, 47, 0.9)';
                   const defaultBorderColor = keyActive
-                    ? "rgba(255, 255, 255, 0.9)"
-                    : "rgba(113, 113, 113, 0.9)";
+                    ? 'rgba(255, 255, 255, 0.9)'
+                    : 'rgba(113, 113, 113, 0.9)';
                   const defaultTextColor = keyActive
-                    ? "#FFFFFF"
-                    : "rgba(121, 121, 121, 0.9)";
+                    ? '#FFFFFF'
+                    : 'rgba(121, 121, 121, 0.9)';
                   const bw = keyVisual?.borderWidth ?? 3;
                   const br = keyVisual?.borderRadius ?? 10;
 
@@ -1261,55 +1274,53 @@ export default function CounterAnimationEditorModal({
                       useInline && stateBackgroundColor
                         ? stateBackgroundColor
                         : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
-                    borderRadius:
-                      useInline
-                        ? `${br}px`
-                        : `var(--key-radius, ${br}px)`,
-                    border:
-                      useInline
-                        ? `${bw}px solid ${stateBorderColor || defaultBorderColor}`
-                        : `var(--key-border, ${bw}px solid ${stateBorderColor || defaultBorderColor})`,
+                    borderRadius: useInline
+                      ? `${br}px`
+                      : `var(--key-radius, ${br}px)`,
+                    border: useInline
+                      ? `${bw}px solid ${stateBorderColor || defaultBorderColor}`
+                      : `var(--key-border, ${bw}px solid ${stateBorderColor || defaultBorderColor})`,
                     color:
                       useInline && stateFontColor
                         ? stateFontColor
                         : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
-                    boxSizing: "border-box",
-                    overflow: "hidden",
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
                   };
 
                   const outsideStyle: React.CSSProperties | undefined =
                     !isInside
                       ? {
-                        position: "absolute",
-                        pointerEvents: "none",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        ...(align === "top" && {
-                          bottom: "100%",
-                          left: "50%",
-                          transform: "translateX(-50%)",
-                          paddingBottom: `${gap}px`,
-                        }),
-                        ...(align === "bottom" && {
-                          top: "100%",
-                          left: "50%",
-                          transform: "translateX(-50%)",
-                          paddingTop: `${gap}px`,
-                        }),
-                        ...(align === "left" && {
-                          right: "100%",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          paddingRight: `${gap}px`,
-                        }),
-                        ...(align === "right" && {
-                          left: "100%",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          paddingLeft: `${gap}px`,
-                        }),
-                      }
+                          position: 'absolute',
+                          pointerEvents: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          ...(align === 'top' && {
+                            bottom: '100%',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            paddingBottom: `${gap}px`,
+                          }),
+                          ...(align === 'bottom' && {
+                            top: '100%',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            paddingTop: `${gap}px`,
+                          }),
+                          ...(align === 'left' && {
+                            right: '100%',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            paddingRight: `${gap}px`,
+                          }),
+                          ...(align === 'right' && {
+                            left: '100%',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            paddingLeft: `${gap}px`,
+                          }),
+                        }
                       : undefined;
 
                   return (
@@ -1318,36 +1329,36 @@ export default function CounterAnimationEditorModal({
                       style={
                         fitScale < 1
                           ? {
-                            transform: `scale(${fitScale})`,
-                            transformOrigin: "center",
-                          }
+                              transform: `scale(${fitScale})`,
+                              transformOrigin: 'center',
+                            }
                           : undefined
                       }
                     >
                       <div
-                        className={`flex items-center justify-center shadow-2xl ${keyVisual?.className || ""}`}
+                        className={`flex items-center justify-center shadow-2xl ${keyVisual?.className || ''}`}
                         style={keyBoxStyle}
-                        data-state={keyActive ? "active" : "inactive"}
+                        data-state={keyActive ? 'active' : 'inactive'}
                         data-key-element="true"
                       >
                         {isInside ? (
                           <div
-                            className={`flex ${isHorizontal ? "" : "flex-col"} w-full h-full items-center pointer-events-none select-none`}
+                            className={`flex ${isHorizontal ? '' : 'flex-col'} w-full h-full items-center pointer-events-none select-none`}
                             style={{
                               justifyContent: isBetween
-                                ? "space-between"
-                                : "center",
+                                ? 'space-between'
+                                : 'center',
                               padding: isBetween
                                 ? isHorizontal
                                   ? `0 ${gap}px`
                                   : `${gap}px 0`
-                                : "0",
+                                : '0',
                               gap: isBetween ? undefined : `${gap}px`,
                             }}
                           >
-                            {(align === "top" || align === "left") && counterEl}
+                            {(align === 'top' || align === 'left') && counterEl}
                             {labelEl}
-                            {(align === "bottom" || align === "right") &&
+                            {(align === 'bottom' || align === 'right') &&
                               counterEl}
                           </div>
                         ) : (
@@ -1361,11 +1372,9 @@ export default function CounterAnimationEditorModal({
                   );
                 })()}
               </div>
-              <div
-                className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none"
-              >
+              <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
                 <span className="mb-2.5 text-white/70 text-[12px] font-medium tracking-wide">
-                  {t("counterSetting.pressToPreview") || "눌러서 미리보기"}
+                  {t('counterSetting.pressToPreview') || '눌러서 미리보기'}
                 </span>
               </div>
             </div>
@@ -1374,34 +1383,40 @@ export default function CounterAnimationEditorModal({
 
         <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center gap-[10.5px]">
           <div className="flex items-center gap-1.5 mr-auto">
-            <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="#8A8D99">
+            <svg
+              className="w-3.5 h-3.5 shrink-0"
+              viewBox="0 0 24 24"
+              fill="#8A8D99"
+            >
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
             <span className="text-[11px] text-[#8A8D99] tracking-wide">
-              {t("counterSetting.motionPerformanceNotice") || "모션 효과는 시스템 리소스를 추가로 사용합니다"}
+              {t('counterSetting.motionPerformanceNotice') ||
+                '모션 효과는 시스템 리소스를 추가로 사용합니다'}
             </span>
           </div>
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 transition-colors ${canSave
-              ? "bg-[#2A2A30] text-[#DCDEE7] hover:bg-[#34343c]"
-              : "bg-[#222228] text-[#777986] cursor-not-allowed"
-              }`}
+            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 transition-colors ${
+              canSave
+                ? 'bg-[#2A2A30] text-[#DCDEE7] hover:bg-[#34343c]'
+                : 'bg-[#222228] text-[#777986] cursor-not-allowed'
+            }`}
             disabled={!canSave}
             onClick={() => {
               void handleSave();
             }}
           >
             {isSaving
-              ? t("counterSetting.saving") || "저장 중..."
-              : t("common.save") || "저장"}
+              ? t('counterSetting.saving') || '저장 중...'
+              : t('common.save') || '저장'}
           </button>
           <button
             type="button"
             className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
             onClick={onClose}
           >
-            {t("common.cancel") || "취소"}
+            {t('common.cancel') || '취소'}
           </button>
         </div>
       </div>

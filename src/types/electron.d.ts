@@ -1,4 +1,4 @@
-import type { DMNoteAPI } from "@src/types/api";
+import type { DMNoteAPI } from '@src/types/api';
 
 declare global {
   interface Window {

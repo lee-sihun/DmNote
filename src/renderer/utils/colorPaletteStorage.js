@@ -4,8 +4,8 @@
  */
 
 const STORAGE_KEYS = {
-  solid: "dmnote-color-palette-solid",
-  gradient: "dmnote-color-palette-gradient",
+  solid: 'dmnote-color-palette-solid',
+  gradient: 'dmnote-color-palette-gradient',
 };
 
 const MAX_PALETTE_SIZE = 5;
@@ -40,17 +40,17 @@ export const addToPalette = (type, color) => {
 
   // 중복 체크를 위한 비교 함수
   const isSameColor = (a, b) => {
-    if (type === "solid") {
+    if (type === 'solid') {
       return normalizeForComparison(a) === normalizeForComparison(b);
     }
     // gradient
     if (
       a &&
       b &&
-      typeof a === "object" &&
-      typeof b === "object" &&
-      a.type === "gradient" &&
-      b.type === "gradient"
+      typeof a === 'object' &&
+      typeof b === 'object' &&
+      a.type === 'gradient' &&
+      b.type === 'gradient'
     ) {
       return (
         normalizeForComparison(a.top) === normalizeForComparison(b.top) &&
@@ -79,26 +79,26 @@ export const addToPalette = (type, color) => {
  * @returns {string}
  */
 const normalizeForComparison = (color) => {
-  if (!color || typeof color !== "string") return "";
+  if (!color || typeof color !== 'string') return '';
 
   // RGBA 형식 처리
-  if (color.startsWith("rgba(")) {
+  if (color.startsWith('rgba(')) {
     const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
     if (match) {
       const [, r, g, b, a] = match;
       // RGBA를 8자리 hex로 변환
-      return `${parseInt(r).toString(16).padStart(2, "0")}${parseInt(g)
+      return `${parseInt(r).toString(16).padStart(2, '0')}${parseInt(g)
         .toString(16)
-        .padStart(2, "0")}${parseInt(b)
+        .padStart(2, '0')}${parseInt(b)
         .toString(16)
-        .padStart(2, "0")}${Math.round(parseFloat(a) * 255)
+        .padStart(2, '0')}${Math.round(parseFloat(a) * 255)
         .toString(16)
-        .padStart(2, "0")}`.toUpperCase();
+        .padStart(2, '0')}`.toUpperCase();
     }
   }
 
   // # 제거하고 대문자로
-  return color.replace(/^#/, "").toUpperCase();
+  return color.replace(/^#/, '').toUpperCase();
 };
 
 /**

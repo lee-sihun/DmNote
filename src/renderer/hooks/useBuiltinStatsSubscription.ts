@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { applyStatsSnapshot } from "@stores/statsSignals";
+import { useEffect, useMemo } from 'react';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { applyStatsSnapshot } from '@stores/statsSignals';
 
 export function useBuiltinStatsSubscription() {
   const statPositions = useStatItemStore((state) => state.positions);
@@ -43,4 +43,3 @@ export function useBuiltinStatsSubscription() {
     };
   }, [hasAnyStatConsumer]);
 }
-

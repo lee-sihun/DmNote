@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import FloatingPopup from "../FloatingPopup";
-import { useLenis } from "@hooks/useLenis";
-import Dropdown from "@components/main/common/Dropdown";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import FloatingPopup from '../FloatingPopup';
+import { useLenis } from '@hooks/useLenis';
+import Dropdown from '@components/main/common/Dropdown';
 
 const SCROLL_CONTENT_GUTTER = 4;
 
@@ -45,7 +45,7 @@ export default function CommonListPickerPopup<T>({
   panelElement = null,
   onClose,
   interactiveRefs = [],
-  widthClass = "w-[156px]",
+  widthClass = 'w-[156px]',
   estimatedWidth = 164,
   estimatedHeight = 280,
   searchQuery,
@@ -57,13 +57,13 @@ export default function CommonListPickerPopup<T>({
   items,
   renderItem,
   renderItemActions,
-  itemRowClassName = "",
+  itemRowClassName = '',
   getItemKey,
   emptyText,
   isLoading = false,
-  loadingText = "로딩...",
-  errorText = "",
-  listHeightClass = "min-h-[120px] h-[120px]",
+  loadingText = '로딩...',
+  errorText = '',
+  listHeightClass = 'min-h-[120px] h-[120px]',
   onAdd,
   addButtonContent,
 }: CommonListPickerPopupProps<T>) {
@@ -261,7 +261,9 @@ export default function CommonListPickerPopup<T>({
         </button>
 
         {isLoading ? (
-          <p className="text-[#9FA3B2] text-style-4 text-center">{loadingText}</p>
+          <p className="text-[#9FA3B2] text-style-4 text-center">
+            {loadingText}
+          </p>
         ) : null}
 
         {errorText ? (

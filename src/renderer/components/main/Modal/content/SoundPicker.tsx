@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import type { SoundListItem } from "@src/types/api";
-import PlusIcon from "@assets/svgs/plus2.svg";
-import CommonListPickerPopup from "./CommonListPickerPopup";
-import SoundManagerModal from "./SoundManagerModal";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import type { SoundListItem } from '@src/types/api';
+import PlusIcon from '@assets/svgs/plus2.svg';
+import CommonListPickerPopup from './CommonListPickerPopup';
+import SoundManagerModal from './SoundManagerModal';
 
 interface SoundPickerProps {
   open: boolean;
@@ -27,24 +27,27 @@ export default function SoundPicker({
   previewVolume,
 }: SoundPickerProps) {
   const { t } = useTranslation();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<"all" | "local">("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'local'>('all');
   const [sounds, setSounds] = useState<SoundListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState('');
   const [showManager, setShowManager] = useState(false);
 
-  const normalizedSelectedSound = useMemo(() => (selectedSound || "").trim(), [selectedSound]);
+  const normalizedSelectedSound = useMemo(
+    () => (selectedSound || '').trim(),
+    [selectedSound],
+  );
 
   const loadSounds = useCallback(async () => {
     setIsLoading(true);
-    setLoadError("");
+    setLoadError('');
     try {
       const nextSounds = await window.api.sound.list();
       setSounds(nextSounds);
     } catch (error) {
-      console.error("Failed to load sound list", error);
-      setLoadError("사운드 목록 로드 실패");
+      console.error('Failed to load sound list', error);
+      setLoadError('사운드 목록 로드 실패');
     } finally {
       setIsLoading(false);
     }
@@ -57,8 +60,8 @@ export default function SoundPicker({
 
   const filterOptions = useMemo(
     () => [
-      { value: "all", label: t("soundPicker.filterAll") || "전체" },
-      { value: "local", label: t("soundPicker.filterLocal") || "로컬 사운드" },
+      { value: 'all', label: t('soundPicker.filterAll') || '전체' },
+      { value: 'local', label: t('soundPicker.filterLocal') || '로컬 사운드' },
     ],
     [t],
   );
@@ -68,7 +71,7 @@ export default function SoundPicker({
 
     return sounds.filter((item) => {
       if (!item.enabled) return false;
-      if (filterType === "local" && item.source !== "local") {
+      if (filterType === 'local' && item.source !== 'local') {
         return false;
       }
       if (!query) return true;
@@ -89,10 +92,10 @@ export default function SoundPicker({
         estimatedHeight={276}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
-        searchPlaceholder={t("soundPicker.searchPlaceholder") || "검색"}
+        searchPlaceholder={t('soundPicker.searchPlaceholder') || '검색'}
         filterOptions={filterOptions}
         filterValue={filterType}
-        onFilterChange={(value) => setFilterType(value as "all" | "local")}
+        onFilterChange={(value) => setFilterType(value as 'all' | 'local')}
         items={filteredSounds}
         renderItem={(item) => {
           const isSelected = item.soundPath === normalizedSelectedSound;
@@ -103,8 +106,8 @@ export default function SoundPicker({
               onClick={() => onSoundSelect(item.soundPath)}
               className={`w-full min-h-[24px] h-[24px] flex-shrink-0 px-[8px] rounded-[7px] text-left text-style-4 transition-colors truncate ${
                 isSelected
-                  ? "bg-[#2E2D33] text-[#FFFFFF]"
-                  : "text-[#DBDEE8] hover:bg-[#26262C]"
+                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
+                  : 'text-[#DBDEE8] hover:bg-[#26262C]'
               }`}
               title={item.fileName}
             >
@@ -112,9 +115,9 @@ export default function SoundPicker({
             </button>
           );
         }}
-        emptyText={t("soundPicker.noSounds") || "사운드 없음"}
+        emptyText={t('soundPicker.noSounds') || '사운드 없음'}
         isLoading={isLoading}
-        loadingText={t("propertiesPanel.loading") || "로딩..."}
+        loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
         onAdd={() => setShowManager(true)}
         addButtonContent={<PlusIcon />}

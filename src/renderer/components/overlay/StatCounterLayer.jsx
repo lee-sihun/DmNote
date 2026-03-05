@@ -1,55 +1,55 @@
-import React, { memo, useMemo } from "react";
-import { useSignals } from "@preact/signals-react/runtime";
-import { getStatValueSignal } from "@stores/statsSignals";
-import CountDisplay from "@components/overlay/CountDisplay";
+import React, { memo, useMemo } from 'react';
+import { useSignals } from '@preact/signals-react/runtime';
+import { getStatValueSignal } from '@stores/statsSignals';
+import CountDisplay from '@components/overlay/CountDisplay';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
+} from '@src/types/keys';
 
 const OUTSIDE_OFFSET = 5;
 
 const computeOutsideStyle = (align, dx, dy, width, height, gap) => {
   const base = {
-    position: "absolute",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
+    position: 'absolute',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'none',
   };
 
   const offset = Number.isFinite(gap) ? gap : OUTSIDE_OFFSET;
 
   switch (align) {
-    case "bottom":
+    case 'bottom':
       return {
         ...base,
         left: `${dx + width / 2}px`,
         top: `${dy + height + offset}px`,
-        transform: "translate(-50%, 0)",
+        transform: 'translate(-50%, 0)',
         minWidth: `${width}px`,
       };
-    case "left":
+    case 'left':
       return {
         ...base,
         left: `${dx - offset}px`,
         top: `${dy + height / 2}px`,
-        transform: "translate(-100%, -50%)",
+        transform: 'translate(-100%, -50%)',
       };
-    case "right":
+    case 'right':
       return {
         ...base,
         left: `${dx + width + offset}px`,
         top: `${dy + height / 2}px`,
-        transform: "translate(0, -50%)",
+        transform: 'translate(0, -50%)',
       };
-    case "top":
+    case 'top':
     default:
       return {
         ...base,
         left: `${dx + width / 2}px`,
         top: `${dy - offset}px`,
-        transform: "translate(-50%, -100%)",
+        transform: 'translate(-50%, -100%)',
         minWidth: `${width}px`,
       };
   }
@@ -70,7 +70,7 @@ const StatCounter = memo(({ position, statType }) => {
     return createDefaultCounterSettings();
   }, [position?.counter]);
 
-  if (!counterSettings.enabled || counterSettings.placement !== "outside") {
+  if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
     return null;
   }
 
@@ -88,11 +88,11 @@ const StatCounter = memo(({ position, statType }) => {
   const fillColor = counterSettings.fill.idle;
   const strokeColor = counterSettings.stroke.idle;
   const offsetY =
-    counterSettings.align === "top"
+    counterSettings.align === 'top'
       ? -6
-      : counterSettings.align === "bottom"
-      ? 6
-      : 0;
+      : counterSettings.align === 'bottom'
+        ? 6
+        : 0;
 
   return (
     <div className="pointer-events-none" style={style}>

@@ -4,39 +4,39 @@ import React, {
   useRef,
   useState,
   useEffect,
-} from "react";
-import { createPortal } from "react-dom";
-import { useTranslation } from "@contexts/I18nContext";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from '@contexts/I18nContext';
 import {
   useGridSelectionStore,
   type SelectedElement,
-} from "@stores/useGridSelectionStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { isMac } from "@utils/platform";
-import { useLenis } from "@hooks/useLenis";
-import ListPopup, { type ListItem } from "@components/main/Modal/ListPopup";
-import CloseEyeIcon from "@assets/svgs/close_eye.svg";
-import OpenEyeIcon from "@assets/svgs/open_eye.svg";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import type { LayerGroups } from "@src/types/layerGroups";
+} from '@stores/useGridSelectionStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
+import { isMac } from '@utils/platform';
+import { useLenis } from '@hooks/useLenis';
+import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import CloseEyeIcon from '@assets/svgs/close_eye.svg';
+import OpenEyeIcon from '@assets/svgs/open_eye.svg';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import type { LayerGroups } from '@src/types/layerGroups';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
   normalizeLayerGroupsForMode,
   resolveSingleGroupIdFromSelection,
-} from "@utils/layerGroupUtils";
+} from '@utils/layerGroupUtils';
 
 // ============================================================================
 // 레이어 아이템 타입
 // ============================================================================
 
 interface LayerItem {
-  type: "key" | "stat" | "graph" | "plugin";
+  type: 'key' | 'stat' | 'graph' | 'plugin';
   id: string;
   index?: number; // key/stat인 경우
   name: string;
@@ -50,7 +50,7 @@ interface LayerItem {
 // ============================================================================
 
 interface GroupHeaderItem {
-  displayType: "group-header";
+  displayType: 'group-header';
   groupId: string;
   groupName: string;
   isCollapsed: boolean;
@@ -59,7 +59,7 @@ interface GroupHeaderItem {
 }
 
 interface LayerDisplayItem {
-  displayType: "layer";
+  displayType: 'layer';
   item: LayerItem;
   groupDepth: number; // 0 = ungrouped, 1 = in group
   flatIndex: number; // index in the original layerItems array
@@ -110,8 +110,8 @@ const ChevronIcon: React.FC<{ collapsed?: boolean }> = ({ collapsed }) => (
     viewBox="0 0 10 10"
     fill="none"
     style={{
-      transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
-      transition: "transform 0.15s ease",
+      transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+      transition: 'transform 0.15s ease',
     }}
   >
     <path
@@ -246,16 +246,18 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
-  const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<number | null>(
-    null,
-  );
+  const [dragOverDisplayIndex, setDragOverDisplayIndex] = useState<
+    number | null
+  >(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const didDragRef = useRef(false);
 
   // Shift 선택을 위한 마지막 클릭 인덱스
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
-  const [lastClickedDisplayIndex, setLastClickedDisplayIndex] = useState<number | null>(null);
+  const [lastClickedDisplayIndex, setLastClickedDisplayIndex] = useState<
+    number | null
+  >(null);
 
   // 더블클릭과 클릭(특히 '이미 선택된 아이템 클릭 시 선택 해제') 충돌 방지용 타이머
   const pendingDeselectTimerRef = useRef<number | null>(null);
@@ -282,7 +284,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   // 드래그 상태를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const dragStateRef = useRef<{
     itemHeight: number;
-    currentDropTarget: { toDisplayIndex: number; targetGroupId: string | undefined } | null;
+    currentDropTarget: {
+      toDisplayIndex: number;
+      targetGroupId: string | undefined;
+    } | null;
   } | null>(null);
   const draggedItemIdsRef = useRef<string[]>([]);
 
@@ -320,7 +325,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     const thumb = calculateThumb(scrollElementRef.current);
     thumbRef.current.style.top = `${thumb.top}px`;
     thumbRef.current.style.height = `${thumb.height}px`;
-    thumbRef.current.style.display = thumb.visible ? "block" : "none";
+    thumbRef.current.style.display = thumb.visible ? 'block' : 'none';
   }, [calculateThumb]);
 
   const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
@@ -349,11 +354,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     const currentKeyMappings = keyMappings[selectedKeyType] || [];
 
     currentPositions.forEach((pos, index) => {
-      const keyCode = currentKeyMappings[index] || "";
+      const keyCode = currentKeyMappings[index] || '';
       const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
       const defaultName = keyInfo?.displayName || keyCode || `Key ${index + 1}`;
       items.push({
-        type: "key",
+        type: 'key',
         id: `key-${index}`,
         index,
         name: pos.layerName || defaultName,
@@ -367,15 +372,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     const currentStatPositions = statPositions[selectedKeyType] || [];
     currentStatPositions.forEach((pos, index) => {
       const defaultName =
-        pos.statType === "kpsAvg"
-          ? "AVG"
-          : pos.statType === "kpsMax"
-          ? "MAX"
-          : pos.statType === "total"
-          ? "Total"
-          : "KPS";
+        pos.statType === 'kpsAvg'
+          ? 'AVG'
+          : pos.statType === 'kpsMax'
+            ? 'MAX'
+            : pos.statType === 'total'
+              ? 'Total'
+              : 'KPS';
       items.push({
-        type: "stat",
+        type: 'stat',
         id: `stat-${index}`,
         index,
         name: (pos as any).layerName || defaultName,
@@ -389,15 +394,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     const currentGraphPositions = graphPositions[selectedKeyType] || [];
     currentGraphPositions.forEach((pos, index) => {
       const defaultName =
-        pos.statType === "kpsAvg"
-          ? "AVG Graph"
-          : pos.statType === "kpsMax"
-            ? "MAX Graph"
-            : pos.statType === "total"
-              ? "Total Graph"
-              : "KPS Graph";
+        pos.statType === 'kpsAvg'
+          ? 'AVG Graph'
+          : pos.statType === 'kpsMax'
+            ? 'MAX Graph'
+            : pos.statType === 'total'
+              ? 'Total Graph'
+              : 'KPS Graph';
       items.push({
-        type: "graph",
+        type: 'graph',
         id: `graph-${index}`,
         index,
         name: (pos as any).layerName || defaultName,
@@ -410,9 +415,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     // 플러그인 아이템 추가
     pluginElements.forEach((el) => {
       items.push({
-        type: "plugin",
+        type: 'plugin',
         id: el.fullId,
-        name: el.definitionId || "Plugin",
+        name: el.definitionId || 'Plugin',
         zIndex: el.zIndex ?? 0,
         hidden: !!el.hidden,
         groupId: (el as any).groupId,
@@ -469,9 +474,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           const allHidden = children.every((c) => c.hidden);
 
           result.push({
-            displayType: "group-header",
+            displayType: 'group-header',
             groupId: item.groupId,
-            groupName: groupDef?.name || t("layerGroup.defaultName"),
+            groupName: groupDef?.name || t('layerGroup.defaultName'),
             isCollapsed,
             childCount: children.length,
             allHidden,
@@ -482,7 +487,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             children.forEach((child) => {
               const childFlatIdx = layerItems.indexOf(child);
               result.push({
-                displayType: "layer",
+                displayType: 'layer',
                 item: child,
                 groupDepth: 1,
                 flatIndex: childFlatIdx,
@@ -494,7 +499,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       } else {
         // 그룹에 속하지 않는 아이템
         result.push({
-          displayType: "layer",
+          displayType: 'layer',
           item,
           groupDepth: 0,
           flatIndex: flatIdx,
@@ -541,7 +546,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       let toIndex = items.length;
       if (safeSlotIndex < currentDisplay.length) {
         const targetDisplayItem = currentDisplay[safeSlotIndex];
-        if (targetDisplayItem.displayType === "layer") {
+        if (targetDisplayItem.displayType === 'layer') {
           toIndex = targetDisplayItem.flatIndex;
         } else {
           const firstChildIndex = items.findIndex(
@@ -561,29 +566,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       let prevIdx = safeSlotIndex - 1;
       while (
         prevIdx >= 0 &&
-        getDisplayItem(prevIdx)?.displayType === "layer" &&
+        getDisplayItem(prevIdx)?.displayType === 'layer' &&
         draggingItemIds.has((getDisplayItem(prevIdx) as any).item.id)
       ) {
         prevIdx--;
       }
-      let prevDisplayItem = getDisplayItem(prevIdx);
+      const prevDisplayItem = getDisplayItem(prevIdx);
 
       let nextIdx = safeSlotIndex;
       while (
         nextIdx < currentDisplay.length &&
-        getDisplayItem(nextIdx)?.displayType === "layer" &&
+        getDisplayItem(nextIdx)?.displayType === 'layer' &&
         draggingItemIds.has((getDisplayItem(nextIdx) as any).item.id)
       ) {
         nextIdx++;
       }
-      let nextDisplayItem = getDisplayItem(nextIdx);
+      const nextDisplayItem = getDisplayItem(nextIdx);
 
       let targetGroupId: string | undefined;
-      if (prevDisplayItem?.displayType === "group-header") {
+      if (prevDisplayItem?.displayType === 'group-header') {
         const prevHeaderGroupId = prevDisplayItem.groupId;
         // 헤더 바로 아래(= 같은 그룹 첫 자식 앞)에서만 해당 그룹으로 편입
         if (
-          nextDisplayItem?.displayType === "layer" &&
+          nextDisplayItem?.displayType === 'layer' &&
           nextDisplayItem.item.groupId === prevHeaderGroupId
         ) {
           targetGroupId = prevHeaderGroupId;
@@ -596,7 +601,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         }
       } else {
         const prevGroupId =
-          prevDisplayItem?.displayType === "layer"
+          prevDisplayItem?.displayType === 'layer'
             ? prevDisplayItem.item.groupId
             : undefined;
 
@@ -616,7 +621,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 포인터 위치 기반 아이템 드롭 타깃 계산
   const resolveItemDropTargetFromPointer = useCallback(
-    (relativeY: number, itemHeight: number, draggingIds: ReadonlySet<string>) => {
+    (
+      relativeY: number,
+      itemHeight: number,
+      draggingIds: ReadonlySet<string>,
+    ) => {
       const currentDisplay = displayItemsRef.current;
       const displayCount = currentDisplay.length;
 
@@ -661,13 +670,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 그룹 헤더 하단 드롭:
       // - 접힌 그룹: 헤더 하단 인디케이터 사용
       // - 펼친 그룹: 첫 자식 위 슬롯 인디케이터로 통일
-      if (row.displayType === "group-header" && isBottomHalf) {
+      if (row.displayType === 'group-header' && isBottomHalf) {
         if (row.isCollapsed) {
           const firstChildIndex = layerItemsRef.current.findIndex(
             (item) => item.groupId === row.groupId,
           );
           const toIndex =
-            firstChildIndex === -1 ? layerItemsRef.current.length : firstChildIndex;
+            firstChildIndex === -1
+              ? layerItemsRef.current.length
+              : firstChildIndex;
 
           return {
             toIndex,
@@ -678,7 +689,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         }
 
         const expandedGroupSlotIndex = rowIndex + 1;
-        const target = resolveItemDropTarget(expandedGroupSlotIndex, draggingIds);
+        const target = resolveItemDropTarget(
+          expandedGroupSlotIndex,
+          draggingIds,
+        );
         return {
           ...target,
           indicatorDisplayIndex: expandedGroupSlotIndex,
@@ -688,7 +702,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 일반 슬롯 드롭: 행 상/하단 기준으로 슬롯 계산
       const displaySlotIndex =
-        row.displayType === "group-header"
+        row.displayType === 'group-header'
           ? rowIndex
           : isBottomHalf
             ? rowIndex + 1
@@ -732,7 +746,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // displayItems 기반 앵커 설정 (Shift+클릭 범위 선택용)
       const displayIdx = displayItemsRef.current.findIndex(
-        (di) => di.displayType === "layer" && di.item.id === item.id,
+        (di) => di.displayType === 'layer' && di.item.id === item.id,
       );
       setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
     },
@@ -765,9 +779,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const isShiftPressed = e.shiftKey;
 
       // Shift+클릭: 범위 선택 (displayItems 기반)
-      if (isShiftPressed && (lastClickedDisplayIndex !== null || lastClickedIndex !== null)) {
+      if (
+        isShiftPressed &&
+        (lastClickedDisplayIndex !== null || lastClickedIndex !== null)
+      ) {
         const thisDisplayIdx = displayItemsRef.current.findIndex(
-          (di) => di.displayType === "layer" && di.item.id === item.id,
+          (di) => di.displayType === 'layer' && di.item.id === item.id,
         );
 
         // displayItems 기반 범위 선택 (그룹 헤더 포함 가능)
@@ -782,7 +799,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           for (let i = startIdx; i <= endIdx; i++) {
             const di = currentDisplay[i];
             if (!di) continue;
-            if (di.displayType === "group-header") {
+            if (di.displayType === 'group-header') {
               rangeGroupIds.push(di.groupId);
               const groupChildren = layerItemsRef.current.filter(
                 (it) => it.groupId === di.groupId,
@@ -811,7 +828,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             const newGroupIds = rangeGroupIds.filter(
               (id) => !existingGroupIds.has(id),
             );
-            setFullSelection(mergedElements, [...selectedGroupIds, ...newGroupIds]);
+            setFullSelection(mergedElements, [
+              ...selectedGroupIds,
+              ...newGroupIds,
+            ]);
           } else {
             setFullSelection(deduped, rangeGroupIds);
           }
@@ -886,7 +906,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 마지막 클릭 인덱스 업데이트 (Shift 선택의 기준점)
       setLastClickedIndex(index);
       const displayIdx = displayItemsRef.current.findIndex(
-        (di) => di.displayType === "layer" && di.item.id === item.id,
+        (di) => di.displayType === 'layer' && di.item.id === item.id,
       );
       setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
     },
@@ -924,10 +944,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           pos,
           currentStatPositions as any,
           currentGraphPositions as any,
-          currentPluginElements
+          currentPluginElements,
         );
 
-      if (item.type === "key" && item.index !== undefined) {
+      if (item.type === 'key' && item.index !== undefined) {
         const currentPositions = pos[selectedKeyType] || [];
         const current = currentPositions[item.index];
         if (!current) return;
@@ -945,7 +965,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         try {
           await window.api.keys.updatePositions(updatedPositions);
         } catch (error) {
-          console.error("Failed to toggle key visibility", error);
+          console.error('Failed to toggle key visibility', error);
         } finally {
           useKeyStore.getState().setLocalUpdateInProgress(false);
         }
@@ -953,7 +973,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
-      if (item.type === "stat" && item.index !== undefined) {
+      if (item.type === 'stat' && item.index !== undefined) {
         const current = useStatItemStore.getState().positions;
         const currentPositions = current[selectedKeyType] || [];
         const target = currentPositions[item.index];
@@ -972,13 +992,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         try {
           await window.api.statItems.updatePositions(updatedPositions);
         } catch (error) {
-          console.error("Failed to toggle stat item visibility", error);
+          console.error('Failed to toggle stat item visibility', error);
         } finally {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
         }
 
         try {
-          window.api.bridge.sendTo("overlay", "statPositions:sync", {
+          window.api.bridge.sendTo('overlay', 'statPositions:sync', {
             positions: updatedPositions,
           });
         } catch {
@@ -988,7 +1008,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
-      if (item.type === "graph" && item.index !== undefined) {
+      if (item.type === 'graph' && item.index !== undefined) {
         const current = useGraphItemStore.getState().positions;
         const currentPositions = current[selectedKeyType] || [];
         const target = currentPositions[item.index];
@@ -1007,13 +1027,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         try {
           await window.api.graphItems.updatePositions(updatedPositions);
         } catch (error) {
-          console.error("Failed to toggle graph item visibility", error);
+          console.error('Failed to toggle graph item visibility', error);
         } finally {
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         }
 
         try {
-          window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+          window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
             positions: updatedPositions,
           });
         } catch {
@@ -1023,7 +1043,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
-      if (item.type === "plugin") {
+      if (item.type === 'plugin') {
         const el = currentPluginElements.find((p) => p.fullId === item.id);
         if (!el) return;
         usePluginDisplayElementStore
@@ -1061,7 +1081,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 인라인 이름 변경 상태 (레이어 + 그룹 공용)
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+  const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelledRef = useRef(false);
 
@@ -1076,33 +1096,38 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     if (contextMenuGroupId) {
       return [
         {
-          id: "renameGroup",
-          label: t("contextMenu.renameGroup") || "Rename",
+          id: 'renameGroup',
+          label: t('contextMenu.renameGroup') || 'Rename',
         },
-        { id: "ungroup", label: t("contextMenu.ungroup") || "Ungroup" },
+        { id: 'ungroup', label: t('contextMenu.ungroup') || 'Ungroup' },
       ];
     }
 
     // 레이어 아이템 우클릭
-    const items: ListItem[] = [{ id: "rename", label: t("contextMenu.rename") || "Rename" }];
+    const items: ListItem[] = [
+      { id: 'rename', label: t('contextMenu.rename') || 'Rename' },
+    ];
 
     // 여러 아이템이 선택되어 있고, 우클릭 항목이 그룹 미소속일 때만 그룹화 노출
     if (selectedElements.length >= 2 && !contextMenuItem?.groupId) {
       items.push({
-        id: "groupSelected",
-        label: t("contextMenu.groupSelected") || "Group",
+        id: 'groupSelected',
+        label: t('contextMenu.groupSelected') || 'Group',
       });
     }
 
     // 우클릭한 아이템이 그룹에 속해 있으면 그룹 해제 옵션 추가
     if (contextMenuItem?.groupId) {
       items.push({
-        id: "removeFromGroup",
-        label: t("contextMenu.removeFromGroup") || "Remove from Group",
+        id: 'removeFromGroup',
+        label: t('contextMenu.removeFromGroup') || 'Remove from Group',
       });
     }
 
-    items.push({ id: "delete", label: t("propertiesPanel.delete") || "Delete" });
+    items.push({
+      id: 'delete',
+      label: t('propertiesPanel.delete') || 'Delete',
+    });
 
     return items;
   }, [t, selectedElements.length, contextMenuItem, contextMenuGroupId]);
@@ -1121,19 +1146,19 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       // 우클릭한 아이템이 선택되어 있지 않으면 해당 아이템만 선택
       if (!isItemSelected(item)) {
         clearSelection();
-        if (item.type === "key" && item.index !== undefined) {
-          toggleSelection({ type: "key", id: item.id, index: item.index });
-        } else if (item.type === "stat" && item.index !== undefined) {
-          toggleSelection({ type: "stat", id: item.id, index: item.index });
-        } else if (item.type === "graph" && item.index !== undefined) {
-          toggleSelection({ type: "graph", id: item.id, index: item.index });
-        } else if (item.type === "plugin") {
-          toggleSelection({ type: "plugin", id: item.id });
+        if (item.type === 'key' && item.index !== undefined) {
+          toggleSelection({ type: 'key', id: item.id, index: item.index });
+        } else if (item.type === 'stat' && item.index !== undefined) {
+          toggleSelection({ type: 'stat', id: item.id, index: item.index });
+        } else if (item.type === 'graph' && item.index !== undefined) {
+          toggleSelection({ type: 'graph', id: item.id, index: item.index });
+        } else if (item.type === 'plugin') {
+          toggleSelection({ type: 'plugin', id: item.id });
         }
         setLastClickedIndex(index);
         // Shift 클릭 앵커도 갱신 (우클릭→Shift 클릭 시 stale 방지)
         const displayIdx = displayItemsRef.current.findIndex(
-          (di) => di.displayType === "layer" && di.item.id === item.id,
+          (di) => di.displayType === 'layer' && di.item.id === item.id,
         );
         setLastClickedDisplayIndex(displayIdx !== -1 ? displayIdx : null);
       }
@@ -1157,9 +1182,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       setRenamingItemId(null);
       const trimmed = value.trim();
       // 빈 문자열이면 layerName 제거 (기본 이름으로 복원)
-      const newLayerName = trimmed === "" ? undefined : trimmed;
+      const newLayerName = trimmed === '' ? undefined : trimmed;
 
-      if (item.type === "key" && item.index !== undefined) {
+      if (item.type === 'key' && item.index !== undefined) {
         const { keyMappings: km, positions: pos } = useKeyStore.getState();
         const currentPositions = pos[selectedKeyType] || [];
         const current = currentPositions[item.index];
@@ -1167,7 +1192,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
         const updatedPositions = { ...pos };
         const updatedModePositions = [...currentPositions];
-        updatedModePositions[item.index] = { ...current, layerName: newLayerName };
+        updatedModePositions[item.index] = {
+          ...current,
+          layerName: newLayerName,
+        };
         updatedPositions[selectedKeyType] = updatedModePositions;
 
         useKeyStore.getState().setLocalUpdateInProgress(true);
@@ -1177,7 +1205,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         } finally {
           useKeyStore.getState().setLocalUpdateInProgress(false);
         }
-      } else if (item.type === "stat" && item.index !== undefined) {
+      } else if (item.type === 'stat' && item.index !== undefined) {
         const current = useStatItemStore.getState().positions;
         const currentPositions = current[selectedKeyType] || [];
         const target = currentPositions[item.index];
@@ -1185,7 +1213,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
         const updatedPositions = { ...current };
         const updatedModePositions = [...currentPositions];
-        updatedModePositions[item.index] = { ...target, layerName: newLayerName };
+        updatedModePositions[item.index] = {
+          ...target,
+          layerName: newLayerName,
+        };
         updatedPositions[selectedKeyType] = updatedModePositions;
 
         useStatItemStore.getState().setLocalUpdateInProgress(true);
@@ -1195,7 +1226,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         } finally {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
         }
-      } else if (item.type === "graph" && item.index !== undefined) {
+      } else if (item.type === 'graph' && item.index !== undefined) {
         const current = useGraphItemStore.getState().positions;
         const currentPositions = current[selectedKeyType] || [];
         const target = currentPositions[item.index];
@@ -1203,7 +1234,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
         const updatedPositions = { ...current };
         const updatedModePositions = [...currentPositions];
-        updatedModePositions[item.index] = { ...target, layerName: newLayerName };
+        updatedModePositions[item.index] = {
+          ...target,
+          layerName: newLayerName,
+        };
         updatedPositions[selectedKeyType] = updatedModePositions;
 
         useGraphItemStore.getState().setLocalUpdateInProgress(true);
@@ -1235,9 +1269,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
-      const currentPluginElements = usePluginDisplayElementStore.getState().elements;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
       const storeLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const historyLayerGroups = options?.historyLayerGroups ?? storeLayerGroups;
+      const historyLayerGroups =
+        options?.historyLayerGroups ?? storeLayerGroups;
       const layerGroupsForNormalization =
         options?.layerGroupsForNormalization ?? storeLayerGroups;
 
@@ -1313,7 +1349,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     async (groupId: string, value: string) => {
       setRenamingItemId(null);
       const trimmed = value.trim();
-      if (trimmed === "") return;
+      if (trimmed === '') return;
 
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
       const statPos = useStatItemStore.getState().positions;
@@ -1321,12 +1357,21 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const pluginEls = usePluginDisplayElementStore.getState().elements;
       const currentGroups = useLayerGroupStore.getState().layerGroups;
       const currentModeGroups = currentGroups[selectedKeyType] || [];
-      const currentGroup = currentModeGroups.find((group) => group.id === groupId);
+      const currentGroup = currentModeGroups.find(
+        (group) => group.id === groupId,
+      );
       if (!currentGroup || currentGroup.name === trimmed) return;
 
       useHistoryStore
         .getState()
-        .pushState(km, pos, statPos as any, graphPos as any, pluginEls, currentGroups);
+        .pushState(
+          km,
+          pos,
+          statPos as any,
+          graphPos as any,
+          pluginEls,
+          currentGroups,
+        );
 
       const updated: LayerGroups = {
         ...currentGroups,
@@ -1339,7 +1384,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       try {
         await window.api.layerGroups.update(updated);
       } catch (error) {
-        console.error("Failed to rename group", error);
+        console.error('Failed to rename group', error);
       }
     },
     [selectedKeyType],
@@ -1376,7 +1421,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 키 positions 업데이트
       const keyChildren = children.filter(
-        (c) => c.type === "key" && c.index !== undefined,
+        (c) => c.type === 'key' && c.index !== undefined,
       );
       if (keyChildren.length > 0) {
         const updatedPositions = { ...pos };
@@ -1401,7 +1446,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 통계 positions 업데이트
       const statChildren = children.filter(
-        (c) => c.type === "stat" && c.index !== undefined,
+        (c) => c.type === 'stat' && c.index !== undefined,
       );
       if (statChildren.length > 0) {
         const current = useStatItemStore.getState().positions;
@@ -1429,7 +1474,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 그래프 positions 업데이트
       const graphChildren = children.filter(
-        (c) => c.type === "graph" && c.index !== undefined,
+        (c) => c.type === 'graph' && c.index !== undefined,
       );
       if (graphChildren.length > 0) {
         const current = useGraphItemStore.getState().positions;
@@ -1456,7 +1501,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       // 플러그인
-      const pluginChildren = children.filter((c) => c.type === "plugin");
+      const pluginChildren = children.filter((c) => c.type === 'plugin');
       pluginChildren.forEach((c) => {
         usePluginDisplayElementStore
           .getState()
@@ -1471,12 +1516,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     async (itemId: string) => {
       // 그룹 헤더 컨텍스트 메뉴 처리
       if (contextMenuGroupId) {
-        if (itemId === "renameGroup") {
+        if (itemId === 'renameGroup') {
           const groupDef = layerGroupsForMode.find(
             (g) => g.id === contextMenuGroupId,
           );
           setRenamingItemId(`group:${contextMenuGroupId}`);
-          setRenameValue(groupDef?.name || "");
+          setRenameValue(groupDef?.name || '');
           setContextMenuOpen(false);
           setContextMenuGroupId(null);
           requestAnimationFrame(() => {
@@ -1485,7 +1530,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           });
           return;
         }
-        if (itemId === "ungroup") {
+        if (itemId === 'ungroup') {
           const children = layerItems.filter(
             (item) => item.groupId === contextMenuGroupId,
           );
@@ -1507,7 +1552,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
-      if (itemId === "rename") {
+      if (itemId === 'rename') {
         // 우클릭한 아이템에 대해 인라인 이름 변경 시작
         if (contextMenuItem) {
           setRenamingItemId(contextMenuItem.id);
@@ -1522,7 +1567,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       // 선택 항목 그룹화
-      if (itemId === "groupSelected") {
+      if (itemId === 'groupSelected') {
         if (selectedElements.length < 2) return;
 
         const currentGroups = useLayerGroupStore.getState().layerGroups;
@@ -1544,12 +1589,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         } else {
           const groupId = crypto.randomUUID();
           const groupName = buildNextLayerGroupName(
-            t("layerGroup.newGroup") || "New Group",
+            t('layerGroup.newGroup') || 'New Group',
             modeGroups,
           );
           const nextGroups: LayerGroups = {
             ...currentGroups,
-            [selectedKeyType]: [...modeGroups, { id: groupId, name: groupName }],
+            [selectedKeyType]: [
+              ...modeGroups,
+              { id: groupId, name: groupName },
+            ],
           };
 
           await setGroupIdOnSelected(groupId, undefined, {
@@ -1563,7 +1611,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       // 그룹에서 제거
-      if (itemId === "removeFromGroup") {
+      if (itemId === 'removeFromGroup') {
         if (contextMenuItem) {
           // 단일 아이템만 그룹에서 제거
           const elements = [
@@ -1581,24 +1629,24 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         return;
       }
 
-      if (itemId === "delete") {
+      if (itemId === 'delete') {
         // 선택된 요소들 삭제
         if (selectedElements.length === 0) return;
 
         const keysToDelete = selectedElements
-          .filter((el) => el.type === "key" && el.index !== undefined)
+          .filter((el) => el.type === 'key' && el.index !== undefined)
           .map((el) => el.index as number);
 
         const statsToDelete = selectedElements
-          .filter((el) => el.type === "stat" && el.index !== undefined)
+          .filter((el) => el.type === 'stat' && el.index !== undefined)
           .map((el) => el.index as number);
 
         const graphsToDelete = selectedElements
-          .filter((el) => el.type === "graph" && el.index !== undefined)
+          .filter((el) => el.type === 'graph' && el.index !== undefined)
           .map((el) => el.index as number);
 
         const pluginsToDelete = selectedElements
-          .filter((el) => el.type === "plugin")
+          .filter((el) => el.type === 'plugin')
           .map((el) => el.id);
 
         // 히스토리 저장
@@ -1662,7 +1710,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             await window.api.keys.update(updatedMappings);
             await window.api.keys.updatePositions(updatedPositions);
           } catch (error) {
-            console.error("Failed to delete keys", error);
+            console.error('Failed to delete keys', error);
           } finally {
             useKeyStore.getState().setLocalUpdateInProgress(false);
           }
@@ -1676,7 +1724,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
           const updatedPositions = {
             ...current,
-            [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
+            [selectedKeyType]: posArray.filter(
+              (_, index) => !deleteSet.has(index),
+            ),
           };
 
           useStatItemStore.getState().setLocalUpdateInProgress(true);
@@ -1684,13 +1734,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           try {
             await window.api.statItems.updatePositions(updatedPositions);
           } catch (error) {
-            console.error("Failed to delete stat items", error);
+            console.error('Failed to delete stat items', error);
           } finally {
             useStatItemStore.getState().setLocalUpdateInProgress(false);
           }
 
           try {
-            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'statPositions:sync', {
               positions: updatedPositions,
             });
           } catch {
@@ -1706,7 +1756,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
           const updatedPositions = {
             ...current,
-            [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
+            [selectedKeyType]: posArray.filter(
+              (_, index) => !deleteSet.has(index),
+            ),
           };
 
           useGraphItemStore.getState().setLocalUpdateInProgress(true);
@@ -1714,13 +1766,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           try {
             await window.api.graphItems.updatePositions(updatedPositions);
           } catch (error) {
-            console.error("Failed to delete graph items", error);
+            console.error('Failed to delete graph items', error);
           } finally {
             useGraphItemStore.getState().setLocalUpdateInProgress(false);
           }
 
           try {
-            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
               positions: updatedPositions,
             });
           } catch {
@@ -1755,12 +1807,18 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           useStatItemStore.getState().setPositions(normalized.statPositions);
           useGraphItemStore.getState().setPositions(normalized.graphPositions);
           if (normalized.groupsChanged) {
-            useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+            useLayerGroupStore
+              .getState()
+              .setLayerGroups(normalized.layerGroups);
           }
           try {
             await window.api.keys.updatePositions(normalized.keyPositions);
-            await window.api.statItems.updatePositions(normalized.statPositions);
-            await window.api.graphItems.updatePositions(normalized.graphPositions);
+            await window.api.statItems.updatePositions(
+              normalized.statPositions,
+            );
+            await window.api.graphItems.updatePositions(
+              normalized.graphPositions,
+            );
             if (normalized.groupsChanged) {
               await window.api.layerGroups.update(normalized.layerGroups);
             }
@@ -1793,7 +1851,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     async (
       draggedIds: string[],
       toDisplayIndex: number,
-      dropContext?: { targetGroupId: string | undefined; preserveFullGroups?: boolean },
+      dropContext?: {
+        targetGroupId: string | undefined;
+        preserveFullGroups?: boolean;
+      },
     ) => {
       const items = [...layerItemsRef.current];
       const currentDisplay = displayItemsRef.current;
@@ -1832,10 +1893,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       let offset = 0;
       for (let i = 0; i < toDisplayIndex && i < currentDisplay.length; i++) {
         const di = currentDisplay[i];
-        if (di.displayType === "layer" && draggedIdSet.has(di.item.id)) {
+        if (di.displayType === 'layer' && draggedIdSet.has(di.item.id)) {
           offset++;
         } else if (
-          di.displayType === "group-header" &&
+          di.displayType === 'group-header' &&
           isFullGroupDragged(di.groupId)
         ) {
           offset++;
@@ -1845,12 +1906,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 필터 디스플레이 목록 (드래그 아이템 제외)
       const filteredDisplay = currentDisplay.filter((di) => {
-        if (di.displayType === "layer" && draggedIdSet.has(di.item.id))
+        if (di.displayType === 'layer' && draggedIdSet.has(di.item.id))
           return false;
-        if (
-          di.displayType === "group-header" &&
-          isFullGroupDragged(di.groupId)
-        )
+        if (di.displayType === 'group-header' && isFullGroupDragged(di.groupId))
           return false;
         return true;
       });
@@ -1860,13 +1918,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const orderedRemaining: LayerItem[] = [];
       const addedIds = new Set<string>();
       for (const di of filteredDisplay) {
-        if (di.displayType === "layer") {
+        if (di.displayType === 'layer') {
           const item = remainingItems.find((ri) => ri.id === di.item.id);
           if (item && !addedIds.has(item.id)) {
             orderedRemaining.push(item);
             addedIds.add(item.id);
           }
-        } else if (di.displayType === "group-header") {
+        } else if (di.displayType === 'group-header') {
           // 그룹의 모든 자식 추가 (접힌 그룹 자식 포함)
           for (const item of remainingItems) {
             if (item.groupId === di.groupId && !addedIds.has(item.id)) {
@@ -1888,12 +1946,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       let insertionIndex = orderedRemaining.length;
       if (filteredTargetIndex < filteredDisplay.length) {
         const targetDI = filteredDisplay[filteredTargetIndex];
-        if (targetDI.displayType === "layer") {
+        if (targetDI.displayType === 'layer') {
           const idx = orderedRemaining.findIndex(
             (i) => i.id === targetDI.item.id,
           );
           if (idx !== -1) insertionIndex = idx;
-        } else if (targetDI.displayType === "group-header") {
+        } else if (targetDI.displayType === 'group-header') {
           const firstChild = orderedRemaining.find(
             (i) => i.groupId === targetDI.groupId,
           );
@@ -1937,7 +1995,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 드래그 아이템에 groupId 적용 (plugin, 전체 그룹 드래그 제외)
       const updatedDraggedItems = draggedItems.map((item) => {
-        if (item.type === "plugin") return item;
+        if (item.type === 'plugin') return item;
         if (preserveGroupIds.has(item.id)) return item;
         return { ...item, groupId: newGroupId };
       });
@@ -1997,31 +2055,37 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         const newZIndex = maxZIndex - idx;
         const isDraggedItem = draggedIdSet.has(item.id);
 
-        if (item.type === "key" && item.index !== undefined) {
+        if (item.type === 'key' && item.index !== undefined) {
           if (currentModePositions[item.index]) {
             currentModePositions[item.index] = {
               ...currentModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id)
+                ? { groupId: newGroupId }
+                : {}),
             };
           }
-        } else if (item.type === "stat" && item.index !== undefined) {
+        } else if (item.type === 'stat' && item.index !== undefined) {
           if (currentStatModePositions[item.index]) {
             currentStatModePositions[item.index] = {
               ...currentStatModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id)
+                ? { groupId: newGroupId }
+                : {}),
             };
           }
-        } else if (item.type === "graph" && item.index !== undefined) {
+        } else if (item.type === 'graph' && item.index !== undefined) {
           if (currentGraphModePositions[item.index]) {
             currentGraphModePositions[item.index] = {
               ...currentGraphModePositions[item.index],
               zIndex: newZIndex,
-              ...(isDraggedItem && !preserveGroupIds.has(item.id) ? { groupId: newGroupId } : {}),
+              ...(isDraggedItem && !preserveGroupIds.has(item.id)
+                ? { groupId: newGroupId }
+                : {}),
             };
           }
-        } else if (item.type === "plugin") {
+        } else if (item.type === 'plugin') {
           usePluginDisplayElementStore.getState().updateElement(item.id, {
             zIndex: newZIndex,
           });
@@ -2059,7 +2123,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           await window.api.layerGroups.update(normalized.layerGroups);
         }
       } catch (error) {
-        console.error("Failed to reorder layers", error);
+        console.error('Failed to reorder layers', error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
         useStatItemStore.getState().setLocalUpdateInProgress(false);
@@ -2067,30 +2131,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       }
 
       try {
-        window.api.bridge.sendTo("overlay", "positions:sync", {
+        window.api.bridge.sendTo('overlay', 'positions:sync', {
           positions: normalized.keyPositions,
         });
       } catch {
         // ignore
       }
       try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
           positions: normalized.statPositions,
         });
       } catch {
         // ignore
       }
       try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
           positions: normalized.graphPositions,
         });
       } catch {
         // ignore
       }
       try {
-        const pluginEls =
-          usePluginDisplayElementStore.getState().elements;
-        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+        const pluginEls = usePluginDisplayElementStore.getState().elements;
+        window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
           elements: pluginEls,
         });
       } catch {
@@ -2114,19 +2177,24 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // targetDisplayIndex에서 드래그 중인 그룹 행을 제외하여 필터된 인덱스 계산
       let offset = 0;
-      for (let i = 0; i < targetDisplayIndex && i < currentDisplay.length; i++) {
+      for (
+        let i = 0;
+        i < targetDisplayIndex && i < currentDisplay.length;
+        i++
+      ) {
         const di = currentDisplay[i];
-        if (di.displayType === "group-header" && di.groupId === groupId) offset++;
-        else if (di.displayType === "layer" && di.item.groupId === groupId)
+        if (di.displayType === 'group-header' && di.groupId === groupId)
+          offset++;
+        else if (di.displayType === 'layer' && di.item.groupId === groupId)
           offset++;
       }
       const filteredTargetIndex = targetDisplayIndex - offset;
 
       // 필터된 디스플레이 목록 (드래그 중인 그룹 제외)
       const filteredDisplay = currentDisplay.filter((di) => {
-        if (di.displayType === "group-header" && di.groupId === groupId)
+        if (di.displayType === 'group-header' && di.groupId === groupId)
           return false;
-        if (di.displayType === "layer" && di.item.groupId === groupId)
+        if (di.displayType === 'layer' && di.item.groupId === groupId)
           return false;
         return true;
       });
@@ -2136,12 +2204,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       if (filteredTargetIndex < filteredDisplay.length) {
         const targetDI = filteredDisplay[filteredTargetIndex];
-        if (targetDI.displayType === "layer") {
+        if (targetDI.displayType === 'layer') {
           const idx = remainingItems.findIndex(
             (i) => i.id === targetDI.item.id,
           );
           if (idx !== -1) insertionIndex = idx;
-        } else if (targetDI.displayType === "group-header") {
+        } else if (targetDI.displayType === 'group-header') {
           const firstChild = remainingItems.find(
             (i) => i.groupId === targetDI.groupId,
           );
@@ -2206,28 +2274,28 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       newItems.forEach((item, idx) => {
         const newZIndex = maxZIndex - idx;
-        if (item.type === "key" && item.index !== undefined) {
+        if (item.type === 'key' && item.index !== undefined) {
           if (currentModePositions[item.index]) {
             currentModePositions[item.index] = {
               ...currentModePositions[item.index],
               zIndex: newZIndex,
             };
           }
-        } else if (item.type === "stat" && item.index !== undefined) {
+        } else if (item.type === 'stat' && item.index !== undefined) {
           if (currentStatModePositions[item.index]) {
             currentStatModePositions[item.index] = {
               ...currentStatModePositions[item.index],
               zIndex: newZIndex,
             };
           }
-        } else if (item.type === "graph" && item.index !== undefined) {
+        } else if (item.type === 'graph' && item.index !== undefined) {
           if (currentGraphModePositions[item.index]) {
             currentGraphModePositions[item.index] = {
               ...currentGraphModePositions[item.index],
               zIndex: newZIndex,
             };
           }
-        } else if (item.type === "plugin") {
+        } else if (item.type === 'plugin') {
           usePluginDisplayElementStore.getState().updateElement(item.id, {
             zIndex: newZIndex,
           });
@@ -2251,7 +2319,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         await window.api.statItems.updatePositions(updatedStatPositions);
         await window.api.graphItems.updatePositions(updatedGraphPositions);
       } catch (error) {
-        console.error("Failed to reorder group", error);
+        console.error('Failed to reorder group', error);
       } finally {
         useKeyStore.getState().setLocalUpdateInProgress(false);
         useStatItemStore.getState().setLocalUpdateInProgress(false);
@@ -2260,30 +2328,29 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
       // 오버레이 동기화
       try {
-        window.api.bridge.sendTo("overlay", "positions:sync", {
+        window.api.bridge.sendTo('overlay', 'positions:sync', {
           positions: updatedPositions,
         });
       } catch {
         // ignore
       }
       try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
           positions: updatedStatPositions,
         });
       } catch {
         // ignore
       }
       try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
           positions: updatedGraphPositions,
         });
       } catch {
         // ignore
       }
       try {
-        const pluginEls =
-          usePluginDisplayElementStore.getState().elements;
-        window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+        const pluginEls = usePluginDisplayElementStore.getState().elements;
+        window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
           elements: pluginEls,
         });
       } catch {
@@ -2363,9 +2430,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         if (moveEvent.clientY < scrollRect.top) {
           relativeY = -1;
         } else if (moveEvent.clientY > scrollRect.bottom) {
-          relativeY = displayItemsRef.current.length * dragStateRef.current.itemHeight + 1;
+          relativeY =
+            displayItemsRef.current.length * dragStateRef.current.itemHeight +
+            1;
         } else {
-          relativeY = moveEvent.clientY - scrollRect.top + scrollElementRef.current.scrollTop;
+          relativeY =
+            moveEvent.clientY -
+            scrollRect.top +
+            scrollElementRef.current.scrollTop;
         }
         const draggingSet = new Set(draggedItemIdsRef.current);
         const target = resolveItemDropTargetFromPointer(
@@ -2380,7 +2452,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           // 접힌 그룹 헤더의 display index + 1을 사용
           const headerIdx = displayItemsRef.current.findIndex(
             (di) =>
-              di.displayType === "group-header" &&
+              di.displayType === 'group-header' &&
               di.groupId === target.indicatorHeaderBottomGroupId,
           );
           dropDisplayIndex = headerIdx !== -1 ? headerIdx + 1 : target.toIndex;
@@ -2417,12 +2489,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         setDragOverHeaderBottomGroupId(null);
         setIsDragging(false);
 
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     },
     [clearPendingDeselect, performMultiDrop, resolveItemDropTargetFromPointer],
   );
@@ -2474,7 +2546,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         } else if (moveEvent.clientY > scrollRect.bottom) {
           relativeY = displayCount * groupDragStateRef.current.itemHeight + 1;
         } else {
-          relativeY = moveEvent.clientY - scrollRect.top + scrollElementRef.current.scrollTop;
+          relativeY =
+            moveEvent.clientY -
+            scrollRect.top +
+            scrollElementRef.current.scrollTop;
         }
         const newIndex = Math.max(
           0,
@@ -2493,8 +2568,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           const targetIdx = groupDragStateRef.current.currentOverIndex;
           if (targetIdx !== null) {
             // 이 그룹이 명시적으로 선택되어 있고 추가 선택 아이템이 있는지 확인
-            const currentSel = useGridSelectionStore.getState().selectedElements;
-            const currentGroupIds = useGridSelectionStore.getState().selectedGroupIds;
+            const currentSel =
+              useGridSelectionStore.getState().selectedElements;
+            const currentGroupIds =
+              useGridSelectionStore.getState().selectedGroupIds;
             const isGroupSelected = currentGroupIds.includes(groupId);
 
             if (isGroupSelected && currentSel.length > 0) {
@@ -2519,8 +2596,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     .map((el) => el.id),
                 ];
                 // 포인터 기반 드롭 타겟 계산으로 정확한 groupId 결정
-                const dropTarget = resolveItemDropTarget(targetIdx, new Set(allIds));
-                performMultiDrop(allIds, targetIdx, { targetGroupId: dropTarget.targetGroupId, preserveFullGroups: true });
+                const dropTarget = resolveItemDropTarget(
+                  targetIdx,
+                  new Set(allIds),
+                );
+                performMultiDrop(allIds, targetIdx, {
+                  targetGroupId: dropTarget.targetGroupId,
+                  preserveFullGroups: true,
+                });
               } else {
                 performGroupDrop(groupId, targetIdx);
               }
@@ -2537,14 +2620,19 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         setDragOverDisplayIndex(null);
         setIsDragging(false);
 
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     },
-    [clearPendingDeselect, performGroupDrop, performMultiDrop, resolveItemDropTarget],
+    [
+      clearPendingDeselect,
+      performGroupDrop,
+      performMultiDrop,
+      resolveItemDropTarget,
+    ],
   );
 
   // 그룹 헤더 클릭 → 그룹 소속 아이템 전체 선택
@@ -2566,7 +2654,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       const childElements = children.map(layerItemToSelectedElement);
 
       const thisDisplayIdx = displayItemsRef.current.findIndex(
-        (di) => di.displayType === "group-header" && di.groupId === groupId,
+        (di) => di.displayType === 'group-header' && di.groupId === groupId,
       );
       if (thisDisplayIdx < 0) return;
 
@@ -2582,7 +2670,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         for (let i = startIdx; i <= endIdx; i++) {
           const di = currentDisplay[i];
           if (!di) continue;
-          if (di.displayType === "group-header") {
+          if (di.displayType === 'group-header') {
             rangeGroupIds.push(di.groupId);
             const groupChildren = layerItemsRef.current.filter(
               (item) => item.groupId === di.groupId,
@@ -2638,9 +2726,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         } else {
           // 그룹 추가
           const existingIds = new Set(selectedElements.map((el) => el.id));
-          const newEls = childElements.filter(
-            (el) => !existingIds.has(el.id),
-          );
+          const newEls = childElements.filter((el) => !existingIds.has(el.id));
           const mergedElements = [...selectedElements, ...newEls];
           const mergedGroupIds = [...selectedGroupIds, groupId];
           setFullSelection(mergedElements, mergedGroupIds);
@@ -2706,7 +2792,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         {layerItems.length === 0 ? (
           <div className="flex items-center justify-center h-full p-[16px]">
             <p className="text-[#6B6D75] text-style-4 text-center">
-              {t("propertiesPanel.noLayers") || "No layers"}
+              {t('propertiesPanel.noLayers') || 'No layers'}
             </p>
           </div>
         ) : (
@@ -2715,7 +2801,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               // ──────────────────────────────────────────────────
               // 그룹 헤더 렌더링
               // ──────────────────────────────────────────────────
-              if (displayItem.displayType === "group-header") {
+              if (displayItem.displayType === 'group-header') {
                 const gh = displayItem;
                 const isRenamingGroup =
                   renamingItemId === `group:${gh.groupId}`;
@@ -2735,14 +2821,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     className={`
                       group relative flex items-center gap-[8px] pl-[12px] pr-[4px] h-[34px]
                       select-none cursor-grab
-                      ${gh.allHidden && !isBeingDragged ? "opacity-60" : ""}
-                      ${isBeingDragged ? "opacity-30" : ""}
+                      ${gh.allHidden && !isBeingDragged ? 'opacity-60' : ''}
+                      ${isBeingDragged ? 'opacity-30' : ''}
                       ${
                         isSelected
-                          ? "bg-[#3B82F6]/20 text-[#DBDEE8]"
+                          ? 'bg-[#3B82F6]/20 text-[#DBDEE8]'
                           : isDragging
-                            ? "text-[#9B9DA5]"
-                            : "hover:bg-[#2A2A30] text-[#9B9DA5]"
+                            ? 'text-[#9B9DA5]'
+                            : 'hover:bg-[#2A2A30] text-[#9B9DA5]'
                       }
                     `}
                   >
@@ -2794,10 +2880,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                           renameCancelledRef.current = false;
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
+                          if (e.key === 'Enter') {
                             e.preventDefault();
                             (e.target as HTMLInputElement).blur();
-                          } else if (e.key === "Escape") {
+                          } else if (e.key === 'Escape') {
                             e.preventDefault();
                             renameCancelledRef.current = true;
                             setRenamingItemId(null);
@@ -2830,8 +2916,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       }}
                       className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
                         gh.allHidden
-                          ? ""
-                          : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                          ? ''
+                          : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                       }`}
                     >
                       {gh.allHidden ? (
@@ -2873,14 +2959,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                   className={`
                     group relative flex items-center gap-[8px] pr-[4px] h-[34px]
                     select-none cursor-grab
-                    ${item.hidden && !isInDraggedGroup ? "opacity-60" : ""}
-                    ${isInDraggedGroup ? "opacity-30" : ""}
+                    ${item.hidden && !isInDraggedGroup ? 'opacity-60' : ''}
+                    ${isInDraggedGroup ? 'opacity-30' : ''}
                     ${
                       isItemSelected(item)
-                        ? "bg-[#3B82F6]/20 text-[#DBDEE8]"
+                        ? 'bg-[#3B82F6]/20 text-[#DBDEE8]'
                         : isDragging
-                          ? "text-[#8B8D95]"
-                          : "hover:bg-[#2A2A30] text-[#8B8D95]"
+                          ? 'text-[#8B8D95]'
+                          : 'hover:bg-[#2A2A30] text-[#8B8D95]'
                     }
                   `}
                 >
@@ -2899,11 +2985,11 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
                   {/* 아이콘 */}
                   <div className="flex-shrink-0">
-                    {item.type === "key" ? (
+                    {item.type === 'key' ? (
                       <KeyIcon />
-                    ) : item.type === "stat" ? (
+                    ) : item.type === 'stat' ? (
                       <StatIcon />
-                    ) : item.type === "graph" ? (
+                    ) : item.type === 'graph' ? (
                       <GraphIcon />
                     ) : (
                       <PluginIcon />
@@ -2925,10 +3011,10 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         renameCancelledRef.current = false;
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        if (e.key === 'Enter') {
                           e.preventDefault();
                           (e.target as HTMLInputElement).blur();
-                        } else if (e.key === "Escape") {
+                        } else if (e.key === 'Escape') {
                           e.preventDefault();
                           renameCancelledRef.current = true;
                           setRenamingItemId(null);
@@ -2958,13 +3044,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     onClick={(e) => handleToggleVisibility(e, item)}
                     title={
                       item.hidden
-                        ? t("propertiesPanel.showLayer") || "Show"
-                        : t("propertiesPanel.hideLayer") || "Hide"
+                        ? t('propertiesPanel.showLayer') || 'Show'
+                        : t('propertiesPanel.hideLayer') || 'Hide'
                     }
                     className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-[#4C4D53] cursor-pointer ${
                       item.hidden
-                        ? ""
-                        : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+                        ? ''
+                        : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                     }`}
                   >
                     {item.hidden ? (
@@ -2974,11 +3060,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         fill="currentColor"
                       />
                     ) : (
-                      <OpenEyeIcon
-                        width={14}
-                        height={14}
-                        fill="currentColor"
-                      />
+                      <OpenEyeIcon width={14} height={14} fill="currentColor" />
                     )}
                   </button>
                 </div>
@@ -2988,13 +3070,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             {/* 마지막 아이템 뒤 드롭 인디케이터 */}
             {draggedItemId &&
               dragOverItemDisplayIndex === displayItems.length && (
-              <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
-            )}
-            {/* 그룹 드래그: 마지막 아이템 뒤 드롭 인디케이터 */}
-            {draggedGroupId &&
-              dragOverDisplayIndex === displayItems.length && (
                 <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
               )}
+            {/* 그룹 드래그: 마지막 아이템 뒤 드롭 인디케이터 */}
+            {draggedGroupId && dragOverDisplayIndex === displayItems.length && (
+              <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-[#3B82F6] z-10" />
+            )}
           </div>
         )}
 
@@ -3003,7 +3084,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
           <div
             ref={thumbRef}
             className="properties-panel-overlay-thumb"
-            style={{ display: "none" }}
+            style={{ display: 'none' }}
           />
         </div>
       </div>

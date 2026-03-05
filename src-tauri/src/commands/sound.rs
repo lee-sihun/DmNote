@@ -248,10 +248,7 @@ pub fn sound_set_enabled(
     state
         .store
         .update(|s| {
-            s.sound_library
-                .entry(path_key.clone())
-                .or_default()
-                .enabled = enabled;
+            s.sound_library.entry(path_key.clone()).or_default().enabled = enabled;
         })
         .map_err(|e| format!("사운드 라이브러리 저장 실패: {e}"))?;
 
@@ -384,7 +381,22 @@ pub fn sound_save_processed_wav(
         .map(|n| {
             let sanitized: String = n
                 .chars()
-                .map(|c| if c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' { '_' } else { c })
+                .map(|c| {
+                    if c == '/'
+                        || c == '\\'
+                        || c == ':'
+                        || c == '*'
+                        || c == '?'
+                        || c == '"'
+                        || c == '<'
+                        || c == '>'
+                        || c == '|'
+                    {
+                        '_'
+                    } else {
+                        c
+                    }
+                })
                 .collect();
             sanitized
         })
@@ -412,8 +424,7 @@ pub fn sound_save_processed_wav(
             let originals_dir = ensure_originals_dir(&app)?;
             let orig_filename = format!("{}.{}", Uuid::new_v4(), orig_ext);
             let orig_path = originals_dir.join(&orig_filename);
-            fs::write(&orig_path, orig_bytes)
-                .map_err(|e| format!("원본 사운드 저장 실패: {e}"))?;
+            fs::write(&orig_path, orig_bytes).map_err(|e| format!("원본 사운드 저장 실패: {e}"))?;
             original_rel_path = Some(format!("originals/{}", orig_filename));
         }
     }
@@ -483,8 +494,7 @@ pub fn sound_load_original(
         return Err("원본 파일이 존재하지 않습니다.".to_string());
     }
 
-    let bytes =
-        fs::read(&original_abs).map_err(|e| format!("원본 사운드 파일 읽기 실패: {e}"))?;
+    let bytes = fs::read(&original_abs).map_err(|e| format!("원본 사운드 파일 읽기 실패: {e}"))?;
     let encoded = BASE64_STANDARD.encode(&bytes);
 
     let ext = original_abs
@@ -543,8 +553,7 @@ pub fn sound_update_processed_wav(
         });
     }
 
-    fs::write(&validated_path, wav_bytes)
-        .map_err(|e| format!("편집된 사운드 저장 실패: {e}"))?;
+    fs::write(&validated_path, wav_bytes).map_err(|e| format!("편집된 사운드 저장 실패: {e}"))?;
 
     state
         .store

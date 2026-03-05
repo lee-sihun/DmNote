@@ -6,14 +6,14 @@ import React, {
   useImperativeHandle,
   forwardRef,
   useCallback,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import Dropdown from "@components/main/common/Dropdown";
-import Checkbox from "@components/main/common/Checkbox";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import Dropdown from '@components/main/common/Dropdown';
+import Checkbox from '@components/main/common/Checkbox';
 import type {
   CounterTabState,
   CounterPreviewData,
-} from "@hooks/Modal/useUnifiedKeySettingState";
+} from '@hooks/Modal/useUnifiedKeySettingState';
 
 // ============================================================================
 // 타입 정의
@@ -22,14 +22,14 @@ import type {
 interface CounterTabContentProps {
   state: CounterTabState;
   setState: React.Dispatch<React.SetStateAction<CounterTabState>>;
-  onPreview: (updates: Omit<CounterPreviewData, "type">) => void;
+  onPreview: (updates: Omit<CounterPreviewData, 'type'>) => void;
 }
 
 type ColorPickerTarget =
-  | "fillIdle"
-  | "fillActive"
-  | "strokeIdle"
-  | "strokeActive";
+  | 'fillIdle'
+  | 'fillActive'
+  | 'strokeIdle'
+  | 'strokeActive';
 
 export interface CounterTabContentRef {
   fillActiveBtnRef: React.RefObject<HTMLButtonElement>;
@@ -63,7 +63,7 @@ const CounterTabContent = forwardRef<
   useEffect(() => {
     const measure = () => {
       if (!alignDropdownWrapperRef.current) return;
-      const btn = alignDropdownWrapperRef.current.querySelector("button");
+      const btn = alignDropdownWrapperRef.current.querySelector('button');
       if (btn) {
         const w = btn.offsetWidth;
         if (w && w !== alignDropdownWidth) setAlignDropdownWidth(w);
@@ -74,17 +74,17 @@ const CounterTabContent = forwardRef<
 
     let ro: ResizeObserver | undefined;
     const btn = alignDropdownWrapperRef.current
-      ? alignDropdownWrapperRef.current.querySelector("button")
+      ? alignDropdownWrapperRef.current.querySelector('button')
       : null;
-    if (btn && typeof ResizeObserver !== "undefined") {
+    if (btn && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => measure());
       ro.observe(btn);
     }
 
-    window.addEventListener("resize", measure);
+    window.addEventListener('resize', measure);
 
     return () => {
-      window.removeEventListener("resize", measure);
+      window.removeEventListener('resize', measure);
       if (ro) ro.disconnect();
     };
   }, [state.align, alignDropdownWidth]);
@@ -98,25 +98,25 @@ const CounterTabContent = forwardRef<
       fillGroupRef,
       strokeGroupRef,
     ],
-    []
+    [],
   );
 
   // 옵션들
   const placementOptions = [
-    { label: t("counterSetting.placementInside"), value: "inside" },
-    { label: t("counterSetting.placementOutside"), value: "outside" },
+    { label: t('counterSetting.placementInside'), value: 'inside' },
+    { label: t('counterSetting.placementOutside'), value: 'outside' },
   ];
 
   const alignOptions = [
-    { label: t("counterSetting.alignTop"), value: "top" },
-    { label: t("counterSetting.alignBottom"), value: "bottom" },
-    { label: t("counterSetting.alignLeft"), value: "left" },
-    { label: t("counterSetting.alignRight"), value: "right" },
+    { label: t('counterSetting.alignTop'), value: 'top' },
+    { label: t('counterSetting.alignBottom'), value: 'bottom' },
+    { label: t('counterSetting.alignLeft'), value: 'left' },
+    { label: t('counterSetting.alignRight'), value: 'right' },
   ];
 
   const alignModeOptions = [
-    { label: t("counterSetting.alignModeCenter"), value: "center" },
-    { label: t("counterSetting.alignModeBetween"), value: "between" },
+    { label: t('counterSetting.alignModeCenter'), value: 'center' },
+    { label: t('counterSetting.alignModeBetween'), value: 'between' },
   ];
 
   // 배치 변경 핸들러
@@ -138,21 +138,21 @@ const CounterTabContent = forwardRef<
 
   // 간격 변경 핸들러
   const handleGapChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value.replace(/[^0-9]/g, "");
-    if (newValue === "") {
-      setState((prev) => ({ ...prev, displayGap: "" }));
+    const newValue = e.target.value.replace(/[^0-9]/g, '');
+    if (newValue === '') {
+      setState((prev) => ({ ...prev, displayGap: '' }));
     } else {
       setState((prev) => ({ ...prev, displayGap: newValue }));
     }
   };
 
   const handleGapBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value.replace(/[^0-9]/g, "");
-    if (inputValue === "" || Number.isNaN(parseInt(inputValue, 10))) {
+    const inputValue = e.target.value.replace(/[^0-9]/g, '');
+    if (inputValue === '' || Number.isNaN(parseInt(inputValue, 10))) {
       setState((prev) => ({
         ...prev,
         gap: 0,
-        displayGap: "0px",
+        displayGap: '0px',
         isGapFocused: false,
       }));
       onPreview({ gap: 0 });
@@ -172,7 +172,7 @@ const CounterTabContent = forwardRef<
   // 컬러 버튼 스타일
   const colorButtonClass = (active: boolean) =>
     `relative px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-      active ? "border-[#459BF8]" : "border-[#3A3943]"
+      active ? 'border-[#459BF8]' : 'border-[#3A3943]'
     } text-[#DBDEE8] text-style-2`;
 
   // 컬러 프리뷰 박스
@@ -200,58 +200,58 @@ const CounterTabContent = forwardRef<
   const colorValueFor = useCallback(
     (key: string | null): string => {
       switch (key) {
-        case "fillIdle":
+        case 'fillIdle':
           return state.fillIdle;
-        case "fillActive":
+        case 'fillActive':
           return state.fillActive;
-        case "strokeIdle":
+        case 'strokeIdle':
           return state.strokeIdle;
-        case "strokeActive":
+        case 'strokeActive':
           return state.strokeActive;
         default:
-          return "#FFFFFF";
+          return '#FFFFFF';
       }
     },
-    [state.fillIdle, state.fillActive, state.strokeIdle, state.strokeActive]
+    [state.fillIdle, state.fillActive, state.strokeIdle, state.strokeActive],
   );
 
   // 색상 설정 핸들러
   const setColorFor = useCallback(
     (key: string | null, color: string) => {
       switch (key) {
-        case "fillIdle":
+        case 'fillIdle':
           setState((prev) => ({ ...prev, fillIdle: color }));
           break;
-        case "fillActive":
+        case 'fillActive':
           setState((prev) => ({ ...prev, fillActive: color }));
           break;
-        case "strokeIdle":
+        case 'strokeIdle':
           setState((prev) => ({ ...prev, strokeIdle: color }));
           break;
-        case "strokeActive":
+        case 'strokeActive':
           setState((prev) => ({ ...prev, strokeActive: color }));
           break;
         default:
           break;
       }
     },
-    [setState]
+    [setState],
   );
 
   const handleColorComplete = useCallback(
     (key: string | null, color: string) => {
       // 먼저 색상 설정
       switch (key) {
-        case "fillIdle":
+        case 'fillIdle':
           setState((prev) => ({ ...prev, fillIdle: color }));
           break;
-        case "fillActive":
+        case 'fillActive':
           setState((prev) => ({ ...prev, fillActive: color }));
           break;
-        case "strokeIdle":
+        case 'strokeIdle':
           setState((prev) => ({ ...prev, strokeIdle: color }));
           break;
-        case "strokeActive":
+        case 'strokeActive':
           setState((prev) => ({ ...prev, strokeActive: color }));
           break;
         default:
@@ -264,12 +264,12 @@ const CounterTabContent = forwardRef<
         alignMode: state.alignMode,
         gap: state.gap,
         fill: {
-          idle: key === "fillIdle" ? color : state.fillIdle,
-          active: key === "fillActive" ? color : state.fillActive,
+          idle: key === 'fillIdle' ? color : state.fillIdle,
+          active: key === 'fillActive' ? color : state.fillActive,
         },
         stroke: {
-          idle: key === "strokeIdle" ? color : state.strokeIdle,
-          active: key === "strokeActive" ? color : state.strokeActive,
+          idle: key === 'strokeIdle' ? color : state.strokeIdle,
+          active: key === 'strokeActive' ? color : state.strokeActive,
         },
       };
       onPreview(payload);
@@ -285,7 +285,7 @@ const CounterTabContent = forwardRef<
       state.strokeIdle,
       state.strokeActive,
       onPreview,
-    ]
+    ],
   );
 
   // ref를 통해 refs와 핸들러 노출
@@ -303,7 +303,7 @@ const CounterTabContent = forwardRef<
       colorValueFor,
       setColorFor,
       handleColorComplete,
-    ]
+    ],
   );
 
   // 카운터 토글 핸들러
@@ -318,7 +318,7 @@ const CounterTabContent = forwardRef<
       {/* 배치 영역 */}
       <div className="flex justify-between w-full items-center">
         <p className="text-white text-style-2">
-          {t("counterSetting.placementArea")}
+          {t('counterSetting.placementArea')}
         </p>
         <Dropdown
           options={placementOptions}
@@ -330,7 +330,7 @@ const CounterTabContent = forwardRef<
       {/* 정렬 방향 */}
       <div className="flex justify-between w-full items-center">
         <p className="text-white text-style-2">
-          {t("counterSetting.alignDirection")}
+          {t('counterSetting.alignDirection')}
         </p>
         <div ref={alignDropdownWrapperRef}>
           <Dropdown
@@ -342,10 +342,10 @@ const CounterTabContent = forwardRef<
       </div>
 
       {/* 정렬 방식 (내부 배치 전용) */}
-      {state.placement === "inside" && (
+      {state.placement === 'inside' && (
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("counterSetting.alignMode")}
+            {t('counterSetting.alignMode')}
           </p>
           <Dropdown
             options={alignModeOptions}
@@ -357,7 +357,7 @@ const CounterTabContent = forwardRef<
 
       {/* 간격 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t("counterSetting.gap")}</p>
+        <p className="text-white text-style-2">{t('counterSetting.gap')}</p>
         <input
           type="text"
           value={state.displayGap}
@@ -379,32 +379,32 @@ const CounterTabContent = forwardRef<
 
       {/* 채우기 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t("counterSetting.fill")}</p>
+        <p className="text-white text-style-2">{t('counterSetting.fill')}</p>
         <div ref={fillGroupRef} className="flex items-center gap-[8px]">
           <button
             ref={fillIdleBtnRef}
             type="button"
             className={colorButtonClass(
-              state.pickerOpen && state.pickerFor === "fillIdle"
+              state.pickerOpen && state.pickerFor === 'fillIdle',
             )}
-            onClick={() => handleColorToggle("fillIdle")}
+            onClick={() => handleColorToggle('fillIdle')}
           >
             {renderColorSquare({ backgroundColor: state.fillIdle })}
             <span className="ml-[16px] text-left">
-              {t("counterSetting.idle")}
+              {t('counterSetting.idle')}
             </span>
           </button>
           <button
             ref={fillActiveBtnRef}
             type="button"
             className={colorButtonClass(
-              state.pickerOpen && state.pickerFor === "fillActive"
+              state.pickerOpen && state.pickerFor === 'fillActive',
             )}
-            onClick={() => handleColorToggle("fillActive")}
+            onClick={() => handleColorToggle('fillActive')}
           >
             {renderColorSquare({ backgroundColor: state.fillActive })}
             <span className="ml-[16px] text-left">
-              {t("counterSetting.active")}
+              {t('counterSetting.active')}
             </span>
           </button>
         </div>
@@ -412,32 +412,32 @@ const CounterTabContent = forwardRef<
 
       {/* 외곽선 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t("counterSetting.stroke")}</p>
+        <p className="text-white text-style-2">{t('counterSetting.stroke')}</p>
         <div ref={strokeGroupRef} className="flex items-center gap-[8px]">
           <button
             ref={strokeIdleBtnRef}
             type="button"
             className={colorButtonClass(
-              state.pickerOpen && state.pickerFor === "strokeIdle"
+              state.pickerOpen && state.pickerFor === 'strokeIdle',
             )}
-            onClick={() => handleColorToggle("strokeIdle")}
+            onClick={() => handleColorToggle('strokeIdle')}
           >
             {renderColorSquare({ backgroundColor: state.strokeIdle })}
             <span className="ml-[16px] text-left">
-              {t("counterSetting.idle")}
+              {t('counterSetting.idle')}
             </span>
           </button>
           <button
             ref={strokeActiveBtnRef}
             type="button"
             className={colorButtonClass(
-              state.pickerOpen && state.pickerFor === "strokeActive"
+              state.pickerOpen && state.pickerFor === 'strokeActive',
             )}
-            onClick={() => handleColorToggle("strokeActive")}
+            onClick={() => handleColorToggle('strokeActive')}
           >
             {renderColorSquare({ backgroundColor: state.strokeActive })}
             <span className="ml-[16px] text-left">
-              {t("counterSetting.active")}
+              {t('counterSetting.active')}
             </span>
           </button>
         </div>
@@ -448,7 +448,7 @@ const CounterTabContent = forwardRef<
       {/* 카운터 사용 */}
       <div className="flex justify-between w-full items-center">
         <p className="text-white text-style-2">
-          {t("counterSetting.counterEnabled")}
+          {t('counterSetting.counterEnabled')}
         </p>
         <Checkbox
           checked={state.counterEnabled}

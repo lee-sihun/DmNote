@@ -1,53 +1,53 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo } from 'react';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
-import { toCssRgba } from "@utils/colorUtils";
+} from '@src/types/keys';
+import { toCssRgba } from '@utils/colorUtils';
 
 const OUTSIDE_OFFSET = 5;
 
 const computeOutsideStyle = (align, dx, dy, width, height, gap) => {
   const base = {
-    position: "absolute",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
+    position: 'absolute',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'none',
   };
 
   const offset = Number.isFinite(gap) ? gap : OUTSIDE_OFFSET;
 
   switch (align) {
-    case "bottom":
+    case 'bottom':
       return {
         ...base,
         left: `${dx + width / 2}px`,
         top: `${dy + height + offset}px`,
-        transform: "translate(-50%, 0)",
+        transform: 'translate(-50%, 0)',
         minWidth: `${width}px`,
       };
-    case "left":
+    case 'left':
       return {
         ...base,
         left: `${dx - offset}px`,
         top: `${dy + height / 2}px`,
-        transform: "translate(-100%, -50%)",
+        transform: 'translate(-100%, -50%)',
       };
-    case "right":
+    case 'right':
       return {
         ...base,
         left: `${dx + width + offset}px`,
         top: `${dy + height / 2}px`,
-        transform: "translate(0, -50%)",
+        transform: 'translate(0, -50%)',
       };
-    case "top":
+    case 'top':
     default:
       return {
         ...base,
         left: `${dx + width / 2}px`,
         top: `${dy - offset}px`,
-        transform: "translate(-50%, -100%)",
+        transform: 'translate(-50%, -100%)',
         minWidth: `${width}px`,
       };
   }
@@ -67,7 +67,7 @@ const KeyCounterPreview = memo(({ position, previewValue = 0 }) => {
   }, [position?.counter]);
 
   // 개별 키의 카운터가 비활성화되었거나 outside가 아니면 렌더링하지 않음
-  if (!counterSettings.enabled || counterSettings.placement !== "outside") {
+  if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
     return null;
   }
 
@@ -77,21 +77,21 @@ const KeyCounterPreview = memo(({ position, previewValue = 0 }) => {
     dy,
     width,
     height,
-    counterSettings.gap
+    counterSettings.gap,
   );
 
   const fillColor = counterSettings.fill.idle;
   const strokeColor = counterSettings.stroke.idle;
 
-  const fill = toCssRgba(fillColor, "#FFFFFF");
-  const stroke = toCssRgba(strokeColor, "transparent");
-  const strokeWidth = stroke.alpha > 0 ? "1px" : "0px";
+  const fill = toCssRgba(fillColor, '#FFFFFF');
+  const stroke = toCssRgba(strokeColor, 'transparent');
+  const strokeWidth = stroke.alpha > 0 ? '1px' : '0px';
 
   const textDecorations = [];
-  if (counterSettings.fontUnderline) textDecorations.push("underline");
-  if (counterSettings.fontStrikethrough) textDecorations.push("line-through");
+  if (counterSettings.fontUnderline) textDecorations.push('underline');
+  if (counterSettings.fontStrikethrough) textDecorations.push('line-through');
   const textDecoration =
-    textDecorations.length > 0 ? textDecorations.join(" ") : "none";
+    textDecorations.length > 0 ? textDecorations.join(' ') : 'none';
 
   return (
     <div className="pointer-events-none" style={style}>
@@ -105,12 +105,12 @@ const KeyCounterPreview = memo(({ position, previewValue = 0 }) => {
             ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
             : undefined,
           fontWeight: counterSettings.fontWeight ?? 400,
-          fontStyle: counterSettings.fontItalic ? "italic" : "normal",
+          fontStyle: counterSettings.fontItalic ? 'italic' : 'normal',
           textDecoration,
           lineHeight: 1,
-          "--counter-color-default": fill.css,
-          "--counter-stroke-color-default": stroke.css,
-          "--counter-stroke-width-default": strokeWidth,
+          '--counter-color-default': fill.css,
+          '--counter-stroke-color-default': stroke.css,
+          '--counter-stroke-width-default': strokeWidth,
         }}
       >
         {previewValue}

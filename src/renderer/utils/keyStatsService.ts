@@ -5,10 +5,10 @@
  * 구독자가 있을 때만 계산하여 성능 최적화
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import type { KeyStatsPayload, KeyStatePayload } from "@src/types/api";
-import type { KeyCounters } from "@src/types/keys";
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import type { KeyStatsPayload, KeyStatePayload } from '@src/types/api';
+import type { KeyCounters } from '@src/types/keys';
 
 export type KeyStatsListener = (stats: KeyStatsPayload) => void;
 
@@ -34,7 +34,7 @@ class KeyStatsService {
 
   // 현재 탭의 키 카운터 합계
   private total = 0;
-  private currentMode = "";
+  private currentMode = '';
   private keyCounters: KeyCounters = {};
 
   // 현재 눌린 키 추적 (홀드 방지)
@@ -50,7 +50,7 @@ class KeyStatsService {
     try {
       // 매핑된 키 상태 이벤트 구독 (현재 탭에 할당된 키만)
       this.unlistenKeyState = await listen<KeyStatePayload>(
-        "keys:state",
+        'keys:state',
         ({ payload }) => {
           this.handleKeyState(payload);
         },
@@ -61,13 +61,13 @@ class KeyStatsService {
         mode: string;
         key: string;
         count: number;
-      }>("keys:counter", ({ payload }) => {
+      }>('keys:counter', ({ payload }) => {
         this.handleCounterChanged(payload);
       });
 
       // 전체 카운터 변경 이벤트 구독 (resetCounters 등)
       this.unlistenCountersChanged = await listen<KeyCounters>(
-        "keys:counters",
+        'keys:counters',
         ({ payload }) => {
           this.keyCounters = payload;
           this.updateTotal();
@@ -76,7 +76,7 @@ class KeyStatsService {
 
       // 모드 변경 이벤트 구독
       this.unlistenModeChanged = await listen<{ mode: string }>(
-        "keys:mode-changed",
+        'keys:mode-changed',
         ({ payload }) => {
           this.currentMode = payload.mode;
           this.updateTotal();
@@ -91,7 +91,7 @@ class KeyStatsService {
         this.updateStats();
       }, STATS_UPDATE_INTERVAL);
     } catch (error) {
-      console.error("[KeyStatsService] Failed to initialize:", error);
+      console.error('[KeyStatsService] Failed to initialize:', error);
       this.initialized = false;
     }
   }
@@ -108,7 +108,7 @@ class KeyStatsService {
         currentMode?: string;
         selected_key_type?: string;
         selectedKeyType?: string;
-      }>("app_bootstrap");
+      }>('app_bootstrap');
 
       this.keyCounters = bootstrap.key_counters || bootstrap.keyCounters || {};
       this.currentMode =
@@ -116,10 +116,10 @@ class KeyStatsService {
         bootstrap.currentMode ||
         bootstrap.selected_key_type ||
         bootstrap.selectedKeyType ||
-        "4key";
+        '4key';
       this.updateTotal();
     } catch (error) {
-      console.error("[KeyStatsService] Failed to load initial state:", error);
+      console.error('[KeyStatsService] Failed to load initial state:', error);
     }
   }
 
@@ -129,13 +129,13 @@ class KeyStatsService {
   private handleKeyState(payload: KeyStatePayload) {
     const { key, state } = payload;
 
-    if (state === "DOWN") {
+    if (state === 'DOWN') {
       // 키가 이미 눌려있지 않은 경우에만 카운팅 (홀드 방지)
       if (!this.pressedKeys.has(key)) {
         this.pressedKeys.add(key);
         this.timestamps.push(Date.now());
       }
-    } else if (state === "UP") {
+    } else if (state === 'UP') {
       this.pressedKeys.delete(key);
     }
   }
@@ -212,7 +212,7 @@ class KeyStatsService {
       try {
         listener(stats);
       } catch (error) {
-        console.error("[KeyStatsService] Listener error:", error);
+        console.error('[KeyStatsService] Listener error:', error);
       }
     });
   }
@@ -258,7 +258,7 @@ class KeyStatsService {
     // 첫 번째 구독자면 초기화 (백그라운드)
     if (wasEmpty) {
       this.initialize().catch((error) => {
-        console.error("[KeyStatsService] Initialize failed:", error);
+        console.error('[KeyStatsService] Initialize failed:', error);
       });
     }
 
@@ -280,7 +280,7 @@ class KeyStatsService {
     // 마지막 구독자가 제거되면 정리 (백그라운드)
     if (this.listeners.size === 0) {
       this.cleanup().catch((error) => {
-        console.error("[KeyStatsService] Cleanup failed:", error);
+        console.error('[KeyStatsService] Cleanup failed:', error);
       });
     }
   }

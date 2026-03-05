@@ -5,9 +5,9 @@ mod commands;
 mod cursor;
 mod defaults;
 mod ipc;
+mod key_sound;
 mod keyboard;
 mod keyboard_daemon;
-mod key_sound;
 #[cfg(target_os = "windows")]
 mod keyboard_labels;
 mod models;

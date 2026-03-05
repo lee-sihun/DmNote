@@ -1,26 +1,26 @@
-import React, { memo, useMemo, useCallback, useRef, useEffect } from "react";
-import { getKeySignal } from "@stores/keySignals";
-import { getKeyCounterSignal } from "@stores/keyCounterSignals";
-import { useSignals } from "@preact/signals-react/runtime";
-import { isMac } from "@utils/platform";
-import { useDraggable } from "@hooks/Grid";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+import React, { memo, useMemo, useCallback, useRef, useEffect } from 'react';
+import { getKeySignal } from '@stores/keySignals';
+import { getKeyCounterSignal } from '@stores/keyCounterSignals';
+import { useSignals } from '@preact/signals-react/runtime';
+import { isMac } from '@utils/platform';
+import { useDraggable } from '@hooks/Grid';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
-import { useSmartGuidesElements } from "@hooks/Grid";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import { resolveImageSource } from "@utils/imageSource";
-import { warmupImageSource } from "@utils/imageWarmup";
-import CountDisplay from "@components/overlay/CountDisplay";
+} from '@src/types/keys';
+import { useSmartGuidesElements } from '@hooks/Grid';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { resolveImageSource } from '@utils/imageSource';
+import { warmupImageSource } from '@utils/imageWarmup';
+import CountDisplay from '@components/overlay/CountDisplay';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
-} from "@utils/smartGuides";
+} from '@utils/smartGuides';
 
 export default function DraggableKey({
   index,
@@ -98,7 +98,7 @@ export default function DraggableKey({
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
-    counterSettings.placement === "inside";
+    counterSettings.placement === 'inside';
 
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기
   const { getOtherElements } = useSmartGuidesElements();
@@ -232,7 +232,7 @@ export default function DraggableKey({
                 // 현재 드래그 중인 요소인 경우 새 위치 사용
                 if (
                   sel.id === elementId ||
-                  (sel.type === "key" && sel.index === index)
+                  (sel.type === 'key' && sel.index === index)
                 ) {
                   return draggedBounds;
                 }
@@ -323,7 +323,7 @@ export default function DraggableKey({
                         : 0),
                     groupBounds.width,
                     groupBounds.height,
-                    "group",
+                    'group',
                   )
                 : calculateBounds(
                     finalX,
@@ -374,9 +374,9 @@ export default function DraggableKey({
           rafId = null;
         }
 
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("blur", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
         // 스마트 가이드 클리어
         useSmartGuidesStore.getState().clearGuides();
         // 드래그 종료 시 애니메이션 복원
@@ -385,10 +385,10 @@ export default function DraggableKey({
         onMultiDragEnd?.();
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
       // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
-      window.addEventListener("blur", handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
     [
       isSelectionMode,
@@ -423,7 +423,7 @@ export default function DraggableKey({
       return;
     }
 
-    if (activeTool === "eraser") {
+    if (activeTool === 'eraser') {
       onEraserClick?.();
       return;
     }
@@ -475,29 +475,29 @@ export default function DraggableKey({
           ? backgroundColor
           : `var(--key-bg, ${
               inactiveImageSrc
-                ? "transparent"
-                : backgroundColor || "rgba(46, 46, 47, 0.9)"
+                ? 'transparent'
+                : backgroundColor || 'rgba(46, 46, 47, 0.9)'
             })`,
       borderRadius:
         useInline && borderRadius != null
           ? `${borderRadius}px`
           : `var(--key-radius, ${
-              borderRadius != null ? `${borderRadius}px` : "10px"
+              borderRadius != null ? `${borderRadius}px` : '10px'
             })`,
       border:
         useInline && (borderColor || borderWidth != null)
           ? `${borderWidth ?? 3}px solid ${
-              borderColor || "rgba(113, 113, 113, 0.9)"
+              borderColor || 'rgba(113, 113, 113, 0.9)'
             }`
           : `var(--key-border, ${borderWidth ?? 3}px solid ${
-              borderColor || "rgba(113, 113, 113, 0.9)"
+              borderColor || 'rgba(113, 113, 113, 0.9)'
             })`,
-      overflow: "hidden",
-      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
-      contain: "layout style paint",
-      imageRendering: "auto",
-      isolation: "isolate",
-      boxSizing: "border-box",
+      overflow: 'hidden',
+      willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
+      contain: 'layout style paint',
+      imageRendering: 'auto',
+      isolation: 'isolate',
+      boxSizing: 'border-box',
       zIndex: position.zIndex ?? zIndex,
     }),
     [
@@ -517,15 +517,15 @@ export default function DraggableKey({
     ],
   );
 
-  const effectiveImageFit = idleImageFit || imageFit || "cover";
+  const effectiveImageFit = idleImageFit || imageFit || 'cover';
   const imageStyle = useMemo(
     () => ({
-      width: "100%",
-      height: "100%",
+      width: '100%',
+      height: '100%',
       objectFit: effectiveImageFit,
-      display: "block",
-      pointerEvents: "none",
-      userSelect: "none",
+      display: 'block',
+      pointerEvents: 'none',
+      userSelect: 'none',
     }),
     [effectiveImageFit],
   );
@@ -533,24 +533,24 @@ export default function DraggableKey({
   const textStyle = useMemo(() => {
     // text-decoration 조합
     const textDecorations = [];
-    if (fontUnderline) textDecorations.push("underline");
-    if (fontStrikethrough) textDecorations.push("line-through");
+    if (fontUnderline) textDecorations.push('underline');
+    if (fontStrikethrough) textDecorations.push('line-through');
 
     return {
-      willChange: "auto",
-      contain: "layout style paint",
+      willChange: 'auto',
+      contain: 'layout style paint',
       color:
         useInline && fontColor
           ? fontColor
-          : `var(--key-text-color, ${fontColor || "rgba(121, 121, 121, 0.9)"})`,
+          : `var(--key-text-color, ${fontColor || 'rgba(121, 121, 121, 0.9)'})`,
       fontSize: fontSize ? `${fontSize}px` : undefined,
       fontFamily: fontFamily
         ? `"${fontFamily}", "SUIT-Regular", sans-serif`
         : undefined,
       fontWeight: fontWeight ?? 700,
-      fontStyle: fontItalic ? "italic" : "normal",
+      fontStyle: fontItalic ? 'italic' : 'normal',
       textDecoration:
-        textDecorations.length > 0 ? textDecorations.join(" ") : "none",
+        textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
     };
   }, [
     useInline,
@@ -609,33 +609,33 @@ export default function DraggableKey({
     );
 
     const isHorizontal =
-      counterSettings.align === "left" || counterSettings.align === "right";
+      counterSettings.align === 'left' || counterSettings.align === 'right';
 
     const elements = isHorizontal
-      ? counterSettings.align === "left"
+      ? counterSettings.align === 'left'
         ? [counterElement, nameElement]
         : [nameElement, counterElement]
-      : counterSettings.align === "top"
-      ? [counterElement, nameElement]
-      : [nameElement, counterElement];
+      : counterSettings.align === 'top'
+        ? [counterElement, nameElement]
+        : [nameElement, counterElement];
 
-    const alignMode = counterSettings.alignMode || "center";
-    const isBetween = alignMode === "between";
+    const alignMode = counterSettings.alignMode || 'center';
+    const isBetween = alignMode === 'between';
     const containerClass = `flex ${
-      isHorizontal ? "" : "flex-col"
+      isHorizontal ? '' : 'flex-col'
     } w-full h-full items-center pointer-events-none select-none`;
 
     return (
       <div
         className={containerClass}
         style={{
-          justifyContent: isBetween ? "space-between" : "center",
+          justifyContent: isBetween ? 'space-between' : 'center',
           padding: isBetween
             ? isHorizontal
               ? `0 ${contentGap}px`
               : `${contentGap}px 0`
-            : "0px",
-          gap: isBetween ? "0px" : `${contentGap}px`,
+            : '0px',
+          gap: isBetween ? '0px' : `${contentGap}px`,
         }}
       >
         {elements}
@@ -650,18 +650,18 @@ export default function DraggableKey({
     }
     nodeRef.current = node;
     // 팝업 위치 지정을 위해 부모에 노드 전달
-    if (typeof setReferenceRef === "function") setReferenceRef(node);
+    if (typeof setReferenceRef === 'function') setReferenceRef(node);
   };
 
   return (
     <div
       ref={attachRef}
       className={`absolute cursor-pointer ${
-        draggable && draggable.wasMoved ? "" : ""
-      } ${className || ""}`}
+        draggable && draggable.wasMoved ? '' : ''
+      } ${className || ''}`}
       style={keyStyle}
       data-state="inactive"
-      data-editing={isDraggingOrResizing ? "true" : undefined}
+      data-editing={isDraggingOrResizing ? 'true' : undefined}
       data-key-element="true"
       onClick={handleClick}
       onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
@@ -669,7 +669,12 @@ export default function DraggableKey({
       onDragStart={(e) => e.preventDefault()}
     >
       {inactiveImageSrc ? (
-        <img src={inactiveImageSrc} alt="" style={imageStyle} draggable={false} />
+        <img
+          src={inactiveImageSrc}
+          alt=""
+          style={imageStyle}
+          draggable={false}
+        />
       ) : showInsideCounter ? (
         renderInsideCounterPreview()
       ) : (
@@ -731,12 +736,12 @@ export const Key = memo(
     const useInline = useInlineStyles === true;
 
     const stateBackgroundColor = active
-      ? activeBackgroundColor ?? backgroundColor
+      ? (activeBackgroundColor ?? backgroundColor)
       : backgroundColor;
     const stateBorderColor = active
-      ? activeBorderColor ?? borderColor
+      ? (activeBorderColor ?? borderColor)
       : borderColor;
-    const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
+    const stateFontColor = active ? (activeFontColor ?? fontColor) : fontColor;
 
     const inactiveImageSrc = resolveImageSource(inactiveImage);
     const activeImageSrc = resolveImageSource(activeImage);
@@ -761,25 +766,25 @@ export const Key = memo(
     const hasCurrentImage = !!currentImageSrc;
     const isUsingActiveImage = active && !!activeImageSrc;
     const effectiveImageFit = isUsingActiveImage
-      ? activeImageFit || imageFit || "cover"
-      : idleImageFit || imageFit || "cover";
+      ? activeImageFit || imageFit || 'cover'
+      : idleImageFit || imageFit || 'cover';
 
     const keyStyle = useMemo(() => {
       // 기본 배경색 계산
       const defaultBgColor = hasCurrentImage
-        ? "transparent"
+        ? 'transparent'
         : active
-        ? "rgba(121, 121, 121, 0.9)"
-        : "rgba(46, 46, 47, 0.9)";
+          ? 'rgba(121, 121, 121, 0.9)'
+          : 'rgba(46, 46, 47, 0.9)';
 
       // 기본 테두리색 계산
       const defaultBorderColor = active
-        ? "rgba(255, 255, 255, 0.9)"
-        : "rgba(113, 113, 113, 0.9)";
+        ? 'rgba(255, 255, 255, 0.9)'
+        : 'rgba(113, 113, 113, 0.9)';
 
       // 기본 텍스트 색상 계산
       const defaultTextColor =
-        active && !activeImageSrc ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
+        active && !activeImageSrc ? '#FFFFFF' : 'rgba(121, 121, 121, 0.9)';
 
       return {
         width: `${width}px`,
@@ -793,7 +798,7 @@ export const Key = memo(
           useInline && borderRadius != null
             ? `${borderRadius}px`
             : `var(--key-radius, ${
-                borderRadius != null ? `${borderRadius}px` : "10px"
+                borderRadius != null ? `${borderRadius}px` : '10px'
               })`,
         border:
           useInline && (stateBorderColor || borderWidth != null)
@@ -808,15 +813,15 @@ export const Key = memo(
             ? stateFontColor
             : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
         fontSize: fontSize ? `${fontSize}px` : undefined,
-        overflow: "hidden",
+        overflow: 'hidden',
         // GPU 가속 최적화: active 상태 변경 시에만 willChange 적용
-        willChange: active ? "transform, background-color" : "transform",
-        backfaceVisibility: "hidden",
-        transformStyle: "preserve-3d",
-        contain: "layout style paint",
-        imageRendering: "auto",
-        isolation: "isolate",
-        boxSizing: "border-box",
+        willChange: active ? 'transform, background-color' : 'transform',
+        backfaceVisibility: 'hidden',
+        transformStyle: 'preserve-3d',
+        contain: 'layout style paint',
+        imageRendering: 'auto',
+        isolation: 'isolate',
+        boxSizing: 'border-box',
         zIndex: position.zIndex,
       };
     }, [
@@ -843,16 +848,16 @@ export const Key = memo(
     const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
     const imageStyle = useMemo(
       () => ({
-        width: "100%",
-        height: "100%",
+        width: '100%',
+        height: '100%',
         objectFit: effectiveImageFit,
-        display: "block",
-        pointerEvents: "none",
-        userSelect: "none",
-        position: "relative",
+        display: 'block',
+        pointerEvents: 'none',
+        userSelect: 'none',
+        position: 'relative',
         zIndex: 0,
         // mask 오버레이 대신 필터만 적용해 페인트 비용을 줄임
-        filter: fallbackImageDimmed ? "brightness(0.62)" : "none",
+        filter: fallbackImageDimmed ? 'brightness(0.62)' : 'none',
       }),
       [effectiveImageFit, fallbackImageDimmed],
     );
@@ -860,20 +865,20 @@ export const Key = memo(
     const textStyle = useMemo(() => {
       // text-decoration 조합
       const textDecorations = [];
-      if (fontUnderline) textDecorations.push("underline");
-      if (fontStrikethrough) textDecorations.push("line-through");
+      if (fontUnderline) textDecorations.push('underline');
+      if (fontStrikethrough) textDecorations.push('line-through');
 
       return {
-        willChange: "auto",
-        contain: "layout style paint",
+        willChange: 'auto',
+        contain: 'layout style paint',
         fontSize: fontSize ? `${fontSize}px` : undefined,
         fontFamily: fontFamily
           ? `"${fontFamily}", "SUIT-Regular", sans-serif`
           : undefined,
         fontWeight: fontWeight ?? 700,
-        fontStyle: fontItalic ? "italic" : "normal",
+        fontStyle: fontItalic ? 'italic' : 'normal',
         textDecoration:
-          textDecorations.length > 0 ? textDecorations.join(" ") : "none",
+          textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
       };
     }, [
       fontSize,
@@ -892,11 +897,11 @@ export const Key = memo(
     const showInsideCounter =
       counterEnabled &&
       counterSettings.enabled &&
-      counterSettings.placement === "inside";
+      counterSettings.placement === 'inside';
 
     let counterSignal;
     if (showInsideCounter) {
-      counterSignal = getKeyCounterSignal(mode ?? "", globalKey);
+      counterSignal = getKeyCounterSignal(mode ?? '', globalKey);
     }
 
     const counterValue = counterSignal?.value ?? 0;
@@ -952,33 +957,33 @@ export const Key = memo(
       );
 
       const isHorizontal =
-        counterSettings.align === "left" || counterSettings.align === "right";
+        counterSettings.align === 'left' || counterSettings.align === 'right';
 
       const elements = isHorizontal
-        ? counterSettings.align === "left"
+        ? counterSettings.align === 'left'
           ? [counterElement, nameElement]
           : [nameElement, counterElement]
-        : counterSettings.align === "top"
-        ? [counterElement, nameElement]
-        : [nameElement, counterElement];
+        : counterSettings.align === 'top'
+          ? [counterElement, nameElement]
+          : [nameElement, counterElement];
 
-      const alignMode = counterSettings.alignMode || "center";
-      const isBetween = alignMode === "between";
+      const alignMode = counterSettings.alignMode || 'center';
+      const isBetween = alignMode === 'between';
       const containerClass = `flex ${
-        isHorizontal ? "" : "flex-col"
+        isHorizontal ? '' : 'flex-col'
       } w-full h-full items-center pointer-events-none select-none`;
 
       return (
         <div
           className={containerClass}
           style={{
-            justifyContent: isBetween ? "space-between" : "center",
+            justifyContent: isBetween ? 'space-between' : 'center',
             padding: isBetween
               ? isHorizontal
                 ? `0 ${contentGap}px`
                 : `${contentGap}px 0`
-              : "0px",
-            gap: isBetween ? "0px" : `${contentGap}px`,
+              : '0px',
+            gap: isBetween ? '0px' : `${contentGap}px`,
           }}
         >
           {elements}
@@ -988,12 +993,17 @@ export const Key = memo(
 
     return (
       <div
-        className={`absolute ${className || ""}`}
+        className={`absolute ${className || ''}`}
         style={keyStyle}
-        data-state={active ? "active" : "inactive"}
+        data-state={active ? 'active' : 'inactive'}
       >
         {hasCurrentImage ? (
-          <img src={currentImageSrc || ""} alt="" style={imageStyle} draggable={false} />
+          <img
+            src={currentImageSrc || ''}
+            alt=""
+            style={imageStyle}
+            draggable={false}
+          />
         ) : showText ? (
           showInsideCounter ? (
             renderInsideLayout()
@@ -1060,8 +1070,8 @@ export const Key = memo(
       prevProps.position.counter?.placement ===
         nextProps.position.counter?.placement &&
       prevProps.position.counter?.align === nextProps.position.counter?.align &&
-      (prevProps.position.counter?.alignMode ?? "center") ===
-        (nextProps.position.counter?.alignMode ?? "center") &&
+      (prevProps.position.counter?.alignMode ?? 'center') ===
+        (nextProps.position.counter?.alignMode ?? 'center') &&
       prevProps.position.counter?.fill?.idle ===
         nextProps.position.counter?.fill?.idle &&
       prevProps.position.counter?.fill?.active ===

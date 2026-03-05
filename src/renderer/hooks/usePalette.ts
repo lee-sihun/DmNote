@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
-import { useSettingsStore } from "@stores/useSettingsStore";
+import { useState, useEffect } from 'react';
+import { useSettingsStore } from '@stores/useSettingsStore';
 
 export function usePalette() {
   const [palette, setPalette] = useState(false);
   const backgroundColor = useSettingsStore((state) => state.backgroundColor);
-  const setBackgroundColor = useSettingsStore((state) => state.setBackgroundColor);
+  const setBackgroundColor = useSettingsStore(
+    (state) => state.setBackgroundColor,
+  );
   const [color, setColor] = useState(backgroundColor);
 
   useEffect(() => {
@@ -15,7 +17,7 @@ export function usePalette() {
     setColor(newColor);
     setBackgroundColor(newColor);
     window.api.settings.update({ backgroundColor: newColor }).catch((error) => {
-      console.error("Failed to update background color", error);
+      console.error('Failed to update background color', error);
     });
   };
 
@@ -24,7 +26,7 @@ export function usePalette() {
   };
 
   const handleResetColor = () => {
-    handleColorChange("transparent");
+    handleColorChange('transparent');
   };
 
   return {

@@ -4,31 +4,31 @@ import React, {
   useMemo,
   useState,
   useRef,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import { useUIStore } from "@stores/useUIStore";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { translatePluginMessage } from "@utils/pluginI18n";
-import type { KeyPosition, KeyCounterSettings } from "@src/types/keys";
-import type { StatItemPosition, StatItemType } from "@src/types/statItems";
-import type { GraphItemPosition } from "@src/types/graphItems";
-import type { PluginSettingSchema, PluginMessages } from "@src/types/api";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { useUIStore } from '@stores/useUIStore';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
+import { translatePluginMessage } from '@utils/pluginI18n';
+import type { KeyPosition, KeyCounterSettings } from '@src/types/keys';
+import type { StatItemPosition, StatItemType } from '@src/types/statItems';
+import type { GraphItemPosition } from '@src/types/graphItems';
+import type { PluginSettingSchema, PluginMessages } from '@src/types/api';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
-import ColorPicker from "@components/main/Modal/content/ColorPicker";
-import ImagePicker from "@components/main/Modal/content/ImagePicker";
-import { useLenis } from "@hooks/useLenis";
+} from '@src/types/keys';
+import ColorPicker from '@components/main/Modal/content/ColorPicker';
+import ImagePicker from '@components/main/Modal/content/ImagePicker';
+import { useLenis } from '@hooks/useLenis';
 
 // 분리된 컴포넌트들 및 훅
 import {
@@ -52,27 +52,33 @@ import {
   LayerPanel,
   useBatchHandlers,
   usePanelScroll,
-} from "./PropertiesPanel/index";
-import Checkbox from "@components/main/common/Checkbox";
-import Dropdown from "@components/main/common/Dropdown";
-import type { NoteColor } from "@src/types/keys";
+} from './PropertiesPanel/index';
+import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
+import type { NoteColor } from '@src/types/keys';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {
-    case "kpsAvg":
-      return "AVG";
-    case "kpsMax":
-      return "MAX";
-    case "total":
-      return "Total";
-    case "kps":
+    case 'kpsAvg':
+      return 'AVG';
+    case 'kpsMax':
+      return 'MAX';
+    case 'total':
+      return 'Total';
+    case 'kps':
     default:
-      return "KPS";
+      return 'KPS';
   }
 };
 
 const RenameIcon: React.FC = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
     <path
       d="M12 20H21"
       stroke="currentColor"
@@ -159,22 +165,22 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 선택된 키 요소 필터링
   const selectedKeyElements = selectedElements.filter(
-    (el) => el.type === "key",
+    (el) => el.type === 'key',
   );
   const selectedStatElements = selectedElements.filter(
-    (el) => el.type === "stat",
+    (el) => el.type === 'stat',
   );
   const selectedGraphElements = selectedElements.filter(
-    (el) => el.type === "graph",
+    (el) => el.type === 'graph',
   );
   const selectedKeyLikeElements = selectedElements.filter(
-    (el) => el.type === "key" || el.type === "stat",
+    (el) => el.type === 'key' || el.type === 'stat',
   );
   const selectedBatchStyleElements = selectedElements.filter(
-    (el) => el.type === "key" || el.type === "stat" || el.type === "graph",
+    (el) => el.type === 'key' || el.type === 'stat' || el.type === 'graph',
   );
   const selectedPluginElements = selectedElements.filter(
-    (el) => el.type === "plugin",
+    (el) => el.type === 'plugin',
   );
 
   const selectedPluginElement = useMemo(() => {
@@ -190,12 +196,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return pluginDefinitions.get(selectedPluginElement.definitionId) || null;
   }, [selectedPluginElement?.definitionId, pluginDefinitions]);
 
-  const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? "panel";
+  const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
   const hasSinglePluginSelection =
     selectedPluginElements.length === 1 && !!selectedPluginElement;
   const showModalHint =
-    hasSinglePluginSelection && pluginSettingsUI === "modal";
-  const showSettings = hasSinglePluginSelection && pluginSettingsUI !== "modal";
+    hasSinglePluginSelection && pluginSettingsUI === 'modal';
+  const showSettings = hasSinglePluginSelection && pluginSettingsUI !== 'modal';
   const isPluginResizable =
     hasSinglePluginSelection && !!selectedPluginDefinition?.resizable;
 
@@ -259,11 +265,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     for (const element of selectedElements) {
       let currentGroupId: string | undefined;
-      if (element.type === "key" && typeof element.index === "number") {
+      if (element.type === 'key' && typeof element.index === 'number') {
         currentGroupId = keyModePositions[element.index]?.groupId;
-      } else if (element.type === "stat" && typeof element.index === "number") {
+      } else if (element.type === 'stat' && typeof element.index === 'number') {
         currentGroupId = (statModePositions[element.index] as any)?.groupId;
-      } else if (element.type === "graph" && typeof element.index === "number") {
+      } else if (
+        element.type === 'graph' &&
+        typeof element.index === 'number'
+      ) {
         currentGroupId = (graphModePositions[element.index] as any)?.groupId;
       } else {
         return null;
@@ -281,8 +290,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const totalMembers =
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
-      statModePositions.filter((pos) => (pos as any)?.groupId === groupId).length +
-      graphModePositions.filter((pos) => (pos as any)?.groupId === groupId).length;
+      statModePositions.filter((pos) => (pos as any)?.groupId === groupId)
+        .length +
+      graphModePositions.filter((pos) => (pos as any)?.groupId === groupId)
+        .length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
@@ -314,7 +325,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 레이어 이름 변경 상태
   const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState("");
+  const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelledRef = useRef(false);
   const renameRequestSignal = usePropertiesPanelStore(
@@ -333,7 +344,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const imageButtonRef = useRef<HTMLButtonElement>(null);
   const [showGraphImagePicker, setShowGraphImagePicker] = useState(false);
   const graphImageButtonRef = useRef<HTMLButtonElement>(null);
-  const [graphClassNameDraft, setGraphClassNameDraft] = useState("");
+  const [graphClassNameDraft, setGraphClassNameDraft] = useState('');
 
   // 다중 선택용 이미지 픽커 상태
   const [showBatchImagePicker, setShowBatchImagePicker] = useState(false);
@@ -350,7 +361,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
 
   // 패널 모드 상태 (layer: 레이어 패널, property: 속성 패널)
-  const [panelMode, setPanelMode] = useState<"layer" | "property">("property");
+  const [panelMode, setPanelMode] = useState<'layer' | 'property'>('property');
 
   // panelMode를 ref로도 유지 (useEffect에서 최신 값 참조용)
   const panelModeRef = useRef(panelMode);
@@ -424,18 +435,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 레이어 이름 변경: 현재 선택된 요소의 layerName 가져오기
   const getCurrentLayerName = useCallback((): string => {
-    if (selectedGroupInfo) return selectedGroupInfo.name || "";
-    if (singleKeyPosition) return singleKeyPosition.layerName || "";
-    if (singleStatPosition) return (singleStatPosition as any).layerName || "";
-    if (singleGraphPosition) return (singleGraphPosition as any).layerName || "";
-    return "";
-  }, [selectedGroupInfo, singleKeyPosition, singleStatPosition, singleGraphPosition]);
+    if (selectedGroupInfo) return selectedGroupInfo.name || '';
+    if (singleKeyPosition) return singleKeyPosition.layerName || '';
+    if (singleStatPosition) return (singleStatPosition as any).layerName || '';
+    if (singleGraphPosition)
+      return (singleGraphPosition as any).layerName || '';
+    return '';
+  }, [
+    selectedGroupInfo,
+    singleKeyPosition,
+    singleStatPosition,
+    singleGraphPosition,
+  ]);
 
   // 레이어 이름 변경: 현재 선택된 요소의 기본 표시 이름 가져오기
   const getCurrentDefaultTitle = useCallback((): string => {
     if (selectedGroupInfo) return selectedGroupInfo.name;
     if (singleKeyPosition) {
-      return singleKeyInfo?.displayName || singleKeyCode || "Key";
+      return singleKeyInfo?.displayName || singleKeyCode || 'Key';
     }
     if (singleStatPosition) {
       return getStatTypeLabel((singleStatPosition as any).statType ?? null);
@@ -443,7 +460,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleGraphPosition) {
       return `${getStatTypeLabel((singleGraphPosition as any).statType ?? null)} Graph`;
     }
-    return "";
+    return '';
   }, [
     selectedGroupInfo,
     singleKeyPosition,
@@ -456,11 +473,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const handleGroupRenameCommit = useCallback(
     async (groupId: string, value: string) => {
       const trimmed = value.trim();
-      if (trimmed === "") return;
+      if (trimmed === '') return;
 
       const currentGroups = useLayerGroupStore.getState().layerGroups;
       const currentModeGroups = currentGroups[selectedKeyType] || [];
-      const currentGroup = currentModeGroups.find((group) => group.id === groupId);
+      const currentGroup = currentModeGroups.find(
+        (group) => group.id === groupId,
+      );
       if (!currentGroup || currentGroup.name === trimmed) return;
 
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
@@ -470,7 +489,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       useHistoryStore
         .getState()
-        .pushState(km, pos, statPos as any, graphPos as any, pluginEls, currentGroups);
+        .pushState(
+          km,
+          pos,
+          statPos as any,
+          graphPos as any,
+          pluginEls,
+          currentGroups,
+        );
 
       const updated = {
         ...currentGroups,
@@ -483,7 +509,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       try {
         await window.api.layerGroups.update(updated);
       } catch (error) {
-        console.error("Failed to rename group", error);
+        console.error('Failed to rename group', error);
       }
     },
     [selectedKeyType],
@@ -513,7 +539,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const trimmed = value.trim();
       const defaultTitle = getCurrentDefaultTitle();
       // 기본 이름과 같으면 layerName 제거 (빈 문자열도 제거)
-      const newLayerName = trimmed === defaultTitle || trimmed === "" ? undefined : trimmed;
+      const newLayerName =
+        trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
 
       if (singleKeyIndex !== null && singleKeyPosition) {
         onKeyUpdate({ index: singleKeyIndex, layerName: newLayerName } as any);
@@ -587,7 +614,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleGraphPosition
       ) {
         // 속성 패널 모드로 전환
-        setPanelMode("property");
+        setPanelMode('property');
         handleRenameStart();
       }
     }
@@ -639,7 +666,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const thumb = calculatePluginThumb(pluginScrollElementRef.current);
     pluginThumbRef.current.style.top = `${thumb.top}px`;
     pluginThumbRef.current.style.height = `${thumb.height}px`;
-    pluginThumbRef.current.style.display = thumb.visible ? "block" : "none";
+    pluginThumbRef.current.style.display = thumb.visible ? 'block' : 'none';
   }, [calculatePluginThumb]);
 
   const { scrollContainerRef: pluginLenisRef } = useLenis({
@@ -703,11 +730,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ]);
 
   // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget = "noteColor" | "glowColor" | "fill" | "stroke" | null;
+  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
-    "idle" | "active"
-  >("idle");
+    'idle' | 'active'
+  >('idle');
 
   // 배치 편집용 로컬 색상 상태 (드래그 중 UI 업데이트용)
   const [batchLocalColors, setBatchLocalColors] = useState<{
@@ -718,12 +745,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     strokeIdle: string;
     strokeActive: string;
   }>({
-    noteColor: "#FFFFFF",
-    glowColor: "#FFFFFF",
-    fillIdle: "#FFFFFF",
-    fillActive: "#FFFFFF",
-    strokeIdle: "#000000",
-    strokeActive: "#000000",
+    noteColor: '#FFFFFF',
+    glowColor: '#FFFFFF',
+    fillIdle: '#FFFFFF',
+    fillActive: '#FFFFFF',
+    strokeIdle: '#000000',
+    strokeActive: '#000000',
   });
 
   const [batchLocalOpacities, setBatchLocalOpacities] = useState<{
@@ -759,12 +786,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ]);
 
   useEffect(() => {
-    setGraphClassNameDraft(singleGraphPosition?.className || "");
-  }, [
-    selectedKeyType,
-    singleGraphIndex,
-    singleGraphPosition?.className,
-  ]);
+    setGraphClassNameDraft(singleGraphPosition?.className || '');
+  }, [selectedKeyType, singleGraphIndex, singleGraphPosition?.className]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -789,7 +812,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     if (pluginSettingsPanel) {
       prevHasSelectionRef.current = hasSelection;
-      if (skipFromKeyboard) useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
+      if (skipFromKeyboard)
+        useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
       return;
     }
 
@@ -799,43 +823,42 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         // 새로운 선택이 발생 → 명시적 닫기 플래그 리셋하고 패널 열기
         manuallyClosedRef.current = false;
         if (!isPanelVisible) {
-          setPanelMode("property");
+          setPanelMode('property');
           setIsPanelVisible(true);
         } else if (
-          panelModeRef.current === "layer" &&
+          panelModeRef.current === 'layer' &&
           !selectionFromLayerPanelRef.current &&
           !skipFromKeyboard
         ) {
           // 레이어 패널이 열린 상태에서 그리드에서 첫 선택 → 속성 패널로 전환
-          setPanelMode("property");
+          setPanelMode('property');
         }
       } else if (!isPanelVisible && !manuallyClosedRef.current) {
         // 선택이 이미 있었고 패널이 닫혀있는데 명시적 닫기가 아닌 경우
-        setPanelMode("property");
+        setPanelMode('property');
         setIsPanelVisible(true);
       } else if (
-        panelModeRef.current === "layer" &&
+        panelModeRef.current === 'layer' &&
         !selectionFromLayerPanelRef.current &&
         !skipFromKeyboard &&
         isPanelVisible
       ) {
         // 레이어 패널 열린 상태에서 그리드에서 선택하면 → 속성 패널로 전환
         // (레이어 패널 내부에서 선택한 경우는 제외)
-        setPanelMode("property");
+        setPanelMode('property');
       }
       // 속성 패널이 이미 열려있으면 현재 모드 유지
     } else if (hadSelection) {
       // 선택이 있었다가 해제된 경우
       if (keyTypeChangedRef.current && isPanelVisible) {
         // 탭 전환으로 인한 선택 해제 → 패널 닫지 않고 레이어 모드로 전환
-        setPanelMode("layer");
+        setPanelMode('layer');
       } else if (
         isPanelVisible &&
-        (selectionFromLayerPanelRef.current ||
-          panelModeRef.current === "layer")
+        (selectionFromLayerPanelRef.current || panelModeRef.current === 'layer')
       ) {
         // 레이어 모드에서 선택 해제(Delete, 레이어 패널 내 동작 등) → 레이어 모드 유지
-        setPanelMode("layer");
+        setPanelMode('layer');
       } else if (!manuallyClosedRef.current) {
         // 일반적인 선택 해제 → 패널 닫기
         setIsPanelVisible(false);
@@ -847,7 +870,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // 플래그 리셋
     selectionFromLayerPanelRef.current = false;
     keyTypeChangedRef.current = false;
-    if (skipFromKeyboard) useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
+    if (skipFromKeyboard)
+      useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
 
     setShowImagePicker(false);
     setShowGraphImagePicker(false);
@@ -875,7 +899,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       !isPanelVisible &&
       !manuallyClosedRef.current
     ) {
-      setPanelMode("property");
+      setPanelMode('property');
       setIsPanelVisible(true);
     }
   }, [selectedBatchStyleElements.length, isPanelVisible]);
@@ -883,7 +907,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   useEffect(() => {
     if (pluginSettingsPanel) {
       manuallyClosedRef.current = false;
-      setPanelMode("property");
+      setPanelMode('property');
       setIsPanelVisible(true);
     }
   }, [pluginSettingsPanel]);
@@ -893,7 +917,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // 레이어 모드이고 패널이 열려있고 선택이 없는 경우에만 리스너 등록
     const hasSelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (panelMode !== "layer" || !isPanelVisible || hasSelection) {
+    if (panelMode !== 'layer' || !isPanelVisible || hasSelection) {
       return undefined;
     }
 
@@ -901,7 +925,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const target = e.target as HTMLElement;
 
       // 그리드 컨테이너 내부 클릭인지 확인
-      const gridContainer = target.closest("[data-grid-container]");
+      const gridContainer = target.closest('[data-grid-container]');
       if (!gridContainer) {
         return; // 그리드 영역 외부 클릭은 무시
       }
@@ -910,15 +934,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (
         target.closest('[class*="properties-panel"]') ||
         target.closest('[class*="PropertiesPanel"]') ||
-        target.closest(".absolute.right-0.top-0.bottom-0")
+        target.closest('.absolute.right-0.top-0.bottom-0')
       ) {
         return;
       }
 
       // 키 요소 클릭은 무시 (선택으로 이어지므로 패널 닫지 않음)
       if (
-        target.closest("[data-key-element]") ||
-        target.closest("[data-plugin-element]")
+        target.closest('[data-key-element]') ||
+        target.closest('[data-plugin-element]')
       ) {
         return;
       }
@@ -928,9 +952,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     };
 
     // mousedown으로 감지 (click보다 먼저 발생)
-    document.addEventListener("mousedown", handleGridClick);
+    document.addEventListener('mousedown', handleGridClick);
     return () => {
-      document.removeEventListener("mousedown", handleGridClick);
+      document.removeEventListener('mousedown', handleGridClick);
     };
   }, [
     isPanelVisible,
@@ -997,30 +1021,30 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       e.stopPropagation();
     };
 
-    window.addEventListener("keydown", blockKeyboardEvents, true);
-    window.addEventListener("keyup", blockKeyboardEvents, true);
-    window.addEventListener("keypress", blockKeyboardEvents, true);
-    window.addEventListener("mousedown", blockMouseEvents, true);
-    window.addEventListener("contextmenu", blockContextMenu, true);
+    window.addEventListener('keydown', blockKeyboardEvents, true);
+    window.addEventListener('keyup', blockKeyboardEvents, true);
+    window.addEventListener('keypress', blockKeyboardEvents, true);
+    window.addEventListener('mousedown', blockMouseEvents, true);
+    window.addEventListener('contextmenu', blockContextMenu, true);
 
     return () => {
-      window.removeEventListener("keydown", blockKeyboardEvents, true);
-      window.removeEventListener("keyup", blockKeyboardEvents, true);
-      window.removeEventListener("keypress", blockKeyboardEvents, true);
-      window.removeEventListener("mousedown", blockMouseEvents, true);
-      window.removeEventListener("contextmenu", blockContextMenu, true);
+      window.removeEventListener('keydown', blockKeyboardEvents, true);
+      window.removeEventListener('keyup', blockKeyboardEvents, true);
+      window.removeEventListener('keypress', blockKeyboardEvents, true);
+      window.removeEventListener('mousedown', blockMouseEvents, true);
+      window.removeEventListener('contextmenu', blockContextMenu, true);
     };
   }, [isListening]);
 
   // 키 리스닝 effect
   useEffect(() => {
     if (!isListening) return undefined;
-    if (typeof window === "undefined" || !window.api?.keys?.onRawInput) {
+    if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
       return undefined;
     }
 
     const unsubscribe = window.api.keys.onRawInput((payload: any) => {
-      if (!payload || payload.state !== "DOWN") return;
+      if (!payload || payload.state !== 'DOWN') return;
       const targetLabel =
         payload.label ||
         (Array.isArray(payload.labels) ? payload.labels[0] : null);
@@ -1044,7 +1068,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       try {
         unsubscribe?.();
       } catch (error) {
-        console.error("Failed to unsubscribe raw input listener", error);
+        console.error('Failed to unsubscribe raw input listener', error);
       }
     };
   }, [isListening, singleKeyIndex, onKeyMappingChange]);
@@ -1063,7 +1087,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       // 선택이 없으면 레이어 모드로 설정
       const hasSelection = selectedElements.length > 0;
       if (!hasSelection) {
-        setPanelMode("layer");
+        setPanelMode('layer');
       }
     } else {
       // 패널을 닫을 때 - 명시적 닫기 플래그 설정
@@ -1076,7 +1100,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [isPanelVisible, selectedElements.length]);
 
   const handleToggleMode = useCallback(() => {
-    setPanelMode((prev) => (prev === "layer" ? "property" : "layer"));
+    setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
   }, []);
 
   const pluginDefaultSettings = useMemo(() => {
@@ -1085,7 +1109,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       Object.entries(selectedPluginDefinition.settings).forEach(
         ([key, schema]) => {
           const schemaValue = schema as PluginSettingSchema;
-          if (schemaValue.type === "divider") return;
+          if (schemaValue.type === 'divider') return;
           defaults[key] = schemaValue.default;
         },
       );
@@ -1273,7 +1297,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       );
       pluginSettingsPanel.resolve(true);
     } catch (error) {
-      console.error("[Plugin Settings] Failed to apply settings:", error);
+      console.error('[Plugin Settings] Failed to apply settings:', error);
       pluginSettingsPanel.resolve(false);
     } finally {
       closePluginSettingsPanel();
@@ -1285,7 +1309,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     try {
       pluginSettingsPanel.onCancel(pluginSettingsPanel.originalSettings);
     } catch (error) {
-      console.error("[Plugin Settings] Failed to cancel settings:", error);
+      console.error('[Plugin Settings] Failed to cancel settings:', error);
     } finally {
       pluginSettingsPanel.resolve(false);
       closePluginSettingsPanel();
@@ -1347,13 +1371,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       window.api.statItems
         .updatePositions(nextPositions)
         .catch((error) => {
-          console.error("Failed to update stat item", error);
+          console.error('Failed to update stat item', error);
         })
         .finally(() => {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
         });
       try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1452,13 +1476,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       window.api.statItems
         .updatePositions(nextPositions)
         .catch((error) => {
-          console.error("Failed to batch update stat items", error);
+          console.error('Failed to batch update stat items', error);
         })
         .finally(() => {
           useStatItemStore.getState().setLocalUpdateInProgress(false);
         });
       try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1498,13 +1522,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       window.api.graphItems
         .updatePositions(nextPositions)
         .catch((error) => {
-          console.error("Failed to update graph item", error);
+          console.error('Failed to update graph item', error);
         })
         .finally(() => {
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         });
       try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1602,13 +1626,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       window.api.graphItems
         .updatePositions(nextPositions)
         .catch((error) => {
-          console.error("Failed to batch update graph items", error);
+          console.error('Failed to batch update graph items', error);
         })
         .finally(() => {
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         });
       try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1648,7 +1672,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return selectedKeyLikeElements
       .map((el) => {
         const index = el.index!;
-        if (el.type === "key") {
+        if (el.type === 'key') {
           const position = positions[selectedKeyType]?.[index];
           const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
@@ -1657,7 +1681,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         // stat
         const position = statItemPositions[selectedKeyType]?.[index];
         const statLabel =
-          (position?.displayText || "").trim() ||
+          (position?.displayText || '').trim() ||
           getStatTypeLabel(position?.statType ?? null);
         const keyInfo = { globalKey: statLabel, displayName: statLabel };
         return { index, position, keyCode: null, keyInfo };
@@ -1687,16 +1711,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return selectedBatchStyleElements
       .map((el) => {
         const index = el.index!;
-        if (el.type === "key") {
+        if (el.type === 'key') {
           const position = positions[selectedKeyType]?.[index];
           const keyCode = keyMappings[selectedKeyType]?.[index] ?? null;
           const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
           return { index, position, keyCode, keyInfo };
         }
-        if (el.type === "stat") {
+        if (el.type === 'stat') {
           const position = statItemPositions[selectedKeyType]?.[index];
           const statLabel =
-            (position?.displayText || "").trim() ||
+            (position?.displayText || '').trim() ||
             getStatTypeLabel(position?.statType ?? null);
           const keyInfo = { globalKey: statLabel, displayName: statLabel };
           return { index, position, keyCode: null, keyInfo };
@@ -1727,7 +1751,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const firstValue = getter(keysData[0].position!) ?? defaultValue;
       const isMixed = keysData.some((data) => {
         const val = getter(data.position!) ?? defaultValue;
-        if (typeof val === "object" && typeof firstValue === "object") {
+        if (typeof val === 'object' && typeof firstValue === 'object') {
           return JSON.stringify(val) !== JSON.stringify(firstValue);
         }
         return val !== firstValue;
@@ -1744,12 +1768,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       defaultValue: T,
     ): { isMixed: boolean; value: T } => {
       const graphsData = getSelectedGraphsData();
-      if (graphsData.length === 0) return { isMixed: false, value: defaultValue };
+      if (graphsData.length === 0)
+        return { isMixed: false, value: defaultValue };
 
       const firstValue = getter(graphsData[0].position!) ?? defaultValue;
       const isMixed = graphsData.some((data) => {
         const val = getter(data.position!) ?? defaultValue;
-        if (typeof val === "object" && typeof firstValue === "object") {
+        if (typeof val === 'object' && typeof firstValue === 'object') {
           return JSON.stringify(val) !== JSON.stringify(firstValue);
         }
         return val !== firstValue;
@@ -1776,12 +1801,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       defaultValue: T,
     ): { isMixed: boolean; value: T } => {
       const batchData = getSelectedBatchStyleData();
-      if (batchData.length === 0) return { isMixed: false, value: defaultValue };
+      if (batchData.length === 0)
+        return { isMixed: false, value: defaultValue };
 
-      const firstValue = getter(batchData[0].position as KeyPosition) ?? defaultValue;
+      const firstValue =
+        getter(batchData[0].position as KeyPosition) ?? defaultValue;
       const isMixed = batchData.some((data) => {
         const val = getter(data.position as KeyPosition) ?? defaultValue;
-        if (typeof val === "object" && typeof firstValue === "object") {
+        if (typeof val === 'object' && typeof firstValue === 'object') {
           return JSON.stringify(val) !== JSON.stringify(firstValue);
         }
         return val !== firstValue;
@@ -1854,7 +1881,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const firstValue = getter(data[0].position) ?? defaultValue;
       const isMixed = data.some(({ position }) => {
         const val = getter(position) ?? defaultValue;
-        if (typeof val === "object" && typeof firstValue === "object") {
+        if (typeof val === 'object' && typeof firstValue === 'object') {
           return JSON.stringify(val) !== JSON.stringify(firstValue);
         }
         return val !== firstValue;
@@ -1868,10 +1895,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const dispatchKeyOnlyBatchUpdates = useCallback(
     (
       updates: Array<{ index: number } & Partial<KeyPosition>>,
-      kind: "preview" | "commit",
+      kind: 'preview' | 'commit',
     ) => {
       if (updates.length === 0) return;
-      if (kind === "preview") {
+      if (kind === 'preview') {
         if (onKeyBatchPreview) {
           onKeyBatchPreview(updates);
           return;
@@ -1898,7 +1925,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         index,
         [property]: value,
       })) as Array<{ index: number } & Partial<KeyPosition>>;
-      dispatchKeyOnlyBatchUpdates(updates, "commit");
+      dispatchKeyOnlyBatchUpdates(updates, 'commit');
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
   );
@@ -1909,7 +1936,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         index,
         noteColor: value,
       }));
-      dispatchKeyOnlyBatchUpdates(updates, "preview");
+      dispatchKeyOnlyBatchUpdates(updates, 'preview');
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
   );
@@ -1920,7 +1947,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         index,
         noteColor: value,
       }));
-      dispatchKeyOnlyBatchUpdates(updates, "commit");
+      dispatchKeyOnlyBatchUpdates(updates, 'commit');
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
   );
@@ -1931,7 +1958,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         index,
         noteGlowColor: value,
       }));
-      dispatchKeyOnlyBatchUpdates(updates, "preview");
+      dispatchKeyOnlyBatchUpdates(updates, 'preview');
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
   );
@@ -1942,7 +1969,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         index,
         noteGlowColor: value,
       }));
-      dispatchKeyOnlyBatchUpdates(updates, "commit");
+      dispatchKeyOnlyBatchUpdates(updates, 'commit');
     },
     [dispatchKeyOnlyBatchUpdates, getSelectedKeyOnlyPositions],
   );
@@ -1971,13 +1998,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (!schema || Object.keys(schema).length === 0) {
         return (
           <p className="text-[#6B6D75] text-style-4 text-center">
-            {t("propertiesPanel.pluginNoSettings") || "설정할 항목이 없습니다."}
+            {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
           </p>
         );
       }
 
       const translate = (key?: string, fallback?: string) => {
-        if (!key) return fallback || "";
+        if (!key) return fallback || '';
         return translatePluginMessage({
           messages,
           locale,
@@ -1987,16 +2014,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       };
 
       const getPluginInputWidth = (
-        type: "string" | "number",
+        type: 'string' | 'number',
         value: any,
       ): string => {
-        if (type === "number") {
-          return "60px";
+        if (type === 'number') {
+          return '60px';
         }
-        const strVal = String(value ?? "");
-        if (strVal.length <= 4) return "60px";
-        if (strVal.length <= 10) return "100px";
-        return "200px";
+        const strVal = String(value ?? '');
+        if (strVal.length <= 4) return '60px';
+        if (strVal.length <= 10) return '100px';
+        return '200px';
       };
 
       const wrap = options?.wrap !== false;
@@ -2006,26 +2033,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         // ── 조건부 visibility ──
         if (schemaValue.visible !== undefined) {
           const vis =
-            typeof schemaValue.visible === "function"
+            typeof schemaValue.visible === 'function'
               ? schemaValue.visible(values)
               : schemaValue.visible;
           if (!vis) return null;
         }
 
-        if (schemaValue.type === "divider") {
+        if (schemaValue.type === 'divider') {
           return <SectionDivider key={`divider-${key}`} />;
         }
         const rawValue =
           values[key] !== undefined ? values[key] : schemaValue.default;
         const labelText = translate(schemaValue.label, schemaValue.label);
         const placeholderText =
-          typeof schemaValue.placeholder === "string"
+          typeof schemaValue.placeholder === 'string'
             ? translate(schemaValue.placeholder, schemaValue.placeholder)
             : schemaValue.placeholder;
 
         let control: React.ReactNode = null;
 
-        if (schemaValue.type === "boolean") {
+        if (schemaValue.type === 'boolean') {
           const checked = !!rawValue;
           control = (
             <Checkbox
@@ -2033,11 +2060,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onChange={() => onChange(key, !checked)}
             />
           );
-        } else if (schemaValue.type === "color") {
+        } else if (schemaValue.type === 'color') {
           const colorValue =
-            typeof rawValue === "string"
+            typeof rawValue === 'string'
               ? rawValue
-              : (schemaValue.default as string) || "#FFFFFF";
+              : (schemaValue.default as string) || '#FFFFFF';
           control = (
             <ColorInput
               value={colorValue}
@@ -2047,11 +2074,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               solidOnly={true}
             />
           );
-        } else if (schemaValue.type === "number") {
+        } else if (schemaValue.type === 'number') {
           const numericValue = Number(rawValue);
           const normalizedValue = Number.isFinite(numericValue)
             ? numericValue
-            : typeof schemaValue.default === "number"
+            : typeof schemaValue.default === 'number'
               ? schemaValue.default
               : 0;
           control = (
@@ -2060,25 +2087,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               min={schemaValue.min}
               max={schemaValue.max}
               onChange={(nextValue) => onChange(key, nextValue)}
-              width={getPluginInputWidth("number", rawValue)}
+              width={getPluginInputWidth('number', rawValue)}
             />
           );
-        } else if (schemaValue.type === "string") {
+        } else if (schemaValue.type === 'string') {
           const stringValue =
-            rawValue === undefined || rawValue === null ? "" : String(rawValue);
+            rawValue === undefined || rawValue === null ? '' : String(rawValue);
           control = (
             <TextInput
               value={stringValue}
               onChange={(nextValue) => onChange(key, nextValue)}
               placeholder={
-                typeof placeholderText === "string"
+                typeof placeholderText === 'string'
                   ? placeholderText
                   : undefined
               }
-              width={getPluginInputWidth("string", stringValue)}
+              width={getPluginInputWidth('string', stringValue)}
             />
           );
-        } else if (schemaValue.type === "select") {
+        } else if (schemaValue.type === 'select') {
           const options = (schemaValue.options || []).map((option) => ({
             label: translate(option.label, option.label),
             value: String(option.value),
@@ -2091,13 +2118,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           );
           const selectedValue = optionMap.has(String(rawValue))
             ? String(rawValue)
-            : String(schemaValue.default ?? "");
+            : String(schemaValue.default ?? '');
           control = (
             <Dropdown
               value={selectedValue}
               options={options}
               placeholder={
-                typeof placeholderText === "string" &&
+                typeof placeholderText === 'string' &&
                 placeholderText.trim().length > 0
                   ? placeholderText
                   : undefined
@@ -2109,7 +2136,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           );
         }
 
-        if (schemaValue.type === "boolean") {
+        if (schemaValue.type === 'boolean') {
           return (
             <div
               key={key}
@@ -2162,7 +2189,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const keysData = getSelectedKeysData();
         const keyOnly = getSelectedKeyOnlyPositions();
         const firstPos =
-          (target === "noteColor" || target === "glowColor") &&
+          (target === 'noteColor' || target === 'glowColor') &&
           keyOnly.length > 0
             ? keyOnly[0].position
             : keysData[0]?.position;
@@ -2173,25 +2200,25 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               const nc = firstPos.noteColor;
               if (
                 nc &&
-                typeof nc === "object" &&
-                "type" in nc &&
-                nc.type === "gradient"
+                typeof nc === 'object' &&
+                'type' in nc &&
+                nc.type === 'gradient'
               ) {
-                return { type: "gradient", top: nc.top, bottom: nc.bottom };
+                return { type: 'gradient', top: nc.top, bottom: nc.bottom };
               }
-              return typeof nc === "string" ? nc : "#FFFFFF";
+              return typeof nc === 'string' ? nc : '#FFFFFF';
             })(),
             glowColor: (() => {
               const gc = firstPos.noteGlowColor ?? firstPos.noteColor;
               if (
                 gc &&
-                typeof gc === "object" &&
-                "type" in gc &&
-                gc.type === "gradient"
+                typeof gc === 'object' &&
+                'type' in gc &&
+                gc.type === 'gradient'
               ) {
-                return { type: "gradient", top: gc.top, bottom: gc.bottom };
+                return { type: 'gradient', top: gc.top, bottom: gc.bottom };
               }
-              return typeof gc === "string" ? gc : "#FFFFFF";
+              return typeof gc === 'string' ? gc : '#FFFFFF';
             })(),
             fillIdle: counterSettings.fill.idle,
             fillActive: counterSettings.fill.active,
@@ -2200,11 +2227,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           });
           setBatchLocalOpacities({
             noteOpacity:
-              typeof firstPos.noteOpacity === "number"
+              typeof firstPos.noteOpacity === 'number'
                 ? firstPos.noteOpacity
                 : 80,
             glowOpacity:
-              typeof firstPos.noteGlowOpacity === "number"
+              typeof firstPos.noteGlowOpacity === 'number'
                 ? firstPos.noteGlowOpacity
                 : 70,
           });
@@ -2218,33 +2245,33 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 배치 피커 색상값 가져오기 (로컬 상태 사용)
   const getBatchPickerColor = useCallback((): any => {
     switch (batchPickerFor) {
-      case "noteColor":
+      case 'noteColor':
         return batchLocalColors.noteColor;
-      case "glowColor":
+      case 'glowColor':
         return batchLocalColors.glowColor;
-      case "fill":
-        return batchCounterColorState === "active"
+      case 'fill':
+        return batchCounterColorState === 'active'
           ? batchLocalColors.fillActive
           : batchLocalColors.fillIdle;
-      case "stroke":
-        return batchCounterColorState === "active"
+      case 'stroke':
+        return batchCounterColorState === 'active'
           ? batchLocalColors.strokeActive
           : batchLocalColors.strokeIdle;
       default:
-        return "#FFFFFF";
+        return '#FFFFFF';
     }
   }, [batchCounterColorState, batchLocalColors, batchPickerFor]);
 
   // 배치 피커 referenceRef
   const getBatchPickerRef = useCallback(() => {
     switch (batchPickerFor) {
-      case "noteColor":
+      case 'noteColor':
         return batchNoteColorButtonRef;
-      case "glowColor":
+      case 'glowColor':
         return batchGlowColorButtonRef;
-      case "fill":
+      case 'fill':
         return batchCounterFillButtonRef;
-      case "stroke":
+      case 'stroke':
         return batchCounterStrokeButtonRef;
       default:
         return null;
@@ -2257,21 +2284,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (!batchPickerFor) return;
 
       // 로컬 상태 업데이트
-      if (batchPickerFor === "noteColor" || batchPickerFor === "glowColor") {
+      if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
         setBatchLocalColors((prev) => ({
           ...prev,
           [batchPickerFor]: newColor,
         }));
-      } else if (batchPickerFor === "fill") {
+      } else if (batchPickerFor === 'fill') {
         const key =
-          batchCounterColorState === "active" ? "fillActive" : "fillIdle";
+          batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
           [key]: newColor,
         }));
-      } else if (batchPickerFor === "stroke") {
+      } else if (batchPickerFor === 'stroke') {
         const key =
-          batchCounterColorState === "active" ? "strokeActive" : "strokeIdle";
+          batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
           [key]: newColor,
@@ -2280,26 +2307,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
       const isGradientNoteLikeColor =
         !!newColor &&
-        typeof newColor === "object" &&
-        (newColor as any).type === "gradient";
+        typeof newColor === 'object' &&
+        (newColor as any).type === 'gradient';
 
       // 다중 편집에서 노트/글로우 그라데이션을 드래그 중 매 프레임 프리뷰하면
       // 대량 업데이트 + IPC가 과도하게 발생해 UI가 멈출 수 있어 complete 시점에만 반영한다.
       if (
         isGradientNoteLikeColor &&
-        (batchPickerFor === "noteColor" || batchPickerFor === "glowColor")
+        (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor')
       ) {
         return;
       }
 
       // 노트/글로우(단색)는 프리뷰도 함께 업데이트
-      if (batchPickerFor === "noteColor") {
+      if (batchPickerFor === 'noteColor') {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchNoteColorChangeKeysOnly(newColor);
         } else {
           handleBatchNoteColorChange(newColor);
         }
-      } else if (batchPickerFor === "glowColor") {
+      } else if (batchPickerFor === 'glowColor') {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchGlowColorChangeKeysOnly(newColor);
         } else {
@@ -2325,21 +2352,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       if (!batchPickerFor) return;
 
       // 로컬 상태 업데이트
-      if (batchPickerFor === "noteColor" || batchPickerFor === "glowColor") {
+      if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
         setBatchLocalColors((prev) => ({
           ...prev,
           [batchPickerFor]: newColor,
         }));
-      } else if (batchPickerFor === "fill") {
+      } else if (batchPickerFor === 'fill') {
         const key =
-          batchCounterColorState === "active" ? "fillActive" : "fillIdle";
+          batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
           [key]: newColor,
         }));
-      } else if (batchPickerFor === "stroke") {
+      } else if (batchPickerFor === 'stroke') {
         const key =
-          batchCounterColorState === "active" ? "strokeActive" : "strokeIdle";
+          batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
           [key]: newColor,
@@ -2351,20 +2378,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ? normalizeCounterSettings(keysData[0].position.counter)
         : createDefaultCounterSettings();
 
-      if (batchPickerFor === "noteColor") {
+      if (batchPickerFor === 'noteColor') {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchNoteColorChangeCompleteKeysOnly(newColor);
         } else {
           handleBatchNoteColorChangeComplete(newColor);
         }
-      } else if (batchPickerFor === "glowColor") {
+      } else if (batchPickerFor === 'glowColor') {
         if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
           handleBatchGlowColorChangeCompleteKeysOnly(newColor);
         } else {
           handleBatchGlowColorChangeComplete(newColor);
         }
-      } else if (batchPickerFor === "fill") {
-        if (batchCounterColorState === "active") {
+      } else if (batchPickerFor === 'fill') {
+        if (batchCounterColorState === 'active') {
           handleBatchCounterUpdate({
             fill: { ...firstCounter.fill, active: newColor },
           });
@@ -2373,8 +2400,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             fill: { ...firstCounter.fill, idle: newColor },
           });
         }
-      } else if (batchPickerFor === "stroke") {
-        if (batchCounterColorState === "active") {
+      } else if (batchPickerFor === 'stroke') {
+        if (batchCounterColorState === 'active') {
           handleBatchCounterUpdate({
             stroke: { ...firstCounter.stroke, active: newColor },
           });
@@ -2410,7 +2437,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <button
           onClick={handleTogglePanel}
           className="m-[8px] w-[32px] h-[32px] bg-[#1F1F24] border border-[#3A3943] rounded-[7px] flex items-center justify-center hover:bg-[#2A2A30] hover:border-[#505058] transition-colors shadow-lg"
-          title={t("propertiesPanel.openPanel") || "속성 패널 열기"}
+          title={t('propertiesPanel.openPanel') || '속성 패널 열기'}
         >
           <SidebarToggleIcon isOpen={false} />
         </button>
@@ -2427,7 +2454,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
           <div className="flex flex-col gap-[2px]">
             <span className="text-[#DBDEE8] text-style-2">
-              {t("propertiesPanel.pluginSettings") || "플러그인 설정"}
+              {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
             </span>
             <span className="text-[#6B6D75] text-style-4 truncate max-w-[150px]">
               {pluginSettingsPanel.pluginId}
@@ -2436,7 +2463,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <button
             onClick={handlePluginSettingsPanelCancel}
             className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-            title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+            title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
           >
             <SidebarToggleIcon isOpen={true} />
           </button>
@@ -2459,7 +2486,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={setPluginThumbRef}
                 className="properties-panel-overlay-thumb"
-                style={{ display: "none" }}
+                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -2470,13 +2497,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onClick={handlePluginSettingsPanelCancel}
               className="flex-1 h-[30px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#303036] transition-colors"
             >
-              {t("common.cancel") || "취소"}
+              {t('common.cancel') || '취소'}
             </button>
             <button
               onClick={handlePluginSettingsPanelConfirm}
               className="flex-1 h-[30px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#303036] transition-colors"
             >
-              {t("common.save") || "저장"}
+              {t('common.save') || '저장'}
             </button>
           </div>
         </div>
@@ -2485,7 +2512,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }
 
   // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
-  if (panelMode === "layer") {
+  if (panelMode === 'layer') {
     const hasAnySelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
     return (
@@ -2529,83 +2556,83 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     const getBatchNoteColorDisplay = () => {
       // 노트 피커가 열려있으면 로컬 상태 사용
-      if (batchPickerFor === "noteColor") {
+      if (batchPickerFor === 'noteColor') {
         const value = batchLocalColors.noteColor;
         if (
           value &&
-          typeof value === "object" &&
-          "type" in value &&
-          value.type === "gradient"
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'gradient'
         ) {
           return {
             style: {
               background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
             },
-            label: "Gradient",
+            label: 'Gradient',
             isMixed: false,
           };
         }
-        const color = typeof value === "string" ? value : "#FFFFFF";
+        const color = typeof value === 'string' ? value : '#FFFFFF';
         return {
           style: { backgroundColor: color },
-          label: color.replace(/^#/, ""),
+          label: color.replace(/^#/, ''),
           isMixed: false,
         };
       }
 
       const mixedFn =
         selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-      const { isMixed, value } = mixedFn((pos) => pos.noteColor, "#FFFFFF");
+      const { isMixed, value } = mixedFn((pos) => pos.noteColor, '#FFFFFF');
       if (isMixed)
         return {
-          style: { backgroundColor: "#666" },
-          label: "Mixed",
+          style: { backgroundColor: '#666' },
+          label: 'Mixed',
           isMixed: true,
         };
       if (
         value &&
-        typeof value === "object" &&
-        "type" in value &&
-        value.type === "gradient"
+        typeof value === 'object' &&
+        'type' in value &&
+        value.type === 'gradient'
       ) {
         return {
           style: {
             background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
           },
-          label: "Gradient",
+          label: 'Gradient',
           isMixed: false,
         };
       }
-      const color = typeof value === "string" ? value : "#FFFFFF";
+      const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
         style: { backgroundColor: color },
-        label: color.replace(/^#/, ""),
+        label: color.replace(/^#/, ''),
         isMixed: false,
       };
     };
 
     const getBatchGlowColorDisplay = () => {
       // 글로우 피커가 열려있으면 로컬 상태 사용
-      if (batchPickerFor === "glowColor") {
+      if (batchPickerFor === 'glowColor') {
         const value = batchLocalColors.glowColor;
         if (
           value &&
-          typeof value === "object" &&
-          "type" in value &&
-          value.type === "gradient"
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'gradient'
         ) {
           return {
             style: {
               background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
             },
-            label: "Gradient",
+            label: 'Gradient',
             isMixed: false,
           };
         }
-        const color = typeof value === "string" ? value : "#FFFFFF";
+        const color = typeof value === 'string' ? value : '#FFFFFF';
         return {
           style: { backgroundColor: color },
-          label: color.replace(/^#/, ""),
+          label: color.replace(/^#/, ''),
           isMixed: false,
         };
       }
@@ -2614,32 +2641,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
       const { isMixed, value } = mixedFn(
         (pos) => pos.noteGlowColor ?? pos.noteColor,
-        "#FFFFFF",
+        '#FFFFFF',
       );
       if (isMixed)
         return {
-          style: { backgroundColor: "#666" },
-          label: "Mixed",
+          style: { backgroundColor: '#666' },
+          label: 'Mixed',
           isMixed: true,
         };
       if (
         value &&
-        typeof value === "object" &&
-        "type" in value &&
-        value.type === "gradient"
+        typeof value === 'object' &&
+        'type' in value &&
+        value.type === 'gradient'
       ) {
         return {
           style: {
             background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
           },
-          label: "Gradient",
+          label: 'Gradient',
           isMixed: false,
         };
       }
-      const color = typeof value === "string" ? value : "#FFFFFF";
+      const color = typeof value === 'string' ? value : '#FFFFFF';
       return {
         style: { backgroundColor: color },
-        label: color.replace(/^#/, ""),
+        label: color.replace(/^#/, ''),
         isMixed: false,
       };
     };
@@ -2671,7 +2698,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           activeBorderColor: firstPos.activeBorderColor,
           activeFontColor: firstPos.activeFontColor,
           useInlineStyles: firstPos.useInlineStyles,
-          isStat: selectedKeyLikeElements[0]?.type === "stat",
+          isStat: selectedKeyLikeElements[0]?.type === 'stat',
         }
       : undefined;
     const noteOpacityMixed = getMixedValue(
@@ -2684,8 +2711,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ).isMixed;
     const batchSpacing = getBatchSpacingValue();
     const graphTypeState = getMixedValueGraphs(
-      (pos) => pos.graphType || "line",
-      "line",
+      (pos) => pos.graphType || 'line',
+      'line',
     );
     const showAvgLineState = getMixedValueGraphs(
       (pos) => pos.showAvgLine ?? true,
@@ -2696,47 +2723,47 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       1000,
     );
     const graphColorState = getMixedValueGraphs(
-      (pos) => pos.graphColor || "#86EFAC",
-      "#86EFAC",
+      (pos) => pos.graphColor || '#86EFAC',
+      '#86EFAC',
     );
     const graphAnimationState = getMixedValueGraphs(
       (pos) => pos.graphAnimationEnabled ?? true,
       true,
     );
     const hasLineGraph = getSelectedGraphsData().some(
-      (data) => (data.position?.graphType || "line") === "line",
+      (data) => (data.position?.graphType || 'line') === 'line',
     );
     const graphShapeOptions = [
       {
-        label: t("propertiesPanel.graphShapeLine") || "Line",
-        value: "line",
+        label: t('propertiesPanel.graphShapeLine') || 'Line',
+        value: 'line',
       },
       {
-        label: t("propertiesPanel.graphShapeBar") || "Bar",
-        value: "bar",
+        label: t('propertiesPanel.graphShapeBar') || 'Bar',
+        value: 'bar',
       },
     ];
 
     // 카운터 색상 표시 (피커가 열려있을 때는 로컬 상태 사용)
-    const getCounterColorDisplay = (target: "fill" | "stroke") => {
+    const getCounterColorDisplay = (target: 'fill' | 'stroke') => {
       const key =
-        target === "fill"
-          ? batchCounterColorState === "active"
-            ? "fillActive"
-            : "fillIdle"
-          : batchCounterColorState === "active"
-            ? "strokeActive"
-            : "strokeIdle";
+        target === 'fill'
+          ? batchCounterColorState === 'active'
+            ? 'fillActive'
+            : 'fillIdle'
+          : batchCounterColorState === 'active'
+            ? 'strokeActive'
+            : 'strokeIdle';
 
       if (batchPickerFor === target) {
         return batchLocalColors[key];
       }
 
-      return target === "fill"
-        ? batchCounterColorState === "active"
+      return target === 'fill'
+        ? batchCounterColorState === 'active'
           ? batchCounterSettings.fill.active
           : batchCounterSettings.fill.idle
-        : batchCounterColorState === "active"
+        : batchCounterColorState === 'active'
           ? batchCounterSettings.stroke.active
           : batchCounterSettings.stroke.idle;
     };
@@ -2766,10 +2793,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       renameCancelledRef.current = false;
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      if (e.key === 'Enter') {
                         e.preventDefault();
                         (e.target as HTMLInputElement).blur();
-                      } else if (e.key === "Escape") {
+                      } else if (e.key === 'Escape') {
                         e.preventDefault();
                         handleRenameCancel();
                       }
@@ -2787,7 +2814,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <button
                       onClick={handleRenameStart}
                       className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
-                      title={t("contextMenu.rename") || "Rename"}
+                      title={t('contextMenu.rename') || 'Rename'}
                     >
                       <RenameIcon />
                     </button>
@@ -2795,7 +2822,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 )
               ) : (
                 <span className="text-[#DBDEE8] text-style-2">
-                  {t("propertiesPanel.multiSelection") || "다중 선택"}
+                  {t('propertiesPanel.multiSelection') || '다중 선택'}
                 </span>
               )}
               {!selectedGroupInfo && (
@@ -2809,7 +2836,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <button
                 onClick={handleToggleMode}
                 className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-                title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+                title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
               >
                 <ModeToggleIcon mode="layer" />
               </button>
@@ -2817,7 +2844,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <button
                 onClick={handleTogglePanel}
                 className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-                title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+                title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
               >
                 <SidebarToggleIcon isOpen={true} />
               </button>
@@ -2848,7 +2875,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={batchScrollRefFor(TABS.STYLE)}
               className={`properties-panel-overlay-viewport ${
-                activeTab === TABS.STYLE ? "" : "hidden"
+                activeTab === TABS.STYLE ? '' : 'hidden'
               }`}
             >
               <div className="p-[12px] flex flex-col gap-[12px]">
@@ -2861,7 +2888,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     hasGraphSelection ? (
                       <>
                         <PropertyRow
-                          label={t("propertiesPanel.graphShape") || "Graph Shape"}
+                          label={
+                            t('propertiesPanel.graphShape') || 'Graph Shape'
+                          }
                         >
                           {graphTypeState.isMixed ? (
                             <span className="text-[#6B6D75] text-style-4 italic">
@@ -2882,8 +2911,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         {hasLineGraph && (
                           <div className="flex justify-between items-center w-full h-[23px]">
                             <p className="text-white text-style-2">
-                              {t("propertiesPanel.graphShowAverageLine") ||
-                                "Show Average Line"}
+                              {t('propertiesPanel.graphShowAverageLine') ||
+                                'Show Average Line'}
                             </p>
                             <Checkbox
                               checked={showAvgLineState.value}
@@ -2897,7 +2926,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         )}
 
                         <PropertyRow
-                          label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+                          label={
+                            t('propertiesPanel.graphSpeed') || 'Graph Speed'
+                          }
                         >
                           {graphSpeedState.isMixed ? (
                             <span className="text-[#6B6D75] text-style-4 italic">
@@ -2908,9 +2939,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                             value={graphSpeedState.value}
                             width="62px"
                             onChange={(value) => {
-                              const clamped = Math.max(500, Math.min(5000, value));
+                              const clamped = Math.max(
+                                500,
+                                Math.min(5000, value),
+                              );
                               const snapped = Math.round(clamped / 100) * 100;
-                              handleGraphBatchSharedSetting({ graphSpeed: snapped });
+                              handleGraphBatchSharedSetting({
+                                graphSpeed: snapped,
+                              });
                             }}
                             min={500}
                             max={5000}
@@ -2920,7 +2956,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </PropertyRow>
 
                         <PropertyRow
-                          label={t("propertiesPanel.graphColor") || "Graph Color"}
+                          label={
+                            t('propertiesPanel.graphColor') || 'Graph Color'
+                          }
                         >
                           {graphColorState.isMixed ? (
                             <span className="text-[#6B6D75] text-style-4 italic">
@@ -2931,7 +2969,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                             value={graphColorState.value}
                             onChange={() => {}}
                             onChangeComplete={(value) =>
-                              handleGraphBatchSharedSetting({ graphColor: value })
+                              handleGraphBatchSharedSetting({
+                                graphColor: value,
+                              })
                             }
                             colorId={`graph-batch-mixed-color-${selectedKeyType}`}
                             panelElement={panelElement}
@@ -2940,8 +2980,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
                         <div className="flex justify-between items-center w-full h-[23px]">
                           <p className="text-white text-style-2">
-                            {t("propertiesPanel.graphAnimation") ||
-                              "Graph Animation"}
+                            {t('propertiesPanel.graphAnimation') ||
+                              'Graph Animation'}
                           </p>
                           <div className="flex items-center gap-[6px]">
                             {graphAnimationState.isMixed ? (
@@ -2992,7 +3032,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <div
                   ref={batchThumbRefFor(TABS.STYLE)}
                   className="properties-panel-overlay-thumb"
-                  style={{ display: "none" }}
+                  style={{ display: 'none' }}
                 />
               </div>
             </div>
@@ -3002,7 +3042,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={batchScrollRefFor(TABS.NOTE)}
                 className={`properties-panel-overlay-viewport ${
-                  activeTab === TABS.NOTE ? "" : "hidden"
+                  activeTab === TABS.NOTE ? '' : 'hidden'
                 }`}
               >
                 <div className="p-[12px] flex flex-col gap-[12px]">
@@ -3014,13 +3054,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                     getBatchGlowColorDisplay={getBatchGlowColorDisplay}
                     onNoteColorPickerToggle={() =>
-                      handleBatchPickerToggle("noteColor")
+                      handleBatchPickerToggle('noteColor')
                     }
                     onGlowColorPickerToggle={() =>
-                      handleBatchPickerToggle("glowColor")
+                      handleBatchPickerToggle('glowColor')
                     }
-                    isNoteColorPickerOpen={batchPickerFor === "noteColor"}
-                    isGlowColorPickerOpen={batchPickerFor === "glowColor"}
+                    isNoteColorPickerOpen={batchPickerFor === 'noteColor'}
+                    isGlowColorPickerOpen={batchPickerFor === 'glowColor'}
                     batchNoteColorButtonRef={batchNoteColorButtonRef}
                     batchGlowColorButtonRef={batchGlowColorButtonRef}
                     t={t}
@@ -3030,7 +3070,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   <div
                     ref={batchThumbRefFor(TABS.NOTE)}
                     className="properties-panel-overlay-thumb"
-                    style={{ display: "none" }}
+                    style={{ display: 'none' }}
                   />
                 </div>
               </div>
@@ -3040,7 +3080,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={batchScrollRefFor(TABS.COUNTER)}
               className={`properties-panel-overlay-viewport ${
-                activeTab === TABS.COUNTER ? "" : "hidden"
+                activeTab === TABS.COUNTER ? '' : 'hidden'
               }`}
             >
               <div className="p-[12px] flex flex-col gap-[12px]">
@@ -3050,12 +3090,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   handleBatchCounterUpdate={handleBatchCounterUpdate}
                   colorState={batchCounterColorState}
                   getCounterColorDisplay={getCounterColorDisplay}
-                  onFillPickerToggle={() => handleBatchPickerToggle("fill")}
-                  onStrokePickerToggle={() => handleBatchPickerToggle("stroke")}
+                  onFillPickerToggle={() => handleBatchPickerToggle('fill')}
+                  onStrokePickerToggle={() => handleBatchPickerToggle('stroke')}
                   batchCounterFillButtonRef={batchCounterFillButtonRef}
                   batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
-                  isFillPickerOpen={batchPickerFor === "fill"}
-                  isStrokePickerOpen={batchPickerFor === "stroke"}
+                  isFillPickerOpen={batchPickerFor === 'fill'}
+                  isStrokePickerOpen={batchPickerFor === 'stroke'}
                   panelElement={panelElement}
                   t={t}
                 />
@@ -3064,7 +3104,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 <div
                   ref={batchThumbRefFor(TABS.COUNTER)}
                   className="properties-panel-overlay-thumb"
-                  style={{ display: "none" }}
+                  style={{ display: 'none' }}
                 />
               </div>
             </div>
@@ -3082,66 +3122,66 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onClose={() => setBatchPickerFor(null)}
               interactiveRefs={batchColorPickerInteractiveRefs}
               solidOnly={
-                batchPickerFor !== "noteColor" && batchPickerFor !== "glowColor"
+                batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
               }
               stateMode={
-                batchPickerFor === "fill" || batchPickerFor === "stroke"
+                batchPickerFor === 'fill' || batchPickerFor === 'stroke'
                   ? batchCounterColorState
                   : undefined
               }
               onStateModeChange={
-                batchPickerFor === "fill" || batchPickerFor === "stroke"
+                batchPickerFor === 'fill' || batchPickerFor === 'stroke'
                   ? setBatchCounterColorState
                   : undefined
               }
               opacityPercent={
-                batchPickerFor === "noteColor"
+                batchPickerFor === 'noteColor'
                   ? batchLocalOpacities.noteOpacity
-                  : batchPickerFor === "glowColor"
+                  : batchPickerFor === 'glowColor'
                     ? batchLocalOpacities.glowOpacity
                     : undefined
               }
               onOpacityPercentChange={(value: number) => {
-                if (batchPickerFor === "noteColor") {
+                if (batchPickerFor === 'noteColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChange("noteOpacity", value);
-                } else if (batchPickerFor === "glowColor") {
+                  handleBatchStyleChange('noteOpacity', value);
+                } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChange("noteGlowOpacity", value);
+                  handleBatchStyleChange('noteGlowOpacity', value);
                 }
               }}
               onOpacityPercentChangeComplete={(value: number) => {
-                if (batchPickerFor === "noteColor") {
+                if (batchPickerFor === 'noteColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     noteOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete("noteOpacity", value);
-                } else if (batchPickerFor === "glowColor") {
+                  handleBatchStyleChangeComplete('noteOpacity', value);
+                } else if (batchPickerFor === 'glowColor') {
                   setBatchLocalOpacities((prev) => ({
                     ...prev,
                     glowOpacity: value,
                   }));
-                  handleBatchStyleChangeComplete("noteGlowOpacity", value);
+                  handleBatchStyleChangeComplete('noteGlowOpacity', value);
                 }
               }}
               opacityPercentLabel={
-                batchPickerFor === "noteColor"
-                  ? t("keySetting.noteOpacity") || "노트 투명도"
-                  : batchPickerFor === "glowColor"
-                    ? t("keySetting.noteGlowOpacity") || "글로우 투명도"
+                batchPickerFor === 'noteColor'
+                  ? t('keySetting.noteOpacity') || '노트 투명도'
+                  : batchPickerFor === 'glowColor'
+                    ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
                     : undefined
               }
               opacityPercentMixed={
-                batchPickerFor === "noteColor"
+                batchPickerFor === 'noteColor'
                   ? noteOpacityMixed
-                  : batchPickerFor === "glowColor"
+                  : batchPickerFor === 'glowColor'
                     ? glowOpacityMixed
                     : false
               }
@@ -3155,38 +3195,39 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               referenceRef={batchImageButtonRef}
               panelElement={panelElement}
               idleImage={
-                styleMixedValueGetter((pos) => pos.inactiveImage, "").isMixed
-                  ? ""
-                  : styleMixedValueGetter((pos) => pos.inactiveImage, "").value
+                styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
+                  ? ''
+                  : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
               }
               activeImage={
-                styleMixedValueGetter((pos) => pos.activeImage, "").isMixed
-                  ? ""
-                  : styleMixedValueGetter((pos) => pos.activeImage, "").value
+                styleMixedValueGetter((pos) => pos.activeImage, '').isMixed
+                  ? ''
+                  : styleMixedValueGetter((pos) => pos.activeImage, '').value
               }
               idleTransparent={
                 styleMixedValueGetter((pos) => pos.idleTransparent, false).value
               }
               activeTransparent={
-                styleMixedValueGetter((pos) => pos.activeTransparent, false).value
+                styleMixedValueGetter((pos) => pos.activeTransparent, false)
+                  .value
               }
               onIdleImageChange={(imageUrl: string) => {
-                handleBatchStyleChangeComplete("inactiveImage", imageUrl);
+                handleBatchStyleChangeComplete('inactiveImage', imageUrl);
               }}
               onActiveImageChange={(imageUrl: string) => {
-                handleBatchStyleChangeComplete("activeImage", imageUrl);
+                handleBatchStyleChangeComplete('activeImage', imageUrl);
               }}
               onIdleTransparentChange={(value: boolean) => {
-                handleBatchStyleChangeComplete("idleTransparent", value);
+                handleBatchStyleChangeComplete('idleTransparent', value);
               }}
               onActiveTransparentChange={(value: boolean) => {
-                handleBatchStyleChangeComplete("activeTransparent", value);
+                handleBatchStyleChangeComplete('activeTransparent', value);
               }}
               onIdleImageReset={() => {
-                handleBatchStyleChangeComplete("inactiveImage", "");
+                handleBatchStyleChangeComplete('inactiveImage', '');
               }}
               onActiveImageReset={() => {
-                handleBatchStyleChangeComplete("activeImage", "");
+                handleBatchStyleChangeComplete('activeImage', '');
               }}
               onClose={() => setShowBatchImagePicker(false)}
             />
@@ -3204,17 +3245,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) {
     const graphShapeOptions = [
       {
-        label: t("propertiesPanel.graphShapeLine") || "Line",
-        value: "line",
+        label: t('propertiesPanel.graphShapeLine') || 'Line',
+        value: 'line',
       },
       {
-        label: t("propertiesPanel.graphShapeBar") || "Bar",
-        value: "bar",
+        label: t('propertiesPanel.graphShapeBar') || 'Bar',
+        value: 'bar',
       },
     ];
     const graphTypeState = getMixedValueGraphs(
-      (pos) => pos.graphType || "line",
-      "line",
+      (pos) => pos.graphType || 'line',
+      'line',
     );
     const showAvgLineState = getMixedValueGraphs(
       (pos) => pos.showAvgLine ?? true,
@@ -3225,15 +3266,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       1000,
     );
     const graphColorState = getMixedValueGraphs(
-      (pos) => pos.graphColor || "#86EFAC",
-      "#86EFAC",
+      (pos) => pos.graphColor || '#86EFAC',
+      '#86EFAC',
     );
     const graphAnimationState = getMixedValueGraphs(
       (pos) => pos.graphAnimationEnabled ?? true,
       true,
     );
     const hasLineGraph = getSelectedGraphsData().some(
-      (data) => (data.position?.graphType || "line") === "line",
+      (data) => (data.position?.graphType || 'line') === 'line',
     );
     const batchGraphSpacing = getBatchSpacingValue();
 
@@ -3260,10 +3301,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       renameCancelledRef.current = false;
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      if (e.key === 'Enter') {
                         e.preventDefault();
                         (e.target as HTMLInputElement).blur();
-                      } else if (e.key === "Escape") {
+                      } else if (e.key === 'Escape') {
                         e.preventDefault();
                         handleRenameCancel();
                       }
@@ -3281,7 +3322,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <button
                       onClick={handleRenameStart}
                       className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
-                      title={t("contextMenu.rename") || "Rename"}
+                      title={t('contextMenu.rename') || 'Rename'}
                     >
                       <RenameIcon />
                     </button>
@@ -3289,7 +3330,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 )
               ) : (
                 <span className="text-[#DBDEE8] text-style-2">
-                  {t("propertiesPanel.multiSelection") || "다중 선택"}
+                  {t('propertiesPanel.multiSelection') || '다중 선택'}
                 </span>
               )}
               {!selectedGroupInfo && (
@@ -3302,20 +3343,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <button
                 onClick={handleToggleMode}
                 className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-                title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+                title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
               >
                 <ModeToggleIcon mode="layer" />
               </button>
               <button
                 onClick={handleTogglePanel}
                 className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-                title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+                title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
               >
                 <SidebarToggleIcon isOpen={true} />
               </button>
             </div>
           </div>
-
         </div>
 
         <div className="flex-1 properties-panel-overlay-scroll">
@@ -3332,7 +3372,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 afterSizeContent={
                   <>
                     <PropertyRow
-                      label={t("propertiesPanel.graphShape") || "Graph Shape"}
+                      label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                     >
                       {graphTypeState.isMixed ? (
                         <span className="text-[#6B6D75] text-style-4 italic">
@@ -3353,8 +3393,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     {hasLineGraph && (
                       <div className="flex justify-between items-center w-full h-[23px]">
                         <p className="text-white text-style-2">
-                          {t("propertiesPanel.graphShowAverageLine") ||
-                            "Show Average Line"}
+                          {t('propertiesPanel.graphShowAverageLine') ||
+                            'Show Average Line'}
                         </p>
                         <Checkbox
                           checked={showAvgLineState.value}
@@ -3368,7 +3408,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     )}
 
                     <PropertyRow
-                      label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+                      label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                     >
                       {graphSpeedState.isMixed ? (
                         <span className="text-[#6B6D75] text-style-4 italic">
@@ -3381,7 +3421,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         onChange={(value) => {
                           const clamped = Math.max(500, Math.min(5000, value));
                           const snapped = Math.round(clamped / 100) * 100;
-                          handleGraphBatchSharedSetting({ graphSpeed: snapped });
+                          handleGraphBatchSharedSetting({
+                            graphSpeed: snapped,
+                          });
                         }}
                         min={500}
                         max={5000}
@@ -3391,7 +3433,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     </PropertyRow>
 
                     <PropertyRow
-                      label={t("propertiesPanel.graphColor") || "Graph Color"}
+                      label={t('propertiesPanel.graphColor') || 'Graph Color'}
                     >
                       {graphColorState.isMixed ? (
                         <span className="text-[#6B6D75] text-style-4 italic">
@@ -3411,8 +3453,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
                     <div className="flex justify-between items-center w-full h-[23px]">
                       <p className="text-white text-style-2">
-                        {t("propertiesPanel.graphAnimation") ||
-                          "Graph Animation"}
+                        {t('propertiesPanel.graphAnimation') ||
+                          'Graph Animation'}
                       </p>
                       <div className="flex items-center gap-[6px]">
                         {graphAnimationState.isMixed ? (
@@ -3457,7 +3499,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={batchThumbRefFor(TABS.STYLE)}
                 className="properties-panel-overlay-thumb"
-                style={{ display: "none" }}
+                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -3469,14 +3511,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             referenceRef={batchImageButtonRef}
             panelElement={panelElement}
             idleImage={
-              getMixedValueGraphs((pos) => pos.inactiveImage, "").isMixed
-                ? ""
-                : getMixedValueGraphs((pos) => pos.inactiveImage, "").value
+              getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
+                ? ''
+                : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
             }
             activeImage={
-              getMixedValueGraphs((pos) => pos.activeImage, "").isMixed
-                ? ""
-                : getMixedValueGraphs((pos) => pos.activeImage, "").value
+              getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
+                ? ''
+                : getMixedValueGraphs((pos) => pos.activeImage, '').value
             }
             idleTransparent={
               getMixedValueGraphs((pos) => pos.idleTransparent, false).value
@@ -3497,10 +3539,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               handleGraphBatchSharedSetting({ activeTransparent: value });
             }}
             onIdleImageReset={() => {
-              handleGraphBatchSharedSetting({ inactiveImage: "" });
+              handleGraphBatchSharedSetting({ inactiveImage: '' });
             }}
             onActiveImageReset={() => {
-              handleGraphBatchSharedSetting({ activeImage: "" });
+              handleGraphBatchSharedSetting({ activeImage: '' });
             }}
             onClose={() => setShowBatchImagePicker(false)}
           />
@@ -3518,8 +3560,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const pluginTitle =
       selectedPluginDefinition?.name ||
       selectedPluginElement?.definitionId ||
-      t("propertiesPanel.pluginElement") ||
-      "Plugin";
+      t('propertiesPanel.pluginElement') ||
+      'Plugin';
 
     return (
       <div
@@ -3534,14 +3576,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <button
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
             <button
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -3555,7 +3597,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="p-[12px] flex flex-col gap-[12px]">
               {isPluginResizable && (
                 <>
-                  <PropertyRow label={t("propertiesPanel.position") || "위치"}>
+                  <PropertyRow label={t('propertiesPanel.position') || '위치'}>
                     <NumberInput
                       value={selectedPluginElement?.position.x ?? 0}
                       onChange={handlePluginPositionXChange}
@@ -3575,7 +3617,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       decimalScale={1}
                     />
                   </PropertyRow>
-                  <PropertyRow label={t("propertiesPanel.size") || "크기"}>
+                  <PropertyRow label={t('propertiesPanel.size') || '크기'}>
                     <NumberInput
                       value={pluginDisplaySize.width}
                       onChange={handlePluginWidthChange}
@@ -3600,14 +3642,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               )}
               {!hasSinglePluginSelection && (
                 <p className="text-[#6B6D75] text-style-4 text-center">
-                  {t("propertiesPanel.pluginMultiSelection") ||
-                    "플러그인 요소는 한 번에 하나만 편집할 수 있습니다."}
+                  {t('propertiesPanel.pluginMultiSelection') ||
+                    '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'}
                 </p>
               )}
               {hasSinglePluginSelection && showModalHint && (
                 <p className="text-[#6B6D75] text-style-4 text-center">
-                  {t("propertiesPanel.pluginModalHint") ||
-                    "이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요."}
+                  {t('propertiesPanel.pluginModalHint') ||
+                    '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
                 </p>
               )}
               {showSettings &&
@@ -3616,7 +3658,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   resolvedPluginSettings,
                   selectedPluginDefinition?.messages,
                   `plugin-element-${
-                    selectedPluginElement?.fullId ?? "unknown"
+                    selectedPluginElement?.fullId ?? 'unknown'
                   }`,
                   handlePluginSettingChange,
                   { wrap: false },
@@ -3626,7 +3668,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={setPluginThumbRef}
                 className="properties-panel-overlay-thumb"
-                style={{ display: "none" }}
+                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -3644,19 +3686,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) {
     const graphShapeOptions = [
       {
-        label: t("propertiesPanel.graphShapeLine") || "Line",
-        value: "line",
+        label: t('propertiesPanel.graphShapeLine') || 'Line',
+        value: 'line',
       },
       {
-        label: t("propertiesPanel.graphShapeBar") || "Bar",
-        value: "bar",
+        label: t('propertiesPanel.graphShapeBar') || 'Bar',
+        value: 'bar',
       },
     ];
 
     const resolvedGraphStatType =
-      (singleGraphPosition.statType as StatItemType) || "kps";
+      (singleGraphPosition.statType as StatItemType) || 'kps';
     const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
-    const graphTitle = (singleGraphPosition as any).layerName || graphDefaultTitle;
+    const graphTitle =
+      (singleGraphPosition as any).layerName || graphDefaultTitle;
 
     return (
       <div
@@ -3678,10 +3721,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 renameCancelledRef.current = false;
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === 'Enter') {
                   e.preventDefault();
                   (e.target as HTMLInputElement).blur();
-                } else if (e.key === "Escape") {
+                } else if (e.key === 'Escape') {
                   e.preventDefault();
                   handleRenameCancel();
                 }
@@ -3699,7 +3742,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <button
                 onClick={handleRenameStart}
                 className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
-                title={t("contextMenu.rename") || "Rename"}
+                title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
               </button>
@@ -3709,14 +3752,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <button
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
             <button
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.closePanel") || "Close"}
+              title={t('propertiesPanel.closePanel') || 'Close'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -3728,7 +3771,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             className="properties-panel-overlay-viewport"
           >
             <div className="p-[12px] flex flex-col gap-[12px]">
-              <PropertyRow label={t("propertiesPanel.position") || "Position"}>
+              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.dx || 0)}
                   onChange={(value) =>
@@ -3755,7 +3798,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 />
               </PropertyRow>
 
-              <PropertyRow label={t("propertiesPanel.size") || "Size"}>
+              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
                 <NumberInput
                   value={Math.round(singleGraphPosition.width || 200)}
                   onChange={(value) =>
@@ -3785,11 +3828,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <SectionDivider />
 
               <PropertyRow
-                label={t("propertiesPanel.graphShape") || "Graph Shape"}
+                label={t('propertiesPanel.graphShape') || 'Graph Shape'}
               >
                 <Dropdown
                   options={graphShapeOptions}
-                  value={singleGraphPosition.graphType || "line"}
+                  value={singleGraphPosition.graphType || 'line'}
                   onChange={(value) =>
                     handleGraphUpdate({
                       index: singleGraphIndex!,
@@ -3799,11 +3842,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 />
               </PropertyRow>
 
-              {(singleGraphPosition.graphType || "line") === "line" && (
+              {(singleGraphPosition.graphType || 'line') === 'line' && (
                 <div className="flex justify-between items-center w-full h-[23px]">
                   <p className="text-white text-style-2">
-                    {t("propertiesPanel.graphShowAverageLine") ||
-                      "Show Average Line"}
+                    {t('propertiesPanel.graphShowAverageLine') ||
+                      'Show Average Line'}
                   </p>
                   <Checkbox
                     checked={singleGraphPosition.showAvgLine ?? true}
@@ -3818,7 +3861,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               )}
 
               <PropertyRow
-                label={t("propertiesPanel.graphSpeed") || "Graph Speed"}
+                label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.graphSpeed || 1000)}
@@ -3838,10 +3881,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </PropertyRow>
 
               <PropertyRow
-                label={t("propertiesPanel.graphColor") || "Graph Color"}
+                label={t('propertiesPanel.graphColor') || 'Graph Color'}
               >
                 <ColorInput
-                  value={singleGraphPosition.graphColor || "#86EFAC"}
+                  value={singleGraphPosition.graphColor || '#86EFAC'}
                   onChange={() => {}}
                   onChangeComplete={(value) =>
                     handleGraphUpdate({
@@ -3856,7 +3899,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
               <div className="flex justify-between items-center w-full h-[23px]">
                 <p className="text-white text-style-2">
-                  {t("propertiesPanel.graphAnimation") || "Graph Animation"}
+                  {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                 </p>
                 <Checkbox
                   checked={singleGraphPosition.graphAnimationEnabled ?? true}
@@ -3874,11 +3917,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <SectionDivider />
 
               <PropertyRow
-                label={t("propertiesPanel.backgroundColor") || "Background Color"}
+                label={
+                  t('propertiesPanel.backgroundColor') || 'Background Color'
+                }
               >
                 <ColorInput
                   value={
-                    singleGraphPosition.backgroundColor || "rgba(17, 17, 20, 0.9)"
+                    singleGraphPosition.backgroundColor ||
+                    'rgba(17, 17, 20, 0.9)'
                   }
                   onChange={() => {}}
                   onChangeComplete={(value) =>
@@ -3893,11 +3939,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </PropertyRow>
 
               <PropertyRow
-                label={t("propertiesPanel.borderColor") || "Border Color"}
+                label={t('propertiesPanel.borderColor') || 'Border Color'}
               >
                 <ColorInput
                   value={
-                    singleGraphPosition.borderColor || "rgba(255, 255, 255, 0.1)"
+                    singleGraphPosition.borderColor ||
+                    'rgba(255, 255, 255, 0.1)'
                   }
                   onChange={() => {}}
                   onChangeComplete={(value) =>
@@ -3912,7 +3959,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </PropertyRow>
 
               <PropertyRow
-                label={t("propertiesPanel.borderWidth") || "Border Width"}
+                label={t('propertiesPanel.borderWidth') || 'Border Width'}
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderWidth ?? 3)}
@@ -3929,7 +3976,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </PropertyRow>
 
               <PropertyRow
-                label={t("propertiesPanel.borderRadius") || "Border Radius"}
+                label={t('propertiesPanel.borderRadius') || 'Border Radius'}
               >
                 <NumberInput
                   value={Math.round(singleGraphPosition.borderRadius ?? 8)}
@@ -3946,19 +3993,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </PropertyRow>
 
               <PropertyRow
-                label={t("propertiesPanel.customImage") || "Custom Image"}
+                label={t('propertiesPanel.customImage') || 'Custom Image'}
               >
                 <button
                   ref={graphImageButtonRef}
                   type="button"
                   className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
                     showGraphImagePicker
-                      ? "border-[#459BF8]"
-                      : "border-[#3A3943]"
+                      ? 'border-[#459BF8]'
+                      : 'border-[#3A3943]'
                   } text-[#DBDEE8] text-style-4`}
                   onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
                 >
-                  {t("propertiesPanel.configure") || "Configure"}
+                  {t('propertiesPanel.configure') || 'Configure'}
                 </button>
               </PropertyRow>
 
@@ -3968,7 +4015,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
                   <div className="flex justify-between items-center w-full h-[23px]">
                     <p className="text-white text-style-2">
-                      {t("propertiesPanel.useInlineStyles") || "인라인 스타일 우선"}
+                      {t('propertiesPanel.useInlineStyles') ||
+                        '인라인 스타일 우선'}
                     </p>
                     <Checkbox
                       checked={singleGraphPosition.useInlineStyles ?? false}
@@ -3983,14 +4031,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     />
                   </div>
 
-                  <PropertyRow label={t("propertiesPanel.className") || "클래스"}>
+                  <PropertyRow
+                    label={t('propertiesPanel.className') || '클래스'}
+                  >
                     <TextInput
                       value={graphClassNameDraft}
                       onChange={setGraphClassNameDraft}
                       onBlur={() =>
                         handleGraphUpdate({
                           index: singleGraphIndex!,
-                          className: graphClassNameDraft || "",
+                          className: graphClassNameDraft || '',
                         } as any)
                       }
                       placeholder="className"
@@ -4004,7 +4054,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={singleThumbRefFor(TABS.STYLE)}
                 className="properties-panel-overlay-thumb"
-                style={{ display: "none" }}
+                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -4015,19 +4065,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             open={showGraphImagePicker}
             referenceRef={graphImageButtonRef}
             panelElement={panelElement}
-            idleImage={singleGraphPosition.inactiveImage || ""}
-            activeImage={singleGraphPosition.activeImage || ""}
+            idleImage={singleGraphPosition.inactiveImage || ''}
+            activeImage={singleGraphPosition.activeImage || ''}
             idleTransparent={false}
             activeTransparent={false}
             idleImageFit={
               singleGraphPosition.idleImageFit ||
               singleGraphPosition.imageFit ||
-              "cover"
+              'cover'
             }
             activeImageFit={
               singleGraphPosition.activeImageFit ||
               singleGraphPosition.imageFit ||
-              "cover"
+              'cover'
             }
             onIdleImageChange={(imageUrl: string) =>
               handleGraphUpdate({
@@ -4068,13 +4118,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             onIdleImageReset={() =>
               handleGraphUpdate({
                 index: singleGraphIndex!,
-                inactiveImage: "",
+                inactiveImage: '',
               } as any)
             }
             onActiveImageReset={() =>
               handleGraphUpdate({
                 index: singleGraphIndex!,
-                activeImage: "",
+                activeImage: '',
               } as any)
             }
             onClose={() => setShowGraphImagePicker(false)}
@@ -4096,19 +4146,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
   const statBaseOptions = [
-    { label: "KPS", value: "kps" },
-    { label: "Total", value: "total" },
+    { label: 'KPS', value: 'kps' },
+    { label: 'Total', value: 'total' },
   ];
 
   const statKpsOptions = [
-    { label: "KPS", value: "kps" },
-    { label: "AVG", value: "kpsAvg" },
-    { label: "MAX", value: "kpsMax" },
+    { label: 'KPS', value: 'kps' },
+    { label: 'AVG', value: 'kpsAvg' },
+    { label: 'MAX', value: 'kpsMax' },
   ];
 
   const resolvedStatType =
-    (singleStatPosition?.statType as StatItemType) || "kps";
-  const statBaseValue = resolvedStatType === "total" ? "total" : "kps";
+    (singleStatPosition?.statType as StatItemType) || 'kps';
+  const statBaseValue = resolvedStatType === 'total' ? 'total' : 'kps';
   const statTitle = getStatTypeLabel(resolvedStatType);
 
   const keyLikeIndex = isSingleStat ? singleStatIndex! : singleKeyIndex!;
@@ -4118,7 +4168,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const keyLikeDefaultTitle = isSingleStat
     ? statTitle
-    : singleKeyInfo?.displayName || singleKeyCode || "Key";
+    : singleKeyInfo?.displayName || singleKeyCode || 'Key';
   const keyLikeTitle = keyLikePosition?.layerName || keyLikeDefaultTitle;
 
   const keyLikeCode = isSingleStat ? null : singleKeyCode;
@@ -4147,27 +4197,27 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const mappingControlLayout = isSingleStat ? (
     <>
-      <PropertyRow label={t("propertiesPanel.statType") || "Stat Type"}>
+      <PropertyRow label={t('propertiesPanel.statType') || 'Stat Type'}>
         <Dropdown
           options={statBaseOptions}
           value={statBaseValue}
           onChange={(value) => {
-            if (value === "total") {
+            if (value === 'total') {
               handleStatUpdate({
                 index: singleStatIndex!,
-                statType: "total",
+                statType: 'total',
               });
               return;
             }
             handleStatUpdate({
               index: singleStatIndex!,
-              statType: resolvedStatType === "total" ? "kps" : resolvedStatType,
+              statType: resolvedStatType === 'total' ? 'kps' : resolvedStatType,
             });
           }}
         />
       </PropertyRow>
-      {statBaseValue === "kps" ? (
-        <PropertyRow label={t("propertiesPanel.statKpsType") || "KPS Type"}>
+      {statBaseValue === 'kps' ? (
+        <PropertyRow label={t('propertiesPanel.statKpsType') || 'KPS Type'}>
           <Dropdown
             options={statKpsOptions}
             value={resolvedStatType}
@@ -4206,10 +4256,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 renameCancelledRef.current = false;
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === 'Enter') {
                   e.preventDefault();
                   (e.target as HTMLInputElement).blur();
-                } else if (e.key === "Escape") {
+                } else if (e.key === 'Escape') {
                   e.preventDefault();
                   handleRenameCancel();
                 }
@@ -4227,7 +4277,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <button
                 onClick={handleRenameStart}
                 className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
-                title={t("contextMenu.rename") || "Rename"}
+                title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
               </button>
@@ -4239,7 +4289,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <button
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.switchToLayer") || "Switch to Layer"}
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
@@ -4247,7 +4297,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <button
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.closePanel") || "속성 패널 닫기"}
+              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -4271,7 +4321,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div
           ref={singleScrollRefFor(TABS.STYLE)}
           className={`properties-panel-overlay-viewport ${
-            activeTab === TABS.STYLE ? "" : "hidden"
+            activeTab === TABS.STYLE ? '' : 'hidden'
           }`}
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
@@ -4289,7 +4339,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               mappingControlLayout={mappingControlLayout}
               mappingLabel={
                 isSingleStat
-                  ? t("propertiesPanel.statType") || "Stat Type"
+                  ? t('propertiesPanel.statType') || 'Stat Type'
                   : undefined
               }
               showSoundControls={!isSingleStat}
@@ -4322,7 +4372,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={singleThumbRefFor(TABS.STYLE)}
               className="properties-panel-overlay-thumb"
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
             />
           </div>
         </div>
@@ -4332,7 +4382,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div
             ref={singleScrollRefFor(TABS.NOTE)}
             className={`properties-panel-overlay-viewport ${
-              activeTab === TABS.NOTE ? "" : "hidden"
+              activeTab === TABS.NOTE ? '' : 'hidden'
             }`}
           >
             <div className="p-[12px] flex flex-col gap-[12px]">
@@ -4349,7 +4399,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div
                 ref={singleThumbRefFor(TABS.NOTE)}
                 className="properties-panel-overlay-thumb"
-                style={{ display: "none" }}
+                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -4359,7 +4409,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <div
           ref={singleScrollRefFor(TABS.COUNTER)}
           className={`properties-panel-overlay-viewport ${
-            activeTab === TABS.COUNTER ? "" : "hidden"
+            activeTab === TABS.COUNTER ? '' : 'hidden'
           }`}
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
@@ -4377,7 +4427,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div
               ref={singleThumbRefFor(TABS.COUNTER)}
               className="properties-panel-overlay-thumb"
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
             />
           </div>
         </div>

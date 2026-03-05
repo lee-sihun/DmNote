@@ -1,26 +1,23 @@
 import {
   type NoteSettings,
   normalizeNoteSettings,
-} from "@src/types/noteSettings";
-import {
-  type FontSettings,
-  normalizeFontSettings,
-} from "@src/types/fonts";
-import { type CustomCss } from "@src/types/css";
-import { type CustomJs } from "@src/types/js";
-import type { ShortcutsState } from "@src/types/shortcuts";
+} from '@src/types/noteSettings';
+import { type FontSettings, normalizeFontSettings } from '@src/types/fonts';
+import { type CustomCss } from '@src/types/css';
+import { type CustomJs } from '@src/types/js';
+import type { ShortcutsState } from '@src/types/shortcuts';
 import {
   getDefaultSettingsState,
   getDefaultGridSettings,
-} from "@src/renderer/defaults";
+} from '@src/renderer/defaults';
 
 export type OverlayResizeAnchor =
-  | "top-left"
-  | "top-right"
-  | "bottom-left"
-  | "bottom-right"
-  | "center"
-  | "fixed-position";
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'center'
+  | 'fixed-position';
 
 export interface GridSettings {
   alignmentGuides: boolean;
@@ -63,12 +60,12 @@ export const DEFAULT_SETTINGS_STATE: SettingsState = getDefaultSettingsState();
 export type SettingsPatchInput = Partial<
   Omit<
     SettingsState,
-    | "noteSettings"
-    | "fontSettings"
-    | "customCSS"
-    | "customJS"
-    | "gridSettings"
-    | "shortcuts"
+    | 'noteSettings'
+    | 'fontSettings'
+    | 'customCSS'
+    | 'customJS'
+    | 'gridSettings'
+    | 'shortcuts'
   >
 > & {
   noteSettings?: Partial<NoteSettings>;
@@ -82,12 +79,12 @@ export type SettingsPatchInput = Partial<
 export type SettingsPatch = Partial<
   Omit<
     SettingsState,
-    | "noteSettings"
-    | "fontSettings"
-    | "customCSS"
-    | "customJS"
-    | "gridSettings"
-    | "shortcuts"
+    | 'noteSettings'
+    | 'fontSettings'
+    | 'customCSS'
+    | 'customJS'
+    | 'gridSettings'
+    | 'shortcuts'
   >
 > & {
   noteSettings?: NoteSettings;
@@ -105,7 +102,7 @@ export interface SettingsDiff {
 
 export function normalizeSettingsPatch(
   patch: SettingsPatchInput,
-  current: SettingsState
+  current: SettingsState,
 ): SettingsPatch {
   const next: SettingsPatch = {};
   const entries = Object.entries(patch) as Array<
@@ -114,39 +111,39 @@ export function normalizeSettingsPatch(
 
   for (const [key, value] of entries) {
     if (value === undefined) continue;
-    if (key === "noteSettings") {
+    if (key === 'noteSettings') {
       next.noteSettings = normalizeNoteSettings({
         ...current.noteSettings,
         ...(value as Partial<NoteSettings>),
       });
       continue;
     }
-    if (key === "fontSettings") {
+    if (key === 'fontSettings') {
       next.fontSettings = normalizeFontSettings(value as FontSettings);
       continue;
     }
-    if (key === "customCSS") {
+    if (key === 'customCSS') {
       next.customCSS = {
         ...current.customCSS,
         ...(value as Partial<CustomCss>),
       } as CustomCss;
       continue;
     }
-    if (key === "customJS") {
+    if (key === 'customJS') {
       next.customJS = {
         ...current.customJS,
         ...(value as Partial<CustomJs>),
       } as CustomJs;
       continue;
     }
-    if (key === "gridSettings") {
+    if (key === 'gridSettings') {
       next.gridSettings = {
         ...current.gridSettings,
         ...(value as Partial<GridSettings>),
       } as GridSettings;
       continue;
     }
-    if (key === "shortcuts") {
+    if (key === 'shortcuts') {
       next.shortcuts = {
         ...current.shortcuts,
         ...(value as Partial<ShortcutsState>),

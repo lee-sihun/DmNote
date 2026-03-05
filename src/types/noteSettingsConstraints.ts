@@ -73,7 +73,7 @@ export const getConstraints = (key: keyof typeof NOTE_SETTINGS_CONSTRAINTS) => {
  */
 export const clampValue = (
   value: number,
-  key: keyof typeof NOTE_SETTINGS_CONSTRAINTS
+  key: keyof typeof NOTE_SETTINGS_CONSTRAINTS,
 ): number => {
   const constraint = NOTE_SETTINGS_CONSTRAINTS[key];
   return Math.min(Math.max(value, constraint.min), constraint.max);

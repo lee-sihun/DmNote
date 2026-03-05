@@ -1,10 +1,10 @@
 use std::{fs, path::Path};
 
+use log::info;
 use rfd::FileDialog;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
-use log::info;
 
 use crate::{
     app_state::AppState,
@@ -92,11 +92,13 @@ fn get_normalized_script(state: &State<AppState>) -> Result<CustomJs, String> {
 }
 
 fn persist_script(state: &State<AppState>, script: &CustomJs) -> Result<CustomJs, String> {
-    state.store.update(|store| {
-        store.custom_js = script.clone();
-    })
-    .map(|data| data.custom_js.clone())
-    .map_err(|err| err.to_string())
+    state
+        .store
+        .update(|store| {
+            store.custom_js = script.clone();
+        })
+        .map(|data| data.custom_js.clone())
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
@@ -349,7 +351,8 @@ pub fn js_set_plugin_enabled(
             "js_set_plugin_enabled: failed to match id={} among {} plugins (names={})",
             id,
             script.plugins.len(),
-            script.plugins
+            script
+                .plugins
                 .iter()
                 .map(|p| format!("{}:{}", p.id, p.name))
                 .collect::<Vec<_>>()

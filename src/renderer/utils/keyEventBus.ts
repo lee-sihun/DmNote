@@ -29,7 +29,7 @@ class KeyEventBus {
         try {
           listener(payload);
         } catch (error) {
-          console.error("[KeyEventBus] Listener error:", error);
+          console.error('[KeyEventBus] Listener error:', error);
         }
       });
     });

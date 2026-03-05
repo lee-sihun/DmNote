@@ -92,15 +92,17 @@ pub struct CursorSettingsResponse {
 #[tauri::command(permission = "dmnote-allow-all")]
 pub fn get_cursor_settings() -> CursorSettingsResponse {
     let settings = get_macos_cursor_settings();
-    
-    let fill_color = settings.fill_color
+
+    let fill_color = settings
+        .fill_color
         .map(rgb_to_hex)
         .unwrap_or_else(|| "#000000".to_string());
-    
-    let outline_color = settings.outline_color
+
+    let outline_color = settings
+        .outline_color
         .map(rgb_to_hex)
         .unwrap_or_else(|| "#FFFFFF".to_string());
-    
+
     CursorSettingsResponse {
         size: settings.size,
         base_size: 24,

@@ -1,12 +1,12 @@
-import { useState, useCallback } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
-import { applyCounterSnapshot } from "@stores/keyCounterSignals";
+import { useState, useCallback } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
+import { applyCounterSnapshot } from '@stores/keyCounterSignals';
 import type {
   CounterAnimationBezier,
   KeyMappings,
@@ -14,11 +14,11 @@ import type {
   NoteColor,
   KeyCounterSettings,
   ImageFit,
-} from "@src/types/keys";
+} from '@src/types/keys';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
+} from '@src/types/keys';
 
 type SelectedKey = { key: string; index: number } | null;
 
@@ -97,7 +97,7 @@ export function useKeyManager() {
       positions,
       statPositions,
       graphPositions,
-      pluginElements
+      pluginElements,
     );
   }, [
     keyMappings,
@@ -131,7 +131,7 @@ export function useKeyManager() {
     };
     setPositions(nextPositions);
     window.api.keys.updatePositions(nextPositions).catch((error) => {
-      console.error("Failed to update key positions", error);
+      console.error('Failed to update key positions', error);
     });
   };
 
@@ -164,7 +164,7 @@ export function useKeyManager() {
                   keyData.idleTransparent ?? value.idleTransparent ?? false,
                 width: keyData.width,
                 height: keyData.height,
-                noteColor: keyData.noteColor ?? value.noteColor ?? "#FFFFFF",
+                noteColor: keyData.noteColor ?? value.noteColor ?? '#FFFFFF',
                 noteOpacity: keyData.noteOpacity ?? value.noteOpacity ?? 80,
                 noteEffectEnabled:
                   keyData.noteEffectEnabled ?? value.noteEffectEnabled ?? true,
@@ -178,7 +178,7 @@ export function useKeyManager() {
                   keyData.noteAutoYCorrection ??
                   value.noteAutoYCorrection ??
                   true,
-                className: keyData.className ?? value.className ?? "",
+                className: keyData.className ?? value.className ?? '',
               }
             : value,
         ),
@@ -191,7 +191,7 @@ export function useKeyManager() {
         window.api.keys.update(updatedMappings),
         window.api.keys.updatePositions(updatedPositions),
       ]).catch((error) => {
-        console.error("Failed to persist key update", error);
+        console.error('Failed to persist key update', error);
       });
 
       setSelectedKey(null);
@@ -206,7 +206,7 @@ export function useKeyManager() {
 
     const updatedMappings: KeyMappings = {
       ...keyMappings,
-      [selectedKeyType]: [...mapping, ""],
+      [selectedKeyType]: [...mapping, ''],
     };
 
     const updatedPositions: KeyPositions = {
@@ -219,22 +219,22 @@ export function useKeyManager() {
           width: 60,
           height: 60,
           hidden: false,
-          activeImage: "",
-          inactiveImage: "",
-          soundPath: "",
+          activeImage: '',
+          inactiveImage: '',
+          soundPath: '',
           soundVolume: 100,
           activeTransparent: false,
           idleTransparent: false,
           count: 0,
-          noteColor: "#FFFFFF",
+          noteColor: '#FFFFFF',
           noteOpacity: 80,
           noteEffectEnabled: true,
           noteGlowEnabled: false,
           noteGlowSize: 20,
           noteGlowOpacity: 70,
-          noteGlowColor: "#FFFFFF",
+          noteGlowColor: '#FFFFFF',
           noteAutoYCorrection: true,
-          className: "",
+          className: '',
           counter: createDefaultCounterSettings(),
         },
       ],
@@ -247,7 +247,7 @@ export function useKeyManager() {
       window.api.keys.update(updatedMappings),
       window.api.keys.updatePositions(updatedPositions),
     ]).catch((error) => {
-      console.error("Failed to persist new key", error);
+      console.error('Failed to persist new key', error);
     });
   };
 
@@ -259,7 +259,7 @@ export function useKeyManager() {
 
     const updatedMappings: KeyMappings = {
       ...keyMappings,
-      [selectedKeyType]: [...mapping, ""],
+      [selectedKeyType]: [...mapping, ''],
     };
 
     const updatedPositions: KeyPositions = {
@@ -272,22 +272,22 @@ export function useKeyManager() {
           width: 60,
           height: 60,
           hidden: false,
-          activeImage: "",
-          inactiveImage: "",
-          soundPath: "",
+          activeImage: '',
+          inactiveImage: '',
+          soundPath: '',
           soundVolume: 100,
           activeTransparent: false,
           idleTransparent: false,
           count: 0,
-          noteColor: "#FFFFFF",
+          noteColor: '#FFFFFF',
           noteOpacity: 80,
           noteEffectEnabled: true,
           noteGlowEnabled: false,
           noteGlowSize: 20,
           noteGlowOpacity: 70,
-          noteGlowColor: "#FFFFFF",
+          noteGlowColor: '#FFFFFF',
           noteAutoYCorrection: true,
-          className: "",
+          className: '',
           counter: createDefaultCounterSettings(),
         },
       ],
@@ -300,7 +300,7 @@ export function useKeyManager() {
       window.api.keys.update(updatedMappings),
       window.api.keys.updatePositions(updatedPositions),
     ]).catch((error) => {
-      console.error("Failed to persist new key at position", error);
+      console.error('Failed to persist new key at position', error);
     });
   };
 
@@ -312,13 +312,13 @@ export function useKeyManager() {
     const sourceKey = mapping[sourceIndex];
     const sourcePosition = pos[sourceIndex];
 
-    if (typeof sourceKey === "undefined" || !sourcePosition) {
+    if (typeof sourceKey === 'undefined' || !sourcePosition) {
       return;
     }
 
     const clonedNoteColor =
       sourcePosition.noteColor &&
-      typeof sourcePosition.noteColor === "object" &&
+      typeof sourcePosition.noteColor === 'object' &&
       sourcePosition.noteColor !== null
         ? { ...sourcePosition.noteColor }
         : sourcePosition.noteColor;
@@ -375,7 +375,7 @@ export function useKeyManager() {
       window.api.keys.update(updatedMappings),
       window.api.keys.updatePositions(updatedPositions),
     ]).catch((error) => {
-      console.error("Failed to duplicate key", error);
+      console.error('Failed to duplicate key', error);
     });
   };
 
@@ -416,7 +416,7 @@ export function useKeyManager() {
 
     setPositions(updatedPositions);
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to update note color settings", error);
+      console.error('Failed to update note color settings', error);
     });
   };
 
@@ -461,7 +461,7 @@ export function useKeyManager() {
     setPositions(updatedPositions);
     // 미리보기라도 오버레이에 반영되도록 이벤트 브로드캐스트
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview note color settings", error);
+      console.error('Failed to preview note color settings', error);
     });
   };
 
@@ -525,25 +525,25 @@ export function useKeyManager() {
               activeTransparent:
                 updates.activeTransparent !== undefined
                   ? updates.activeTransparent
-                  : pos.activeTransparent ?? false,
+                  : (pos.activeTransparent ?? false),
               idleTransparent:
                 updates.idleTransparent !== undefined
                   ? updates.idleTransparent
-                  : pos.idleTransparent ?? false,
+                  : (pos.idleTransparent ?? false),
               width:
-                typeof updates.width === "number" &&
+                typeof updates.width === 'number' &&
                 !Number.isNaN(updates.width)
                   ? updates.width
                   : pos.width,
               height:
-                typeof updates.height === "number" &&
+                typeof updates.height === 'number' &&
                 !Number.isNaN(updates.height)
                   ? updates.height
                   : pos.height,
               className:
                 updates.className !== undefined
                   ? updates.className
-                  : pos.className ?? "",
+                  : (pos.className ?? ''),
               // 새 스타일 속성들
               backgroundColor:
                 updates.backgroundColor !== undefined
@@ -608,7 +608,7 @@ export function useKeyManager() {
 
     setPositions(updatedPositions);
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview key settings", error);
+      console.error('Failed to preview key settings', error);
     });
   };
 
@@ -677,9 +677,7 @@ export function useKeyManager() {
               ? update.inactiveImage
               : pos.inactiveImage,
           soundPath:
-            update.soundPath !== undefined
-              ? update.soundPath
-              : pos.soundPath,
+            update.soundPath !== undefined ? update.soundPath : pos.soundPath,
           soundVolume:
             update.soundVolume !== undefined
               ? update.soundVolume
@@ -687,23 +685,23 @@ export function useKeyManager() {
           activeTransparent:
             update.activeTransparent !== undefined
               ? update.activeTransparent
-              : pos.activeTransparent ?? false,
+              : (pos.activeTransparent ?? false),
           idleTransparent:
             update.idleTransparent !== undefined
               ? update.idleTransparent
-              : pos.idleTransparent ?? false,
+              : (pos.idleTransparent ?? false),
           width:
-            typeof update.width === "number" && !Number.isNaN(update.width)
+            typeof update.width === 'number' && !Number.isNaN(update.width)
               ? update.width
               : pos.width,
           height:
-            typeof update.height === "number" && !Number.isNaN(update.height)
+            typeof update.height === 'number' && !Number.isNaN(update.height)
               ? update.height
               : pos.height,
           className:
             update.className !== undefined
               ? update.className
-              : pos.className ?? "",
+              : (pos.className ?? ''),
           backgroundColor:
             update.backgroundColor !== undefined
               ? update.backgroundColor
@@ -766,7 +764,7 @@ export function useKeyManager() {
 
     setPositions(updatedPositions);
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to batch preview key settings", error);
+      console.error('Failed to batch preview key settings', error);
     });
   };
 
@@ -798,7 +796,7 @@ export function useKeyManager() {
 
     setPositions(updatedPositions);
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to update counter settings", error);
+      console.error('Failed to update counter settings', error);
     });
   };
 
@@ -829,7 +827,7 @@ export function useKeyManager() {
     setPositions(updatedPositions);
     // 미리보기라도 오버레이에 반영되도록 이벤트 브로드캐스트
     window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview counter settings", error);
+      console.error('Failed to preview counter settings', error);
     });
   };
 
@@ -856,7 +854,7 @@ export function useKeyManager() {
       window.api.keys.update(updatedMappings),
       window.api.keys.updatePositions(updatedPositions),
     ]).catch((error) => {
-      console.error("Failed to delete key", error);
+      console.error('Failed to delete key', error);
     });
 
     setSelectedKey(null);
@@ -888,11 +886,11 @@ export function useKeyManager() {
     try {
       await window.api.keys.updatePositions(updatedPositions);
       // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
+      window.api.bridge.sendTo('overlay', 'positions:sync', {
         positions: updatedPositions,
       });
     } catch (error) {
-      console.error("Failed to move key to front", error);
+      console.error('Failed to move key to front', error);
     } finally {
       setLocalUpdateInProgress(false);
     }
@@ -924,11 +922,11 @@ export function useKeyManager() {
     try {
       await window.api.keys.updatePositions(updatedPositions);
       // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
+      window.api.bridge.sendTo('overlay', 'positions:sync', {
         positions: updatedPositions,
       });
     } catch (error) {
-      console.error("Failed to move key to back", error);
+      console.error('Failed to move key to back', error);
     } finally {
       setLocalUpdateInProgress(false);
     }
@@ -1007,11 +1005,11 @@ export function useKeyManager() {
     try {
       await window.api.keys.updatePositions(updatedPositions);
       // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
+      window.api.bridge.sendTo('overlay', 'positions:sync', {
         positions: updatedPositions,
       });
     } catch (error) {
-      console.error("Failed to move key forward", error);
+      console.error('Failed to move key forward', error);
     } finally {
       setLocalUpdateInProgress(false);
     }
@@ -1090,11 +1088,11 @@ export function useKeyManager() {
     try {
       await window.api.keys.updatePositions(updatedPositions);
       // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
+      window.api.bridge.sendTo('overlay', 'positions:sync', {
         positions: updatedPositions,
       });
     } catch (error) {
-      console.error("Failed to move key backward", error);
+      console.error('Failed to move key backward', error);
     } finally {
       setLocalUpdateInProgress(false);
     }
@@ -1105,7 +1103,7 @@ export function useKeyManager() {
       await window.api.keys.resetMode(selectedKeyType);
       setSelectedKey(null);
     } catch (error) {
-      console.error("Failed to reset current mode", error);
+      console.error('Failed to reset current mode', error);
     }
   };
 
@@ -1131,7 +1129,9 @@ export function useKeyManager() {
         useStatItemStore.getState().setPositions(previousState.statPositions);
         useGraphItemStore.getState().setPositions(previousState.graphPositions);
         if (previousState.layerGroups !== undefined) {
-          useLayerGroupStore.getState().setLayerGroups(previousState.layerGroups);
+          useLayerGroupStore
+            .getState()
+            .setLayerGroups(previousState.layerGroups);
         }
 
         // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
@@ -1199,7 +1199,7 @@ export function useKeyManager() {
 
           // 오버레이로 동기화
           if (window.api?.bridge) {
-            window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+            window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
               elements: finalElements,
             });
           }
@@ -1216,23 +1216,25 @@ export function useKeyManager() {
           window.api.keys
             .updatePositions(previousState.positions)
             .catch((error) => {
-              console.error("Failed to apply undo positions", error);
+              console.error('Failed to apply undo positions', error);
             });
 
           window.api.statItems
             .updatePositions(previousState.statPositions as any)
             .catch((error) => {
-              console.error("Failed to apply undo stat positions", error);
+              console.error('Failed to apply undo stat positions', error);
             });
           window.api.graphItems
             .updatePositions(previousState.graphPositions as any)
             .catch((error) => {
-              console.error("Failed to apply undo graph positions", error);
+              console.error('Failed to apply undo graph positions', error);
             });
           if (previousState.layerGroups !== undefined) {
-            window.api.layerGroups.update(previousState.layerGroups).catch((error) => {
-              console.error("Failed to apply undo layer groups", error);
-            });
+            window.api.layerGroups
+              .update(previousState.layerGroups)
+              .catch((error) => {
+                console.error('Failed to apply undo layer groups', error);
+              });
           }
 
           if (previousState.keyCounters) {
@@ -1240,21 +1242,21 @@ export function useKeyManager() {
           }
 
           try {
-            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'statPositions:sync', {
               positions: previousState.statPositions,
             });
           } catch {
             // ignore
           }
           try {
-            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
               positions: previousState.graphPositions,
             });
           } catch {
             // ignore
           }
         } catch (error) {
-          console.error("Failed to apply undo", error);
+          console.error('Failed to apply undo', error);
         }
       }
     } finally {
@@ -1357,7 +1359,7 @@ export function useKeyManager() {
 
           // 오버레이로 동기화
           if (window.api?.bridge) {
-            window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+            window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
               elements: finalElements,
             });
           }
@@ -1369,23 +1371,25 @@ export function useKeyManager() {
           window.api.keys
             .updatePositions(nextState.positions)
             .catch((error) => {
-              console.error("Failed to apply redo positions", error);
+              console.error('Failed to apply redo positions', error);
             });
 
           window.api.statItems
             .updatePositions(nextState.statPositions as any)
             .catch((error) => {
-              console.error("Failed to apply redo stat positions", error);
+              console.error('Failed to apply redo stat positions', error);
             });
           window.api.graphItems
             .updatePositions(nextState.graphPositions as any)
             .catch((error) => {
-              console.error("Failed to apply redo graph positions", error);
+              console.error('Failed to apply redo graph positions', error);
             });
           if (nextState.layerGroups !== undefined) {
-            window.api.layerGroups.update(nextState.layerGroups).catch((error) => {
-              console.error("Failed to apply redo layer groups", error);
-            });
+            window.api.layerGroups
+              .update(nextState.layerGroups)
+              .catch((error) => {
+                console.error('Failed to apply redo layer groups', error);
+              });
           }
 
           if (nextState.keyCounters) {
@@ -1393,21 +1397,21 @@ export function useKeyManager() {
           }
 
           try {
-            window.api.bridge.sendTo("overlay", "statPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'statPositions:sync', {
               positions: nextState.statPositions,
             });
           } catch {
             // ignore
           }
           try {
-            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+            window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
               positions: nextState.graphPositions,
             });
           } catch {
             // ignore
           }
         } catch (error) {
-          console.error("Failed to apply redo", error);
+          console.error('Failed to apply redo', error);
         }
       }
     } finally {
@@ -1439,7 +1443,7 @@ export function useKeyManager() {
 
       setKeyMappings(updatedMappings);
       window.api.keys.update(updatedMappings).catch((error) => {
-        console.error("Failed to update key mapping", error);
+        console.error('Failed to update key mapping', error);
       });
     },
     [selectedKeyType, keyMappings, saveToHistory, setKeyMappings],
@@ -1470,7 +1474,7 @@ export function useKeyManager() {
       window.api.keys
         .updatePositions(updatedPositions)
         .catch((error) => {
-          console.error("Failed to update key style", error);
+          console.error('Failed to update key style', error);
         })
         .finally(() => {
           setLocalUpdateInProgress(false);
@@ -1524,7 +1528,7 @@ export function useKeyManager() {
       window.api.keys
         .updatePositions(updatedPositions)
         .catch((error) => {
-          console.error("Failed to batch update key styles", error);
+          console.error('Failed to batch update key styles', error);
         })
         .finally(() => {
           setLocalUpdateInProgress(false);

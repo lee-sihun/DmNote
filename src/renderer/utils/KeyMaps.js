@@ -40,17 +40,41 @@ export const keyMaps = {
   Digit9: { browserKey: '9', globalKey: '9', displayName: '9' },
 
   // 특수키
-  ShiftLeft: { browserKey: 'Shift', globalKey: 'LEFT SHIFT', displayName: 'LShift' },
-  ShiftRight: { browserKey: 'Shift', globalKey: 'RIGHT SHIFT', displayName: 'RShift' },
-  ControlLeft: { browserKey: 'Control', globalKey: 'LEFT CTRL', displayName: 'LCtrl' },
-  ControlRight: { browserKey: 'Control', globalKey: '25', displayName: 'RCtrl' },
+  ShiftLeft: {
+    browserKey: 'Shift',
+    globalKey: 'LEFT SHIFT',
+    displayName: 'LShift',
+  },
+  ShiftRight: {
+    browserKey: 'Shift',
+    globalKey: 'RIGHT SHIFT',
+    displayName: 'RShift',
+  },
+  ControlLeft: {
+    browserKey: 'Control',
+    globalKey: 'LEFT CTRL',
+    displayName: 'LCtrl',
+  },
+  ControlRight: {
+    browserKey: 'Control',
+    globalKey: '25',
+    displayName: 'RCtrl',
+  },
   AltLeft: { browserKey: 'Alt', globalKey: 'LEFT ALT', displayName: 'LAlt' },
   AltRight: { browserKey: 'Alt', globalKey: '21', displayName: 'RAlt' },
   Space: { browserKey: ' ', globalKey: 'SPACE', displayName: 'Space' },
   Enter: { browserKey: 'Enter', globalKey: 'RETURN', displayName: 'Enter' },
   Tab: { browserKey: 'Tab', globalKey: 'TAB', displayName: 'Tab' },
-  Backspace: { browserKey: 'Backspace', globalKey: 'BACKSPACE', displayName: 'Back' },
-  CapsLock: { browserKey: 'CapsLock', globalKey: 'CAPS LOCK', displayName: 'Caps' },
+  Backspace: {
+    browserKey: 'Backspace',
+    globalKey: 'BACKSPACE',
+    displayName: 'Back',
+  },
+  CapsLock: {
+    browserKey: 'CapsLock',
+    globalKey: 'CAPS LOCK',
+    displayName: 'Caps',
+  },
   MetaLeft: { browserKey: 'Meta', globalKey: '91', displayName: 'LWin' },
   MetaRight: { browserKey: 'Meta', globalKey: '92', displayName: 'RWin' },
   Fn: { browserKey: 'Fn', globalKey: 'FN', displayName: 'Fn' },
@@ -71,15 +95,35 @@ export const keyMaps = {
 
   // 방향키
   ArrowUp: { browserKey: 'ArrowUp', globalKey: 'UP ARROW', displayName: '↑' },
-  ArrowDown: { browserKey: 'ArrowDown', globalKey: 'DOWN ARROW', displayName: '↓' },
-  ArrowLeft: { browserKey: 'ArrowLeft', globalKey: 'LEFT ARROW', displayName: '←' },
-  ArrowRight: { browserKey: 'ArrowRight', globalKey: 'RIGHT ARROW', displayName: '→' },
+  ArrowDown: {
+    browserKey: 'ArrowDown',
+    globalKey: 'DOWN ARROW',
+    displayName: '↓',
+  },
+  ArrowLeft: {
+    browserKey: 'ArrowLeft',
+    globalKey: 'LEFT ARROW',
+    displayName: '←',
+  },
+  ArrowRight: {
+    browserKey: 'ArrowRight',
+    globalKey: 'RIGHT ARROW',
+    displayName: '→',
+  },
 
   // 특수문자
   Minus: { browserKey: '-', globalKey: 'MINUS', displayName: '-' },
   Equal: { browserKey: '=', globalKey: 'EQUALS', displayName: '=' },
-  BracketLeft: { browserKey: '[', globalKey: 'SQUARE BRACKET OPEN', displayName: '[' },
-  BracketRight: { browserKey: ']', globalKey: 'SQUARE BRACKET CLOSE', displayName: ']' },
+  BracketLeft: {
+    browserKey: '[',
+    globalKey: 'SQUARE BRACKET OPEN',
+    displayName: '[',
+  },
+  BracketRight: {
+    browserKey: ']',
+    globalKey: 'SQUARE BRACKET CLOSE',
+    displayName: ']',
+  },
   Semicolon: { browserKey: ';', globalKey: 'SEMICOLON', displayName: ';' },
   Quote: { browserKey: "'", globalKey: 'QUOTE', displayName: "'" },
   Backquote: { browserKey: '`', globalKey: 'SECTION', displayName: '`' },
@@ -99,32 +143,80 @@ export const keyMaps = {
   Numpad7: { browserKey: '7', globalKey: 'NUMPAD 7', displayName: 'Num7' },
   Numpad8: { browserKey: '8', globalKey: 'NUMPAD 8', displayName: 'Num8' },
   Numpad9: { browserKey: '9', globalKey: 'NUMPAD 9', displayName: 'Num9' },
-  NumpadMultiply: { browserKey: '*', globalKey: 'NUMPAD MULTIPLY', displayName: 'Num*' },
+  NumpadMultiply: {
+    browserKey: '*',
+    globalKey: 'NUMPAD MULTIPLY',
+    displayName: 'Num*',
+  },
   NumpadAdd: { browserKey: '+', globalKey: 'NUMPAD PLUS', displayName: 'Num+' },
-  NumpadSubtract: { browserKey: '-', globalKey: 'NUMPAD MINUS', displayName: 'Num-' },
-  NumpadDecimal: { browserKey: '.', globalKey: 'NUMPAD DELETE', displayName: 'Num.' },
-  NumpadDivide: { browserKey: '/', globalKey: 'NUMPAD DIVIDE', displayName: 'Num/' },
-  NumpadEnter: { browserKey: 'NumpadEnter', globalKey: 'NUMPAD RETURN', displayName: 'NEnt' },
+  NumpadSubtract: {
+    browserKey: '-',
+    globalKey: 'NUMPAD MINUS',
+    displayName: 'Num-',
+  },
+  NumpadDecimal: {
+    browserKey: '.',
+    globalKey: 'NUMPAD DELETE',
+    displayName: 'Num.',
+  },
+  NumpadDivide: {
+    browserKey: '/',
+    globalKey: 'NUMPAD DIVIDE',
+    displayName: 'Num/',
+  },
+  NumpadEnter: {
+    browserKey: 'NumpadEnter',
+    globalKey: 'NUMPAD RETURN',
+    displayName: 'NEnt',
+  },
 
   // 기타
   Escape: { browserKey: 'Escape', globalKey: 'ESCAPE', displayName: 'Esc' },
-  PrintScreen: { browserKey: 'PrintScreen', globalKey: 'PRINT SCREEN', displayName: 'PrtSc' },
-  ScrollLock: { browserKey: 'ScrollLock', globalKey: 'SCROLL LOCK', displayName: 'ScrLk' },
+  PrintScreen: {
+    browserKey: 'PrintScreen',
+    globalKey: 'PRINT SCREEN',
+    displayName: 'PrtSc',
+  },
+  ScrollLock: {
+    browserKey: 'ScrollLock',
+    globalKey: 'SCROLL LOCK',
+    displayName: 'ScrLk',
+  },
   Pause: { browserKey: 'Pause', globalKey: '19', displayName: 'Pause' },
   Insert: { browserKey: 'Insert', globalKey: 'INS', displayName: 'Ins' },
   Home: { browserKey: 'Home', globalKey: 'HOME', displayName: 'Home' },
   PageUp: { browserKey: 'PageUp', globalKey: 'PAGE UP', displayName: 'PgUp' },
   Delete: { browserKey: 'Delete', globalKey: 'DELETE', displayName: 'Del' },
   End: { browserKey: 'End', globalKey: 'END', displayName: 'End' },
-  PageDown: { browserKey: 'PageDown', globalKey: 'PAGE DOWN', displayName: 'PgDn' },
-  ContextMenu: { browserKey: 'ContextMenu', globalKey: 'CONTEXT MENU', displayName: 'Menu' },
+  PageDown: {
+    browserKey: 'PageDown',
+    globalKey: 'PAGE DOWN',
+    displayName: 'PgDn',
+  },
+  ContextMenu: {
+    browserKey: 'ContextMenu',
+    globalKey: 'CONTEXT MENU',
+    displayName: 'Menu',
+  },
 };
 
 // 마우스 / 게임패드
 const extraGlobalKeyMap = {
-  MOUSE1: { browserKey: 'MouseLeft', globalKey: 'MOUSE1', displayName: 'Mouse Left' },
-  MOUSE2: { browserKey: 'MouseRight', globalKey: 'MOUSE2', displayName: 'Mouse Right' },
-  MOUSE3: { browserKey: 'MouseMiddle', globalKey: 'MOUSE3', displayName: 'Mouse Middle' },
+  MOUSE1: {
+    browserKey: 'MouseLeft',
+    globalKey: 'MOUSE1',
+    displayName: 'Mouse Left',
+  },
+  MOUSE2: {
+    browserKey: 'MouseRight',
+    globalKey: 'MOUSE2',
+    displayName: 'Mouse Right',
+  },
+  MOUSE3: {
+    browserKey: 'MouseMiddle',
+    globalKey: 'MOUSE3',
+    displayName: 'Mouse Middle',
+  },
   MOUSE4: { browserKey: 'Mouse4', globalKey: 'MOUSE4', displayName: 'Mouse 4' },
   MOUSE5: { browserKey: 'Mouse5', globalKey: 'MOUSE5', displayName: 'Mouse 5' },
   GP_A: { browserKey: 'GamepadA', globalKey: 'GP_A', displayName: 'Pad A' },
@@ -135,14 +227,34 @@ const extraGlobalKeyMap = {
   GP_RB: { browserKey: 'GamepadRB', globalKey: 'GP_RB', displayName: 'Pad RB' },
   GP_LT: { browserKey: 'GamepadLT', globalKey: 'GP_LT', displayName: 'Pad LT' },
   GP_RT: { browserKey: 'GamepadRT', globalKey: 'GP_RT', displayName: 'Pad RT' },
-  GP_BACK: { browserKey: 'GamepadBack', globalKey: 'GP_BACK', displayName: 'Pad Back' },
-  GP_START: { browserKey: 'GamepadStart', globalKey: 'GP_START', displayName: 'Pad Start' },
+  GP_BACK: {
+    browserKey: 'GamepadBack',
+    globalKey: 'GP_BACK',
+    displayName: 'Pad Back',
+  },
+  GP_START: {
+    browserKey: 'GamepadStart',
+    globalKey: 'GP_START',
+    displayName: 'Pad Start',
+  },
   GP_LS: { browserKey: 'GamepadLS', globalKey: 'GP_LS', displayName: 'Pad LS' },
   GP_RS: { browserKey: 'GamepadRS', globalKey: 'GP_RS', displayName: 'Pad RS' },
   GP_UP: { browserKey: 'GamepadUp', globalKey: 'GP_UP', displayName: 'Pad Up' },
-  GP_DOWN: { browserKey: 'GamepadDown', globalKey: 'GP_DOWN', displayName: 'Pad Down' },
-  GP_LEFT: { browserKey: 'GamepadLeft', globalKey: 'GP_LEFT', displayName: 'Pad Left' },
-  GP_RIGHT: { browserKey: 'GamepadRight', globalKey: 'GP_RIGHT', displayName: 'Pad Right' },
+  GP_DOWN: {
+    browserKey: 'GamepadDown',
+    globalKey: 'GP_DOWN',
+    displayName: 'Pad Down',
+  },
+  GP_LEFT: {
+    browserKey: 'GamepadLeft',
+    globalKey: 'GP_LEFT',
+    displayName: 'Pad Left',
+  },
+  GP_RIGHT: {
+    browserKey: 'GamepadRight',
+    globalKey: 'GP_RIGHT',
+    displayName: 'Pad Right',
+  },
 };
 
 const globalKeyLookup = (() => {
@@ -154,11 +266,13 @@ const globalKeyLookup = (() => {
 })();
 
 export const getKeyInfo = (code, key) => {
-  return keyMaps[code] || {
-    browserKey: key,
-    globalKey: key.toUpperCase(),
-    displayName: key.toUpperCase()
-  };
+  return (
+    keyMaps[code] || {
+      browserKey: key,
+      globalKey: key.toUpperCase(),
+      displayName: key.toUpperCase(),
+    }
+  );
 };
 
 export const getKeyInfoByGlobalKey = (globalKey) => {

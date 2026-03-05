@@ -1,14 +1,14 @@
-import React from "react";
-import { useLenis } from "@hooks/useLenis";
-import { useTranslation } from "@contexts/I18nContext";
-import Modal from "../Modal";
-import KeyTabContent, { type KeyTabContentRef } from "./KeyTabContent";
-import NoteTabContent, { type NoteTabContentRef } from "./NoteTabContent";
+import React from 'react';
+import { useLenis } from '@hooks/useLenis';
+import { useTranslation } from '@contexts/I18nContext';
+import Modal from '../Modal';
+import KeyTabContent, { type KeyTabContentRef } from './KeyTabContent';
+import NoteTabContent, { type NoteTabContentRef } from './NoteTabContent';
 import CounterTabContent, {
   type CounterTabContentRef,
-} from "./CounterTabContent";
-import ImagePicker from "./ImagePicker";
-import ColorPicker from "./ColorPicker";
+} from './CounterTabContent';
+import ImagePicker from './ImagePicker';
+import ColorPicker from './ColorPicker';
 import {
   TABS,
   useUnifiedKeySettingState,
@@ -18,9 +18,9 @@ import {
   type KeyData,
   type SaveData,
   type PreviewData,
-} from "@hooks/Modal/useUnifiedKeySettingState";
-import { getScrollShadowState } from "@utils/scrollShadow";
-import type { KeyCounterSettings } from "@src/types/keys";
+} from '@hooks/Modal/useUnifiedKeySettingState';
+import { getScrollShadowState } from '@utils/scrollShadow';
+import type { KeyCounterSettings } from '@src/types/keys';
 
 // ============================================================================
 // 타입 정의
@@ -48,9 +48,9 @@ const TabSwitch: React.FC<TabSwitchProps> = ({ activeTab, onTabChange }) => {
   const { t } = useTranslation();
 
   const tabs = [
-    { id: TABS.KEY, label: t("keySetting.tabKey") },
-    { id: TABS.NOTE, label: t("keySetting.tabNote") },
-    { id: TABS.COUNTER, label: t("keySetting.tabCounter") },
+    { id: TABS.KEY, label: t('keySetting.tabKey') },
+    { id: TABS.NOTE, label: t('keySetting.tabNote') },
+    { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
   ] as const;
 
   return (
@@ -61,8 +61,8 @@ const TabSwitch: React.FC<TabSwitchProps> = ({ activeTab, onTabChange }) => {
           onClick={() => onTabChange(tab.id)}
           className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
             activeTab === tab.id
-              ? "bg-[#3A3943] text-white"
-              : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
+              ? 'bg-[#3A3943] text-white'
+              : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
           }`}
         >
           {tab.label}
@@ -96,7 +96,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   const [skipShadowTransition, setSkipShadowTransition] = React.useState(false);
   // 컨테이너 높이 (애니메이션용)
   const [containerHeight, setContainerHeight] = React.useState<number | null>(
-    null
+    null,
   );
   // 높이 애니메이션 스킵 여부 (초기 마운트 시)
   const isFirstRender = React.useRef(true);
@@ -114,7 +114,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       prev.hasTopShadow === nextState.hasTopShadow &&
       prev.hasBottomShadow === nextState.hasBottomShadow
         ? prev
-        : nextState
+        : nextState,
     );
   }, []);
 
@@ -167,7 +167,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         setContainerHeight(Math.min(contentHeight, maxHeight));
         const nextHasOverflow = contentHeight > maxHeight;
         setHasOverflow((prev) =>
-          prev === nextHasOverflow ? prev : nextHasOverflow
+          prev === nextHasOverflow ? prev : nextHasOverflow,
         );
       }
     };
@@ -247,7 +247,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       setKeyState((prev) => ({ ...prev, inactiveImage: imageUrl }));
       handleKeyPreview({ inactiveImage: imageUrl });
     },
-    [setKeyState, handleKeyPreview]
+    [setKeyState, handleKeyPreview],
   );
 
   const handleActiveImageChange = React.useCallback(
@@ -255,7 +255,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       setKeyState((prev) => ({ ...prev, activeImage: imageUrl }));
       handleKeyPreview({ activeImage: imageUrl });
     },
-    [setKeyState, handleKeyPreview]
+    [setKeyState, handleKeyPreview],
   );
 
   const handleIdleTransparentChange = React.useCallback(
@@ -263,7 +263,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       setKeyState((prev) => ({ ...prev, idleTransparent: checked }));
       handleKeyPreview({ idleTransparent: checked });
     },
-    [setKeyState, handleKeyPreview]
+    [setKeyState, handleKeyPreview],
   );
 
   const handleActiveTransparentChange = React.useCallback(
@@ -271,7 +271,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       setKeyState((prev) => ({ ...prev, activeTransparent: checked }));
       handleKeyPreview({ activeTransparent: checked });
     },
-    [setKeyState, handleKeyPreview]
+    [setKeyState, handleKeyPreview],
   );
 
   return (
@@ -289,10 +289,10 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           {/* 상단 그림자 */}
           <div
             className={`absolute top-0 left-0 ${
-              hasOverflow ? "right-[14px]" : "right-0"
+              hasOverflow ? 'right-[14px]' : 'right-0'
             } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? "" : "transition-opacity duration-150"
-            } ${scrollState.hasTopShadow ? "opacity-100" : "opacity-0"}`}
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
           />
 
           <div
@@ -300,8 +300,8 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
             className="overflow-y-auto modal-content-scroll pr-[14px]"
             style={{
               height:
-                containerHeight !== null ? `${containerHeight}px` : "auto",
-              maxHeight: "195px",
+                containerHeight !== null ? `${containerHeight}px` : 'auto',
+              maxHeight: '195px',
               width:
                 hasOverflow && scrollbarWidth > 0
                   ? `calc(100% + ${scrollbarWidth}px)`
@@ -315,8 +315,8 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
                   ? `${scrollbarWidth}px`
                   : undefined,
               transition: isFirstRender.current
-                ? "none"
-                : "height 100ms ease-in-out",
+                ? 'none'
+                : 'height 100ms ease-in-out',
             }}
           >
             <div ref={contentRef}>{renderTabContent()}</div>
@@ -325,10 +325,10 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           {/* 하단 그림자 */}
           <div
             className={`absolute bottom-0 left-0 ${
-              hasOverflow ? "right-[14px]" : "right-0"
+              hasOverflow ? 'right-[14px]' : 'right-0'
             } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? "" : "transition-opacity duration-150"
-            } ${scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"}`}
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
 
@@ -338,13 +338,13 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
             onClick={handleSubmit}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {t("keySetting.save")}
+            {t('keySetting.save')}
           </button>
           <button
             onClick={handleClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            {t("keySetting.cancel")}
+            {t('keySetting.cancel')}
           </button>
         </div>
       </div>
@@ -362,8 +362,8 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           onActiveImageChange={handleActiveImageChange}
           onIdleTransparentChange={handleIdleTransparentChange}
           onActiveTransparentChange={handleActiveTransparentChange}
-          onIdleImageReset={() => handleIdleImageChange("")}
-          onActiveImageReset={() => handleActiveImageChange("")}
+          onIdleImageReset={() => handleIdleImageChange('')}
+          onActiveImageReset={() => handleActiveImageChange('')}
           onClose={() =>
             setKeyState((prev) => ({ ...prev, showImagePicker: false }))
           }
@@ -421,7 +421,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           referenceRef={counterTabRef.current?.fillActiveBtnRef}
           color={
             counterTabRef.current?.colorValueFor(counterState.pickerFor) ??
-            "#FFFFFF"
+            '#FFFFFF'
           }
           onColorChange={(c: string) =>
             counterTabRef.current?.setColorFor(counterState.pickerFor, c)
@@ -429,7 +429,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           onColorChangeComplete={(c: string) =>
             counterTabRef.current?.handleColorComplete(
               counterState.pickerFor,
-              c
+              c,
             )
           }
           onClose={() =>

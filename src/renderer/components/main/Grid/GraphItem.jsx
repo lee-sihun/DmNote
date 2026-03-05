@@ -1,16 +1,16 @@
-import React, { useCallback, useMemo, useRef } from "react";
-import { isMac } from "@utils/platform";
-import { useDraggable, useSmartGuidesElements } from "@hooks/Grid";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
+import React, { useCallback, useMemo, useRef } from 'react';
+import { isMac } from '@utils/platform';
+import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
-} from "@utils/smartGuides";
-import GraphPanel from "@components/graph/GraphPanel";
-import { resolveImageSource } from "@utils/imageSource";
+} from '@utils/smartGuides';
+import GraphPanel from '@components/graph/GraphPanel';
+import { resolveImageSource } from '@utils/imageSource';
 
 const PREVIEW_HISTORY_BASE = [
   8, 10, 11, 13, 12, 14, 15, 16, 14, 13, 12, 14, 15, 14, 14,
@@ -50,8 +50,8 @@ export default function GraphItem({
     width = 200,
     height = 100,
     className,
-    graphType = "line",
-    graphColor = "#86EFAC",
+    graphType = 'line',
+    graphColor = '#86EFAC',
     showAvgLine = true,
     graphAnimationEnabled = true,
     backgroundColor,
@@ -67,15 +67,15 @@ export default function GraphItem({
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
-    (state) => state.gridSettings?.gridSnapSize || 5
+    (state) => state.gridSettings?.gridSnapSize || 5,
   );
   const isDraggingOrResizing = useGridSelectionStore(
-    (state) => state.isDraggingOrResizing
+    (state) => state.isDraggingOrResizing,
   );
 
   const isSelectionMode = isSelected;
   const uidRef = useRef(
-    `graph-preview-${Math.random().toString(36).slice(2, 11)}`
+    `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
   const multiDragRef = useRef({ isDragging: false, startX: 0, startY: 0 });
   const effectiveElementId = elementId || `graph-${index}`;
@@ -83,10 +83,12 @@ export default function GraphItem({
   const previewHistory = useMemo(() => [...PREVIEW_HISTORY_BASE], []);
   const previewImageSrc = useMemo(
     () =>
-      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || null,
-    [inactiveImage, activeImage]
+      resolveImageSource(inactiveImage) ||
+      resolveImageSource(activeImage) ||
+      null,
+    [inactiveImage, activeImage],
   );
-  const previewImageFit = idleImageFit || imageFit || "cover";
+  const previewImageFit = idleImageFit || imageFit || 'cover';
 
   const draggable = useDraggable({
     gridSize: gridSnapSize,
@@ -161,7 +163,7 @@ export default function GraphItem({
 
           const otherElements = getOtherElements(currentElementId);
           const nonSelectedElements = otherElements.filter(
-            (el) => !selectedElements.some((sel) => sel.id === el.id)
+            (el) => !selectedElements.some((sel) => sel.id === el.id),
           );
 
           const draggedBounds = calculateBounds(
@@ -169,7 +171,7 @@ export default function GraphItem({
             newY,
             currentWidth,
             currentHeight,
-            currentElementId
+            currentElementId,
           );
 
           let groupBounds = null;
@@ -178,7 +180,7 @@ export default function GraphItem({
               .map((sel) => {
                 if (
                   sel.id === currentElementId ||
-                  (sel.type === "graph" && sel.index === index)
+                  (sel.type === 'graph' && sel.index === index)
                 ) {
                   return draggedBounds;
                 }
@@ -191,7 +193,7 @@ export default function GraphItem({
                   found.top + rawDeltaY,
                   found.width,
                   found.height,
-                  found.id
+                  found.id,
                 );
               })
               .filter(Boolean);
@@ -204,10 +206,15 @@ export default function GraphItem({
               : draggedBounds;
 
           const snapResult = alignmentGuidesEnabled
-            ? calculateSnapPoints(snapTargetBounds, nonSelectedElements, undefined, {
-                groupBounds,
-                disableSpacing: !spacingGuidesEnabled,
-              })
+            ? calculateSnapPoints(
+                snapTargetBounds,
+                nonSelectedElements,
+                undefined,
+                {
+                  groupBounds,
+                  disableSpacing: !spacingGuidesEnabled,
+                },
+              )
             : null;
 
           let finalX = newX;
@@ -254,14 +261,14 @@ export default function GraphItem({
                         : 0),
                     groupBounds.width,
                     groupBounds.height,
-                    "group"
+                    'group',
                   )
                 : calculateBounds(
                     finalX,
                     finalY,
                     currentWidth,
                     currentHeight,
-                    currentElementId
+                    currentElementId,
                   );
 
             smartGuidesStore.setDraggedBounds(displayBounds);
@@ -302,17 +309,17 @@ export default function GraphItem({
           rafId = null;
         }
 
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("blur", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
         useSmartGuidesStore.getState().clearGuides();
         useGridSelectionStore.getState().setDraggingOrResizing(false);
         onMultiDragEnd?.();
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      window.addEventListener("blur", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
     [
       isSelectionMode,
@@ -328,7 +335,7 @@ export default function GraphItem({
       index,
       onMultiDrag,
       onMultiDragEnd,
-    ]
+    ],
   );
 
   const handleClick = useCallback(
@@ -347,7 +354,7 @@ export default function GraphItem({
         return;
       }
 
-      if (activeTool === "eraser") {
+      if (activeTool === 'eraser') {
         onEraserClick?.();
         return;
       }
@@ -375,7 +382,7 @@ export default function GraphItem({
       draggable.wasMoved,
       onShiftClick,
       onClick,
-    ]
+    ],
   );
 
   const handleContextMenu = useCallback(
@@ -384,7 +391,7 @@ export default function GraphItem({
       e.stopPropagation();
       onContextMenu?.(e);
     },
-    [onContextMenu]
+    [onContextMenu],
   );
 
   const attachRef = useCallback(
@@ -392,11 +399,11 @@ export default function GraphItem({
       if (!isSelectionMode) {
         draggable.ref(node);
       }
-      if (typeof setReferenceRef === "function") {
+      if (typeof setReferenceRef === 'function') {
         setReferenceRef(node);
       }
     },
-    [isSelectionMode, draggable, setReferenceRef]
+    [isSelectionMode, draggable, setReferenceRef],
   );
 
   return (
@@ -409,7 +416,7 @@ export default function GraphItem({
       zIndex={position.zIndex ?? zIndex}
       className={className}
       graphType={graphType}
-      graphColor={graphColor || "#86EFAC"}
+      graphColor={graphColor || '#86EFAC'}
       showAvgLine={showAvgLine}
       animationEnabled={graphAnimationEnabled ?? true}
       backgroundColor={backgroundColor}

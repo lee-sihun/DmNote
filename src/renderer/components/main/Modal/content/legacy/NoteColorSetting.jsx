@@ -1,16 +1,16 @@
-import React, { useState, useRef, useEffect } from "react";
-import Modal from "../Modal";
-import ColorPicker from "./ColorPicker";
-import { useTranslation } from "@contexts/I18nContext";
-import { isGradientColor, normalizeColorInput } from "@utils/colorUtils";
-import Checkbox from "@components/main/common/Checkbox";
+import React, { useState, useRef, useEffect } from 'react';
+import Modal from '../Modal';
+import ColorPicker from './ColorPicker';
+import { useTranslation } from '@contexts/I18nContext';
+import { isGradientColor, normalizeColorInput } from '@utils/colorUtils';
+import Checkbox from '@components/main/common/Checkbox';
 
 const COLOR_MODES = {
-  solid: "solid",
-  gradient: "gradient",
+  solid: 'solid',
+  gradient: 'gradient',
 };
 
-const toGradient = (top, bottom) => ({ type: "gradient", top, bottom });
+const toGradient = (top, bottom) => ({ type: 'gradient', top, bottom });
 
 export default function NoteColorSettingModal({
   onClose,
@@ -26,59 +26,61 @@ export default function NoteColorSettingModal({
   const initialGlowSource = initialNoteGlowColor ?? initialNoteColor;
 
   const [colorMode, setColorMode] = useState(
-    isGradientColor(initialNoteColor) ? COLOR_MODES.gradient : COLOR_MODES.solid
+    isGradientColor(initialNoteColor)
+      ? COLOR_MODES.gradient
+      : COLOR_MODES.solid,
   );
   const [noteColor, setNoteColor] = useState(() =>
-    normalizeColorInput(initialNoteColor)
+    normalizeColorInput(initialNoteColor),
   );
   const [gradientBottom, setGradientBottom] = useState(() =>
     isGradientColor(initialNoteColor)
       ? initialNoteColor.bottom
-      : normalizeColorInput(initialNoteColor)
+      : normalizeColorInput(initialNoteColor),
   );
   const [noteOpacity, setNoteOpacity] = useState(initialNoteOpacity ?? 80);
   const [glowEnabled, setGlowEnabled] = useState(
-    initialNoteGlowEnabled ?? false
+    initialNoteGlowEnabled ?? false,
   );
   const [glowSize, setGlowSize] = useState(
-    typeof initialNoteGlowSize === "number" ? initialNoteGlowSize : 20
+    typeof initialNoteGlowSize === 'number' ? initialNoteGlowSize : 20,
   );
   const [glowOpacity, setGlowOpacity] = useState(
-    typeof initialNoteGlowOpacity === "number" ? initialNoteGlowOpacity : 70
+    typeof initialNoteGlowOpacity === 'number' ? initialNoteGlowOpacity : 70,
   );
   const [glowColor, setGlowColor] = useState(() =>
     isGradientColor(initialGlowSource)
       ? normalizeColorInput(initialGlowSource.top)
-      : normalizeColorInput(initialGlowSource)
+      : normalizeColorInput(initialGlowSource),
   );
   const [glowGradientBottom, setGlowGradientBottom] = useState(() =>
     isGradientColor(initialGlowSource)
       ? normalizeColorInput(initialGlowSource.bottom)
-      : normalizeColorInput(initialGlowSource)
+      : normalizeColorInput(initialGlowSource),
   );
   const [glowColorMode, setGlowColorMode] = useState(
     isGradientColor(initialGlowSource)
       ? COLOR_MODES.gradient
-      : COLOR_MODES.solid
+      : COLOR_MODES.solid,
   );
   const [showPicker, setShowPicker] = useState(false);
   const [showGlowPicker, setShowGlowPicker] = useState(false);
 
   const [isFocused, setIsFocused] = useState(false);
   const [displayNoteOpacity, setDisplayNoteOpacity] = useState(
-    typeof initialNoteOpacity === "number" ? `${initialNoteOpacity}%` : "80%"
+    typeof initialNoteOpacity === 'number' ? `${initialNoteOpacity}%` : '80%',
   );
   const [glowSizeFocused, setGlowSizeFocused] = useState(false);
   const [glowOpacityFocused, setGlowOpacityFocused] = useState(false);
   const [displayGlowSize, setDisplayGlowSize] = useState(
-    typeof initialNoteGlowSize === "number"
+    typeof initialNoteGlowSize === 'number'
       ? initialNoteGlowSize.toString()
-      : "20"
+      : '20',
   );
   const [displayGlowOpacity, setDisplayGlowOpacity] = useState(
-    typeof initialNoteGlowOpacity === "number"
+    typeof initialNoteGlowOpacity === 'number'
       ? `${initialNoteGlowOpacity}%`
-      : "70%"
+      : '70%',
   );
 
   const colorButtonRef = useRef(null);
@@ -186,12 +188,12 @@ export default function NoteColorSettingModal({
 
   const colorLabel =
     colorMode === COLOR_MODES.gradient
-      ? "Gradient"
-      : noteColor.replace(/^#/, "");
+      ? 'Gradient'
+      : noteColor.replace(/^#/, '');
   const glowColorLabel =
     glowColorMode === COLOR_MODES.gradient
-      ? "Gradient"
-      : glowColor.replace(/^#/, "");
+      ? 'Gradient'
+      : glowColor.replace(/^#/, '');
 
   return (
     <Modal onClick={onClose}>
@@ -203,13 +205,13 @@ export default function NoteColorSettingModal({
           {/* 색상 */}
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.noteColor")}
+              {t('keySetting.noteColor')}
             </p>
             <button
               ref={colorButtonRef}
               type="button"
               className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                showPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
               } text-[#DBDEE8] text-style-2`}
               onClick={handleColorButtonClick}
             >
@@ -224,15 +226,15 @@ export default function NoteColorSettingModal({
           {/* 노트 투명도 */}
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.noteOpacity")}
+              {t('keySetting.noteOpacity')}
             </p>
             <input
               type="text"
               value={displayNoteOpacity}
               onChange={(e) => {
-                const newValue = e.target.value.replace(/[^0-9]/g, "");
-                if (newValue === "") {
-                  setDisplayNoteOpacity("");
+                const newValue = e.target.value.replace(/[^0-9]/g, '');
+                if (newValue === '') {
+                  setDisplayNoteOpacity('');
                 } else {
                   const numValue = parseInt(newValue, 10);
                   if (!Number.isNaN(numValue)) {
@@ -246,13 +248,13 @@ export default function NoteColorSettingModal({
               }}
               onBlur={(e) => {
                 setIsFocused(false);
-                const inputValue = e.target.value.replace(/[^0-9]/g, "");
+                const inputValue = e.target.value.replace(/[^0-9]/g, '');
                 if (
-                  inputValue === "" ||
+                  inputValue === '' ||
                   Number.isNaN(parseInt(inputValue, 10))
                 ) {
                   setNoteOpacity(80);
-                  setDisplayNoteOpacity("80%");
+                  setDisplayNoteOpacity('80%');
                 } else {
                   const numValue = parseInt(inputValue, 10);
                   const clamped = Math.min(Math.max(numValue, 0), 100);
@@ -270,7 +272,7 @@ export default function NoteColorSettingModal({
           <div className="flex flex-col gap-[19px]">
             <div className="flex justify-between w-full items-center">
               <p className="text-white text-style-2">
-                {t("keySetting.noteGlow")}
+                {t('keySetting.noteGlow')}
               </p>
               <Checkbox
                 checked={glowEnabled}
@@ -280,18 +282,18 @@ export default function NoteColorSettingModal({
 
             <div
               className={`flex justify-between w-full items-center ${
-                !glowEnabled ? "opacity-40" : ""
+                !glowEnabled ? 'opacity-40' : ''
               }`}
             >
               <p className="text-white text-style-2">
-                {t("keySetting.noteGlowColor")}
+                {t('keySetting.noteGlowColor')}
               </p>
               <button
                 ref={glowColorButtonRef}
                 type="button"
                 disabled={!glowEnabled}
                 className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                  showGlowPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                  showGlowPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
                 } text-[#DBDEE8] text-style-2`}
                 onClick={handleGlowColorButtonClick}
               >
@@ -305,18 +307,18 @@ export default function NoteColorSettingModal({
 
             <div
               className={`flex justify-between w-full items-center ${
-                !glowEnabled ? "opacity-40" : ""
+                !glowEnabled ? 'opacity-40' : ''
               }`}
             >
               <p className="text-white text-style-2">
-                {t("keySetting.noteGlowSize")}
+                {t('keySetting.noteGlowSize')}
               </p>
               <input
                 type="text"
                 disabled={!glowEnabled}
                 value={displayGlowSize}
                 onChange={(e) => {
-                  const newValue = e.target.value.replace(/[^0-9]/g, "");
+                  const newValue = e.target.value.replace(/[^0-9]/g, '');
                   setDisplayGlowSize(newValue);
                 }}
                 onFocus={() => {
@@ -326,8 +328,8 @@ export default function NoteColorSettingModal({
                 onBlur={(e) => {
                   setGlowSizeFocused(false);
                   const parsed = parseInt(
-                    e.target.value.replace(/[^0-9]/g, ""),
-                    10
+                    e.target.value.replace(/[^0-9]/g, ''),
+                    10,
                   );
                   const clamped = Number.isNaN(parsed)
                     ? 20
@@ -341,20 +343,20 @@ export default function NoteColorSettingModal({
 
             <div
               className={`flex justify-between w-full items-center ${
-                !glowEnabled ? "opacity-40" : ""
+                !glowEnabled ? 'opacity-40' : ''
               }`}
             >
               <p className="text-white text-style-2">
-                {t("keySetting.noteGlowOpacity")}
+                {t('keySetting.noteGlowOpacity')}
               </p>
               <input
                 type="text"
                 disabled={!glowEnabled}
                 value={displayGlowOpacity}
                 onChange={(e) => {
-                  const newValue = e.target.value.replace(/[^0-9]/g, "");
-                  if (newValue === "") {
-                    setDisplayGlowOpacity("");
+                  const newValue = e.target.value.replace(/[^0-9]/g, '');
+                  if (newValue === '') {
+                    setDisplayGlowOpacity('');
                   } else {
                     const numValue = parseInt(newValue, 10);
                     if (!Number.isNaN(numValue)) {
@@ -368,13 +370,13 @@ export default function NoteColorSettingModal({
                 }}
                 onBlur={(e) => {
                   setGlowOpacityFocused(false);
-                  const inputValue = e.target.value.replace(/[^0-9]/g, "");
+                  const inputValue = e.target.value.replace(/[^0-9]/g, '');
                   if (
-                    inputValue === "" ||
+                    inputValue === '' ||
                     Number.isNaN(parseInt(inputValue, 10))
                   ) {
                     setGlowOpacity(70);
-                    setDisplayGlowOpacity("70%");
+                    setDisplayGlowOpacity('70%');
                   } else {
                     const numValue = parseInt(inputValue, 10);
                     const clamped = Math.min(Math.max(numValue, 0), 100);
@@ -392,13 +394,13 @@ export default function NoteColorSettingModal({
               onClick={handleSubmit}
               className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
             >
-              {t("keySetting.save")}
+              {t('keySetting.save')}
             </button>
             <button
               onClick={onClose}
               className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             >
-              {t("keySetting.cancel")}
+              {t('keySetting.cancel')}
             </button>
           </div>
         </div>

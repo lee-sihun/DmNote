@@ -8,7 +8,9 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use tauri::{Emitter, Manager};
 use uuid::Uuid;
-use webp_animation::{AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig};
+use webp_animation::{
+    AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
+};
 
 use crate::app_state::AppState;
 
@@ -32,7 +34,9 @@ pub fn image_load(app: tauri::AppHandle) -> Result<ImageLoadResponse, String> {
     let picked = FileDialog::new()
         .add_filter(
             "Images",
-            &["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif"],
+            &[
+                "png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "ico", "avif",
+            ],
         )
         .pick_file();
 
@@ -51,8 +55,7 @@ pub fn image_load(app: tauri::AppHandle) -> Result<ImageLoadResponse, String> {
         .app_data_dir()
         .map_err(|e| format!("앱 데이터 디렉토리 확인 실패: {e}"))?;
     let images_dir = data_dir.join("images");
-    fs::create_dir_all(&images_dir)
-        .map_err(|e| format!("이미지 디렉토리 생성 실패: {e}"))?;
+    fs::create_dir_all(&images_dir).map_err(|e| format!("이미지 디렉토리 생성 실패: {e}"))?;
 
     let dest_path = copy_image_to_app_data(&path, &images_dir, &ext)?;
 
@@ -83,9 +86,7 @@ fn schedule_gif_optimization(app: tauri::AppHandle, gif_path: PathBuf, images_di
             return;
         }
 
-        if let Err(error) =
-            replace_store_image_path_references(&app, &gif_path, &optimized_path)
-        {
+        if let Err(error) = replace_store_image_path_references(&app, &gif_path, &optimized_path) {
             log::warn!("[Image] 최적화 이미지 경로 치환 실패: {error}");
         }
     });

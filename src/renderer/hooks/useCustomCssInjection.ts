@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import type { TabCss, TabCssOverrides } from "@src/types/css";
-import type { CustomCss } from "@src/types/css";
+import { useEffect, useRef } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
+import type { TabCss, TabCssOverrides } from '@src/types/css';
+import type { CustomCss } from '@src/types/css';
 
-const STYLE_ELEMENT_ID = "dmn-custom-css";
+const STYLE_ELEMENT_ID = 'dmn-custom-css';
 
 /**
  * CSS 적용 우선순위:
@@ -14,7 +14,7 @@ const STYLE_ELEMENT_ID = "dmn-custom-css";
  */
 export function useCustomCssInjection() {
   // 상태 캐싱 ref
-  const globalCssRef = useRef<CustomCss>({ path: null, content: "" });
+  const globalCssRef = useRef<CustomCss>({ path: null, content: '' });
   const globalUseRef = useRef<boolean>(false);
   const tabCssOverridesRef = useRef<TabCssOverrides>({});
   const styleElRef = useRef<HTMLStyleElement | null>(null);
@@ -22,10 +22,10 @@ export function useCustomCssInjection() {
   useEffect(() => {
     // 스타일 요소 생성/재사용
     let styleEl = document.getElementById(
-      STYLE_ELEMENT_ID
+      STYLE_ELEMENT_ID,
     ) as HTMLStyleElement | null;
     if (!styleEl) {
-      styleEl = document.createElement("style");
+      styleEl = document.createElement('style');
       styleEl.id = STYLE_ELEMENT_ID;
       document.head.appendChild(styleEl);
     }
@@ -45,7 +45,7 @@ export function useCustomCssInjection() {
 
       // 1. 전역 CSS OFF → 모든 CSS 미적용
       if (!globalUse) {
-        styleEl.textContent = "";
+        styleEl.textContent = '';
         styleEl.disabled = true;
         return;
       }
@@ -54,7 +54,7 @@ export function useCustomCssInjection() {
       if (tabCss) {
         // 탭 enabled=false → CSS 미적용
         if (!tabCss.enabled) {
-          styleEl.textContent = "";
+          styleEl.textContent = '';
           styleEl.disabled = true;
           return;
         }
@@ -72,7 +72,7 @@ export function useCustomCssInjection() {
         styleEl.textContent = globalCss.content;
         styleEl.disabled = false;
       } else {
-        styleEl.textContent = "";
+        styleEl.textContent = '';
         styleEl.disabled = true;
       }
     };

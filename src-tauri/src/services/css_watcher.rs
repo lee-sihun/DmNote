@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use notify_debouncer_mini::{new_debouncer, Debouncer};
 use notify::RecommendedWatcher;
+use notify_debouncer_mini::{new_debouncer, Debouncer};
 use parking_lot::RwLock;
 use tauri::{AppHandle, Emitter};
 
@@ -74,7 +74,7 @@ impl CssWatcher {
     /// 특정 경로에 대한 워칭 시작
     fn watch_path(&self, path: &str, target: CssWatchTarget) -> Result<(), String> {
         let path_buf = PathBuf::from(path);
-        
+
         // 파일이 존재하는지 확인
         if !path_buf.exists() {
             return Err(format!("File not found: {}", path));
@@ -136,7 +136,11 @@ impl CssWatcher {
             .watch(watch_target, notify::RecursiveMode::NonRecursive)
             .map_err(|e| format!("Failed to start watching: {}", e))?;
 
-        log::info!("[CssWatcher] Started watching: {:?} for {:?}", watch_path, target);
+        log::info!(
+            "[CssWatcher] Started watching: {:?} for {:?}",
+            watch_path,
+            target
+        );
 
         watchers.insert(
             watch_path,
@@ -249,7 +253,12 @@ fn reload_global_css(store: &AppStore, app: &AppHandle, path: &str) -> Result<()
 }
 
 /// 탭별 CSS 리로드
-fn reload_tab_css(store: &AppStore, app: &AppHandle, tab_id: &str, path: &str) -> Result<(), String> {
+fn reload_tab_css(
+    store: &AppStore,
+    app: &AppHandle,
+    tab_id: &str,
+    path: &str,
+) -> Result<(), String> {
     let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
 
     let tab_css = TabCss {
@@ -260,7 +269,8 @@ fn reload_tab_css(store: &AppStore, app: &AppHandle, tab_id: &str, path: &str) -
 
     store
         .update(|s| {
-            s.tab_css_overrides.insert(tab_id.to_string(), tab_css.clone());
+            s.tab_css_overrides
+                .insert(tab_id.to_string(), tab_css.clone());
         })
         .map_err(|e| e.to_string())?;
 
@@ -295,16 +305,16 @@ fn paths_match(path1: &str, path2: &str) -> bool {
             // 플랫폼 차이를 무시하기 위해 정규화된 문자열로 비교
             let normalized1 = path1.replace('\\', "/").to_lowercase();
             let normalized2 = path2.replace('\\', "/").to_lowercase();
-            
+
             if normalized1 == normalized2 {
                 return true;
             }
-            
+
             // 문자열이 다르면 canonicalize로 최종 확인 (비용이 크므로 마지막에만)
             if let (Ok(canonical1), Ok(canonical2)) = (p1.canonicalize(), p2.canonicalize()) {
                 return canonical1 == canonical2;
             }
-            
+
             false
         }
         _ => false,

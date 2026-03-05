@@ -195,7 +195,9 @@ enum AudioCommand {
     SetVolume(f32),
     SetLatencyLogging(bool),
     SetSoundpack(Option<Arc<LoadedSoundpack>>),
-    InvalidateFileCache { path: String },
+    InvalidateFileCache {
+        path: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -303,11 +305,7 @@ impl KeySoundEngine {
         self.status()
     }
 
-    pub fn play_labels(
-        &self,
-        labels: &[String],
-        trace: Option<KeySoundDispatchTrace>,
-    ) {
+    pub fn play_labels(&self, labels: &[String], trace: Option<KeySoundDispatchTrace>) {
         if labels.is_empty() {
             return;
         }
@@ -328,12 +326,7 @@ impl KeySoundEngine {
         });
     }
 
-    pub fn play_file(
-        &self,
-        path: &str,
-        per_key_volume: f32,
-        trace: Option<KeySoundDispatchTrace>,
-    ) {
+    pub fn play_file(&self, path: &str, per_key_volume: f32, trace: Option<KeySoundDispatchTrace>) {
         let trimmed = path.trim();
         if trimmed.is_empty() {
             return;
@@ -351,10 +344,7 @@ impl KeySoundEngine {
     }
 }
 
-fn audio_thread(
-    receiver: Receiver<AudioCommand>,
-    state: Arc<RwLock<KeySoundRuntimeState>>,
-) {
+fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRuntimeState>>) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         use thread_priority::{set_current_thread_priority, ThreadPriority};
@@ -474,10 +464,8 @@ fn audio_thread(
 
                 #[cfg(debug_assertions)]
                 let clip_lookup_started_at = latency_logging.then_some(Instant::now());
-                let (clip, clip_load_trace) = match get_or_load_cached_clip(
-                    &path,
-                    &mut file_cache,
-                    {
+                let (clip, clip_load_trace) =
+                    match get_or_load_cached_clip(&path, &mut file_cache, {
                         #[cfg(debug_assertions)]
                         {
                             latency_logging
@@ -486,8 +474,7 @@ fn audio_thread(
                         {
                             false
                         }
-                    },
-                ) {
+                    }) {
                         Some(result) => result,
                         None => continue,
                     };
@@ -503,11 +490,8 @@ fn audio_thread(
                 }
 
                 let final_volume = (volume * per_key_volume).clamp(0.0, 1.0);
-                let source = AudioSource::new(
-                    clip.samples.clone(),
-                    clip.channels,
-                    clip.sample_rate,
-                );
+                let source =
+                    AudioSource::new(clip.samples.clone(), clip.channels, clip.sample_rate);
 
                 #[cfg(debug_assertions)]
                 let play_started_at = latency_logging.then_some(Instant::now());
@@ -627,15 +611,18 @@ fn get_or_load_cached_clip(
             ))
         }
         Err(error) => {
-            warn!("[KeySound] failed to decode key sound file '{}': {error:#}", path);
+            warn!(
+                "[KeySound] failed to decode key sound file '{}': {error:#}",
+                path
+            );
             None
         }
     }
 }
 
 fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open key sound file: {}", path))?;
+    let file =
+        File::open(path).with_context(|| format!("failed to open key sound file: {}", path))?;
     let media_source = MediaSourceStream::new(Box::new(file), Default::default());
     let path_ref = Path::new(path);
 
@@ -661,7 +648,10 @@ fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
         .make(&track.codec_params, &Default::default())
         .context("failed to create key sound decoder")?;
 
-    let mut channels = track.codec_params.channels.map(|value| value.count() as u16);
+    let mut channels = track
+        .codec_params
+        .channels
+        .map(|value| value.count() as u16);
     let mut sample_rate = track.codec_params.sample_rate;
     let mut samples: Vec<i16> = Vec::new();
 
@@ -884,7 +874,9 @@ impl SoundDecoder {
             )
             .context("failed to probe sound file format")?;
         let format = probe.format;
-        let track = format.default_track().context("no default track in sound file")?;
+        let track = format
+            .default_track()
+            .context("no default track in sound file")?;
         let decoder = get_codecs()
             .make(&track.codec_params, &Default::default())
             .context("failed to create audio decoder")?;
@@ -899,7 +891,9 @@ impl SoundDecoder {
                     .channels
                     .map(|v| v.count() as u16)
                     .context("missing channels in sound file")?,
-                params.time_base.context("missing time base in sound file")?,
+                params
+                    .time_base
+                    .context("missing time base in sound file")?,
             )
         };
 

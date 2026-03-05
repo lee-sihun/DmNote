@@ -1,6 +1,4 @@
-import {
-  DEFAULT_NOTE_BORDER_RADIUS,
-} from "@constants/overlayConfig";
+import { DEFAULT_NOTE_BORDER_RADIUS } from '@constants/overlayConfig';
 
 const MAX_NOTES = 2048;
 
@@ -21,7 +19,7 @@ const linearToSRGB = (c: number) => {
 };
 
 const parseColor = (hex: string) => {
-  const color = hex.replace("#", "");
+  const color = hex.replace('#', '');
   const r = parseInt(color.substring(0, 2), 16);
   const g = parseInt(color.substring(2, 4), 16);
   const b = parseInt(color.substring(4, 6), 16);
@@ -31,7 +29,7 @@ const parseColor = (hex: string) => {
 const convertLinearToSRGB = (rgb: readonly number[]) =>
   [linearToSRGB(rgb[0]), linearToSRGB(rgb[1]), linearToSRGB(rgb[2])] as const;
 
-const extractColorStops = (color: any, fallback = "#FFFFFF") => {
+const extractColorStops = (color: any, fallback = '#FFFFFF') => {
   if (!color) {
     const c = parseColor(fallback);
     return {
@@ -39,11 +37,11 @@ const extractColorStops = (color: any, fallback = "#FFFFFF") => {
       bottom: [...c] as readonly number[],
     };
   }
-  if (typeof color === "string") {
+  if (typeof color === 'string') {
     const solid = parseColor(color);
     return { top: solid, bottom: [...solid] as readonly number[] };
   }
-  if (typeof color === "object" && color.type === "gradient") {
+  if (typeof color === 'object' && color.type === 'gradient') {
     return {
       top: parseColor(color.top ?? fallback),
       bottom: parseColor(color.bottom ?? fallback),
@@ -102,7 +100,8 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       ? layout.noteOpacityTop
       : baseOpacityPercent;
   const opacityBottomPercent =
-    layout.noteOpacityBottom != null && Number.isFinite(layout.noteOpacityBottom)
+    layout.noteOpacityBottom != null &&
+    Number.isFinite(layout.noteOpacityBottom)
       ? layout.noteOpacityBottom
       : baseOpacityPercent;
 
@@ -125,10 +124,10 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       ? layout.noteGlowOpacityBottom
       : baseGlowOpacityPercent;
 
-  const { top, bottom } = extractColorStops(layout.noteColor, "#FFFFFF");
+  const { top, bottom } = extractColorStops(layout.noteColor, '#FFFFFF');
   const glowStops = extractColorStops(
     layout.noteGlowColor ?? layout.noteColor,
-    "#FFFFFF"
+    '#FFFFFF',
   );
 
   return {
@@ -137,7 +136,9 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       opacityTop: clampPercentToUnit(opacityTopPercent),
       opacityBottom: clampPercentToUnit(opacityBottomPercent),
       glowSize,
-      glowOpacityTop: glowEnabled ? clampPercentToUnit(glowOpacityTopPercent) : 0,
+      glowOpacityTop: glowEnabled
+        ? clampPercentToUnit(glowOpacityTopPercent)
+        : 0,
       glowOpacityBottom: glowEnabled
         ? clampPercentToUnit(glowOpacityBottomPercent)
         : 0,
@@ -150,7 +151,7 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
   };
 };
 
-export type NoteBufferEventType = "add" | "finalize" | "cleanup" | "clear";
+export type NoteBufferEventType = 'add' | 'finalize' | 'cleanup' | 'clear';
 
 export class NoteBuffer {
   readonly noteInfo: Float32Array;
@@ -246,47 +247,47 @@ export class NoteBuffer {
       this.noteInfo.copyWithin(
         (insertIndex + 1) * 3,
         insertIndex * 3,
-        this.activeCount * 3
+        this.activeCount * 3,
       );
       this.noteSize.copyWithin(
         (insertIndex + 1) * 2,
         insertIndex * 2,
-        this.activeCount * 2
+        this.activeCount * 2,
       );
       this.noteColorTop.copyWithin(
         (insertIndex + 1) * 4,
         insertIndex * 4,
-        this.activeCount * 4
+        this.activeCount * 4,
       );
       this.noteColorBottom.copyWithin(
         (insertIndex + 1) * 4,
         insertIndex * 4,
-        this.activeCount * 4
+        this.activeCount * 4,
       );
       this.noteRadius.copyWithin(
         insertIndex + 1,
         insertIndex,
-        this.activeCount
+        this.activeCount,
       );
       this.trackIndex.copyWithin(
         insertIndex + 1,
         insertIndex,
-        this.activeCount
+        this.activeCount,
       );
       this.noteGlow.copyWithin(
         (insertIndex + 1) * 3,
         insertIndex * 3,
-        this.activeCount * 3
+        this.activeCount * 3,
       );
       this.noteGlowColorTop.copyWithin(
         (insertIndex + 1) * 3,
         insertIndex * 3,
-        this.activeCount * 3
+        this.activeCount * 3,
       );
       this.noteGlowColorBottom.copyWithin(
         (insertIndex + 1) * 3,
         insertIndex * 3,
-        this.activeCount * 3
+        this.activeCount * 3,
       );
 
       for (let i = this.activeCount; i > insertIndex; i -= 1) {
@@ -380,12 +381,12 @@ export class NoteBuffer {
       this.noteGlowColorTop.copyWithin(
         index * 3,
         nextIndex * 3,
-        (last + 1) * 3
+        (last + 1) * 3,
       );
       this.noteGlowColorBottom.copyWithin(
         index * 3,
         nextIndex * 3,
-        (last + 1) * 3
+        (last + 1) * 3,
       );
 
       for (let i = index; i < last; i += 1) {

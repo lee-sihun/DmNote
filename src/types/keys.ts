@@ -1,22 +1,22 @@
-import { z } from "zod";
-import { NOTE_SETTINGS_CONSTRAINTS } from "./noteSettingsConstraints";
-import { getDefaultCounterSettings } from "@src/renderer/defaults";
+import { z } from 'zod';
+import { NOTE_SETTINGS_CONSTRAINTS } from './noteSettingsConstraints';
+import { getDefaultCounterSettings } from '@src/renderer/defaults';
 
 export const keyCounterPlacementSchema = z.union([
-  z.literal("inside"),
-  z.literal("outside"),
+  z.literal('inside'),
+  z.literal('outside'),
 ]);
 
 export const keyCounterAlignSchema = z.union([
-  z.literal("top"),
-  z.literal("bottom"),
-  z.literal("left"),
-  z.literal("right"),
+  z.literal('top'),
+  z.literal('bottom'),
+  z.literal('left'),
+  z.literal('right'),
 ]);
 
 export const keyCounterAlignModeSchema = z.union([
-  z.literal("center"),
-  z.literal("between"),
+  z.literal('center'),
+  z.literal('between'),
 ]);
 
 export const keyCounterColorSchema = z.object({
@@ -90,7 +90,7 @@ export interface KeyCounterSettings {
 }
 
 /** @deprecated Use getDefaultCounterAnimationPresetId() from @src/renderer/defaults */
-export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = "builtin-ease-out";
+export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = 'builtin-ease-out';
 
 export { getDefaultCounterSettings as createDefaultCounterSettings };
 
@@ -133,7 +133,7 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
   ];
 
   return {
-    enabled: typeof enabled === "boolean" ? enabled : fallback.enabled,
+    enabled: typeof enabled === 'boolean' ? enabled : fallback.enabled,
     placement: placement ?? fallback.placement,
     align: align ?? fallback.align,
     alignMode: alignMode ?? fallback.alignMode,
@@ -146,46 +146,46 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
       active: stroke?.active ?? fallback.stroke.active,
     },
     gap:
-      typeof gap === "number" && Number.isFinite(gap) && gap >= 0
+      typeof gap === 'number' && Number.isFinite(gap) && gap >= 0
         ? gap
         : fallback.gap,
     fontSize:
-      typeof fontSize === "number" && Number.isFinite(fontSize)
+      typeof fontSize === 'number' && Number.isFinite(fontSize)
         ? fontSize
         : fallback.fontSize,
     fontWeight:
-      typeof fontWeight === "number" && Number.isFinite(fontWeight)
+      typeof fontWeight === 'number' && Number.isFinite(fontWeight)
         ? fontWeight
         : fallback.fontWeight,
     fontFamily:
-      typeof fontFamily === "string" ? fontFamily : fallback.fontFamily,
+      typeof fontFamily === 'string' ? fontFamily : fallback.fontFamily,
     fontItalic:
-      typeof fontItalic === "boolean" ? fontItalic : fallback.fontItalic,
+      typeof fontItalic === 'boolean' ? fontItalic : fallback.fontItalic,
     fontUnderline:
-      typeof fontUnderline === "boolean"
+      typeof fontUnderline === 'boolean'
         ? fontUnderline
         : fallback.fontUnderline,
     fontStrikethrough:
-      typeof fontStrikethrough === "boolean"
+      typeof fontStrikethrough === 'boolean'
         ? fontStrikethrough
         : fallback.fontStrikethrough,
     animation: {
       enabled:
-        typeof animation?.enabled === "boolean"
+        typeof animation?.enabled === 'boolean'
           ? animation.enabled
           : fallback.animation.enabled,
       presetId:
-        typeof animation?.presetId === "string" &&
+        typeof animation?.presetId === 'string' &&
         animation.presetId.trim().length > 0
           ? animation.presetId.trim()
           : fallback.animation.presetId,
       bezier: normalizedBezier,
       scale:
-        typeof animation?.scale === "number" && Number.isFinite(animation.scale)
+        typeof animation?.scale === 'number' && Number.isFinite(animation.scale)
           ? animation.scale
           : fallback.animation.scale,
       durationMs:
-        typeof animation?.durationMs === "number" &&
+        typeof animation?.durationMs === 'number' &&
         Number.isFinite(animation.durationMs)
           ? Math.min(Math.max(Math.round(animation.durationMs), 1), 5000)
           : fallback.animation.durationMs,
@@ -196,10 +196,10 @@ export function normalizeCounterSettings(raw: unknown): KeyCounterSettings {
 export const keySchema = z.string();
 
 export const keyModeSchema = z.union([
-  z.literal("4key"),
-  z.literal("5key"),
-  z.literal("6key"),
-  z.literal("8key"),
+  z.literal('4key'),
+  z.literal('5key'),
+  z.literal('6key'),
+  z.literal('8key'),
 ]);
 
 export type KeyMode = z.infer<typeof keyModeSchema> | string;
@@ -208,7 +208,7 @@ export const keyMappingSchema = z.record(z.string(), z.array(keySchema));
 export type KeyMappings = Record<string, string[]>;
 
 const gradientNoteColorSchema = z.object({
-  type: z.literal("gradient"),
+  type: z.literal('gradient'),
   top: z.string(),
   bottom: z.string(),
 });
@@ -219,10 +219,10 @@ export type NoteColor = z.infer<typeof noteColorSchema>;
 
 // 이미지 맞춤 설정 (CSS object-fit과 동일)
 export const imageFitSchema = z.union([
-  z.literal("cover"),
-  z.literal("contain"),
-  z.literal("fill"),
-  z.literal("none"),
+  z.literal('cover'),
+  z.literal('contain'),
+  z.literal('fill'),
+  z.literal('none'),
 ]);
 export type ImageFit = z.infer<typeof imageFitSchema>;
 
@@ -233,10 +233,10 @@ export const keyPositionSchema = z.object({
   height: z.number().positive(),
   // 레이어 표시 여부 (false면 그리드/오버레이에서 렌더링하지 않음)
   hidden: z.boolean().optional().default(false),
-  activeImage: z.string().optional().or(z.literal("")),
-  inactiveImage: z.string().optional().or(z.literal("")),
+  activeImage: z.string().optional().or(z.literal('')),
+  inactiveImage: z.string().optional().or(z.literal('')),
   soundEnabled: z.boolean().optional(),
-  soundPath: z.string().optional().or(z.literal("")),
+  soundPath: z.string().optional().or(z.literal('')),
   soundVolume: z.number().min(0).max(100).optional(),
   activeTransparent: z.boolean().optional(),
   idleTransparent: z.boolean().optional(),
@@ -264,7 +264,7 @@ export const keyPositionSchema = z.object({
   noteGlowOpacityBottom: z.number().int().min(0).max(100).optional(),
   noteGlowColor: noteColorSchema.optional(),
   noteAutoYCorrection: z.boolean().optional().default(true),
-  className: z.string().optional().or(z.literal("")),
+  className: z.string().optional().or(z.literal('')),
   zIndex: z.number().optional(),
   counter: z
     .any()

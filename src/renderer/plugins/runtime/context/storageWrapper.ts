@@ -8,7 +8,7 @@
  */
 export const createNamespacedStorage = (
   pluginId: string,
-  originalStorage: typeof window.api.plugin.storage
+  originalStorage: typeof window.api.plugin.storage,
 ) => {
   return {
     get: async <T = any>(key: string) => {

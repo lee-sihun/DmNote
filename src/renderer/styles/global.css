@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: "SUIT-Regular";
-  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2")
-    format("woff2");
+  font-family: 'SUIT-Regular';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2')
+    format('woff2');
   font-weight: normal;
   font-style: normal;
 }
 
 :root {
-  font-family: "SUIT-Regular", sans-serif;
+  font-family: 'SUIT-Regular', sans-serif;
 }
 
 html,
@@ -26,11 +26,11 @@ body,
   outline: none;
 }
 
-[app-region="drag"] {
+[app-region='drag'] {
   -webkit-app-region: drag;
 }
 
-[app-region="no-drag"] {
+[app-region='no-drag'] {
   -webkit-app-region: no-drag;
 }
 
@@ -52,18 +52,18 @@ body,
 }
 
 /* 라디오 버튼 스타일링 */
-input[type="radio"]:checked + span {
+input[type='radio']:checked + span {
   border-color: #ffb400;
 }
 
-input[type="radio"]:checked + span span {
+input[type='radio']:checked + span span {
   background: #ffb400;
   transform: scale(0.5);
 }
 
 /* 숫자 인풋 버튼 제거 */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
@@ -313,14 +313,14 @@ input[type="number"]::-webkit-outer-spin-button {
 .webfont-cm-editor .cm-scroller,
 .webfont-cm-editor .cm-content,
 .webfont-cm-editor .cm-gutterElement {
-  font-family: Consolas, "Courier New", monospace;
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 13px;
   line-height: 20px;
   letter-spacing: 0;
   font-variant-ligatures: none;
   font-feature-settings:
-    "liga" 0,
-    "calt" 0;
+    'liga' 0,
+    'calt' 0;
 }
 
 .webfont-cm-editor .cm-gutterElement {
@@ -506,8 +506,8 @@ body.dmn-custom-cursor * {
  * 메인 창 그리드에서 키/플러그인 요소를 드래그하거나 크기 조절할 때
  * 애니메이션이 적용되어 흐물흐물하게 움직이는 것을 방지
  */
-[data-editing="true"],
-[data-editing="true"] * {
+[data-editing='true'],
+[data-editing='true'] * {
   transition: none !important;
   animation: none !important;
 }

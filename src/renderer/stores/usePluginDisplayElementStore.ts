@@ -1,9 +1,9 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 import {
   PluginDisplayElementInternal,
   PluginDefinitionInternal,
-} from "@src/types/api";
-import { useKeyStore } from "./useKeyStore";
+} from '@src/types/api';
+import { useKeyStore } from './useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수
 let syncScheduled = false;
@@ -12,7 +12,7 @@ const SYNC_THROTTLE_MS = 16; // ~60fps
 
 // rAF 기반 state 배치 업데이트를 위한 변수
 let rafScheduled = false;
-let pendingStateUpdates: Map<
+const pendingStateUpdates: Map<
   string,
   Partial<PluginDisplayElementInternal>
 > = new Map();
@@ -43,17 +43,17 @@ interface PluginDisplayElementStore {
   updateElement: (
     fullId: string,
     updates: Partial<PluginDisplayElementInternal>,
-    options?: { skipSync?: boolean }
+    options?: { skipSync?: boolean },
   ) => void;
   updateElementBatched: (
     fullId: string,
-    updates: Partial<PluginDisplayElementInternal>
+    updates: Partial<PluginDisplayElementInternal>,
   ) => void;
   removeElement: (fullId: string) => void;
   clearByPluginId: (pluginId: string) => void;
   setElements: (
     elements: PluginDisplayElementInternal[],
-    options?: { skipSync?: boolean }
+    options?: { skipSync?: boolean },
   ) => void;
   registerDefinition: (definition: PluginDefinitionInternal) => void;
   // z-order 관련 함수들
@@ -72,7 +72,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
       set((state) => {
         const newElements = [...state.elements, element];
         // 메인 윈도우에서만 오버레이로 동기화
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
@@ -81,18 +81,18 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
     updateElement: (fullId, updates, options?: { skipSync?: boolean }) =>
       set((state) => {
         const newElements = state.elements.map((el) =>
-          el.fullId === fullId ? { ...el, ...updates } : el
+          el.fullId === fullId ? { ...el, ...updates } : el,
         );
         // 메인 윈도우에서만 오버레이로 동기화
         // state만 변경된 경우 동기화 스킵 (오버레이에서 자체 관리)
         // skipSync 옵션이 true인 경우 동기화 스킵 (리사이즈 중 등)
         if (
-          (window as any).__dmn_window_type === "main" &&
+          (window as any).__dmn_window_type === 'main' &&
           !options?.skipSync
         ) {
           const updateKeys = Object.keys(updates);
           const isStateOnlyUpdate =
-            updateKeys.length === 1 && updateKeys[0] === "state";
+            updateKeys.length === 1 && updateKeys[0] === 'state';
           if (!isStateOnlyUpdate) {
             syncToOverlayThrottled(newElements);
           }
@@ -134,7 +134,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
       set((state) => {
         const newElements = state.elements.filter((el) => el.fullId !== fullId);
         // 메인 윈도우에서만 오버레이로 동기화
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
@@ -143,7 +143,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
     clearByPluginId: (pluginId) =>
       set((state) => {
         const newElements = state.elements.filter(
-          (el) => el.pluginId !== pluginId
+          (el) => el.pluginId !== pluginId,
         );
         const newDefinitions = new Map(state.definitions);
         for (const [id, def] of newDefinitions.entries()) {
@@ -152,7 +152,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
           }
         }
         // 메인 윈도우에서만 오버레이로 동기화
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements, definitions: newDefinitions };
@@ -163,7 +163,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         // 메인 윈도우에서만 오버레이로 동기화
         // skipSync 옵션이 true인 경우 동기화 스킵 (드래그 중 등)
         if (
-          (window as any).__dmn_window_type === "main" &&
+          (window as any).__dmn_window_type === 'main' &&
           !options?.skipSync
         ) {
           syncToOverlayThrottled(elements);
@@ -192,10 +192,10 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         const maxZIndex = Math.max(0, ...keyZIndexes, ...pluginZIndexes);
 
         const newElements = state.elements.map((el) =>
-          el.fullId === fullId ? { ...el, zIndex: maxZIndex + 1 } : el
+          el.fullId === fullId ? { ...el, zIndex: maxZIndex + 1 } : el,
         );
 
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
@@ -215,10 +215,10 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         const minZIndex = Math.min(0, ...keyZIndexes, ...pluginZIndexes);
 
         const newElements = state.elements.map((el) =>
-          el.fullId === fullId ? { ...el, zIndex: minZIndex - 1 } : el
+          el.fullId === fullId ? { ...el, zIndex: minZIndex - 1 } : el,
         );
 
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
@@ -287,10 +287,10 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         }
 
         const newElements = state.elements.map((el) =>
-          el.fullId === fullId ? { ...el, zIndex: newZIndex } : el
+          el.fullId === fullId ? { ...el, zIndex: newZIndex } : el,
         );
 
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
@@ -359,27 +359,27 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         }
 
         const newElements = state.elements.map((el) =>
-          el.fullId === fullId ? { ...el, zIndex: newZIndex } : el
+          el.fullId === fullId ? { ...el, zIndex: newZIndex } : el,
         );
 
-        if ((window as any).__dmn_window_type === "main") {
+        if ((window as any).__dmn_window_type === 'main') {
           syncToOverlayThrottled(newElements);
         }
         return { elements: newElements };
       }),
-  })
+  }),
 );
 
 // 메인 윈도우에서 오버레이로 동기화 (즉시 실행)
 function syncToOverlay(elements: PluginDisplayElementInternal[]) {
   try {
     if (window.api?.bridge) {
-      window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+      window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
         elements,
       });
     }
   } catch (error) {
-    console.error("[DisplayElement Store] Failed to sync to overlay:", error);
+    console.error('[DisplayElement Store] Failed to sync to overlay:', error);
   }
 }
 

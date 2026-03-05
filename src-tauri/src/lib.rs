@@ -2,12 +2,12 @@ pub mod app_state;
 pub mod commands;
 pub mod cursor;
 pub mod defaults;
+pub mod ipc;
+pub mod key_sound;
 pub mod keyboard;
 pub mod keyboard_daemon;
-pub mod key_sound;
 #[cfg(target_os = "windows")]
 pub mod keyboard_labels;
-pub mod ipc;
 pub mod models;
 pub mod services;
 pub mod store;
@@ -43,11 +43,11 @@ pub fn compute_compensating_zoom() -> f64 {
 /// 읽기에 실패하거나 설정이 없으면 1.0(100%)을 반환합니다.
 #[cfg(target_os = "windows")]
 fn get_windows_text_scale_factor() -> f64 {
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
-        REG_DWORD, REG_VALUE_TYPE,
-    };
     use windows::core::w;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
+        REG_VALUE_TYPE,
+    };
 
     unsafe {
         let mut key_handle = HKEY::default();

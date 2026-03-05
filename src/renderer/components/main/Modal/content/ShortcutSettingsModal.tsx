@@ -1,13 +1,13 @@
-import React from "react";
-import Modal from "@components/main/Modal/Modal";
-import { useLenis } from "@hooks/useLenis";
-import { useTranslation } from "@contexts/I18nContext";
-import { isMac } from "@utils/platform";
+import React from 'react';
+import Modal from '@components/main/Modal/Modal';
+import { useLenis } from '@hooks/useLenis';
+import { useTranslation } from '@contexts/I18nContext';
+import { isMac } from '@utils/platform';
 // import { TooltipGroup } from "@components/main/Modal/TooltipGroup";
 // import FloatingTooltip from "@components/main/Modal/FloatingTooltip";
-import { getScrollShadowState } from "@utils/scrollShadow";
-import type { ShortcutBinding, ShortcutsState } from "@src/types/shortcuts";
-import { getDefaultShortcuts } from "@src/renderer/defaults";
+import { getScrollShadowState } from '@utils/scrollShadow';
+import type { ShortcutBinding, ShortcutsState } from '@src/types/shortcuts';
+import { getDefaultShortcuts } from '@src/renderer/defaults';
 
 type ShortcutKey = keyof ShortcutsState;
 
@@ -19,37 +19,37 @@ interface ShortcutSettingsModalProps {
 }
 
 const MODIFIER_CODES = new Set([
-  "ControlLeft",
-  "ControlRight",
-  "ShiftLeft",
-  "ShiftRight",
-  "AltLeft",
-  "AltRight",
-  "MetaLeft",
-  "MetaRight",
+  'ControlLeft',
+  'ControlRight',
+  'ShiftLeft',
+  'ShiftRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
 ]);
 
 function formatShortcut(binding: ShortcutBinding, macOS: boolean): string {
-  if (!binding?.key) return "";
+  if (!binding?.key) return '';
 
   const parts: string[] = [];
-  if (binding.ctrl) parts.push("Ctrl");
-  if (binding.meta) parts.push(macOS ? "Cmd" : "Win");
-  if (binding.alt) parts.push("Alt");
-  if (binding.shift) parts.push("Shift");
+  if (binding.ctrl) parts.push('Ctrl');
+  if (binding.meta) parts.push(macOS ? 'Cmd' : 'Win');
+  if (binding.alt) parts.push('Alt');
+  if (binding.shift) parts.push('Shift');
 
   const key = binding.key;
   const displayKey =
-    key.startsWith("Key") && key.length === 4
+    key.startsWith('Key') && key.length === 4
       ? key.slice(3)
-      : key.startsWith("Digit") && key.length === 6
+      : key.startsWith('Digit') && key.length === 6
         ? key.slice(5)
-        : key === "Space"
-          ? "Space"
+        : key === 'Space'
+          ? 'Space'
           : key;
 
   parts.push(displayKey);
-  return parts.join(" + ");
+  return parts.join(' + ');
 }
 
 function isSameShortcut(a: ShortcutBinding, b: ShortcutBinding): boolean {
@@ -134,7 +134,7 @@ export default function ShortcutSettingsModal({
     const next = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
       prev.hasTopShadow === next.hasTopShadow &&
-        prev.hasBottomShadow === next.hasBottomShadow
+      prev.hasBottomShadow === next.hasBottomShadow
         ? prev
         : next,
     );
@@ -210,7 +210,7 @@ export default function ShortcutSettingsModal({
       e.preventDefault();
       e.stopPropagation();
 
-      const code = e.code || "";
+      const code = e.code || '';
       const mods = {
         ctrl: e.ctrlKey,
         shift: e.shiftKey,
@@ -219,7 +219,7 @@ export default function ShortcutSettingsModal({
       };
 
       if (
-        code === "Escape" &&
+        code === 'Escape' &&
         !mods.ctrl &&
         !mods.shift &&
         !mods.alt &&
@@ -230,13 +230,13 @@ export default function ShortcutSettingsModal({
       }
 
       if (
-        code === "Backspace" &&
+        code === 'Backspace' &&
         !mods.ctrl &&
         !mods.shift &&
         !mods.alt &&
         !mods.meta
       ) {
-        setDraft((prev) => ({ ...prev, [listeningKey!]: { key: "" } }));
+        setDraft((prev) => ({ ...prev, [listeningKey!]: { key: '' } }));
         setListeningKey(null);
         return;
       }
@@ -252,15 +252,15 @@ export default function ShortcutSettingsModal({
       setListeningKey(null);
     };
 
-    window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("keyup", block, true);
-    window.addEventListener("keypress", block, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', block, true);
+    window.addEventListener('keypress', block, true);
 
     return () => {
       (window as any).__dmn_isKeyListening = false;
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("keyup", block, true);
-      window.removeEventListener("keypress", block, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', block, true);
+      window.removeEventListener('keypress', block, true);
     };
   }, [isListening, listeningKey]);
 
@@ -269,65 +269,65 @@ export default function ShortcutSettingsModal({
       [
         // Overlay
         {
-          section: "overlay" as const,
-          key: "toggleOverlay" as const,
-          label: t("shortcutSetting.toggleOverlay"),
-          help: t("shortcutSetting.toggleOverlayHint"),
+          section: 'overlay' as const,
+          key: 'toggleOverlay' as const,
+          label: t('shortcutSetting.toggleOverlay'),
+          help: t('shortcutSetting.toggleOverlayHint'),
         },
         {
-          section: "overlay" as const,
-          key: "toggleOverlayLock" as const,
-          label: t("shortcutSetting.toggleOverlayLock"),
-          help: t("shortcutSetting.toggleOverlayLockHint"),
+          section: 'overlay' as const,
+          key: 'toggleOverlayLock' as const,
+          label: t('shortcutSetting.toggleOverlayLock'),
+          help: t('shortcutSetting.toggleOverlayLockHint'),
         },
         {
-          section: "overlay" as const,
-          key: "toggleAlwaysOnTop" as const,
-          label: t("shortcutSetting.toggleAlwaysOnTop"),
-          help: t("shortcutSetting.toggleAlwaysOnTopHint"),
+          section: 'overlay' as const,
+          key: 'toggleAlwaysOnTop' as const,
+          label: t('shortcutSetting.toggleAlwaysOnTop'),
+          help: t('shortcutSetting.toggleAlwaysOnTopHint'),
         },
 
         // Canvas
         {
-          section: "canvas" as const,
-          key: "toggleSettingsPanel" as const,
-          label: t("shortcutSetting.toggleSidePanel"),
-          help: t("shortcutSetting.toggleSidePanelHint"),
+          section: 'canvas' as const,
+          key: 'toggleSettingsPanel' as const,
+          label: t('shortcutSetting.toggleSidePanel'),
+          help: t('shortcutSetting.toggleSidePanelHint'),
         },
         {
-          section: "canvas" as const,
-          key: "switchKeyMode" as const,
-          label: t("shortcutSetting.switchKeyMode"),
-          help: t("shortcutSetting.switchKeyModeHint"),
+          section: 'canvas' as const,
+          key: 'switchKeyMode' as const,
+          label: t('shortcutSetting.switchKeyMode'),
+          help: t('shortcutSetting.switchKeyModeHint'),
         },
         {
-          section: "canvas" as const,
-          key: "zoomIn" as const,
-          label: t("shortcutSetting.zoomIn"),
-          help: t("shortcutSetting.zoomInHint"),
+          section: 'canvas' as const,
+          key: 'zoomIn' as const,
+          label: t('shortcutSetting.zoomIn'),
+          help: t('shortcutSetting.zoomInHint'),
         },
         {
-          section: "canvas" as const,
-          key: "zoomOut" as const,
-          label: t("shortcutSetting.zoomOut"),
-          help: t("shortcutSetting.zoomOutHint"),
+          section: 'canvas' as const,
+          key: 'zoomOut' as const,
+          label: t('shortcutSetting.zoomOut'),
+          help: t('shortcutSetting.zoomOutHint'),
         },
         {
-          section: "canvas" as const,
-          key: "resetZoom" as const,
-          label: t("shortcutSetting.resetZoom"),
-          help: t("shortcutSetting.resetZoomHint"),
+          section: 'canvas' as const,
+          key: 'resetZoom' as const,
+          label: t('shortcutSetting.resetZoom'),
+          help: t('shortcutSetting.resetZoomHint'),
         },
       ] as const,
     [t],
   );
 
   const overlayActions = React.useMemo(
-    () => actions.filter((a) => a.section === "overlay"),
+    () => actions.filter((a) => a.section === 'overlay'),
     [actions],
   );
   const canvasActions = React.useMemo(
-    () => actions.filter((a) => a.section === "canvas"),
+    () => actions.filter((a) => a.section === 'canvas'),
     [actions],
   );
 
@@ -341,7 +341,7 @@ export default function ShortcutSettingsModal({
           if (bindA.key && bindB.key && isSameShortcut(bindA, bindB)) {
             const nameA = actions.find((a) => a.key === keyA)?.label || keyA;
             const nameB = actions.find((a) => a.key === keyB)?.label || keyB;
-            return t("shortcutSetting.duplicate", { a: nameA, b: nameB });
+            return t('shortcutSetting.duplicate', { a: nameA, b: nameB });
           }
         }
       }
@@ -388,16 +388,18 @@ export default function ShortcutSettingsModal({
         onPointerDownCapture={(event) => {
           if (!isListening) return;
           const target = event.target as HTMLElement | null;
-          if (target?.closest("button")) return;
+          if (target?.closest('button')) return;
           setError(null);
           setListeningKey(null);
         }}
       >
         <div className="relative">
           <div
-            className={`absolute top-0 left-0 ${hasOverflow ? "right-[14px]" : "right-0"
-              } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasTopShadow ? "opacity-100" : "opacity-0"}`}
+            className={`absolute top-0 left-0 ${
+              hasOverflow ? 'right-[14px]' : 'right-0'
+            } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
           />
 
           <div
@@ -405,8 +407,8 @@ export default function ShortcutSettingsModal({
             className="overflow-y-auto modal-content-scroll pr-[14px]"
             style={{
               height:
-                containerHeight !== null ? `${containerHeight}px` : "auto",
-              maxHeight: "235px",
+                containerHeight !== null ? `${containerHeight}px` : 'auto',
+              maxHeight: '235px',
               width:
                 hasOverflow && scrollbarWidth > 0
                   ? `calc(100% + ${scrollbarWidth}px)`
@@ -420,15 +422,15 @@ export default function ShortcutSettingsModal({
                   ? `${scrollbarWidth}px`
                   : undefined,
               transition: isFirstRender.current
-                ? "none"
-                : "height 100ms ease-in-out",
+                ? 'none'
+                : 'height 100ms ease-in-out',
             }}
           >
             <div ref={contentRef} className="flex flex-col gap-[28px] py-[4px]">
               <div className="flex flex-col gap-[19px]">
                 <div className="flex items-center gap-[10px]">
                   <p className="text-[12px] font-medium text-[#9A9DA8] uppercase tracking-wider whitespace-nowrap">
-                    {t("shortcutSetting.sectionOverlay")}
+                    {t('shortcutSetting.sectionOverlay')}
                   </p>
                   <div className="flex-1 h-[1px] bg-[#2A2A30]" />
                 </div>
@@ -438,8 +440,8 @@ export default function ShortcutSettingsModal({
                     const isRowListening = listeningKey === action.key;
                     const formatted = formatShortcut(binding, macOS);
                     const display = isRowListening
-                      ? t("shortcutSetting.listening")
-                      : formatted || t("shortcutSetting.unassigned");
+                      ? t('shortcutSetting.listening')
+                      : formatted || t('shortcutSetting.unassigned');
 
                     return (
                       <div
@@ -466,13 +468,14 @@ export default function ShortcutSettingsModal({
                             setListeningKey(null);
                             setDraft((prev) => ({
                               ...prev,
-                              [action.key]: { key: "" },
+                              [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${isRowListening
-                            ? "border-[#459BF8]"
-                            : "border-[#3A3943]"
-                            } text-[#DBDEE8] text-style-2`}
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                            isRowListening
+                              ? 'border-[#459BF8]'
+                              : 'border-[#3A3943]'
+                          } text-[#DBDEE8] text-style-2`}
                         >
                           {display}
                         </button>
@@ -482,12 +485,10 @@ export default function ShortcutSettingsModal({
                 </div>
               </div>
 
-
-
               <div className="flex flex-col gap-[19px]">
                 <div className="flex items-center gap-[10px]">
                   <p className="text-[12px] font-medium text-[#9A9DA8] uppercase tracking-wider whitespace-nowrap">
-                    {t("shortcutSetting.sectionCanvas")}
+                    {t('shortcutSetting.sectionCanvas')}
                   </p>
                   <div className="flex-1 h-[1px] bg-[#2A2A30]" />
                 </div>
@@ -497,8 +498,8 @@ export default function ShortcutSettingsModal({
                     const isRowListening = listeningKey === action.key;
                     const formatted = formatShortcut(binding, macOS);
                     const display = isRowListening
-                      ? t("shortcutSetting.listening")
-                      : formatted || t("shortcutSetting.unassigned");
+                      ? t('shortcutSetting.listening')
+                      : formatted || t('shortcutSetting.unassigned');
 
                     return (
                       <div
@@ -525,13 +526,14 @@ export default function ShortcutSettingsModal({
                             setListeningKey(null);
                             setDraft((prev) => ({
                               ...prev,
-                              [action.key]: { key: "" },
+                              [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${isRowListening
-                            ? "border-[#459BF8]"
-                            : "border-[#3A3943]"
-                            } text-[#DBDEE8] text-style-2`}
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                            isRowListening
+                              ? 'border-[#459BF8]'
+                              : 'border-[#3A3943]'
+                          } text-[#DBDEE8] text-style-2`}
                         >
                           {display}
                         </button>
@@ -544,9 +546,11 @@ export default function ShortcutSettingsModal({
           </div>
 
           <div
-            className={`absolute bottom-0 left-0 ${hasOverflow ? "right-[14px]" : "right-0"
-              } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"}`}
+            className={`absolute bottom-0 left-0 ${
+              hasOverflow ? 'right-[14px]' : 'right-0'
+            } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
 
@@ -562,20 +566,20 @@ export default function ShortcutSettingsModal({
             onClick={handleSave}
             disabled={isListening}
             style={
-              isListening ? { opacity: 0.6, pointerEvents: "none" } : undefined
+              isListening ? { opacity: 0.6, pointerEvents: 'none' } : undefined
             }
           >
-            {t("shortcutSetting.save")}
+            {t('shortcutSetting.save')}
           </button>
           <button
             className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             onClick={onClose}
             disabled={isListening}
             style={
-              isListening ? { opacity: 0.6, pointerEvents: "none" } : undefined
+              isListening ? { opacity: 0.6, pointerEvents: 'none' } : undefined
             }
           >
-            {t("shortcutSetting.cancel")}
+            {t('shortcutSetting.cancel')}
           </button>
           {/* <button
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"

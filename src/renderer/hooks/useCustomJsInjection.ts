@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { createCustomJsRuntime } from "@src/renderer/plugins/runtime/customJsRuntime";
+import { useEffect } from 'react';
+import { createCustomJsRuntime } from '@src/renderer/plugins/runtime/customJsRuntime';
 
 export function useCustomJsInjection() {
   useEffect(() => {

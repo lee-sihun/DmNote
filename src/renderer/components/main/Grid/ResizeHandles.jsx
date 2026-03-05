@@ -1,11 +1,11 @@
-import React, { useCallback, useRef, useState } from "react";
-import { useSettingsStore } from "@stores/useSettingsStore";
+import React, { useCallback, useRef, useState } from 'react';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   getCursor,
   lockCustomCursor,
   setCustomCursorHover,
   unlockCustomCursor,
-} from "@utils/cursorUtils";
+} from '@utils/cursorUtils';
 
 /**
  * 8방향 리사이즈 핸들을 표시하는 컴포넌트
@@ -25,56 +25,56 @@ const HANDLE_HIT_HALF = HANDLE_HIT_SIZE / 2;
 // 핸들 타입 정의 (corner: 꼭짓점, edge-v: 수직 방향 모서리, edge-h: 수평 방향 모서리)
 const HANDLES = [
   {
-    id: "nw",
-    cursor: "nwse-resize",
+    id: 'nw',
+    cursor: 'nwse-resize',
     x: 0,
     y: 0,
     dx: -1,
     dy: -1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "n", cursor: "ns-resize", x: 0.5, y: 0, dx: 0, dy: -1, type: "edge-h" },
+  { id: 'n', cursor: 'ns-resize', x: 0.5, y: 0, dx: 0, dy: -1, type: 'edge-h' },
   {
-    id: "ne",
-    cursor: "nesw-resize",
+    id: 'ne',
+    cursor: 'nesw-resize',
     x: 1,
     y: 0,
     dx: 1,
     dy: -1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "w", cursor: "ew-resize", x: 0, y: 0.5, dx: -1, dy: 0, type: "edge-v" },
-  { id: "e", cursor: "ew-resize", x: 1, y: 0.5, dx: 1, dy: 0, type: "edge-v" },
+  { id: 'w', cursor: 'ew-resize', x: 0, y: 0.5, dx: -1, dy: 0, type: 'edge-v' },
+  { id: 'e', cursor: 'ew-resize', x: 1, y: 0.5, dx: 1, dy: 0, type: 'edge-v' },
   {
-    id: "sw",
-    cursor: "nesw-resize",
+    id: 'sw',
+    cursor: 'nesw-resize',
     x: 0,
     y: 1,
     dx: -1,
     dy: 1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "s", cursor: "ns-resize", x: 0.5, y: 1, dx: 0, dy: 1, type: "edge-h" },
-  { id: "se", cursor: "nwse-resize", x: 1, y: 1, dx: 1, dy: 1, type: "corner" },
+  { id: 's', cursor: 'ns-resize', x: 0.5, y: 1, dx: 0, dy: 1, type: 'edge-h' },
+  { id: 'se', cursor: 'nwse-resize', x: 1, y: 1, dx: 1, dy: 1, type: 'corner' },
 ];
 
 // 핸들 시각적 스타일 반환
 const getHandleStyle = (type, isHovered) => {
   const baseStyle = {
-    backgroundColor: isHovered ? "rgba(59, 130, 246, 1)" : "white",
-    border: "1.5px solid rgba(59, 130, 246, 0.9)",
-    pointerEvents: "none",
-    transition: "background-color 0.15s ease",
+    backgroundColor: isHovered ? 'rgba(59, 130, 246, 1)' : 'white',
+    border: '1.5px solid rgba(59, 130, 246, 0.9)',
+    pointerEvents: 'none',
+    transition: 'background-color 0.15s ease',
   };
 
-  if (type === "corner") {
+  if (type === 'corner') {
     return {
       ...baseStyle,
       width: CORNER_HANDLE_SIZE,
       height: CORNER_HANDLE_SIZE,
-      borderRadius: "50%",
+      borderRadius: '50%',
     };
-  } else if (type === "edge-h") {
+  } else if (type === 'edge-h') {
     // 상/하 핸들: 가로로 긴 형태
     return {
       ...baseStyle,
@@ -106,17 +106,17 @@ function Handle({ handle, centerX, centerY, onMouseDown }) {
   return (
     <div
       style={{
-        position: "absolute",
+        position: 'absolute',
         left: hitX,
         top: hitY,
         width: HANDLE_HIT_SIZE,
         height: HANDLE_HIT_SIZE,
         cursor: cursorStyle,
         zIndex: 21,
-        backgroundColor: "transparent",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        backgroundColor: 'transparent',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
       onMouseEnter={(e) => {
@@ -184,8 +184,13 @@ export default function ResizeHandles({
       const handleMouseMove = (moveEvent) => {
         if (!resizeRef.current.isResizing) return;
 
-        const { handle, startMouseX, startMouseY, startBounds, startAspectRatio } =
-          resizeRef.current;
+        const {
+          handle,
+          startMouseX,
+          startMouseY,
+          startBounds,
+          startAspectRatio,
+        } = resizeRef.current;
 
         // 마우스 이동량 계산 (줌 보정)
         const rawDeltaX = (moveEvent.clientX - startMouseX) / zoom;
@@ -230,21 +235,22 @@ export default function ResizeHandles({
           const isCorner = handle.dx !== 0 && handle.dy !== 0;
           const primary =
             handle.dx !== 0 && handle.dy === 0
-              ? "width"
+              ? 'width'
               : handle.dy !== 0 && handle.dx === 0
-              ? "height"
-              : isCorner
-              ? (() => {
-                  const relW =
-                    Math.abs(newWidth - startBounds.width) / startBounds.width;
-                  const relH =
-                    Math.abs(newHeight - startBounds.height) /
-                    startBounds.height;
-                  return relW >= relH ? "width" : "height";
-                })()
-              : "width";
+                ? 'height'
+                : isCorner
+                  ? (() => {
+                      const relW =
+                        Math.abs(newWidth - startBounds.width) /
+                        startBounds.width;
+                      const relH =
+                        Math.abs(newHeight - startBounds.height) /
+                        startBounds.height;
+                      return relW >= relH ? 'width' : 'height';
+                    })()
+                  : 'width';
 
-          if (primary === "width") {
+          if (primary === 'width') {
             newWidth = Math.max(MIN_SIZE, snap(newWidth));
             const scale = newWidth / startBounds.width;
             newHeight = Math.max(MIN_SIZE, startBounds.height * scale);
@@ -289,18 +295,18 @@ export default function ResizeHandles({
 
       const handleMouseUp = () => {
         resizeRef.current.isResizing = false;
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("blur", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
         unlockCustomCursor();
         onResizeEnd?.();
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      window.addEventListener("blur", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
-    [bounds, zoom, onResizeStart, onResize, onResizeEnd]
+    [bounds, zoom, onResizeStart, onResize, onResizeEnd],
   );
 
   if (!bounds) return null;

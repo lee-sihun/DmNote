@@ -17,7 +17,7 @@ export type ShortcutsState = {
   resetZoom: ShortcutBinding;
 };
 
-import { getDefaultShortcuts } from "@src/renderer/defaults";
+import { getDefaultShortcuts } from '@src/renderer/defaults';
 
 /** @deprecated Use getDefaultShortcuts() from @src/renderer/defaults */
 export const DEFAULT_SHORTCUTS: ShortcutsState = getDefaultShortcuts();

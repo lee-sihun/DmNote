@@ -1,4 +1,4 @@
-import React, { createContext, useMemo, useRef } from "react";
+import React, { createContext, useMemo, useRef } from 'react';
 
 export type TooltipGroupContextType = {
   getEffectiveDelay: (baseDelay: number) => number;
@@ -53,7 +53,7 @@ export const TooltipGroup: React.FC<{
         firstAnimationConsumedRef.current = true;
       },
     }),
-    []
+    [],
   );
 
   return (

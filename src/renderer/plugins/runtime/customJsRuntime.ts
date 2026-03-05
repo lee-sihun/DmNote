@@ -1,10 +1,10 @@
 /**
  * Custom JS Runtime
  * 플러그인 JS 파일을 로드하고 실행하는 런타임입니다.
- * 
+ *
  * 이 파일은 모듈화된 플러그인 시스템의 진입점으로,
  * 세부 구현은 하위 모듈들에서 처리됩니다.
- * 
+ *
  * 모듈 구조:
  * - handlers/: 이벤트 핸들러 레지스트리
  * - displayElement/: 디스플레이 요소 관리
@@ -12,15 +12,18 @@
  * - api/: defineElement, defineSettings 등 플러그인 API
  */
 
-import { usePluginMenuStore } from "@stores/usePluginMenuStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { extractPluginId } from "@utils/pluginUtils";
-import { handlerRegistry } from "./handlers";
-import { displayElementInstanceRegistry, setInitialLoading } from "./displayElement";
-import { createPluginApiProxy, createPluginWindowProxy } from "./api";
-import type { JsPlugin } from "@src/types/js";
+import { usePluginMenuStore } from '@stores/usePluginMenuStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { extractPluginId } from '@utils/pluginUtils';
+import { handlerRegistry } from './handlers';
+import {
+  displayElementInstanceRegistry,
+  setInitialLoading,
+} from './displayElement';
+import { createPluginApiProxy, createPluginWindowProxy } from './api';
+import type { JsPlugin } from '@src/types/js';
 
-const SCRIPT_ID_PREFIX = "dmn-custom-js-";
+const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
 
 type CleanupAwareWindow = Window & {
   __dmn_custom_js_cleanup?: () => void;
@@ -50,17 +53,17 @@ export function createCustomJsRuntime(): CustomJsRuntime {
   const getIsReloading = () => isReloading;
 
   const safeRun = (fn?: () => void, label?: string) => {
-    if (typeof fn !== "function") return;
+    if (typeof fn !== 'function') return;
     try {
       fn();
     } catch (error) {
-      const tag = label ? ` (${label})` : "";
+      const tag = label ? ` (${label})` : '';
       console.error(`Error during custom JS cleanup${tag}`, error);
     }
   };
 
   const registerCleanup = (pluginId: string, cleanup: () => void) => {
-    if (typeof cleanup !== "function") {
+    if (typeof cleanup !== 'function') {
       console.warn(`[Plugin ${pluginId}] registerCleanup requires a function`);
       return;
     }
@@ -106,19 +109,19 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     }
     activeElements.clear();
 
-    if ((window as any).__dmn_window_type === "main") {
+    if ((window as any).__dmn_window_type === 'main') {
       try {
         usePluginMenuStore.getState().clearAll();
         usePluginDisplayElementStore.getState().setElements([]);
         displayElementInstanceRegistry.clearAll();
 
         if (window.api?.bridge) {
-          window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+          window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
             elements: [],
           });
         }
       } catch (error) {
-        console.error("Failed to clear plugin UI elements", error);
+        console.error('Failed to clear plugin UI elements', error);
       }
     }
   };
@@ -134,21 +137,21 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 
       (anyWindow as any).__dmn_current_plugin_id = pluginId;
 
-      if ((window as any).__dmn_window_type === "main") {
+      if ((window as any).__dmn_window_type === 'main') {
         try {
           usePluginMenuStore.getState().clearByPluginId(pluginId);
           usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
           displayElementInstanceRegistry.clearByPluginId(pluginId);
 
           if (window.api?.bridge) {
-            window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
+            window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
               elements: usePluginDisplayElementStore.getState().elements,
             });
           }
         } catch (error) {
           console.error(
             `Failed to clear UI elements for plugin '${pluginId}'`,
-            error
+            error,
           );
         }
       }
@@ -224,9 +227,9 @@ ${plugin.content}
 })(window.__dmn_plugin_window_proxy);
 `;
 
-      const element = document.createElement("script");
+      const element = document.createElement('script');
       element.id = `${SCRIPT_ID_PREFIX}${plugin.id}`;
-      element.type = "text/javascript";
+      element.type = 'text/javascript';
       element.textContent = wrappedContent;
       document.head.appendChild(element);
 
@@ -248,7 +251,7 @@ ${plugin.content}
       activeElements.set(plugin.id, {
         element,
         cleanup:
-          typeof pluginCleanup === "function" ? pluginCleanup : undefined,
+          typeof pluginCleanup === 'function' ? pluginCleanup : undefined,
         pluginId,
       });
     } catch (error) {
@@ -294,7 +297,7 @@ ${plugin.content}
         syncPlugins(Array.isArray(data.plugins) ? data.plugins : []);
       })
       .catch((error) => {
-        console.error("Failed to fetch JS plugins", error);
+        console.error('Failed to fetch JS plugins', error);
       });
 
     window.api.js
@@ -309,7 +312,7 @@ ${plugin.content}
         }
       })
       .catch((error) => {
-        console.error("Failed to fetch JS plugin toggle state", error);
+        console.error('Failed to fetch JS plugin toggle state', error);
       });
   };
 

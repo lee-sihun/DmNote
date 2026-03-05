@@ -1,12 +1,12 @@
-import { useKeyStore } from "@stores/useKeyStore";
-import GridIcon from "@assets/svgs/grid.svg";
-import { useTranslation } from "@contexts/I18nContext";
-import { useState, useRef } from "react";
-import FloatingPopup from "../Modal/FloatingPopup";
-import TabList from "../Modal/content/TabList";
+import { useKeyStore } from '@stores/useKeyStore';
+import GridIcon from '@assets/svgs/grid.svg';
+import { useTranslation } from '@contexts/I18nContext';
+import { useState, useRef } from 'react';
+import FloatingPopup from '../Modal/FloatingPopup';
+import TabList from '../Modal/content/TabList';
 
 const TabTool = () => {
-  const keyTypes = ["4key", "5key", "6key", "8key"];
+  const keyTypes = ['4key', '5key', '6key', '8key'];
   const { t } = useTranslation();
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
   const [isPopupOpen, setIsPopupOpen] = useState(false);
@@ -17,7 +17,7 @@ const TabTool = () => {
     <div className="flex gap-[10px]">
       <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
         {keyTypes.map((keyType) => {
-          const num = keyType.replace("key", "");
+          const num = keyType.replace('key', '');
           const label = t(`mode.button${num}`);
           return (
             <Button
@@ -45,9 +45,9 @@ const TabTool = () => {
         <div
           className={`w-[30px] h-[30px] flex items-center justify-center rounded-[7px] transition-colors ${
             isCustomSelected
-              ? "bg-button-active"
-              : "hover:bg-button-hover active:bg-button-active"
-          } ${!isBootstrapped ? "opacity-50" : ""}`}
+              ? 'bg-button-active'
+              : 'hover:bg-button-hover active:bg-button-active'
+          } ${!isBootstrapped ? 'opacity-50' : ''}`}
         >
           <GridIcon />
         </div>
@@ -82,9 +82,9 @@ const Button = ({
       type="button"
       className={`flex items-center h-[30px] px-[8px] rounded-[7px] transition-colors ${
         isSelected
-          ? "bg-button-active"
-          : "bg-button-primary hover:bg-button-hover"
-      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          ? 'bg-button-active'
+          : 'bg-button-primary hover:bg-button-hover'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       onClick={onClick}
       disabled={disabled}
     >

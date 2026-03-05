@@ -1,18 +1,18 @@
-import React, { useCallback, useRef, useState } from "react";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
+import React, { useCallback, useRef, useState } from 'react';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateSizeSnap,
-} from "@utils/smartGuides";
+} from '@utils/smartGuides';
 import {
   getCursor,
   lockCustomCursor,
   setCustomCursorHover,
   unlockCustomCursor,
-} from "@utils/cursorUtils";
+} from '@utils/cursorUtils';
 
 /**
  * 다중 선택 시 그룹 전체를 감싸는 리사이즈 핸들을 표시하는 컴포넌트
@@ -33,56 +33,56 @@ const HANDLE_HIT_HALF = HANDLE_HIT_SIZE / 2;
 // 핸들 타입 정의
 const HANDLES = [
   {
-    id: "nw",
-    cursor: "nwse-resize",
+    id: 'nw',
+    cursor: 'nwse-resize',
     x: 0,
     y: 0,
     dx: -1,
     dy: -1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "n", cursor: "ns-resize", x: 0.5, y: 0, dx: 0, dy: -1, type: "edge-h" },
+  { id: 'n', cursor: 'ns-resize', x: 0.5, y: 0, dx: 0, dy: -1, type: 'edge-h' },
   {
-    id: "ne",
-    cursor: "nesw-resize",
+    id: 'ne',
+    cursor: 'nesw-resize',
     x: 1,
     y: 0,
     dx: 1,
     dy: -1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "w", cursor: "ew-resize", x: 0, y: 0.5, dx: -1, dy: 0, type: "edge-v" },
-  { id: "e", cursor: "ew-resize", x: 1, y: 0.5, dx: 1, dy: 0, type: "edge-v" },
+  { id: 'w', cursor: 'ew-resize', x: 0, y: 0.5, dx: -1, dy: 0, type: 'edge-v' },
+  { id: 'e', cursor: 'ew-resize', x: 1, y: 0.5, dx: 1, dy: 0, type: 'edge-v' },
   {
-    id: "sw",
-    cursor: "nesw-resize",
+    id: 'sw',
+    cursor: 'nesw-resize',
     x: 0,
     y: 1,
     dx: -1,
     dy: 1,
-    type: "corner",
+    type: 'corner',
   },
-  { id: "s", cursor: "ns-resize", x: 0.5, y: 1, dx: 0, dy: 1, type: "edge-h" },
-  { id: "se", cursor: "nwse-resize", x: 1, y: 1, dx: 1, dy: 1, type: "corner" },
+  { id: 's', cursor: 'ns-resize', x: 0.5, y: 1, dx: 0, dy: 1, type: 'edge-h' },
+  { id: 'se', cursor: 'nwse-resize', x: 1, y: 1, dx: 1, dy: 1, type: 'corner' },
 ];
 
 // 핸들 시각적 스타일 반환
 const getHandleStyle = (type, isHovered) => {
   const baseStyle = {
-    backgroundColor: isHovered ? "rgba(59, 130, 246, 1)" : "white",
-    border: "2px solid rgba(59, 130, 246, 0.9)",
-    pointerEvents: "none",
-    transition: "background-color 0.15s ease",
+    backgroundColor: isHovered ? 'rgba(59, 130, 246, 1)' : 'white',
+    border: '2px solid rgba(59, 130, 246, 0.9)',
+    pointerEvents: 'none',
+    transition: 'background-color 0.15s ease',
   };
 
-  if (type === "corner") {
+  if (type === 'corner') {
     return {
       ...baseStyle,
       width: CORNER_HANDLE_SIZE,
       height: CORNER_HANDLE_SIZE,
-      borderRadius: "50%",
+      borderRadius: '50%',
     };
-  } else if (type === "edge-h") {
+  } else if (type === 'edge-h') {
     return {
       ...baseStyle,
       width: EDGE_HANDLE_LENGTH,
@@ -112,17 +112,17 @@ function Handle({ handle, centerX, centerY, onMouseDown }) {
   return (
     <div
       style={{
-        position: "absolute",
+        position: 'absolute',
         left: hitX,
         top: hitY,
         width: HANDLE_HIT_SIZE,
         height: HANDLE_HIT_SIZE,
         cursor: cursorStyle,
         zIndex: 25,
-        backgroundColor: "transparent",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        backgroundColor: 'transparent',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
       onMouseDown={(e) => onMouseDown(e, handle)}
       onMouseEnter={(e) => {
@@ -148,16 +148,16 @@ function isElementResizable(
   statPositions,
   graphPositions,
   selectedKeyType,
-  pluginElements
+  pluginElements,
 ) {
-  if (element.type === "key") {
+  if (element.type === 'key') {
     // 키 요소는 항상 리사이즈 가능
     return true;
-  } else if (element.type === "stat") {
+  } else if (element.type === 'stat') {
     return true;
-  } else if (element.type === "graph") {
+  } else if (element.type === 'graph') {
     return true;
-  } else if (element.type === "plugin") {
+  } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find((p) => p.fullId === element.id);
     if (!pluginEl) return false;
 
@@ -180,9 +180,9 @@ function getElementBounds(
   statPositions,
   graphPositions,
   selectedKeyType,
-  pluginElements
+  pluginElements,
 ) {
-  if (element.type === "key" && element.index !== undefined) {
+  if (element.type === 'key' && element.index !== undefined) {
     const pos = positions[selectedKeyType]?.[element.index];
     if (!pos) return null;
     return {
@@ -191,7 +191,7 @@ function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
-  } else if (element.type === "stat" && element.index !== undefined) {
+  } else if (element.type === 'stat' && element.index !== undefined) {
     const pos = statPositions?.[selectedKeyType]?.[element.index];
     if (!pos) return null;
     return {
@@ -200,7 +200,7 @@ function getElementBounds(
       width: pos.width || 60,
       height: pos.height || 60,
     };
-  } else if (element.type === "graph" && element.index !== undefined) {
+  } else if (element.type === 'graph' && element.index !== undefined) {
     const pos = graphPositions?.[selectedKeyType]?.[element.index];
     if (!pos) return null;
     return {
@@ -209,7 +209,7 @@ function getElementBounds(
       width: pos.width || 200,
       height: pos.height || 100,
     };
-  } else if (element.type === "plugin") {
+  } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find((p) => p.fullId === element.id);
     if (!pluginEl?.measuredSize) return null;
     return {
@@ -231,7 +231,7 @@ function calculateGroupBounds(
   statPositions,
   graphPositions,
   selectedKeyType,
-  pluginElements
+  pluginElements,
 ) {
   let minX = Infinity;
   let minY = Infinity;
@@ -249,7 +249,7 @@ function calculateGroupBounds(
         statPositions,
         graphPositions,
         selectedKeyType,
-        pluginElements
+        pluginElements,
       )
     ) {
       continue;
@@ -261,7 +261,7 @@ function calculateGroupBounds(
       statPositions,
       graphPositions,
       selectedKeyType,
-      pluginElements
+      pluginElements,
     );
     if (!bounds) continue;
 
@@ -318,7 +318,7 @@ export default function GroupResizeHandles({
     statPositions,
     graphPositions,
     selectedKeyType,
-    pluginElements
+    pluginElements,
   );
 
   // 각 요소가 리사이즈 가능한지 확인
@@ -330,12 +330,12 @@ export default function GroupResizeHandles({
       statPositions,
       graphPositions,
       selectedKeyType,
-      pluginElements
+      pluginElements,
     ),
   }));
 
   const nonResizableElements = resizabilityInfo.filter(
-    (info) => !info.isResizable
+    (info) => !info.isResizable,
   );
   const resizableElements = resizabilityInfo.filter((info) => info.isResizable);
 
@@ -356,8 +356,8 @@ export default function GroupResizeHandles({
             statPositions,
             graphPositions,
             selectedKeyType,
-            pluginElements
-          )
+            pluginElements,
+          ),
       );
 
       const nonResizableElementBounds = groupData.elementBounds.filter(
@@ -368,15 +368,15 @@ export default function GroupResizeHandles({
             statPositions,
             graphPositions,
             selectedKeyType,
-            pluginElements
-          )
+            pluginElements,
+          ),
       );
 
       const getMaxShrink = (boundsList, groupSize, axis) => {
         if (!Number.isFinite(groupSize) || groupSize <= 0) return 0;
         let minScale = 0;
         for (const { bounds } of boundsList) {
-          const size = axis === "x" ? bounds.width : bounds.height;
+          const size = axis === 'x' ? bounds.width : bounds.height;
           if (!Number.isFinite(size) || size <= 0) continue;
           if (size >= MIN_SIZE) {
             minScale = Math.max(minScale, MIN_SIZE / size);
@@ -400,8 +400,8 @@ export default function GroupResizeHandles({
         },
         startElementBounds: resizableElementBounds,
         nonResizableElementBounds: nonResizableElementBounds,
-        maxShrinkX: getMaxShrink(resizableElementBounds, groupData.width, "x"),
-        maxShrinkY: getMaxShrink(resizableElementBounds, groupData.height, "y"),
+        maxShrinkX: getMaxShrink(resizableElementBounds, groupData.width, 'x'),
+        maxShrinkY: getMaxShrink(resizableElementBounds, groupData.height, 'y'),
         handle,
       };
 
@@ -426,15 +426,14 @@ export default function GroupResizeHandles({
         const rawDeltaY = (moveEvent.clientY - startMouseY) / zoom;
 
         // store에서 스냅 크기 가져오기
-        const snapSize = useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+        const snapSize =
+          useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
 
-        const snapDelta = (delta) =>
-          Math.round(delta / snapSize) * snapSize;
+        const snapDelta = (delta) => Math.round(delta / snapSize) * snapSize;
 
         const clampShrinkDelta = (delta, handleDir, maxShrink) => {
           if (!Number.isFinite(maxShrink) || maxShrink <= 0) return delta;
-          const maxSnapped =
-            Math.floor(maxShrink / snapSize) * snapSize;
+          const maxSnapped = Math.floor(maxShrink / snapSize) * snapSize;
           if (handleDir === -1) {
             return Math.min(delta, maxSnapped);
           }
@@ -451,14 +450,14 @@ export default function GroupResizeHandles({
           snappedDeltaX = clampShrinkDelta(
             snappedDeltaX,
             handle.dx,
-            maxShrinkX
+            maxShrinkX,
           );
         }
         if (handle.dy !== 0) {
           snappedDeltaY = clampShrinkDelta(
             snappedDeltaY,
             handle.dy,
-            maxShrinkY
+            maxShrinkY,
           );
         }
 
@@ -472,7 +471,7 @@ export default function GroupResizeHandles({
         if (handle.dx === -1) {
           newGroupWidth = Math.max(
             MIN_SIZE,
-            startGroupBounds.width - snappedDeltaX
+            startGroupBounds.width - snappedDeltaX,
           );
           if (newGroupWidth > MIN_SIZE) {
             newGroupX = startGroupBounds.x + snappedDeltaX;
@@ -482,14 +481,14 @@ export default function GroupResizeHandles({
         } else if (handle.dx === 1) {
           newGroupWidth = Math.max(
             MIN_SIZE,
-            startGroupBounds.width + snappedDeltaX
+            startGroupBounds.width + snappedDeltaX,
           );
         }
 
         if (handle.dy === -1) {
           newGroupHeight = Math.max(
             MIN_SIZE,
-            startGroupBounds.height - snappedDeltaY
+            startGroupBounds.height - snappedDeltaY,
           );
           if (newGroupHeight > MIN_SIZE) {
             newGroupY = startGroupBounds.y + snappedDeltaY;
@@ -499,7 +498,7 @@ export default function GroupResizeHandles({
         } else if (handle.dy === 1) {
           newGroupHeight = Math.max(
             MIN_SIZE,
-            startGroupBounds.height + snappedDeltaY
+            startGroupBounds.height + snappedDeltaY,
           );
         }
 
@@ -516,7 +515,7 @@ export default function GroupResizeHandles({
 
         // 선택된 요소들의 ID 수집 (스마트 가이드에서 제외)
         const selectedIds = selectedElements.map((el) =>
-          el.type === "key" ? `key-${el.index}` : el.id
+          el.type === 'key' ? `key-${el.index}` : el.id,
         );
 
         if (getOtherElements && alignmentGuidesEnabled) {
@@ -528,14 +527,14 @@ export default function GroupResizeHandles({
             newGroupY,
             newGroupWidth,
             newGroupHeight,
-            "group"
+            'group',
           );
 
           const snapResult = calculateSnapPoints(
             groupBoundsForSnap,
             otherElements,
             undefined,
-            { disableSpacing: !spacingGuidesEnabled }
+            { disableSpacing: !spacingGuidesEnabled },
           );
 
           // X축 스냅 적용
@@ -589,7 +588,7 @@ export default function GroupResizeHandles({
               newGroupWidth,
               newGroupHeight,
               otherElements,
-              "group"
+              'group',
             );
 
             if (sizeSnapResult.didSnapWidth) {
@@ -627,7 +626,7 @@ export default function GroupResizeHandles({
               newGroupY,
               newGroupWidth,
               newGroupHeight,
-              "group"
+              'group',
             );
             smartGuidesStore.setDraggedBounds(snappedBounds);
 
@@ -642,51 +641,51 @@ export default function GroupResizeHandles({
                 const filteredSpacingGuides = snapResult.spacingGuides.filter(
                   (guide) => {
                     // 수평 방향 간격 가이드 (좌우 간격)
-                    if (guide.direction === "horizontal") {
+                    if (guide.direction === 'horizontal') {
                       // 좌우 핸들이 아니면 표시 안 함
                       if (handle.dx === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === "group" || 
-                        guide.toElementId === "group";
-                      
+                      const isDraggedElement =
+                        guide.fromElementId === 'group' ||
+                        guide.toElementId === 'group';
+
                       if (!isDraggedElement) return false;
-                      
+
                       // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
                       if (handle.dx === -1) {
-                        return guide.toElementId === "group";
+                        return guide.toElementId === 'group';
                       }
                       // 오른쪽 핸들(dx: 1): 오른쪽 간격만 표시
                       if (handle.dx === 1) {
-                        return guide.fromElementId === "group";
+                        return guide.fromElementId === 'group';
                       }
                     }
-                    
+
                     // 수직 방향 간격 가이드 (상하 간격)
-                    if (guide.direction === "vertical") {
+                    if (guide.direction === 'vertical') {
                       // 상하 핸들이 아니면 표시 안 함
                       if (handle.dy === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === "group" || 
-                        guide.toElementId === "group";
-                      
+                      const isDraggedElement =
+                        guide.fromElementId === 'group' ||
+                        guide.toElementId === 'group';
+
                       if (!isDraggedElement) return false;
-                      
+
                       // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
                       if (handle.dy === -1) {
-                        return guide.toElementId === "group";
+                        return guide.toElementId === 'group';
                       }
                       // 아래쪽 핸들(dy: 1): 아래쪽 간격만 표시
                       if (handle.dy === 1) {
-                        return guide.fromElementId === "group";
+                        return guide.fromElementId === 'group';
                       }
                     }
-                    
+
                     return false;
-                  }
+                  },
                 );
                 smartGuidesStore.setSpacingGuides(filteredSpacingGuides);
               } else {
@@ -699,7 +698,7 @@ export default function GroupResizeHandles({
 
             if (hasSizeSnap) {
               smartGuidesStore.setSizeMatchGuides(
-                sizeSnapResult.sizeMatchGuides
+                sizeSnapResult.sizeMatchGuides,
               );
             } else {
               smartGuidesStore.setSizeMatchGuides([]);
@@ -731,10 +730,10 @@ export default function GroupResizeHandles({
             const relativeY = bounds.y - startGroupBounds.y;
 
             // 새 위치 계산 (스케일 적용)
-            let newX = newGroupX + relativeX * scaleX;
-            let newY = newGroupY + relativeY * scaleY;
-            let newWidth = bounds.width * scaleX;
-            let newHeight = bounds.height * scaleY;
+            const newX = newGroupX + relativeX * scaleX;
+            const newY = newGroupY + relativeY * scaleY;
+            const newWidth = bounds.width * scaleX;
+            const newHeight = bounds.height * scaleY;
 
             // 내부 요소는 스케일만 적용해 비율을 유지한다. (스냅은 그룹 bounds에서만 처리)
 
@@ -747,7 +746,7 @@ export default function GroupResizeHandles({
                 height: newHeight,
               },
             };
-          }
+          },
         );
 
         // 새 그룹 bounds 계산
@@ -782,16 +781,16 @@ export default function GroupResizeHandles({
         resizeRef.current.isResizing = false;
         // 스마트 가이드 클리어
         useSmartGuidesStore.getState().clearGuides();
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("blur", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
         unlockCustomCursor();
         onGroupResizeEnd?.();
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      window.addEventListener("blur", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
     [
       groupData,
@@ -806,7 +805,7 @@ export default function GroupResizeHandles({
       onGroupResize,
       onGroupResizeEnd,
       getOtherElements,
-    ]
+    ],
   );
 
   if (!groupData || selectedElements.length < 2) return null;
@@ -840,14 +839,14 @@ export default function GroupResizeHandles({
       {/* 그룹 바운딩 박스 테두리 */}
       <div
         style={{
-          position: "absolute",
+          position: 'absolute',
           left: selectionLeft,
           top: selectionTop,
           width: selectionWidth,
           height: selectionHeight,
           border: `${GROUP_BORDER_WIDTH}px solid rgba(59, 130, 246, 0.9)`,
-          borderRadius: "6px",
-          pointerEvents: "none",
+          borderRadius: '6px',
+          pointerEvents: 'none',
           zIndex: 22,
         }}
       />
@@ -860,7 +859,7 @@ export default function GroupResizeHandles({
           statPositions,
           graphPositions,
           selectedKeyType,
-          pluginElements
+          pluginElements,
         );
         if (!bounds) return null;
 
@@ -868,14 +867,14 @@ export default function GroupResizeHandles({
           <div
             key={`non-resizable-${element.id}`}
             style={{
-              position: "absolute",
+              position: 'absolute',
               left: bounds.x * zoom + panX - 2,
               top: bounds.y * zoom + panY - 2,
               width: bounds.width * zoom + 4,
               height: bounds.height * zoom + 4,
-              border: "2px dashed rgba(251, 146, 60, 0.9)",
-              borderRadius: "4px",
-              pointerEvents: "none",
+              border: '2px dashed rgba(251, 146, 60, 0.9)',
+              borderRadius: '4px',
+              pointerEvents: 'none',
               zIndex: 21,
             }}
             title="크기 조절 불가능한 요소"
@@ -913,7 +912,7 @@ function getNonResizableElementIds(
   statPositions,
   graphPositions,
   selectedKeyType,
-  pluginElements
+  pluginElements,
 ) {
   return selectedElements
     .filter(
@@ -924,8 +923,8 @@ function getNonResizableElementIds(
           statPositions,
           graphPositions,
           selectedKeyType,
-          pluginElements
-        )
+          pluginElements,
+        ),
     )
     .map((element) => element.id);
 }

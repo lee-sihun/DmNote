@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import Modal from "../Modal";
-import Dropdown from "@components/main/common/Dropdown";
-import ColorPicker from "./ColorPicker";
-import { useTranslation } from "@contexts/I18nContext";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Modal from '../Modal';
+import Dropdown from '@components/main/common/Dropdown';
+import ColorPicker from './ColorPicker';
+import { useTranslation } from '@contexts/I18nContext';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
+} from '@src/types/keys';
 
 export default function CounterSettingModal({
   onClose,
@@ -20,9 +20,9 @@ export default function CounterSettingModal({
   const resolvedSettings = useMemo(
     () =>
       normalizeCounterSettings(
-        initialSettings ?? createDefaultCounterSettings()
+        initialSettings ?? createDefaultCounterSettings(),
       ),
-    [initialSettings]
+    [initialSettings],
   );
 
   const [placement, setPlacement] = useState(resolvedSettings.placement);
@@ -31,14 +31,14 @@ export default function CounterSettingModal({
   const [gap, setGap] = useState(resolvedSettings.gap ?? 6);
   const [isGapFocused, setIsGapFocused] = useState(false);
   const [displayGap, setDisplayGap] = useState(
-    `${resolvedSettings.gap ?? 6}px`
+    `${resolvedSettings.gap ?? 6}px`,
   );
 
   const [fillIdle, setFillIdle] = useState(resolvedSettings.fill.idle);
   const [fillActive, setFillActive] = useState(resolvedSettings.fill.active);
   const [strokeIdle, setStrokeIdle] = useState(resolvedSettings.stroke.idle);
   const [strokeActive, setStrokeActive] = useState(
-    resolvedSettings.stroke.active
+    resolvedSettings.stroke.active,
   );
 
   // 정렬 드롭다운과 동일한 폭으로 간격 인풋 너비를 맞추기 위한 참조 및 상태
@@ -48,7 +48,7 @@ export default function CounterSettingModal({
   useEffect(() => {
     const measure = () => {
       if (!alignDropdownWrapperRef.current) return;
-      const btn = alignDropdownWrapperRef.current.querySelector("button");
+      const btn = alignDropdownWrapperRef.current.querySelector('button');
       if (btn) {
         const w = btn.offsetWidth;
         if (w && w !== alignDropdownWidth) setAlignDropdownWidth(w);
@@ -61,18 +61,18 @@ export default function CounterSettingModal({
     // 버튼 자체 크기 변화를 감지
     let ro;
     const btn = alignDropdownWrapperRef.current
-      ? alignDropdownWrapperRef.current.querySelector("button")
+      ? alignDropdownWrapperRef.current.querySelector('button')
       : null;
-    if (btn && typeof ResizeObserver !== "undefined") {
+    if (btn && typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => measure());
       ro.observe(btn);
     }
 
     // 윈도우 리사이즈 대응
-    window.addEventListener("resize", measure);
+    window.addEventListener('resize', measure);
 
     return () => {
-      window.removeEventListener("resize", measure);
+      window.removeEventListener('resize', measure);
       if (ro) ro.disconnect();
     };
     // align 값/라벨 변경 시에도 재측정
@@ -95,7 +95,7 @@ export default function CounterSettingModal({
 
   // 실시간 프리뷰: 내부 상태가 변하면 즉시 onPreview 호출 (색상 제외)
   useEffect(() => {
-    if (typeof onPreview !== "function") return;
+    if (typeof onPreview !== 'function') return;
     const payload = {
       placement,
       align,
@@ -126,29 +126,29 @@ export default function CounterSettingModal({
       fillGroupRef,
       strokeGroupRef,
     ],
-    []
+    [],
   );
 
   const placementOptions = [
-    { label: t("counterSetting.placementInside"), value: "inside" },
-    { label: t("counterSetting.placementOutside"), value: "outside" },
+    { label: t('counterSetting.placementInside'), value: 'inside' },
+    { label: t('counterSetting.placementOutside'), value: 'outside' },
   ];
 
   const alignOptions = [
-    { label: t("counterSetting.alignTop"), value: "top" },
-    { label: t("counterSetting.alignBottom"), value: "bottom" },
-    { label: t("counterSetting.alignLeft"), value: "left" },
-    { label: t("counterSetting.alignRight"), value: "right" },
+    { label: t('counterSetting.alignTop'), value: 'top' },
+    { label: t('counterSetting.alignBottom'), value: 'bottom' },
+    { label: t('counterSetting.alignLeft'), value: 'left' },
+    { label: t('counterSetting.alignRight'), value: 'right' },
   ];
 
   const alignModeOptions = [
-    { label: t("counterSetting.alignModeCenter"), value: "center" },
-    { label: t("counterSetting.alignModeBetween"), value: "between" },
+    { label: t('counterSetting.alignModeCenter'), value: 'center' },
+    { label: t('counterSetting.alignModeBetween'), value: 'between' },
   ];
 
   const colorButtonClass = (active) =>
     `relative px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-      active ? "border-[#459BF8]" : "border-[#3A3943]"
+      active ? 'border-[#459BF8]' : 'border-[#3A3943]'
     } text-[#DBDEE8] text-style-2`;
 
   const renderColorSquare = (style) => (
@@ -170,31 +170,31 @@ export default function CounterSettingModal({
 
   const colorValueFor = (key) => {
     switch (key) {
-      case "fillIdle":
+      case 'fillIdle':
         return fillIdle;
-      case "fillActive":
+      case 'fillActive':
         return fillActive;
-      case "strokeIdle":
+      case 'strokeIdle':
         return strokeIdle;
-      case "strokeActive":
+      case 'strokeActive':
         return strokeActive;
       default:
-        return "#FFFFFF";
+        return '#FFFFFF';
     }
   };
 
   const setColorFor = (key, color) => {
     switch (key) {
-      case "fillIdle":
+      case 'fillIdle':
         setFillIdle(color);
         break;
-      case "fillActive":
+      case 'fillActive':
         setFillActive(color);
         break;
-      case "strokeIdle":
+      case 'strokeIdle':
         setStrokeIdle(color);
         break;
-      case "strokeActive":
+      case 'strokeActive':
         setStrokeActive(color);
         break;
       default:
@@ -214,7 +214,7 @@ export default function CounterSettingModal({
   const handleColorComplete = (key, color) => {
     setColorFor(key, color);
 
-    if (typeof onPreview !== "function") return;
+    if (typeof onPreview !== 'function') return;
 
     const payload = {
       placement,
@@ -222,12 +222,12 @@ export default function CounterSettingModal({
       alignMode,
       gap,
       fill: {
-        idle: key === "fillIdle" ? color : fillIdle,
-        active: key === "fillActive" ? color : fillActive,
+        idle: key === 'fillIdle' ? color : fillIdle,
+        active: key === 'fillActive' ? color : fillActive,
       },
       stroke: {
-        idle: key === "strokeIdle" ? color : strokeIdle,
-        active: key === "strokeActive" ? color : strokeActive,
+        idle: key === 'strokeIdle' ? color : strokeIdle,
+        active: key === 'strokeActive' ? color : strokeActive,
       },
     };
     onPreview(payload);
@@ -248,7 +248,7 @@ export default function CounterSettingModal({
         active: strokeActive,
       },
     };
-    if (typeof onSave === "function") {
+    if (typeof onSave === 'function') {
       onSave(normalizeCounterSettings(payload));
     }
   };
@@ -262,7 +262,7 @@ export default function CounterSettingModal({
         {/* 배치 영역 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("counterSetting.placementArea")}
+            {t('counterSetting.placementArea')}
           </p>
           <Dropdown
             options={placementOptions}
@@ -274,7 +274,7 @@ export default function CounterSettingModal({
         {/* 정렬 방향 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("counterSetting.alignDirection")}
+            {t('counterSetting.alignDirection')}
           </p>
           <div ref={alignDropdownWrapperRef}>
             <Dropdown
@@ -286,10 +286,10 @@ export default function CounterSettingModal({
         </div>
 
         {/* 정렬 방식 (내부 배치 전용) */}
-        {placement === "inside" && (
+        {placement === 'inside' && (
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("counterSetting.alignMode")}
+              {t('counterSetting.alignMode')}
             </p>
             <Dropdown
               options={alignModeOptions}
@@ -301,14 +301,14 @@ export default function CounterSettingModal({
 
         {/* 간격 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("counterSetting.gap")}</p>
+          <p className="text-white text-style-2">{t('counterSetting.gap')}</p>
           <input
             type="text"
             value={displayGap}
             onChange={(e) => {
-              const newValue = e.target.value.replace(/[^0-9]/g, "");
-              if (newValue === "") {
-                setDisplayGap("");
+              const newValue = e.target.value.replace(/[^0-9]/g, '');
+              if (newValue === '') {
+                setDisplayGap('');
               } else {
                 setDisplayGap(newValue);
               }
@@ -319,10 +319,10 @@ export default function CounterSettingModal({
             }}
             onBlur={(e) => {
               setIsGapFocused(false);
-              const inputValue = e.target.value.replace(/[^0-9]/g, "");
-              if (inputValue === "" || Number.isNaN(parseInt(inputValue, 10))) {
+              const inputValue = e.target.value.replace(/[^0-9]/g, '');
+              if (inputValue === '' || Number.isNaN(parseInt(inputValue, 10))) {
                 setGap(0);
-                setDisplayGap("0px");
+                setDisplayGap('0px');
               } else {
                 const numValue = parseInt(inputValue, 10);
                 const clamped = Math.max(numValue, 0);
@@ -339,32 +339,32 @@ export default function CounterSettingModal({
 
         {/* 채우기 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("counterSetting.fill")}</p>
+          <p className="text-white text-style-2">{t('counterSetting.fill')}</p>
           <div ref={fillGroupRef} className="flex items-center gap-[8px]">
             <button
               ref={fillIdleBtnRef}
               type="button"
               className={colorButtonClass(
-                pickerOpen && pickerFor === "fillIdle"
+                pickerOpen && pickerFor === 'fillIdle',
               )}
-              onClick={() => handleColorToggle("fillIdle")}
+              onClick={() => handleColorToggle('fillIdle')}
             >
               {renderColorSquare({ backgroundColor: fillIdle })}
               <span className="ml-[16px] text-left">
-                {t("counterSetting.idle")}
+                {t('counterSetting.idle')}
               </span>
             </button>
             <button
               ref={fillActiveBtnRef}
               type="button"
               className={colorButtonClass(
-                pickerOpen && pickerFor === "fillActive"
+                pickerOpen && pickerFor === 'fillActive',
               )}
-              onClick={() => handleColorToggle("fillActive")}
+              onClick={() => handleColorToggle('fillActive')}
             >
               {renderColorSquare({ backgroundColor: fillActive })}
               <span className="ml-[16px] text-left">
-                {t("counterSetting.active")}
+                {t('counterSetting.active')}
               </span>
             </button>
           </div>
@@ -373,33 +373,33 @@ export default function CounterSettingModal({
         {/* 외곽선 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("counterSetting.stroke")}
+            {t('counterSetting.stroke')}
           </p>
           <div ref={strokeGroupRef} className="flex items-center gap-[8px]">
             <button
               ref={strokeIdleBtnRef}
               type="button"
               className={colorButtonClass(
-                pickerOpen && pickerFor === "strokeIdle"
+                pickerOpen && pickerFor === 'strokeIdle',
               )}
-              onClick={() => handleColorToggle("strokeIdle")}
+              onClick={() => handleColorToggle('strokeIdle')}
             >
               {renderColorSquare({ backgroundColor: strokeIdle })}
               <span className="ml-[16px] text-left">
-                {t("counterSetting.idle")}
+                {t('counterSetting.idle')}
               </span>
             </button>
             <button
               ref={strokeActiveBtnRef}
               type="button"
               className={colorButtonClass(
-                pickerOpen && pickerFor === "strokeActive"
+                pickerOpen && pickerFor === 'strokeActive',
               )}
-              onClick={() => handleColorToggle("strokeActive")}
+              onClick={() => handleColorToggle('strokeActive')}
             >
               {renderColorSquare({ backgroundColor: strokeActive })}
               <span className="ml-[16px] text-left">
-                {t("counterSetting.active")}
+                {t('counterSetting.active')}
               </span>
             </button>
           </div>
@@ -411,13 +411,13 @@ export default function CounterSettingModal({
             onClick={handleApply}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {t("counterSetting.apply")}
+            {t('counterSetting.apply')}
           </button>
           <button
             onClick={onClose}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            {t("counterSetting.cancel")}
+            {t('counterSetting.cancel')}
           </button>
         </div>
 

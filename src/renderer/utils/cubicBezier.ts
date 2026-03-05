@@ -1,16 +1,16 @@
-import type { CounterAnimationBezier } from "@src/types/keys";
+import type { CounterAnimationBezier } from '@src/types/keys';
 
 export const COUNTER_DEFAULT_BEZIER: CounterAnimationBezier = [
   0.25, 0.46, 0.45, 0.94,
 ];
 
 export type CounterBezierPresetId =
-  | "current"
-  | "linear"
-  | "easeOut"
-  | "easeIn"
-  | "easeInOut"
-  | "overshoot";
+  | 'current'
+  | 'linear'
+  | 'easeOut'
+  | 'easeIn'
+  | 'easeInOut'
+  | 'overshoot';
 
 export interface CounterBezierPreset {
   id: CounterBezierPresetId;
@@ -20,33 +20,33 @@ export interface CounterBezierPreset {
 
 export const COUNTER_BEZIER_PRESETS: CounterBezierPreset[] = [
   {
-    id: "current",
-    fallbackLabel: "Default",
+    id: 'current',
+    fallbackLabel: 'Default',
     bezier: [0.25, 0.46, 0.45, 0.94],
   },
   {
-    id: "linear",
-    fallbackLabel: "Linear",
+    id: 'linear',
+    fallbackLabel: 'Linear',
     bezier: [0, 0, 1, 1],
   },
   {
-    id: "easeOut",
-    fallbackLabel: "Ease Out",
+    id: 'easeOut',
+    fallbackLabel: 'Ease Out',
     bezier: [0, 0, 0.58, 1],
   },
   {
-    id: "easeIn",
-    fallbackLabel: "Ease In",
+    id: 'easeIn',
+    fallbackLabel: 'Ease In',
     bezier: [0.42, 0, 1, 1],
   },
   {
-    id: "easeInOut",
-    fallbackLabel: "Ease In-Out",
+    id: 'easeInOut',
+    fallbackLabel: 'Ease In-Out',
     bezier: [0.42, 0, 0.58, 1],
   },
   {
-    id: "overshoot",
-    fallbackLabel: "Overshoot",
+    id: 'overshoot',
+    fallbackLabel: 'Overshoot',
     bezier: [0.34, 1.56, 0.64, 1],
   },
 ];
@@ -128,7 +128,7 @@ export const bezierToCssString = (
 
 export const findBezierPresetId = (
   bezier: CounterAnimationBezier | number[],
-): CounterBezierPresetId | "custom" => {
+): CounterBezierPresetId | 'custom' => {
   const target = clampCounterBezier(bezier);
   const matched = COUNTER_BEZIER_PRESETS.find((preset) => {
     return preset.bezier.every((value, index) => {
@@ -136,5 +136,5 @@ export const findBezierPresetId = (
       return Math.abs(Number(value) - Number(targetValue)) < 0.001;
     });
   });
-  return matched ? matched.id : "custom";
+  return matched ? matched.id : 'custom';
 };

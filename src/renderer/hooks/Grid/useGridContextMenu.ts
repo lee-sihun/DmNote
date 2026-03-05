@@ -4,10 +4,10 @@
  * - 그리드 컨텍스트 메뉴 항목 생성
  */
 
-import { useCallback, useMemo } from "react";
-import { usePluginMenuStore } from "@stores/usePluginMenuStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { translatePluginMessage } from "@utils/pluginI18n";
+import { useCallback, useMemo } from 'react';
+import { usePluginMenuStore } from '@stores/usePluginMenuStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { translatePluginMessage } from '@utils/pluginI18n';
 
 interface MenuItem {
   id: string;
@@ -42,7 +42,7 @@ interface UseGridContextMenuReturn {
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
-    gridAddLocalPos: { dx: number; dy: number } | null
+    gridAddLocalPos: { dx: number; dy: number } | null,
   ) => MenuItem[];
   pluginKeyMenuItems: any[];
   pluginGridMenuItems: any[];
@@ -63,10 +63,10 @@ export function useGridContextMenu({
   // 플러그인 메뉴 아이템
   const pluginKeyMenuItems = usePluginMenuStore((state) => state.keyMenuItems);
   const pluginGridMenuItems = usePluginMenuStore(
-    (state) => state.gridMenuItems
+    (state) => state.gridMenuItems,
   );
   const pluginDefinitions = usePluginDisplayElementStore(
-    (state) => state.definitions
+    (state) => state.definitions,
   );
 
   const pluginMessagesById = useMemo(() => {
@@ -87,27 +87,27 @@ export function useGridContextMenu({
         key: rawLabel,
         fallback: rawLabel,
       }),
-    [pluginMessagesById, locale]
+    [pluginMessagesById, locale],
   );
 
   // 키 메뉴 아이템 생성 (기본 + 플러그인)
   const getKeyMenuItems = useCallback(
     (contextIndex: number | null): MenuItem[] => {
       const baseItems: MenuItem[] = [
-        { id: "delete", label: t("contextMenu.deleteKey") },
-        { id: "duplicate", label: t("contextMenu.duplicateKey") },
-        { id: "counterReset", label: t("contextMenu.counterReset") },
-        { id: "bringToFront", label: t("contextMenu.bringToFront") },
+        { id: 'delete', label: t('contextMenu.deleteKey') },
+        { id: 'duplicate', label: t('contextMenu.duplicateKey') },
+        { id: 'counterReset', label: t('contextMenu.counterReset') },
+        { id: 'bringToFront', label: t('contextMenu.bringToFront') },
         // { id: "bringForward", label: t("contextMenu.bringForward") },
         // { id: "sendBackward", label: t("contextMenu.sendBackward") },
-        { id: "sendToBack", label: t("contextMenu.sendToBack") },
+        { id: 'sendToBack', label: t('contextMenu.sendToBack') },
       ];
 
       // 플러그인 메뉴 필터링 (조건부 표시)
       const context: KeyContext | null =
         contextIndex !== null
           ? {
-              keyCode: keyMappings[selectedKeyType]?.[contextIndex] || "",
+              keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
               index: contextIndex,
               position: positions[selectedKeyType]?.[contextIndex] || {},
               mode: selectedKeyType,
@@ -120,7 +120,7 @@ export function useGridContextMenu({
           .filter((item) => {
             // visible 체크
             if (item.visible === false) return false;
-            if (typeof item.visible === "function" && !item.visible(context))
+            if (typeof item.visible === 'function' && !item.visible(context))
               return false;
             return true;
           })
@@ -128,7 +128,7 @@ export function useGridContextMenu({
             id: item.fullId,
             label: resolvePluginLabel(item.pluginId, item.label),
             disabled:
-              typeof item.disabled === "function"
+              typeof item.disabled === 'function'
                 ? item.disabled(context)
                 : item.disabled || false,
             isPlugin: true,
@@ -136,10 +136,10 @@ export function useGridContextMenu({
       };
 
       const topPluginItems = filterPluginItems(
-        pluginKeyMenuItems.filter((i) => i.position === "top")
+        pluginKeyMenuItems.filter((i) => i.position === 'top'),
       );
       const bottomPluginItems = filterPluginItems(
-        pluginKeyMenuItems.filter((i) => i.position !== "top")
+        pluginKeyMenuItems.filter((i) => i.position !== 'top'),
       );
 
       return [...topPluginItems, ...baseItems, ...bottomPluginItems];
@@ -151,40 +151,44 @@ export function useGridContextMenu({
       t,
       pluginKeyMenuItems,
       resolvePluginLabel,
-    ]
+    ],
   );
 
   // 그리드 메뉴 아이템 생성 (기본 + 플러그인)
   const getStatMenuItems = useCallback(
     (_contextIndex: number | null): MenuItem[] => [
-      { id: "delete", label: t("contextMenu.deleteStat") },
-      { id: "duplicate", label: t("contextMenu.duplicateStat") },
-      { id: "bringToFront", label: t("contextMenu.bringToFront") },
-      { id: "sendToBack", label: t("contextMenu.sendToBack") },
+      { id: 'delete', label: t('contextMenu.deleteStat') },
+      { id: 'duplicate', label: t('contextMenu.duplicateStat') },
+      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
     ],
-    [t]
+    [t],
   );
 
   const getGraphMenuItems = useCallback(
     (_contextIndex: number | null): MenuItem[] => [
-      { id: "delete", label: t("contextMenu.deleteGraph") },
-      { id: "duplicate", label: t("contextMenu.duplicateGraph") },
-      { id: "bringToFront", label: t("contextMenu.bringToFront") },
-      { id: "sendToBack", label: t("contextMenu.sendToBack") },
+      { id: 'delete', label: t('contextMenu.deleteGraph') },
+      { id: 'duplicate', label: t('contextMenu.duplicateGraph') },
+      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
     ],
-    [t]
+    [t],
   );
 
   const getGridMenuItems = useCallback(
     (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
       const topBaseItems: MenuItem[] = [
-        { id: "add", label: t("contextMenu.addKey") },
-        { id: "addStat", label: t("contextMenu.addStat") },
-        { id: "addGraph", label: t("contextMenu.addGraph") },
+        { id: 'add', label: t('contextMenu.addKey') },
+        { id: 'addStat', label: t('contextMenu.addStat') },
+        { id: 'addGraph', label: t('contextMenu.addGraph') },
       ];
       const bottomBaseItems: MenuItem[] = [
-        { id: "tabCss", label: t("contextMenu.tabCssSetting") },
-        { id: "tabNote", label: t("contextMenu.tabNoteSetting"), disabled: !noteEffect },
+        { id: 'tabCss', label: t('contextMenu.tabCssSetting') },
+        {
+          id: 'tabNote',
+          label: t('contextMenu.tabNoteSetting'),
+          disabled: !noteEffect,
+        },
       ];
 
       // 플러그인 메뉴 필터링
@@ -200,7 +204,7 @@ export function useGridContextMenu({
         return items
           .filter((item) => {
             if (item.visible === false) return false;
-            if (typeof item.visible === "function" && !item.visible(context))
+            if (typeof item.visible === 'function' && !item.visible(context))
               return false;
             return true;
           })
@@ -208,7 +212,7 @@ export function useGridContextMenu({
             id: item.fullId,
             label: resolvePluginLabel(item.pluginId, item.label),
             disabled:
-              typeof item.disabled === "function"
+              typeof item.disabled === 'function'
                 ? item.disabled(context)
                 : item.disabled || false,
             isPlugin: true,
@@ -216,10 +220,10 @@ export function useGridContextMenu({
       };
 
       const topPluginItems = filterPluginItems(
-        pluginGridMenuItems.filter((i) => i.position === "top")
+        pluginGridMenuItems.filter((i) => i.position === 'top'),
       );
       const bottomPluginItems = filterPluginItems(
-        pluginGridMenuItems.filter((i) => i.position !== "top")
+        pluginGridMenuItems.filter((i) => i.position !== 'top'),
       );
 
       return [
@@ -229,7 +233,7 @@ export function useGridContextMenu({
         ...bottomBaseItems,
       ];
     },
-    [selectedKeyType, t, pluginGridMenuItems, resolvePluginLabel, noteEffect]
+    [selectedKeyType, t, pluginGridMenuItems, resolvePluginLabel, noteEffect],
   );
 
   return {

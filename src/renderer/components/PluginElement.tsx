@@ -4,42 +4,42 @@ import React, {
   useMemo,
   useState,
   useCallback,
-} from "react";
-import { createPortal } from "react-dom";
-import { isMac } from "@utils/platform";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { isMac } from '@utils/platform';
 import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
-} from "@src/types/api";
-import { useDraggable } from "@hooks/Grid";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { useKeyStore as useKeyStoreForHistory } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useSmartGuidesElements } from "@hooks/Grid";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
+} from '@src/types/api';
+import { useDraggable } from '@hooks/Grid';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { useKeyStore as useKeyStoreForHistory } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useSmartGuidesElements } from '@hooks/Grid';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
-} from "@utils/smartGuides";
+} from '@utils/smartGuides';
 import {
   useGridSelectionStore,
   SelectedElement,
   isElementInMarquee,
-} from "@stores/useGridSelectionStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useTranslation } from "@contexts/I18nContext";
-import ListPopup, { ListItem } from "./main/Modal/ListPopup";
-import { html, styleMap, css } from "@utils/templateEngine";
-import { translatePluginMessage } from "@utils/pluginI18n";
+} from '@stores/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useTranslation } from '@contexts/I18nContext';
+import ListPopup, { ListItem } from './main/Modal/ListPopup';
+import { html, styleMap, css } from '@utils/templateEngine';
+import { translatePluginMessage } from '@utils/pluginI18n';
 import {
   registerExposedActions,
   clearExposedActions,
-} from "@utils/displayElementActions";
-import { setupPluginDropdownInteractions } from "@utils/pluginDropdownManager";
+} from '@utils/displayElementActions';
+import { setupPluginDropdownInteractions } from '@utils/pluginDropdownManager';
 
 /**
  * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
@@ -47,7 +47,7 @@ import { setupPluginDropdownInteractions } from "@utils/pluginDropdownManager";
 function calculateAnchorOffset(
   anchor: ElementResizeAnchor,
   prevSize: { width: number; height: number },
-  newSize: { width: number; height: number }
+  newSize: { width: number; height: number },
 ): { dx: number; dy: number } {
   const dw = newSize.width - prevSize.width;
   const dh = newSize.height - prevSize.height;
@@ -56,24 +56,24 @@ function calculateAnchorOffset(
   let dy = 0;
 
   // X축 보정 (center, right 계열)
-  if (anchor.includes("center") && !anchor.startsWith("center")) {
+  if (anchor.includes('center') && !anchor.startsWith('center')) {
     // top-center, bottom-center
     dx = -dw / 2;
-  } else if (anchor === "center") {
+  } else if (anchor === 'center') {
     dx = -dw / 2;
-  } else if (anchor.includes("right")) {
+  } else if (anchor.includes('right')) {
     dx = -dw;
-  } else if (anchor === "center-left") {
+  } else if (anchor === 'center-left') {
     dx = 0;
-  } else if (anchor === "center-right") {
+  } else if (anchor === 'center-right') {
     dx = -dw;
   }
 
   // Y축 보정 (center, bottom 계열)
-  if (anchor.startsWith("center")) {
+  if (anchor.startsWith('center')) {
     // center-left, center, center-right
     dy = -dh / 2;
-  } else if (anchor.startsWith("bottom")) {
+  } else if (anchor.startsWith('bottom')) {
     dy = -dh;
   }
 
@@ -82,7 +82,7 @@ function calculateAnchorOffset(
 
 interface PluginElementProps {
   element: PluginDisplayElementInternal;
-  windowType: "main" | "overlay";
+  windowType: 'main' | 'overlay';
   activeTool?: string;
   positionOffset?: { x: number; y: number };
   zoom?: number;
@@ -125,13 +125,13 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
   const updateElement = usePluginDisplayElementStore(
-    (state) => state.updateElement
+    (state) => state.updateElement,
   );
   const updateElementBatched = usePluginDisplayElementStore(
-    (state) => state.updateElementBatched
+    (state) => state.updateElementBatched,
   );
   const definitions = usePluginDisplayElementStore(
-    (state) => state.definitions
+    (state) => state.definitions,
   );
   const definition = element.definitionId
     ? definitions.get(element.definitionId)
@@ -143,12 +143,12 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   // 이전 크기를 추적하여 리사이즈 앵커 기반 위치 보정에 사용
   // 초기값으로 element.measuredSize를 사용하여 리로드 후에도 올바르게 동작
   const prevMeasuredSizeRef = useRef<{ width: number; height: number } | null>(
-    element.measuredSize ? { ...element.measuredSize } : null
+    element.measuredSize ? { ...element.measuredSize } : null,
   );
 
   // 이전 앵커를 추적하여 앵커 변경 시 prevMeasuredSizeRef 리셋
   const prevAnchorRef = useRef<string | undefined>(
-    element.resizeAnchor || definition?.resizeAnchor || "top-left"
+    element.resizeAnchor || definition?.resizeAnchor || 'top-left',
   );
 
   // 이전 줌 값을 추적하여 줌 변경 시 위치 보정을 스킵
@@ -158,7 +158,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   // 이렇게 하면 앵커 변경 직후의 크기 변화에서 불필요한 위치 보정이 발생하지 않음
   useEffect(() => {
     const currentAnchor =
-      element.resizeAnchor || definition?.resizeAnchor || "top-left";
+      element.resizeAnchor || definition?.resizeAnchor || 'top-left';
     if (prevAnchorRef.current !== currentAnchor) {
       // 앵커가 변경됨 - 현재 측정된 크기로 리셋
       if (element.measuredSize) {
@@ -172,7 +172,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   // 단, needsRemeasure 상태가 아닐 때만 (설정 변경으로 인한 재측정 중에는 스킵)
   useEffect(() => {
     if (
-      windowType === "main" &&
+      windowType === 'main' &&
       definition?.resizable &&
       element.measuredSize &&
       !needsRemeasureRef.current
@@ -189,7 +189,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     (
       key: string,
       params?: Record<string, string | number>,
-      fallback?: string
+      fallback?: string,
     ) =>
       translatePluginMessage({
         messages: definition?.messages,
@@ -198,14 +198,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         params,
         fallback,
       }),
-    [definition?.messages, locale]
+    [definition?.messages, locale],
   );
 
   const pluginTranslateStable = useCallback(
     (
       key: string,
       params?: Record<string, string | number>,
-      fallback?: string
+      fallback?: string,
     ) =>
       translatePluginMessage({
         messages: definition?.messages,
@@ -214,7 +214,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         params,
         fallback,
       }),
-    [definition?.messages]
+    [definition?.messages],
   );
 
   const positions = useKeyStore((state) => state.positions);
@@ -227,14 +227,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     Set<
       (
         newSettings: Record<string, any>,
-        oldSettings: Record<string, any>
+        oldSettings: Record<string, any>,
       ) => void
     >
   >(new Set());
 
   // Settings 변경 감지 (overlay에서만 - 리스너 콜백용)
   useEffect(() => {
-    if (windowType !== "overlay") return;
+    if (windowType !== 'overlay') return;
 
     const currentSettings = element.settings || {};
     const prevSettings = prevSettingsRef.current;
@@ -256,8 +256,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           listener(currentSettings, prevSettings);
         } catch (error) {
           console.error(
-            "[PluginElement] onSettingsChange listener error:",
-            error
+            '[PluginElement] onSettingsChange listener error:',
+            error,
           );
         }
       });
@@ -284,7 +284,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   >(new Map());
 
   useEffect(() => {
-    if (windowType !== "main") return;
+    if (windowType !== 'main') return;
     if (!definition?.resizable) return;
 
     const currentSettings = element.settings || {};
@@ -322,15 +322,15 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // 저장된 크기로 즉시 복원 (width, height도 함께 업데이트)
         const currentSize = element.measuredSize;
         const resizeAnchor: ElementResizeAnchor =
-          element.resizeAnchor || definition?.resizeAnchor || "top-left";
+          element.resizeAnchor || definition?.resizeAnchor || 'top-left';
 
         // 앵커 기반 위치 보정 계산
         let newPosition = element.position;
-        if (currentSize && resizeAnchor !== "top-left") {
+        if (currentSize && resizeAnchor !== 'top-left') {
           const { dx, dy } = calculateAnchorOffset(
             resizeAnchor,
             currentSize,
-            savedSize
+            savedSize,
           );
           if (dx !== 0 || dy !== 0) {
             newPosition = {
@@ -381,7 +381,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       const keyMappings = useKeyStore.getState().keyMappings;
       const modeKeys = keyMappings[selectedKeyType] || [];
       const keyIndex = modeKeys.findIndex(
-        (key) => key === element.anchor?.keyCode
+        (key) => key === element.anchor?.keyCode,
       );
 
       if (keyIndex >= 0 && positions[selectedKeyType]?.[keyIndex]) {
@@ -409,7 +409,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // 히스토리 저장 함수 (드래그 시작 시 호출)
   const saveToHistory = useCallback(() => {
-    if (windowType !== "main") return;
+    if (windowType !== 'main') return;
 
     const { keyMappings, positions } = useKeyStoreForHistory.getState();
     const statPositions = useStatItemStore.getState().positions;
@@ -422,7 +422,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         positions,
         statPositions,
         graphPositions,
-        pluginElements
+        pluginElements,
       );
   }, [windowType]);
 
@@ -430,7 +430,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const { getOtherElements } = useSmartGuidesElements();
 
   // 그리드 스냅 크기 가져오기
-  const gridSnapSize = useSettingsStore((state) => state.gridSettings?.gridSnapSize || 5);
+  const gridSnapSize = useSettingsStore(
+    (state) => state.gridSettings?.gridSnapSize || 5,
+  );
 
   // 선택 드래그 상태
   const multiDragRef = useRef<{
@@ -451,8 +453,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const isSelectionMode = isSelected;
 
   // 드래그/리사이즈 중인 상태 (CSS 애니메이션 비활성화용, main 윈도우에서만)
-  const isDraggingOrResizing = useGridSelectionStore(
-    (state) => (windowType === "main" ? state.isDraggingOrResizing : false)
+  const isDraggingOrResizing = useGridSelectionStore((state) =>
+    windowType === 'main' ? state.isDraggingOrResizing : false,
   );
 
   // 드래그 지원 (main 윈도우에서만)
@@ -463,7 +465,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     onDragStart: saveToHistory, // 드래그 시작 시 히스토리 저장
     onPositionChange: (newX, newY) => {
       // 선택 모드가 아닐 때만 개별 이동
-      if (windowType === "main" && element.draggable && !isSelectionMode) {
+      if (windowType === 'main' && element.draggable && !isSelectionMode) {
         updateElement(element.fullId, {
           position: { x: newX, y: newY },
           anchor: undefined, // 드래그하면 앵커 제거
@@ -472,10 +474,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // onPositionChange 핸들러 호출 (자동 래핑되어 있음)
         if (
           element.onPositionChange &&
-          typeof element.onPositionChange === "string"
+          typeof element.onPositionChange === 'string'
         ) {
           const handler = (window as any)[element.onPositionChange];
-          if (typeof handler === "function") {
+          if (typeof handler === 'function') {
             handler({ x: newX, y: newY });
           }
         }
@@ -488,7 +490,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     elementId: element.fullId,
     elementWidth: element.measuredSize?.width || 100,
     elementHeight: element.measuredSize?.height || 100,
-    getOtherElements: windowType === "main" ? getOtherElements : null,
+    getOtherElements: windowType === 'main' ? getOtherElements : null,
     // 선택 모드에서는 개별 드래그 비활성화
     disabled: isSelectionMode,
   });
@@ -568,8 +570,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
               !selectedElements.some(
                 (sel) =>
                   sel.id === el.id ||
-                  (sel.type === "key" && el.id === `key-${sel.index}`)
-              )
+                  (sel.type === 'key' && el.id === `key-${sel.index}`),
+              ),
           );
 
           const draggedBounds = calculateBounds(
@@ -577,7 +579,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             newY,
             currentWidth,
             currentHeight,
-            elementId
+            elementId,
           );
 
           // 다중 선택 시 그룹 전체의 bounds 계산 (캔버스 중앙 스냅용)
@@ -594,7 +596,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
                 const found = otherElements.find(
                   (el) =>
                     el.id === sel.id ||
-                    (sel.type === "key" && el.id === `key-${sel.index}`)
+                    (sel.type === 'key' && el.id === `key-${sel.index}`),
                 );
                 if (found) {
                   return calculateBounds(
@@ -602,7 +604,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
                     found.top + rawDeltaY,
                     found.width,
                     found.height,
-                    found.id
+                    found.id,
                   );
                 }
                 return null;
@@ -625,7 +627,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
                 {
                   groupBounds,
                   disableSpacing: !spacingGuidesEnabled,
-                }
+                },
               )
             : null;
 
@@ -681,14 +683,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
                         : 0),
                     groupBounds.width,
                     groupBounds.height,
-                    "group"
+                    'group',
                   )
                 : calculateBounds(
                     finalX,
                     finalY,
                     currentWidth,
                     currentHeight,
-                    elementId
+                    elementId,
                   );
             smartGuidesStore.setDraggedBounds(displayBounds);
             smartGuidesStore.setActiveGuides(snapResult.guides);
@@ -730,10 +732,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           rafId = null;
         }
         multiDragRef.current.isDragging = false;
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
         // window blur 시에도 cleanup 되도록 이벤트 제거
-        window.removeEventListener("blur", handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
         // 스마트 가이드 클리어
         useSmartGuidesStore.getState().clearGuides();
         // 드래그 종료 시 애니메이션 복원
@@ -742,10 +744,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         onMultiDragEnd?.();
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
       // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
-      window.addEventListener("blur", handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
     [
       isSelectionMode,
@@ -760,7 +762,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       element.fullId,
       getOtherElements,
       selectedElements,
-    ]
+    ],
   );
 
   const { ref: draggableRef, dx: renderX, dy: renderY } = draggable;
@@ -774,13 +776,13 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           setShadowRoot(containerRef.current.shadowRoot);
         } else {
           const root = containerRef.current.attachShadow({
-            mode: "open",
+            mode: 'open',
           });
           setShadowRoot(root);
         }
       } catch (err) {
         console.warn(
-          `[PluginElement] Shadow DOM already attached for ${element.fullId}`
+          `[PluginElement] Shadow DOM already attached for ${element.fullId}`,
         );
       }
     }
@@ -793,7 +795,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       const settings = element.settings || {};
 
       const renderState =
-        windowType === "main" && definition.previewState
+        windowType === 'main' && definition.previewState
           ? { ...state, ...definition.previewState }
           : state;
 
@@ -832,27 +834,27 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       element.measuredSize &&
       !needsRemeasureRef.current;
 
-    if (windowType === "main" && containerRef.current && !isResizableWithSize) {
+    if (windowType === 'main' && containerRef.current && !isResizableWithSize) {
       requestAnimationFrame(() => {
         if (containerRef.current) {
           // 재측정이 필요한 경우, 일시적으로 크기 제약을 풀어 자연스러운 콘텐츠 크기 측정
           const needsRemeasure =
             needsRemeasureRef.current && definition?.resizable;
-          const preserveAxis = definition?.preserveAxis || "both";
+          const preserveAxis = definition?.preserveAxis || 'both';
 
-          let originalWidth = "";
-          let originalHeight = "";
+          let originalWidth = '';
+          let originalHeight = '';
 
           if (needsRemeasure) {
             originalWidth = containerRef.current.style.width;
             originalHeight = containerRef.current.style.height;
 
             // preserveAxis에 따라 해제할 축 결정
-            if (preserveAxis !== "width" && preserveAxis !== "both") {
-              containerRef.current.style.width = "auto";
+            if (preserveAxis !== 'width' && preserveAxis !== 'both') {
+              containerRef.current.style.width = 'auto';
             }
-            if (preserveAxis !== "height" && preserveAxis !== "both") {
-              containerRef.current.style.height = "auto";
+            if (preserveAxis !== 'height' && preserveAxis !== 'both') {
+              containerRef.current.style.height = 'auto';
             }
           }
 
@@ -874,9 +876,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           if (definition?.resizable && needsRemeasureRef.current) {
             // preserveAxis에 따라 각 축 유지 여부 결정
             const shouldPreserveWidth =
-              preserveAxis === "width" || preserveAxis === "both";
+              preserveAxis === 'width' || preserveAxis === 'both';
             const shouldPreserveHeight =
-              preserveAxis === "height" || preserveAxis === "both";
+              preserveAxis === 'height' || preserveAxis === 'both';
 
             // 가로: 유지 설정이고 저장된 값이 있으면 그 값 사용
             if (shouldPreserveWidth && userPreservedSize) {
@@ -913,18 +915,18 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           if (sizeChanged) {
             // 리사이즈 앵커 결정 (우선순위: element > definition > default)
             const resizeAnchor: ElementResizeAnchor =
-              element.resizeAnchor || definition?.resizeAnchor || "top-left";
+              element.resizeAnchor || definition?.resizeAnchor || 'top-left';
 
             // 줌 변경으로 인한 크기 측정 차이는 위치 보정하지 않음
             // 실제 콘텐츠 변화에 의한 크기 변경만 위치 보정
             const shouldAdjustPosition =
-              prevSize && resizeAnchor !== "top-left" && !zoomChanged;
+              prevSize && resizeAnchor !== 'top-left' && !zoomChanged;
 
             if (shouldAdjustPosition) {
               const { dx, dy } = calculateAnchorOffset(
                 resizeAnchor,
                 prevSize,
-                newSize
+                newSize,
               );
 
               if (dx !== 0 || dy !== 0) {
@@ -956,26 +958,26 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
 
     // data-plugin-handler 이벤트 위임 (메인 윈도우에서만)
-    if (windowType === "main") {
+    if (windowType === 'main') {
       // Input blur 핸들러: min/max 자동 정규화
       const handleInputBlur = (e: Event) => {
         const targetEl = e.target as HTMLInputElement;
         if (
-          targetEl.tagName === "INPUT" &&
-          targetEl.type === "number" &&
-          targetEl.hasAttribute("data-plugin-input-blur")
+          targetEl.tagName === 'INPUT' &&
+          targetEl.type === 'number' &&
+          targetEl.hasAttribute('data-plugin-input-blur')
         ) {
-          const minStr = targetEl.getAttribute("data-plugin-input-min");
-          const maxStr = targetEl.getAttribute("data-plugin-input-max");
+          const minStr = targetEl.getAttribute('data-plugin-input-min');
+          const maxStr = targetEl.getAttribute('data-plugin-input-max');
           const currentValue = targetEl.value;
 
           // 빈 값이거나 숫자가 아닌 경우
-          if (currentValue === "" || isNaN(parseFloat(currentValue))) {
+          if (currentValue === '' || isNaN(parseFloat(currentValue))) {
             // min이 있으면 min으로, 없으면 0으로
             const defaultValue = minStr ? parseFloat(minStr) : 0;
             targetEl.value = String(defaultValue);
             // change 이벤트 발생
-            targetEl.dispatchEvent(new Event("change", { bubbles: true }));
+            targetEl.dispatchEvent(new Event('change', { bubbles: true }));
             return;
           }
 
@@ -994,7 +996,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           if (clampedValue !== numValue) {
             targetEl.value = String(clampedValue);
             // change 이벤트 발생
-            targetEl.dispatchEvent(new Event("change", { bubbles: true }));
+            targetEl.dispatchEvent(new Event('change', { bubbles: true }));
           }
         }
       };
@@ -1002,31 +1004,31 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       // 체크박스 토글 기능
       const handleCheckboxToggle = (e: Event) => {
         const targetEl = e.target as HTMLElement;
-        const checkbox = targetEl.closest("[data-checkbox-toggle]");
+        const checkbox = targetEl.closest('[data-checkbox-toggle]');
         if (checkbox) {
           const input = checkbox.querySelector(
-            "input[type=checkbox]"
+            'input[type=checkbox]',
           ) as HTMLInputElement;
-          const knob = checkbox.querySelector("div") as HTMLElement;
+          const knob = checkbox.querySelector('div') as HTMLElement;
 
           if (input) {
             input.checked = !input.checked;
 
             // 스타일 토글
             if (input.checked) {
-              checkbox.classList.remove("bg-[#3B4049]");
-              checkbox.classList.add("bg-[#493C1D]");
-              knob.classList.remove("left-[2px]", "bg-[#989BA6]");
-              knob.classList.add("left-[13px]", "bg-[#FFB400]");
+              checkbox.classList.remove('bg-[#3B4049]');
+              checkbox.classList.add('bg-[#493C1D]');
+              knob.classList.remove('left-[2px]', 'bg-[#989BA6]');
+              knob.classList.add('left-[13px]', 'bg-[#FFB400]');
             } else {
-              checkbox.classList.remove("bg-[#493C1D]");
-              checkbox.classList.add("bg-[#3B4049]");
-              knob.classList.remove("left-[13px]", "bg-[#FFB400]");
-              knob.classList.add("left-[2px]", "bg-[#989BA6]");
+              checkbox.classList.remove('bg-[#493C1D]');
+              checkbox.classList.add('bg-[#3B4049]');
+              knob.classList.remove('left-[13px]', 'bg-[#FFB400]');
+              knob.classList.add('left-[2px]', 'bg-[#989BA6]');
             }
 
             // change 이벤트 발생
-            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
           }
         }
       };
@@ -1034,13 +1036,13 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       const handleEvent = (e: Event) => {
         const targetEl = e.target as HTMLElement;
         const handlerAttr =
-          e.type === "click"
-            ? "data-plugin-handler"
-            : e.type === "input"
-            ? "data-plugin-handler-input"
-            : e.type === "change"
-            ? "data-plugin-handler-change"
-            : null;
+          e.type === 'click'
+            ? 'data-plugin-handler'
+            : e.type === 'input'
+              ? 'data-plugin-handler-input'
+              : e.type === 'change'
+                ? 'data-plugin-handler-change'
+                : null;
 
         if (!handlerAttr) return;
 
@@ -1058,26 +1060,26 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
         // 핸들러 실행 (자동 래핑되어 있음)
         const handler = (window as any)[handlerName];
-        if (typeof handler === "function") {
+        if (typeof handler === 'function') {
           handler(e);
         }
       };
 
       const detachDropdowns = setupPluginDropdownInteractions(target);
 
-      target.addEventListener("click", handleCheckboxToggle);
-      target.addEventListener("click", handleEvent);
-      target.addEventListener("change", handleEvent);
-      target.addEventListener("input", handleEvent);
-      target.addEventListener("blur", handleInputBlur, true); // capture phase
+      target.addEventListener('click', handleCheckboxToggle);
+      target.addEventListener('click', handleEvent);
+      target.addEventListener('change', handleEvent);
+      target.addEventListener('input', handleEvent);
+      target.addEventListener('blur', handleInputBlur, true); // capture phase
 
       // cleanup
       return () => {
-        target.removeEventListener("click", handleCheckboxToggle);
-        target.removeEventListener("click", handleEvent);
-        target.removeEventListener("change", handleEvent);
-        target.removeEventListener("input", handleEvent);
-        target.removeEventListener("blur", handleInputBlur, true);
+        target.removeEventListener('click', handleCheckboxToggle);
+        target.removeEventListener('click', handleEvent);
+        target.removeEventListener('change', handleEvent);
+        target.removeEventListener('input', handleEvent);
+        target.removeEventListener('blur', handleInputBlur, true);
         detachDropdowns();
       };
     }
@@ -1098,7 +1100,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // Overlay Logic (onMount)
   useEffect(() => {
-    if (windowType !== "overlay") return;
+    if (windowType !== 'overlay') return;
 
     if (!definition) {
       // definition이 아직 로드되지 않았을 수 있음.
@@ -1138,12 +1140,12 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // 메인 윈도우로 동기화 (브릿지 통해)
         if (window.api?.bridge) {
           window.api.bridge.sendTo(
-            "main",
-            "plugin:displayElement:updateAnchor",
+            'main',
+            'plugin:displayElement:updateAnchor',
             {
               fullId: element.fullId,
               resizeAnchor: anchor,
-            }
+            },
           );
         }
       },
@@ -1152,23 +1154,23 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           .getState()
           .elements.find((el) => el.fullId === element.fullId);
         return (
-          currentElement?.resizeAnchor || definition?.resizeAnchor || "top-left"
+          currentElement?.resizeAnchor || definition?.resizeAnchor || 'top-left'
         );
       },
       onHook: (event: string, callback: (...args: any[]) => void) => {
         // console.log(`[PluginElement] onHook registered for ${event}`);
-        if (event === "key") {
+        if (event === 'key') {
           // 백엔드 재구독 대신 키 이벤트 버스 사용
-          import("@utils/keyEventBus").then(({ keyEventBus }) => {
+          import('@utils/keyEventBus').then(({ keyEventBus }) => {
             const unsub = keyEventBus.subscribe((payload) => {
               // console.log(`[PluginElement] Key event received via hook`, payload);
               callback(payload);
             });
             cleanups.push(unsub);
           });
-        } else if (event === "rawKey") {
+        } else if (event === 'rawKey') {
           // Raw key 이벤트 버스 사용 (구독 기반 - 구독자가 있을 때만 백엔드가 emit)
-          import("@utils/rawKeyEventBus").then(({ rawKeyEventBus }) => {
+          import('@utils/rawKeyEventBus').then(({ rawKeyEventBus }) => {
             rawKeyEventBus
               .subscribe((payload) => {
                 callback(payload);
@@ -1179,16 +1181,16 @@ export const PluginElement: React.FC<PluginElementProps> = ({
               .catch((error) => {
                 console.error(
                   `[PluginElement] Failed to subscribe to rawKey:`,
-                  error
+                  error,
                 );
               });
           });
         }
       },
       expose: (actions: Record<string, (...args: any[]) => any>) => {
-        if (!actions || typeof actions !== "object") return;
+        if (!actions || typeof actions !== 'object') return;
         const validEntries = Object.entries(actions).filter(
-          ([, fn]) => typeof fn === "function"
+          ([, fn]) => typeof fn === 'function',
         );
         if (validEntries.length === 0) return;
 
@@ -1205,15 +1207,15 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           return window.api.i18n.onLocaleChange(listener);
         }
         console.warn(
-          "[PluginElement] i18n API is not available in this context"
+          '[PluginElement] i18n API is not available in this context',
         );
         return () => undefined;
       },
       onSettingsChange: (
         listener: (
           newSettings: Record<string, any>,
-          oldSettings: Record<string, any>
-        ) => void
+          oldSettings: Record<string, any>,
+        ) => void,
       ) => {
         settingsChangeListenersRef.current.add(listener);
         cleanups.push(() => {
@@ -1225,7 +1227,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     console.log(`[PluginElement] Mounting ${element.fullId}`);
 
     const mountCleanup = definition.onMount(context);
-    if (typeof mountCleanup === "function") {
+    if (typeof mountCleanup === 'function') {
       cleanups.push(mountCleanup);
     }
 
@@ -1244,29 +1246,29 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   const elementStyle: React.CSSProperties = useMemo(() => {
     const shouldPromoteTransformLayer =
-      windowType === "overlay" ||
-      (windowType === "main" &&
+      windowType === 'overlay' ||
+      (windowType === 'main' &&
         (isDraggingOrResizing || isViewportTransforming));
 
     const baseStyle: React.CSSProperties = {
-      position: "absolute",
+      position: 'absolute',
       left: 0,
       top: 0,
       transform:
-        windowType === "main"
+        windowType === 'main'
           ? `translate(${renderX}px, ${renderY}px)`
           : `translate3d(${renderX}px, ${renderY}px, 0)`,
       // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
       // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
       zIndex: element.zIndex ?? keyCount + arrayIndex,
       cursor:
-        element.draggable && windowType === "main"
-          ? "move"
-          : element.onClick && windowType === "main"
-          ? "pointer"
-          : "default",
-      willChange: shouldPromoteTransformLayer ? "transform" : "auto",
-      pointerEvents: windowType === "main" ? "auto" : "none",
+        element.draggable && windowType === 'main'
+          ? 'move'
+          : element.onClick && windowType === 'main'
+            ? 'pointer'
+            : 'default',
+      willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
+      pointerEvents: windowType === 'main' ? 'auto' : 'none',
     };
 
     // resizable 플러그인 요소의 경우 명시적 크기 적용
@@ -1274,7 +1276,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     if (definition?.resizable && element.measuredSize) {
       baseStyle.width = element.measuredSize.width;
       baseStyle.height = element.measuredSize.height;
-      baseStyle.overflow = "hidden";
+      baseStyle.overflow = 'hidden';
     }
 
     return { ...baseStyle, ...element.style };
@@ -1299,18 +1301,18 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       if (node) {
         containerRef.current = node;
         // 선택 모드가 아닐 때만 드래그 ref 연결
-        if (element.draggable && windowType === "main" && !isSelectionMode) {
+        if (element.draggable && windowType === 'main' && !isSelectionMode) {
           draggableRef(node);
         }
       }
     },
-    [element.draggable, windowType, draggableRef, isSelectionMode]
+    [element.draggable, windowType, draggableRef, isSelectionMode],
   );
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
     // 오버레이에서는 기본 브라우저 메뉴만 차단
-    if (windowType !== "main") {
+    if (windowType !== 'main') {
       e.preventDefault();
       return;
     }
@@ -1337,9 +1339,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   const deletePluginElement = useCallback(() => {
     // onDelete 핸들러 호출 (자동 래핑되어 있음)
-    if (element.onDelete && typeof element.onDelete === "string") {
+    if (element.onDelete && typeof element.onDelete === 'string') {
       const handler = (window as any)[element.onDelete];
-      if (typeof handler === "function") {
+      if (typeof handler === 'function') {
         handler();
       }
     }
@@ -1356,7 +1358,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     // 우클릭은 컨텍스트 메뉴용이므로 제외
     if (e.button !== 0) return;
 
-    if (windowType === "main" && activeTool === "eraser") {
+    if (windowType === 'main' && activeTool === 'eraser') {
       e.stopPropagation();
       deletePluginElement();
       return;
@@ -1366,10 +1368,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     const macOS = isMac();
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
 
-    if (isPrimaryModifierPressed && windowType === "main") {
+    if (isPrimaryModifierPressed && windowType === 'main') {
       e.stopPropagation();
       useGridSelectionStore.getState().toggleSelection({
-        type: "plugin",
+        type: 'plugin',
         id: element.fullId,
       });
       // 마지막 선택 요소 좌표 저장
@@ -1385,14 +1387,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
 
     // Shift+클릭으로 범위 선택 (메인 윈도우에서만)
-    if (e.shiftKey && windowType === "main") {
+    if (e.shiftKey && windowType === 'main') {
       e.stopPropagation();
       const lastBounds = useGridSelectionStore.getState().lastSelectedKeyBounds;
-      
+
       if (!lastBounds) {
         // 이전 선택이 없으면 단일 선택처럼 동작
         useGridSelectionStore.getState().selectElement({
-          type: "plugin",
+          type: 'plugin',
           id: element.fullId,
         });
         if (element.measuredSize) {
@@ -1418,12 +1420,12 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       const minX = Math.min(lastBounds.x, clickedBounds.x);
       const maxX = Math.max(
         lastBounds.x + lastBounds.width,
-        clickedBounds.x + clickedBounds.width
+        clickedBounds.x + clickedBounds.width,
       );
       const minY = Math.min(lastBounds.y, clickedBounds.y);
       const maxY = Math.max(
         lastBounds.y + lastBounds.height,
-        clickedBounds.y + clickedBounds.height
+        clickedBounds.y + clickedBounds.height,
       );
 
       const rangeRect = {
@@ -1448,7 +1450,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         };
         if (isElementInMarquee(elementBounds, rangeRect)) {
           newSelectedElements.push({
-            type: "key",
+            type: 'key',
             id: `key-${i}`,
             index: i,
           });
@@ -1467,7 +1469,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           };
           if (isElementInMarquee(elementBounds, rangeRect)) {
             newSelectedElements.push({
-              type: "plugin",
+              type: 'plugin',
               id: el.fullId,
             });
           }
@@ -1478,11 +1480,11 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       return;
     }
 
-    const settingsUI = definition?.settingsUI ?? "panel";
-    if (windowType === "main" && settingsUI !== "modal") {
+    const settingsUI = definition?.settingsUI ?? 'panel';
+    if (windowType === 'main' && settingsUI !== 'modal') {
       e.stopPropagation();
       useGridSelectionStore.getState().selectElement({
-        type: "plugin",
+        type: 'plugin',
         id: element.fullId,
       });
       // 마지막 선택 요소 좌표 저장
@@ -1504,12 +1506,12 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
 
     // onClick 핸들러가 있고, 메인 윈도우에서만
-    if (!element.onClick || windowType !== "main") return;
+    if (!element.onClick || windowType !== 'main') return;
 
     // onClick 핸들러 실행 (자동 래핑되어 있음)
-    if (typeof element.onClick === "string") {
+    if (typeof element.onClick === 'string') {
       const handler = (window as any)[element.onClick];
-      if (typeof handler === "function") {
+      if (typeof handler === 'function') {
         handler(e);
       }
     }
@@ -1521,14 +1523,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     const {
       enableDelete = true,
-      deleteLabel = "삭제",
+      deleteLabel = '삭제',
       customItems = [],
     } = element.contextMenu;
     const items: ListItem[] = [];
 
     if (enableDelete) {
       items.push({
-        id: "delete",
+        id: 'delete',
         label: pluginTranslate(deleteLabel, undefined, deleteLabel),
       });
     }
@@ -1543,10 +1545,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     // z-order 항목 추가
     items.push(
-      { id: "bringToFront", label: t("contextMenu.bringToFront") },
+      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
       // { id: "bringForward", label: t("contextMenu.bringForward") },
       // { id: "sendBackward", label: t("contextMenu.sendBackward") },
-      { id: "sendToBack", label: t("contextMenu.sendToBack") }
+      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
     );
 
     return items;
@@ -1558,45 +1560,45 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         {},
         {
           get: (_target, prop: string | symbol) => {
-            if (typeof prop !== "string") return undefined;
+            if (typeof prop !== 'string') return undefined;
             return (...args: any[]) => {
               try {
                 window.api?.bridge?.sendTo(
-                  "overlay",
-                  "plugin:displayElement:invokeAction",
+                  'overlay',
+                  'plugin:displayElement:invokeAction',
                   {
                     elementId,
                     action: prop,
                     args,
-                  }
+                  },
                 );
               } catch (error) {
                 console.error(
-                  "[PluginElement] Failed to invoke exposed action",
-                  error
+                  '[PluginElement] Failed to invoke exposed action',
+                  error,
                 );
               }
             };
           },
-        }
+        },
       ),
-    []
+    [],
   );
 
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {
-    if (itemId === "delete") {
+    if (itemId === 'delete') {
       deletePluginElement();
-    } else if (itemId === "bringToFront") {
+    } else if (itemId === 'bringToFront') {
       usePluginDisplayElementStore.getState().bringToFront(element.fullId);
-    } else if (itemId === "bringForward") {
+    } else if (itemId === 'bringForward') {
       usePluginDisplayElementStore.getState().bringForward(element.fullId);
-    } else if (itemId === "sendBackward") {
+    } else if (itemId === 'sendBackward') {
       usePluginDisplayElementStore.getState().sendBackward(element.fullId);
-    } else if (itemId === "sendToBack") {
+    } else if (itemId === 'sendToBack') {
       usePluginDisplayElementStore.getState().sendToBack(element.fullId);
-    } else if (itemId.startsWith("custom-")) {
-      const index = parseInt(itemId.replace("custom-", ""), 10);
+    } else if (itemId.startsWith('custom-')) {
+      const index = parseInt(itemId.replace('custom-', ''), 10);
       const customItem = element.contextMenu?.customItems?.[index];
       if (customItem) {
         // 커스텀 메뉴 실행 (자동 래핑되어 있음)
@@ -1612,7 +1614,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const renderContent = (): React.ReactNode => {
     if (renderedContent) {
       // 템플릿 결과가 문자열인 경우 (레거시)
-      if (typeof renderedContent === "string") {
+      if (typeof renderedContent === 'string') {
         return <div dangerouslySetInnerHTML={{ __html: renderedContent }} />;
       }
       // React Element인 경우
@@ -1636,7 +1638,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         style={elementStyle}
         data-plugin-element={element.fullId}
         data-plugin-id={element.pluginId}
-        data-editing={isDraggingOrResizing ? "true" : undefined}
+        data-editing={isDraggingOrResizing ? 'true' : undefined}
         onClick={handleClick}
         onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
         onContextMenu={handleContextMenu}
@@ -1647,7 +1649,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       </div>
 
       {/* 컨텍스트 메뉴 - 줌 영향을 받지 않도록 body에 Portal로 렌더링 */}
-      {windowType === "main" &&
+      {windowType === 'main' &&
         element.contextMenu &&
         contextMenuOpen &&
         createPortal(
@@ -1659,7 +1661,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             onSelect={handleContextMenuSelect}
             className="!z-[10000]"
           />,
-          document.body
+          document.body,
         )}
     </>
   );

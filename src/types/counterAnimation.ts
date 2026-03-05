@@ -1,9 +1,9 @@
 import type {
   CounterAnimationBezier,
   KeyCounterAnimationSettings,
-} from "@src/types/keys";
+} from '@src/types/keys';
 
-export type CounterAnimationSource = "builtin" | "user";
+export type CounterAnimationSource = 'builtin' | 'user';
 
 export interface CounterAnimationPreset {
   id: string;
@@ -47,10 +47,11 @@ export interface CounterAnimationDeleteResponse {
   fallbackPresetId: string;
 }
 
-import { getDefaultCounterAnimationPresetId } from "@src/renderer/defaults";
+import { getDefaultCounterAnimationPresetId } from '@src/renderer/defaults';
 
 /** @deprecated Use getDefaultCounterAnimationPresetId() from @src/renderer/defaults */
-export const DEFAULT_COUNTER_ANIMATION_PRESET_ID = getDefaultCounterAnimationPresetId();
+export const DEFAULT_COUNTER_ANIMATION_PRESET_ID =
+  getDefaultCounterAnimationPresetId();
 
 export function clampCounterAnimationBezier(
   bezier: CounterAnimationBezier | number[],
@@ -72,10 +73,10 @@ export function normalizeCounterAnimationPreset(
   preset: CounterAnimationPreset,
 ): CounterAnimationPreset {
   const source: CounterAnimationSource =
-    preset.source === "user" ? "user" : "builtin";
+    preset.source === 'user' ? 'user' : 'builtin';
   return {
-    id: String(preset.id || "").trim(),
-    name: String(preset.name || "").trim(),
+    id: String(preset.id || '').trim(),
+    name: String(preset.name || '').trim(),
     source,
     labelKey: preset.labelKey ? String(preset.labelKey) : undefined,
     bezier: clampCounterAnimationBezier(preset.bezier),
@@ -93,7 +94,7 @@ export function normalizeCounterAnimationLibrary(
   const userPresets = Array.isArray(response.userPresets)
     ? response.userPresets
         .map(normalizeCounterAnimationPreset)
-        .filter((preset) => preset.source === "user")
+        .filter((preset) => preset.source === 'user')
     : [];
 
   return { builtinPresets, userPresets };
@@ -111,10 +112,14 @@ export function resolveAnimationPresetById(
   return all.find((preset) => preset.id === normalizedId) || null;
 }
 
-function isBezierEqual(a: CounterAnimationBezier, b: CounterAnimationBezier): boolean {
+function isBezierEqual(
+  a: CounterAnimationBezier,
+  b: CounterAnimationBezier,
+): boolean {
   const EPSILON = 0.001;
-  return a.every((value, index) =>
-    Math.abs(Number(value) - Number(b[index as 0 | 1 | 2 | 3])) <= EPSILON,
+  return a.every(
+    (value, index) =>
+      Math.abs(Number(value) - Number(b[index as 0 | 1 | 2 | 3])) <= EPSILON,
   );
 }
 
@@ -122,7 +127,8 @@ export function findMatchingPresetId(
   animation: KeyCounterAnimationSettings,
   library: CounterAnimationListResponse,
 ): string | null {
-  const directId = typeof animation.presetId === "string" ? animation.presetId.trim() : "";
+  const directId =
+    typeof animation.presetId === 'string' ? animation.presetId.trim() : '';
   if (directId) {
     const direct = resolveAnimationPresetById(directId, library);
     if (direct) return direct.id;
@@ -130,8 +136,12 @@ export function findMatchingPresetId(
 
   const all = [...library.builtinPresets, ...library.userPresets];
   const normalizedBezier = clampCounterAnimationBezier(animation.bezier);
-  const normalizedDuration = clampCounterAnimationDuration(animation.durationMs);
-  const normalizedScale = Number.isFinite(animation.scale) ? animation.scale : 1.1;
+  const normalizedDuration = clampCounterAnimationDuration(
+    animation.durationMs,
+  );
+  const normalizedScale = Number.isFinite(animation.scale)
+    ? animation.scale
+    : 1.1;
 
   const matched = all.find((preset) => {
     const scaleDiff = Math.abs(preset.scale - normalizedScale);

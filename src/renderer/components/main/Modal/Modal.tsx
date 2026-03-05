@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   onClick?: () => void;
@@ -13,26 +13,24 @@ export default function Modal({
   animate = true,
 }: ModalProps) {
   const backdropAnimClass = animate
-    ? "opacity-0 animate-modal-fade"
-    : "opacity-100";
-  const contentAnimClass = animate ? "animate-modal-scale" : "";
+    ? 'opacity-0 animate-modal-fade'
+    : 'opacity-100';
+  const contentAnimClass = animate ? 'animate-modal-scale' : '';
   const closeFromBackdropRef = useRef(false);
 
   useEffect(() => {
     const reset = () => {
       closeFromBackdropRef.current = false;
     };
-    document.addEventListener("pointercancel", reset, true);
-    window.addEventListener("blur", reset);
+    document.addEventListener('pointercancel', reset, true);
+    window.addEventListener('blur', reset);
     return () => {
-      document.removeEventListener("pointercancel", reset, true);
-      window.removeEventListener("blur", reset);
+      document.removeEventListener('pointercancel', reset, true);
+      window.removeEventListener('blur', reset);
     };
   }, []);
 
-  const handleBackdropPointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
-  ) => {
+  const handleBackdropPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // only mark if pointer started directly on the backdrop
     closeFromBackdropRef.current = e.target === e.currentTarget;
   };

@@ -1,9 +1,9 @@
-import React, { useMemo } from "react";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { calculateGuideLineExtent } from "@utils/smartGuides";
-import { useKeyStore } from "@stores/useKeyStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { calculateBounds, type ElementBounds } from "@utils/smartGuides";
+import React, { useMemo } from 'react';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { calculateGuideLineExtent } from '@utils/smartGuides';
+import { useKeyStore } from '@stores/useKeyStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { calculateBounds, type ElementBounds } from '@utils/smartGuides';
 
 interface SmartGuidesOverlayProps {
   zoom?: number;
@@ -35,7 +35,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
 
   // 플러그인 요소 정보
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
 
   // 모든 요소의 bounds 계산
@@ -52,8 +52,8 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
           pos.dy,
           pos.width || 60,
           pos.height || 60,
-          `key-${index}`
-        )
+          `key-${index}`,
+        ),
       );
     });
 
@@ -71,8 +71,8 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
             el.position.y,
             el.measuredSize.width,
             el.measuredSize.height,
-            el.fullId
-          )
+            el.fullId,
+          ),
         );
       }
     });
@@ -98,13 +98,13 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
   return (
     <svg
       style={{
-        position: "absolute",
+        position: 'absolute',
         top: 0,
         left: 0,
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-        overflow: "visible",
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        overflow: 'visible',
         zIndex: 9999,
       }}
     >
@@ -139,10 +139,10 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
             const extent = calculateGuideLineExtent(
               guide,
               draggedBounds!,
-              allElementBounds
+              allElementBounds,
             );
 
-            if (guide.type === "vertical") {
+            if (guide.type === 'vertical') {
               return (
                 <line
                   key={`guide-${index}`}
@@ -154,7 +154,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                   strokeWidth={1 / zoom}
                   strokeDasharray={`${4 / zoom} ${2 / zoom}`}
                   style={{
-                    filter: "drop-shadow(0 0 2px rgba(255, 107, 107, 0.5))",
+                    filter: 'drop-shadow(0 0 2px rgba(255, 107, 107, 0.5))',
                   }}
                 />
               );
@@ -170,7 +170,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                   strokeWidth={1 / zoom}
                   strokeDasharray={`${4 / zoom} ${2 / zoom}`}
                   style={{
-                    filter: "drop-shadow(0 0 2px rgba(255, 107, 107, 0.5))",
+                    filter: 'drop-shadow(0 0 2px rgba(255, 107, 107, 0.5))',
                   }}
                 />
               );
@@ -180,7 +180,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
         {/* 간격 가이드 (보라색 양방향 화살표 + 수치) - draggedBounds가 있을 때만 */}
         {showSpacingGuides &&
           spacingGuides.map((spacing, index) => {
-            const isHorizontal = spacing.direction === "horizontal";
+            const isHorizontal = spacing.direction === 'horizontal';
             const midPoint = (spacing.startPos + spacing.endPos) / 2;
             const labelOffset = 12 / zoom;
 
@@ -216,7 +216,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                     fontSize={10 / zoom}
                     fill="white"
                     fontWeight="bold"
-                    style={{ userSelect: "none" }}
+                    style={{ userSelect: 'none' }}
                   >
                     {Math.round(spacing.value)}
                   </text>
@@ -254,7 +254,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                     fontSize={10 / zoom}
                     fill="white"
                     fontWeight="bold"
-                    style={{ userSelect: "none" }}
+                    style={{ userSelect: 'none' }}
                   >
                     {Math.round(spacing.value)}
                   </text>
@@ -265,7 +265,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
 
         {/* 크기 일치 가이드 (파란색 라벨 + 일치 요소 테두리) */}
         {sizeMatchGuides.map((sizeMatch, index) => {
-          const isWidth = sizeMatch.dimension === "width";
+          const isWidth = sizeMatch.dimension === 'width';
           const label = isWidth
             ? `W: ${Math.round(sizeMatch.value)}`
             : `H: ${Math.round(sizeMatch.value)}`;
@@ -286,7 +286,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                   strokeDasharray={`${4 / zoom} ${2 / zoom}`}
                   rx={4 / zoom}
                   style={{
-                    filter: "drop-shadow(0 0 3px rgba(59, 130, 246, 0.5))",
+                    filter: 'drop-shadow(0 0 3px rgba(59, 130, 246, 0.5))',
                   }}
                 />
               )}
@@ -308,7 +308,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                 fontSize={10 / zoom}
                 fill="white"
                 fontWeight="bold"
-                style={{ userSelect: "none" }}
+                style={{ userSelect: 'none' }}
               >
                 {label}
               </text>

@@ -1,19 +1,26 @@
-import { useEffect } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useFontStore, syncFontCSS } from "@stores/useFontStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
+import { useEffect } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useFontStore, syncFontCSS } from '@stores/useFontStore';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
 import {
   useSettingsStore,
   type SettingsStateSnapshot,
-} from "@stores/useSettingsStore";
-import { applyCounterSnapshot, setKeyCounter } from "@stores/keyCounterSignals";
-import { getUndoRedoInProgress } from "@api/pluginDisplayElements";
-import type { SettingsDiff, OverlayResizeAnchor } from "@src/types/settings";
-import { initDefaults, getDefaultGridSettings, getDefaultShortcuts } from "@src/renderer/defaults";
-import { initializeCursorSystem, refreshCursorSettings } from "@utils/cursorUtils";
-import type { CustomJs, JsPlugin } from "@src/types/js";
+} from '@stores/useSettingsStore';
+import { applyCounterSnapshot, setKeyCounter } from '@stores/keyCounterSignals';
+import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
+import type { SettingsDiff, OverlayResizeAnchor } from '@src/types/settings';
+import {
+  initDefaults,
+  getDefaultGridSettings,
+  getDefaultShortcuts,
+} from '@src/renderer/defaults';
+import {
+  initializeCursorSystem,
+  refreshCursorSettings,
+} from '@utils/cursorUtils';
+import type { CustomJs, JsPlugin } from '@src/types/js';
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   if (!source) return [];
@@ -23,12 +30,12 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   }
 
   const legacyPath = source.path ?? null;
-  const legacyContent = source.content ?? "";
+  const legacyContent = source.content ?? '';
   if (!legacyPath && !legacyContent) {
     return [];
   }
 
-  const fallbackName = legacyPath?.split(/\\|\//).pop() || "legacy.js";
+  const fallbackName = legacyPath?.split(/\\|\//).pop() || 'legacy.js';
   return [
     {
       id: `legacy-${Date.now().toString(36)}`,
@@ -52,7 +59,7 @@ export function useAppBootstrap() {
     >();
 
     const composeCounterKey = (mode?: string, key?: string) =>
-      `${mode || "__unknown_mode__"}::${key || "__unknown_key__"}`;
+      `${mode || '__unknown_mode__'}::${key || '__unknown_key__'}`;
 
     const clearCounterDelayTimers = (composedKey?: string) => {
       if (composedKey) {
@@ -79,7 +86,7 @@ export function useAppBootstrap() {
     const scheduleCounterUpdate = (
       mode: string,
       key: string,
-      count: number
+      count: number,
     ) => {
       const delayMs = getCounterDelayMs();
       const composedKey = composeCounterKey(mode, key);
@@ -114,7 +121,7 @@ export function useAppBootstrap() {
 
     const finalizeBootstrap = () =>
       useKeyStore.setState((state) =>
-        state.isBootstrapped ? state : { ...state, isBootstrapped: true }
+        state.isBootstrapped ? state : { ...state, isBootstrapped: true },
       );
 
     const applyDiff = (diff: SettingsDiff) => {
@@ -157,8 +164,8 @@ export function useAppBootstrap() {
       } = diff.changed;
       const sanitized = Object.fromEntries(
         Object.entries(rest).filter(
-          ([, value]) => value !== undefined && value !== null
-        )
+          ([, value]) => value !== undefined && value !== null,
+        ),
       ) as Partial<SettingsStateSnapshot>;
       if (Object.keys(sanitized).length > 0) {
         merge(sanitized);
@@ -193,12 +200,13 @@ export function useAppBootstrap() {
           (bootstrap.settings as any).autoUpdateEnabled ?? true,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
-        gridSettings: bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
+        gridSettings:
+          bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
         shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
       });
       useFontStore.setState({
         customFonts: bootstrap.settings.fontSettings.customFonts.map(
-          (font) => ({ ...font })
+          (font) => ({ ...font }),
         ),
       });
       syncFontCSS();
@@ -249,19 +257,19 @@ export function useAppBootstrap() {
         applyDiff(diff);
       }),
       window.api.keys.onChanged((keys) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
         if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
           return;
         useKeyStore.setState((state) => ({ ...state, keyMappings: keys }));
       }),
       window.api.keys.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
         if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
           return;
         useKeyStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.statItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
         if (
           !isOverlayWindow &&
           useStatItemStore.getState().isLocalUpdateInProgress
@@ -270,7 +278,7 @@ export function useAppBootstrap() {
         useStatItemStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.graphItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === "overlay";
+        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
         if (
           !isOverlayWindow &&
           useGraphItemStore.getState().isLocalUpdateInProgress
@@ -299,7 +307,7 @@ export function useAppBootstrap() {
             customTabs,
             selectedKeyType,
           }));
-        }
+        },
       ),
       window.api.noteTab.onChanged(({ tabId, settings }) => {
         if (disposed) return;
@@ -359,8 +367,10 @@ export function useAppBootstrap() {
     const handleWindowFocus = () => {
       refreshCursorSettings().catch(() => {});
     };
-    window.addEventListener("focus", handleWindowFocus);
-    unsubscribers.push(() => window.removeEventListener("focus", handleWindowFocus));
+    window.addEventListener('focus', handleWindowFocus);
+    unsubscribers.push(() =>
+      window.removeEventListener('focus', handleWindowFocus),
+    );
 
     return () => {
       disposed = true;
@@ -368,7 +378,7 @@ export function useAppBootstrap() {
         try {
           unsubscribe();
         } catch (error) {
-          console.error("Failed to unsubscribe", error);
+          console.error('Failed to unsubscribe', error);
         }
       });
       clearCounterDelayTimers();

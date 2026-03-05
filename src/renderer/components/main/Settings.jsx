@@ -1,35 +1,35 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useLenis } from "@hooks/useLenis";
-import { useTranslation } from "@contexts/I18nContext";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import Checkbox from "@components/main/common/Checkbox";
-import Dropdown from "@components/main/common/Dropdown";
-import FlaskIcon from "@assets/svgs/flask.svg";
-import { PluginManagerModal } from "@components/main/Modal/content/PluginManagerModal";
-import { PluginDataDeleteModal } from "@components/main/Modal/content/PluginDataDeleteModal";
-import ShortcutSettingsModal from "@components/main/Modal/content/ShortcutSettingsModal";
-import { applyCounterSnapshot } from "@stores/keyCounterSignals";
-import { extractPluginId } from "@utils/pluginUtils";
-import { isMac } from "@utils/platform";
-import { useUpdateCheck } from "@hooks/useUpdateCheck";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLenis } from '@hooks/useLenis';
+import { useTranslation } from '@contexts/I18nContext';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
+import FlaskIcon from '@assets/svgs/flask.svg';
+import { PluginManagerModal } from '@components/main/Modal/content/PluginManagerModal';
+import { PluginDataDeleteModal } from '@components/main/Modal/content/PluginDataDeleteModal';
+import ShortcutSettingsModal from '@components/main/Modal/content/ShortcutSettingsModal';
+import { applyCounterSnapshot } from '@stores/keyCounterSignals';
+import { extractPluginId } from '@utils/pluginUtils';
+import { isMac } from '@utils/platform';
+import { useUpdateCheck } from '@hooks/useUpdateCheck';
 
 // 설정 미리보기 영상
 const PREVIEW_SOURCES = {
   overlayLock:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/overlay-lock.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/overlay-lock.webm',
   alwaysOnTop:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/alwaysontop.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/alwaysontop.webm',
   noteEffect:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/noteeffect.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/noteeffect.webm',
   keyCounter:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/counter.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/counter.webm',
   customCSS:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/css.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/css.webm',
   customJS:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/plugin.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/plugin.webm',
   resizeAnchor:
-    "https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/resize.webm",
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/resize.webm',
 };
 
 export default function Settings({ showAlert, showConfirm }) {
@@ -88,39 +88,39 @@ export default function Settings({ showAlert, showConfirm }) {
   const { scrollContainerRef } = useLenis();
 
   const RESIZE_ANCHOR_OPTIONS = [
-    { value: "top-left", key: "topLeft" },
-    { value: "bottom-left", key: "bottomLeft" },
-    { value: "top-right", key: "topRight" },
-    { value: "bottom-right", key: "bottomRight" },
-    { value: "center", key: "center" },
+    { value: 'top-left', key: 'topLeft' },
+    { value: 'bottom-left', key: 'bottomLeft' },
+    { value: 'top-right', key: 'topRight' },
+    { value: 'bottom-right', key: 'bottomRight' },
+    { value: 'center', key: 'center' },
     // 미완성 기능
     // { value: "fixed-position", key: "fixedPosition" },
   ];
 
   const ANGLE_OPTIONS = [
-    { value: "skia", label: "Skia" },
-    { value: "d3d11", label: "Direct3D 11" },
-    { value: "d3d9", label: "Direct3D 9" },
-    { value: "gl", label: "OpenGL" },
+    { value: 'skia', label: 'Skia' },
+    { value: 'd3d11', label: 'Direct3D 11' },
+    { value: 'd3d9', label: 'Direct3D 9' },
+    { value: 'gl', label: 'OpenGL' },
   ];
 
   const macAngleOptions = useMemo(
-    () => [{ value: "metal", label: "Metal" }],
+    () => [{ value: 'metal', label: 'Metal' }],
     [],
   );
 
   useEffect(() => {
-    if (isMacOS && angleMode !== "metal") {
-      setAngleMode("metal");
+    if (isMacOS && angleMode !== 'metal') {
+      setAngleMode('metal');
     }
   }, [isMacOS, angleMode, setAngleMode]);
 
   const LANGUAGE_OPTIONS = [
-    { value: "ko", label: "한국어" },
-    { value: "en", label: "English" },
-    { value: "zh-cn", label: "简体中文" },
-    { value: "zh-Hant", label: "繁體中文" },
-    { value: "ru", label: "Русский" },
+    { value: 'ko', label: '한국어' },
+    { value: 'en', label: 'English' },
+    { value: 'zh-cn', label: '简体中文' },
+    { value: 'zh-Hant', label: '繁體中文' },
+    { value: 'ru', label: 'Русский' },
   ];
 
   const handleHardwareAccelerationChange = () => {
@@ -132,12 +132,12 @@ export default function Settings({ showAlert, showConfirm }) {
         await window.api.settings.update({ hardwareAcceleration: next });
         await window.api.app.restart();
       } catch (error) {
-        console.error("Failed to toggle hardware acceleration", error);
+        console.error('Failed to toggle hardware acceleration', error);
       }
     };
 
     if (showConfirm) {
-      showConfirm(t("settings.restartConfirm"), apply);
+      showConfirm(t('settings.restartConfirm'), apply);
     } else {
       apply();
     }
@@ -149,7 +149,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ alwaysOnTop: next });
     } catch (error) {
-      console.error("Failed to toggle always-on-top", error);
+      console.error('Failed to toggle always-on-top', error);
     }
   };
 
@@ -159,7 +159,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.overlay.setLock(next);
     } catch (error) {
-      console.error("Failed to toggle overlay lock", error);
+      console.error('Failed to toggle overlay lock', error);
     }
   };
 
@@ -169,7 +169,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.css.toggle(next);
     } catch (error) {
-      console.error("Failed to toggle custom CSS", error);
+      console.error('Failed to toggle custom CSS', error);
     }
   };
 
@@ -180,16 +180,16 @@ export default function Settings({ showAlert, showConfirm }) {
       if (result?.success) {
         if (result.content) setCustomCSSContent(result.content);
         if (result.path) setCustomCSSPath(result.path);
-        showAlert?.(t("settings.cssLoaded"));
+        showAlert?.(t('settings.cssLoaded'));
       } else {
         const message = result?.error
-          ? `${t("settings.cssLoadFailed")}${result.error}`
-          : t("settings.cssLoadFailed");
+          ? `${t('settings.cssLoadFailed')}${result.error}`
+          : t('settings.cssLoadFailed');
         showAlert?.(message);
       }
     } catch (error) {
-      console.error("Failed to load custom CSS", error);
-      showAlert?.(`${t("settings.cssLoadFailed")}${error}`);
+      console.error('Failed to load custom CSS', error);
+      showAlert?.(`${t('settings.cssLoadFailed')}${error}`);
     }
   };
 
@@ -199,19 +199,19 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.js.toggle(next);
     } catch (error) {
-      console.error("Failed to toggle custom JS", error);
+      console.error('Failed to toggle custom JS', error);
     }
   };
 
   const formatPluginErrors = (errors = []) =>
-    errors.map((item) => `${item.path ?? "unknown"}: ${item.error}`).join("\n");
+    errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
 
   const canReloadPlugins = jsPlugins.some((plugin) => plugin.path);
 
   const handleReloadPlugins = async () => {
     if (isReloadingPlugins) return;
     if (jsPlugins.length === 0) {
-      showAlert?.(t("settings.jsReloadNoPlugins"));
+      showAlert?.(t('settings.jsReloadNoPlugins'));
       return;
     }
     const startTime = performance.now();
@@ -223,22 +223,22 @@ export default function Settings({ showAlert, showConfirm }) {
 
       if (errors.length && updated.length) {
         showAlert?.(
-          `${t("settings.jsReloadPartial", {
+          `${t('settings.jsReloadPartial', {
             count: updated.length,
           })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
-          `${t("settings.jsReloadFailed")}\n${formatPluginErrors(errors)}`,
+          `${t('settings.jsReloadFailed')}\n${formatPluginErrors(errors)}`,
         );
       } else if (updated.length) {
-        showAlert?.(t("settings.jsReloadSuccess", { count: updated.length }));
+        showAlert?.(t('settings.jsReloadSuccess', { count: updated.length }));
       } else {
-        showAlert?.(t("settings.jsReloadNoChanges"));
+        showAlert?.(t('settings.jsReloadNoChanges'));
       }
     } catch (error) {
-      console.error("Failed to reload JS plugins", error);
-      showAlert?.(`${t("settings.jsReloadFailed")}${error}`);
+      console.error('Failed to reload JS plugins', error);
+      showAlert?.(`${t('settings.jsReloadFailed')}${error}`);
     } finally {
       const elapsed = performance.now() - startTime;
       const MIN_SPINNER_MS = 250;
@@ -272,20 +272,20 @@ export default function Settings({ showAlert, showConfirm }) {
 
       if (errors.length && added.length) {
         showAlert?.(
-          `${t("settings.jsAddPartial", {
+          `${t('settings.jsAddPartial', {
             count: added.length,
           })}\n${formatPluginErrors(errors)}`,
         );
       } else if (errors.length) {
         showAlert?.(
-          `${t("settings.jsAddFailed")}\n${formatPluginErrors(errors)}`,
+          `${t('settings.jsAddFailed')}\n${formatPluginErrors(errors)}`,
         );
       } else if (added.length) {
-        showAlert?.(t("settings.jsAddSuccess", { count: added.length }));
+        showAlert?.(t('settings.jsAddSuccess', { count: added.length }));
       }
     } catch (error) {
-      console.error("Failed to add JS plugins", error);
-      showAlert?.(`${t("settings.jsAddFailed")}${error}`);
+      console.error('Failed to add JS plugins', error);
+      showAlert?.(`${t('settings.jsAddFailed')}${error}`);
     } finally {
       setIsAddingPlugins(false);
     }
@@ -297,11 +297,11 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       const result = await window.api.js.setPluginEnabled(pluginId, nextState);
       if (!result?.success) {
-        showAlert?.(t("settings.jsPluginToggleFailed"));
+        showAlert?.(t('settings.jsPluginToggleFailed'));
       }
     } catch (error) {
-      console.error("Failed to toggle JS plugin", error);
-      showAlert?.(t("settings.jsPluginToggleFailed"));
+      console.error('Failed to toggle JS plugin', error);
+      showAlert?.(t('settings.jsPluginToggleFailed'));
     } finally {
       setPendingPluginId(null);
     }
@@ -321,9 +321,9 @@ export default function Settings({ showAlert, showConfirm }) {
       // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
       const hasData = await window.api.plugin.storage.hasData(pluginNamespace);
       console.debug(
-        "[PluginRemove] namespace=",
+        '[PluginRemove] namespace=',
         pluginNamespace,
-        "hasData=",
+        'hasData=',
         hasData,
       );
 
@@ -338,8 +338,8 @@ export default function Settings({ showAlert, showConfirm }) {
         await removePluginOnly(pluginId);
       }
     } catch (error) {
-      console.error("Failed to check plugin data", error);
-      showAlert?.(t("settings.jsPluginRemoveFailed"));
+      console.error('Failed to check plugin data', error);
+      showAlert?.(t('settings.jsPluginRemoveFailed'));
     }
   };
 
@@ -348,11 +348,11 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       const result = await window.api.js.remove(pluginId);
       if (!result?.success) {
-        showAlert?.(t("settings.jsPluginRemoveFailed"));
+        showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
     } catch (error) {
-      console.error("Failed to remove JS plugin", error);
-      showAlert?.(t("settings.jsPluginRemoveFailed"));
+      console.error('Failed to remove JS plugin', error);
+      showAlert?.(t('settings.jsPluginRemoveFailed'));
     } finally {
       setPendingPluginId(null);
       setDataDeleteModalOpen(false);
@@ -365,7 +365,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       const plugin = jsPlugins.find((p) => p.id === pluginId);
       if (!plugin) {
-        throw new Error("Plugin not found");
+        throw new Error('Plugin not found');
       }
 
       // 실제 네임스페이스를 다시 추출
@@ -374,14 +374,14 @@ export default function Settings({ showAlert, showConfirm }) {
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
       const result = await window.api.js.remove(pluginId);
       if (!result?.success) {
-        showAlert?.(t("settings.jsPluginRemoveFailed"));
+        showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
 
       // 2) 그 다음 스토리지 정리 → 클린업 중 재생성된 값까지 함께 제거
       await window.api.plugin.storage.clearByPrefix(pluginNamespace);
     } catch (error) {
-      console.error("Failed to remove JS plugin with data", error);
-      showAlert?.(t("settings.jsPluginRemoveFailed"));
+      console.error('Failed to remove JS plugin with data', error);
+      showAlert?.(t('settings.jsPluginRemoveFailed'));
     } finally {
       setPendingPluginId(null);
       setDataDeleteModalOpen(false);
@@ -390,10 +390,10 @@ export default function Settings({ showAlert, showConfirm }) {
   };
 
   const actionButtonClass = (enabled) =>
-    "py-[4px] px-[8px] border-[1px] rounded-[7px] text-style-2 transition-colors " +
+    'py-[4px] px-[8px] border-[1px] rounded-[7px] text-style-2 transition-colors ' +
     (enabled
-      ? "bg-[#2A2A31] border-[#3A3944] text-[#DBDEE8] hover:bg-[#34343c]"
-      : "bg-[#222228] border-[#31303C] text-[#44464E] cursor-not-allowed");
+      ? 'bg-[#2A2A31] border-[#3A3944] text-[#DBDEE8] hover:bg-[#34343c]'
+      : 'bg-[#222228] border-[#31303C] text-[#44464E] cursor-not-allowed');
 
   const handleNoteEffectChange = async () => {
     const next = !noteEffect;
@@ -401,7 +401,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ noteEffect: next });
     } catch (error) {
-      console.error("Failed to toggle note effect", error);
+      console.error('Failed to toggle note effect', error);
     }
   };
 
@@ -410,8 +410,8 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ shortcuts: next });
     } catch (error) {
-      console.error("Failed to update shortcuts", error);
-      showAlert?.(t("shortcutSetting.saveFailed"));
+      console.error('Failed to update shortcuts', error);
+      showAlert?.(t('shortcutSetting.saveFailed'));
     }
   };
 
@@ -423,12 +423,12 @@ export default function Settings({ showAlert, showConfirm }) {
         await window.api.settings.update({ angleMode: val });
         await window.api.app.restart();
       } catch (error) {
-        console.error("Failed to change angle mode", error);
+        console.error('Failed to change angle mode', error);
       }
     };
 
     if (showConfirm) {
-      showConfirm(t("settings.restartConfirm"), apply);
+      showConfirm(t('settings.restartConfirm'), apply);
     } else {
       apply();
     }
@@ -440,7 +440,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ laboratoryEnabled: next });
     } catch (error) {
-      console.error("Failed to toggle laboratory mode", error);
+      console.error('Failed to toggle laboratory mode', error);
     }
   };
 
@@ -450,7 +450,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ trayEnabled: next });
     } catch (error) {
-      console.error("Failed to toggle tray mode", error);
+      console.error('Failed to toggle tray mode', error);
     }
   };
 
@@ -460,7 +460,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ autoUpdateEnabled: next });
     } catch (error) {
-      console.error("Failed to toggle auto update", error);
+      console.error('Failed to toggle auto update', error);
     }
   };
 
@@ -476,7 +476,7 @@ export default function Settings({ showAlert, showConfirm }) {
         } catch (e) {}
       }
     } catch (error) {
-      console.error("Failed to toggle developer mode", error);
+      console.error('Failed to toggle developer mode', error);
     }
   };
 
@@ -486,7 +486,7 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       await window.api.settings.update({ keyCounterEnabled: next });
     } catch (error) {
-      console.error("Failed to toggle key counter", error);
+      console.error('Failed to toggle key counter', error);
     }
   };
 
@@ -495,10 +495,10 @@ export default function Settings({ showAlert, showConfirm }) {
     try {
       const snapshot = await window.api.keys.resetCounters();
       applyCounterSnapshot(snapshot);
-      showAlert?.(t("settings.counterReset"));
+      showAlert?.(t('settings.counterReset'));
     } catch (error) {
-      console.error("Failed to reset key counters", error);
-      showAlert?.(t("settings.counterResetFailed"));
+      console.error('Failed to reset key counters', error);
+      showAlert?.(t('settings.counterResetFailed'));
     }
   };
 
@@ -516,15 +516,15 @@ export default function Settings({ showAlert, showConfirm }) {
           });
         }
       } catch (error) {
-        console.error("Failed to reset presets", error);
+        console.error('Failed to reset presets', error);
       }
     };
 
     if (showConfirm) {
       showConfirm(
-        t("settings.resetAllConfirm"),
+        t('settings.resetAllConfirm'),
         reset,
-        t("settings.initialize"),
+        t('settings.initialize'),
       );
     } else {
       reset();
@@ -541,7 +541,7 @@ export default function Settings({ showAlert, showConfirm }) {
       <div
         ref={scrollContainerRef}
         className={`settings-content-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#0B0B0D] ${
-          isScrollHovered ? "show-scrollbar" : ""
+          isScrollHovered ? 'show-scrollbar' : ''
         }`}
         onMouseEnter={() => setIsScrollHovered(true)}
         onMouseLeave={() => setIsScrollHovered(false)}
@@ -553,12 +553,12 @@ export default function Settings({ showAlert, showConfirm }) {
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("overlayLock")}
+                onMouseEnter={() => setHoveredKey('overlayLock')}
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleOverlayLockChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.overlayLock")}
+                  {t('settings.overlayLock')}
                 </p>
                 <Checkbox
                   checked={overlayLocked}
@@ -567,12 +567,12 @@ export default function Settings({ showAlert, showConfirm }) {
               </div>
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("alwaysOnTop")}
+                onMouseEnter={() => setHoveredKey('alwaysOnTop')}
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleAlwaysOnTopChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.alwaysOnTop")}
+                  {t('settings.alwaysOnTop')}
                 </p>
                 <Checkbox
                   checked={alwaysOnTop}
@@ -581,12 +581,12 @@ export default function Settings({ showAlert, showConfirm }) {
               </div>
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("noteEffect")}
+                onMouseEnter={() => setHoveredKey('noteEffect')}
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleNoteEffectChange}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.noteEffect")}
+                  {t('settings.noteEffect')}
                 </p>
                 <Checkbox
                   checked={noteEffect}
@@ -595,12 +595,12 @@ export default function Settings({ showAlert, showConfirm }) {
               </div>
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("keyCounter")}
+                onMouseEnter={() => setHoveredKey('keyCounter')}
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleKeyCounterToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.keyCounter")}
+                  {t('settings.keyCounter')}
                 </p>
                 <div className="flex items-center gap-[8px]">
                   {/* <button
@@ -636,18 +636,18 @@ export default function Settings({ showAlert, showConfirm }) {
                 onClick={handleTrayToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.trayEnabled")}
+                  {t('settings.trayEnabled')}
                 </p>
                 <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
               </div>
               {null}
               <div
                 className="flex flex-row justify-between items-center h-[40px]"
-                onMouseEnter={() => setHoveredKey("resizeAnchor")}
+                onMouseEnter={() => setHoveredKey('resizeAnchor')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.resizeAnchor")}
+                  {t('settings.resizeAnchor')}
                 </p>
                 <Dropdown
                   options={RESIZE_ANCHOR_OPTIONS.map((opt) => ({
@@ -660,10 +660,10 @@ export default function Settings({ showAlert, showConfirm }) {
                     try {
                       await window.api.overlay.setAnchor(val);
                     } catch (error) {
-                      console.error("Failed to set overlay anchor", error);
+                      console.error('Failed to set overlay anchor', error);
                     }
                   }}
-                  placeholder={t("settings.selectAnchor")}
+                  placeholder={t('settings.selectAnchor')}
                 />
               </div>
             </div>
@@ -671,7 +671,7 @@ export default function Settings({ showAlert, showConfirm }) {
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div
                 className="flex flex-col gap-[0px]"
-                onMouseEnter={() => setHoveredKey("customCSS")}
+                onMouseEnter={() => setHoveredKey('customCSS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
                 <div
@@ -679,7 +679,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   onClick={handleToggleCustomCSS}
                 >
                   <p className="text-style-3 text-[#FFFFFF]">
-                    {t("settings.customCSS")}
+                    {t('settings.customCSS')}
                   </p>
                   <Checkbox
                     checked={useCustomCSS}
@@ -689,31 +689,31 @@ export default function Settings({ showAlert, showConfirm }) {
                 <div className="flex flex-row justify-between items-center h-[40px]">
                   <p
                     className={
-                      "text-[12px] truncate max-w-[150px] " +
-                      (useCustomCSS ? "text-[#989BA6]" : "text-[#44464E]")
+                      'text-[12px] truncate max-w-[150px] ' +
+                      (useCustomCSS ? 'text-[#989BA6]' : 'text-[#44464E]')
                     }
                   >
                     {customCSSPath && customCSSPath.length > 0
                       ? customCSSPath
-                      : t("settings.noCssFile")}
+                      : t('settings.noCssFile')}
                   </p>
                   <button
                     onClick={handleLoadCustomCSS}
                     disabled={!useCustomCSS}
                     className={
-                      "py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 " +
+                      'py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 ' +
                       (useCustomCSS
-                        ? "text-[#DBDEE8]"
-                        : "text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]")
+                        ? 'text-[#DBDEE8]'
+                        : 'text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]')
                     }
                   >
-                    {t("settings.loadCss")}
+                    {t('settings.loadCss')}
                   </button>
                 </div>
               </div>
               <div
                 className="flex flex-col gap-[0px]"
-                onMouseEnter={() => setHoveredKey("customJS")}
+                onMouseEnter={() => setHoveredKey('customJS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
                 <div
@@ -721,7 +721,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   onClick={handleToggleCustomJS}
                 >
                   <p className="text-style-3 text-[#FFFFFF]">
-                    {t("settings.customJS")}
+                    {t('settings.customJS')}
                   </p>
                   <Checkbox
                     checked={useCustomJS}
@@ -731,11 +731,11 @@ export default function Settings({ showAlert, showConfirm }) {
                 <div className="flex flex-row justify-between items-center h-[40px]">
                   <p
                     className={
-                      "text-[12px] truncate max-w-[150px] " +
-                      (useCustomJS ? "text-[#989BA6]" : "text-[#44464E]")
+                      'text-[12px] truncate max-w-[150px] ' +
+                      (useCustomJS ? 'text-[#989BA6]' : 'text-[#44464E]')
                     }
                   >
-                    {t("settings.pluginManageLabel")}
+                    {t('settings.pluginManageLabel')}
                   </p>
                   <div className="flex flex-row gap-[8px]">
                     <button
@@ -744,21 +744,21 @@ export default function Settings({ showAlert, showConfirm }) {
                       className={
                         actionButtonClass(
                           canReloadPlugins && !isReloadingPlugins,
-                        ) + " transition-none"
+                        ) + ' transition-none'
                       }
                       style={
                         isReloadingPlugins
-                          ? { opacity: 0.65, pointerEvents: "none" }
+                          ? { opacity: 0.65, pointerEvents: 'none' }
                           : undefined
                       }
                     >
-                      {t("settings.reloadPlugins")}
+                      {t('settings.reloadPlugins')}
                     </button>
                     <button
                       onClick={handleOpenPluginModal}
                       className={actionButtonClass(true)}
                     >
-                      {t("settings.managePlugins")}
+                      {t('settings.managePlugins')}
                     </button>
                   </div>
                 </div>
@@ -768,35 +768,35 @@ export default function Settings({ showAlert, showConfirm }) {
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.language")}
+                  {t('settings.language')}
                 </p>
                 <Dropdown
                   options={LANGUAGE_OPTIONS}
                   value={language}
                   onChange={handleLanguageChange}
-                  placeholder={t("settings.selectLanguage")}
+                  placeholder={t('settings.selectLanguage')}
                 />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.shortcuts")}
+                  {t('settings.shortcuts')}
                 </p>
                 <button
                   onClick={() => setShortcutModalOpen(true)}
                   className={actionButtonClass(true)}
                 >
-                  {t("settings.configure")}
+                  {t('settings.configure')}
                 </button>
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.graphicsOption")}
+                  {t('settings.graphicsOption')}
                 </p>
                 <Dropdown
                   options={isMacOS ? macAngleOptions : ANGLE_OPTIONS}
-                  value={isMacOS ? "metal" : angleMode}
+                  value={isMacOS ? 'metal' : angleMode}
                   onChange={handleAngleModeChangeSelect}
-                  placeholder={t("settings.renderMode")}
+                  placeholder={t('settings.renderMode')}
                   disabled={isMacOS}
                 />
               </div>
@@ -806,7 +806,7 @@ export default function Settings({ showAlert, showConfirm }) {
                   onClick={handleAutoUpdateToggle}
                 >
                   <p className="text-style-3 text-[#FFFFFF]">
-                    {t("settings.autoUpdate")}
+                    {t('settings.autoUpdate')}
                   </p>
                   <Checkbox
                     checked={autoUpdateEnabled}
@@ -819,7 +819,7 @@ export default function Settings({ showAlert, showConfirm }) {
                 onClick={handleDeveloperModeToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
-                  {t("settings.developerMode")}
+                  {t('settings.developerMode')}
                 </p>
                 <Checkbox
                   checked={developerModeEnabled}
@@ -838,14 +838,14 @@ export default function Settings({ showAlert, showConfirm }) {
                     disabled={isChecking}
                   >
                     {isChecking
-                      ? t("update.checking")
-                      : t("update.checkUpdate")}
+                      ? t('update.checking')
+                      : t('update.checkUpdate')}
                   </button>
                   <button
                     className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
                     onClick={handleResetAll}
                   >
-                    {t("settings.resetData")}
+                    {t('settings.resetData')}
                   </button>
                 </div>
               </div>

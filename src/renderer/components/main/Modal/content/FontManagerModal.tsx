@@ -7,23 +7,20 @@ import {
   useRef,
   useEffect,
   useLayoutEffect,
-} from "react";
-import { useLenis } from "@hooks/useLenis";
-import Modal from "@components/main/Modal/Modal";
-import Checkbox from "@components/main/common/Checkbox";
-import TrashIcon from "@assets/svgs/trash.svg";
-import { getScrollShadowState } from "@utils/scrollShadow";
-import {
-  useFontStore,
-  syncFontCSS,
-} from "@stores/useFontStore";
-import type { CustomFont } from "@src/types/fonts";
+} from 'react';
+import { useLenis } from '@hooks/useLenis';
+import Modal from '@components/main/Modal/Modal';
+import Checkbox from '@components/main/common/Checkbox';
+import TrashIcon from '@assets/svgs/trash.svg';
+import { getScrollShadowState } from '@utils/scrollShadow';
+import { useFontStore, syncFontCSS } from '@stores/useFontStore';
+import type { CustomFont } from '@src/types/fonts';
 import {
   extractFontFamilyFromCSS,
   generateFontId,
   normalizeFontFamilyName,
-} from "@src/types/fonts";
-import { convertFileSrc } from "@tauri-apps/api/core";
+} from '@src/types/fonts';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface FontManagerModalProps {
   isOpen: boolean;
@@ -31,16 +28,16 @@ interface FontManagerModalProps {
   t: (key: string, options?: Record<string, string>) => string;
 }
 
-type TabType = "local" | "web";
+type TabType = 'local' | 'web';
 const MAX_SCROLL_HEIGHT = 195;
 
-let webFontInputModalPreloadPromise:
-  | Promise<typeof import("./WebFontInputModal")>
-  | null = null;
+let webFontInputModalPreloadPromise: Promise<
+  typeof import('./WebFontInputModal')
+> | null = null;
 
 const preloadWebFontInputModal = () => {
   if (!webFontInputModalPreloadPromise) {
-    webFontInputModalPreloadPromise = import("./WebFontInputModal");
+    webFontInputModalPreloadPromise = import('./WebFontInputModal');
   }
   return webFontInputModalPreloadPromise;
 };
@@ -62,7 +59,7 @@ export default function FontManagerModal({
   const [isScrollable, setIsScrollable] = useState(false);
   const isFirstRender = useRef(true);
 
-  const [activeTab, setActiveTab] = useState<TabType>("web");
+  const [activeTab, setActiveTab] = useState<TabType>('web');
   const [isAdding, setIsAdding] = useState(false);
   const [showWebFontModal, setShowWebFontModal] = useState(false);
   const [editingWebFontId, setEditingWebFontId] = useState<string | null>(null);
@@ -77,7 +74,7 @@ export default function FontManagerModal({
   const editingWebFont = useMemo(
     () =>
       customFonts.find(
-        (font) => font.type === "web" && font.id === editingWebFontId,
+        (font) => font.type === 'web' && font.id === editingWebFontId,
       ) || null,
     [customFonts, editingWebFontId],
   );
@@ -87,7 +84,10 @@ export default function FontManagerModal({
   const previewCssCacheRef = useRef<Map<string, string>>(new Map());
 
   // preview용 font-family 이름 생성 (syncFontCSS의 영향을 받지 않도록 별도 이름 사용)
-  const getPreviewFontFamily = useCallback((fontName: string) => `${fontName}__preview`, []);
+  const getPreviewFontFamily = useCallback(
+    (fontName: string) => `${fontName}__preview`,
+    [],
+  );
 
   // preview CSS 주입 (syncFontCSS의 'font-' prefix와 다른 'fontpreview-' prefix 사용)
   const injectPreviewCSS = useCallback((id: string, css: string) => {
@@ -96,7 +96,7 @@ export default function FontManagerModal({
     if (existing) {
       existing.textContent = css;
     } else {
-      const style = document.createElement("style");
+      const style = document.createElement('style');
       style.id = styleId;
       style.textContent = css;
       document.head.appendChild(style);
@@ -123,16 +123,23 @@ export default function FontManagerModal({
       const previewFontFamily = getPreviewFontFamily(font.name);
 
       let css: string | null = null;
-      if (font.type === "local" && font.localPath) {
+      if (font.type === 'local' && font.localPath) {
         const url = convertFileSrc(font.localPath);
-        const ext = font.localPath.split(".").pop()?.toLowerCase() ?? "";
-        const format = ext === "otf" ? "opentype" : ext === "woff" ? "woff" : ext === "woff2" ? "woff2" : "truetype";
+        const ext = font.localPath.split('.').pop()?.toLowerCase() ?? '';
+        const format =
+          ext === 'otf'
+            ? 'opentype'
+            : ext === 'woff'
+              ? 'woff'
+              : ext === 'woff2'
+                ? 'woff2'
+                : 'truetype';
         css = `@font-face {\n  font-family: '${previewFontFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
-      } else if (font.type === "web" && font.cssContent) {
+      } else if (font.type === 'web' && font.cssContent) {
         // 웹폰트 CSS에서 font-family를 preview 이름으로 교체
         css = font.cssContent.replace(
           /font-family:\s*['"]?([^'";]+)['"]?\s*;/i,
-          `font-family: '${previewFontFamily}';`
+          `font-family: '${previewFontFamily}';`,
         );
       }
 
@@ -252,7 +259,7 @@ export default function FontManagerModal({
       window.api.settings
         .update({ fontSettings: { customFonts: nextFonts } })
         .catch((error) => {
-          console.error("Failed to persist font settings:", error);
+          console.error('Failed to persist font settings:', error);
         });
     },
     [setAll],
@@ -277,13 +284,13 @@ export default function FontManagerModal({
   const showDuplicateFontFamilyAlert = useCallback(
     (fontFamily: string) => {
       const message =
-        t("webFontInput.duplicateFontFamilyAlert", { name: fontFamily }) ||
+        t('webFontInput.duplicateFontFamilyAlert', { name: fontFamily }) ||
         `"${fontFamily}" 폰트가 이미 등록되어 있습니다.`;
 
       void window.api.ui.dialog
-        .alert(message, { confirmText: t("common.ok") || "확인" })
+        .alert(message, { confirmText: t('common.ok') || '확인' })
         .catch((error) => {
-          console.error("Failed to open duplicate font alert:", error);
+          console.error('Failed to open duplicate font alert:', error);
         });
     },
     [t],
@@ -304,7 +311,7 @@ export default function FontManagerModal({
 
         const newFont: CustomFont = {
           id: generateFontId(),
-          type: "local",
+          type: 'local',
           name: result.fontName,
           displayName: result.fontName,
           enabled: true,
@@ -313,10 +320,10 @@ export default function FontManagerModal({
         const nextFonts = [...useFontStore.getState().customFonts, newFont];
         persistFonts(nextFonts);
       } else if (result.error) {
-        console.error("Failed to load font:", result.error);
+        console.error('Failed to load font:', result.error);
       }
     } catch (error) {
-      console.error("Failed to add local font:", error);
+      console.error('Failed to add local font:', error);
     } finally {
       setIsAdding(false);
     }
@@ -345,7 +352,7 @@ export default function FontManagerModal({
     (css: string, displayName: string) => {
       const fontFamily = extractFontFamilyFromCSS(css);
       if (!fontFamily) {
-        console.error("Failed to extract font-family from CSS");
+        console.error('Failed to extract font-family from CSS');
         return;
       }
 
@@ -357,7 +364,7 @@ export default function FontManagerModal({
       const currentCustomFonts = useFontStore.getState().customFonts;
       const newWebFont: CustomFont = {
         id: generateFontId(),
-        type: "web",
+        type: 'web',
         name: fontFamily,
         displayName: displayName || fontFamily,
         enabled: true,
@@ -403,9 +410,11 @@ export default function FontManagerModal({
   // 폰트 토글
   const handleToggleFont = useCallback(
     (id: string, enabled: boolean) => {
-      const nextFonts = useFontStore.getState().customFonts.map((font) =>
-        font.id === id ? { ...font, enabled } : font,
-      );
+      const nextFonts = useFontStore
+        .getState()
+        .customFonts.map((font) =>
+          font.id === id ? { ...font, enabled } : font,
+        );
       persistFonts(nextFonts);
     },
     [persistFonts],
@@ -413,7 +422,7 @@ export default function FontManagerModal({
 
   // 추가 버튼 클릭
   const handleAdd = useCallback(() => {
-    if (activeTab === "local") {
+    if (activeTab === 'local') {
       handleAddLocalFont();
     } else {
       handleAddWebFont();
@@ -441,24 +450,24 @@ export default function FontManagerModal({
               <button
                 type="button"
                 className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-                  activeTab === "web"
-                    ? "bg-[#3A3943] text-white"
-                    : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
+                  activeTab === 'web'
+                    ? 'bg-[#3A3943] text-white'
+                    : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
                 }`}
-                onClick={() => setActiveTab("web")}
+                onClick={() => setActiveTab('web')}
               >
-                {t("fontManager.webTab") || "웹폰트"}
+                {t('fontManager.webTab') || '웹폰트'}
               </button>
               <button
                 type="button"
                 className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-                  activeTab === "local"
-                    ? "bg-[#3A3943] text-white"
-                    : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
+                  activeTab === 'local'
+                    ? 'bg-[#3A3943] text-white'
+                    : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
                 }`}
-                onClick={() => setActiveTab("local")}
+                onClick={() => setActiveTab('local')}
               >
-                {t("fontManager.localTab") || "로컬 폰트"}
+                {t('fontManager.localTab') || '로컬 폰트'}
               </button>
             </div>
           </div>
@@ -468,8 +477,8 @@ export default function FontManagerModal({
             {/* 상단 그림자 */}
             <div
               className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasTopShadow ? "opacity-100" : "opacity-0"}`}
+                skipShadowTransition ? '' : 'transition-opacity duration-150'
+              } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
             />
 
             <div
@@ -477,13 +486,13 @@ export default function FontManagerModal({
               className="modal-content-scroll pr-[14px]"
               style={{
                 height:
-                  containerHeight !== null ? `${containerHeight}px` : "auto",
+                  containerHeight !== null ? `${containerHeight}px` : 'auto',
                 maxHeight: `${MAX_SCROLL_HEIGHT}px`,
-                overflowY: isScrollable ? "auto" : "hidden",
+                overflowY: isScrollable ? 'auto' : 'hidden',
                 transition: isFirstRender.current
-                  ? "none"
-                  : "height 100ms ease-in-out",
-                willChange: "scroll-position",
+                  ? 'none'
+                  : 'height 100ms ease-in-out',
+                willChange: 'scroll-position',
               }}
             >
               <div
@@ -492,29 +501,29 @@ export default function FontManagerModal({
               >
                 {currentFonts.length === 0 ? (
                   <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
-                    {activeTab === "local"
-                      ? t("fontManager.noLocalFonts") || "로컬 폰트가 없습니다"
-                      : t("fontManager.noWebFonts") || "웹폰트가 없습니다"}
+                    {activeTab === 'local'
+                      ? t('fontManager.noLocalFonts') || '로컬 폰트가 없습니다'
+                      : t('fontManager.noWebFonts') || '웹폰트가 없습니다'}
                   </div>
                 ) : (
                   currentFonts.map((font) => (
                     <div
                       key={font.id}
                       className="flex items-center justify-between"
-                      style={{ transform: "translateZ(0)" }}
+                      style={{ transform: 'translateZ(0)' }}
                     >
                       <div className="flex items-center gap-[10px] h-[23px]">
                         <button
                           className="flex items-center justify-center transition-colors hover:opacity-80"
                           onClick={() => handleRemoveFont(font.id)}
                           aria-label={
-                            t("fontManager.removeFont") || "폰트 삭제"
+                            t('fontManager.removeFont') || '폰트 삭제'
                           }
-                          title={t("fontManager.removeFont") || "폰트 삭제"}
+                          title={t('fontManager.removeFont') || '폰트 삭제'}
                         >
                           <TrashIcon className="w-[14px] h-[15px]" />
                         </button>
-                        {font.type === "web" ? (
+                        {font.type === 'web' ? (
                           <button
                             type="button"
                             className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left leading-[23px] cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
@@ -522,7 +531,7 @@ export default function FontManagerModal({
                               fontFamily: `${font.name}__preview, ${font.name}`,
                             }}
                             onClick={() => handleEditWebFont(font.id)}
-                            title={t("webFontInput.update") || "수정"}
+                            title={t('webFontInput.update') || '수정'}
                           >
                             {font.displayName}
                           </button>
@@ -554,8 +563,8 @@ export default function FontManagerModal({
             {/* 하단 그림자 */}
             <div
               className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"}`}
+                skipShadowTransition ? '' : 'transition-opacity duration-150'
+              } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
             />
           </div>
 
@@ -567,15 +576,15 @@ export default function FontManagerModal({
             <button
               className={`flex items-center justify-center w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
                 isAdding
-                  ? "bg-[#222228] cursor-not-allowed opacity-50"
-                  : "bg-[#2A2A30] hover:bg-[#34343c]"
+                  ? 'bg-[#222228] cursor-not-allowed opacity-50'
+                  : 'bg-[#2A2A30] hover:bg-[#34343c]'
               }`}
               onClick={handleAdd}
               disabled={isAdding}
             >
               {isAdding
-                ? t("fontManager.adding") || "추가 중..."
-                : `${t("fontManager.addFont") || "추가"} (${
+                ? t('fontManager.adding') || '추가 중...'
+                : `${t('fontManager.addFont') || '추가'} (${
                     currentFonts.length
                   })`}
             </button>
@@ -583,7 +592,7 @@ export default function FontManagerModal({
               className="flex items-center justify-center w-[75px] h-[30px] bg-[#2A2A30] rounded-[7px] text-style-3 text-[#DCDEE7] hover:bg-[#34343c] transition-colors"
               onClick={handleClose}
             >
-              {t("common.ok") || "확인"}
+              {t('common.ok') || '확인'}
             </button>
           </div>
         </div>
@@ -609,7 +618,7 @@ export default function FontManagerModal({
             isOpen={showWebFontModal}
             onClose={handleCloseWebFontModal}
             onSubmit={handleWebFontSubmit}
-            initialCss={editingWebFont?.cssContent || ""}
+            initialCss={editingWebFont?.cssContent || ''}
             isDuplicateFontFamily={(fontFamily) =>
               isDuplicateFontFamily(fontFamily, { excludeId: editingWebFontId })
             }

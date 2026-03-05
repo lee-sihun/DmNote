@@ -4,15 +4,15 @@ import React, {
   useImperativeHandle,
   forwardRef,
   useCallback,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import Checkbox from "@components/main/common/Checkbox";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import Checkbox from '@components/main/common/Checkbox';
 import {
   COLOR_MODES,
   toGradient,
   type NoteTabState,
   type NotePreviewData,
-} from "@hooks/Modal/useUnifiedKeySettingState";
+} from '@hooks/Modal/useUnifiedKeySettingState';
 
 // ============================================================================
 // 타입 정의
@@ -21,7 +21,7 @@ import {
 interface NoteTabContentProps {
   state: NoteTabState;
   setState: React.Dispatch<React.SetStateAction<NoteTabState>>;
-  onPreview: (updates: Omit<NotePreviewData, "type">) => void;
+  onPreview: (updates: Omit<NotePreviewData, 'type'>) => void;
 }
 
 export interface NoteTabContentRef {
@@ -72,20 +72,20 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
     // 색상 라벨
     const colorLabel =
       state.colorMode === COLOR_MODES.gradient
-        ? "Gradient"
-        : state.noteColor.replace(/^#/, "");
+        ? 'Gradient'
+        : state.noteColor.replace(/^#/, '');
     const glowColorLabel =
       state.glowColorMode === COLOR_MODES.gradient
-        ? "Gradient"
-        : state.glowColor.replace(/^#/, "");
+        ? 'Gradient'
+        : state.glowColor.replace(/^#/, '');
 
     // 색상 변경 핸들러
     const handleColorChange = useCallback(
       (newColor: any) => {
         if (
           newColor &&
-          typeof newColor === "object" &&
-          newColor.type === "gradient"
+          typeof newColor === 'object' &&
+          newColor.type === 'gradient'
         ) {
           setState((prev) => ({
             ...prev,
@@ -102,15 +102,15 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           }));
         }
       },
-      [setState]
+      [setState],
     );
 
     const handleColorChangeComplete = useCallback(
       (newColor: any) => {
         if (
           newColor &&
-          typeof newColor === "object" &&
-          newColor.type === "gradient"
+          typeof newColor === 'object' &&
+          newColor.type === 'gradient'
         ) {
           setState((prev) => ({
             ...prev,
@@ -129,15 +129,15 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           onPreview({ noteColor: newColor });
         }
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     const handleGlowColorChange = useCallback(
       (newColor: any) => {
         if (
           newColor &&
-          typeof newColor === "object" &&
-          newColor.type === "gradient"
+          typeof newColor === 'object' &&
+          newColor.type === 'gradient'
         ) {
           setState((prev) => ({
             ...prev,
@@ -154,15 +154,15 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           }));
         }
       },
-      [setState]
+      [setState],
     );
 
     const handleGlowColorChangeComplete = useCallback(
       (newColor: any) => {
         if (
           newColor &&
-          typeof newColor === "object" &&
-          newColor.type === "gradient"
+          typeof newColor === 'object' &&
+          newColor.type === 'gradient'
         ) {
           setState((prev) => ({
             ...prev,
@@ -183,7 +183,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           onPreview({ noteGlowColor: newColor });
         }
       },
-      [setState, onPreview]
+      [setState, onPreview],
     );
 
     // ref를 통해 버튼 refs와 핸들러 노출
@@ -202,14 +202,14 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         handleColorChangeComplete,
         handleGlowColorChange,
         handleGlowColorChangeComplete,
-      ]
+      ],
     );
 
     // 불투명도 핸들러
     const handleOpacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value.replace(/[^0-9]/g, "");
-      if (newValue === "") {
-        setState((prev) => ({ ...prev, displayNoteOpacity: "" }));
+      const newValue = e.target.value.replace(/[^0-9]/g, '');
+      if (newValue === '') {
+        setState((prev) => ({ ...prev, displayNoteOpacity: '' }));
       } else {
         const numValue = parseInt(newValue, 10);
         if (!Number.isNaN(numValue)) {
@@ -219,12 +219,12 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
     };
 
     const handleOpacityBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      const inputValue = e.target.value.replace(/[^0-9]/g, "");
-      if (inputValue === "" || Number.isNaN(parseInt(inputValue, 10))) {
+      const inputValue = e.target.value.replace(/[^0-9]/g, '');
+      if (inputValue === '' || Number.isNaN(parseInt(inputValue, 10))) {
         setState((prev) => ({
           ...prev,
           noteOpacity: 80,
-          displayNoteOpacity: "80%",
+          displayNoteOpacity: '80%',
           isFocused: false,
         }));
         onPreview({ noteOpacity: 80 });
@@ -243,12 +243,12 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
     // 글로우 크기 핸들러
     const handleGlowSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value.replace(/[^0-9]/g, "");
+      const newValue = e.target.value.replace(/[^0-9]/g, '');
       setState((prev) => ({ ...prev, displayGlowSize: newValue }));
     };
 
     const handleGlowSizeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      const parsed = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+      const parsed = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10);
       const clamped = Number.isNaN(parsed)
         ? 20
         : Math.min(Math.max(parsed, 0), 50);
@@ -263,11 +263,11 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
     // 글로우 불투명도 핸들러
     const handleGlowOpacityChange = (
-      e: React.ChangeEvent<HTMLInputElement>
+      e: React.ChangeEvent<HTMLInputElement>,
     ) => {
-      const newValue = e.target.value.replace(/[^0-9]/g, "");
-      if (newValue === "") {
-        setState((prev) => ({ ...prev, displayGlowOpacity: "" }));
+      const newValue = e.target.value.replace(/[^0-9]/g, '');
+      if (newValue === '') {
+        setState((prev) => ({ ...prev, displayGlowOpacity: '' }));
       } else {
         const numValue = parseInt(newValue, 10);
         if (!Number.isNaN(numValue)) {
@@ -277,12 +277,12 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
     };
 
     const handleGlowOpacityBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      const inputValue = e.target.value.replace(/[^0-9]/g, "");
-      if (inputValue === "" || Number.isNaN(parseInt(inputValue, 10))) {
+      const inputValue = e.target.value.replace(/[^0-9]/g, '');
+      if (inputValue === '' || Number.isNaN(parseInt(inputValue, 10))) {
         setState((prev) => ({
           ...prev,
           glowOpacity: 70,
-          displayGlowOpacity: "70%",
+          displayGlowOpacity: '70%',
           glowOpacityFocused: false,
         }));
         onPreview({ noteGlowOpacity: 70 });
@@ -317,12 +317,12 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
       <div className="flex flex-col gap-[19px]">
         {/* 색상 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("keySetting.noteColor")}</p>
+          <p className="text-white text-style-2">{t('keySetting.noteColor')}</p>
           <button
             ref={colorButtonRef}
             type="button"
             className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+              state.showPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
             } text-[#DBDEE8] text-style-2`}
             onClick={() =>
               setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
@@ -339,7 +339,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         {/* 노트 투명도 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("keySetting.noteOpacity")}
+            {t('keySetting.noteOpacity')}
           </p>
           <input
             type="text"
@@ -363,25 +363,25 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         <div className="flex flex-col gap-[19px]">
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.noteGlow")}
+              {t('keySetting.noteGlow')}
             </p>
             <Checkbox checked={state.glowEnabled} onChange={handleGlowToggle} />
           </div>
 
           <div
             className={`flex justify-between w-full items-center ${
-              !state.glowEnabled ? "opacity-40" : ""
+              !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
             <p className="text-white text-style-2">
-              {t("keySetting.noteGlowColor")}
+              {t('keySetting.noteGlowColor')}
             </p>
             <button
               ref={glowColorButtonRef}
               type="button"
               disabled={!state.glowEnabled}
               className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                state.showGlowPicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                state.showGlowPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
               } text-[#DBDEE8] text-style-2`}
               onClick={() => {
                 if (state.glowEnabled) {
@@ -402,11 +402,11 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
           <div
             className={`flex justify-between w-full items-center ${
-              !state.glowEnabled ? "opacity-40" : ""
+              !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
             <p className="text-white text-style-2">
-              {t("keySetting.noteGlowSize")}
+              {t('keySetting.noteGlowSize')}
             </p>
             <input
               type="text"
@@ -427,11 +427,11 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
           <div
             className={`flex justify-between w-full items-center ${
-              !state.glowEnabled ? "opacity-40" : ""
+              !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
             <p className="text-white text-style-2">
-              {t("keySetting.noteGlowOpacity")}
+              {t('keySetting.noteGlowOpacity')}
             </p>
             <input
               type="text"
@@ -456,7 +456,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         {/* 노트 효과 사용 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("keySetting.noteEffectEnabled")}
+            {t('keySetting.noteEffectEnabled')}
           </p>
           <Checkbox
             checked={state.noteEffectEnabled}
@@ -467,7 +467,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         {/* Y축 자동 보정 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("keySetting.noteAutoYCorrection")}
+            {t('keySetting.noteAutoYCorrection')}
           </p>
           <Checkbox
             checked={state.autoYCorrection}
@@ -480,7 +480,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         </div>
       </div>
     );
-  }
+  },
 );
 
 export default NoteTabContent;

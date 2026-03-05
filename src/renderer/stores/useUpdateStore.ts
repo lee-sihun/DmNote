@@ -1,9 +1,9 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
-const GITHUB_REPO = "lee-sihun/DmNote";
-const STORAGE_KEY = "dmnote:skipped-version";
-const CACHE_KEY = "dmnote:update-check-cache";
-const POST_UPDATE_NOTICE_KEY = "dmnote:post-update-release-notice-version";
+const GITHUB_REPO = 'lee-sihun/DmNote';
+const STORAGE_KEY = 'dmnote:skipped-version';
+const CACHE_KEY = 'dmnote:update-check-cache';
+const POST_UPDATE_NOTICE_KEY = 'dmnote:post-update-release-notice-version';
 const CACHE_MS = 5 * 60 * 1000; // 5분 캐시
 const CURRENT_VERSION = __APP_VERSION__;
 
@@ -44,22 +44,22 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
-  if (typeof error === "string" && error.trim()) {
+  if (typeof error === 'string' && error.trim()) {
     return error;
   }
-  if (error && typeof error === "object") {
+  if (error && typeof error === 'object') {
     const maybeMessage = (error as { message?: unknown }).message;
-    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
       return maybeMessage;
     }
   }
-  return "Unknown error";
+  return 'Unknown error';
 }
 
 function compareVersions(current: string, latest: string): number {
-  const normalize = (v: string) => v.replace(/^v/i, "");
-  const currentParts = normalize(current).split(".").map(Number);
-  const latestParts = normalize(latest).split(".").map(Number);
+  const normalize = (v: string) => v.replace(/^v/i, '');
+  const currentParts = normalize(current).split('.').map(Number);
+  const latestParts = normalize(latest).split('.').map(Number);
 
   for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
     const a = currentParts[i] || 0;
@@ -82,7 +82,7 @@ function setSkippedVersion(version: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, version);
   } catch (e) {
-    console.warn("Failed to save skipped version", e);
+    console.warn('Failed to save skipped version', e);
   }
 }
 
@@ -90,7 +90,7 @@ function clearSkippedVersion(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch (e) {
-    console.warn("Failed to clear skipped version", e);
+    console.warn('Failed to clear skipped version', e);
   }
 }
 
@@ -119,14 +119,17 @@ function setCacheUntil(time: number): void {
 }
 
 function normalizeVersionString(version: string): string {
-  return version.trim().replace(/^v/i, "");
+  return version.trim().replace(/^v/i, '');
 }
 
 function setPostUpdateNoticeVersion(version: string): void {
   try {
-    localStorage.setItem(POST_UPDATE_NOTICE_KEY, normalizeVersionString(version));
+    localStorage.setItem(
+      POST_UPDATE_NOTICE_KEY,
+      normalizeVersionString(version),
+    );
   } catch (e) {
-    console.warn("Failed to save post-update notice version", e);
+    console.warn('Failed to save post-update notice version', e);
   }
 }
 
@@ -134,17 +137,19 @@ export function clearPendingPostUpdateReleaseNotice(): void {
   try {
     localStorage.removeItem(POST_UPDATE_NOTICE_KEY);
   } catch (e) {
-    console.warn("Failed to clear post-update notice version", e);
+    console.warn('Failed to clear post-update notice version', e);
   }
 }
 
 export function hasPendingPostUpdateReleaseNotice(
-  currentVersion: string = CURRENT_VERSION
+  currentVersion: string = CURRENT_VERSION,
 ): boolean {
   try {
     const pending = localStorage.getItem(POST_UPDATE_NOTICE_KEY);
     if (!pending) return false;
-    return normalizeVersionString(pending) === normalizeVersionString(currentVersion);
+    return (
+      normalizeVersionString(pending) === normalizeVersionString(currentVersion)
+    );
   } catch {
     return false;
   }
@@ -212,9 +217,9 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
         {
           headers: {
-            Accept: "application/vnd.github.v3+json",
+            Accept: 'application/vnd.github.v3+json',
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -237,7 +242,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         latestVersion,
         releaseUrl: release.html_url,
         releaseName: release.name || latestVersion,
-        releaseNotes: release.body || "",
+        releaseNotes: release.body || '',
         publishedAt: release.published_at,
       };
 
@@ -278,7 +283,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     } catch (e) {
       const message = getErrorMessage(e);
       set({ error: message, isChecking: false });
-      console.error("Update check failed:", e);
+      console.error('Update check failed:', e);
     }
   },
 
@@ -288,7 +293,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     const normalizedTag = targetTag?.trim();
     if (!normalizedTag) {
-      throw new Error("Invalid target version");
+      throw new Error('Invalid target version');
     }
 
     set({

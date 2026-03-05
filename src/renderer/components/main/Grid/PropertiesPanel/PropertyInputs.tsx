@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -10,9 +10,9 @@ import type {
   TabButtonProps,
   TabsProps,
   FontStyleToggleProps,
-} from "./types";
-import { TABS } from "./types";
-import ColorPicker from "@components/main/Modal/content/ColorPicker";
+} from './types';
+import { TABS } from './types';
+import ColorPicker from '@components/main/Modal/content/ColorPicker';
 
 // ============================================================================
 // PropertyRow
@@ -40,11 +40,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   max = 9999,
   prefix,
   suffix,
-  width = "54px",
+  width = '54px',
   allowDecimal = false,
   decimalScale = 1,
   isMixed = false,
-  mixedPlaceholder = "Mixed",
+  mixedPlaceholder = 'Mixed',
 }) => {
   const hasSuffix = !!suffix;
   const resolvedDecimalScale = allowDecimal
@@ -58,10 +58,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const sanitizeNumericInput = (raw: string): string => {
-    let sanitized = raw.replace(supportsDecimal ? /[^0-9.-]/g : /[^0-9-]/g, "");
+    let sanitized = raw.replace(supportsDecimal ? /[^0-9.-]/g : /[^0-9-]/g, '');
 
-    const isNegative = sanitized.startsWith("-");
-    sanitized = sanitized.replace(/-/g, "");
+    const isNegative = sanitized.startsWith('-');
+    sanitized = sanitized.replace(/-/g, '');
     if (isNegative) {
       sanitized = `-${sanitized}`;
     }
@@ -70,9 +70,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       return sanitized;
     }
 
-    const sign = sanitized.startsWith("-") ? "-" : "";
+    const sign = sanitized.startsWith('-') ? '-' : '';
     const unsigned = sign ? sanitized.slice(1) : sanitized;
-    const dotIndex = unsigned.indexOf(".");
+    const dotIndex = unsigned.indexOf('.');
 
     if (dotIndex === -1) {
       return `${sign}${unsigned}`;
@@ -81,15 +81,15 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     const integerPart = unsigned.slice(0, dotIndex);
     const fractionalPart = unsigned
       .slice(dotIndex + 1)
-      .replace(/\./g, "")
+      .replace(/\./g, '')
       .slice(0, resolvedDecimalScale);
 
     return `${sign}${integerPart}.${fractionalPart}`;
   };
 
   const canParseNumericValue = (input: string): boolean => {
-    if (input === "" || input === "-") return false;
-    if (supportsDecimal && (input === "." || input === "-.")) return false;
+    if (input === '' || input === '-') return false;
+    if (supportsDecimal && (input === '.' || input === '-.')) return false;
     return Number.isFinite(Number(input));
   };
 
@@ -104,8 +104,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const getDisplayValue = (val: number | string, focused: boolean): string => {
-    const normalized =
-      typeof val === "number" ? normalizePrecision(val) : val;
+    const normalized = typeof val === 'number' ? normalizePrecision(val) : val;
     if (hasSuffix && !focused) {
       return `${normalized}${suffix}`;
     }
@@ -113,14 +112,14 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   const [localValue, setLocalValue] = useState<string>(
-    isMixed ? "" : getDisplayValue(value, false)
+    isMixed ? '' : getDisplayValue(value, false),
   );
   const [isFocused, setIsFocused] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
 
   useEffect(() => {
     if (!isFocused) {
-      setLocalValue(isMixed ? "" : getDisplayValue(value, false));
+      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
       setHasUserInput(false);
     }
   }, [value, isFocused, hasSuffix, suffix, isMixed]);
@@ -128,49 +127,49 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   // 숫자, 마이너스, 소수점(옵션), 백스페이스, Delete, 화살표, Tab, Enter만 허용
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
-      "Backspace",
-      "Delete",
-      "ArrowLeft",
-      "ArrowRight",
-      "ArrowUp",
-      "ArrowDown",
-      "Tab",
-      "Enter",
-      "Home",
-      "End",
+      'Backspace',
+      'Delete',
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      'Tab',
+      'Enter',
+      'Home',
+      'End',
     ];
-    
+
     // 허용된 특수 키
     if (allowedKeys.includes(e.key)) {
       return;
     }
-    
+
     // Ctrl/Cmd 조합 허용 (복사, 붙여넣기, 전체선택 등)
     if (e.ctrlKey || e.metaKey) {
       return;
     }
-    
+
     // 숫자 0-9
     if (/^[0-9]$/.test(e.key)) {
       return;
     }
 
     // 소수점 (허용된 경우)
-    if (supportsDecimal && (e.key === "." || e.key === "Decimal")) {
+    if (supportsDecimal && (e.key === '.' || e.key === 'Decimal')) {
       const input = e.currentTarget;
       const selectionStart = input.selectionStart ?? input.value.length;
       const selectionEnd = input.selectionEnd ?? selectionStart;
       const selectedText = input.value.slice(selectionStart, selectionEnd);
-      if (!input.value.includes(".") || selectedText.includes(".")) {
+      if (!input.value.includes('.') || selectedText.includes('.')) {
         return;
       }
     }
-    
+
     // 마이너스 (첫 번째 위치에서만)
-    if (e.key === "-" && e.currentTarget.selectionStart === 0) {
+    if (e.key === '-' && e.currentTarget.selectionStart === 0) {
       return;
     }
-    
+
     // 그 외 모든 키 입력 차단
     e.preventDefault();
   };
@@ -191,30 +190,30 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     setHasUserInput(false);
     if (!isMixed) {
       const numericValue =
-        typeof value === "number"
+        typeof value === 'number'
           ? String(normalizePrecision(value))
           : String(value);
       setLocalValue(numericValue);
     } else {
-      setLocalValue("");
+      setLocalValue('');
     }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
     const numericValue = sanitizeNumericInput(localValue);
-    
+
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
-      setLocalValue("");
+      setLocalValue('');
       setHasUserInput(false);
       onBlur?.();
       return;
     }
-    
+
     const clamped = parseAndClamp(numericValue);
     if (clamped === null) {
-      setLocalValue(isMixed ? "" : getDisplayValue(value, false));
+      setLocalValue(isMixed ? '' : getDisplayValue(value, false));
     } else {
       setLocalValue(getDisplayValue(clamped, false));
       onChange(clamped);
@@ -224,13 +223,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   };
 
   // Mixed 상태일 때 placeholder 표시 여부
-  const showMixedPlaceholder = isMixed && !isFocused && localValue === "";
+  const showMixedPlaceholder = isMixed && !isFocused && localValue === '';
 
   if (hasSuffix) {
     return (
       <input
         type="text"
-        inputMode={supportsDecimal ? "decimal" : "numeric"}
+        inputMode={supportsDecimal ? 'decimal' : 'numeric'}
         value={localValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -238,8 +237,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
         className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? "border-[#459BF8]" : "border-[#3A3943]"
-        } text-style-4 ${showMixedPlaceholder ? "text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic" : "text-[#DBDEE8]"}`}
+          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        } text-style-4 ${showMixedPlaceholder ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic' : 'text-[#DBDEE8]'}`}
         style={{ width }}
       />
     );
@@ -248,7 +247,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   return (
     <div
       className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
       }`}
       style={{ width }}
     >
@@ -259,7 +258,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       )}
       <input
         type="text"
-        inputMode={supportsDecimal ? "decimal" : "numeric"}
+        inputMode={supportsDecimal ? 'decimal' : 'numeric'}
         value={localValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -267,10 +266,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
         className={`absolute ${
-          prefix && !showMixedPlaceholder ? "left-[20px]" : "left-0"
+          prefix && !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
         } top-[-1px] h-[23px] ${
-          prefix && !showMixedPlaceholder ? "w-[26px]" : "w-full"
-        } bg-transparent text-style-4 ${showMixedPlaceholder ? "text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic" : "text-[#DBDEE8]"} text-center`}
+          prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
+        } bg-transparent text-style-4 ${showMixedPlaceholder ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic' : 'text-[#DBDEE8]'} text-center`}
       />
     </div>
   );
@@ -287,10 +286,10 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   min = 0,
   max = 9999,
   suffix,
-  width = "54px",
+  width = '54px',
   placeholder,
   isMixed = false,
-  mixedPlaceholder = "Mixed",
+  mixedPlaceholder = 'Mixed',
 }) => {
   const hasSuffix = !!suffix;
 
@@ -302,7 +301,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   };
 
   const [localValue, setLocalValue] = useState<string>(() => {
-    if (isMixed || value == null) return "";
+    if (isMixed || value == null) return '';
     return getDisplayValue(value, false);
   });
   const [isFocused, setIsFocused] = useState(false);
@@ -311,7 +310,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   useEffect(() => {
     if (!isFocused) {
       if (isMixed || value == null) {
-        setLocalValue("");
+        setLocalValue('');
       } else {
         setLocalValue(getDisplayValue(value, false));
       }
@@ -322,16 +321,16 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   // Digits/backspace/delete/arrows/tab/enter/home/end only (no minus, no decimals)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
-      "Backspace",
-      "Delete",
-      "ArrowLeft",
-      "ArrowRight",
-      "ArrowUp",
-      "ArrowDown",
-      "Tab",
-      "Enter",
-      "Home",
-      "End",
+      'Backspace',
+      'Delete',
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      'Tab',
+      'Enter',
+      'Home',
+      'End',
     ];
 
     if (allowedKeys.includes(e.key)) return;
@@ -342,11 +341,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value.replace(/[^0-9]/g, "");
+    const newValue = e.target.value.replace(/[^0-9]/g, '');
     setLocalValue(newValue);
     setHasUserInput(true);
 
-    if (newValue === "") {
+    if (newValue === '') {
       onChange(undefined);
       return;
     }
@@ -364,24 +363,24 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!isMixed && value != null) {
       setLocalValue(String(value));
     } else {
-      setLocalValue("");
+      setLocalValue('');
     }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
-    const numericValue = localValue.replace(/[^0-9]/g, "");
+    const numericValue = localValue.replace(/[^0-9]/g, '');
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
-      setLocalValue("");
+      setLocalValue('');
       setHasUserInput(false);
       onBlur?.();
       return;
     }
 
-    if (numericValue === "" || isNaN(Number(numericValue))) {
-      setLocalValue("");
+    if (numericValue === '' || isNaN(Number(numericValue))) {
+      setLocalValue('');
       onChange(undefined);
       setHasUserInput(false);
       onBlur?.();
@@ -396,15 +395,17 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     onBlur?.();
   };
 
-  const showMixedPlaceholder = isMixed && !isFocused && localValue === "";
+  const showMixedPlaceholder = isMixed && !isFocused && localValue === '';
   const effectivePlaceholder = showMixedPlaceholder
     ? mixedPlaceholder
     : placeholder;
 
   const placeholderClass = effectivePlaceholder
-    ? "placeholder:text-[#6B6D75] placeholder:italic"
-    : "";
-  const textClass = showMixedPlaceholder ? "text-[#6B6D75] italic" : "text-[#DBDEE8]";
+    ? 'placeholder:text-[#6B6D75] placeholder:italic'
+    : '';
+  const textClass = showMixedPlaceholder
+    ? 'text-[#6B6D75] italic'
+    : 'text-[#DBDEE8]';
 
   if (hasSuffix) {
     return (
@@ -418,7 +419,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         onBlur={handleBlur}
         placeholder={effectivePlaceholder}
         className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
         } text-style-4 ${textClass} ${placeholderClass}`}
         style={{ width }}
       />
@@ -436,7 +437,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       onBlur={handleBlur}
       placeholder={effectivePlaceholder}
       className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
       } text-style-4 ${textClass} ${placeholderClass}`}
       style={{ width }}
     />
@@ -452,7 +453,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   onChange,
   onBlur,
   placeholder,
-  width = "90px",
+  width = '90px',
   isMixed = false,
 }) => {
   const [localValue, setLocalValue] = useState(value);
@@ -483,8 +484,8 @@ export const TextInput: React.FC<TextInputProps> = ({
       onBlur={handleBlur}
       placeholder={placeholder}
       className={`text-center h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? "border-[#459BF8]" : "border-[#3A3943]"
-      } text-style-4 ${isMixed ? "text-[#DBDEE8] placeholder:text-[#6B6D75] placeholder:italic" : "text-[#DBDEE8]"}`}
+        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+      } text-style-4 ${isMixed ? 'text-[#DBDEE8] placeholder:text-[#6B6D75] placeholder:italic' : 'text-[#DBDEE8]'}`}
       style={{ width }}
     />
   );
@@ -519,36 +520,36 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   const isStateControlled =
     externalStateMode !== undefined && externalOnStateModeChange !== undefined;
-  const [internalStateMode, setInternalStateMode] = useState<"idle" | "active">(
-    "idle"
+  const [internalStateMode, setInternalStateMode] = useState<'idle' | 'active'>(
+    'idle',
   );
   const stateMode =
     showStateTabs && isStateControlled
       ? externalStateMode
       : showStateTabs
-      ? internalStateMode
-      : "idle";
+        ? internalStateMode
+        : 'idle';
 
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
-  const [localColor, setLocalColor] = useState(value || "#FFFFFF");
+  const [localColor, setLocalColor] = useState(value || '#FFFFFF');
   const [localActiveColor, setLocalActiveColor] = useState(
-    activeValue ?? value ?? "#FFFFFF"
+    activeValue ?? value ?? '#FFFFFF',
   );
 
   // 피커가 닫혀있을 때만 외부 prop과 동기화
   useEffect(() => {
     if (!open) {
-      setLocalColor(value || "#FFFFFF");
-      setLocalActiveColor(activeValue ?? value ?? "#FFFFFF");
+      setLocalColor(value || '#FFFFFF');
+      setLocalActiveColor(activeValue ?? value ?? '#FFFFFF');
     }
   }, [value, activeValue, open]);
 
   // colorId가 없으면 value 기반으로 생성
   const stableId = useMemo(
-    () => colorId || `color-input-${value?.replace(/[^a-zA-Z0-9]/g, "")}`,
-    [colorId, value]
+    () => colorId || `color-input-${value?.replace(/[^a-zA-Z0-9]/g, '')}`,
+    [colorId, value],
   );
 
   const interactiveRefs = useMemo(() => [buttonRef], []);
@@ -571,7 +572,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   // 드래그 중 로컬 상태만 업데이트
   const handleColorChange = (color: string) => {
-    if (showStateTabs && stateMode === "active") {
+    if (showStateTabs && stateMode === 'active') {
       setLocalActiveColor(color);
       return;
     }
@@ -581,7 +582,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 
   // 드래그 완료 시 부모에게 전달
   const handleColorChangeComplete = (color: string) => {
-    if (showStateTabs && stateMode === "active") {
+    if (showStateTabs && stateMode === 'active') {
       setLocalActiveColor(color);
       onActiveChange?.(color);
       onActiveChangeComplete?.(color);
@@ -593,7 +594,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     onChangeComplete?.(color);
   };
 
-  const handleStateModeChange = (nextMode: "idle" | "active") => {
+  const handleStateModeChange = (nextMode: 'idle' | 'active') => {
     if (!showStateTabs) return;
     if (isStateControlled) {
       externalOnStateModeChange(nextMode);
@@ -603,10 +604,10 @@ export const ColorInput: React.FC<ColorInputProps> = ({
   };
 
   const getDisplayColor = (color: string): string => {
-    if (!color) return "#ffffff";
-    if (color.startsWith("rgba") || color.startsWith("rgb")) return color;
-    if (color.startsWith("#")) return color;
-    return "#ffffff";
+    if (!color) return '#ffffff';
+    if (color.startsWith('rgba') || color.startsWith('rgb')) return color;
+    if (color.startsWith('#')) return color;
+    return '#ffffff';
   };
 
   return (
@@ -615,11 +616,13 @@ export const ColorInput: React.FC<ColorInputProps> = ({
         ref={buttonRef}
         onClick={handleToggle}
         className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-          open ? "border-[#459BF8]" : "border-[#3A3943] hover:border-[#505058]"
+          open ? 'border-[#459BF8]' : 'border-[#3A3943] hover:border-[#505058]'
         }`}
         style={{
           backgroundColor: getDisplayColor(
-            showStateTabs && stateMode === "active" ? localActiveColor : localColor
+            showStateTabs && stateMode === 'active'
+              ? localActiveColor
+              : localColor,
           ),
         }}
       />
@@ -629,7 +632,9 @@ export const ColorInput: React.FC<ColorInputProps> = ({
           referenceRef={buttonRef}
           panelElement={panelElement}
           color={
-            showStateTabs && stateMode === "active" ? localActiveColor : localColor
+            showStateTabs && stateMode === 'active'
+              ? localActiveColor
+              : localColor
           }
           onColorChange={handleColorChange}
           onColorChangeComplete={handleColorChangeComplete}
@@ -660,7 +665,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`h-[23px] min-w-[70px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isOpen ? "border-[#459BF8]" : "border-[#3A3943]"
+          isOpen ? 'border-[#459BF8]' : 'border-[#3A3943]'
         } px-[8px] flex items-center justify-between gap-[4px] hover:border-[#505058] transition-colors`}
       >
         <span className="text-style-4 text-[#DBDEE8]">
@@ -697,7 +702,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
                   setIsOpen(false);
                 }}
                 className={`w-full px-[8px] py-[6px] text-left text-style-4 hover:bg-[#32323A] transition-colors ${
-                  value === opt.value ? "text-[#459BF8]" : "text-[#DBDEE8]"
+                  value === opt.value ? 'text-[#459BF8]' : 'text-[#DBDEE8]'
                 }`}
               >
                 {opt.label}
@@ -722,12 +727,12 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     <button
       onClick={() => onChange(!checked)}
       className={`w-[32px] h-[18px] rounded-full transition-colors relative flex-shrink-0 ${
-        checked ? "bg-[#459BF8]" : "bg-[#3A3943]"
+        checked ? 'bg-[#459BF8]' : 'bg-[#3A3943]'
       }`}
     >
       <div
         className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-          checked ? "translate-x-[16px]" : "translate-x-[2px]"
+          checked ? 'translate-x-[16px]' : 'translate-x-[2px]'
         }`}
       />
     </button>
@@ -858,8 +863,8 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   const buttonClass = (active: boolean) =>
     `w-[24px] h-[21px] flex items-center justify-center transition-colors ${
       active
-        ? "bg-[#493C1D] text-[#FFB400]"
-        : "bg-[#2A2A30] text-[#6B6D75] hover:bg-[#32323A] hover:text-[#97999E]"
+        ? 'bg-[#493C1D] text-[#FFB400]'
+        : 'bg-[#2A2A30] text-[#6B6D75] hover:bg-[#32323A] hover:text-[#97999E]'
     }`;
 
   return (
@@ -905,8 +910,8 @@ const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
     onClick={onClick}
     className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
       active
-        ? "bg-[#3A3943] text-white"
-        : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
+        ? 'bg-[#3A3943] text-white'
+        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
     }`}
   >
     {children}
@@ -930,7 +935,7 @@ export const Tabs: React.FC<TabsProps> = ({
           active={activeTab === TABS.STYLE}
           onClick={() => onTabChange(TABS.STYLE)}
         >
-          {t("propertiesPanel.tabStyle") || "키"}
+          {t('propertiesPanel.tabStyle') || '키'}
         </TabButton>
       )}
       {tabs.includes(TABS.NOTE) && (
@@ -938,7 +943,7 @@ export const Tabs: React.FC<TabsProps> = ({
           active={activeTab === TABS.NOTE}
           onClick={() => onTabChange(TABS.NOTE)}
         >
-          {t("propertiesPanel.tabNote") || "노트"}
+          {t('propertiesPanel.tabNote') || '노트'}
         </TabButton>
       )}
       {tabs.includes(TABS.COUNTER) && (
@@ -946,7 +951,7 @@ export const Tabs: React.FC<TabsProps> = ({
           active={activeTab === TABS.COUNTER}
           onClick={() => onTabChange(TABS.COUNTER)}
         >
-          {t("propertiesPanel.tabCounter") || "카운터"}
+          {t('propertiesPanel.tabCounter') || '카운터'}
         </TabButton>
       )}
     </div>
@@ -983,9 +988,9 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
       fill="none"
     />
     <line
-      x1={isOpen ? "10" : "12"}
+      x1={isOpen ? '10' : '12'}
       y1="1"
-      x2={isOpen ? "10" : "12"}
+      x2={isOpen ? '10' : '12'}
       y2="13"
       stroke="#6B6D75"
       strokeWidth="1.5"
@@ -1026,13 +1031,13 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
 
 // 레이어/속성 모드 전환 토글 아이콘
 export const ModeToggleIcon: React.FC<{
-  mode: "layer" | "property";
+  mode: 'layer' | 'property';
   disabled?: boolean;
 }> = ({ mode, disabled = false }) => {
-  const strokeColor = disabled ? "#4A4A50" : "#6B6D75";
-  const fillColor = disabled ? "#4A4A50" : "#6B6D75";
+  const strokeColor = disabled ? '#4A4A50' : '#6B6D75';
+  const fillColor = disabled ? '#4A4A50' : '#6B6D75';
 
-  if (mode === "layer") {
+  if (mode === 'layer') {
     // 레이어 아이콘 (쌓인 레이어)
     return (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

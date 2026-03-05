@@ -17,10 +17,13 @@ export function warmupImageSource(src?: string | null): void {
     img.onerror = done;
     img.src = src;
 
-    if (typeof img.decode === "function") {
-      img.decode().then(done).catch(() => {
-        if (img.complete) done();
-      });
+    if (typeof img.decode === 'function') {
+      img
+        .decode()
+        .then(done)
+        .catch(() => {
+          if (img.complete) done();
+        });
     } else if (img.complete) {
       done();
     }

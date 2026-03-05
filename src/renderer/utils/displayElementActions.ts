@@ -4,11 +4,11 @@ const actionRegistry = new Map<string, ActionMap>();
 
 export const registerExposedActions = (
   elementId: string,
-  actions: ActionMap
+  actions: ActionMap,
 ) => {
   if (!elementId) return;
   const validEntries = Object.entries(actions || {}).filter(
-    ([, fn]) => typeof fn === "function"
+    ([, fn]) => typeof fn === 'function',
   );
   if (validEntries.length === 0) return;
 
@@ -27,20 +27,20 @@ export const clearExposedActions = (elementId: string) => {
 export const invokeExposedAction = async (
   elementId: string,
   action: string,
-  args: any[] = []
+  args: any[] = [],
 ) => {
   const actions = actionRegistry.get(elementId);
   if (!actions) {
     console.warn(
-      `[PluginElement] No exposed actions registered for '${elementId}'`
+      `[PluginElement] No exposed actions registered for '${elementId}'`,
     );
     return;
   }
 
   const fn = actions[action];
-  if (typeof fn !== "function") {
+  if (typeof fn !== 'function') {
     console.warn(
-      `[PluginElement] Action '${action}' is not exposed for '${elementId}'`
+      `[PluginElement] Action '${action}' is not exposed for '${elementId}'`,
     );
     return;
   }
@@ -50,7 +50,7 @@ export const invokeExposedAction = async (
   } catch (error) {
     console.error(
       `[PluginElement] Action '${action}' failed for '${elementId}'`,
-      error
+      error,
     );
   }
 };

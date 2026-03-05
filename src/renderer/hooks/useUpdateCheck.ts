@@ -5,5 +5,5 @@ export {
   useUpdateStore,
   hasPendingPostUpdateReleaseNotice,
   clearPendingPostUpdateReleaseNotice,
-} from "@stores/useUpdateStore";
-export type { UpdateInfo } from "@stores/useUpdateStore";
+} from '@stores/useUpdateStore';
+export type { UpdateInfo } from '@stores/useUpdateStore';

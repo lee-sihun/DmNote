@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 
 const BAR_ANIMATION_DURATION_MS = 150;
 const LINE_ANIMATION_DURATION_MS = 150;
@@ -14,7 +14,7 @@ function buildLinePoints(history, safeMax) {
         value <= 0 ? baselineY : 100 - Math.min((value / safeMax) * 100, 100);
       return `${x},${y}`;
     })
-    .join(" ");
+    .join(' ');
 
   const fillPoints = [
     `0,${baselineY}`,
@@ -26,7 +26,7 @@ function buildLinePoints(history, safeMax) {
       return `${x},${y}`;
     }),
     `100,${baselineY}`,
-  ].join(" ");
+  ].join(' ');
 
   return { points, fillPoints };
 }
@@ -78,7 +78,7 @@ function areHistoriesEqual(a, b) {
 function buildBarPath(history, safeMax, width, height) {
   const count = history.length;
   if (count <= 0) {
-    return "";
+    return '';
   }
 
   const safeWidth = Math.max(Number(width) || 0, 1);
@@ -89,7 +89,7 @@ function buildBarPath(history, safeMax, width, height) {
   const radiusXBase = (2 / safeWidth) * 100;
   const radiusYBase = (2 / safeHeightPx) * 100;
 
-  let path = "";
+  let path = '';
   for (let index = 0; index < count; index += 1) {
     const value = history[index] || 0;
     const normalized = Math.min((value / safeMax) * 100, 100);
@@ -122,22 +122,22 @@ const GraphPanel = forwardRef(function GraphPanel(
     width = 200,
     height = 100,
     zIndex = 0,
-    className = "",
-    graphType = "line",
-    graphColor = "#86EFAC",
+    className = '',
+    graphType = 'line',
+    graphColor = '#86EFAC',
     showAvgLine = true,
-    backgroundColor = "rgba(17, 17, 20, 0.9)",
-    borderColor = "rgba(255, 255, 255, 0.1)",
+    backgroundColor = 'rgba(17, 17, 20, 0.9)',
+    borderColor = 'rgba(255, 255, 255, 0.1)',
     borderWidth = 3,
     borderRadius = 8,
     imageSrc = null,
-    imageFit = "cover",
+    imageFit = 'cover',
     useInlineStyles = false,
     animationEnabled = true,
     history = [],
     avg = 0,
     maxval = 1,
-    uid = "graph",
+    uid = 'graph',
     withOffsetVars = true,
     interactive = true,
     dataEditing,
@@ -150,7 +150,7 @@ const GraphPanel = forwardRef(function GraphPanel(
   ref,
 ) {
   const safeMax = maxval > 0 ? maxval : 1;
-  const resolvedGraphType = graphType === "bar" ? "bar" : "line";
+  const resolvedGraphType = graphType === 'bar' ? 'bar' : 'line';
   const transform = withOffsetVars
     ? `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`
     : `translate3d(${dx}px, ${dy}px, 0)`;
@@ -187,7 +187,7 @@ const GraphPanel = forwardRef(function GraphPanel(
   }, []);
 
   useEffect(() => {
-    if (!animationEnabled || resolvedGraphType !== "line") {
+    if (!animationEnabled || resolvedGraphType !== 'line') {
       if (lineAnimationFrameRef.current) {
         cancelAnimationFrame(lineAnimationFrameRef.current);
         lineAnimationFrameRef.current = null;
@@ -253,7 +253,7 @@ const GraphPanel = forwardRef(function GraphPanel(
   }, [animationEnabled, normalizedHistory, resolvedGraphType]);
 
   useEffect(() => {
-    if (!animationEnabled || resolvedGraphType !== "bar") {
+    if (!animationEnabled || resolvedGraphType !== 'bar') {
       if (barAnimationFrameRef.current) {
         cancelAnimationFrame(barAnimationFrameRef.current);
         barAnimationFrameRef.current = null;
@@ -319,13 +319,13 @@ const GraphPanel = forwardRef(function GraphPanel(
   }, [animationEnabled, normalizedHistory, resolvedGraphType]);
 
   const lineHistory =
-    resolvedGraphType === "line" ? animatedLineHistory : normalizedHistory;
+    resolvedGraphType === 'line' ? animatedLineHistory : normalizedHistory;
   const { points: linePoints, fillPoints } = useMemo(
     () => buildLinePoints(lineHistory, safeMax),
     [lineHistory, safeMax],
   );
   const barHistory =
-    resolvedGraphType === "bar" ? animatedBarHistory : normalizedHistory;
+    resolvedGraphType === 'bar' ? animatedBarHistory : normalizedHistory;
   const barPath = useMemo(
     () => buildBarPath(barHistory, safeMax, width, height),
     [barHistory, safeMax, width, height],
@@ -338,11 +338,11 @@ const GraphPanel = forwardRef(function GraphPanel(
     ? Math.max(0, Number(borderRadius))
     : 8;
   const useInline = useInlineStyles === true;
-  const resolvedBackgroundColor = backgroundColor || "rgba(17, 17, 20, 0.9)";
+  const resolvedBackgroundColor = backgroundColor || 'rgba(17, 17, 20, 0.9)';
   const fallbackBorder =
     resolvedBorderWidth <= 0
-      ? "none"
-      : `${resolvedBorderWidth}px solid ${borderColor || "rgba(255, 255, 255, 0.1)"}`;
+      ? 'none'
+      : `${resolvedBorderWidth}px solid ${borderColor || 'rgba(255, 255, 255, 0.1)'}`;
   const resolvedBorder = useInline
     ? fallbackBorder
     : `var(--graph-border, ${fallbackBorder})`;
@@ -352,7 +352,7 @@ const GraphPanel = forwardRef(function GraphPanel(
   const resolvedRadius = useInline
     ? `${resolvedBorderRadius}px`
     : `var(--graph-radius, ${resolvedBorderRadius}px)`;
-  const resolvedGraphColor = graphColor || "#86EFAC";
+  const resolvedGraphColor = graphColor || '#86EFAC';
   const graphStrokeColor = useInline
     ? resolvedGraphColor
     : `var(--graph-color, ${resolvedGraphColor})`;
@@ -362,32 +362,33 @@ const GraphPanel = forwardRef(function GraphPanel(
   return (
     <div
       ref={ref}
-      className={`absolute select-none ${className || ""}`}
+      className={`absolute select-none ${className || ''}`}
       style={{
         width: `${width}px`,
         height: `${height}px`,
         transform,
         background: resolvedBg,
-        color: "#FFFFFF",
+        color: '#FFFFFF',
         border: resolvedBorder,
         borderRadius: resolvedRadius,
-        boxSizing: "border-box",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        cursor: interactive ? "pointer" : "default",
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        cursor: interactive ? 'pointer' : 'default',
         fontFamily:
           "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
-        willChange: (dataEditing || isViewportTransforming) ? "transform" : "auto",
-        backfaceVisibility: "hidden",
-        transformStyle: "preserve-3d",
-        contain: "layout style paint",
-        imageRendering: "auto",
-        isolation: "isolate",
+        willChange:
+          dataEditing || isViewportTransforming ? 'transform' : 'auto',
+        backfaceVisibility: 'hidden',
+        transformStyle: 'preserve-3d',
+        contain: 'layout style paint',
+        imageRendering: 'auto',
+        isolation: 'isolate',
         zIndex,
       }}
       data-state="inactive"
-      data-editing={dataEditing ? "true" : undefined}
+      data-editing={dataEditing ? 'true' : undefined}
       onClick={onClick}
       onMouseDown={onMouseDown}
       onContextMenu={onContextMenu}
@@ -399,25 +400,25 @@ const GraphPanel = forwardRef(function GraphPanel(
           alt=""
           draggable={false}
           style={{
-            position: "absolute",
+            position: 'absolute',
             inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: imageFit || "cover",
-            pointerEvents: "none",
-            userSelect: "none",
+            width: '100%',
+            height: '100%',
+            objectFit: imageFit || 'cover',
+            pointerEvents: 'none',
+            userSelect: 'none',
             zIndex: 0,
           }}
         />
       ) : null}
-      {resolvedGraphType === "bar" ? (
+      {resolvedGraphType === 'bar' ? (
         <div
           style={{
-            display: "flex",
+            display: 'flex',
             flex: 1,
             minHeight: 0,
-            background: "transparent",
-            position: "relative",
+            background: 'transparent',
+            position: 'relative',
             zIndex: 1,
           }}
         >
@@ -427,13 +428,13 @@ const GraphPanel = forwardRef(function GraphPanel(
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             style={{
-              position: "absolute",
+              position: 'absolute',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              width: "100%",
-              height: "100%",
+              width: '100%',
+              height: '100%',
             }}
           >
             <defs>
@@ -462,14 +463,14 @@ const GraphPanel = forwardRef(function GraphPanel(
       ) : (
         <div
           style={{
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
             flex: 1,
             minHeight: 0,
-            background: "transparent",
-            gap: "1px",
-            position: "relative",
+            background: 'transparent',
+            gap: '1px',
+            position: 'relative',
             zIndex: 1,
           }}
         >
@@ -479,13 +480,13 @@ const GraphPanel = forwardRef(function GraphPanel(
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             style={{
-              position: "absolute",
+              position: 'absolute',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              width: "100%",
-              height: "100%",
+              width: '100%',
+              height: '100%',
             }}
           >
             <defs>

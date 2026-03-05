@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+use std::time::Instant;
 use std::{
     collections::HashSet,
     io::{BufRead, BufReader},
@@ -9,8 +11,6 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-#[cfg(debug_assertions)]
-use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
@@ -24,19 +24,19 @@ use tauri::{
 };
 use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize};
 
+#[cfg(debug_assertions)]
+use crate::key_sound::KeySoundDispatchTrace;
 use crate::{
     key_sound::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload,
-        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds,
-        OverlayResizeAnchor, SettingsDiff, SettingsState,
+        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
+        KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
+        SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, settings::SettingsService},
     store::AppStore,
 };
-#[cfg(debug_assertions)]
-use crate::key_sound::KeySoundDispatchTrace;
 
 const OVERLAY_LABEL: &str = "overlay";
 const TRAY_ICON_ID: &str = "background-tray";
@@ -669,7 +669,7 @@ impl AppState {
                                     "state": state,
                                     "device": device_str,
                                 });
-                                
+
                                 // Emit to main window first, then fallback to app-wide emit
                                 if let Some(main) = app_handle.get_webview_window("main") {
                                     let _ = main.emit("input:raw", &raw_payload);

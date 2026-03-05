@@ -1,8 +1,11 @@
-import type { KeyCounterSettings, CounterAnimationBezier } from "@src/types/keys";
-import type { NoteSettings } from "@src/types/noteSettings";
-import type { GridSettings, SettingsState } from "@src/types/settings";
-import type { ShortcutsState } from "@src/types/shortcuts";
-import type { FontSettings } from "@src/types/fonts";
+import type {
+  KeyCounterSettings,
+  CounterAnimationBezier,
+} from '@src/types/keys';
+import type { NoteSettings } from '@src/types/noteSettings';
+import type { GridSettings, SettingsState } from '@src/types/settings';
+import type { ShortcutsState } from '@src/types/shortcuts';
+import type { FontSettings } from '@src/types/fonts';
 
 export interface DefaultsPayload {
   settings: SettingsState;
@@ -26,7 +29,10 @@ export function getDefaultCounterSettings(): KeyCounterSettings {
       ...d,
       fill: { ...d.fill },
       stroke: { ...d.stroke },
-      animation: { ...d.animation, bezier: [...d.animation.bezier] as CounterAnimationBezier },
+      animation: {
+        ...d.animation,
+        bezier: [...d.animation.bezier] as CounterAnimationBezier,
+      },
     };
   }
   return FALLBACK_COUNTER_SETTINGS();
@@ -64,15 +70,23 @@ export function getDefaultSettingsState(): SettingsState {
       fontSettings: getDefaultFontSettings(),
       gridSettings: getDefaultGridSettings(),
       shortcuts: getDefaultShortcuts(),
-      customCSS: { ...(_defaults.settings.customCSS ?? { path: null, content: "" }) },
-      customJS: { ...(_defaults.settings.customJS ?? { path: null, content: "", plugins: [] }) },
+      customCSS: {
+        ...(_defaults.settings.customCSS ?? { path: null, content: '' }),
+      },
+      customJS: {
+        ...(_defaults.settings.customJS ?? {
+          path: null,
+          content: '',
+          plugins: [],
+        }),
+      },
     };
   }
   return FALLBACK_SETTINGS_STATE();
 }
 
 export function getDefaultCounterAnimationPresetId(): string {
-  return _defaults?.counterSettings.animation.presetId ?? "builtin-ease-out";
+  return _defaults?.counterSettings.animation.presetId ?? 'builtin-ease-out';
 }
 
 // ── Fallback values (used only before bootstrap completes) ──
@@ -80,11 +94,11 @@ export function getDefaultCounterAnimationPresetId(): string {
 function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
   return {
     enabled: true,
-    placement: "inside",
-    align: "top",
-    alignMode: "center",
-    fill: { idle: "rgba(121, 121, 121, 0.9)", active: "#FFFFFF" },
-    stroke: { idle: "transparent", active: "transparent" },
+    placement: 'inside',
+    align: 'top',
+    alignMode: 'center',
+    fill: { idle: 'rgba(121, 121, 121, 0.9)', active: '#FFFFFF' },
+    stroke: { idle: 'transparent', active: 'transparent' },
     gap: 6,
     fontSize: 16,
     fontWeight: 700,
@@ -94,7 +108,7 @@ function FALLBACK_COUNTER_SETTINGS(): KeyCounterSettings {
     fontStrikethrough: false,
     animation: {
       enabled: false,
-      presetId: "builtin-ease-out",
+      presetId: 'builtin-ease-out',
       bezier: [0.25, 0.46, 0.45, 0.94],
       scale: 1.1,
       durationMs: 300,
@@ -108,7 +122,7 @@ function FALLBACK_NOTE_SETTINGS(): NoteSettings {
     speed: 180,
     trackHeight: 150,
     reverse: false,
-    fadePosition: "auto",
+    fadePosition: 'auto',
     fadeTopPx: 50,
     fadeBottomPx: 0,
     reverseFadeTopPx: 0,
@@ -132,14 +146,44 @@ function FALLBACK_GRID_SETTINGS(): GridSettings {
 
 function FALLBACK_SHORTCUTS(): ShortcutsState {
   return {
-    toggleOverlay: { key: "KeyO", ctrl: true, shift: true, alt: false, meta: false },
-    toggleOverlayLock: { key: "" },
-    toggleAlwaysOnTop: { key: "" },
-    switchKeyMode: { key: "Tab", ctrl: false, shift: false, alt: false, meta: false },
-    toggleSettingsPanel: { key: "KeyB", ctrl: true, shift: false, alt: false, meta: false },
-    zoomIn: { key: "Equal", ctrl: true, shift: false, alt: false, meta: false },
-    zoomOut: { key: "Minus", ctrl: true, shift: false, alt: false, meta: false },
-    resetZoom: { key: "Digit0", ctrl: true, shift: false, alt: false, meta: false },
+    toggleOverlay: {
+      key: 'KeyO',
+      ctrl: true,
+      shift: true,
+      alt: false,
+      meta: false,
+    },
+    toggleOverlayLock: { key: '' },
+    toggleAlwaysOnTop: { key: '' },
+    switchKeyMode: {
+      key: 'Tab',
+      ctrl: false,
+      shift: false,
+      alt: false,
+      meta: false,
+    },
+    toggleSettingsPanel: {
+      key: 'KeyB',
+      ctrl: true,
+      shift: false,
+      alt: false,
+      meta: false,
+    },
+    zoomIn: { key: 'Equal', ctrl: true, shift: false, alt: false, meta: false },
+    zoomOut: {
+      key: 'Minus',
+      ctrl: true,
+      shift: false,
+      alt: false,
+      meta: false,
+    },
+    resetZoom: {
+      key: 'Digit0',
+      ctrl: true,
+      shift: false,
+      alt: false,
+      meta: false,
+    },
   };
 }
 
@@ -151,18 +195,18 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     noteEffect: false,
     noteSettings: FALLBACK_NOTE_SETTINGS(),
     fontSettings: { customFonts: [] },
-    angleMode: "d3d11",
-    language: "ko",
+    angleMode: 'd3d11',
+    language: 'ko',
     laboratoryEnabled: false,
     developerModeEnabled: false,
     trayEnabled: false,
     autoUpdateEnabled: true,
-    backgroundColor: "transparent",
+    backgroundColor: 'transparent',
     useCustomCSS: false,
-    customCSS: { path: null, content: "" },
+    customCSS: { path: null, content: '' },
     useCustomJS: false,
-    customJS: { path: null, content: "", plugins: [] },
-    overlayResizeAnchor: "top-left",
+    customJS: { path: null, content: '', plugins: [] },
+    overlayResizeAnchor: 'top-left',
     keyCounterEnabled: false,
     gridSettings: FALLBACK_GRID_SETTINGS(),
     shortcuts: FALLBACK_SHORTCUTS(),

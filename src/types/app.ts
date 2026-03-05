@@ -1,13 +1,13 @@
-import { SettingsState } from "@src/types/settings";
+import { SettingsState } from '@src/types/settings';
 import {
   CustomTab,
   KeyMappings,
   KeyPositions,
   KeyCounters,
-} from "@src/types/keys";
-import type { StatItemPositions } from "@src/types/statItems";
-import type { GraphItemPositions } from "@src/types/graphItems";
-import type { DefaultsPayload } from "@src/renderer/defaults";
+} from '@src/types/keys';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
+import type { DefaultsPayload } from '@src/renderer/defaults';
 
 export interface BootstrapPayload {
   settings: SettingsState;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from 'react';
 
 interface ZoomIndicatorProps {
   zoom: number;
@@ -43,7 +43,7 @@ export default function ZoomIndicator({ zoom }: ZoomIndicatorProps) {
   return (
     <div
       className={`absolute bottom-[96px] left-2 bg-black/50 text-white text-xs px-2 py-1 rounded select-none pointer-events-none transition-opacity duration-300 ${
-        isVisible ? "opacity-100" : "opacity-0"
+        isVisible ? 'opacity-100' : 'opacity-0'
       }`}
     >
       {Math.round(displayZoom * 100)}%

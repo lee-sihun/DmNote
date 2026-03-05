@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import type { GraphItemPositions } from "@src/types/graphItems";
+import { create } from 'zustand';
+import type { GraphItemPositions } from '@src/types/graphItems';
 
 interface GraphItemStoreState {
   positions: GraphItemPositions;
@@ -14,4 +14,3 @@ export const useGraphItemStore = create<GraphItemStoreState>((set) => ({
   setPositions: (positions) => set({ positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),
 }));
-

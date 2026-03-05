@@ -1,10 +1,10 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // 폰트 타입 스키마
 export const fontTypeSchema = z.union([
-  z.literal("builtin"),
-  z.literal("local"),
-  z.literal("web"),
+  z.literal('builtin'),
+  z.literal('local'),
+  z.literal('web'),
 ]);
 
 export type FontType = z.infer<typeof fontTypeSchema>;
@@ -32,13 +32,13 @@ export const fontSettingsSchema = z.object({
 export type FontSettings = z.infer<typeof fontSettingsSchema>;
 
 export type WebFontCssValidationStatus =
-  | "idle"
-  | "ready"
-  | "invalidCss"
-  | "missingFontFace"
-  | "missingFontFamily"
-  | "missingSrc"
-  | "multipleFamilies";
+  | 'idle'
+  | 'ready'
+  | 'invalidCss'
+  | 'missingFontFace'
+  | 'missingFontFamily'
+  | 'missingSrc'
+  | 'multipleFamilies';
 
 export interface WebFontCssValidationResult {
   status: WebFontCssValidationStatus;
@@ -49,17 +49,17 @@ export interface WebFontCssValidationResult {
 // 내장 폰트 목록 (기본 제공)
 export const BUILTIN_FONTS: CustomFont[] = [
   {
-    id: "suit",
-    type: "builtin",
-    name: "SUIT-Regular",
-    displayName: "SUIT",
+    id: 'suit',
+    type: 'builtin',
+    name: 'SUIT-Regular',
+    displayName: 'SUIT',
     enabled: true,
   },
   {
-    id: "pretendard",
-    type: "builtin",
-    name: "Pretendard",
-    displayName: "Pretendard",
+    id: 'pretendard',
+    type: 'builtin',
+    name: 'Pretendard',
+    displayName: 'Pretendard',
     enabled: true,
     cssContent: `@font-face {
   font-family: 'Pretendard';
@@ -69,10 +69,10 @@ export const BUILTIN_FONTS: CustomFont[] = [
 }`,
   },
   {
-    id: "isyun",
-    type: "builtin",
-    name: "IsYun",
-    displayName: "이서윤체",
+    id: 'isyun',
+    type: 'builtin',
+    name: 'IsYun',
+    displayName: '이서윤체',
     enabled: true,
     cssContent: `@font-face {
       font-family: 'IsYun';
@@ -82,10 +82,10 @@ export const BUILTIN_FONTS: CustomFont[] = [
     }`,
   },
   {
-    id: "rounded-fixedsys",
-    type: "builtin",
-    name: "RoundedFixedsys",
-    displayName: "둥근모꼴",
+    id: 'rounded-fixedsys',
+    type: 'builtin',
+    name: 'RoundedFixedsys',
+    displayName: '둥근모꼴',
     enabled: true,
     cssContent: `@font-face {
       font-family: 'RoundedFixedsys';
@@ -96,7 +96,7 @@ export const BUILTIN_FONTS: CustomFont[] = [
   },
 ];
 
-import { getDefaultFontSettings } from "@src/renderer/defaults";
+import { getDefaultFontSettings } from '@src/renderer/defaults';
 
 /** @deprecated Use getDefaultFontSettings() from @src/renderer/defaults */
 export const DEFAULT_FONT_SETTINGS: FontSettings = getDefaultFontSettings();
@@ -104,7 +104,7 @@ export const DEFAULT_FONT_SETTINGS: FontSettings = getDefaultFontSettings();
 function stripOuterQuotes(value: string): string {
   const trimmed = value.trim();
   if (
-    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     return trimmed.slice(1, -1).trim();
@@ -113,7 +113,11 @@ function stripOuterQuotes(value: string): string {
 }
 
 export function normalizeFontFamilyName(value: string): string {
-  return value.trim().replace(/^['"]+|['"]+$/g, "").trim().toLowerCase();
+  return value
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 const FONT_FAMILY_DECLARATION_REGEX = /font-family\s*:\s*([^;]+?)(?:;|$)/i;
@@ -134,12 +138,16 @@ function createCssLexState(): CssLexState {
   };
 }
 
-function consumeCssLiteral(css: string, cursor: number, state: CssLexState): number | null {
+function consumeCssLiteral(
+  css: string,
+  cursor: number,
+  state: CssLexState,
+): number | null {
   const char = css[cursor];
   const next = css[cursor + 1];
 
   if (state.inComment) {
-    if (char === "*" && next === "/") {
+    if (char === '*' && next === '/') {
       state.inComment = false;
       return cursor + 2;
     }
@@ -147,7 +155,7 @@ function consumeCssLiteral(css: string, cursor: number, state: CssLexState): num
   }
 
   if (state.inSingleQuote) {
-    if (char === "\\") {
+    if (char === '\\') {
       return Math.min(css.length, cursor + 2);
     }
     if (char === "'") {
@@ -157,16 +165,16 @@ function consumeCssLiteral(css: string, cursor: number, state: CssLexState): num
   }
 
   if (state.inDoubleQuote) {
-    if (char === "\\") {
+    if (char === '\\') {
       return Math.min(css.length, cursor + 2);
     }
-    if (char === "\"") {
+    if (char === '"') {
       state.inDoubleQuote = false;
     }
     return cursor + 1;
   }
 
-  if (char === "/" && next === "*") {
+  if (char === '/' && next === '*') {
     state.inComment = true;
     return cursor + 2;
   }
@@ -176,7 +184,7 @@ function consumeCssLiteral(css: string, cursor: number, state: CssLexState): num
     return cursor + 1;
   }
 
-  if (char === "\"") {
+  if (char === '"') {
     state.inDoubleQuote = true;
     return cursor + 1;
   }
@@ -184,7 +192,11 @@ function consumeCssLiteral(css: string, cursor: number, state: CssLexState): num
   return null;
 }
 
-function matchesTokenIgnoreCase(source: string, cursor: number, token: string): boolean {
+function matchesTokenIgnoreCase(
+  source: string,
+  cursor: number,
+  token: string,
+): boolean {
   if (cursor + token.length > source.length) {
     return false;
   }
@@ -205,7 +217,7 @@ function isCssStructurallyBalanced(css: string): boolean {
   let braceDepth = 0;
   const state = createCssLexState();
 
-  for (let cursor = 0; cursor < css.length;) {
+  for (let cursor = 0; cursor < css.length; ) {
     const nextCursor = consumeCssLiteral(css, cursor, state);
     if (nextCursor !== null) {
       cursor = nextCursor;
@@ -213,9 +225,9 @@ function isCssStructurallyBalanced(css: string): boolean {
     }
 
     const char = css[cursor];
-    if (char === "{") {
+    if (char === '{') {
       braceDepth += 1;
-    } else if (char === "}") {
+    } else if (char === '}') {
       braceDepth -= 1;
       if (braceDepth < 0) {
         return false;
@@ -233,9 +245,12 @@ function isCssStructurallyBalanced(css: string): boolean {
   );
 }
 
-function extractFontFaceBodies(css: string): { bodies: string[]; malformed: boolean } {
+function extractFontFaceBodies(css: string): {
+  bodies: string[];
+  malformed: boolean;
+} {
   const bodies: string[] = [];
-  const token = "@font-face";
+  const token = '@font-face';
   let cursor = 0;
   const state = createCssLexState();
 
@@ -256,7 +271,7 @@ function extractFontFaceBodies(css: string): { bodies: string[]; malformed: bool
       blockStart += 1;
     }
 
-    if (css[blockStart] !== "{") {
+    if (css[blockStart] !== '{') {
       return { bodies, malformed: true };
     }
 
@@ -273,13 +288,13 @@ function extractFontFaceBodies(css: string): { bodies: string[]; malformed: bool
       }
 
       const bodyChar = css[bodyCursor];
-      if (bodyChar === "{") {
+      if (bodyChar === '{') {
         depth += 1;
         bodyCursor += 1;
         continue;
       }
 
-      if (bodyChar === "}") {
+      if (bodyChar === '}') {
         depth -= 1;
         if (depth === 0) {
           break;
@@ -310,7 +325,7 @@ export function normalizeFontSettings(raw: unknown): FontSettings {
   const defaults = getDefaultFontSettings();
   const parsed = fontSettingsSchema.safeParse({
     ...defaults,
-    ...(typeof raw === "object" && raw !== null ? raw : {}),
+    ...(typeof raw === 'object' && raw !== null ? raw : {}),
   });
   return parsed.success ? parsed.data : defaults;
 }
@@ -329,44 +344,48 @@ function createValidationResult(
   };
 }
 
-export function validateWebFontFaceCss(css: string): WebFontCssValidationResult {
+export function validateWebFontFaceCss(
+  css: string,
+): WebFontCssValidationResult {
   const trimmed = css.trim();
   if (!trimmed) {
-    return createValidationResult("idle");
+    return createValidationResult('idle');
   }
 
   if (!isCssStructurallyBalanced(trimmed)) {
-    return createValidationResult("invalidCss");
+    return createValidationResult('invalidCss');
   }
 
   const { bodies, malformed } = extractFontFaceBodies(trimmed);
   if (malformed) {
-    return createValidationResult("invalidCss");
+    return createValidationResult('invalidCss');
   }
 
   if (bodies.length === 0) {
-    return createValidationResult("missingFontFace");
+    return createValidationResult('missingFontFace');
   }
 
   const familyMap = new Map<string, string>();
 
   for (const body of bodies) {
-    const bodyWithoutComments = body.replace(CSS_BLOCK_COMMENT_REGEX, " ");
-    const familyMatch = bodyWithoutComments.match(FONT_FAMILY_DECLARATION_REGEX);
+    const bodyWithoutComments = body.replace(CSS_BLOCK_COMMENT_REGEX, ' ');
+    const familyMatch = bodyWithoutComments.match(
+      FONT_FAMILY_DECLARATION_REGEX,
+    );
     if (!familyMatch) {
-      return createValidationResult("missingFontFamily");
+      return createValidationResult('missingFontFamily');
     }
 
-    const rawFamily = familyMatch[1].split(",")[0] || "";
+    const rawFamily = familyMatch[1].split(',')[0] || '';
     const familyName = stripOuterQuotes(rawFamily).trim();
     const normalizedFamilyName = normalizeFontFamilyName(familyName);
     if (!normalizedFamilyName) {
-      return createValidationResult("missingFontFamily");
+      return createValidationResult('missingFontFamily');
     }
 
     const srcMatch = bodyWithoutComments.match(SRC_DECLARATION_REGEX);
     if (!srcMatch || !/url\s*\(/i.test(srcMatch[1])) {
-      return createValidationResult("missingSrc", {
+      return createValidationResult('missingSrc', {
         familyNames: Array.from(familyMap.values()),
       });
     }
@@ -378,10 +397,10 @@ export function validateWebFontFaceCss(css: string): WebFontCssValidationResult 
 
   const familyNames = Array.from(familyMap.values());
   if (familyMap.size > 1) {
-    return createValidationResult("multipleFamilies", { familyNames });
+    return createValidationResult('multipleFamilies', { familyNames });
   }
 
-  return createValidationResult("ready", {
+  return createValidationResult('ready', {
     detectedFontFamily: familyNames[0] || null,
     familyNames,
   });

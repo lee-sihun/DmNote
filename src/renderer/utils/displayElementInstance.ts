@@ -1,11 +1,11 @@
-import type { PluginDisplayElement } from "@src/types/api";
-import { renderToStaticMarkup } from "react-dom/server";
-import { html, styleMap, css } from "@src/renderer/utils/templateEngine";
+import type { PluginDisplayElement } from '@src/types/api';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { html, styleMap, css } from '@src/renderer/utils/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateHelpers,
   PluginTranslateFn,
-} from "@src/types/api";
+} from '@src/types/api';
 
 /**
  * 두 값이 동일한지 깊은 비교
@@ -24,7 +24,7 @@ function deepEqual(a: any, b: any): boolean {
     return true;
   }
 
-  if (typeof a === "object") {
+  if (typeof a === 'object') {
     const keysA = Object.keys(a);
     const keysB = Object.keys(b);
     if (keysA.length !== keysB.length) return false;
@@ -46,7 +46,7 @@ interface DisplayElementInstanceOptions {
   template?: DisplayElementTemplate;
   updateElement: (
     fullId: string,
-    updates: Partial<PluginDisplayElement>
+    updates: Partial<PluginDisplayElement>,
   ) => void;
   removeElement: (fullId: string) => void;
   locale: string;
@@ -60,7 +60,7 @@ export class DisplayElementInstance extends String {
   private readonly scoped: boolean;
   private readonly updateElement: (
     fullId: string,
-    updates: Partial<PluginDisplayElement>
+    updates: Partial<PluginDisplayElement>,
   ) => void;
   private readonly removeElement: (fullId: string) => void;
 
@@ -94,7 +94,7 @@ export class DisplayElementInstance extends String {
 
   setState(updates: Record<string, any>): void {
     if (!this.ensureActive()) return;
-    if (!updates || typeof updates !== "object") return;
+    if (!updates || typeof updates !== 'object') return;
 
     const nextState = this.ensureState();
 
@@ -121,21 +121,21 @@ export class DisplayElementInstance extends String {
     return { ...(this.state || {}) };
   }
 
-  setText(selector: string = ":root", text: string): void {
+  setText(selector: string = ':root', text: string): void {
     if (!this.ensureActive()) return;
     this.withTarget(selector, (target) => {
       target.textContent = text;
     });
   }
 
-  setHTML(selector: string = ":root", html: string): void {
+  setHTML(selector: string = ':root', html: string): void {
     if (!this.ensureActive()) return;
     this.withTarget(selector, (target) => {
       target.innerHTML = html;
     });
   }
 
-  setStyle(selector: string = ":root", styles: Record<string, string>): void {
+  setStyle(selector: string = ':root', styles: Record<string, string>): void {
     if (!this.ensureActive()) return;
     this.withTarget(selector, (target) => {
       if (!(target instanceof HTMLElement)) return;
@@ -146,7 +146,7 @@ export class DisplayElementInstance extends String {
     });
   }
 
-  addClass(selector: string = ":root", ...classNames: string[]): void {
+  addClass(selector: string = ':root', ...classNames: string[]): void {
     if (!this.ensureActive()) return;
     if (!classNames.length) return;
     this.withTarget(selector, (target) => {
@@ -155,7 +155,7 @@ export class DisplayElementInstance extends String {
     });
   }
 
-  removeClass(selector: string = ":root", ...classNames: string[]): void {
+  removeClass(selector: string = ':root', ...classNames: string[]): void {
     if (!this.ensureActive()) return;
     if (!classNames.length) return;
     this.withTarget(selector, (target) => {
@@ -164,7 +164,7 @@ export class DisplayElementInstance extends String {
     });
   }
 
-  toggleClass(selector: string = ":root", className: string): void {
+  toggleClass(selector: string = ':root', className: string): void {
     if (!this.ensureActive()) return;
     if (!className) return;
     this.withTarget(selector, (target) => {
@@ -173,7 +173,7 @@ export class DisplayElementInstance extends String {
     });
   }
 
-  query(selector: string = ":root"): Element | ShadowRoot | null {
+  query(selector: string = ':root'): Element | ShadowRoot | null {
     const resolved = this.resolveTarget(selector, { sync: false });
     if (!resolved) return null;
     return resolved.target;
@@ -210,7 +210,7 @@ export class DisplayElementInstance extends String {
   private ensureActive(): boolean {
     if (this.destroyed) {
       console.warn(
-        `[DisplayElement] '${this.id}'은 더 이상 사용할 수 없습니다.`
+        `[DisplayElement] '${this.id}'은 더 이상 사용할 수 없습니다.`,
       );
       return false;
     }
@@ -226,32 +226,32 @@ export class DisplayElementInstance extends String {
 
   private renderFromTemplate(): void {
     if (!this.template || !this.state) return;
-    let output: any = "";
+    let output: any = '';
     try {
       output = this.template({ ...this.state }, this.templateHelpers);
     } catch (error) {
       console.error(
         `[DisplayElement] template 렌더링에 실패했습니다 (${this.id})`,
-        error
+        error,
       );
       return;
     }
 
-    if (typeof output === "object" && output !== null) {
+    if (typeof output === 'object' && output !== null) {
       const htmlString = renderToStaticMarkup(output);
       this.updateElement(this.id, { html: htmlString });
       return;
     }
 
     this.updateElement(this.id, {
-      html: typeof output === "string" ? output : String(output),
+      html: typeof output === 'string' ? output : String(output),
     });
   }
 
   private resolveHost(): HTMLElement | null {
-    if (typeof document === "undefined") return null;
+    if (typeof document === 'undefined') return null;
     return document.querySelector(
-      `[data-plugin-element="${this.id}"]`
+      `[data-plugin-element="${this.id}"]`,
     ) as HTMLElement | null;
   }
 
@@ -263,17 +263,17 @@ export class DisplayElementInstance extends String {
   }
 
   private resolveTarget(
-    selector: string = ":root",
-    options: { sync?: boolean } = {}
+    selector: string = ':root',
+    options: { sync?: boolean } = {},
   ) {
     const host = this.resolveHost();
     if (!host) return null;
     const root = this.resolveRoot(host);
 
     let target: Element | ShadowRoot | null;
-    if (!selector || selector === ":root") {
+    if (!selector || selector === ':root') {
       target = root;
-    } else if (selector === ":host") {
+    } else if (selector === ':host') {
       target = host;
     } else {
       target =
@@ -290,7 +290,7 @@ export class DisplayElementInstance extends String {
   private withTarget(
     selector: string,
     fn: (target: Element | ShadowRoot) => void,
-    options: { sync?: boolean } = {}
+    options: { sync?: boolean } = {},
   ): void {
     const resolved = this.resolveTarget(selector, options);
     if (!resolved) return;

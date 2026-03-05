@@ -37,10 +37,7 @@ pub async fn plugin_storage_set(
 
 /// 플러그인 데이터 삭제
 #[tauri::command]
-pub async fn plugin_storage_remove(
-    state: State<'_, AppState>,
-    key: String,
-) -> Result<(), String> {
+pub async fn plugin_storage_remove(state: State<'_, AppState>, key: String) -> Result<(), String> {
     let storage_key = make_storage_key(&key);
     state
         .store

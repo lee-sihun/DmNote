@@ -1,4 +1,4 @@
-import React, { useState, useRef, useId, useContext } from "react";
+import React, { useState, useRef, useId, useContext } from 'react';
 import {
   useFloating,
   offset,
@@ -6,13 +6,13 @@ import {
   shift,
   arrow,
   autoUpdate,
-} from "@floating-ui/react";
-import { TooltipGroupContext } from "./TooltipGroup";
+} from '@floating-ui/react';
+import { TooltipGroupContext } from './TooltipGroup';
 
 type FloatingTooltipProps = {
   content: React.ReactNode;
   children: React.ReactElement;
-  placement?: "top" | "bottom" | "left" | "right";
+  placement?: 'top' | 'bottom' | 'left' | 'right';
   delay?: number; // ms to wait before showing tooltip on hover
   disabled?: boolean; // when true, tooltip won't show
 };
@@ -20,7 +20,7 @@ type FloatingTooltipProps = {
 const FloatingTooltip = ({
   content,
   children,
-  placement = "top",
+  placement = 'top',
   delay = 500,
   disabled = false,
 }: FloatingTooltipProps) => {
@@ -117,18 +117,18 @@ const FloatingTooltip = ({
 
   const arrowStyle: React.CSSProperties = {};
   // placement may include variations like "top-start", so check startsWith
-  if (placement.startsWith("top")) {
+  if (placement.startsWith('top')) {
     arrowStyle.left = `${arrowX}px`;
-    arrowStyle.bottom = "-4px";
-  } else if (placement.startsWith("bottom")) {
+    arrowStyle.bottom = '-4px';
+  } else if (placement.startsWith('bottom')) {
     arrowStyle.left = `${arrowX}px`;
-    arrowStyle.top = "-4px";
-  } else if (placement.startsWith("left")) {
+    arrowStyle.top = '-4px';
+  } else if (placement.startsWith('left')) {
     arrowStyle.top = `${arrowY}px`;
-    arrowStyle.right = "-4px";
+    arrowStyle.right = '-4px';
   } else {
     arrowStyle.top = `${arrowY}px`;
-    arrowStyle.left = "-4px";
+    arrowStyle.left = '-4px';
   }
 
   return (
@@ -160,12 +160,12 @@ const FloatingTooltip = ({
             zIndex: 90,
           }}
           className={
-            shouldAnimateOpenRef.current ? "tooltip-fade-in" : undefined
+            shouldAnimateOpenRef.current ? 'tooltip-fade-in' : undefined
           }
         >
-            <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm whitespace-nowrap">
+          <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm whitespace-nowrap">
             {content}
-            </div>
+          </div>
           <div
             ref={arrowRef}
             style={arrowStyle}

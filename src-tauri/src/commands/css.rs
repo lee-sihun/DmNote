@@ -4,7 +4,10 @@ use rfd::FileDialog;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{app_state::AppState, models::{CustomCss, TabCss, TabCssOverrides}};
+use crate::{
+    app_state::AppState,
+    models::{CustomCss, TabCss, TabCssOverrides},
+};
 
 #[derive(Serialize)]
 pub struct CssToggleResponse {
@@ -103,7 +106,7 @@ pub fn css_toggle(
         let css = state.store.snapshot().custom_css;
         app.emit("css:content", &css)
             .map_err(|err| err.to_string())?;
-        
+
         // CSS 핫리로딩: 활성화 시 파일 워칭 시작
         if let Some(path) = &css.path {
             if let Err(err) = state.watch_global_css(path) {
@@ -264,11 +267,13 @@ pub fn css_tab_load(
                 content: content.clone(),
                 enabled: true,
             };
-            
+
             state
                 .store
                 .update(|store| {
-                    store.tab_css_overrides.insert(tab_id.clone(), tab_css.clone());
+                    store
+                        .tab_css_overrides
+                        .insert(tab_id.clone(), tab_css.clone());
                 })
                 .map_err(|err| err.to_string())?;
 
@@ -281,7 +286,11 @@ pub fn css_tab_load(
 
             // CSS 핫리로딩: 새 탭 CSS 파일 워칭 시작
             if let Err(err) = state.watch_tab_css(&path_string, &tab_id) {
-                log::warn!("[css_tab_load] Failed to start watching tab {}: {}", tab_id, err);
+                log::warn!(
+                    "[css_tab_load] Failed to start watching tab {}: {}",
+                    tab_id,
+                    err
+                );
             }
 
             Ok(TabCssLoadResponse {
@@ -345,7 +354,9 @@ pub fn css_tab_set(
         state
             .store
             .update(|store| {
-                store.tab_css_overrides.insert(tab_id.clone(), tab_css.clone());
+                store
+                    .tab_css_overrides
+                    .insert(tab_id.clone(), tab_css.clone());
             })
             .map_err(|err| err.to_string())?;
 
@@ -353,7 +364,11 @@ pub fn css_tab_set(
         if tab_css.enabled {
             if let Some(path) = &tab_css.path {
                 if let Err(err) = state.watch_tab_css(path, &tab_id) {
-                    log::warn!("[css_tab_set] Failed to start watching tab {}: {}", tab_id, err);
+                    log::warn!(
+                        "[css_tab_set] Failed to start watching tab {}: {}",
+                        tab_id,
+                        err
+                    );
                 }
             }
         }
@@ -389,7 +404,7 @@ pub fn css_tab_toggle(
     enabled: bool,
 ) -> Result<TabCssToggleResponse, String> {
     let mut updated_css: Option<TabCss> = None;
-    
+
     state
         .store
         .update(|store| {
@@ -403,7 +418,9 @@ pub fn css_tab_toggle(
                     content: String::new(),
                     enabled,
                 };
-                store.tab_css_overrides.insert(tab_id.clone(), new_css.clone());
+                store
+                    .tab_css_overrides
+                    .insert(tab_id.clone(), new_css.clone());
                 updated_css = Some(new_css);
             }
         })
@@ -414,7 +431,11 @@ pub fn css_tab_toggle(
         if enabled {
             if let Some(path) = &css.path {
                 if let Err(err) = state.watch_tab_css(path, &tab_id) {
-                    log::warn!("[css_tab_toggle] Failed to start watching tab {}: {}", tab_id, err);
+                    log::warn!(
+                        "[css_tab_toggle] Failed to start watching tab {}: {}",
+                        tab_id,
+                        err
+                    );
                 }
             }
         } else {

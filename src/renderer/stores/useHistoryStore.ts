@@ -1,15 +1,15 @@
-import { create } from "zustand";
-import { getCounterSnapshot } from "@stores/keyCounterSignals";
-import type { KeyCounters, KeyMappings, KeyPositions } from "@src/types/keys";
-import type { PluginDisplayElementInternal } from "@src/types/api";
-import type { StatItemPositions } from "@src/types/statItems";
-import type { GraphItemPositions } from "@src/types/graphItems";
-import type { LayerGroups } from "@src/types/layerGroups";
+import { create } from 'zustand';
+import { getCounterSnapshot } from '@stores/keyCounterSignals';
+import type { KeyCounters, KeyMappings, KeyPositions } from '@src/types/keys';
+import type { PluginDisplayElementInternal } from '@src/types/api';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
+import type { LayerGroups } from '@src/types/layerGroups';
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)
 type SerializablePluginElement = Omit<
   PluginDisplayElementInternal,
-  "onClick" | "onPositionChange" | "onDelete" | "contextMenu"
+  'onClick' | 'onPositionChange' | 'onDelete' | 'contextMenu'
 >;
 
 interface HistoryState {
@@ -34,7 +34,7 @@ interface HistoryStore {
     graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[],
     layerGroups?: LayerGroups,
-    keyCounters?: KeyCounters
+    keyCounters?: KeyCounters,
   ) => void;
   undo: (
     currentKeyMappings: KeyMappings,
@@ -42,7 +42,7 @@ interface HistoryStore {
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups
+    currentLayerGroups?: LayerGroups,
   ) => HistoryState | null;
   redo: (
     currentKeyMappings: KeyMappings,
@@ -50,7 +50,7 @@ interface HistoryStore {
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups
+    currentLayerGroups?: LayerGroups,
   ) => HistoryState | null;
   clear: () => void;
   clearFuture: () => void;
@@ -60,7 +60,7 @@ const MAX_HISTORY_SIZE = 50;
 
 // 플러그인 요소를 직렬화 가능한 형태로 변환 (함수 핸들러 제외)
 function serializePluginElements(
-  elements: PluginDisplayElementInternal[]
+  elements: PluginDisplayElementInternal[],
 ): SerializablePluginElement[] {
   return elements.map((el) => {
     // 함수 핸들러와 contextMenu 제외한 순수 데이터만 복사
@@ -92,7 +92,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     graphPositions: GraphItemPositions,
     pluginElements?: PluginDisplayElementInternal[],
     layerGroups?: LayerGroups,
-    keyCounters?: KeyCounters
+    keyCounters?: KeyCounters,
   ) => {
     set((state) => {
       const newState: HistoryState = {
@@ -130,7 +130,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups
+    currentLayerGroups?: LayerGroups,
   ) => {
     const state = get();
     if (state.past.length === 0) return null;
@@ -167,7 +167,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     currentStatPositions: StatItemPositions,
     currentGraphPositions: GraphItemPositions,
     currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups
+    currentLayerGroups?: LayerGroups,
   ) => {
     const state = get();
     if (state.future.length === 0) return null;

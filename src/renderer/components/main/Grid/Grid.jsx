@@ -4,36 +4,39 @@ import React, {
   useState,
   useCallback,
   useMemo,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import DraggableKey from "@components/Key";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import UnifiedKeySetting from "../Modal/content/UnifiedKeySetting";
-import TabCssModal from "../Modal/content/TabCssModal";
-import TabNoteSettingModal from "../Modal/content/TabNoteSettingModal";
-import ListPopup from "../Modal/ListPopup";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
-import { useGridZoomPan } from "@hooks/Grid/useGridZoomPan";
-import GridMinimap from "./GridMinimap";
-import ZoomIndicator from "./ZoomIndicator";
-import SmartGuidesOverlay from "./SmartGuidesOverlay";
-import GridBackground from "./GridBackground";
-import MarqueeSelectionOverlay from "./MarqueeSelectionOverlay";
-import ResizeHandles from "./ResizeHandles";
-import GroupResizeHandles, { isElementResizable } from "./GroupResizeHandles";
-import KeyCounterPreviewLayer from "./KeyCounterPreviewLayer";
-import StatCounterLayer from "./StatCounterLayer";
-import GraphItem from "./GraphItem";
-import { useGridSelectionStore, isElementInMarquee } from "@stores/useGridSelectionStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { useUIStore } from "@stores/useUIStore";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import DraggableKey from '@components/Key';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
+import UnifiedKeySetting from '../Modal/content/UnifiedKeySetting';
+import TabCssModal from '../Modal/content/TabCssModal';
+import TabNoteSettingModal from '../Modal/content/TabNoteSettingModal';
+import ListPopup from '../Modal/ListPopup';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { PluginElementsRenderer } from '@components/PluginElementsRenderer';
+import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
+import GridMinimap from './GridMinimap';
+import ZoomIndicator from './ZoomIndicator';
+import SmartGuidesOverlay from './SmartGuidesOverlay';
+import GridBackground from './GridBackground';
+import MarqueeSelectionOverlay from './MarqueeSelectionOverlay';
+import ResizeHandles from './ResizeHandles';
+import GroupResizeHandles, { isElementResizable } from './GroupResizeHandles';
+import KeyCounterPreviewLayer from './KeyCounterPreviewLayer';
+import StatCounterLayer from './StatCounterLayer';
+import GraphItem from './GraphItem';
+import {
+  useGridSelectionStore,
+  isElementInMarquee,
+} from '@stores/useGridSelectionStore';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { useUIStore } from '@stores/useUIStore';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   snapCursorToGrid,
   useGridKeyboard,
@@ -42,22 +45,22 @@ import {
   useGridMarquee,
   useGridResize,
   useSmartGuidesElements,
-} from "@hooks/Grid";
-import { createDefaultCounterSettings } from "@src/types/keys";
-import { resolveImageSource } from "@utils/imageSource";
+} from '@hooks/Grid';
+import { createDefaultCounterSettings } from '@src/types/keys';
+import { resolveImageSource } from '@utils/imageSource';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
   normalizeLayerGroupsForMode,
   resolveSingleGroupIdFromSelection,
-} from "@utils/layerGroupUtils";
+} from '@utils/layerGroupUtils';
 
 function getStatTypeLabel(type) {
-  if (type === "kps") return "KPS";
-  if (type === "kpsAvg") return "AVG";
-  if (type === "kpsMax") return "MAX";
-  if (type === "total") return "Total";
-  return String(type || "");
+  if (type === 'kps') return 'KPS';
+  if (type === 'kpsAvg') return 'AVG';
+  if (type === 'kpsMax') return 'MAX';
+  if (type === 'total') return 'Total';
+  return String(type || '');
 }
 
 export default function Grid({
@@ -95,10 +98,16 @@ export default function Grid({
   setIsNoteSettingOpen,
 }) {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
-  const keyCounterEnabled = useSettingsStore((state) => state.keyCounterEnabled);
+  const keyCounterEnabled = useSettingsStore(
+    (state) => state.keyCounterEnabled,
+  );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
-  const minimapEnabled = useSettingsStore((state) => state.gridSettings.minimapEnabled);
-  const gridSnapSize = useSettingsStore((state) => state.gridSettings?.gridSnapSize || 5);
+  const minimapEnabled = useSettingsStore(
+    (state) => state.gridSettings.minimapEnabled,
+  );
+  const gridSnapSize = useSettingsStore(
+    (state) => state.gridSettings?.gridSnapSize || 5,
+  );
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
 
@@ -144,20 +153,20 @@ export default function Grid({
 
   // 선택 상태 관리
   const selectedElements = useGridSelectionStore(
-    (state) => state.selectedElements
+    (state) => state.selectedElements,
   );
   const toggleSelection = useGridSelectionStore(
-    (state) => state.toggleSelection
+    (state) => state.toggleSelection,
   );
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
   const setSelectedElements = useGridSelectionStore(
-    (state) => state.setSelectedElements
+    (state) => state.setSelectedElements,
   );
   const lastSelectedKeyBounds = useGridSelectionStore(
-    (state) => state.lastSelectedKeyBounds
+    (state) => state.lastSelectedKeyBounds,
   );
   const setLastSelectedKeyBounds = useGridSelectionStore(
-    (state) => state.setLastSelectedKeyBounds
+    (state) => state.setLastSelectedKeyBounds,
   );
 
   // 클립보드 상태 (복사/붙여넣기용)
@@ -165,7 +174,7 @@ export default function Grid({
 
   // 플러그인 요소 가져오기
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
 
   // 내장 통계 요소(Stat Items) 위치 정보
@@ -221,14 +230,14 @@ export default function Grid({
   const handleSelectedMoveForward = useCallback(async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === "key") {
+    if (selected.type === 'key') {
       try {
         await onMoveForward(selected.index);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected key forward", error);
+        console.error('Failed to move selected key forward', error);
       }
-    } else if (selected.type === "stat") {
+    } else if (selected.type === 'stat') {
       const store = useStatItemStore.getState();
       const current = store.positions;
       const tabPositions = current[selectedKeyType] || [];
@@ -248,13 +257,13 @@ export default function Grid({
           currentPositions,
           current,
           currentGraphPositions,
-          currentPluginElements
+          currentPluginElements,
         );
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p
+          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p,
         ),
       };
       store.setLocalUpdateInProgress(true);
@@ -263,13 +272,13 @@ export default function Grid({
         await window.api.statItems.updatePositions(updatedPositions);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected stat item forward", error);
+        console.error('Failed to move selected stat item forward', error);
       } finally {
         store.setLocalUpdateInProgress(false);
       }
-    } else if (selected.type === "plugin") {
+    } else if (selected.type === 'plugin') {
       usePluginDisplayElementStore.getState().bringForward(selected.id);
-    } else if (selected.type === "graph") {
+    } else if (selected.type === 'graph') {
       const store = useGraphItemStore.getState();
       const current = store.positions;
       const tabPositions = current[selectedKeyType] || [];
@@ -288,13 +297,13 @@ export default function Grid({
           currentPositions,
           currentStatPositions,
           current,
-          currentPluginElements
+          currentPluginElements,
         );
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p
+          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p,
         ),
       };
       store.setLocalUpdateInProgress(true);
@@ -303,7 +312,7 @@ export default function Grid({
         await window.api.graphItems.updatePositions(updatedPositions);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected graph item forward", error);
+        console.error('Failed to move selected graph item forward', error);
       } finally {
         store.setLocalUpdateInProgress(false);
       }
@@ -318,14 +327,14 @@ export default function Grid({
   const handleSelectedMoveBackward = useCallback(async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
-    if (selected.type === "key") {
+    if (selected.type === 'key') {
       try {
         await onMoveBackward(selected.index);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected key backward", error);
+        console.error('Failed to move selected key backward', error);
       }
-    } else if (selected.type === "stat") {
+    } else if (selected.type === 'stat') {
       const store = useStatItemStore.getState();
       const current = store.positions;
       const tabPositions = current[selectedKeyType] || [];
@@ -345,13 +354,13 @@ export default function Grid({
           currentPositions,
           current,
           currentGraphPositions,
-          currentPluginElements
+          currentPluginElements,
         );
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p
+          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p,
         ),
       };
       store.setLocalUpdateInProgress(true);
@@ -360,13 +369,13 @@ export default function Grid({
         await window.api.statItems.updatePositions(updatedPositions);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected stat item backward", error);
+        console.error('Failed to move selected stat item backward', error);
       } finally {
         store.setLocalUpdateInProgress(false);
       }
-    } else if (selected.type === "plugin") {
+    } else if (selected.type === 'plugin') {
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
-    } else if (selected.type === "graph") {
+    } else if (selected.type === 'graph') {
       const store = useGraphItemStore.getState();
       const current = store.positions;
       const tabPositions = current[selectedKeyType] || [];
@@ -385,13 +394,13 @@ export default function Grid({
           currentPositions,
           currentStatPositions,
           current,
-          currentPluginElements
+          currentPluginElements,
         );
       const currentZIndex = target.zIndex ?? selected.index;
       const updatedPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p
+          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p,
         ),
       };
       store.setLocalUpdateInProgress(true);
@@ -400,7 +409,7 @@ export default function Grid({
         await window.api.graphItems.updatePositions(updatedPositions);
         syncSelectedElementsToOverlay();
       } catch (error) {
-        console.error("Failed to move selected graph item backward", error);
+        console.error('Failed to move selected graph item backward', error);
       } finally {
         store.setLocalUpdateInProgress(false);
       }
@@ -426,13 +435,13 @@ export default function Grid({
     onRedo,
     onMoveForward: handleSelectedMoveForward,
     onMoveBackward: handleSelectedMoveBackward,
-    newGroupLabel: t("layerGroup.newGroup") || "New Group",
+    newGroupLabel: t('layerGroup.newGroup') || 'New Group',
   });
 
   // 키 컨텍스트 메뉴
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [contextIndex, setContextIndex] = useState(null);
-  const [contextType, setContextType] = useState("key");
+  const [contextType, setContextType] = useState('key');
   const contextRef = useRef(null);
   const [contextPosition, setContextPosition] = useState(null);
   const keyRefs = useRef([]);
@@ -444,15 +453,17 @@ export default function Grid({
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const mixedSelectionMenuItems = useMemo(() => {
     const items = [
-      { id: "delete", label: t("contextMenu.deleteSelected") },
-      { id: "duplicate", label: t("contextMenu.duplicateSelected") },
+      { id: 'delete', label: t('contextMenu.deleteSelected') },
+      { id: 'duplicate', label: t('contextMenu.duplicateSelected') },
     ];
 
     if (selectedElements.length >= 2) {
       // 선택된 요소들의 그룹 상태 확인
       const modeKeyPos = positions[selectedKeyType] || [];
-      const modeStatPos = useStatItemStore.getState().positions[selectedKeyType] || [];
-      const modeGraphPos = useGraphItemStore.getState().positions[selectedKeyType] || [];
+      const modeStatPos =
+        useStatItemStore.getState().positions[selectedKeyType] || [];
+      const modeGraphPos =
+        useGraphItemStore.getState().positions[selectedKeyType] || [];
 
       let anyInGroup = false;
       let allInSameGroup = true;
@@ -461,39 +472,47 @@ export default function Grid({
 
       selectedElements.forEach((el) => {
         let gid;
-        if (el.type === "key" && el.index !== undefined) {
+        if (el.type === 'key' && el.index !== undefined) {
           gid = modeKeyPos[el.index]?.groupId;
-        } else if (el.type === "stat" && el.index !== undefined) {
+        } else if (el.type === 'stat' && el.index !== undefined) {
           gid = modeStatPos[el.index]?.groupId;
-        } else if (el.type === "graph" && el.index !== undefined) {
+        } else if (el.type === 'graph' && el.index !== undefined) {
           gid = modeGraphPos[el.index]?.groupId;
         }
         if (gid) anyInGroup = true;
-        if (first) { firstGroupId = gid; first = false; }
-        else if (gid !== firstGroupId) allInSameGroup = false;
+        if (first) {
+          firstGroupId = gid;
+          first = false;
+        } else if (gid !== firstGroupId) allInSameGroup = false;
       });
 
       if (anyInGroup && allInSameGroup && firstGroupId) {
         // 모두 같은 그룹 → 그룹 해제만
-        items.push({ id: "ungroupSelected", label: t("contextMenu.ungroup") });
+        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
       } else if (!anyInGroup) {
         // 그룹 없음 → 그룹화만
-        items.push({ id: "groupSelected", label: t("contextMenu.groupSelected") });
+        items.push({
+          id: 'groupSelected',
+          label: t('contextMenu.groupSelected'),
+        });
       } else {
         // 혼합 → 둘 다
-        items.push({ id: "groupSelected", label: t("contextMenu.groupSelected") });
-        items.push({ id: "ungroupSelected", label: t("contextMenu.ungroup") });
+        items.push({
+          id: 'groupSelected',
+          label: t('contextMenu.groupSelected'),
+        });
+        items.push({ id: 'ungroupSelected', label: t('contextMenu.ungroup') });
       }
     }
 
-    items.push({ id: "bringToFront", label: t("contextMenu.bringToFront") });
-    items.push({ id: "sendToBack", label: t("contextMenu.sendToBack") });
+    items.push({ id: 'bringToFront', label: t('contextMenu.bringToFront') });
+    items.push({ id: 'sendToBack', label: t('contextMenu.sendToBack') });
 
     return items;
   }, [t, selectedElements, positions, selectedKeyType]);
 
   const openMixedSelectionContextMenu = useCallback((x, y, referenceNode) => {
-    setContextType("mixed");
+    setContextType('mixed');
     setContextIndex(null);
     contextRef.current = referenceNode || null;
     setContextPosition({ x, y });
@@ -506,7 +525,7 @@ export default function Grid({
       if (!selectedElements.some((el) => el.id === clickedId)) return false;
       return true;
     },
-    [selectedElements]
+    [selectedElements],
   );
 
   // 클라이언트 좌표를 그리드 좌표로 변환 (줌/팬 반영)
@@ -516,67 +535,76 @@ export default function Grid({
       if (!gridCoords) return null;
       return snapCursorToGrid(gridCoords.x, gridCoords.y);
     },
-    [clientToGridCoords]
+    [clientToGridCoords],
   );
 
   // 원본 데이터 저장 (미리보기 롤백용)
-  const pushHistorySnapshot = useCallback((currentStatPositions, currentGraphPositions) => {
-    const currentKeyPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        km,
-        currentKeyPositions,
-        currentStatPositions,
-        currentGraphPositions,
-        currentPluginElements
-      );
-  }, []);
+  const pushHistorySnapshot = useCallback(
+    (currentStatPositions, currentGraphPositions) => {
+      const currentKeyPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore
+        .getState()
+        .pushState(
+          km,
+          currentKeyPositions,
+          currentStatPositions,
+          currentGraphPositions,
+          currentPluginElements,
+        );
+    },
+    [],
+  );
 
-  const persistStatPositions = useCallback(async (nextPositions, errorMessage) => {
-    const store = useStatItemStore.getState();
-    store.setLocalUpdateInProgress(true);
-    store.setPositions(nextPositions);
-    try {
-      await window.api.statItems.updatePositions(nextPositions);
-    } catch (error) {
-      console.error(errorMessage || "Failed to update stat items", error);
-    } finally {
-      store.setLocalUpdateInProgress(false);
-    }
+  const persistStatPositions = useCallback(
+    async (nextPositions, errorMessage) => {
+      const store = useStatItemStore.getState();
+      store.setLocalUpdateInProgress(true);
+      store.setPositions(nextPositions);
+      try {
+        await window.api.statItems.updatePositions(nextPositions);
+      } catch (error) {
+        console.error(errorMessage || 'Failed to update stat items', error);
+      } finally {
+        store.setLocalUpdateInProgress(false);
+      }
 
-    try {
-      window.api.bridge.sendTo("overlay", "statPositions:sync", {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
-  }, []);
+      try {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
 
-  const persistGraphPositions = useCallback(async (nextPositions, errorMessage) => {
-    const store = useGraphItemStore.getState();
-    store.setLocalUpdateInProgress(true);
-    store.setPositions(nextPositions);
-    try {
-      await window.api.graphItems.updatePositions(nextPositions);
-    } catch (error) {
-      console.error(errorMessage || "Failed to update graph items", error);
-    } finally {
-      store.setLocalUpdateInProgress(false);
-    }
+  const persistGraphPositions = useCallback(
+    async (nextPositions, errorMessage) => {
+      const store = useGraphItemStore.getState();
+      store.setLocalUpdateInProgress(true);
+      store.setPositions(nextPositions);
+      try {
+        await window.api.graphItems.updatePositions(nextPositions);
+      } catch (error) {
+        console.error(errorMessage || 'Failed to update graph items', error);
+      } finally {
+        store.setLocalUpdateInProgress(false);
+      }
 
-    try {
-      window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
-  }, []);
+      try {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [],
+  );
 
   const deleteStatAtIndex = useCallback(
     (indexToDelete) => {
@@ -589,12 +617,14 @@ export default function Grid({
 
       const nextPositions = {
         ...current,
-        [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
+        [selectedKeyType]: tabPositions.filter(
+          (_, idx) => idx !== indexToDelete,
+        ),
       };
 
-      persistStatPositions(nextPositions, "Failed to delete stat item");
+      persistStatPositions(nextPositions, 'Failed to delete stat item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions],
   );
 
   const moveStatToFront = useCallback(
@@ -620,19 +650,19 @@ export default function Grid({
         0,
         ...keyZIndexes,
         ...statZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === index ? { ...p, zIndex: maxZIndex + 1 } : p
+          i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
         ),
       };
 
-      persistStatPositions(nextPositions, "Failed to move stat item to front");
+      persistStatPositions(nextPositions, 'Failed to move stat item to front');
     },
-    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions],
   );
 
   const moveStatToBack = useCallback(
@@ -658,19 +688,19 @@ export default function Grid({
         0,
         ...keyZIndexes,
         ...statZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === index ? { ...p, zIndex: minZIndex - 1 } : p
+          i === index ? { ...p, zIndex: minZIndex - 1 } : p,
         ),
       };
 
-      persistStatPositions(nextPositions, "Failed to move stat item to back");
+      persistStatPositions(nextPositions, 'Failed to move stat item to back');
     },
-    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions],
   );
 
   const beginDuplicateStat = useCallback(
@@ -681,7 +711,7 @@ export default function Grid({
 
       const clonedNoteColor =
         position.noteColor &&
-        typeof position.noteColor === "object" &&
+        typeof position.noteColor === 'object' &&
         position.noteColor !== null
           ? { ...position.noteColor }
           : position.noteColor;
@@ -702,7 +732,7 @@ export default function Grid({
         : null;
 
       setDuplicateState({
-        elementType: "stat",
+        elementType: 'stat',
         sourceIndex,
         keyName: getStatTypeLabel(position.statType),
         position: {
@@ -713,7 +743,7 @@ export default function Grid({
       });
       setDuplicateCursor(null);
     },
-    [selectedKeyType]
+    [selectedKeyType],
   );
 
   const placeDuplicateStat = useCallback(
@@ -738,7 +768,7 @@ export default function Grid({
         0,
         ...keyZIndexes,
         ...statZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
@@ -754,9 +784,9 @@ export default function Grid({
         ],
       };
 
-      persistStatPositions(nextPositions, "Failed to duplicate stat item");
+      persistStatPositions(nextPositions, 'Failed to duplicate stat item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions],
   );
 
   const deleteGraphAtIndex = useCallback(
@@ -770,12 +800,14 @@ export default function Grid({
 
       const nextPositions = {
         ...current,
-        [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
+        [selectedKeyType]: tabPositions.filter(
+          (_, idx) => idx !== indexToDelete,
+        ),
       };
 
-      persistGraphPositions(nextPositions, "Failed to delete graph item");
+      persistGraphPositions(nextPositions, 'Failed to delete graph item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions],
   );
 
   const moveGraphToFront = useCallback(
@@ -790,7 +822,8 @@ export default function Grid({
 
       const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
       const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-      const statPos = useStatItemStore.getState().positions[selectedKeyType] || [];
+      const statPos =
+        useStatItemStore.getState().positions[selectedKeyType] || [];
       const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
       const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
 
@@ -804,19 +837,22 @@ export default function Grid({
         ...keyZIndexes,
         ...statZIndexes,
         ...graphZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === index ? { ...p, zIndex: maxZIndex + 1 } : p
+          i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
         ),
       };
 
-      persistGraphPositions(nextPositions, "Failed to move graph item to front");
+      persistGraphPositions(
+        nextPositions,
+        'Failed to move graph item to front',
+      );
     },
-    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions],
   );
 
   const moveGraphToBack = useCallback(
@@ -831,7 +867,8 @@ export default function Grid({
 
       const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
       const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-      const statPos = useStatItemStore.getState().positions[selectedKeyType] || [];
+      const statPos =
+        useStatItemStore.getState().positions[selectedKeyType] || [];
       const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
       const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
 
@@ -845,19 +882,19 @@ export default function Grid({
         ...keyZIndexes,
         ...statZIndexes,
         ...graphZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
         ...current,
         [selectedKeyType]: tabPositions.map((p, i) =>
-          i === index ? { ...p, zIndex: minZIndex - 1 } : p
+          i === index ? { ...p, zIndex: minZIndex - 1 } : p,
         ),
       };
 
-      persistGraphPositions(nextPositions, "Failed to move graph item to back");
+      persistGraphPositions(nextPositions, 'Failed to move graph item to back');
     },
-    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions],
   );
 
   const beginDuplicateGraph = useCallback(
@@ -867,14 +904,14 @@ export default function Grid({
       if (!position) return;
 
       setDuplicateState({
-        elementType: "graph",
+        elementType: 'graph',
         sourceIndex,
         keyName: getStatTypeLabel(position.statType),
         position: { ...position },
       });
       setDuplicateCursor(null);
     },
-    [selectedKeyType]
+    [selectedKeyType],
   );
 
   const placeDuplicateGraph = useCallback(
@@ -888,7 +925,8 @@ export default function Grid({
 
       const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
       const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-      const statPos = useStatItemStore.getState().positions[selectedKeyType] || [];
+      const statPos =
+        useStatItemStore.getState().positions[selectedKeyType] || [];
       const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
       const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
 
@@ -902,7 +940,7 @@ export default function Grid({
         ...keyZIndexes,
         ...statZIndexes,
         ...graphZIndexes,
-        ...pluginZIndexes
+        ...pluginZIndexes,
       );
 
       const nextPositions = {
@@ -918,9 +956,9 @@ export default function Grid({
         ],
       };
 
-      persistGraphPositions(nextPositions, "Failed to duplicate graph item");
+      persistGraphPositions(nextPositions, 'Failed to duplicate graph item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions],
   );
 
   const duplicateSelectedFromContextMenu = useCallback(async () => {
@@ -932,15 +970,15 @@ export default function Grid({
     if (selectedElements.length === 0) return;
 
     for (const el of selectedElements) {
-      if (el.type === "key" && el.index !== undefined) {
-        if (typeof onMoveToFront === "function") {
+      if (el.type === 'key' && el.index !== undefined) {
+        if (typeof onMoveToFront === 'function') {
           await onMoveToFront(el.index);
         }
-      } else if (el.type === "stat" && el.index !== undefined) {
+      } else if (el.type === 'stat' && el.index !== undefined) {
         moveStatToFront(el.index);
-      } else if (el.type === "graph" && el.index !== undefined) {
+      } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToFront(el.index);
-      } else if (el.type === "plugin") {
+      } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().bringToFront(el.id);
       }
     }
@@ -958,15 +996,15 @@ export default function Grid({
     if (selectedElements.length === 0) return;
 
     for (const el of selectedElements) {
-      if (el.type === "key" && el.index !== undefined) {
-        if (typeof onMoveToBack === "function") {
+      if (el.type === 'key' && el.index !== undefined) {
+        if (typeof onMoveToBack === 'function') {
           await onMoveToBack(el.index);
         }
-      } else if (el.type === "stat" && el.index !== undefined) {
+      } else if (el.type === 'stat' && el.index !== undefined) {
         moveStatToBack(el.index);
-      } else if (el.type === "graph" && el.index !== undefined) {
+      } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToBack(el.index);
-      } else if (el.type === "plugin") {
+      } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().sendToBack(el.id);
       }
     }
@@ -982,11 +1020,11 @@ export default function Grid({
 
   const addKeyAtPosition = useCallback(
     (dx, dy) => {
-      if (typeof onAddKeyAt === "function") {
+      if (typeof onAddKeyAt === 'function') {
         onAddKeyAt(dx, dy);
       }
     },
-    [onAddKeyAt]
+    [onAddKeyAt],
   );
 
   const addStatAtPosition = useCallback(
@@ -996,28 +1034,28 @@ export default function Grid({
 
       const list = [...(current[selectedKeyType] || [])];
       list.push({
-        statType: "kps",
+        statType: 'kps',
         dx,
         dy,
         width: 60,
         height: 60,
         hidden: false,
-        activeImage: "",
-        inactiveImage: "",
-        soundPath: "",
+        activeImage: '',
+        inactiveImage: '',
+        soundPath: '',
         soundVolume: 100,
         activeTransparent: false,
         idleTransparent: false,
         count: 0,
-        noteColor: "#FFFFFF",
+        noteColor: '#FFFFFF',
         noteOpacity: 80,
         noteEffectEnabled: true,
         noteGlowEnabled: false,
         noteGlowSize: 20,
         noteGlowOpacity: 70,
-        noteGlowColor: "#FFFFFF",
+        noteGlowColor: '#FFFFFF',
         noteAutoYCorrection: true,
-        className: "",
+        className: '',
         counter: createDefaultCounterSettings(),
       });
 
@@ -1025,9 +1063,9 @@ export default function Grid({
         ...current,
         [selectedKeyType]: list,
       };
-      persistStatPositions(nextPositions, "Failed to add stat item");
+      persistStatPositions(nextPositions, 'Failed to add stat item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistStatPositions]
+    [selectedKeyType, pushHistorySnapshot, persistStatPositions],
   );
 
   const addGraphAtPosition = useCallback(
@@ -1037,10 +1075,10 @@ export default function Grid({
 
       const list = [...(current[selectedKeyType] || [])];
       list.push({
-        statType: "kps",
-        graphType: "line",
+        statType: 'kps',
+        graphType: 'line',
         graphSpeed: 1000,
-        graphColor: "#86EFAC",
+        graphColor: '#86EFAC',
         showAvgLine: true,
         graphAnimationEnabled: true,
         dx,
@@ -1048,77 +1086,80 @@ export default function Grid({
         width: 120,
         height: 60,
         hidden: false,
-        activeImage: "",
-        inactiveImage: "",
-        soundPath: "",
+        activeImage: '',
+        inactiveImage: '',
+        soundPath: '',
         soundVolume: 100,
         activeTransparent: false,
         idleTransparent: false,
         count: 0,
-        noteColor: "#FFFFFF",
+        noteColor: '#FFFFFF',
         noteOpacity: 80,
         noteEffectEnabled: true,
         noteGlowEnabled: false,
         noteGlowSize: 20,
         noteGlowOpacity: 70,
-        noteGlowColor: "#FFFFFF",
+        noteGlowColor: '#FFFFFF',
         noteAutoYCorrection: true,
-        className: "",
+        className: '',
         counter: createDefaultCounterSettings(),
-        backgroundColor: "rgba(46, 46, 47, 0.9)",
-        borderColor: "rgba(113, 113, 113, 0.9)",
+        backgroundColor: 'rgba(46, 46, 47, 0.9)',
+        borderColor: 'rgba(113, 113, 113, 0.9)',
         borderWidth: 3,
         borderRadius: 10,
-        fontColor: "#FFFFFF",
-        activeFontColor: "#FFFFFF",
+        fontColor: '#FFFFFF',
+        activeFontColor: '#FFFFFF',
         fontSize: 12,
         useInlineStyles: false,
-        displayText: "",
+        displayText: '',
       });
 
       const nextPositions = {
         ...current,
         [selectedKeyType]: list,
       };
-      persistGraphPositions(nextPositions, "Failed to add graph item");
+      persistGraphPositions(nextPositions, 'Failed to add graph item');
     },
-    [selectedKeyType, pushHistorySnapshot, persistGraphPositions]
+    [selectedKeyType, pushHistorySnapshot, persistGraphPositions],
   );
 
-  const getViewportCenterSnappedPosition = useCallback((width, height) => {
-    const container = gridContainerRef.current;
-    if (!container) return null;
-    const rect = container.getBoundingClientRect();
-    const centerClientX = rect.left + rect.width / 2;
-    const centerClientY = rect.top + rect.height / 2;
-    const gridCoords = clientToGridCoords(centerClientX, centerClientY);
-    if (!gridCoords) return null;
-    const targetX = gridCoords.x - width / 2;
-    const targetY = gridCoords.y - height / 2;
-    const snapped = snapCursorToGrid(targetX, targetY);
-    return {
-      dx: snapped.x,
-      dy: snapped.y,
-    };
-  }, [clientToGridCoords]);
+  const getViewportCenterSnappedPosition = useCallback(
+    (width, height) => {
+      const container = gridContainerRef.current;
+      if (!container) return null;
+      const rect = container.getBoundingClientRect();
+      const centerClientX = rect.left + rect.width / 2;
+      const centerClientY = rect.top + rect.height / 2;
+      const gridCoords = clientToGridCoords(centerClientX, centerClientY);
+      if (!gridCoords) return null;
+      const targetX = gridCoords.x - width / 2;
+      const targetY = gridCoords.y - height / 2;
+      const snapped = snapCursorToGrid(targetX, targetY);
+      return {
+        dx: snapped.x,
+        dy: snapped.y,
+      };
+    },
+    [clientToGridCoords],
+  );
 
   useEffect(() => {
     if (!toolbarAddRequest) return;
 
     const defaultSize =
-      toolbarAddRequest.type === "graph"
+      toolbarAddRequest.type === 'graph'
         ? { width: 120, height: 60 }
         : { width: 60, height: 60 };
     const targetPos = getViewportCenterSnappedPosition(
       defaultSize.width,
-      defaultSize.height
+      defaultSize.height,
     );
     if (targetPos) {
-      if (toolbarAddRequest.type === "key") {
+      if (toolbarAddRequest.type === 'key') {
         addKeyAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === "stat") {
+      } else if (toolbarAddRequest.type === 'stat') {
         addStatAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === "graph") {
+      } else if (toolbarAddRequest.type === 'graph') {
         addGraphAtPosition(targetPos.dx, targetPos.dy);
       }
     }
@@ -1153,7 +1194,7 @@ export default function Grid({
 
   // 불러오기/내보내기 팝업 열림 상태 (미니맵 표시 제어용)
   const isExportImportPopupOpen = useUIStore(
-    (state) => state.isExportImportPopupOpen
+    (state) => state.isExportImportPopupOpen,
   );
   const previousSelectedKeyTypeRef = useRef(selectedKeyType);
 
@@ -1175,15 +1216,15 @@ export default function Grid({
     const handleMouseMove = (e) => {
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
   useEffect(() => {
     if (
       shouldSkipModalAnimation &&
       selectedKey &&
-      typeof onModalAnimationConsumed === "function"
+      typeof onModalAnimationConsumed === 'function'
     ) {
       onModalAnimationConsumed();
     }
@@ -1197,7 +1238,7 @@ export default function Grid({
         key={`${selectedKeyType}-${index}`}
         index={index}
         position={position}
-        keyName={keyMappings[selectedKeyType]?.[index] || ""}
+        keyName={keyMappings[selectedKeyType]?.[index] || ''}
         onPositionChange={onPositionChange}
         zIndex={position.zIndex ?? index}
         onClick={() => {
@@ -1207,26 +1248,26 @@ export default function Grid({
           }
           // 단일 선택: 기존 선택을 해제하고 이 키만 선택
           clearSelection();
-          toggleSelection({ type: "key", id: `key-${index}`, index });
+          toggleSelection({ type: 'key', id: `key-${index}`, index });
           if (position?.groupId) {
             const groupId = position.groupId;
             (positions[selectedKeyType] || []).forEach((p, i) => {
               if (p?.groupId === groupId && i !== index) {
-                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+                toggleSelection({ type: 'key', id: `key-${i}`, index: i });
               }
             });
             const statPos =
               useStatItemStore.getState().positions[selectedKeyType] || [];
             statPos.forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+                toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
               }
             });
             const graphPos =
               useGraphItemStore.getState().positions[selectedKeyType] || [];
             graphPos.forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+                toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
               }
             });
           }
@@ -1243,7 +1284,7 @@ export default function Grid({
         }}
         onCtrlClick={() => {
           // 다중 선택: 기존 선택 유지하면서 추가/제거
-          toggleSelection({ type: "key", id: `key-${index}`, index });
+          toggleSelection({ type: 'key', id: `key-${index}`, index });
           // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
           const pos = positions[selectedKeyType]?.[index];
           if (pos) {
@@ -1260,7 +1301,7 @@ export default function Grid({
           if (!lastSelectedKeyBounds) {
             // 이전 선택이 없으면 단일 선택처럼 동작
             clearSelection();
-            toggleSelection({ type: "key", id: `key-${index}`, index });
+            toggleSelection({ type: 'key', id: `key-${index}`, index });
             const pos = positions[selectedKeyType]?.[index];
             if (pos) {
               setLastSelectedKeyBounds({
@@ -1287,12 +1328,12 @@ export default function Grid({
           const minX = Math.min(lastSelectedKeyBounds.x, clickedBounds.x);
           const maxX = Math.max(
             lastSelectedKeyBounds.x + lastSelectedKeyBounds.width,
-            clickedBounds.x + clickedBounds.width
+            clickedBounds.x + clickedBounds.width,
           );
           const minY = Math.min(lastSelectedKeyBounds.y, clickedBounds.y);
           const maxY = Math.max(
             lastSelectedKeyBounds.y + lastSelectedKeyBounds.height,
-            clickedBounds.y + clickedBounds.height
+            clickedBounds.y + clickedBounds.height,
           );
 
           const rangeRect = {
@@ -1313,72 +1354,73 @@ export default function Grid({
             };
             if (isElementInMarquee(elementBounds, rangeRect)) {
               newSelectedElements.push({
-                type: "key",
+                type: 'key',
                 id: `key-${i}`,
                 index: i,
               });
             }
           });
 
-           // 범위 내 플러그인 요소도 선택
-           pluginElements.forEach((el) => {
-             const belongsToCurrentTab = !el.tabId || el.tabId === selectedKeyType;
-             if (belongsToCurrentTab && el.measuredSize) {
-               const elementBounds = {
-                 x: el.position.x,
-                 y: el.position.y,
-                 width: el.measuredSize.width,
-                 height: el.measuredSize.height,
-               };
-               if (isElementInMarquee(elementBounds, rangeRect)) {
-                 newSelectedElements.push({
-                   type: "plugin",
-                   id: el.fullId,
-                 });
-               }
-             }
-           });
+          // 범위 내 플러그인 요소도 선택
+          pluginElements.forEach((el) => {
+            const belongsToCurrentTab =
+              !el.tabId || el.tabId === selectedKeyType;
+            if (belongsToCurrentTab && el.measuredSize) {
+              const elementBounds = {
+                x: el.position.x,
+                y: el.position.y,
+                width: el.measuredSize.width,
+                height: el.measuredSize.height,
+              };
+              if (isElementInMarquee(elementBounds, rangeRect)) {
+                newSelectedElements.push({
+                  type: 'plugin',
+                  id: el.fullId,
+                });
+              }
+            }
+          });
 
-           // 범위 내 통계 요소도 선택
-           (statPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-             if (!pos || pos.hidden) return;
-             const elementBounds = {
-               x: pos.dx,
-               y: pos.dy,
-               width: pos.width || 60,
-               height: pos.height || 60,
-             };
-             if (isElementInMarquee(elementBounds, rangeRect)) {
-               newSelectedElements.push({
-                 type: "stat",
-                 id: `stat-${i}`,
-                 index: i,
-               });
-             }
-           });
+          // 범위 내 통계 요소도 선택
+          (statPositions?.[selectedKeyType] || []).forEach((pos, i) => {
+            if (!pos || pos.hidden) return;
+            const elementBounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
+            };
+            if (isElementInMarquee(elementBounds, rangeRect)) {
+              newSelectedElements.push({
+                type: 'stat',
+                id: `stat-${i}`,
+                index: i,
+              });
+            }
+          });
 
-           // 범위 내 그래프 요소도 선택
-           (graphPositions?.[selectedKeyType] || []).forEach((pos, i) => {
-             if (!pos || pos.hidden) return;
-             const elementBounds = {
-               x: pos.dx,
-               y: pos.dy,
-               width: pos.width || 200,
-               height: pos.height || 100,
-             };
-             if (isElementInMarquee(elementBounds, rangeRect)) {
-               newSelectedElements.push({
-                 type: "graph",
-                 id: `graph-${i}`,
-                 index: i,
-               });
-             }
-           });
+          // 범위 내 그래프 요소도 선택
+          (graphPositions?.[selectedKeyType] || []).forEach((pos, i) => {
+            if (!pos || pos.hidden) return;
+            const elementBounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 200,
+              height: pos.height || 100,
+            };
+            if (isElementInMarquee(elementBounds, rangeRect)) {
+              newSelectedElements.push({
+                type: 'graph',
+                id: `graph-${i}`,
+                index: i,
+              });
+            }
+          });
 
-           setSelectedElements(newSelectedElements);
-         }}
+          setSelectedElements(newSelectedElements);
+        }}
         isSelected={selectedElements.some(
-          (el) => el.type === "key" && el.index === index
+          (el) => el.type === 'key' && el.index === index,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1398,18 +1440,18 @@ export default function Grid({
               currentPositions,
               useStatItemStore.getState().positions,
               useGraphItemStore.getState().positions,
-              currentPluginElements
+              currentPluginElements,
             );
         }}
         activeTool={activeTool}
         onEraserClick={() => {
-          const globalKey = keyMappings[selectedKeyType]?.[index] || "";
+          const globalKey = keyMappings[selectedKeyType]?.[index] || '';
           const displayName =
             getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
           showConfirm(
-            t("confirm.removeKey", { name: displayName }),
+            t('confirm.removeKey', { name: displayName }),
             () => onKeyDelete(index),
-            t("confirm.remove")
+            t('confirm.remove'),
           );
         }}
         onContextMenu={(e) => {
@@ -1422,11 +1464,11 @@ export default function Grid({
             openMixedSelectionContextMenu(
               e.clientX,
               e.clientY,
-              keyRefs.current[index] || null
+              keyRefs.current[index] || null,
             );
             return;
           }
-          setContextType("key");
+          setContextType('key');
           setContextIndex(index);
           contextRef.current = keyRefs.current[index] || null;
           setContextPosition({ x: e.clientX, y: e.clientY });
@@ -1468,20 +1510,20 @@ export default function Grid({
           currentKeyPositions,
           current,
           useGraphItemStore.getState().positions,
-          currentPluginElements
+          currentPluginElements,
         );
 
       const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos
+        i === index ? { ...pos, dx, dy } : pos,
       );
       const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
 
       useStatItemStore.getState().setPositions(nextPositions);
       window.api.statItems.updatePositions(nextPositions).catch((error) => {
-        console.error("Failed to update stat item positions", error);
+        console.error('Failed to update stat item positions', error);
       });
       try {
-        window.api.bridge.sendTo("overlay", "statPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1504,7 +1546,7 @@ export default function Grid({
             setContextPosition(null);
           }
           clearSelection();
-          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
           const statTabPositions =
             useStatItemStore.getState().positions[selectedKeyType] || [];
           const pos = statTabPositions[index];
@@ -1512,32 +1554,32 @@ export default function Grid({
             const groupId = pos.groupId;
             (positions[selectedKeyType] || []).forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+                toggleSelection({ type: 'key', id: `key-${i}`, index: i });
               }
             });
             statTabPositions.forEach((p, i) => {
               if (p?.groupId === groupId && i !== index) {
-                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+                toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
               }
             });
             const graphPos =
               useGraphItemStore.getState().positions[selectedKeyType] || [];
             graphPos.forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+                toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
               }
             });
           }
         }}
         onCtrlClick={() => {
-          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
         }}
         onShiftClick={() => {
           // 통계 요소는 범위 선택 대상이 아니므로 Ctrl+클릭과 동일하게 처리
-          toggleSelection({ type: "stat", id: `stat-${index}`, index });
+          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === "stat" && el.index === index
+          (el) => el.type === 'stat' && el.index === index,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1556,16 +1598,16 @@ export default function Grid({
               currentPositions,
               useStatItemStore.getState().positions,
               useGraphItemStore.getState().positions,
-              currentPluginElements
+              currentPluginElements,
             );
         }}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
-            t("confirm.removeStat", { name: displayName }),
+            t('confirm.removeStat', { name: displayName }),
             () => deleteStatAtIndex(index),
-            t("confirm.remove")
+            t('confirm.remove'),
           );
         }}
         onContextMenu={(e) => {
@@ -1578,11 +1620,11 @@ export default function Grid({
             openMixedSelectionContextMenu(
               e.clientX,
               e.clientY,
-              statRefs.current[index] || null
+              statRefs.current[index] || null,
             );
             return;
           }
-          setContextType("stat");
+          setContextType('stat');
           setContextIndex(index);
           contextRef.current = statRefs.current[index] || null;
           setContextPosition({ x: e.clientX, y: e.clientY });
@@ -1623,20 +1665,20 @@ export default function Grid({
           currentKeyPositions,
           useStatItemStore.getState().positions,
           current,
-          currentPluginElements
+          currentPluginElements,
         );
 
       const nextTabPositions = tabPositions.map((pos, i) =>
-        i === index ? { ...pos, dx, dy } : pos
+        i === index ? { ...pos, dx, dy } : pos,
       );
       const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
 
       useGraphItemStore.getState().setPositions(nextPositions);
       window.api.graphItems.updatePositions(nextPositions).catch((error) => {
-        console.error("Failed to update graph item positions", error);
+        console.error('Failed to update graph item positions', error);
       });
       try {
-        window.api.bridge.sendTo("overlay", "graphPositions:sync", {
+        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1658,7 +1700,7 @@ export default function Grid({
             setContextPosition(null);
           }
           clearSelection();
-          toggleSelection({ type: "graph", id: `graph-${index}`, index });
+          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
           const graphTabPositions =
             useGraphItemStore.getState().positions[selectedKeyType] || [];
           const pos = graphTabPositions[index];
@@ -1666,31 +1708,31 @@ export default function Grid({
             const groupId = pos.groupId;
             (positions[selectedKeyType] || []).forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "key", id: `key-${i}`, index: i });
+                toggleSelection({ type: 'key', id: `key-${i}`, index: i });
               }
             });
             const statPos =
               useStatItemStore.getState().positions[selectedKeyType] || [];
             statPos.forEach((p, i) => {
               if (p?.groupId === groupId) {
-                toggleSelection({ type: "stat", id: `stat-${i}`, index: i });
+                toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
               }
             });
             graphTabPositions.forEach((p, i) => {
               if (p?.groupId === groupId && i !== index) {
-                toggleSelection({ type: "graph", id: `graph-${i}`, index: i });
+                toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
               }
             });
           }
         }}
         onCtrlClick={() => {
-          toggleSelection({ type: "graph", id: `graph-${index}`, index });
+          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: "graph", id: `graph-${index}`, index });
+          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === "graph" && el.index === index
+          (el) => el.type === 'graph' && el.index === index,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1709,16 +1751,16 @@ export default function Grid({
               currentPositions,
               useStatItemStore.getState().positions,
               useGraphItemStore.getState().positions,
-              currentPluginElements
+              currentPluginElements,
             );
         }}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
           showConfirm(
-            t("confirm.removeGraph", { name: displayName }),
+            t('confirm.removeGraph', { name: displayName }),
             () => deleteGraphAtIndex(index),
-            t("confirm.remove")
+            t('confirm.remove'),
           );
         }}
         onContextMenu={(e) => {
@@ -1731,11 +1773,11 @@ export default function Grid({
             openMixedSelectionContextMenu(
               e.clientX,
               e.clientY,
-              graphRefs.current[index] || null
+              graphRefs.current[index] || null,
             );
             return;
           }
-          setContextType("graph");
+          setContextType('graph');
           setContextIndex(index);
           contextRef.current = graphRefs.current[index] || null;
           setContextPosition({ x: e.clientX, y: e.clientY });
@@ -1755,7 +1797,7 @@ export default function Grid({
   const renderDuplicateGhost = () => {
     if (!duplicateState || !duplicateCursor) return null;
 
-    if (duplicateState.elementType === "graph") {
+    if (duplicateState.elementType === 'graph') {
       const width = duplicateState.position?.width || 200;
       const height = duplicateState.position?.height || 100;
       const offsetX = duplicateCursor.x - width / 2;
@@ -1767,9 +1809,9 @@ export default function Grid({
             width: `${width}px`,
             height: `${height}px`,
             transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
-            background: "rgba(17, 17, 20, 0.9)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            borderRadius: "8px",
+            background: 'rgba(17, 17, 20, 0.9)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
             opacity: 0.5,
             zIndex: 1000,
           }}
@@ -1788,13 +1830,15 @@ export default function Grid({
       keyName,
     } = duplicateState;
     const previewImage =
-      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || "";
+      resolveImageSource(inactiveImage) ||
+      resolveImageSource(activeImage) ||
+      '';
     const backgroundColor = previewImage
-      ? "transparent"
-      : "rgba(46, 46, 47, 0.9)";
-    const borderStyle = "3px solid rgba(113, 113, 113, 0.9)";
+      ? 'transparent'
+      : 'rgba(46, 46, 47, 0.9)';
+    const borderStyle = '3px solid rgba(113, 113, 113, 0.9)';
     const displayName =
-      getKeyInfoByGlobalKey(keyName)?.displayName || keyName || "";
+      getKeyInfoByGlobalKey(keyName)?.displayName || keyName || '';
 
     // 키의 중심이 마우스에 위치하도록 오프셋 계산
     const offsetX = duplicateCursor.x - width / 2;
@@ -1803,16 +1847,16 @@ export default function Grid({
     return (
       <div
         className={`absolute pointer-events-none select-none ${
-          className || ""
+          className || ''
         }`}
         style={{
           width: `${width}px`,
           height: `${height}px`,
           transform: `translate3d(${offsetX}px, ${offsetY}px, 0)`,
           backgroundColor,
-          borderRadius: "10px",
+          borderRadius: '10px',
           border: borderStyle,
-          overflow: "hidden",
+          overflow: 'hidden',
           opacity: 0.5,
           zIndex: 1000,
         }}
@@ -1822,12 +1866,12 @@ export default function Grid({
             src={previewImage}
             alt=""
             style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-              pointerEvents: "none",
-              userSelect: "none",
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+              pointerEvents: 'none',
+              userSelect: 'none',
             }}
             draggable={false}
           />
@@ -1835,9 +1879,9 @@ export default function Grid({
           <div
             className="flex items-center justify-center h-full font-bold leading-none text-safe-inline"
             style={{
-              color: "var(--key-text-color, rgba(121, 121, 121, 0.9))",
-              willChange: "auto",
-              contain: "layout style paint",
+              color: 'var(--key-text-color, rgba(121, 121, 121, 0.9))',
+              willChange: 'auto',
+              contain: 'layout style paint',
             }}
           >
             {displayName}
@@ -1875,7 +1919,7 @@ export default function Grid({
         startMarqueeSelection(gridCoords.x, gridCoords.y);
       }
     },
-    [duplicateState, clientToGridCoords, startMarqueeSelection]
+    [duplicateState, clientToGridCoords, startMarqueeSelection],
   );
 
   return (
@@ -1886,7 +1930,7 @@ export default function Grid({
       }}
       data-grid-container
       className="relative w-full h-full bg-[#3A3943] rounded-[0px] overflow-hidden"
-      style={{ backgroundColor: color === "transparent" ? "#3A3943" : color }}
+      style={{ backgroundColor: color === 'transparent' ? '#3A3943' : color }}
       onContextMenu={(e) => {
         if (duplicateState) {
           setDuplicateState(null);
@@ -1926,25 +1970,25 @@ export default function Grid({
           // 마우스 위치에서 키의 중심이 배치되도록 조정
           const width = duplicateState.position.width || 60;
           const height = duplicateState.position.height || 60;
-          const type = duplicateState.elementType || "key";
+          const type = duplicateState.elementType || 'key';
 
-          if (type === "key" && typeof onKeyDuplicate === "function") {
+          if (type === 'key' && typeof onKeyDuplicate === 'function') {
             onKeyDuplicate(
               duplicateState.sourceIndex,
               snapped.x - width / 2,
-              snapped.y - height / 2
+              snapped.y - height / 2,
             );
-          } else if (type === "stat") {
+          } else if (type === 'stat') {
             placeDuplicateStat(
               duplicateState.position,
               snapped.x - width / 2,
-              snapped.y - height / 2
+              snapped.y - height / 2,
             );
-          } else if (type === "graph") {
+          } else if (type === 'graph') {
             placeDuplicateGraph(
               duplicateState.position,
               snapped.x - width / 2,
-              snapped.y - height / 2
+              snapped.y - height / 2,
             );
           }
         }
@@ -1958,7 +2002,7 @@ export default function Grid({
         zoom={zoom}
         panX={panX}
         panY={panY}
-        color={color === "transparent" ? "#3A3943" : color}
+        color={color === 'transparent' ? '#3A3943' : color}
       />
       {/* 줌/팬이 적용되는 콘텐츠 영역 */}
       <div
@@ -1967,8 +2011,8 @@ export default function Grid({
         className="absolute"
         style={{
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-          transformOrigin: "0 0",
-          willChange: isTransforming ? "transform" : "auto",
+          transformOrigin: '0 0',
+          willChange: isTransforming ? 'transform' : 'auto',
         }}
       >
         {renderKeys()}
@@ -2004,7 +2048,7 @@ export default function Grid({
             openMixedSelectionContextMenu(
               clientX,
               clientY,
-              referenceElement || null
+              referenceElement || null,
             );
             return true;
           }}
@@ -2025,7 +2069,7 @@ export default function Grid({
                 currentPositions,
                 useStatItemStore.getState().positions,
                 useGraphItemStore.getState().positions,
-                currentPluginElements
+                currentPluginElements,
               );
           }}
         />
@@ -2049,7 +2093,7 @@ export default function Grid({
             statPositions,
             graphPositions,
             selectedKeyType,
-            pluginElements
+            pluginElements,
           );
           if (!isResizable) {
             return null; // 주황색 선은 GroupResizeHandles에서 표시
@@ -2057,7 +2101,7 @@ export default function Grid({
         }
 
         let bounds = null;
-        if (el.type === "key" && el.index !== undefined) {
+        if (el.type === 'key' && el.index !== undefined) {
           const pos = positions[selectedKeyType]?.[el.index];
           if (pos) {
             bounds = {
@@ -2067,7 +2111,7 @@ export default function Grid({
               height: pos.height || 60,
             };
           }
-        } else if (el.type === "stat" && el.index !== undefined) {
+        } else if (el.type === 'stat' && el.index !== undefined) {
           const pos = statPositions?.[selectedKeyType]?.[el.index];
           if (pos) {
             bounds = {
@@ -2077,7 +2121,7 @@ export default function Grid({
               height: pos.height || 60,
             };
           }
-        } else if (el.type === "graph" && el.index !== undefined) {
+        } else if (el.type === 'graph' && el.index !== undefined) {
           const pos = graphPositions?.[selectedKeyType]?.[el.index];
           if (pos) {
             bounds = {
@@ -2087,7 +2131,7 @@ export default function Grid({
               height: pos.height || 100,
             };
           }
-        } else if (el.type === "plugin") {
+        } else if (el.type === 'plugin') {
           const pluginEl = pluginElements.find((p) => p.fullId === el.id);
           if (pluginEl && pluginEl.measuredSize) {
             bounds = {
@@ -2110,14 +2154,14 @@ export default function Grid({
           <div
             key={el.id}
             style={{
-              position: "absolute",
+              position: 'absolute',
               left: displayBounds.x * zoom + panX - 2,
               top: displayBounds.y * zoom + panY - 2,
               width: displayBounds.width * zoom + 4,
               height: displayBounds.height * zoom + 4,
-              border: "2px solid rgba(59, 130, 246, 0.8)",
-              borderRadius: "4px",
-              pointerEvents: "none",
+              border: '2px solid rgba(59, 130, 246, 0.8)',
+              borderRadius: '4px',
+              pointerEvents: 'none',
               zIndex: 20,
             }}
           />
@@ -2130,7 +2174,7 @@ export default function Grid({
           let bounds = null;
           let elementId = null;
 
-          if (el.type === "key" && el.index !== undefined) {
+          if (el.type === 'key' && el.index !== undefined) {
             // 키 요소
             const pos = positions[selectedKeyType]?.[el.index];
             if (!pos) return null;
@@ -2142,7 +2186,7 @@ export default function Grid({
               height: pos.height || 60,
             };
             elementId = `key-${el.index}`;
-          } else if (el.type === "stat" && el.index !== undefined) {
+          } else if (el.type === 'stat' && el.index !== undefined) {
             const pos = statPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
 
@@ -2153,7 +2197,7 @@ export default function Grid({
               height: pos.height || 60,
             };
             elementId = `stat-${el.index}`;
-          } else if (el.type === "graph" && el.index !== undefined) {
+          } else if (el.type === 'graph' && el.index !== undefined) {
             const pos = graphPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
 
@@ -2164,7 +2208,7 @@ export default function Grid({
               height: pos.height || 100,
             };
             elementId = `graph-${el.index}`;
-          } else if (el.type === "plugin") {
+          } else if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
             if (!pluginEl || !pluginEl.measuredSize) {
@@ -2237,30 +2281,33 @@ export default function Grid({
             setContextPosition(null);
           }}
           items={
-            contextType === "mixed"
+            contextType === 'mixed'
               ? mixedSelectionMenuItems
-              : contextType === "stat"
-              ? getStatMenuItems(contextIndex)
-              : contextType === "graph"
-              ? getGraphMenuItems(contextIndex)
-              : getKeyMenuItems(contextIndex)
+              : contextType === 'stat'
+                ? getStatMenuItems(contextIndex)
+                : contextType === 'graph'
+                  ? getGraphMenuItems(contextIndex)
+                  : getKeyMenuItems(contextIndex)
           }
           onSelect={async (id) => {
-            if (contextType === "mixed") {
-              if (id === "delete") {
+            if (contextType === 'mixed') {
+              if (id === 'delete') {
                 await deleteSelectedElements();
-              } else if (id === "duplicate") {
+              } else if (id === 'duplicate') {
                 await duplicateSelectedFromContextMenu();
-              } else if (id === "bringToFront") {
+              } else if (id === 'bringToFront') {
                 await moveSelectedToFront();
-              } else if (id === "sendToBack") {
+              } else if (id === 'sendToBack') {
                 await moveSelectedToBack();
-              } else if (id === "groupSelected") {
-                const { keyMappings: km, positions: keyPos } = useKeyStore.getState();
+              } else if (id === 'groupSelected') {
+                const { keyMappings: km, positions: keyPos } =
+                  useKeyStore.getState();
                 const statPos = useStatItemStore.getState().positions;
                 const graphPos = useGraphItemStore.getState().positions;
-                const pluginEls = usePluginDisplayElementStore.getState().elements;
-                const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+                const pluginEls =
+                  usePluginDisplayElementStore.getState().elements;
+                const currentLayerGroups =
+                  useLayerGroupStore.getState().layerGroups;
                 const modeGroups = currentLayerGroups[selectedKeyType] || [];
 
                 const singleGroupId = resolveSingleGroupIdFromSelection(
@@ -2277,7 +2324,7 @@ export default function Grid({
                 if (!targetGroupId) {
                   targetGroupId = crypto.randomUUID();
                   const groupName = buildNextLayerGroupName(
-                    t("layerGroup.newGroup") || "New Group",
+                    t('layerGroup.newGroup') || 'New Group',
                     modeGroups,
                   );
                   nextLayerGroups = {
@@ -2325,18 +2372,22 @@ export default function Grid({
                     );
 
                   useKeyStore.getState().setPositions(normalized.keyPositions);
-                  useStatItemStore.getState().setPositions(normalized.statPositions);
+                  useStatItemStore
+                    .getState()
+                    .setPositions(normalized.statPositions);
                   useGraphItemStore
                     .getState()
                     .setPositions(normalized.graphPositions);
 
-                  await window.api.keys.updatePositions(normalized.keyPositions);
-                  await window.api
-                    .statItems
-                    .updatePositions(normalized.statPositions);
-                  await window.api
-                    .graphItems
-                    .updatePositions(normalized.graphPositions);
+                  await window.api.keys.updatePositions(
+                    normalized.keyPositions,
+                  );
+                  await window.api.statItems.updatePositions(
+                    normalized.statPositions,
+                  );
+                  await window.api.graphItems.updatePositions(
+                    normalized.graphPositions,
+                  );
 
                   if (createdGroup || normalized.groupsChanged) {
                     useLayerGroupStore
@@ -2345,12 +2396,15 @@ export default function Grid({
                     await window.api.layerGroups.update(normalized.layerGroups);
                   }
                 }
-              } else if (id === "ungroupSelected") {
-                const { keyMappings: km, positions: keyPos } = useKeyStore.getState();
+              } else if (id === 'ungroupSelected') {
+                const { keyMappings: km, positions: keyPos } =
+                  useKeyStore.getState();
                 const statPos = useStatItemStore.getState().positions;
                 const graphPos = useGraphItemStore.getState().positions;
-                const pluginEls = usePluginDisplayElementStore.getState().elements;
-                const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+                const pluginEls =
+                  usePluginDisplayElementStore.getState().elements;
+                const currentLayerGroups =
+                  useLayerGroupStore.getState().layerGroups;
 
                 const ungrouped = applyGroupIdToSelectedElements({
                   mode: selectedKeyType,
@@ -2383,18 +2437,22 @@ export default function Grid({
                     );
 
                   useKeyStore.getState().setPositions(normalized.keyPositions);
-                  useStatItemStore.getState().setPositions(normalized.statPositions);
+                  useStatItemStore
+                    .getState()
+                    .setPositions(normalized.statPositions);
                   useGraphItemStore
                     .getState()
                     .setPositions(normalized.graphPositions);
 
-                  await window.api.keys.updatePositions(normalized.keyPositions);
-                  await window.api
-                    .statItems
-                    .updatePositions(normalized.statPositions);
-                  await window.api
-                    .graphItems
-                    .updatePositions(normalized.graphPositions);
+                  await window.api.keys.updatePositions(
+                    normalized.keyPositions,
+                  );
+                  await window.api.statItems.updatePositions(
+                    normalized.statPositions,
+                  );
+                  await window.api.graphItems.updatePositions(
+                    normalized.graphPositions,
+                  );
 
                   if (normalized.groupsChanged) {
                     useLayerGroupStore
@@ -2412,24 +2470,24 @@ export default function Grid({
 
             if (contextIndex == null) return;
 
-            if (contextType === "stat") {
+            if (contextType === 'stat') {
               const pos =
                 useStatItemStore.getState().positions?.[selectedKeyType]?.[
                   contextIndex
                 ] || null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : "";
+              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
-              if (id === "delete") {
+              if (id === 'delete') {
                 showConfirm(
-                  t("confirm.removeStat", { name: displayName }),
+                  t('confirm.removeStat', { name: displayName }),
                   () => deleteStatAtIndex(contextIndex),
-                  t("confirm.remove")
+                  t('confirm.remove'),
                 );
-              } else if (id === "duplicate") {
+              } else if (id === 'duplicate') {
                 beginDuplicateStat(contextIndex);
-              } else if (id === "bringToFront") {
+              } else if (id === 'bringToFront') {
                 moveStatToFront(contextIndex);
-              } else if (id === "sendToBack") {
+              } else if (id === 'sendToBack') {
                 moveStatToBack(contextIndex);
               }
 
@@ -2438,24 +2496,24 @@ export default function Grid({
               return;
             }
 
-            if (contextType === "graph") {
+            if (contextType === 'graph') {
               const pos =
                 useGraphItemStore.getState().positions?.[selectedKeyType]?.[
                   contextIndex
                 ] || null;
-              const displayName = pos ? getStatTypeLabel(pos.statType) : "";
+              const displayName = pos ? getStatTypeLabel(pos.statType) : '';
 
-              if (id === "delete") {
+              if (id === 'delete') {
                 showConfirm(
-                  t("confirm.removeGraph", { name: displayName }),
+                  t('confirm.removeGraph', { name: displayName }),
                   () => deleteGraphAtIndex(contextIndex),
-                  t("confirm.remove")
+                  t('confirm.remove'),
                 );
-              } else if (id === "duplicate") {
+              } else if (id === 'duplicate') {
                 beginDuplicateGraph(contextIndex);
-              } else if (id === "bringToFront") {
+              } else if (id === 'bringToFront') {
                 moveGraphToFront(contextIndex);
-              } else if (id === "sendToBack") {
+              } else if (id === 'sendToBack') {
                 moveGraphToBack(contextIndex);
               }
 
@@ -2466,11 +2524,11 @@ export default function Grid({
 
             // 플러그인 메뉴 처리
             const pluginItem = pluginKeyMenuItems.find(
-              (item) => item.fullId === id
+              (item) => item.fullId === id,
             );
             if (pluginItem) {
               const context = {
-                keyCode: keyMappings[selectedKeyType]?.[contextIndex] || "",
+                keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
                 index: contextIndex,
                 position: positions[selectedKeyType]?.[contextIndex] || {},
                 mode: selectedKeyType,
@@ -2478,18 +2536,18 @@ export default function Grid({
 
               try {
                 const result = pluginItem.onClick(context);
-                if (result && typeof result.then === "function") {
+                if (result && typeof result.then === 'function') {
                   result.catch((error) => {
                     console.error(
                       `[Plugin Menu] Error in '${pluginItem.label}':`,
-                      error
+                      error,
                     );
                   });
                 }
               } catch (error) {
                 console.error(
                   `[Plugin Menu] Error in '${pluginItem.label}':`,
-                  error
+                  error,
                 );
               }
 
@@ -2499,25 +2557,25 @@ export default function Grid({
             }
 
             // 기본 메뉴 처리
-            if (id === "delete") {
+            if (id === 'delete') {
               const globalKey =
-                keyMappings[selectedKeyType]?.[contextIndex] || "";
+                keyMappings[selectedKeyType]?.[contextIndex] || '';
               const displayName =
                 getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
               showConfirm(
-                t("confirm.removeKey", { name: displayName }),
+                t('confirm.removeKey', { name: displayName }),
                 () => onKeyDelete(contextIndex),
-                t("confirm.remove")
+                t('confirm.remove'),
               );
-            } else if (id === "duplicate") {
+            } else if (id === 'duplicate') {
               const keyCode =
-                keyMappings[selectedKeyType]?.[contextIndex] || "";
+                keyMappings[selectedKeyType]?.[contextIndex] || '';
               const position =
                 positions[selectedKeyType]?.[contextIndex] || null;
               if (position) {
                 const clonedNoteColor =
                   position.noteColor &&
-                  typeof position.noteColor === "object" &&
+                  typeof position.noteColor === 'object' &&
                   position.noteColor !== null
                     ? { ...position.noteColor }
                     : position.noteColor;
@@ -2536,15 +2594,15 @@ export default function Grid({
                         : {}),
                     }
                   : null;
-                let initialCursor = null;
+                const initialCursor = null;
                 // 현재 실제 마우스 위치를 사용 (메뉴를 클릭한 시점의 위치)
                 const currentMousePos = lastMousePosRef.current;
                 const snapped = computeSnappedCursorFromClient(
                   currentMousePos.x,
-                  currentMousePos.y
+                  currentMousePos.y,
                 );
                 setDuplicateState({
-                  elementType: "key",
+                  elementType: 'key',
                   sourceIndex: contextIndex,
                   keyName: keyCode,
                   position: {
@@ -2555,39 +2613,39 @@ export default function Grid({
                 });
                 setDuplicateCursor(initialCursor);
               }
-            } else if (id === "counterReset") {
+            } else if (id === 'counterReset') {
               const globalKey =
-                keyMappings[selectedKeyType]?.[contextIndex] || "";
+                keyMappings[selectedKeyType]?.[contextIndex] || '';
               const displayName =
                 getKeyInfoByGlobalKey(globalKey)?.displayName || globalKey;
               showConfirm(
-                t("confirm.resetKeyCounter", { name: displayName }),
+                t('confirm.resetKeyCounter', { name: displayName }),
                 async () => {
                   try {
                     await window.api.keys.resetSingleCounter(
                       selectedKeyType,
-                      globalKey
+                      globalKey,
                     );
                   } catch (error) {
-                    console.error("Failed to reset key counter", error);
+                    console.error('Failed to reset key counter', error);
                   }
                 },
-                t("confirm.reset")
+                t('confirm.reset'),
               );
-            } else if (id === "bringToFront") {
-              if (typeof onMoveToFront === "function") {
+            } else if (id === 'bringToFront') {
+              if (typeof onMoveToFront === 'function') {
                 onMoveToFront(contextIndex);
               }
-            } else if (id === "bringForward") {
-              if (typeof onMoveForward === "function") {
+            } else if (id === 'bringForward') {
+              if (typeof onMoveForward === 'function') {
                 onMoveForward(contextIndex);
               }
-            } else if (id === "sendBackward") {
-              if (typeof onMoveBackward === "function") {
+            } else if (id === 'sendBackward') {
+              if (typeof onMoveBackward === 'function') {
                 onMoveBackward(contextIndex);
               }
-            } else if (id === "sendToBack") {
-              if (typeof onMoveToBack === "function") {
+            } else if (id === 'sendToBack') {
+              if (typeof onMoveToBack === 'function') {
                 onMoveToBack(contextIndex);
               }
             }
@@ -2610,7 +2668,7 @@ export default function Grid({
           onSelect={(id) => {
             // 플러그인 메뉴 처리
             const pluginItem = pluginGridMenuItems.find(
-              (item) => item.fullId === id
+              (item) => item.fullId === id,
             );
             if (pluginItem && gridAddLocalPos) {
               const context = {
@@ -2618,18 +2676,18 @@ export default function Grid({
                 mode: selectedKeyType,
               };
 
+              // 플러그인 컨텍스트 설정
+              const previousPluginId = window.__dmn_current_plugin_id;
               try {
-                // 플러그인 컨텍스트 설정
-                const previousPluginId = window.__dmn_current_plugin_id;
                 window.__dmn_current_plugin_id = pluginItem.pluginId;
 
                 const result = pluginItem.onClick(context);
-                if (result && typeof result.then === "function") {
+                if (result && typeof result.then === 'function') {
                   result
                     .catch((error) => {
                       console.error(
                         `[Plugin Menu] Error in '${pluginItem.label}':`,
-                        error
+                        error,
                       );
                     })
                     .finally(() => {
@@ -2643,7 +2701,7 @@ export default function Grid({
               } catch (error) {
                 console.error(
                   `[Plugin Menu] Error in '${pluginItem.label}':`,
-                  error
+                  error,
                 );
                 // 에러 발생 시에도 컨텍스트 복원
                 window.__dmn_current_plugin_id = previousPluginId;
@@ -2656,15 +2714,15 @@ export default function Grid({
             }
 
             // 기본 메뉴 처리
-            if (id === "add" && gridAddLocalPos) {
+            if (id === 'add' && gridAddLocalPos) {
               addKeyAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === "addStat" && gridAddLocalPos) {
+            } else if (id === 'addStat' && gridAddLocalPos) {
               addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === "addGraph" && gridAddLocalPos) {
+            } else if (id === 'addGraph' && gridAddLocalPos) {
               addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === "tabCss") {
+            } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
-            } else if (id === "tabNote") {
+            } else if (id === 'tabNote') {
               setIsNoteSettingOpen(false);
               setIsTabNoteModalOpen(true);
             }
@@ -2692,7 +2750,7 @@ export default function Grid({
             height: positions[selectedKeyType][selectedKey.index].height,
             noteColor:
               positions[selectedKeyType][selectedKey.index].noteColor ||
-              "#FFFFFF",
+              '#FFFFFF',
             noteOpacity:
               positions[selectedKeyType][selectedKey.index].noteOpacity || 80,
             noteEffectEnabled:
@@ -2708,11 +2766,11 @@ export default function Grid({
             noteGlowColor:
               positions[selectedKeyType][selectedKey.index].noteGlowColor ||
               positions[selectedKeyType][selectedKey.index].noteColor ||
-              "#FFFFFF",
+              '#FFFFFF',
             noteAutoYCorrection:
               positions[selectedKeyType][selectedKey.index].noteAutoYCorrection,
             className:
-              positions[selectedKeyType][selectedKey.index].className || "",
+              positions[selectedKeyType][selectedKey.index].className || '',
           }}
           initialCounterSettings={
             positions[selectedKeyType][selectedKey.index].counter || null
@@ -2721,7 +2779,7 @@ export default function Grid({
             // 미리보기 롤백
             if (originalKeyData) {
               // 키 롤백
-              if (typeof onKeyPreview === "function" && originalKeyData.key) {
+              if (typeof onKeyPreview === 'function' && originalKeyData.key) {
                 const origKey = originalKeyData.key;
                 onKeyPreview(selectedKey.index, {
                   activeImage: origKey.activeImage,
@@ -2734,12 +2792,12 @@ export default function Grid({
                 });
               }
               // 카운터 롤백
-              if (typeof onCounterPreview === "function") {
+              if (typeof onCounterPreview === 'function') {
                 onCounterPreview(selectedKey.index, originalKeyData.counter);
               }
               // 노트 롤백
               if (
-                typeof onNoteColorPreview === "function" &&
+                typeof onNoteColorPreview === 'function' &&
                 originalKeyData.key
               ) {
                 const origKey = originalKeyData.key;
@@ -2752,7 +2810,7 @@ export default function Grid({
                   origKey.noteGlowOpacity,
                   origKey.noteGlowColor,
                   origKey.noteAutoYCorrection,
-                  origKey.noteEffectEnabled
+                  origKey.noteEffectEnabled,
                 );
               }
             }
@@ -2763,11 +2821,11 @@ export default function Grid({
             // 키, 노트, 카운터 데이터를 모두 포함하여 저장
             const { counter, ...keyAndNoteData } = data;
             // 키 및 노트 데이터 업데이트
-            if (typeof onKeyUpdate === "function") {
+            if (typeof onKeyUpdate === 'function') {
               onKeyUpdate(keyAndNoteData);
             }
             // 카운터 데이터 업데이트
-            if (counter && typeof onCounterUpdate === "function") {
+            if (counter && typeof onCounterUpdate === 'function') {
               onCounterUpdate(selectedKey.index, counter);
             }
             setOriginalKeyData(null);
@@ -2783,8 +2841,8 @@ export default function Grid({
             }
 
             if (
-              previewData.type === "counter" &&
-              typeof onCounterPreview === "function"
+              previewData.type === 'counter' &&
+              typeof onCounterPreview === 'function'
             ) {
               const currentCounter =
                 positions[selectedKeyType][selectedKey.index].counter || {};
@@ -2792,36 +2850,36 @@ export default function Grid({
               const mergedPayload = {
                 enabled: previewData.enabled ?? currentCounter.enabled ?? true,
                 placement:
-                  previewData.placement ?? currentCounter.placement ?? "inside",
-                align: previewData.align ?? currentCounter.align ?? "bottom",
+                  previewData.placement ?? currentCounter.placement ?? 'inside',
+                align: previewData.align ?? currentCounter.align ?? 'bottom',
                 gap: previewData.gap ?? currentCounter.gap ?? 6,
                 fill: {
                   idle:
                     previewData.fill?.idle ??
                     currentCounter.fill?.idle ??
-                    "rgba(255,255,255,0.6)",
+                    'rgba(255,255,255,0.6)',
                   active:
                     previewData.fill?.active ??
                     currentCounter.fill?.active ??
-                    "rgba(255,255,255,1)",
+                    'rgba(255,255,255,1)',
                 },
                 stroke: {
                   idle:
                     previewData.stroke?.idle ??
                     currentCounter.stroke?.idle ??
-                    "rgba(0,0,0,0)",
+                    'rgba(0,0,0,0)',
                   active:
                     previewData.stroke?.active ??
                     currentCounter.stroke?.active ??
-                    "rgba(0,0,0,0)",
+                    'rgba(0,0,0,0)',
                 },
               };
               onCounterPreview(selectedKey.index, mergedPayload);
             }
 
             if (
-              previewData.type === "key" &&
-              typeof onKeyPreview === "function"
+              previewData.type === 'key' &&
+              typeof onKeyPreview === 'function'
             ) {
               const { type, ...rest } = previewData;
               onKeyPreview(selectedKey.index, rest);
@@ -2829,8 +2887,8 @@ export default function Grid({
 
             // 노트 미리보기 처리
             if (
-              previewData.type === "note" &&
-              typeof onNoteColorPreview === "function"
+              previewData.type === 'note' &&
+              typeof onNoteColorPreview === 'function'
             ) {
               const currentKey = positions[selectedKeyType][selectedKey.index];
               // 현재 값과 미리보기 값을 병합
@@ -2860,7 +2918,7 @@ export default function Grid({
                 noteGlowOpacity,
                 noteGlowColor,
                 noteAutoYCorrection,
-                noteEffectEnabled
+                noteEffectEnabled,
               );
             }
           }}

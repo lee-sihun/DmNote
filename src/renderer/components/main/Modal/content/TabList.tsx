@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import PlusIcon from "@assets/svgs/plus2.svg";
-import MinusIcon from "@assets/svgs/minus.svg";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useLenis } from "@hooks/useLenis";
-import Alert from "./Alert.jsx";
-import TabNameModal from "./TabNameModal";
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import PlusIcon from '@assets/svgs/plus2.svg';
+import MinusIcon from '@assets/svgs/minus.svg';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useLenis } from '@hooks/useLenis';
+import Alert from './Alert.jsx';
+import TabNameModal from './TabNameModal';
 
 type TabListProps = {
   onClose?: () => void;
@@ -37,8 +37,8 @@ const TabList = ({ onClose }: TabListProps) => {
   } = useLenis();
 
   const isCustomSelected = useMemo(
-    () => !["4key", "5key", "6key", "8key"].includes(selectedKeyType),
-    [selectedKeyType]
+    () => !['4key', '5key', '6key', '8key'].includes(selectedKeyType),
+    [selectedKeyType],
   );
 
   useEffect(() => {
@@ -96,7 +96,7 @@ const TabList = ({ onClose }: TabListProps) => {
       }
       return result;
     } catch (error) {
-      console.error("Failed to select custom tab", error);
+      console.error('Failed to select custom tab', error);
       return { success: false };
     }
   };
@@ -105,10 +105,10 @@ const TabList = ({ onClose }: TabListProps) => {
     try {
       const result = await window.api.keys.customTabs.delete(selectedKeyType);
       if (!result?.success) {
-        console.warn("Failed to delete custom tab", result?.error);
+        console.warn('Failed to delete custom tab', result?.error);
       }
     } catch (error) {
-      console.error("Failed to delete custom tab", error);
+      console.error('Failed to delete custom tab', error);
     }
   };
 
@@ -116,7 +116,7 @@ const TabList = ({ onClose }: TabListProps) => {
     <div className="flex flex-col items-center justify-center max-w-[154px] bg-button-primary rounded-[7px] border border-button-hover">
       <div className="min-h-[39px] w-full border-b-[1px] border-button-hover flex flex-col items-center justify-center p-[8px] gap-[8px]">
         {customTabs.length === 0 ? (
-          <span className="text-style-2 text-[#DBDEE8]">{t("tabs.empty")}</span>
+          <span className="text-style-2 text-[#DBDEE8]">{t('tabs.empty')}</span>
         ) : (
           <div
             ref={scrollRef}
@@ -148,7 +148,7 @@ const TabList = ({ onClose }: TabListProps) => {
                   <button
                     key={tab.id}
                     className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-button-hover active:bg-button-active ${
-                      selectedKeyType === tab.id ? "bg-button-hover" : ""
+                      selectedKeyType === tab.id ? 'bg-button-hover' : ''
                     }`}
                     onClick={() => handleSelect(tab.id)}
                   >
@@ -172,8 +172,8 @@ const TabList = ({ onClose }: TabListProps) => {
           <button
             className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] ${
               isCustomSelected
-                ? "bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929]"
-                : "bg-button-hover opacity-50 cursor-not-allowed"
+                ? 'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929]'
+                : 'bg-button-hover opacity-50 cursor-not-allowed'
             }`}
             disabled={!isCustomSelected}
             onClick={() => setAskDelete(true)}
@@ -193,11 +193,11 @@ const TabList = ({ onClose }: TabListProps) => {
       <Alert
         isOpen={askDelete}
         type="confirm"
-        message={t("tabs.deleteConfirm", {
-          name: customTabs.find((t) => t.id === selectedKeyType)?.name || "",
+        message={t('tabs.deleteConfirm', {
+          name: customTabs.find((t) => t.id === selectedKeyType)?.name || '',
         })}
-        confirmText={t("tabs.delete")}
-        cancelText={t("common.cancel")}
+        confirmText={t('tabs.delete')}
+        cancelText={t('common.cancel')}
         showCancel
         onConfirm={async () => {
           setAskDelete(false);

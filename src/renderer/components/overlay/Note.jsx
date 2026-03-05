@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef } from "react";
+import React, { memo, useEffect, useRef } from 'react';
 
 export const Note = memo(
   ({ note, registerRef, noteColor, noteOpacity, borderRadius, className }) => {
@@ -20,28 +20,28 @@ export const Note = memo(
         : 2;
 
     const initialStyle = {
-      position: "absolute",
-      bottom: "0px",
-      left: "50%",
-      transform: "translateX(-50%) translateZ(0)",
-      width: "100%",
-      height: "0px",
-      backgroundColor: `var(--note-bg, ${noteColor || "#ffffff"})`,
+      position: 'absolute',
+      bottom: '0px',
+      left: '50%',
+      transform: 'translateX(-50%) translateZ(0)',
+      width: '100%',
+      height: '0px',
+      backgroundColor: `var(--note-bg, ${noteColor || '#ffffff'})`,
       borderRadius: `var(--note-radius, ${br}px)`,
       opacity: (noteOpacity || 80) / 100,
       zIndex: 10,
       // GPU 가속 설정
-      willChange: "height, bottom, opacity, border-radius",
-      backfaceVisibility: "hidden",
+      willChange: 'height, bottom, opacity, border-radius',
+      backfaceVisibility: 'hidden',
     };
 
     return (
       <div
         ref={noteRef}
         style={initialStyle}
-        className={className || ""}
+        className={className || ''}
         data-state="note"
       />
     );
-  }
+  },
 );

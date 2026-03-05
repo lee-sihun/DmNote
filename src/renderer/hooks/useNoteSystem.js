@@ -1,6 +1,6 @@
-import { useCallback, useRef, useEffect } from "react";
-import { DEFAULT_NOTE_SETTINGS } from "@constants/overlayConfig";
-import { createNoteBuffer } from "@stores/noteBuffer";
+import { useCallback, useRef, useEffect } from 'react';
+import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayConfig';
+import { createNoteBuffer } from '@stores/noteBuffer';
 
 const acquireNote = (pool) => {
   const note = pool.pop();
@@ -8,8 +8,8 @@ const acquireNote = (pool) => {
     return note;
   }
   return {
-    id: "",
-    keyName: "",
+    id: '',
+    keyName: '',
     startTime: 0,
     endTime: null,
     isActive: false,
@@ -17,8 +17,8 @@ const acquireNote = (pool) => {
 };
 
 const releaseNote = (note, pool) => {
-  note.id = "";
-  note.keyName = "";
+  note.id = '';
+  note.keyName = '';
   note.startTime = 0;
   note.endTime = null;
   note.isActive = false;
@@ -145,7 +145,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
 
     if (hasChanges && removedNoteIds.length > 0) {
       notifySubscribers({
-        type: "cleanup",
+        type: 'cleanup',
         note: { ids: removedNoteIds },
         activeCount: noteBufferRef.current.activeCount,
         version: noteBufferRef.current.version,
@@ -208,7 +208,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
         nextCleanupTimeRef.current = newCleanupTime;
       }
     },
-    [runCleanup]
+    [runCleanup],
   );
 
   const updateLabSettings = useCallback((settings) => {
@@ -241,7 +241,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       releaseAllNotes(
         notesRef.current,
         notePoolRef.current,
-        noteLookupRef.current
+        noteLookupRef.current,
       );
       noteLookupRef.current.clear();
       // activeNotes에 남아있는 타이머 정리
@@ -269,7 +269,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       finalizeTimersRef.current.clear();
       noteBufferRef.current.clear();
       notifySubscribers({
-        type: "clear",
+        type: 'clear',
         activeCount: 0,
         version: noteBufferRef.current.version,
       });
@@ -300,18 +300,18 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       const slot = noteBufferRef.current.allocate(keyName, noteId, startTime);
       if (slot >= 0) {
         notifySubscribers({
-          type: "add",
+          type: 'add',
           note: newNote,
           slot,
           activeCount: noteBufferRef.current.activeCount,
           version: noteBufferRef.current.version,
         });
       } else {
-        notifySubscribers({ type: "add", note: newNote });
+        notifySubscribers({ type: 'add', note: newNote });
       }
       return noteId;
     },
-    [notifySubscribers]
+    [notifySubscribers],
   );
 
   const finalizeNote = useCallback(
@@ -324,7 +324,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       note.isActive = false;
       const slot = noteBufferRef.current.finalize(noteId, endTime);
       notifySubscribers({
-        type: "finalize",
+        type: 'finalize',
         note,
         slot,
         activeCount: noteBufferRef.current.activeCount,
@@ -333,7 +333,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       // 이벤트 기반 클린업 스케줄링
       scheduleCleanup(note);
     },
-    [notifySubscribers, scheduleCleanup]
+    [notifySubscribers, scheduleCleanup],
   );
 
   const removeState = useCallback((keyName, state) => {
@@ -397,7 +397,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       state.finalizeTimer = timer;
       finalizeTimersRef.current.set(state.noteId, timer);
     },
-    [computeMinLengthMs, finalizeNote, removeState]
+    [computeMinLengthMs, finalizeNote, removeState],
   );
 
   // 노트 생성/완료
@@ -471,7 +471,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
         startTime: noteStartTime,
       });
     },
-    [createNote, removeState, scheduleNoteFinalization]
+    [createNote, removeState, scheduleNoteFinalization],
   );
 
   const handleKeyUp = useCallback(
@@ -513,7 +513,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
         scheduleNoteFinalization(keyName, state);
       }
     },
-    [finalizeNote, removeState, scheduleNoteFinalization]
+    [finalizeNote, removeState, scheduleNoteFinalization],
   );
 
   // 화면 밖으로 나간 노트 제거 - 언마운트 시 타이머 정리
@@ -548,7 +548,7 @@ export function useNoteSystem({ noteEffect, noteSettings }) {
       releaseAllNotes(
         notesRef.current,
         notePoolRef.current,
-        noteLookupRef.current
+        noteLookupRef.current,
       );
       noteLookupRef.current.clear();
       noteBufferRef.current.clear();

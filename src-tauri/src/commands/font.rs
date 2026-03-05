@@ -54,8 +54,7 @@ pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
         .app_data_dir()
         .map_err(|e| format!("앱 데이터 디렉토리 확인 실패: {e}"))?;
     let fonts_dir = data_dir.join("fonts");
-    fs::create_dir_all(&fonts_dir)
-        .map_err(|e| format!("폰트 디렉토리 생성 실패: {e}"))?;
+    fs::create_dir_all(&fonts_dir).map_err(|e| format!("폰트 디렉토리 생성 실패: {e}"))?;
 
     let dest_path = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
     fs::copy(&path, &dest_path).map_err(|e| format!("폰트 파일 복사 실패: {e}"))?;

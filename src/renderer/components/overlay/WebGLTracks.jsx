@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef } from "react";
+import React, { memo, useEffect, useRef } from 'react';
 import {
   Color,
   WebGLRenderer,
@@ -12,13 +12,13 @@ import {
   NormalBlending,
   Vector2,
   SRGBColorSpace,
-} from "three";
-import { animationScheduler } from "../../utils/animationScheduler";
-import { resolvedFadeValues } from "../../../types/noteSettings";
+} from 'three';
+import { animationScheduler } from '../../utils/animationScheduler';
+import { resolvedFadeValues } from '../../../types/noteSettings';
 
 const MAX_NOTES = 2048; // 씬에서 동시에 렌더링할 수 있는 최대 노트 수
 
-const extractColorStops = (color, fallback = "#FFFFFF") => {
+const extractColorStops = (color, fallback = '#FFFFFF') => {
   if (!color) {
     return {
       top: new Color(fallback),
@@ -26,11 +26,11 @@ const extractColorStops = (color, fallback = "#FFFFFF") => {
       isGradient: false,
     };
   }
-  if (typeof color === "string") {
+  if (typeof color === 'string') {
     const solid = new Color(color);
     return { top: solid, bottom: solid.clone(), isGradient: false };
   }
-  if (typeof color === "object" && color.type === "gradient") {
+  if (typeof color === 'object' && color.type === 'gradient') {
     return {
       top: new Color(color.top ?? fallback),
       bottom: new Color(color.bottom ?? fallback),
@@ -301,7 +301,7 @@ export const WebGLTracks = memo(
         canvas,
         alpha: true,
         antialias: true,
-        powerPreference: "high-performance",
+        powerPreference: 'high-performance',
       });
       renderer.outputColorSpace = SRGBColorSpace;
       renderer.sortObjects = true; // 투명 객체 정렬 활성화
@@ -319,7 +319,7 @@ export const WebGLTracks = memo(
         window.innerHeight,
         0,
         1,
-        1000
+        1000,
       );
       camera.position.z = 5;
       cameraRef.current = camera;
@@ -375,21 +375,21 @@ export const WebGLTracks = memo(
         const noteSizeAttr = new InstancedBufferAttribute(noteSizeArray, 2);
         const noteColorAttrTop = new InstancedBufferAttribute(
           noteColorArrayTop,
-          4
+          4,
         );
         const noteColorAttrBottom = new InstancedBufferAttribute(
           noteColorArrayBottom,
-          4
+          4,
         );
         const noteRadiusAttr = new InstancedBufferAttribute(noteRadiusArray, 1);
         const trackIndexAttr = new InstancedBufferAttribute(trackIndexArray, 1);
 
-        mesh.geometry.setAttribute("noteInfo", noteInfoAttr);
-        mesh.geometry.setAttribute("noteSize", noteSizeAttr);
-        mesh.geometry.setAttribute("noteColorTop", noteColorAttrTop);
-        mesh.geometry.setAttribute("noteColorBottom", noteColorAttrBottom);
-        mesh.geometry.setAttribute("noteRadius", noteRadiusAttr);
-        mesh.geometry.setAttribute("trackIndex", trackIndexAttr);
+        mesh.geometry.setAttribute('noteInfo', noteInfoAttr);
+        mesh.geometry.setAttribute('noteSize', noteSizeAttr);
+        mesh.geometry.setAttribute('noteColorTop', noteColorAttrTop);
+        mesh.geometry.setAttribute('noteColorBottom', noteColorAttrBottom);
+        mesh.geometry.setAttribute('noteRadius', noteRadiusAttr);
+        mesh.geometry.setAttribute('trackIndex', trackIndexAttr);
 
         attributesMapRef.current.set(track.trackKey, {
           noteInfoArray,
@@ -442,7 +442,7 @@ export const WebGLTracks = memo(
 
         const totalNotes = Object.values(notesRef.current).reduce(
           (sum, notes) => sum + notes.length,
-          0
+          0,
         );
         if (totalNotes === 0) {
           for (const { mesh } of meshMapRef.current.values()) {
@@ -464,7 +464,7 @@ export const WebGLTracks = memo(
 
         const { type, note } = event;
 
-        if (type === "clear") {
+        if (type === 'clear') {
           // 모든 노트 클리어
           for (const [, entry] of meshMapRef.current) {
             entry.noteIndexMap.clear();
@@ -480,7 +480,7 @@ export const WebGLTracks = memo(
             requestAnimationFrame(() => {
               if (!rendererRef.current) return;
               const { width, height } = rendererRef.current.getSize(
-                new Vector2()
+                new Vector2(),
               );
               rendererRef.current.setScissor(0, 0, width, height);
               rendererRef.current.clear();
@@ -491,7 +491,7 @@ export const WebGLTracks = memo(
 
         if (!note) return;
 
-        if (type === "add") {
+        if (type === 'add') {
           const track = trackMapRef.current.get(note.keyName);
           if (!track) return;
 
@@ -513,9 +513,9 @@ export const WebGLTracks = memo(
               ? Math.min(Math.max(track.noteOpacity / 100, 0), 1)
               : 0.8;
           const colorKey =
-            track.noteColor && typeof track.noteColor === "object"
+            track.noteColor && typeof track.noteColor === 'object'
               ? JSON.stringify(track.noteColor)
-              : track.noteColor ?? "";
+              : (track.noteColor ?? '');
           const cacheKey = `${colorKey}|${opacity}`;
           let colorData = colorCacheRef.current.get(cacheKey);
           if (!colorData) {
@@ -537,7 +537,7 @@ export const WebGLTracks = memo(
 
           attrs.noteInfoArray.set(
             [note.startTime, 0, track.position.dx],
-            base3
+            base3,
           );
           attrs.noteSizeArray.set([track.width, track.position.dy], base2);
           attrs.noteColorArrayTop.set(colorData.top, base4);
@@ -553,7 +553,7 @@ export const WebGLTracks = memo(
           attrs.trackIndexAttr.needsUpdate = true;
 
           mesh.count = Math.max(mesh.count, index + 1);
-        } else if (type === "finalize") {
+        } else if (type === 'finalize') {
           const trackKey = noteTrackMapRef.current.get(note.id);
           if (!trackKey) return;
 
@@ -570,7 +570,7 @@ export const WebGLTracks = memo(
           // endTime만 업데이트
           attrs.noteInfoArray.set([note.endTime], base3 + 1);
           attrs.noteInfoAttr.needsUpdate = true;
-        } else if (type === "cleanup") {
+        } else if (type === 'cleanup') {
           // useNoteSystem에서 전달된 제거할 노트들 처리
           for (const noteId of note.ids) {
             const trackKey = noteTrackMapRef.current.get(noteId);
@@ -609,7 +609,7 @@ export const WebGLTracks = memo(
             requestAnimationFrame(() => {
               if (!rendererRef.current) return;
               const { width, height } = rendererRef.current.getSize(
-                new Vector2()
+                new Vector2(),
               );
               rendererRef.current.setScissor(0, 0, width, height);
               rendererRef.current.clear();
@@ -631,12 +631,12 @@ export const WebGLTracks = memo(
         for (const [, entry] of meshMapRef.current) {
           sceneRef.current?.remove(entry.mesh);
           try {
-            entry.mesh.geometry.deleteAttribute?.("noteInfo");
-            entry.mesh.geometry.deleteAttribute?.("noteSize");
-            entry.mesh.geometry.deleteAttribute?.("noteColorTop");
-            entry.mesh.geometry.deleteAttribute?.("noteColorBottom");
-            entry.mesh.geometry.deleteAttribute?.("noteRadius");
-            entry.mesh.geometry.deleteAttribute?.("trackIndex");
+            entry.mesh.geometry.deleteAttribute?.('noteInfo');
+            entry.mesh.geometry.deleteAttribute?.('noteSize');
+            entry.mesh.geometry.deleteAttribute?.('noteColorTop');
+            entry.mesh.geometry.deleteAttribute?.('noteColorBottom');
+            entry.mesh.geometry.deleteAttribute?.('noteRadius');
+            entry.mesh.geometry.deleteAttribute?.('trackIndex');
           } catch {}
           entry.mesh.dispose();
         }
@@ -720,11 +720,11 @@ export const WebGLTracks = memo(
         }
       };
 
-      window.addEventListener("resize", handleResize);
+      window.addEventListener('resize', handleResize);
       handleResize();
 
       return () => {
-        window.removeEventListener("resize", handleResize);
+        window.removeEventListener('resize', handleResize);
       };
     }, []);
 
@@ -732,14 +732,14 @@ export const WebGLTracks = memo(
       <canvas
         ref={canvasRef}
         style={{
-          position: "absolute",
+          position: 'absolute',
           top: 0,
           left: 0,
-          width: "100%",
-          height: "100%",
-          pointerEvents: "none",
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
         }}
       />
     );
-  }
+  },
 );

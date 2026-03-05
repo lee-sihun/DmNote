@@ -3,14 +3,14 @@ import React, {
   useEffect,
   useImperativeHandle,
   forwardRef,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 import type {
   KeyTabState,
   KeyPreviewData,
-} from "@hooks/Modal/useUnifiedKeySettingState";
+} from '@hooks/Modal/useUnifiedKeySettingState';
 
 // ============================================================================
 // 타입 정의
@@ -19,7 +19,7 @@ import type {
 interface KeyTabContentProps {
   state: KeyTabState;
   setState: React.Dispatch<React.SetStateAction<KeyTabState>>;
-  onPreview: (updates: Omit<KeyPreviewData, "type">) => void;
+  onPreview: (updates: Omit<KeyPreviewData, 'type'>) => void;
 }
 
 export interface KeyTabContentRef {
@@ -106,30 +106,30 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       };
 
       // 캡처 단계에서 모든 키보드/마우스 이벤트 차단
-      window.addEventListener("keydown", blockKeyboardEvents, true);
-      window.addEventListener("keyup", blockKeyboardEvents, true);
-      window.addEventListener("keypress", blockKeyboardEvents, true);
-      window.addEventListener("mousedown", blockMouseEvents, true);
-      window.addEventListener("contextmenu", blockContextMenu, true);
+      window.addEventListener('keydown', blockKeyboardEvents, true);
+      window.addEventListener('keyup', blockKeyboardEvents, true);
+      window.addEventListener('keypress', blockKeyboardEvents, true);
+      window.addEventListener('mousedown', blockMouseEvents, true);
+      window.addEventListener('contextmenu', blockContextMenu, true);
 
       return () => {
-        window.removeEventListener("keydown", blockKeyboardEvents, true);
-        window.removeEventListener("keyup", blockKeyboardEvents, true);
-        window.removeEventListener("keypress", blockKeyboardEvents, true);
-        window.removeEventListener("mousedown", blockMouseEvents, true);
-        window.removeEventListener("contextmenu", blockContextMenu, true);
+        window.removeEventListener('keydown', blockKeyboardEvents, true);
+        window.removeEventListener('keyup', blockKeyboardEvents, true);
+        window.removeEventListener('keypress', blockKeyboardEvents, true);
+        window.removeEventListener('mousedown', blockMouseEvents, true);
+        window.removeEventListener('contextmenu', blockContextMenu, true);
       };
     }, [state.isListening]);
 
     // 키 리스닝 effect
     useEffect(() => {
       if (!state.isListening) return undefined;
-      if (typeof window === "undefined" || !window.api?.keys?.onRawInput) {
+      if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
         return undefined;
       }
 
       const unsubscribe = window.api.keys.onRawInput((payload: any) => {
-        if (!payload || payload.state !== "DOWN") return;
+        if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||
           (Array.isArray(payload.labels) ? payload.labels[0] : null);
@@ -155,7 +155,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         try {
           unsubscribe?.();
         } catch (error) {
-          console.error("Failed to unsubscribe raw input listener", error);
+          console.error('Failed to unsubscribe raw input listener', error);
         }
       };
     }, [state.isListening, setState]);
@@ -188,8 +188,8 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     const handleWidthChange = React.useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
-        if (newValue === "") {
-          setState((prev) => ({ ...prev, width: "" }));
+        if (newValue === '') {
+          setState((prev) => ({ ...prev, width: '' }));
         } else {
           const numValue = parseInt(newValue, 10);
           if (!Number.isNaN(numValue)) {
@@ -205,8 +205,8 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     const handleHeightChange = React.useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
-        if (newValue === "") {
-          setState((prev) => ({ ...prev, height: "" }));
+        if (newValue === '') {
+          setState((prev) => ({ ...prev, height: '' }));
         } else {
           const numValue = parseInt(newValue, 10);
           if (!Number.isNaN(numValue)) {
@@ -251,27 +251,27 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         {/* 키 매핑 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("keySetting.keyMapping")}
+            {t('keySetting.keyMapping')}
           </p>
           <button
             onClick={handleKeyListen}
             className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-              state.isListening ? "border-[#459BF8]" : "border-[#3A3943]"
+              state.isListening ? 'border-[#459BF8]' : 'border-[#3A3943]'
             } text-[#DBDEE8] text-style-2`}
           >
             {state.isListening
-              ? t("keySetting.pressAnyKey")
-              : state.displayKey || t("keySetting.clickToSet")}
+              ? t('keySetting.pressAnyKey')
+              : state.displayKey || t('keySetting.clickToSet')}
           </button>
         </div>
 
         {/* 키 사이즈 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("keySetting.keySize")}</p>
+          <p className="text-white text-style-2">{t('keySetting.keySize')}</p>
           <div className="flex items-center gap-[10.5px]">
             <div
               className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.widthFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+                state.widthFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
               }`}
             >
               <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
@@ -288,7 +288,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
                   setState((prev) => {
                     const val = e.target.value;
                     const finalVal =
-                      val === "" || Number.isNaN(parseInt(val, 10))
+                      val === '' || Number.isNaN(parseInt(val, 10))
                         ? 60
                         : parseInt(val, 10);
                     return { ...prev, width: finalVal, widthFocused: false };
@@ -299,7 +299,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
             </div>
             <div
               className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.heightFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+                state.heightFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
               }`}
             >
               <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
@@ -316,7 +316,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
                   setState((prev) => {
                     const val = e.target.value;
                     const finalVal =
-                      val === "" || Number.isNaN(parseInt(val, 10))
+                      val === '' || Number.isNaN(parseInt(val, 10))
                         ? 60
                         : parseInt(val, 10);
                     return { ...prev, height: finalVal, heightFocused: false };
@@ -331,13 +331,13 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         {/* 커스텀 이미지 */}
         <div className="flex justify-between w-full items-center">
           <p className="text-white text-style-2">
-            {t("keySetting.customImage")}
+            {t('keySetting.customImage')}
           </p>
           <button
             ref={imageButtonRef}
             type="button"
             className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showImagePicker ? "border-[#459BF8]" : "border-[#3A3943]"
+              state.showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
             } text-[#DBDEE8] text-style-4`}
             onClick={() =>
               setState((prev) => ({
@@ -346,7 +346,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
               }))
             }
           >
-            {t("keySetting.configure")}
+            {t('keySetting.configure')}
           </button>
         </div>
 
@@ -354,7 +354,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         {useCustomCSS && (
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.className")}
+              {t('keySetting.className')}
             </p>
             <input
               type="text"

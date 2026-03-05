@@ -1,13 +1,13 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import FloatingPopup from "./FloatingPopup";
-import { useLenis } from "@hooks/useLenis";
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import FloatingPopup from './FloatingPopup';
+import { useLenis } from '@hooks/useLenis';
 
 export type ListItem = {
   id: string;
   label: string;
   disabled?: boolean;
   /** 구분선 항목 */
-  type?: "item" | "separator";
+  type?: 'item' | 'separator';
   /** 토글 항목의 체크 상태 */
   checked?: boolean;
   /** 서브메뉴 항목 */
@@ -27,7 +27,7 @@ type ListPopupProps = {
   offsetX?: number;
   offsetY?: number;
   /** 텍스트 정렬 방향 */
-  textAlign?: "left" | "center";
+  textAlign?: 'left' | 'center';
   /** 최대 표시 항목 수 (초과 시 스크롤) */
   maxVisibleItems?: number;
 };
@@ -37,19 +37,22 @@ const SubMenu = ({
   items,
   onSelect,
   onCloseAll,
-  textAlign = "left",
+  textAlign = 'left',
   maxVisibleItems,
   anchorRect,
 }: {
   items: ListItem[];
   onSelect?: (id: string) => void;
   onCloseAll?: () => void;
-  textAlign?: "left" | "center";
+  textAlign?: 'left' | 'center';
   maxVisibleItems?: number;
   anchorRect: DOMRect | null;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
-  const siblingActiveRef = useRef<{ id: string | null; close: (() => void) | null }>({ id: null, close: null });
+  const siblingActiveRef = useRef<{
+    id: string | null;
+    close: (() => void) | null;
+  }>({ id: null, close: null });
   const [pos, setPos] = useState<{
     left?: number;
     right?: number;
@@ -64,7 +67,7 @@ const SubMenu = ({
     let top = anchorRect.top;
 
     // 서브메뉴의 대략적인 높이 추정
-    const separatorCount = items.filter((i) => i.type === "separator").length;
+    const separatorCount = items.filter((i) => i.type === 'separator').length;
     const itemCount = items.length - separatorCount;
     const estimatedHeight = itemCount * 28 + separatorCount * 9 + 10;
     const estimatedWidth = 160;
@@ -89,7 +92,7 @@ const SubMenu = ({
   if (!pos) return null;
 
   const itemHeight = 28;
-  const separatorCount = items.filter((i) => i.type === "separator").length;
+  const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const effectiveMax = maxVisibleItems ?? normalItemCount;
   const needsScroll = normalItemCount > effectiveMax;
@@ -109,13 +112,13 @@ const SubMenu = ({
           node;
         if (needsScroll) subLenisRef(node);
       }}
-      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${needsScroll ? " listpopup-scroll" : ""}`}
+      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${needsScroll ? ' listpopup-scroll' : ''}`}
       style={{
         left: pos.left,
         right: pos.right,
         top: pos.top,
         ...(maxHeight
-          ? { maxHeight, overflowY: "auto", overflowX: "hidden" }
+          ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
           : {}),
       }}
     >
@@ -142,11 +145,14 @@ const MenuItemRow = ({
   siblingActiveRef,
 }: {
   item: ListItem;
-  textAlign: "left" | "center";
+  textAlign: 'left' | 'center';
   onSelect?: (id: string) => void;
   onCloseAll?: () => void;
   /** 형제 항목 중 활성 서브메뉴를 추적하는 ref (즉시 전환용) */
-  siblingActiveRef?: React.RefObject<{ id: string | null; close: (() => void) | null }>;
+  siblingActiveRef?: React.RefObject<{
+    id: string | null;
+    close: (() => void) | null;
+  }>;
 }) => {
   const [subMenuOpen, setSubMenuOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
@@ -173,7 +179,10 @@ const MenuItemRow = ({
       }
       setSubMenuOpen(true);
       if (siblingActiveRef) {
-        siblingActiveRef.current = { id: item.id, close: () => setSubMenuOpen(false) };
+        siblingActiveRef.current = {
+          id: item.id,
+          close: () => setSubMenuOpen(false),
+        };
       }
     }, delay);
   }, [hasChildren, siblingActiveRef, item.id]);
@@ -195,7 +204,7 @@ const MenuItemRow = ({
   }, []);
 
   // 구분선 (부모 p-[5px] 패딩을 무시하고 전체 폭 사용)
-  if (item.type === "separator") {
+  if (item.type === 'separator') {
     return (
       <div className="-mx-[5px] py-[3px]">
         <div className="h-[1px] bg-[#3A3D4A]" />
@@ -203,8 +212,8 @@ const MenuItemRow = ({
     );
   }
 
-  const isLeft = textAlign === "left";
-  const hasCheck = typeof item.checked === "boolean";
+  const isLeft = textAlign === 'left';
+  const hasCheck = typeof item.checked === 'boolean';
   const isBasicCenterItem = !isLeft && !hasCheck && !hasChildren;
 
   const handleSelect = () => {
@@ -221,13 +230,13 @@ const MenuItemRow = ({
         onClick={handleSelect}
         className={`w-full min-w-[108px] h-[24px] px-[24px] rounded-[7px] flex items-center justify-center ${
           item.disabled
-            ? "opacity-70"
-            : "hover:bg-button-hover active:bg-button-active cursor-pointer"
+            ? 'opacity-70'
+            : 'hover:bg-button-hover active:bg-button-active cursor-pointer'
         }`}
       >
         <span
           className={`text-style-2 whitespace-nowrap ${
-            item.disabled ? "text-[#6B6E7B]" : "text-[#DBDEE8]"
+            item.disabled ? 'text-[#6B6E7B]' : 'text-[#DBDEE8]'
           }`}
         >
           {item.label}
@@ -249,8 +258,8 @@ const MenuItemRow = ({
         onClick={handleSelect}
         className={`w-full min-w-[140px] h-[28px] px-[6px] rounded-[5px] flex items-center gap-[4px] ${
           item.disabled
-            ? "opacity-70"
-            : "hover:bg-button-hover active:bg-button-active cursor-pointer"
+            ? 'opacity-70'
+            : 'hover:bg-button-hover active:bg-button-active cursor-pointer'
         }`}
       >
         {/* 좌측 체크 영역 (고정 너비) */}
@@ -277,8 +286,8 @@ const MenuItemRow = ({
         {/* 라벨 텍스트 */}
         <span
           className={`flex-1 text-style-2 whitespace-nowrap ${
-            isLeft ? "text-left" : "text-center"
-          } ${item.disabled ? "text-[#6B6E7B]" : "text-[#DBDEE8]"}`}
+            isLeft ? 'text-left' : 'text-center'
+          } ${item.disabled ? 'text-[#6B6E7B]' : 'text-[#DBDEE8]'}`}
         >
           {item.label}
         </span>
@@ -327,19 +336,19 @@ const ListPopup = ({
   onClose,
   items,
   onSelect,
-  className = "",
+  className = '',
   offsetX = 0,
   offsetY = 0,
-  textAlign = "center",
+  textAlign = 'center',
   maxVisibleItems,
 }: ListPopupProps) => {
   const defaultClassName =
-    "z-30 bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px]";
+    'z-30 bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산
   const itemHeight = 28;
-  const separatorCount = items.filter((i) => i.type === "separator").length;
+  const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const needsScroll =
     maxVisibleItems != null && normalItemCount > maxVisibleItems;
@@ -347,7 +356,10 @@ const ListPopup = ({
     ? maxVisibleItems * itemHeight + separatorCount * 9 + 10
     : undefined;
 
-  const siblingActiveRef = useRef<{ id: string | null; close: (() => void) | null }>({ id: null, close: null });
+  const siblingActiveRef = useRef<{
+    id: string | null;
+    close: (() => void) | null;
+  }>({ id: null, close: null });
 
   const { scrollContainerRef: lenisRef } = useLenis({
     duration: 0.5,
@@ -371,10 +383,10 @@ const ListPopup = ({
         ref={needsScroll ? lenisRef : undefined}
         style={
           maxHeight
-            ? { maxHeight, overflowY: "auto", overflowX: "hidden" }
+            ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
             : undefined
         }
-        className={`flex flex-col gap-[1px]${needsScroll ? " listpopup-scroll" : ""}`}
+        className={`flex flex-col gap-[1px]${needsScroll ? ' listpopup-scroll' : ''}`}
       >
         {items.map((it) => (
           <MenuItemRow

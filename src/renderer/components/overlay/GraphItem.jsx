@@ -1,7 +1,7 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { getStatValueSignal } from "@stores/statsSignals";
-import GraphPanel from "@components/graph/GraphPanel";
-import { resolveImageSource } from "@utils/imageSource";
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { getStatValueSignal } from '@stores/statsSignals';
+import GraphPanel from '@components/graph/GraphPanel';
+import { resolveImageSource } from '@utils/imageSource';
 
 const GRAPH_UPDATE_MS = 100;
 const GRAPH_TICK_MS = 50;
@@ -15,7 +15,7 @@ function normalizeGraphSpeed(speed) {
 function createInitialHistory(speed) {
   const targetSize = Math.max(
     1,
-    Math.ceil(normalizeGraphSpeed(speed) / GRAPH_UPDATE_MS)
+    Math.ceil(normalizeGraphSpeed(speed) / GRAPH_UPDATE_MS),
   );
   return new Array(targetSize).fill(0);
 }
@@ -24,10 +24,10 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
   if (!position || position.hidden) return null;
 
   const {
-    statType = "kps",
-    graphType = "line",
+    statType = 'kps',
+    graphType = 'line',
     graphSpeed = 1000,
-    graphColor = "#86EFAC",
+    graphColor = '#86EFAC',
     showAvgLine = true,
     graphAnimationEnabled = true,
     backgroundColor,
@@ -49,12 +49,14 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
   const statSignal = useMemo(() => getStatValueSignal(statType), [statType]);
   const imageSrc = useMemo(
     () =>
-      resolveImageSource(inactiveImage) || resolveImageSource(activeImage) || null,
-    [inactiveImage, activeImage]
+      resolveImageSource(inactiveImage) ||
+      resolveImageSource(activeImage) ||
+      null,
+    [inactiveImage, activeImage],
   );
-  const resolvedImageFit = idleImageFit || imageFit || "cover";
+  const resolvedImageFit = idleImageFit || imageFit || 'cover';
   const uidRef = useRef(
-    `graph-overlay-${Math.random().toString(36).slice(2, 11)}`
+    `graph-overlay-${Math.random().toString(36).slice(2, 11)}`,
   );
   const graphSpeedRef = useRef(normalizeGraphSpeed(graphSpeed));
   const historyBufferRef = useRef(createInitialHistory(graphSpeed));
@@ -107,7 +109,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }) {
 
       const targetSize = Math.max(
         1,
-        Math.ceil(graphSpeedRef.current / GRAPH_UPDATE_MS)
+        Math.ceil(graphSpeedRef.current / GRAPH_UPDATE_MS),
       );
       while (history.length > targetSize) history.shift();
       while (history.length < targetSize) history.unshift(0);

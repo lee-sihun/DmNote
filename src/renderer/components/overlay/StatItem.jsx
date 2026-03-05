@@ -1,13 +1,13 @@
-import React, { memo, useEffect, useMemo } from "react";
-import { useSignals } from "@preact/signals-react/runtime";
-import { getStatValueSignal } from "@stores/statsSignals";
+import React, { memo, useEffect, useMemo } from 'react';
+import { useSignals } from '@preact/signals-react/runtime';
+import { getStatValueSignal } from '@stores/statsSignals';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
-import { resolveImageSource } from "@utils/imageSource";
-import { warmupImageSource } from "@utils/imageWarmup";
-import CountDisplay from "@components/overlay/CountDisplay";
+} from '@src/types/keys';
+import { resolveImageSource } from '@utils/imageSource';
+import { warmupImageSource } from '@utils/imageWarmup';
+import CountDisplay from '@components/overlay/CountDisplay';
 
 export default memo(function StatItem({
   statType,
@@ -55,12 +55,12 @@ export default memo(function StatItem({
   } = position;
 
   const stateBackgroundColor = active
-    ? activeBackgroundColor ?? backgroundColor
+    ? (activeBackgroundColor ?? backgroundColor)
     : backgroundColor;
   const stateBorderColor = active
-    ? activeBorderColor ?? borderColor
+    ? (activeBorderColor ?? borderColor)
     : borderColor;
-  const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
+  const stateFontColor = active ? (activeFontColor ?? fontColor) : fontColor;
 
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
@@ -77,7 +77,7 @@ export default memo(function StatItem({
   }
 
   const useInline = useInlineStyles === true;
-  const labelText = displayText || label || "";
+  const labelText = displayText || label || '';
 
   // 활성 상태에서 activeImage가 없으면 inactiveImage를 fallback으로 사용
   const currentImageSrc =
@@ -85,8 +85,8 @@ export default memo(function StatItem({
   const hasCurrentImage = !!currentImageSrc;
   const isUsingActiveImage = active && !!activeImageSrc;
   const effectiveImageFit = isUsingActiveImage
-    ? activeImageFit || imageFit || "cover"
-    : idleImageFit || imageFit || "cover";
+    ? activeImageFit || imageFit || 'cover'
+    : idleImageFit || imageFit || 'cover';
 
   const counterSettings = useMemo(() => {
     if (counter) {
@@ -98,7 +98,7 @@ export default memo(function StatItem({
   const showInsideCounter =
     counterEnabled &&
     counterSettings.enabled &&
-    counterSettings.placement === "inside";
+    counterSettings.placement === 'inside';
 
   const counterValue = showInsideCounter
     ? (getStatValueSignal(statType).value ?? 0) | 0
@@ -106,15 +106,15 @@ export default memo(function StatItem({
 
   const keyStyle = useMemo(() => {
     const defaultBgColor = hasCurrentImage
-      ? "transparent"
+      ? 'transparent'
       : active
-      ? "rgba(121, 121, 121, 0.9)"
-      : "rgba(46, 46, 47, 0.9)";
+        ? 'rgba(121, 121, 121, 0.9)'
+        : 'rgba(46, 46, 47, 0.9)';
     const defaultBorderColor = active
-      ? "rgba(255, 255, 255, 0.9)"
-      : "rgba(113, 113, 113, 0.9)";
+      ? 'rgba(255, 255, 255, 0.9)'
+      : 'rgba(113, 113, 113, 0.9)';
     const defaultTextColor =
-      active && !activeImageSrc ? "#FFFFFF" : "rgba(121, 121, 121, 0.9)";
+      active && !activeImageSrc ? '#FFFFFF' : 'rgba(121, 121, 121, 0.9)';
 
     return {
       width: `${width}px`,
@@ -128,7 +128,7 @@ export default memo(function StatItem({
         useInline && borderRadius != null
           ? `${borderRadius}px`
           : `var(--key-radius, ${
-              borderRadius != null ? `${borderRadius}px` : "10px"
+              borderRadius != null ? `${borderRadius}px` : '10px'
             })`,
       border:
         useInline && (stateBorderColor || borderWidth != null)
@@ -141,16 +141,16 @@ export default memo(function StatItem({
           ? stateFontColor
           : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
       fontSize: fontSize ? `${fontSize}px` : undefined,
-      overflow: "hidden",
-      willChange: active ? "transform, background-color" : "transform",
-      backfaceVisibility: "hidden",
-      transformStyle: "preserve-3d",
-      contain: "layout style paint",
-      imageRendering: "auto",
-      isolation: "isolate",
-      boxSizing: "border-box",
+      overflow: 'hidden',
+      willChange: active ? 'transform, background-color' : 'transform',
+      backfaceVisibility: 'hidden',
+      transformStyle: 'preserve-3d',
+      contain: 'layout style paint',
+      imageRendering: 'auto',
+      isolation: 'isolate',
+      boxSizing: 'border-box',
       zIndex: position.zIndex,
-      cursor: "default",
+      cursor: 'default',
     };
   }, [
     active,
@@ -173,36 +173,36 @@ export default memo(function StatItem({
   const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
   const imageStyle = useMemo(
     () => ({
-      width: "100%",
-      height: "100%",
+      width: '100%',
+      height: '100%',
       objectFit: effectiveImageFit,
-      display: "block",
-      pointerEvents: "none",
-      userSelect: "none",
-      position: "relative",
+      display: 'block',
+      pointerEvents: 'none',
+      userSelect: 'none',
+      position: 'relative',
       zIndex: 0,
       // mask 오버레이 없이 필터만 적용해 페인트 비용을 줄임
-      filter: fallbackImageDimmed ? "brightness(0.62)" : "none",
+      filter: fallbackImageDimmed ? 'brightness(0.62)' : 'none',
     }),
     [effectiveImageFit, fallbackImageDimmed],
   );
 
   const textStyle = useMemo(() => {
     const textDecorations = [];
-    if (fontUnderline) textDecorations.push("underline");
-    if (fontStrikethrough) textDecorations.push("line-through");
+    if (fontUnderline) textDecorations.push('underline');
+    if (fontStrikethrough) textDecorations.push('line-through');
 
     return {
-      willChange: "auto",
-      contain: "layout style paint",
+      willChange: 'auto',
+      contain: 'layout style paint',
       fontSize: fontSize ? `${fontSize}px` : undefined,
       fontFamily: fontFamily
         ? `"${fontFamily}", "SUIT-Regular", sans-serif`
         : undefined,
       fontWeight: fontWeight ?? 700,
-      fontStyle: fontItalic ? "italic" : "normal",
+      fontStyle: fontItalic ? 'italic' : 'normal',
       textDecoration:
-        textDecorations.length > 0 ? textDecorations.join(" ") : "none",
+        textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
     };
   }, [
     fontSize,
@@ -259,33 +259,33 @@ export default memo(function StatItem({
     );
 
     const isHorizontal =
-      counterSettings.align === "left" || counterSettings.align === "right";
+      counterSettings.align === 'left' || counterSettings.align === 'right';
 
     const elements = isHorizontal
-      ? counterSettings.align === "left"
+      ? counterSettings.align === 'left'
         ? [counterElement, nameElement]
         : [nameElement, counterElement]
-      : counterSettings.align === "top"
-      ? [counterElement, nameElement]
-      : [nameElement, counterElement];
+      : counterSettings.align === 'top'
+        ? [counterElement, nameElement]
+        : [nameElement, counterElement];
 
-    const alignMode = counterSettings.alignMode || "center";
-    const isBetween = alignMode === "between";
+    const alignMode = counterSettings.alignMode || 'center';
+    const isBetween = alignMode === 'between';
     const containerClass = `flex ${
-      isHorizontal ? "" : "flex-col"
+      isHorizontal ? '' : 'flex-col'
     } w-full h-full items-center pointer-events-none select-none`;
 
     return (
       <div
         className={containerClass}
         style={{
-          justifyContent: isBetween ? "space-between" : "center",
+          justifyContent: isBetween ? 'space-between' : 'center',
           padding: isBetween
             ? isHorizontal
               ? `0 ${contentGap}px`
               : `${contentGap}px 0`
-            : "0px",
-          gap: isBetween ? "0px" : `${contentGap}px`,
+            : '0px',
+          gap: isBetween ? '0px' : `${contentGap}px`,
         }}
       >
         {elements}
@@ -295,12 +295,17 @@ export default memo(function StatItem({
 
   return (
     <div
-      className={`absolute ${className || ""}`}
+      className={`absolute ${className || ''}`}
       style={keyStyle}
-      data-state={active ? "active" : "inactive"}
+      data-state={active ? 'active' : 'inactive'}
     >
       {hasCurrentImage ? (
-        <img src={currentImageSrc} alt="" style={imageStyle} draggable={false} />
+        <img
+          src={currentImageSrc}
+          alt=""
+          style={imageStyle}
+          draggable={false}
+        />
       ) : showInsideCounter ? (
         renderInsideLayout()
       ) : (

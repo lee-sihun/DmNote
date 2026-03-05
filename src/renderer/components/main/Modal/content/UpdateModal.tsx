@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import Modal from "../Modal";
+import React, { useState } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import Modal from '../Modal';
 
 interface UpdateInfo {
   currentVersion: string;
@@ -48,7 +48,7 @@ export default function UpdateModal({
     try {
       await window.api.app.openExternal(updateInfo.releaseUrl);
     } catch (e) {
-      console.error("Failed to open release URL:", e);
+      console.error('Failed to open release URL:', e);
     }
   };
 
@@ -105,7 +105,7 @@ export default function UpdateModal({
               </div>
               <div>
                 <h2 className="text-[#FFFFFF] text-[14px] font-medium">
-                  {t("update.latestAlready")}
+                  {t('update.latestAlready')}
                 </h2>
               </div>
             </div>
@@ -114,7 +114,7 @@ export default function UpdateModal({
             <div className="bg-[#222127] rounded-[8px] p-[12px] mb-[16px] border-[1px] border-[#2F2E36]">
               <div className="flex justify-between items-center">
                 <span className="text-[#8A8A8A] text-[12px]">
-                  {t("update.currentVersion")}
+                  {t('update.currentVersion')}
                 </span>
                 <span className="text-[#61AF85] text-[12px] font-mono font-medium">
                   {updateInfo.currentVersion}
@@ -129,14 +129,14 @@ export default function UpdateModal({
                 className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46]
                            rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors"
               >
-                {t("update.goToRelease")}
+                {t('update.goToRelease')}
               </button>
               <button
                 onClick={onClose}
                 className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
                            rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
               >
-                {t("common.confirm")}
+                {t('common.confirm')}
               </button>
             </div>
           </>
@@ -168,7 +168,7 @@ export default function UpdateModal({
               </div>
               <div>
                 <h2 className="text-[#FFFFFF] text-[14px] font-medium">
-                  {t("update.title")}
+                  {t('update.title')}
                 </h2>
                 <p className="text-[#8A8A8A] text-[11px]">
                   {formatDate(updateInfo.publishedAt)}
@@ -180,7 +180,7 @@ export default function UpdateModal({
             <div className="bg-[#222127] rounded-[8px] p-[12px] mb-[16px] border-[1px] border-[#2F2E36]">
               <div className="flex justify-between items-center mb-[8px]">
                 <span className="text-[#8A8A8A] text-[12px]">
-                  {t("update.currentVersion")}
+                  {t('update.currentVersion')}
                 </span>
                 <span className="text-[#FFFFFF] text-[12px] font-mono">
                   {updateInfo.currentVersion}
@@ -188,7 +188,7 @@ export default function UpdateModal({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#8A8A8A] text-[12px]">
-                  {t("update.latestVersion")}
+                  {t('update.latestVersion')}
                 </span>
                 <span className="text-[#61AF85] text-[12px] font-mono font-medium">
                   {updateInfo.latestVersion}
@@ -211,7 +211,7 @@ export default function UpdateModal({
                            after:rotate-45 checked:after:block"
               />
               <span className="text-[#8A8A8A] text-[11px]">
-                {t("update.skipVersion")}
+                {t('update.skipVersion')}
               </span>
             </label>
 
@@ -224,14 +224,14 @@ export default function UpdateModal({
                            rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {primaryActionLabel || t("update.goToRelease")}
+                {primaryActionLabel || t('update.goToRelease')}
               </button>
               <button
                 onClick={handleClose}
                 className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
                            rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
               >
-                {t("update.later")}
+                {t('update.later')}
               </button>
             </div>
           </>

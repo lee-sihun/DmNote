@@ -17,8 +17,8 @@ fn load_hotkeys_from_env() -> ShortcutsState {
 use crate::{
     ipc::pipe_client_connect,
     keyboard_labels::{
-        build_key_labels, should_skip_keyboard_event, IsKeyboardEventInjected, KeyboardEvent,
-        KeyboardKey, KeyPress,
+        build_key_labels, should_skip_keyboard_event, IsKeyboardEventInjected, KeyPress,
+        KeyboardEvent, KeyboardKey,
     },
 };
 
@@ -40,7 +40,11 @@ struct HotkeyState {
 
 #[cfg(target_os = "windows")]
 impl HotkeyState {
-    fn new(toggle_overlay: ShortcutBinding, toggle_overlay_lock: ShortcutBinding, toggle_always_on_top: ShortcutBinding) -> Self {
+    fn new(
+        toggle_overlay: ShortcutBinding,
+        toggle_overlay_lock: ShortcutBinding,
+        toggle_always_on_top: ShortcutBinding,
+    ) -> Self {
         Self {
             ctrl_left: false,
             ctrl_right: false,
@@ -223,7 +227,11 @@ struct MacHotkeyState {
 
 #[cfg(target_os = "macos")]
 impl MacHotkeyState {
-    fn new(toggle_overlay: ShortcutBinding, toggle_overlay_lock: ShortcutBinding, toggle_always_on_top: ShortcutBinding) -> Self {
+    fn new(
+        toggle_overlay: ShortcutBinding,
+        toggle_overlay_lock: ShortcutBinding,
+        toggle_always_on_top: ShortcutBinding,
+    ) -> Self {
         let toggle_overlay_key = toggle_overlay.key.to_ascii_lowercase();
         let toggle_overlay_lock_key = toggle_overlay_lock.key.to_ascii_lowercase();
         let toggle_always_on_top_key = toggle_always_on_top.key.to_ascii_lowercase();
@@ -464,20 +472,14 @@ fn mac_mouse_label(button: rdev::Button) -> Option<String> {
     }
 }
 
-fn write_message(
-    sink: &mut Box<dyn Write + Send>,
-    message: &HookMessage,
-) -> Result<()> {
+fn write_message(sink: &mut Box<dyn Write + Send>, message: &HookMessage) -> Result<()> {
     let line = to_string(message)?;
     sink.write_all(line.as_bytes())?;
     sink.write_all(b"\n")?;
     Ok(())
 }
 
-fn write_command(
-    sink: &mut Box<dyn Write + Send>,
-    command: &DaemonCommand,
-) -> Result<()> {
+fn write_command(sink: &mut Box<dyn Write + Send>, command: &DaemonCommand) -> Result<()> {
     let line = to_string(command)?;
     sink.write_all(line.as_bytes())?;
     sink.write_all(b"\n")?;
@@ -497,7 +499,9 @@ pub fn run() -> Result<()> {
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        Err(anyhow!("Raw input backend is only available on Windows and macOS"))
+        Err(anyhow!(
+            "Raw input backend is only available on Windows and macOS"
+        ))
     }
 }
 
@@ -508,15 +512,16 @@ fn run_raw_input() -> Result<()> {
 
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{GetLastError, HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{MapVirtualKeyW, MAPVK_VSC_TO_VK_EX};
     use windows::Win32::UI::Input::{
         GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
-        RAWINPUTHEADER, RIDEV_INPUTSINK, RIDEV_NOLEGACY, RID_INPUT, RIM_TYPEKEYBOARD, RIM_TYPEMOUSE,
+        RAWINPUTHEADER, RIDEV_INPUTSINK, RIDEV_NOLEGACY, RID_INPUT, RIM_TYPEKEYBOARD,
+        RIM_TYPEMOUSE,
     };
-    use windows::Win32::UI::Input::KeyboardAndMouse::{MapVirtualKeyW, MAPVK_VSC_TO_VK_EX};
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassExW,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, MSG, WNDCLASSEXW, WM_DESTROY,
-        WM_INPUT, WM_QUIT, WS_OVERLAPPEDWINDOW, PostQuitMessage, RI_KEY_BREAK, RI_KEY_E0,
+        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostQuitMessage,
+        RegisterClassExW, TranslateMessage, CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, MSG,
+        RI_KEY_BREAK, RI_KEY_E0, WM_DESTROY, WM_INPUT, WM_QUIT, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
     };
 
     // Try to connect to named pipe; fall back to stdout if unavailable
@@ -566,7 +571,10 @@ fn run_raw_input() -> Result<()> {
 
     unsafe {
         // Register a minimal window class for receiving WM_INPUT.
-        let class_name: Vec<u16> = "DmNoteRawInput".encode_utf16().chain(std::iter::once(0)).collect();
+        let class_name: Vec<u16> = "DmNoteRawInput"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         use windows::Win32::System::LibraryLoader::GetModuleHandleW;
         let hinstance = GetModuleHandleW(None)?;
 
@@ -675,7 +683,8 @@ fn run_raw_input() -> Result<()> {
                         // match expected labels. Prefer scancode-based recovery for fake keys.
                         let mut vk_norm = vkey;
                         if vk_norm == 0 || vk_norm == 0xFF {
-                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                            let mapped =
+                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
                             if mapped != 0 {
                                 vk_norm = mapped;
                             } else {
@@ -698,7 +707,8 @@ fn run_raw_input() -> Result<()> {
                         const VK_RMENU: u32 = 0xA5;
 
                         if vk_norm == VK_SHIFT {
-                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                            let mapped =
+                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
                             match mapped {
                                 VK_LSHIFT | VK_RSHIFT => vk_norm = mapped,
                                 _ => match scan_code {
@@ -878,7 +888,11 @@ fn run_macos() -> Result<()> {
     let max_retries = 5;
     for attempt in 0..max_retries {
         if attempt > 0 {
-            eprintln!("rdev::listen 재시도 ({}/{}), 2초 후 시도...", attempt + 1, max_retries);
+            eprintln!(
+                "rdev::listen 재시도 ({}/{}), 2초 후 시도...",
+                attempt + 1,
+                max_retries
+            );
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
@@ -909,80 +923,78 @@ fn run_macos_listen() -> Result<()> {
         hotkeys.toggle_always_on_top,
     );
 
-    let callback = move |event: rdev::Event| {
-        match event.event_type {
-            EventType::KeyPress(key) => {
-                let key_name = format!("{:?}", key).to_ascii_lowercase();
-                if let Some(command) = hotkey_state.update(&key_name, true) {
-                    let _ = write_command(&mut sink, &command);
-                }
-
-                let labels = mac_key_labels(key, event.name.as_deref());
-                if labels.is_empty() {
-                    return;
-                }
-
-                let message = HookMessage {
-                    device: InputDeviceKind::Keyboard,
-                    labels,
-                    state: HookKeyState::Down,
-                    vk_code: None,
-                    scan_code: None,
-                    flags: None,
-                };
-                let _ = write_message(&mut sink, &message);
+    let callback = move |event: rdev::Event| match event.event_type {
+        EventType::KeyPress(key) => {
+            let key_name = format!("{:?}", key).to_ascii_lowercase();
+            if let Some(command) = hotkey_state.update(&key_name, true) {
+                let _ = write_command(&mut sink, &command);
             }
-            EventType::KeyRelease(key) => {
-                let key_name = format!("{:?}", key).to_ascii_lowercase();
-                let _ = hotkey_state.update(&key_name, false);
 
-                let labels = mac_key_labels(key, event.name.as_deref());
-                if labels.is_empty() {
-                    return;
-                }
+            let labels = mac_key_labels(key, event.name.as_deref());
+            if labels.is_empty() {
+                return;
+            }
 
-                let message = HookMessage {
-                    device: InputDeviceKind::Keyboard,
-                    labels,
-                    state: HookKeyState::Up,
-                    vk_code: None,
-                    scan_code: None,
-                    flags: None,
-                };
-                let _ = write_message(&mut sink, &message);
-            }
-            EventType::ButtonPress(button) => {
-                if let Some(label) = mac_mouse_label(button) {
-                    let _ = write_message(
-                        &mut sink,
-                        &HookMessage {
-                            device: InputDeviceKind::Mouse,
-                            labels: vec![label],
-                            state: HookKeyState::Down,
-                            vk_code: None,
-                            scan_code: None,
-                            flags: None,
-                        },
-                    );
-                }
-            }
-            EventType::ButtonRelease(button) => {
-                if let Some(label) = mac_mouse_label(button) {
-                    let _ = write_message(
-                        &mut sink,
-                        &HookMessage {
-                            device: InputDeviceKind::Mouse,
-                            labels: vec![label],
-                            state: HookKeyState::Up,
-                            vk_code: None,
-                            scan_code: None,
-                            flags: None,
-                        },
-                    );
-                }
-            }
-            _ => {}
+            let message = HookMessage {
+                device: InputDeviceKind::Keyboard,
+                labels,
+                state: HookKeyState::Down,
+                vk_code: None,
+                scan_code: None,
+                flags: None,
+            };
+            let _ = write_message(&mut sink, &message);
         }
+        EventType::KeyRelease(key) => {
+            let key_name = format!("{:?}", key).to_ascii_lowercase();
+            let _ = hotkey_state.update(&key_name, false);
+
+            let labels = mac_key_labels(key, event.name.as_deref());
+            if labels.is_empty() {
+                return;
+            }
+
+            let message = HookMessage {
+                device: InputDeviceKind::Keyboard,
+                labels,
+                state: HookKeyState::Up,
+                vk_code: None,
+                scan_code: None,
+                flags: None,
+            };
+            let _ = write_message(&mut sink, &message);
+        }
+        EventType::ButtonPress(button) => {
+            if let Some(label) = mac_mouse_label(button) {
+                let _ = write_message(
+                    &mut sink,
+                    &HookMessage {
+                        device: InputDeviceKind::Mouse,
+                        labels: vec![label],
+                        state: HookKeyState::Down,
+                        vk_code: None,
+                        scan_code: None,
+                        flags: None,
+                    },
+                );
+            }
+        }
+        EventType::ButtonRelease(button) => {
+            if let Some(label) = mac_mouse_label(button) {
+                let _ = write_message(
+                    &mut sink,
+                    &HookMessage {
+                        device: InputDeviceKind::Mouse,
+                        labels: vec![label],
+                        state: HookKeyState::Up,
+                        vk_code: None,
+                        scan_code: None,
+                        flags: None,
+                    },
+                );
+            }
+        }
+        _ => {}
     };
 
     listen(callback).map_err(|err| anyhow!("macOS input listener failed: {err:?}"))?;
@@ -999,5 +1011,3 @@ fn check_accessibility_permission() -> bool {
     }
     unsafe { AXIsProcessTrusted() }
 }
-
-

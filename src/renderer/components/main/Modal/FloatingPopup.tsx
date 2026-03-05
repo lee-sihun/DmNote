@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   useFloating,
   offset as fuiOffset,
   shift,
   flip,
   autoUpdate,
-} from "@floating-ui/react";
+} from '@floating-ui/react';
 
 type FloatingPopupProps = {
   open: boolean;
@@ -28,7 +28,7 @@ type FloatingPopupProps = {
 const FloatingPopup = ({
   open,
   referenceRef,
-  placement = "top",
+  placement = 'top',
   offset = 20,
   offsetX = 0,
   offsetY = 0,
@@ -36,7 +36,7 @@ const FloatingPopup = ({
   fixedY,
   interactiveRefs = [],
   onClose,
-  className = "",
+  className = '',
   children,
   autoClose = true,
   closeOnScroll = false,
@@ -61,7 +61,7 @@ const FloatingPopup = ({
   useEffect(() => {
     if (open && autoClose) {
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") onClose?.();
+        if (e.key === 'Escape') onClose?.();
       };
 
       const onClickAway = (e: MouseEvent) => {
@@ -83,11 +83,11 @@ const FloatingPopup = ({
         onClose?.();
       };
 
-      document.addEventListener("keydown", onKey);
-      document.addEventListener("mousedown", onClickAway);
+      document.addEventListener('keydown', onKey);
+      document.addEventListener('mousedown', onClickAway);
       return () => {
-        document.removeEventListener("keydown", onKey);
-        document.removeEventListener("mousedown", onClickAway);
+        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('mousedown', onClickAway);
       };
     }
   }, [open, autoClose, onClose, referenceRef, refs.floating]);
@@ -105,10 +105,10 @@ const FloatingPopup = ({
     };
 
     // 캡처 단계에서 모든 스크롤 이벤트 감지
-    document.addEventListener("scroll", handleScroll, true);
+    document.addEventListener('scroll', handleScroll, true);
 
     return () => {
-      document.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener('scroll', handleScroll, true);
     };
   }, [open, closeOnScroll, onClose]);
 
@@ -117,8 +117,8 @@ const FloatingPopup = ({
     if (
       !open ||
       !floatingRef.current ||
-      typeof fixedX !== "number" ||
-      typeof fixedY !== "number"
+      typeof fixedX !== 'number' ||
+      typeof fixedY !== 'number'
     ) {
       setAdjustedPos(null);
       return;
@@ -188,13 +188,13 @@ const FloatingPopup = ({
       const isInsideModal =
         target instanceof Element &&
         !!target.closest('[data-dmn-modal-backdrop="true"]');
-      
+
       if (!floatingEl) return;
 
       const isInsideFloating = floatingEl.contains(target);
       const isInsideReference = referenceEl?.contains(target) ?? false;
       const isInsideInteractive = interactiveEls.some((el) =>
-        el.contains(target as Node)
+        el.contains(target as Node),
       );
 
       if (isInsideFloating) {
@@ -204,7 +204,7 @@ const FloatingPopup = ({
 
       if (
         pointerCapturedInside &&
-        (event.type === "pointerdown" || event.type === "mousedown")
+        (event.type === 'pointerdown' || event.type === 'mousedown')
       ) {
         pointerCapturedInside = false;
       }
@@ -229,20 +229,20 @@ const FloatingPopup = ({
     };
 
     // 이벤트 리스너는 document에만 등록 (floatingEl은 동적으로 참조)
-    document.addEventListener("pointerup", handlePointerUp, true);
-    document.addEventListener("pointerdown", handleDocumentDown, true);
-    document.addEventListener("mousedown", handleDocumentDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointerdown', handleDocumentDown, true);
+    document.addEventListener('mousedown', handleDocumentDown, true);
 
     return () => {
-      document.removeEventListener("pointerup", handlePointerUp, true);
-      document.removeEventListener("pointerdown", handleDocumentDown, true);
-      document.removeEventListener("mousedown", handleDocumentDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointerdown', handleDocumentDown, true);
+      document.removeEventListener('mousedown', handleDocumentDown, true);
     };
   }, [open, autoClose, onClose, referenceRef, interactiveRefs]);
 
   if (!open) return null;
 
-  const isFixed = typeof fixedX === "number" && typeof fixedY === "number";
+  const isFixed = typeof fixedX === 'number' && typeof fixedY === 'number';
 
   // 고정 좌표를 사용할 때는 조정된 위치, 아니면 기본 위치를 사용합
   let left: number;
@@ -267,7 +267,7 @@ const FloatingPopup = ({
         floatingRef.current = node;
       }}
       style={{
-        position: isFixed ? "fixed" : (strategy as any),
+        position: isFixed ? 'fixed' : (strategy as any),
         left,
         top,
       }}

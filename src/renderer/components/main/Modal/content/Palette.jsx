@@ -1,26 +1,26 @@
-import React from "react";
+import React from 'react';
 import {
   parseHexColor,
   buildGradient,
   isGradientColor,
-} from "@utils/colorUtils";
+} from '@utils/colorUtils';
 
 export default function Palette({ color, onColorChange }) {
   const colors = [
-    "#D9E3F0",
-    "#F47373",
-    "#697689",
-    "#37D67A",
-    "#2CCCE4",
-    "#555555",
-    "#DCE775",
-    "#FF8A65",
-    "#BA68C8",
-    "transparent",
+    '#D9E3F0',
+    '#F47373',
+    '#697689',
+    '#37D67A',
+    '#2CCCE4',
+    '#555555',
+    '#DCE775',
+    '#FF8A65',
+    '#BA68C8',
+    'transparent',
   ];
 
   const handleColorChange = (next) => {
-    if (typeof next === "string") {
+    if (typeof next === 'string') {
       const parsed = parseHexColor(next);
       if (!parsed) {
         onColorChange(next);

@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
-import Modal from "../Modal";
-import Checkbox from "@components/main/common/Checkbox";
-import { useTranslation } from "@contexts/I18nContext";
-import { useKeyStore } from "@stores/useKeyStore";
-import type { TabCss } from "@src/types/css";
+import React, { useEffect, useState, useRef } from 'react';
+import Modal from '../Modal';
+import Checkbox from '@components/main/common/Checkbox';
+import { useTranslation } from '@contexts/I18nContext';
+import { useKeyStore } from '@stores/useKeyStore';
+import type { TabCss } from '@src/types/css';
 
 type Props = {
   isOpen: boolean;
@@ -35,7 +35,7 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
         originalStateRef.current = css ? { ...css } : null;
       })
       .catch((error) => {
-        console.error("Failed to get CSS info:", error);
+        console.error('Failed to get CSS info:', error);
       })
       .finally(() => {
         setIsLoading(false);
@@ -63,10 +63,10 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
       if (result.success && result.css) {
         setTabCss(result.css);
       } else if (result.error) {
-        showAlert?.(t("tabCss.loadFailed") + ": " + result.error);
+        showAlert?.(t('tabCss.loadFailed') + ': ' + result.error);
       }
     } catch (error) {
-      console.error("Failed to load tab CSS:", error);
+      console.error('Failed to load tab CSS:', error);
     }
   };
 
@@ -77,7 +77,7 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
         setTabCss(null);
       }
     } catch (error) {
-      console.error("Failed to clear tab CSS:", error);
+      console.error('Failed to clear tab CSS:', error);
     }
   };
 
@@ -86,17 +86,17 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
     try {
       const result = await window.api.css.tab.toggle(
         selectedKeyType,
-        newEnabled
+        newEnabled,
       );
       if (result.success) {
         setTabCss((prev) =>
           prev
             ? { ...prev, enabled: result.enabled }
-            : { path: null, content: "", enabled: result.enabled }
+            : { path: null, content: '', enabled: result.enabled },
         );
       }
     } catch (error) {
-      console.error("Failed to toggle tab CSS:", error);
+      console.error('Failed to toggle tab CSS:', error);
     }
   };
 
@@ -122,7 +122,7 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
         await window.api.css.tab.set(selectedKeyType, original);
       }
     } catch (error) {
-      console.error("Failed to restore original state:", error);
+      console.error('Failed to restore original state:', error);
     }
 
     onClose();
@@ -141,13 +141,13 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
       >
         {/* CSS 사용 여부 토글 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("tabCss.enableCss")}</p>
+          <p className="text-white text-style-2">{t('tabCss.enableCss')}</p>
           <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
         </div>
 
         {/* CSS 파일 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t("tabCss.cssFile")}</p>
+          <p className="text-white text-style-2">{t('tabCss.cssFile')}</p>
           <div className="flex items-center gap-[8px]">
             <button
               type="button"
@@ -155,11 +155,11 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
               disabled={isLoading || !hasTabCss}
               className={`px-[7px] h-[23px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 ${
                 hasTabCss
-                  ? "bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] border-[#4A2A2A] text-[#E6DBDB]"
-                  : "bg-[#2A2A30] border-[#3A3943] text-[#6B6D77] cursor-not-allowed"
+                  ? 'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] border-[#4A2A2A] text-[#E6DBDB]'
+                  : 'bg-[#2A2A30] border-[#3A3943] text-[#6B6D77] cursor-not-allowed'
               }`}
             >
-              {t("tabCss.remove")}
+              {t('tabCss.remove')}
             </button>
             <button
               type="button"
@@ -167,7 +167,7 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
               disabled={isLoading}
               className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 hover:bg-[#303036] active:bg-[#393941]"
             >
-              {t("tabCss.loadFile")}
+              {t('tabCss.loadFile')}
             </button>
           </div>
         </div>
@@ -178,13 +178,13 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
             onClick={handleSave}
             className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
           >
-            {t("keySetting.save")}
+            {t('keySetting.save')}
           </button>
           <button
             onClick={handleCancel}
             className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
           >
-            {t("keySetting.cancel")}
+            {t('keySetting.cancel')}
           </button>
         </div>
       </div>

@@ -5,11 +5,11 @@ import React, {
   useRef,
   useState,
   useLayoutEffect,
-} from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { Saturation, Hue, Alpha, useColor } from "react-color-palette";
-import "react-color-palette/css";
-import FloatingPopup from "../FloatingPopup";
+} from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { Saturation, Hue, Alpha, useColor } from 'react-color-palette';
+import 'react-color-palette/css';
+import FloatingPopup from '../FloatingPopup';
 import {
   MODES,
   isGradientColor,
@@ -17,15 +17,15 @@ import {
   buildGradient,
   parseHexColor,
   toColorObject,
-} from "@utils/colorUtils";
-import { loadPalette, addToPalette } from "@utils/colorPaletteStorage";
+} from '@utils/colorUtils';
+import { loadPalette, addToPalette } from '@utils/colorPaletteStorage';
 
 // RGBA 문자열 또는 Hex에서 alpha 추출
 const extractAlphaFromColor = (colorValue) => {
-  if (typeof colorValue === "string") {
-    if (colorValue.startsWith("rgba(")) {
+  if (typeof colorValue === 'string') {
+    if (colorValue.startsWith('rgba(')) {
       const match = colorValue.match(
-        /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/
+        /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/,
       );
       if (match) {
         return parseFloat(match[4]);
@@ -60,28 +60,28 @@ export default function ColorPickerWrapper({
   interactiveRefs = [],
   position = undefined,
   offsetY = -80,
-  placement = "right-start",
+  placement = 'right-start',
 }) {
   const initialMode = solidOnly
     ? MODES.solid
     : isGradientColor(color)
-    ? MODES.gradient
-    : MODES.solid;
+      ? MODES.gradient
+      : MODES.solid;
   const [mode, setMode] = useState(initialMode);
   const baseColor = normalizeColorInput(color);
   const [selectedColor, setSelectedColor] = useColor(baseColor);
   const [alpha, setAlpha] = useState(() => extractAlphaFromColor(color));
   const [alphaPercentInput, setAlphaPercentInput] = useState(() =>
-    String(Math.round(extractAlphaFromColor(color) * 100))
+    String(Math.round(extractAlphaFromColor(color) * 100)),
   );
   const [isAlphaPercentFocused, setIsAlphaPercentFocused] = useState(false);
   const [gradientTop, setGradientTop] = useState(() =>
     isGradientColor(color)
-      ? color.top.replace("#", "")
-      : selectedColor.hex.replace("#", "")
+      ? color.top.replace('#', '')
+      : selectedColor.hex.replace('#', ''),
   );
   const [gradientBottom, setGradientBottom] = useState(() =>
-    isGradientColor(color) ? color.bottom.replace("#", "") : "FFFFFF"
+    isGradientColor(color) ? color.bottom.replace('#', '') : 'FFFFFF',
   );
   const suppressGradientResetRef = useRef(false);
   const suppressGradientBroadcastRef = useRef(false);
@@ -97,13 +97,13 @@ export default function ColorPickerWrapper({
   const prevColorRef = useRef(color);
   // which gradient input is currently selected for Sat/Hue editing: 'top' | 'bottom'
   const [gradientSelected, setGradientSelected] = useState(() =>
-    isGradientColor(color) ? "top" : "top"
+    isGradientColor(color) ? 'top' : 'top',
   );
 
   // 팔레트 상태
-  const [solidPalette, setSolidPalette] = useState(() => loadPalette("solid"));
+  const [solidPalette, setSolidPalette] = useState(() => loadPalette('solid'));
   const [gradientPalette, setGradientPalette] = useState(() =>
-    loadPalette("gradient")
+    loadPalette('gradient'),
   );
 
   // 현재 색상을 팔레트에 저장하는 함수
@@ -115,29 +115,29 @@ export default function ColorPickerWrapper({
         // solidOnly 모드: RGBA 형식으로 저장
         colorToSave = `rgba(${parseInt(
           selectedColor.hex.slice(1, 3),
-          16
+          16,
         )}, ${parseInt(selectedColor.hex.slice(3, 5), 16)}, ${parseInt(
           selectedColor.hex.slice(5, 7),
-          16
+          16,
         )}, ${alpha})`;
       } else {
         // 일반 솔리드 모드: hex 형식으로 저장
         colorToSave = selectedColor.hex;
       }
-      addToPalette("solid", colorToSave);
-      setSolidPalette(loadPalette("solid"));
+      addToPalette('solid', colorToSave);
+      setSolidPalette(loadPalette('solid'));
     } else {
       // 그라디언트 모드
       const gradient = buildGradient(`#${gradientTop}`, `#${gradientBottom}`);
-      addToPalette("gradient", gradient);
-      setGradientPalette(loadPalette("gradient"));
+      addToPalette('gradient', gradient);
+      setGradientPalette(loadPalette('gradient'));
     }
   }, [solidOnly, mode, selectedColor.hex, alpha, gradientTop, gradientBottom]);
 
   // 팔레트 클릭 핸들러
   const handlePaletteClick = useCallback(
     (paletteColor, type) => {
-      if (type === "solid") {
+      if (type === 'solid') {
         const parsed = parseHexColor(normalizeColorInput(paletteColor));
         if (parsed) {
           setSelectedColor(parsed);
@@ -148,18 +148,18 @@ export default function ColorPickerWrapper({
           if (solidOnly) {
             const rgbaValue = `rgba(${parseInt(
               parsed.hex.slice(1, 3),
-              16
+              16,
             )}, ${parseInt(parsed.hex.slice(3, 5), 16)}, ${parseInt(
               parsed.hex.slice(5, 7),
-              16
+              16,
             )}, ${newAlpha})`;
             onColorChange?.(rgbaValue);
             onColorChangeComplete?.(rgbaValue);
           } else if (mode === MODES.gradient) {
             // 그라디언트 모드에서 솔리드 팔레트 클릭 시, 선택된 stop에 적용
-            const newHex = parsed.hex.replace("#", "").toUpperCase();
+            const newHex = parsed.hex.replace('#', '').toUpperCase();
             suppressGradientBroadcastRef.current = true;
-            if (gradientSelected === "top") {
+            if (gradientSelected === 'top') {
               setGradientTop(newHex);
               const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
               onColorChange?.(gradient);
@@ -175,20 +175,20 @@ export default function ColorPickerWrapper({
             onColorChangeComplete?.(parsed.hex);
           }
         }
-      } else if (type === "gradient") {
+      } else if (type === 'gradient') {
         // 그라디언트 팔레트 클릭
         if (
           paletteColor &&
-          typeof paletteColor === "object" &&
-          paletteColor.type === "gradient"
+          typeof paletteColor === 'object' &&
+          paletteColor.type === 'gradient'
         ) {
           suppressGradientBroadcastRef.current = true;
-          setGradientTop(paletteColor.top.replace("#", "").toUpperCase());
-          setGradientBottom(paletteColor.bottom.replace("#", "").toUpperCase());
+          setGradientTop(paletteColor.top.replace('#', '').toUpperCase());
+          setGradientBottom(paletteColor.bottom.replace('#', '').toUpperCase());
           setMode(MODES.gradient);
           const parsedTop = parseHexColor(paletteColor.top);
           if (parsedTop) setSelectedColor(parsedTop);
-          setGradientSelected("top");
+          setGradientSelected('top');
           onColorChange?.(paletteColor);
           onColorChangeComplete?.(paletteColor);
         }
@@ -202,7 +202,7 @@ export default function ColorPickerWrapper({
       gradientBottom,
       onColorChange,
       onColorChangeComplete,
-    ]
+    ],
   );
 
   // onClose를 래핑하여 팔레트 저장 후 호출
@@ -228,25 +228,25 @@ export default function ColorPickerWrapper({
     }
 
     if (isGradientNow) {
-      const topHex = color.top.replace("#", "").toUpperCase();
-      const bottomHex = color.bottom.replace("#", "").toUpperCase();
+      const topHex = color.top.replace('#', '').toUpperCase();
+      const bottomHex = color.bottom.replace('#', '').toUpperCase();
       suppressGradientBroadcastRef.current = true;
       setGradientTop(topHex);
       setGradientBottom(bottomHex);
       hasSeededGradientFromSolidRef.current = true;
 
-      const targetHex = gradientSelected === "bottom" ? bottomHex : topHex;
+      const targetHex = gradientSelected === 'bottom' ? bottomHex : topHex;
       const parsedTarget = parseHexColor(targetHex);
       if (parsedTarget) {
         setSelectedColor(parsedTarget);
       }
 
       if (!wasGradient) {
-        setGradientSelected("top");
-      } else if (gradientSelected !== "top" && gradientSelected !== "bottom") {
-        setGradientSelected("top");
+        setGradientSelected('top');
+      } else if (gradientSelected !== 'top' && gradientSelected !== 'bottom') {
+        setGradientSelected('top');
       }
-    } else if (typeof color === "string") {
+    } else if (typeof color === 'string') {
       const normalized = normalizeColorInput(color);
       const parsed = parseHexColor(normalized);
       if (parsed) {
@@ -260,11 +260,11 @@ export default function ColorPickerWrapper({
           !hasSeededGradientFromSolidRef.current
         ) {
           suppressGradientBroadcastRef.current = true;
-          setGradientTop(parsed.hex.replace("#", ""));
-          setGradientBottom("FFFFFF");
+          setGradientTop(parsed.hex.replace('#', ''));
+          setGradientBottom('FFFFFF');
         }
       }
-      setGradientSelected("top");
+      setGradientSelected('top');
       // 한 번만 억제 플래그를 사용
       suppressGradientResetRef.current = false;
     }
@@ -274,17 +274,17 @@ export default function ColorPickerWrapper({
 
   const [inputValue, setInputValue] = useState(() =>
     selectedColor.hex
-      .replace("#", "")
+      .replace('#', '')
       .toUpperCase()
-      .slice(0, solidOnly ? 6 : 8)
+      .slice(0, solidOnly ? 6 : 8),
   );
 
   useEffect(() => {
     setInputValue(
       selectedColor.hex
-        .replace("#", "")
+        .replace('#', '')
         .toUpperCase()
-        .slice(0, solidOnly ? 6 : 8)
+        .slice(0, solidOnly ? 6 : 8),
     );
   }, [selectedColor.hex, solidOnly]);
 
@@ -330,7 +330,7 @@ export default function ColorPickerWrapper({
       onColorChangeComplete,
       selectedColor.hex,
       solidOnly,
-    ]
+    ],
   );
 
   useEffect(() => {
@@ -351,10 +351,10 @@ export default function ColorPickerWrapper({
       setSelectedColor(parsed);
       if (!solidOnly && mode === MODES.gradient) {
         // when editing via Saturation/Hue in gradient mode, update the selected stop
-        const newHex = parsed.hex.replace("#", "").toUpperCase();
+        const newHex = parsed.hex.replace('#', '').toUpperCase();
 
         suppressGradientBroadcastRef.current = true;
-        if (gradientSelected === "top") {
+        if (gradientSelected === 'top') {
           setGradientTop(newHex);
           const gradient = buildGradient(parsed.hex, `#${gradientBottom}`);
           onColorChange?.(gradient);
@@ -371,10 +371,10 @@ export default function ColorPickerWrapper({
         // solidOnly 모드에서는 현재 alpha 값을 유지
         const rgbaValue = `rgba(${parseInt(
           parsed.hex.slice(1, 3),
-          16
+          16,
         )}, ${parseInt(parsed.hex.slice(3, 5), 16)}, ${parseInt(
           parsed.hex.slice(5, 7),
-          16
+          16,
         )}, ${alpha})`;
         onColorChange?.(rgbaValue);
         if (isComplete) onColorChangeComplete?.(rgbaValue);
@@ -392,7 +392,7 @@ export default function ColorPickerWrapper({
       gradientBottom,
       solidOnly,
       alpha,
-    ]
+    ],
   );
 
   const handleChange = (nextColor) => {
@@ -407,7 +407,7 @@ export default function ColorPickerWrapper({
 
   const handleInputChange = (raw) => {
     const sanitized = raw
-      .replace(/[^0-9a-fA-F]/g, "")
+      .replace(/[^0-9a-fA-F]/g, '')
       .slice(0, solidOnly ? 6 : 8)
       .toUpperCase();
     setInputValue(sanitized);
@@ -417,9 +417,9 @@ export default function ColorPickerWrapper({
     if (!inputValue) {
       setInputValue(
         selectedColor.hex
-          .replace("#", "")
+          .replace('#', '')
           .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8)
+          .slice(0, solidOnly ? 6 : 8),
       );
       return;
     }
@@ -428,9 +428,9 @@ export default function ColorPickerWrapper({
     if (!parsed) {
       setInputValue(
         selectedColor.hex
-          .replace("#", "")
+          .replace('#', '')
           .toUpperCase()
-          .slice(0, solidOnly ? 6 : 8)
+          .slice(0, solidOnly ? 6 : 8),
       );
       return;
     }
@@ -442,7 +442,7 @@ export default function ColorPickerWrapper({
             rgb: { ...parsed.rgb, a: alpha },
             hsv: { ...parsed.hsv, a: alpha },
           }
-        : parsed
+        : parsed,
     );
 
     if (solidOnly) {
@@ -465,14 +465,14 @@ export default function ColorPickerWrapper({
 
   const handleAlphaPercentChange = useCallback(
     (raw) => {
-      const sanitized = raw.replace(/[^0-9]/g, "").slice(0, 3);
+      const sanitized = raw.replace(/[^0-9]/g, '').slice(0, 3);
       setAlphaPercentInput(sanitized);
 
-      if (sanitized === "") return;
+      if (sanitized === '') return;
       const num = Math.min(Math.max(parseInt(sanitized, 10), 0), 100);
       setAlphaWithSync(num / 100, false);
     },
-    [setAlphaWithSync]
+    [setAlphaWithSync],
   );
 
   const commitAlphaPercent = useCallback(() => {
@@ -501,7 +501,7 @@ export default function ColorPickerWrapper({
 
   const handleGradientInputChange = (setter) => (raw) => {
     const sanitized = raw
-      .replace(/[^0-9a-fA-F]/g, "")
+      .replace(/[^0-9a-fA-F]/g, '')
       .slice(0, 8)
       .toUpperCase();
     setter(sanitized);
@@ -509,7 +509,7 @@ export default function ColorPickerWrapper({
 
   const selectGradient = (side) => {
     setGradientSelected(side);
-    const hex = `#${side === "top" ? gradientTop : gradientBottom}`;
+    const hex = `#${side === 'top' ? gradientTop : gradientBottom}`;
     const parsed = parseHexColor(hex);
     if (parsed) setSelectedColor(parsed);
   };
@@ -531,7 +531,7 @@ export default function ColorPickerWrapper({
     } else {
       // 그라디언트 모드에 진입함을 표시(이후부터는 시드 금지)
       hasSeededGradientFromSolidRef.current = true;
-      setGradientSelected("top");
+      setGradientSelected('top');
       commitGradient();
     }
   };
@@ -540,14 +540,14 @@ export default function ColorPickerWrapper({
   const [fixedPosition, setFixedPosition] = useState(null);
   const pickerContainerRef = useRef(null);
   const showStateSwitch =
-    stateMode != null && typeof onStateModeChange === "function";
+    stateMode != null && typeof onStateModeChange === 'function';
 
   const resolvedOpacityPercent = useMemo(() => {
-    if (typeof opacityPercent === "number" && Number.isFinite(opacityPercent)) {
+    if (typeof opacityPercent === 'number' && Number.isFinite(opacityPercent)) {
       const v = opacityPercent;
       return { solid: v, top: v, bottom: v };
     }
-    if (opacityPercent && typeof opacityPercent === "object") {
+    if (opacityPercent && typeof opacityPercent === 'object') {
       const top = Number(opacityPercent.top);
       const bottom = Number(opacityPercent.bottom);
       if (Number.isFinite(top) && Number.isFinite(bottom)) {
@@ -559,40 +559,40 @@ export default function ColorPickerWrapper({
 
   const showOpacityControl =
     resolvedOpacityPercent !== null &&
-    typeof onOpacityPercentChange === "function";
+    typeof onOpacityPercentChange === 'function';
 
   const resolvedOpacitySolid = resolvedOpacityPercent?.solid;
   const resolvedOpacityTop = resolvedOpacityPercent?.top;
   const resolvedOpacityBottom = resolvedOpacityPercent?.bottom;
 
-  const [opacityPercentSolidInput, setOpacityPercentSolidInput] = useState(() =>
-    showOpacityControl ? String(Math.round(resolvedOpacitySolid)) : ""
+  const [opacityPercentSolidInput, setOpacityPercentSolidInput] = useState(
+    () => (showOpacityControl ? String(Math.round(resolvedOpacitySolid)) : ''),
   );
   const [opacityPercentTopInput, setOpacityPercentTopInput] = useState(() =>
-    showOpacityControl ? String(Math.round(resolvedOpacityTop)) : ""
+    showOpacityControl ? String(Math.round(resolvedOpacityTop)) : '',
   );
   const [opacityPercentBottomInput, setOpacityPercentBottomInput] = useState(
-    () => (showOpacityControl ? String(Math.round(resolvedOpacityBottom)) : "")
+    () => (showOpacityControl ? String(Math.round(resolvedOpacityBottom)) : ''),
   );
   const [opacityPercentFocusTarget, setOpacityPercentFocusTarget] = useState(
-    /** @type {null | "solid" | "top" | "bottom"} */ (null)
+    /** @type {null | "solid" | "top" | "bottom"} */ (null),
   );
 
   useEffect(() => {
     if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === "solid") return;
+    if (opacityPercentFocusTarget === 'solid') return;
     setOpacityPercentSolidInput(String(Math.round(resolvedOpacitySolid)));
   }, [opacityPercentFocusTarget, resolvedOpacitySolid, showOpacityControl]);
 
   useEffect(() => {
     if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === "top") return;
+    if (opacityPercentFocusTarget === 'top') return;
     setOpacityPercentTopInput(String(Math.round(resolvedOpacityTop)));
   }, [opacityPercentFocusTarget, resolvedOpacityTop, showOpacityControl]);
 
   useEffect(() => {
     if (!showOpacityControl) return;
-    if (opacityPercentFocusTarget === "bottom") return;
+    if (opacityPercentFocusTarget === 'bottom') return;
     setOpacityPercentBottomInput(String(Math.round(resolvedOpacityBottom)));
   }, [opacityPercentFocusTarget, resolvedOpacityBottom, showOpacityControl]);
 
@@ -650,7 +650,14 @@ export default function ColorPickerWrapper({
     } else {
       setFixedPosition(null);
     }
-  }, [open, panelElement, solidOnly, mode, showStateSwitch, showOpacityControl]); // mode/상태탭/추가컨트롤 변경 시에도 재계산 (높이가 변경됨)
+  }, [
+    open,
+    panelElement,
+    solidOnly,
+    mode,
+    showStateSwitch,
+    showOpacityControl,
+  ]); // mode/상태탭/추가컨트롤 변경 시에도 재계산 (높이가 변경됨)
 
   // fixedPosition이 있으면 offsetY를 무시 (이미 정확한 좌표가 계산됨)
   const effectiveOffsetY = fixedPosition ? 0 : offsetY;
@@ -664,48 +671,54 @@ export default function ColorPickerWrapper({
   const handleOpacityPercentSolidChange = useCallback(
     (raw) => {
       if (!showOpacityControl) return;
-      const sanitized = String(raw ?? "").replace(/[^0-9]/g, "").slice(0, 3);
+      const sanitized = String(raw ?? '')
+        .replace(/[^0-9]/g, '')
+        .slice(0, 3);
       setOpacityPercentSolidInput(sanitized);
 
-      if (sanitized === "") return;
+      if (sanitized === '') return;
       const num = clampOpacityPercent(sanitized);
-      onOpacityPercentChange?.(num, "solid");
+      onOpacityPercentChange?.(num, 'solid');
     },
-    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl]
+    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl],
   );
 
   const handleOpacityPercentTopChange = useCallback(
     (raw) => {
       if (!showOpacityControl) return;
-      const sanitized = String(raw ?? "").replace(/[^0-9]/g, "").slice(0, 3);
+      const sanitized = String(raw ?? '')
+        .replace(/[^0-9]/g, '')
+        .slice(0, 3);
       setOpacityPercentTopInput(sanitized);
 
-      if (sanitized === "") return;
+      if (sanitized === '') return;
       const num = clampOpacityPercent(sanitized);
-      onOpacityPercentChange?.(num, "top");
+      onOpacityPercentChange?.(num, 'top');
     },
-    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl]
+    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl],
   );
 
   const handleOpacityPercentBottomChange = useCallback(
     (raw) => {
       if (!showOpacityControl) return;
-      const sanitized = String(raw ?? "").replace(/[^0-9]/g, "").slice(0, 3);
+      const sanitized = String(raw ?? '')
+        .replace(/[^0-9]/g, '')
+        .slice(0, 3);
       setOpacityPercentBottomInput(sanitized);
 
-      if (sanitized === "") return;
+      if (sanitized === '') return;
       const num = clampOpacityPercent(sanitized);
-      onOpacityPercentChange?.(num, "bottom");
+      onOpacityPercentChange?.(num, 'bottom');
     },
-    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl]
+    [clampOpacityPercent, onOpacityPercentChange, showOpacityControl],
   );
 
   const commitOpacityPercentSolid = useCallback(() => {
     if (!showOpacityControl) return;
     const clamped = clampOpacityPercent(opacityPercentSolidInput);
     setOpacityPercentSolidInput(String(clamped));
-    onOpacityPercentChange?.(clamped, "solid");
-    onOpacityPercentChangeComplete?.(clamped, "solid");
+    onOpacityPercentChange?.(clamped, 'solid');
+    onOpacityPercentChangeComplete?.(clamped, 'solid');
   }, [
     clampOpacityPercent,
     onOpacityPercentChange,
@@ -718,8 +731,8 @@ export default function ColorPickerWrapper({
     if (!showOpacityControl) return;
     const clamped = clampOpacityPercent(opacityPercentTopInput);
     setOpacityPercentTopInput(String(clamped));
-    onOpacityPercentChange?.(clamped, "top");
-    onOpacityPercentChangeComplete?.(clamped, "top");
+    onOpacityPercentChange?.(clamped, 'top');
+    onOpacityPercentChangeComplete?.(clamped, 'top');
   }, [
     clampOpacityPercent,
     onOpacityPercentChange,
@@ -732,8 +745,8 @@ export default function ColorPickerWrapper({
     if (!showOpacityControl) return;
     const clamped = clampOpacityPercent(opacityPercentBottomInput);
     setOpacityPercentBottomInput(String(clamped));
-    onOpacityPercentChange?.(clamped, "bottom");
-    onOpacityPercentChangeComplete?.(clamped, "bottom");
+    onOpacityPercentChange?.(clamped, 'bottom');
+    onOpacityPercentChangeComplete?.(clamped, 'bottom');
   }, [
     clampOpacityPercent,
     onOpacityPercentChange,
@@ -743,14 +756,14 @@ export default function ColorPickerWrapper({
   ]);
 
   const opacitySliderTarget = useMemo(() => {
-    if (solidOnly || mode === MODES.solid) return "solid";
+    if (solidOnly || mode === MODES.solid) return 'solid';
     return gradientSelected;
   }, [gradientSelected, mode, solidOnly]);
 
   const opacitySliderPercent = useMemo(() => {
     if (!showOpacityControl) return 100;
-    if (opacitySliderTarget === "solid") return resolvedOpacitySolid ?? 100;
-    if (opacitySliderTarget === "top") return resolvedOpacityTop ?? 100;
+    if (opacitySliderTarget === 'solid') return resolvedOpacitySolid ?? 100;
+    if (opacitySliderTarget === 'top') return resolvedOpacityTop ?? 100;
     return resolvedOpacityBottom ?? 100;
   }, [
     opacitySliderTarget,
@@ -768,7 +781,12 @@ export default function ColorPickerWrapper({
       rgb: { ...selectedColor.rgb, a },
       hsv: { ...selectedColor.hsv, a },
     };
-  }, [clampOpacityPercent, opacitySliderPercent, selectedColor, showOpacityControl]);
+  }, [
+    clampOpacityPercent,
+    opacitySliderPercent,
+    selectedColor,
+    showOpacityControl,
+  ]);
 
   return (
     <FloatingPopup
@@ -828,8 +846,10 @@ export default function ColorPickerWrapper({
                 opacityPercentFocusTarget === null ||
                 opacityPercentFocusTarget !== target
               ) {
-                if (target === "solid") setOpacityPercentSolidInput(String(next));
-                else if (target === "top") setOpacityPercentTopInput(String(next));
+                if (target === 'solid')
+                  setOpacityPercentSolidInput(String(next));
+                else if (target === 'top')
+                  setOpacityPercentTopInput(String(next));
                 else setOpacityPercentBottomInput(String(next));
               }
               onOpacityPercentChange?.(next, target);
@@ -837,8 +857,9 @@ export default function ColorPickerWrapper({
             onChangeComplete={(c) => {
               const target = opacitySliderTarget;
               const next = clampOpacityPercent((c?.rgb?.a ?? 1) * 100);
-              if (target === "solid") setOpacityPercentSolidInput(String(next));
-              else if (target === "top") setOpacityPercentTopInput(String(next));
+              if (target === 'solid') setOpacityPercentSolidInput(String(next));
+              else if (target === 'top')
+                setOpacityPercentTopInput(String(next));
               else setOpacityPercentBottomInput(String(next));
               onOpacityPercentChange?.(next, target);
               onOpacityPercentChangeComplete?.(next, target);
@@ -856,44 +877,44 @@ export default function ColorPickerWrapper({
               solidOnly
                 ? alpha
                 : showOpacityControl
-                ? clampOpacityPercent(opacityPercent) / 100
-                : undefined
+                  ? clampOpacityPercent(opacityPercent) / 100
+                  : undefined
             }
             alphaPercentValue={
               solidOnly
                 ? alphaPercentInput
                 : showOpacityControl
-                ? opacityPercentSolidInput
-                : undefined
+                  ? opacityPercentSolidInput
+                  : undefined
             }
             alphaPercentFocused={
               solidOnly
                 ? isAlphaPercentFocused
                 : showOpacityControl
-                ? opacityPercentFocusTarget === "solid"
-                : false
+                  ? opacityPercentFocusTarget === 'solid'
+                  : false
             }
             onAlphaPercentChange={
               solidOnly
                 ? handleAlphaPercentChange
                 : showOpacityControl
-                ? handleOpacityPercentSolidChange
-                : undefined
+                  ? handleOpacityPercentSolidChange
+                  : undefined
             }
             onAlphaPercentCommit={
               solidOnly
                 ? commitAlphaPercent
                 : showOpacityControl
-                ? commitOpacityPercentSolid
-                : undefined
+                  ? commitOpacityPercentSolid
+                  : undefined
             }
             onAlphaPercentFocusChange={
               solidOnly
                 ? setIsAlphaPercentFocused
                 : showOpacityControl
-                ? (focused) =>
-                    setOpacityPercentFocusTarget(focused ? "solid" : null)
-                : undefined
+                  ? (focused) =>
+                      setOpacityPercentFocusTarget(focused ? 'solid' : null)
+                  : undefined
             }
           />
         ) : (
@@ -904,23 +925,27 @@ export default function ColorPickerWrapper({
             onBottomChange={handleGradientInputChange(setGradientBottom)}
             onTopCommit={() => {
               commitGradient();
-              selectGradient("top");
+              selectGradient('top');
             }}
             onBottomCommit={() => {
               commitGradient();
-              selectGradient("bottom");
+              selectGradient('bottom');
             }}
             selected={gradientSelected}
             onSelect={(s) => selectGradient(s)}
-            rightTopValue={showOpacityControl ? opacityPercentTopInput : undefined}
+            rightTopValue={
+              showOpacityControl ? opacityPercentTopInput : undefined
+            }
             rightBottomValue={
               showOpacityControl ? opacityPercentBottomInput : undefined
             }
-            rightFocusTarget={showOpacityControl ? opacityPercentFocusTarget : null}
+            rightFocusTarget={
+              showOpacityControl ? opacityPercentFocusTarget : null
+            }
             onRightValueChange={
               showOpacityControl
                 ? (target, raw) => {
-                    if (target === "top") handleOpacityPercentTopChange(raw);
+                    if (target === 'top') handleOpacityPercentTopChange(raw);
                     else handleOpacityPercentBottomChange(raw);
                   }
                 : undefined
@@ -928,7 +953,7 @@ export default function ColorPickerWrapper({
             onRightCommit={
               showOpacityControl
                 ? (target) => {
-                    if (target === "top") commitOpacityPercentTop();
+                    if (target === 'top') commitOpacityPercentTop();
                     else commitOpacityPercentBottom();
                   }
                 : undefined
@@ -939,7 +964,7 @@ export default function ColorPickerWrapper({
                     setOpacityPercentFocusTarget(focused ? target : null)
                 : undefined
             }
-            rightTitle={opacityPercentLabel || "Opacity"}
+            rightTitle={opacityPercentLabel || 'Opacity'}
           />
         )}
 
@@ -989,7 +1014,7 @@ function ColorPalette({
             key={`solid-${index}`}
             color={color}
             type="solid"
-            onClick={() => color && onPaletteClick(color, "solid")}
+            onClick={() => color && onPaletteClick(color, 'solid')}
             solidOnly={solidOnly}
           />
         ))}
@@ -1003,7 +1028,7 @@ function ColorPalette({
               key={`gradient-${index}`}
               color={color}
               type="gradient"
-              onClick={() => color && onPaletteClick(color, "gradient")}
+              onClick={() => color && onPaletteClick(color, 'gradient')}
             />
           ))}
         </div>
@@ -1018,61 +1043,61 @@ function PaletteSlot({ color, type, onClick, solidOnly }) {
   // 배경 스타일 계산
   const getBackgroundStyle = () => {
     if (isEmpty) {
-      return { backgroundColor: "#2A2A30" };
+      return { backgroundColor: '#2A2A30' };
     }
 
-    if (type === "gradient" && color?.type === "gradient") {
+    if (type === 'gradient' && color?.type === 'gradient') {
       return {
         background: `linear-gradient(to bottom, ${color.top}, ${color.bottom})`,
       };
     }
 
     // 솔리드 색상
-    if (typeof color === "string") {
+    if (typeof color === 'string') {
       // RGBA 형식인 경우
-      if (color.startsWith("rgba(")) {
+      if (color.startsWith('rgba(')) {
         return { backgroundColor: color };
       }
       // Hex 형식
-      return { backgroundColor: color.startsWith("#") ? color : `#${color}` };
+      return { backgroundColor: color.startsWith('#') ? color : `#${color}` };
     }
 
-    return { backgroundColor: "#2A2A30" };
+    return { backgroundColor: '#2A2A30' };
   };
 
   // 툴팁 텍스트 생성
   const getTitle = () => {
-    if (isEmpty) return "";
-    if (type === "gradient" && color?.type === "gradient") {
-      const topHex = color.top.replace("#", "").toUpperCase();
-      const bottomHex = color.bottom.replace("#", "").toUpperCase();
+    if (isEmpty) return '';
+    if (type === 'gradient' && color?.type === 'gradient') {
+      const topHex = color.top.replace('#', '').toUpperCase();
+      const bottomHex = color.bottom.replace('#', '').toUpperCase();
       return `${topHex}\n${bottomHex}`;
     }
     // 솔리드 색상 툴팁 - 통일된 형식으로 표시
-    if (typeof color === "string") {
+    if (typeof color === 'string') {
       // RGBA 형식인 경우 hex로 변환
-      if (color.startsWith("rgba(")) {
+      if (color.startsWith('rgba(')) {
         const match = color.match(
-          /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/
+          /rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/,
         );
         if (match) {
           const [, r, g, b, a] = match;
           const hexColor = `${parseInt(r)
             .toString(16)
-            .padStart(2, "0")}${parseInt(g)
+            .padStart(2, '0')}${parseInt(g)
             .toString(16)
-            .padStart(2, "0")}${parseInt(b)
+            .padStart(2, '0')}${parseInt(b)
             .toString(16)
-            .padStart(2, "0")}${Math.round(parseFloat(a) * 255)
+            .padStart(2, '0')}${Math.round(parseFloat(a) * 255)
             .toString(16)
-            .padStart(2, "0")}`.toUpperCase();
+            .padStart(2, '0')}`.toUpperCase();
           return hexColor;
         }
       }
       // Hex 형식 - # 제거하고 대문자로
-      return color.replace("#", "").toUpperCase();
+      return color.replace('#', '').toUpperCase();
     }
-    return "";
+    return '';
   };
 
   return (
@@ -1080,8 +1105,8 @@ function PaletteSlot({ color, type, onClick, solidOnly }) {
       type="button"
       className={`w-[22px] h-[22px] rounded-[7px] border transition-colors ${
         isEmpty
-          ? "border-[#3A3943] cursor-default"
-          : "border-[#3A3943] cursor-pointer"
+          ? 'border-[#3A3943] cursor-default'
+          : 'border-[#3A3943] cursor-pointer'
       }`}
       style={getBackgroundStyle()}
       onClick={isEmpty ? undefined : onClick}
@@ -1093,22 +1118,22 @@ function PaletteSlot({ color, type, onClick, solidOnly }) {
 
 function StateSwitch({ state, onChange }) {
   const { t } = useTranslation();
-  const idleLabel = t("colorPicker.idle") || "대기";
-  const activeLabel = t("colorPicker.active") || "입력";
+  const idleLabel = t('colorPicker.idle') || '대기';
+  const activeLabel = t('colorPicker.active') || '입력';
 
   return (
     <div className="flex gap-[6px] max-w-full">
       {[
-        { key: "idle", label: idleLabel },
-        { key: "active", label: activeLabel },
+        { key: 'idle', label: idleLabel },
+        { key: 'active', label: activeLabel },
       ].map((item) => (
         <button
           key={item.key}
           type="button"
           className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-[7px] text-style-4 text-[#DBDEE8] transition-colors ${
             state === item.key
-              ? "bg-[#2E2D33] text-[#FFFFFF]"
-              : "hover:bg-[#303036] text-[#6F6E7A]"
+              ? 'bg-[#2E2D33] text-[#FFFFFF]'
+              : 'hover:bg-[#303036] text-[#6F6E7A]'
           }`}
           onClick={() => onChange?.(item.key)}
         >
@@ -1121,8 +1146,8 @@ function StateSwitch({ state, onChange }) {
 
 function ModeSwitch({ mode, onChange }) {
   const { t } = useTranslation();
-  const solidLabel = t("colorPicker.solid");
-  const gradientLabel = t("colorPicker.gradient");
+  const solidLabel = t('colorPicker.solid');
+  const gradientLabel = t('colorPicker.gradient');
   return (
     <div className="flex gap-[6px] max-w-full">
       {[
@@ -1134,8 +1159,8 @@ function ModeSwitch({ mode, onChange }) {
           type="button"
           className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-[7px] text-style-4 text-[#DBDEE8] transition-colors ${
             mode === item.key
-              ? "bg-[#2E2D33] text-[#FFFFFF]"
-              : "hover:bg-[#303036] text-[#6F6E7A]"
+              ? 'bg-[#2E2D33] text-[#FFFFFF]'
+              : 'hover:bg-[#303036] text-[#6F6E7A]'
           }`}
           onClick={() => onChange?.(item.key)}
         >
@@ -1147,7 +1172,7 @@ function ModeSwitch({ mode, onChange }) {
 }
 
 const Input = ({
-  value = "",
+  value = '',
   onValueChange,
   onValueCommit,
   previewColor,
@@ -1165,10 +1190,10 @@ const Input = ({
   // previewColor를 RGBA로 변환
   const rgbaPreview =
     alpha !== undefined && previewColor
-      ? previewColor.startsWith("#")
+      ? previewColor.startsWith('#')
         ? `rgba(${parseInt(previewColor.slice(1, 3), 16)}, ${parseInt(
             previewColor.slice(3, 5),
-            16
+            16,
           )}, ${parseInt(previewColor.slice(5, 7), 16)}, ${alpha})`
         : previewColor
       : previewColor;
@@ -1186,7 +1211,7 @@ const Input = ({
           onChange={handleChange}
           onBlur={onValueCommit}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            if (event.key === 'Enter') {
               onValueCommit?.();
             }
           }}
@@ -1199,7 +1224,7 @@ const Input = ({
           <input
             type="text"
             inputMode="numeric"
-            value={alphaPercentValue ?? ""}
+            value={alphaPercentValue ?? ''}
             onChange={(e) => onAlphaPercentChange?.(e.target.value)}
             onFocus={() => onAlphaPercentFocusChange?.(true)}
             onBlur={() => {
@@ -1207,7 +1232,7 @@ const Input = ({
               onAlphaPercentCommit?.();
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === 'Enter') {
                 event.currentTarget.blur();
               }
             }}
@@ -1243,13 +1268,13 @@ function GradientInputs({
         value={topValue}
         onChange={onTopChange}
         onCommit={onTopCommit}
-        selected={selected === "top"}
-        onSelect={() => onSelect?.("top")}
+        selected={selected === 'top'}
+        onSelect={() => onSelect?.('top')}
         rightValue={rightTopValue}
-        rightFocused={rightFocusTarget === "top"}
-        onRightValueChange={(raw) => onRightValueChange?.("top", raw)}
-        onRightCommit={() => onRightCommit?.("top")}
-        onRightFocusChange={(focused) => onRightFocusChange?.("top", focused)}
+        rightFocused={rightFocusTarget === 'top'}
+        onRightValueChange={(raw) => onRightValueChange?.('top', raw)}
+        onRightCommit={() => onRightCommit?.('top')}
+        onRightFocusChange={(focused) => onRightFocusChange?.('top', focused)}
         rightTitle={rightTitle}
       />
       <GradientInput
@@ -1257,14 +1282,14 @@ function GradientInputs({
         value={bottomValue}
         onChange={onBottomChange}
         onCommit={onBottomCommit}
-        selected={selected === "bottom"}
-        onSelect={() => onSelect?.("bottom")}
+        selected={selected === 'bottom'}
+        onSelect={() => onSelect?.('bottom')}
         rightValue={rightBottomValue}
-        rightFocused={rightFocusTarget === "bottom"}
-        onRightValueChange={(raw) => onRightValueChange?.("bottom", raw)}
-        onRightCommit={() => onRightCommit?.("bottom")}
+        rightFocused={rightFocusTarget === 'bottom'}
+        onRightValueChange={(raw) => onRightValueChange?.('bottom', raw)}
+        onRightCommit={() => onRightCommit?.('bottom')}
         onRightFocusChange={(focused) =>
-          onRightFocusChange?.("bottom", focused)
+          onRightFocusChange?.('bottom', focused)
         }
         rightTitle={rightTitle}
       />
@@ -1294,11 +1319,11 @@ function GradientInput({
           tabIndex={0}
           onClick={() => onSelect?.()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") onSelect?.();
+            if (e.key === 'Enter') onSelect?.();
           }}
           className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
           style={{
-            background: `#${value}` || "#561ecb",
+            background: value ? `#${value}` : '#561ecb',
           }}
         />
         <input
@@ -1308,15 +1333,15 @@ function GradientInput({
           onFocus={() => onSelect?.()}
           onBlur={onCommit}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            if (event.key === 'Enter') {
               onCommit?.();
             }
           }}
           placeholder={label}
           className={`pl-[23px] text-left w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] text-style-4 text-[#DBDEE8] uppercase pt-[1px] leading-[23px] ${
             selected
-              ? "border-[#459BF8]"
-              : "border-[#3A3943] focus:border-[#459BF8]"
+              ? 'border-[#459BF8]'
+              : 'border-[#3A3943] focus:border-[#459BF8]'
           }`}
         />
       </div>
@@ -1325,7 +1350,7 @@ function GradientInput({
           <input
             type="text"
             inputMode="numeric"
-            value={rightValue ?? ""}
+            value={rightValue ?? ''}
             onChange={(e) => onRightValueChange?.(e.target.value)}
             onFocus={() => onRightFocusChange?.(true)}
             onBlur={() => {
@@ -1333,12 +1358,12 @@ function GradientInput({
               onRightCommit?.();
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter") {
+              if (event.key === 'Enter') {
                 event.currentTarget.blur();
               }
             }}
             className={`px-[6px] text-center w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8] pt-[1px] leading-[23px] ${
-              rightFocused ? "border-[#459BF8]" : ""
+              rightFocused ? 'border-[#459BF8]' : ''
             }`}
             title={rightTitle}
           />

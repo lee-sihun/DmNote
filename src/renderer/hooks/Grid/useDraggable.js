@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { MIN_GRID_POSITION, MAX_GRID_POSITION } from "@stores/useGridViewStore";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { calculateBounds, calculateSnapPoints } from "@utils/smartGuides";
-import { DRAG_THRESHOLD } from "./constants";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MIN_GRID_POSITION, MAX_GRID_POSITION } from '@stores/useGridViewStore';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { calculateBounds, calculateSnapPoints } from '@utils/smartGuides';
+import { DRAG_THRESHOLD } from './constants';
 
 // 위치 클램핑 함수
 const clampPosition = (value) => {
@@ -30,7 +30,7 @@ export const useDraggable = ({
   panX = 0, // 팬 X 오프셋
   panY = 0, // 팬 Y 오프셋
   // 스마트 가이드 관련 옵션
-  elementId = "", // 요소 식별자
+  elementId = '', // 요소 식별자
   elementWidth = 60, // 요소 너비
   elementHeight = 60, // 요소 높이
   getOtherElements = null, // 다른 요소들의 bounds를 반환하는 함수
@@ -84,16 +84,16 @@ export const useDraggable = ({
   }, []);
 
   const restoreBodyCursor = useCallback(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
     if (previousBodyCursorRef.current === null) return;
     document.body.style.cursor = previousBodyCursorRef.current;
     previousBodyCursorRef.current = null;
   }, []);
 
   const setBodyCursor = useCallback((cursor) => {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
     if (previousBodyCursorRef.current === null) {
-      previousBodyCursorRef.current = document.body.style.cursor || "";
+      previousBodyCursorRef.current = document.body.style.cursor || '';
     }
     document.body.style.cursor = cursor;
   }, []);
@@ -101,13 +101,13 @@ export const useDraggable = ({
   const handleMouseOver = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
-    if (node && !isDragging) node.style.cursor = "grab";
+    if (node && !isDragging) node.style.cursor = 'grab';
   }, [node, isDragging]);
 
   const handleMouseOut = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
-    if (node && !isDragging) node.style.cursor = "";
+    if (node && !isDragging) node.style.cursor = '';
   }, [node, isDragging]);
 
   const handleMouseDown = useCallback(
@@ -138,10 +138,14 @@ export const useDraggable = ({
       const currentZoom = zoomRef.current;
 
       // gridSettings에서 스냅 크기 가져오기
-      const gridSnapSize = useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+      const gridSnapSize =
+        useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
 
       // 줌 레벨에 따른 동적 그리드 크기 계산
-      const dynamicGridSize = calculateDynamicGridSize(currentZoom, gridSnapSize);
+      const dynamicGridSize = calculateDynamicGridSize(
+        currentZoom,
+        gridSnapSize,
+      );
 
       // 무한 캔버스에서는 경계 제한 없음
       // 시작 위치 계산 (줌 반영)
@@ -174,11 +178,11 @@ export const useDraggable = ({
             deltaY > dragThresholdRef.current)
         ) {
           actuallyDragging = true;
-          node.style.cursor = "grabbing";
-          setBodyCursor("grabbing");
+          node.style.cursor = 'grabbing';
+          setBodyCursor('grabbing');
           // 실제 드래그가 시작될 때만 최적화 적용
-          node.style.pointerEvents = "none";
-          node.style.userSelect = "none";
+          node.style.pointerEvents = 'none';
+          node.style.userSelect = 'none';
           // 드래그 시작 시 애니메이션 비활성화
           useGridSelectionStore.getState().setDraggingOrResizing(true);
           // 드래그 시작 콜백 호출 (히스토리 저장용)
@@ -186,7 +190,7 @@ export const useDraggable = ({
 
           // Shift 키가 눌려있으면 처음 움직인 방향으로 축 고정
           if (moveEvent.shiftKey && lockedAxis === null) {
-            lockedAxis = deltaX >= deltaY ? "x" : "y";
+            lockedAxis = deltaX >= deltaY ? 'x' : 'y';
           }
         }
 
@@ -204,9 +208,9 @@ export const useDraggable = ({
           let newDy = (moveEvent.clientY - startPos.y) / currentZoom;
 
           // Shift 키로 축이 고정된 경우 해당 축만 이동
-          if (lockedAxis === "x") {
+          if (lockedAxis === 'x') {
             newDy = initialPosition.dy;
-          } else if (lockedAxis === "y") {
+          } else if (lockedAxis === 'y') {
             newDx = initialPosition.dx;
           }
 
@@ -238,14 +242,14 @@ export const useDraggable = ({
               newDy,
               currentWidth,
               currentHeight,
-              currentElementId
+              currentElementId,
             );
 
             const snapResult = calculateSnapPoints(
               draggedBounds,
               otherElements,
               undefined,
-              { disableSpacing: !spacingGuidesEnabled }
+              { disableSpacing: !spacingGuidesEnabled },
             );
 
             if (snapResult.didSnapX || snapResult.didSnapY) {
@@ -276,7 +280,7 @@ export const useDraggable = ({
                 finalY,
                 currentWidth,
                 currentHeight,
-                currentElementId
+                currentElementId,
               );
               smartGuidesStore.setDraggedBounds(snappedBounds);
               smartGuidesStore.setActiveGuides(snapResult.guides);
@@ -304,7 +308,7 @@ export const useDraggable = ({
             snappedX = clampPosition(Math.round(finalX));
           } else {
             snappedX = clampPosition(
-              Math.round(finalX / dynamicGridSize) * dynamicGridSize
+              Math.round(finalX / dynamicGridSize) * dynamicGridSize,
             );
           }
 
@@ -314,7 +318,7 @@ export const useDraggable = ({
             snappedY = clampPosition(Math.round(finalY));
           } else {
             snappedY = clampPosition(
-              Math.round(finalY / dynamicGridSize) * dynamicGridSize
+              Math.round(finalY / dynamicGridSize) * dynamicGridSize,
             );
           }
 
@@ -341,9 +345,9 @@ export const useDraggable = ({
           rafId = null;
         }
 
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("blur", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('blur', handleMouseUp);
 
         setIsDragging(false);
 
@@ -352,9 +356,9 @@ export const useDraggable = ({
 
         // 실제 드래그가 발생했을 때만 복구
         if (actuallyDragging) {
-          node.style.cursor = "grab";
-          node.style.pointerEvents = "auto";
-          node.style.userSelect = "auto";
+          node.style.cursor = 'grab';
+          node.style.pointerEvents = 'auto';
+          node.style.userSelect = 'auto';
           // 드래그 종료 시 애니메이션 복원
           useGridSelectionStore.getState().setDraggingOrResizing(false);
 
@@ -363,30 +367,30 @@ export const useDraggable = ({
           onPositionChange?.(finalDx, finalDy);
         } else {
           // 클릭만 했을 경우 커서만 복구
-          node.style.cursor = "grab";
+          node.style.cursor = 'grab';
         }
       };
 
-      document.addEventListener("mousemove", handleMouseMove, {
+      document.addEventListener('mousemove', handleMouseMove, {
         passive: true,
       });
-      document.addEventListener("mouseup", handleMouseUp);
-      window.addEventListener("blur", handleMouseUp);
+      document.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('blur', handleMouseUp);
     },
-    [node, dx, dy, onPositionChange, restoreBodyCursor, setBodyCursor]
+    [node, dx, dy, onPositionChange, restoreBodyCursor, setBodyCursor],
   );
 
   useEffect(() => {
     if (!node) return;
 
-    node.addEventListener("mousedown", handleMouseDown);
-    node.addEventListener("mouseenter", handleMouseOver);
-    node.addEventListener("mouseleave", handleMouseOut);
+    node.addEventListener('mousedown', handleMouseDown);
+    node.addEventListener('mouseenter', handleMouseOver);
+    node.addEventListener('mouseleave', handleMouseOut);
 
     return () => {
-      node.removeEventListener("mousedown", handleMouseDown);
-      node.removeEventListener("mouseenter", handleMouseOver);
-      node.removeEventListener("mouseleave", handleMouseOut);
+      node.removeEventListener('mousedown', handleMouseDown);
+      node.removeEventListener('mouseenter', handleMouseOver);
+      node.removeEventListener('mouseleave', handleMouseOut);
     };
   }, [node, handleMouseDown, handleMouseOver, handleMouseOut]);
 

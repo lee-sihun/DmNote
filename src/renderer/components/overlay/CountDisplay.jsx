@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { toCssRgba } from "@utils/colorUtils";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { toCssRgba } from '@utils/colorUtils';
 import {
   COUNTER_DEFAULT_BEZIER,
   createCubicBezierEasing,
-} from "@utils/cubicBezier";
+} from '@utils/cubicBezier';
 
 export default function CountDisplay({
   count,
@@ -100,38 +100,38 @@ export default function CountDisplay({
   }, [count, durationMs, easing, targetScale, animationEnabled]);
 
   const displayValue = count || 0;
-  const fill = toCssRgba(fillColor, "#FFFFFF");
-  const stroke = toCssRgba(strokeColor, "transparent");
-  const strokeWidth = stroke.alpha > 0 ? "1px" : "0px";
+  const fill = toCssRgba(fillColor, '#FFFFFF');
+  const stroke = toCssRgba(strokeColor, 'transparent');
+  const strokeWidth = stroke.alpha > 0 ? '1px' : '0px';
 
   const textDecorations = [];
-  if (fontUnderline) textDecorations.push("underline");
-  if (fontStrikethrough) textDecorations.push("line-through");
+  if (fontUnderline) textDecorations.push('underline');
+  if (fontStrikethrough) textDecorations.push('line-through');
   const textDecoration =
-    textDecorations.length > 0 ? textDecorations.join(" ") : "none";
+    textDecorations.length > 0 ? textDecorations.join(' ') : 'none';
 
   return (
     <span
       className="counter"
       data-text={displayValue}
-      data-counter-state={active ? "active" : "inactive"}
+      data-counter-state={active ? 'active' : 'inactive'}
       style={{
         transform: `scale(${scale})`,
-        transformOrigin: "center bottom",
+        transformOrigin: 'center bottom',
         fontSize: `${Number.isFinite(fontSize) ? fontSize : 16}px`,
         fontFamily: fontFamily
           ? `"${fontFamily}", "SUIT-Regular", sans-serif`
           : undefined,
         fontWeight: Number.isFinite(fontWeight) ? fontWeight : 400,
-        fontStyle: fontItalic ? "italic" : "normal",
+        fontStyle: fontItalic ? 'italic' : 'normal',
         textDecoration,
-        textAlign: "center",
-        pointerEvents: "none",
-        userSelect: "none",
+        textAlign: 'center',
+        pointerEvents: 'none',
+        userSelect: 'none',
         lineHeight: 1,
-        "--counter-color-default": fill.css,
-        "--counter-stroke-color-default": stroke.css,
-        "--counter-stroke-width-default": strokeWidth,
+        '--counter-color-default': fill.css,
+        '--counter-stroke-color-default': stroke.css,
+        '--counter-stroke-width-default': strokeWidth,
       }}
     >
       {displayValue}

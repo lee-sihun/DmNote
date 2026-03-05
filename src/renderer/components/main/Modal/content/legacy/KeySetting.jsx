@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import ImagePicker from "../ImagePicker";
-import Modal from "../../Modal";
+import React, { useEffect, useState, useRef } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import ImagePicker from '../ImagePicker';
+import Modal from '../../Modal';
 
 export default function KeySetting({
   keyData,
@@ -18,9 +18,9 @@ export default function KeySetting({
     getKeyInfoByGlobalKey(key).displayName,
   );
   const [isListening, setIsListening] = useState(false);
-  const [activeImage, setActiveImage] = useState(keyData.activeImage || "");
+  const [activeImage, setActiveImage] = useState(keyData.activeImage || '');
   const [inactiveImage, setInactiveImage] = useState(
-    keyData.inactiveImage || "",
+    keyData.inactiveImage || '',
   );
   const [width, setWidth] = useState(keyData.width || 60);
   const [height, setHeight] = useState(keyData.height || 60);
@@ -32,7 +32,7 @@ export default function KeySetting({
     keyData.activeTransparent || false,
   );
 
-  const [className, setClassName] = useState(keyData.className || "");
+  const [className, setClassName] = useState(keyData.className || '');
 
   const [widthFocused, setWidthFocused] = useState(false);
   const [heightFocused, setHeightFocused] = useState(false);
@@ -79,12 +79,12 @@ export default function KeySetting({
 
   useEffect(() => {
     if (!isListening) return undefined;
-    if (typeof window === "undefined" || !window.api?.keys?.onRawInput) {
+    if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
       return undefined;
     }
 
     const unsubscribe = window.api.keys.onRawInput((payload) => {
-      if (!payload || payload.state !== "DOWN") return;
+      if (!payload || payload.state !== 'DOWN') return;
       const targetLabel =
         payload.label ||
         (Array.isArray(payload.labels) ? payload.labels[0] : null);
@@ -100,7 +100,7 @@ export default function KeySetting({
       try {
         unsubscribe?.();
       } catch (error) {
-        console.error("Failed to unsubscribe raw input listener", error);
+        console.error('Failed to unsubscribe raw input listener', error);
       }
     };
   }, [isListening]);
@@ -141,25 +141,25 @@ export default function KeySetting({
         <div className="flex-1 flex flex-col gap-[19px]">
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.keyMapping")}
+              {t('keySetting.keyMapping')}
             </p>
             <button
               onClick={() => setIsListening(true)}
               className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                isListening ? "border-[#459BF8]" : "border-[#3A3943]"
+                isListening ? 'border-[#459BF8]' : 'border-[#3A3943]'
               } text-[#DBDEE8] text-style-2`}
             >
               {isListening
-                ? t("keySetting.pressAnyKey")
-                : displayKey || t("keySetting.clickToSet")}
+                ? t('keySetting.pressAnyKey')
+                : displayKey || t('keySetting.clickToSet')}
             </button>
           </div>
           <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">{t("keySetting.keySize")}</p>
+            <p className="text-white text-style-2">{t('keySetting.keySize')}</p>
             <div className="flex items-center gap-[10.5px]">
               <div
                 className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                  widthFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+                  widthFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
                 }`}
               >
                 <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
@@ -170,8 +170,8 @@ export default function KeySetting({
                   value={width}
                   onChange={(e) => {
                     const newValue = e.target.value;
-                    if (newValue === "") {
-                      setWidth("");
+                    if (newValue === '') {
+                      setWidth('');
                     } else {
                       const numValue = parseInt(newValue, 10);
                       if (!Number.isNaN(numValue)) {
@@ -183,7 +183,7 @@ export default function KeySetting({
                   onBlur={(e) => {
                     setWidthFocused(false);
                     if (
-                      e.target.value === "" ||
+                      e.target.value === '' ||
                       Number.isNaN(parseInt(e.target.value, 10))
                     ) {
                       setWidth(60);
@@ -194,7 +194,7 @@ export default function KeySetting({
               </div>
               <div
                 className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                  heightFocused ? "border-[#459BF8]" : "border-[#3A3943]"
+                  heightFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
                 }`}
               >
                 <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
@@ -205,8 +205,8 @@ export default function KeySetting({
                   value={height}
                   onChange={(e) => {
                     const newValue = e.target.value;
-                    if (newValue === "") {
-                      setHeight("");
+                    if (newValue === '') {
+                      setHeight('');
                     } else {
                       const numValue = parseInt(newValue, 10);
                       if (!Number.isNaN(numValue)) {
@@ -218,7 +218,7 @@ export default function KeySetting({
                   onBlur={(e) => {
                     setHeightFocused(false);
                     if (
-                      e.target.value === "" ||
+                      e.target.value === '' ||
                       Number.isNaN(parseInt(e.target.value, 10))
                     ) {
                       setHeight(60);
@@ -232,24 +232,24 @@ export default function KeySetting({
           {/* 커스텀 이미지 */}
           <div className="flex justify-between w-full items-center">
             <p className="text-white text-style-2">
-              {t("keySetting.customImage")}
+              {t('keySetting.customImage')}
             </p>
             <button
               ref={imageButtonRef}
               type="button"
               className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showImagePicker ? "border-[#459BF8]" : "border-[#3A3943]"
+                showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
               } text-[#DBDEE8] text-style-4`}
               onClick={handleImageButtonClick}
             >
-              {t("keySetting.configure")}
+              {t('keySetting.configure')}
             </button>
           </div>
           {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
           {useCustomCSS && (
             <div className="flex justify-between w-full items-center">
               <p className="text-white text-style-2">
-                {t("keySetting.className")}
+                {t('keySetting.className')}
               </p>
               <input
                 key="classNameUnified"
@@ -267,13 +267,13 @@ export default function KeySetting({
               onClick={handleSubmit}
               className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
             >
-              {t("keySetting.save")}
+              {t('keySetting.save')}
             </button>
             <button
               onClick={onClose}
               className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
             >
-              {t("keySetting.cancel")}
+              {t('keySetting.cancel')}
             </button>
           </div>
         </div>
@@ -289,8 +289,8 @@ export default function KeySetting({
             onActiveImageChange={setActiveImage}
             onIdleTransparentChange={setIdleTransparent}
             onActiveTransparentChange={setActiveTransparent}
-            onIdleImageReset={() => setInactiveImage("")}
-            onActiveImageReset={() => setActiveImage("")}
+            onIdleImageReset={() => setInactiveImage('')}
+            onActiveImageReset={() => setActiveImage('')}
             onClose={handleImagePickerClose}
           />
         )}

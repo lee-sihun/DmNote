@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useRef } from "react";
-import { animationScheduler } from "../../utils/animationScheduler";
+import React, { memo, useEffect, useRef } from 'react';
+import { animationScheduler } from '../../utils/animationScheduler';
 
 export const Track = memo(
   ({
@@ -17,7 +17,7 @@ export const Track = memo(
     const canvasRef = useRef();
     const trackRef = useRef();
 
-    // 트랙 상단 글로벌 마스크 
+    // 트랙 상단 글로벌 마스크
     useEffect(() => {
       if (!trackRef.current) return;
       const fadeZoneHeight = 50; // 고정 상단 페이드 영역
@@ -31,11 +31,11 @@ export const Track = memo(
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext('2d');
       const currentSpeed = flowSpeed || 180;
       const minNoteHeight = 0;
       const baseOpacity = (noteOpacity || 80) / 100;
-      const color = noteColor || "#FFFFFF";
+      const color = noteColor || '#FFFFFF';
       const noteRadius = borderRadius ?? 2;
 
       // roundRect 폴리필
@@ -56,7 +56,7 @@ export const Track = memo(
       }
 
       let rgbaColor = color;
-      if (color.startsWith("#")) {
+      if (color.startsWith('#')) {
         const r = parseInt(color.slice(1, 3), 16);
         const g = parseInt(color.slice(3, 5), 16);
         const b = parseInt(color.slice(5, 7), 16);
@@ -67,7 +67,7 @@ export const Track = memo(
         ctx.clearRect(0, 0, width, height);
         const notes = notesRef.current[trackKey] || [];
 
-        ctx.fillStyle = rgbaColor; 
+        ctx.fillStyle = rgbaColor;
 
         for (let i = 0; i < notes.length; i++) {
           const note = notes[i];
@@ -79,14 +79,14 @@ export const Track = memo(
             const pressDuration = currentTime - startTime;
             noteLength = Math.max(
               minNoteHeight,
-              (pressDuration * currentSpeed) / 1000
+              (pressDuration * currentSpeed) / 1000,
             );
             yPosition = height - noteLength;
           } else {
             const noteDuration = endTime - startTime;
             noteLength = Math.max(
               minNoteHeight,
-              (noteDuration * currentSpeed) / 1000
+              (noteDuration * currentSpeed) / 1000,
             );
             const timeSinceCompletion = currentTime - endTime;
             const moveDistance = (timeSinceCompletion * currentSpeed) / 1000;
@@ -133,7 +133,7 @@ export const Track = memo(
     ]);
 
     const trackStyle = {
-      position: "absolute",
+      position: 'absolute',
       left: `${position.dx}px`,
       top: `${position.dy - height}px`,
       width: `${width}px`,
@@ -144,25 +144,25 @@ export const Track = memo(
       overflow: `var(--track-overflow, hidden)`,
       pointerEvents: `var(--track-pointer-events, none)`,
       boxShadow: `var(--track-shadow, none)`,
-      willChange: "transform",
-      backfaceVisibility: "hidden",
-      transform: "translateZ(0)",
+      willChange: 'transform',
+      backfaceVisibility: 'hidden',
+      transform: 'translateZ(0)',
     };
 
     return (
       <div
         ref={trackRef}
         style={trackStyle}
-        className={position?.className || ""}
+        className={position?.className || ''}
         data-state="track-canvas"
       >
         <canvas
           ref={canvasRef}
           width={width}
           height={height}
-          style={{ width: "100%", height: "100%", display: "block" }}
+          style={{ width: '100%', height: '100%', display: 'block' }}
         />
       </div>
     );
-  }
+  },
 );

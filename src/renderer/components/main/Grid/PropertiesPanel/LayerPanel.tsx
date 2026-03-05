@@ -1,11 +1,11 @@
-import React, { useCallback } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import { SidebarToggleIcon, ModeToggleIcon } from "./PropertyInputs";
-import { LAYER_PANEL_TABS, type LayerPanelTabType } from "./types";
-import LayerTabContent from "./LayerTabContent";
-import GridTabContent from "./GridTabContent";
+import React, { useCallback } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { SidebarToggleIcon, ModeToggleIcon } from './PropertyInputs';
+import { LAYER_PANEL_TABS, type LayerPanelTabType } from './types';
+import LayerTabContent from './LayerTabContent';
+import GridTabContent from './GridTabContent';
 
 // ============================================================================
 // 레이어 패널 Props
@@ -28,13 +28,17 @@ interface LayerPanelTabButtonProps {
   children: React.ReactNode;
 }
 
-const LayerPanelTabButton: React.FC<LayerPanelTabButtonProps> = ({ active, onClick, children }) => (
+const LayerPanelTabButton: React.FC<LayerPanelTabButtonProps> = ({
+  active,
+  onClick,
+  children,
+}) => (
   <button
     onClick={onClick}
     className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
       active
-        ? "bg-[#3A3943] text-white"
-        : "bg-[#26262C] text-[#9395A1] hover:bg-[#303036]"
+        ? 'bg-[#3A3943] text-white'
+        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
     }`}
   >
     {children}
@@ -51,19 +55,23 @@ interface LayerPanelTabsProps {
   t: (key: string) => string;
 }
 
-const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({ activeTab, onTabChange, t }) => (
+const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
+  activeTab,
+  onTabChange,
+  t,
+}) => (
   <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
     <LayerPanelTabButton
       active={activeTab === LAYER_PANEL_TABS.LAYER}
       onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
     >
-      {t("propertiesPanel.tabLayer") || "레이어"}
+      {t('propertiesPanel.tabLayer') || '레이어'}
     </LayerPanelTabButton>
     <LayerPanelTabButton
       active={activeTab === LAYER_PANEL_TABS.GRID}
       onClick={() => onTabChange(LAYER_PANEL_TABS.GRID)}
     >
-      {t("propertiesPanel.tabGrid") || "그리드"}
+      {t('propertiesPanel.tabGrid') || '그리드'}
     </LayerPanelTabButton>
   </div>
 );
@@ -72,10 +80,19 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({ activeTab, onTabChange,
 // 레이어 패널 컴포넌트
 // ============================================================================
 
-const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, hasSelection = false, onSelectionFromPanel }) => {
+const LayerPanel: React.FC<LayerPanelProps> = ({
+  onClose,
+  onSwitchToProperty,
+  hasSelection = false,
+  onSelectionFromPanel,
+}) => {
   const { t } = useTranslation();
-  const activeTab = usePropertiesPanelStore((state) => state.canvasPanelActiveTab);
-  const setActiveTab = usePropertiesPanelStore((state) => state.setCanvasPanelActiveTab);
+  const activeTab = usePropertiesPanelStore(
+    (state) => state.canvasPanelActiveTab,
+  );
+  const setActiveTab = usePropertiesPanelStore(
+    (state) => state.setCanvasPanelActiveTab,
+  );
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
   // 헤더/탭 영역 빈 공간 클릭 시 선택 해제
@@ -84,9 +101,9 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
       // 버튼, 입력 등 인터랙티브 요소 클릭은 무시
-      if (target.closest("button, input")) return;
+      if (target.closest('button, input')) return;
       // 레이어 리스트 영역은 자체 핸들러가 있으므로 무시
-      if (target.closest(".properties-panel-overlay-scroll")) return;
+      if (target.closest('.properties-panel-overlay-scroll')) return;
       onSelectionFromPanel?.();
       clearSelection();
     },
@@ -103,7 +120,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           <span className="text-[#DBDEE8] text-style-2">
-            {t("propertiesPanel.canvas") || "Canvas"}
+            {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
           <div className="flex items-center gap-[4px]">
             {/* 모드 토글 버튼 - hasSelection에 따라 활성/비활성 */}
@@ -111,9 +128,13 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
               disabled={!hasSelection}
               onClick={hasSelection ? onSwitchToProperty : undefined}
               className={`w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
-                hasSelection ? "hover:bg-[#2A2A30] cursor-pointer" : "cursor-not-allowed opacity-70"
+                hasSelection
+                  ? 'hover:bg-[#2A2A30] cursor-pointer'
+                  : 'cursor-not-allowed opacity-70'
               }`}
-              title={t("propertiesPanel.switchToProperty") || "Switch to Property"}
+              title={
+                t('propertiesPanel.switchToProperty') || 'Switch to Property'
+              }
             >
               <ModeToggleIcon mode="property" disabled={!hasSelection} />
             </button>
@@ -121,7 +142,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
             <button
               onClick={onClose}
               className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
-              title={t("propertiesPanel.closePanel") || "Close Panel"}
+              title={t('propertiesPanel.closePanel') || 'Close Panel'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -145,9 +166,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({ onClose, onSwitchToProperty, ha
           onSelectionFromPanel={onSelectionFromPanel}
         />
       )}
-      {activeTab === LAYER_PANEL_TABS.GRID && (
-        <GridTabContent />
-      )}
+      {activeTab === LAYER_PANEL_TABS.GRID && <GridTabContent />}
     </div>
   );
 };

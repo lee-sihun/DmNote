@@ -1,6 +1,6 @@
-import { signal, type Signal } from "@preact/signals-react";
-import type { KeyStatsPayload } from "@src/types/api";
-import type { StatItemType } from "@src/types/statItems";
+import { signal, type Signal } from '@preact/signals-react';
+import type { KeyStatsPayload } from '@src/types/api';
+import type { StatItemType } from '@src/types/statItems';
 
 const statsSignals: Record<keyof KeyStatsPayload, Signal<number>> = {
   kps: signal(0),
@@ -18,13 +18,13 @@ export function applyStatsSnapshot(snapshot: KeyStatsPayload) {
 
 export function getStatValueSignal(statType: StatItemType): Signal<number> {
   switch (statType) {
-    case "kpsAvg":
+    case 'kpsAvg':
       return statsSignals.kpsAvg;
-    case "kpsMax":
+    case 'kpsMax':
       return statsSignals.kpsMax;
-    case "total":
+    case 'total':
       return statsSignals.total;
-    case "kps":
+    case 'kps':
     default:
       return statsSignals.kps;
   }

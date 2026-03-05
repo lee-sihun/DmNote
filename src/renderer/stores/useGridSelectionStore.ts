@@ -1,10 +1,10 @@
-import { create } from "zustand";
-import type { KeyPosition } from "@src/types/keys";
-import type { PluginDisplayElementInternal } from "@src/types/api";
-import type { StatItemPosition } from "@src/types/statItems";
-import type { GraphItemPosition } from "@src/types/graphItems";
+import { create } from 'zustand';
+import type { KeyPosition } from '@src/types/keys';
+import type { PluginDisplayElementInternal } from '@src/types/api';
+import type { StatItemPosition } from '@src/types/statItems';
+import type { GraphItemPosition } from '@src/types/graphItems';
 
-export type SelectableElementType = "key" | "stat" | "graph" | "plugin";
+export type SelectableElementType = 'key' | 'stat' | 'graph' | 'plugin';
 
 export interface SelectedElement {
   type: SelectableElementType;
@@ -14,27 +14,27 @@ export interface SelectedElement {
 
 // 클립보드에 저장되는 키 데이터
 export interface ClipboardKeyData {
-  type: "key";
+  type: 'key';
   keyCode: string;
   position: KeyPosition;
 }
 
 // 클립보드에 저장되는 통계 요소 데이터
 export interface ClipboardStatData {
-  type: "stat";
+  type: 'stat';
   position: StatItemPosition;
 }
 
 // 클립보드에 저장되는 그래프 데이터
 export interface ClipboardGraphData {
-  type: "graph";
+  type: 'graph';
   position: GraphItemPosition;
 }
 
 // 클립보드에 저장되는 플러그인 요소 데이터
 export interface ClipboardPluginData {
-  type: "plugin";
-  element: Omit<PluginDisplayElementInternal, "fullId">;
+  type: 'plugin';
+  element: Omit<PluginDisplayElementInternal, 'fullId'>;
 }
 
 export type ClipboardItem =
@@ -50,7 +50,12 @@ interface GridSelectionState {
   selectedGroupIds: string[];
 
   // 마지막으로 선택된 키의 좌표 (Shift+클릭 범위 선택용)
-  lastSelectedKeyBounds: { x: number; y: number; width: number; height: number } | null;
+  lastSelectedKeyBounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
 
   // 클립보드 (복사된 요소들)
   clipboard: ClipboardItem[];
@@ -79,10 +84,15 @@ interface GridSelectionState {
   setSelectedElements: (elements: SelectedElement[]) => void;
   setFullSelection: (elements: SelectedElement[], groupIds: string[]) => void;
   isSelected: (id: string) => boolean;
-  setLastSelectedKeyBounds: (bounds: { x: number; y: number; width: number; height: number } | null) => void;
+  setLastSelectedKeyBounds: (
+    bounds: { x: number; y: number; width: number; height: number } | null,
+  ) => void;
 
   // 클립보드 Actions
-  setClipboard: (items: ClipboardItem[], groups?: { id: string; name: string; collapsed?: boolean }[]) => void;
+  setClipboard: (
+    items: ClipboardItem[],
+    groups?: { id: string; name: string; collapsed?: boolean }[],
+  ) => void;
   clearClipboard: () => void;
 
   // 마퀴 선택 Actions
@@ -120,12 +130,12 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
     set((state) => {
       if (addToSelection) {
         const existingIndex = state.selectedElements.findIndex(
-          (el) => el.id === element.id
+          (el) => el.id === element.id,
         );
         if (existingIndex >= 0) {
           return {
             selectedElements: state.selectedElements.filter(
-              (el) => el.id !== element.id
+              (el) => el.id !== element.id,
             ),
             selectedGroupIds: [],
           };
@@ -145,12 +155,12 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
   toggleSelection: (element) => {
     set((state) => {
       const existingIndex = state.selectedElements.findIndex(
-        (el) => el.id === element.id
+        (el) => el.id === element.id,
       );
       if (existingIndex >= 0) {
         return {
           selectedElements: state.selectedElements.filter(
-            (el) => el.id !== element.id
+            (el) => el.id !== element.id,
           ),
           selectedGroupIds: [],
         };
@@ -240,7 +250,7 @@ export const useGridSelectionStore = create<GridSelectionState>((set, get) => ({
  */
 export function getMarqueeRect(
   start: { x: number; y: number } | null,
-  end: { x: number; y: number } | null
+  end: { x: number; y: number } | null,
 ): { left: number; top: number; width: number; height: number } | null {
   if (!start || !end) return null;
 
@@ -257,7 +267,7 @@ export function getMarqueeRect(
  */
 export function isElementInMarquee(
   elementBounds: { x: number; y: number; width: number; height: number },
-  marqueeRect: { left: number; top: number; width: number; height: number }
+  marqueeRect: { left: number; top: number; width: number; height: number },
 ): boolean {
   const elementRight = elementBounds.x + elementBounds.width;
   const elementBottom = elementBounds.y + elementBounds.height;

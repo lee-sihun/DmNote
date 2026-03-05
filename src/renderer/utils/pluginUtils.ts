@@ -17,7 +17,7 @@ const componentHandlers = new Map<string, Map<string, Function>>();
  */
 export function registerComponentHandler(
   pluginId: string,
-  handler: Function
+  handler: Function,
 ): string {
   const handlerId = `__dmn_component_handler_${++handlerIdCounter}`;
 
@@ -61,7 +61,7 @@ export function clearComponentHandlers(pluginId: string): void {
  */
 export function extractPluginId(content: string, filename: string): string {
   // 첫 20줄에서 @id 메타데이터 찾기
-  const lines = content.split("\n").slice(0, 20);
+  const lines = content.split('\n').slice(0, 20);
   for (const line of lines) {
     const match = line.match(/\/\/\s*@id(?:\s*:\s*|\s+)([a-z0-9-_]+)/i);
     if (match) {
@@ -72,8 +72,8 @@ export function extractPluginId(content: string, filename: string): string {
   // 폴백: 파일명 정규화
   return filename
     .toLowerCase()
-    .replace(/\.(js|mjs|ts)$/i, "")
-    .replace(/[^a-z0-9-_]/g, "-")
-    .replace(/--+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/\.(js|mjs|ts)$/i, '')
+    .replace(/[^a-z0-9-_]/g, '-')
+    .replace(/--+/g, '-')
+    .replace(/^-|-$/g, '');
 }

@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { useState, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import { EditorSelection, EditorState } from '@codemirror/state';
 import {
   EditorView,
   highlightActiveLine,
@@ -7,18 +7,22 @@ import {
   keymap,
   lineNumbers,
   placeholder,
-} from "@codemirror/view";
+} from '@codemirror/view';
 import {
   defaultKeymap,
   history,
   historyKeymap,
   indentWithTab,
-} from "@codemirror/commands";
-import { css } from "@codemirror/lang-css";
-import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { tags } from "@lezer/highlight";
-import Modal from "@components/main/Modal/Modal";
-import { validateWebFontFaceCss } from "@src/types/fonts";
+} from '@codemirror/commands';
+import { css } from '@codemirror/lang-css';
+import {
+  HighlightStyle,
+  indentUnit,
+  syntaxHighlighting,
+} from '@codemirror/language';
+import { tags } from '@lezer/highlight';
+import Modal from '@components/main/Modal/Modal';
+import { validateWebFontFaceCss } from '@src/types/fonts';
 
 interface WebFontInputModalProps {
   isOpen: boolean;
@@ -30,11 +34,11 @@ interface WebFontInputModalProps {
 }
 
 const WEBFONT_EDITOR_HIGHLIGHT_STYLE = HighlightStyle.define([
-  { tag: tags.comment, color: "#6A9955" },
-  { tag: [tags.string, tags.special(tags.string)], color: "#CE9178" },
-  { tag: tags.keyword, color: "#C586C0" },
-  { tag: [tags.propertyName], color: "#9CDCFE" },
-  { tag: [tags.bracket, tags.punctuation], color: "#D4D4D4" },
+  { tag: tags.comment, color: '#6A9955' },
+  { tag: [tags.string, tags.special(tags.string)], color: '#CE9178' },
+  { tag: tags.keyword, color: '#C586C0' },
+  { tag: [tags.propertyName], color: '#9CDCFE' },
+  { tag: [tags.bracket, tags.punctuation], color: '#D4D4D4' },
 ]);
 
 const WEBFONT_EDITOR_BASE_EXTENSIONS = [
@@ -42,12 +46,12 @@ const WEBFONT_EDITOR_BASE_EXTENSIONS = [
   highlightActiveLine(),
   highlightActiveLineGutter(),
   history(),
-  indentUnit.of("  "),
+  indentUnit.of('  '),
   css(),
   syntaxHighlighting(WEBFONT_EDITOR_HIGHLIGHT_STYLE),
   EditorView.contentAttributes.of({
-    spellcheck: "false",
-    "aria-label": "@font-face CSS input",
+    spellcheck: 'false',
+    'aria-label': '@font-face CSS input',
   }),
   EditorView.domEventHandlers({
     dragstart: (event) => {
@@ -65,15 +69,15 @@ export default function WebFontInputModal({
   isOpen,
   onClose,
   onSubmit,
-  initialCss = "",
+  initialCss = '',
   isDuplicateFontFamily,
   t,
 }: WebFontInputModalProps) {
-  const [cssInput, setCssInput] = useState("");
+  const [cssInput, setCssInput] = useState('');
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const handleSubmitRef = useRef<() => void>(() => undefined);
-  const normalizedInitialCss = initialCss || "";
+  const normalizedInitialCss = initialCss || '';
 
   const trimmedCSS = cssInput.trim();
 
@@ -85,61 +89,64 @@ export default function WebFontInputModal({
   const extractedFontFamily = cssValidation.detectedFontFamily;
 
   const hasDuplicateFontFamily = useMemo(() => {
-    if (cssValidation.status !== "ready" || !extractedFontFamily) {
+    if (cssValidation.status !== 'ready' || !extractedFontFamily) {
       return false;
     }
     return isDuplicateFontFamily?.(extractedFontFamily) ?? false;
   }, [cssValidation.status, extractedFontFamily, isDuplicateFontFamily]);
 
-  const canSubmit = cssValidation.status === "ready" && !hasDuplicateFontFamily;
+  const canSubmit = cssValidation.status === 'ready' && !hasDuplicateFontFamily;
 
   const detectedFontFileName = useMemo(() => {
-    const defaultFileName = t("webFontInput.defaultFileName") || "web-font";
+    const defaultFileName = t('webFontInput.defaultFileName') || 'web-font';
     return extractedFontFamily || defaultFileName;
   }, [extractedFontFamily, t]);
 
   const availabilityLabel = useMemo(() => {
-    if (cssValidation.status === "ready" && hasDuplicateFontFamily) {
+    if (cssValidation.status === 'ready' && hasDuplicateFontFamily) {
       return (
-        t("webFontInput.availabilityDuplicateFontFamily") ||
-        "이미 등록된 font-family"
+        t('webFontInput.availabilityDuplicateFontFamily') ||
+        '이미 등록된 font-family'
       );
     }
 
     switch (cssValidation.status) {
-      case "idle":
-        return t("webFontInput.availabilityIdle") || "입력 대기";
-      case "ready":
-        return t("webFontInput.availabilityReady") || "사용 가능";
-      case "invalidCss":
-        return t("webFontInput.availabilityInvalidCss") || "문법 오류";
-      case "missingFontFace":
-        return t("webFontInput.availabilityMissingFontFace") || "@font-face 없음";
-      case "missingFontFamily":
-        return t("webFontInput.availabilityMissingFontFamily") || "font-family 없음";
-      case "missingSrc":
-        return t("webFontInput.availabilityMissingSrc") || "src 없음";
-      case "multipleFamilies":
+      case 'idle':
+        return t('webFontInput.availabilityIdle') || '입력 대기';
+      case 'ready':
+        return t('webFontInput.availabilityReady') || '사용 가능';
+      case 'invalidCss':
+        return t('webFontInput.availabilityInvalidCss') || '문법 오류';
+      case 'missingFontFace':
         return (
-          t("webFontInput.availabilityMultipleFamilies") ||
-          "다중 폰트 감지"
+          t('webFontInput.availabilityMissingFontFace') || '@font-face 없음'
+        );
+      case 'missingFontFamily':
+        return (
+          t('webFontInput.availabilityMissingFontFamily') || 'font-family 없음'
+        );
+      case 'missingSrc':
+        return t('webFontInput.availabilityMissingSrc') || 'src 없음';
+      case 'multipleFamilies':
+        return (
+          t('webFontInput.availabilityMultipleFamilies') || '다중 폰트 감지'
         );
       default:
-        return t("webFontInput.availabilityNotReady") || "사용 불가";
+        return t('webFontInput.availabilityNotReady') || '사용 불가';
     }
   }, [cssValidation.status, hasDuplicateFontFamily, t]);
 
   const fixedHintMessage =
-    t("webFontInput.fixedHint") || "@font-face CSS를 추가할 수 있습니다.";
-  const submitButtonLabel = t("webFontInput.submit") || "저장";
+    t('webFontInput.fixedHint') || '@font-face CSS를 추가할 수 있습니다.';
+  const submitButtonLabel = t('webFontInput.submit') || '저장';
 
   const placeholderText = useMemo(
     () =>
-      `${t("webFontInput.cssLabel") || "@font-face CSS"}\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`,
+      `${t('webFontInput.cssLabel') || '@font-face CSS'}\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`,
     [t],
   );
 
-  const resetEditorContent = useCallback((nextValue = "") => {
+  const resetEditorContent = useCallback((nextValue = '') => {
     setCssInput(nextValue);
 
     const editorView = editorViewRef.current;
@@ -164,14 +171,20 @@ export default function WebFontInputModal({
       return;
     }
 
-    onSubmit(trimmedCSS, extractedFontFamily || "");
-    resetEditorContent("");
-  }, [canSubmit, extractedFontFamily, onSubmit, resetEditorContent, trimmedCSS]);
+    onSubmit(trimmedCSS, extractedFontFamily || '');
+    resetEditorContent('');
+  }, [
+    canSubmit,
+    extractedFontFamily,
+    onSubmit,
+    resetEditorContent,
+    trimmedCSS,
+  ]);
 
   handleSubmitRef.current = handleSubmit;
 
   const handleClose = useCallback(() => {
-    resetEditorContent("");
+    resetEditorContent('');
     onClose();
   }, [onClose, resetEditorContent]);
 
@@ -181,7 +194,7 @@ export default function WebFontInputModal({
         editorViewRef.current.destroy();
         editorViewRef.current = null;
       }
-      setCssInput("");
+      setCssInput('');
       return;
     }
 
@@ -200,7 +213,7 @@ export default function WebFontInputModal({
           ...historyKeymap,
           indentWithTab,
           {
-            key: "Mod-Enter",
+            key: 'Mod-Enter',
             run: () => {
               handleSubmitRef.current();
               return true;
@@ -300,8 +313,8 @@ export default function WebFontInputModal({
           <button
             className={`w-[120px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
               canSubmit
-                ? "bg-[#2A2A30] hover:bg-[#34343c]"
-                : "bg-[#222228] cursor-not-allowed opacity-50"
+                ? 'bg-[#2A2A30] hover:bg-[#34343c]'
+                : 'bg-[#222228] cursor-not-allowed opacity-50'
             }`}
             onClick={handleSubmit}
             disabled={!canSubmit}
@@ -312,7 +325,7 @@ export default function WebFontInputModal({
             className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
             onClick={handleClose}
           >
-            {t("common.cancel") || "취소"}
+            {t('common.cancel') || '취소'}
           </button>
         </div>
       </div>

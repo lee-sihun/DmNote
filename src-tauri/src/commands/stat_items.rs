@@ -21,4 +21,3 @@ pub fn stat_positions_update(
         .map_err(|err| err.to_string())?;
     Ok(updated)
 }
-

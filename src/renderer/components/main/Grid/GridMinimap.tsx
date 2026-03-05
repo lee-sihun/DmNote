@@ -4,10 +4,10 @@ import React, {
   useState,
   useRef,
   useEffect,
-} from "react";
-import { useGridViewStore } from "@stores/useGridViewStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useKeyStore } from "@stores/useKeyStore";
+} from 'react';
+import { useGridViewStore } from '@stores/useGridViewStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/useKeyStore';
 
 interface Position {
   dx: number;
@@ -68,7 +68,7 @@ export default function GridMinimap({
 
   // 플러그인 요소들 가져오기
   const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements
+    (state) => state.elements,
   );
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
 
@@ -253,7 +253,7 @@ export default function GridMinimap({
 
       return { panX: newPanX, panY: newPanY };
     },
-    [containerSize, minimapScale, bounds, zoom, offsetX, offsetY]
+    [containerSize, minimapScale, bounds, zoom, offsetX, offsetY],
   );
 
   // 미니맵 클릭으로 팬 이동
@@ -268,7 +268,7 @@ export default function GridMinimap({
       const { panX: newPanX, panY: newPanY } = minimapToGridPan(clickX, clickY);
       setPan(mode, newPanX, newPanY);
     },
-    [isDragging, minimapToGridPan, mode, setPan]
+    [isDragging, minimapToGridPan, mode, setPan],
   );
 
   // 드래그 시작
@@ -285,21 +285,21 @@ export default function GridMinimap({
 
         const { panX: newPanX, panY: newPanY } = minimapToGridPan(
           clickX,
-          clickY
+          clickY,
         );
         setPan(mode, newPanX, newPanY);
       };
 
       const handleMouseUp = () => {
         setIsDragging(false);
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     },
-    [minimapToGridPan, mode, setPan]
+    [minimapToGridPan, mode, setPan],
   );
 
   // 키 개수와 플러그인 요소가 모두 없으면 미니맵 숨김
@@ -321,8 +321,8 @@ export default function GridMinimap({
       className="absolute bottom-2 left-2 flex flex-col gap-[2px] select-none"
       style={{
         opacity: shouldShow ? 1 : 0,
-        transition: "opacity 200ms ease-out",
-        pointerEvents: shouldShow ? "auto" : "none",
+        transition: 'opacity 200ms ease-out',
+        pointerEvents: shouldShow ? 'auto' : 'none',
       }}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
@@ -333,11 +333,11 @@ export default function GridMinimap({
         style={{
           width: MINIMAP_WIDTH,
           height: 23,
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
           borderRadius: 4,
-          border: "1px solid rgba(255, 255, 255, 0.2)",
-          boxSizing: "border-box",
-          overflow: "hidden",
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
         {/* 초기화 버튼 */}
@@ -352,22 +352,50 @@ export default function GridMinimap({
           style={{
             borderTopLeftRadius: 3,
             borderBottomLeftRadius: 3,
-            backgroundColor: "transparent",
-            transition: "background-color 150ms, color 150ms",
+            backgroundColor: 'transparent',
+            transition: 'background-color 150ms, color 150ms',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.backgroundColor = 'transparent')
+          }
           title="Reset zoom (Ctrl+0)"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             {/* 좌상단 ㄱ */}
-            <path d="M2 4.5V2H4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M2 4.5V2H4.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
             {/* 우상단 ㄱ 뒤집힌 */}
-            <path d="M7.5 2H10V4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M7.5 2H10V4.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
             {/* 좌하단 ㄴ */}
-            <path d="M2 7.5V10H4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M2 7.5V10H4.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
             {/* 우하단 ㄴ 뒤집힌 */}
-            <path d="M7.5 10H10V7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M7.5 10H10V7.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </div>
         {/* 확대 버튼 */}
@@ -380,15 +408,24 @@ export default function GridMinimap({
           }}
           className="flex-1 flex items-center justify-center h-full text-white/70 hover:text-white cursor-pointer"
           style={{
-            backgroundColor: "transparent",
-            transition: "background-color 150ms, color 150ms",
+            backgroundColor: 'transparent',
+            transition: 'background-color 150ms, color 150ms',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.backgroundColor = 'transparent')
+          }
           title="Zoom in (Ctrl++)"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M6 3V9M3 6H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path
+              d="M6 3V9M3 6H9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
         {/* 축소 버튼 */}
@@ -401,15 +438,24 @@ export default function GridMinimap({
           }}
           className="flex-1 flex items-center justify-center h-full text-white/70 hover:text-white cursor-pointer"
           style={{
-            backgroundColor: "transparent",
-            transition: "background-color 150ms, color 150ms",
+            backgroundColor: 'transparent',
+            transition: 'background-color 150ms, color 150ms',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.backgroundColor = 'transparent')
+          }
           title="Zoom out (Ctrl+-)"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M3 6H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path
+              d="M3 6H9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
         {/* 현재 배율 */}
@@ -426,8 +472,8 @@ export default function GridMinimap({
         style={{
           width: MINIMAP_WIDTH,
           height: MINIMAP_HEIGHT,
-          border: "1px solid rgba(255, 255, 255, 0.2)",
-          boxSizing: "border-box",
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxSizing: 'border-box',
         }}
         onClick={handleMinimapClick}
         onMouseDown={handleMouseDown}

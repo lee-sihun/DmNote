@@ -1,9 +1,9 @@
-import React from "react";
-import { useLenis } from "@hooks/useLenis";
-import Modal from "@components/main/Modal/Modal";
-import Checkbox from "@components/main/common/Checkbox";
-import TrashIcon from "@assets/svgs/trash.svg";
-import { getScrollShadowState } from "@utils/scrollShadow";
+import React from 'react';
+import { useLenis } from '@hooks/useLenis';
+import Modal from '@components/main/Modal/Modal';
+import Checkbox from '@components/main/common/Checkbox';
+import TrashIcon from '@assets/svgs/trash.svg';
+import { getScrollShadowState } from '@utils/scrollShadow';
 
 export function PluginManagerModal({
   isOpen,
@@ -33,7 +33,7 @@ export function PluginManagerModal({
       prev.hasTopShadow === nextState.hasTopShadow &&
       prev.hasBottomShadow === nextState.hasBottomShadow
         ? prev
-        : nextState
+        : nextState,
     );
   }, []);
 
@@ -97,8 +97,8 @@ export function PluginManagerModal({
           {/* 상단 그림자 */}
           <div
             className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? "" : "transition-opacity duration-150"
-            } ${scrollState.hasTopShadow ? "opacity-100" : "opacity-0"}`}
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
           />
 
           <div
@@ -106,44 +106,44 @@ export function PluginManagerModal({
             className="overflow-y-auto modal-content-scroll pr-[14px]"
             style={{
               height:
-                containerHeight !== null ? `${containerHeight}px` : "auto",
-              maxHeight: "195px",
+                containerHeight !== null ? `${containerHeight}px` : 'auto',
+              maxHeight: '195px',
               transition: isFirstRender.current
-                ? "none"
-                : "height 100ms ease-in-out",
-              willChange: "scroll-position",
+                ? 'none'
+                : 'height 100ms ease-in-out',
+              willChange: 'scroll-position',
             }}
           >
             <div ref={contentRef} className="flex flex-col gap-[19px] py-[5px]">
               {plugins.length === 0 ? (
                 <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
-                  {t("settings.noPlugins")}
+                  {t('settings.noPlugins')}
                 </div>
               ) : (
                 plugins.map((plugin) => {
                   const isPending =
                     pendingPluginAction && pendingPluginAction.id === plugin.id;
                   const isRemovePending =
-                    isPending && pendingPluginAction.op === "remove";
+                    isPending && pendingPluginAction.op === 'remove';
                   return (
                     <div
                       key={plugin.id}
                       className="flex items-center justify-between"
-                      style={{ transform: "translateZ(0)" }}
+                      style={{ transform: 'translateZ(0)' }}
                     >
                       <div className="flex items-center gap-[10px]  h-[23px]">
                         <button
                           className={`flex items-center justify-center transition-colors ${
                             isRemovePending
-                              ? "opacity-50 cursor-not-allowed"
-                              : "hover:opacity-80"
+                              ? 'opacity-50 cursor-not-allowed'
+                              : 'hover:opacity-80'
                           }`}
                           onClick={() => {
                             if (!isRemovePending) onRemove(plugin.id);
                           }}
                           disabled={isRemovePending}
-                          aria-label={t("settings.removePlugin")}
-                          title={t("settings.removePlugin")}
+                          aria-label={t('settings.removePlugin')}
+                          title={t('settings.removePlugin')}
                         >
                           <TrashIcon className="w-[14px] h-[15px]" />
                         </button>
@@ -177,8 +177,8 @@ export function PluginManagerModal({
           {/* 하단 그림자 */}
           <div
             className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? "" : "transition-opacity duration-150"
-            } ${scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"}`}
+              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
 
@@ -190,21 +190,21 @@ export function PluginManagerModal({
           <button
             className={`flex items-center justify-center w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
               isAdding
-                ? "bg-[#222228] cursor-not-allowed opacity-50"
-                : "bg-[#2A2A30] hover:bg-[#34343c]"
+                ? 'bg-[#222228] cursor-not-allowed opacity-50'
+                : 'bg-[#2A2A30] hover:bg-[#34343c]'
             }`}
             onClick={onAdd}
             disabled={isAdding}
           >
             {isAdding
-              ? t("settings.adding")
-              : `${t("settings.loadJs")} (${plugins.length})`}
+              ? t('settings.adding')
+              : `${t('settings.loadJs')} (${plugins.length})`}
           </button>
           <button
             className="flex items-center justify-center w-[75px] h-[30px] bg-[#2A2A30] rounded-[7px] text-style-3 text-[#DCDEE7] hover:bg-[#34343c] transition-colors"
             onClick={onClose}
           >
-            {t("common.ok")}
+            {t('common.ok')}
           </button>
         </div>
       </div>

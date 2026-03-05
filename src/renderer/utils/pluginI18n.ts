@@ -1,10 +1,10 @@
-import type { PluginMessages, PluginI18nParams } from "@src/types/api";
+import type { PluginMessages, PluginI18nParams } from '@src/types/api';
 
 function getNestedValue(source: Record<string, any>, path: string): unknown {
-  return path.split(".").reduce<unknown>((acc, part) => {
+  return path.split('.').reduce<unknown>((acc, part) => {
     if (
       acc &&
-      typeof acc === "object" &&
+      typeof acc === 'object' &&
       part in (acc as Record<string, any>)
     ) {
       return (acc as Record<string, any>)[part];
@@ -17,7 +17,7 @@ function interpolate(template: string, params?: PluginI18nParams) {
   if (!params) return template;
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const value = params[key];
-    return value === undefined ? "" : String(value);
+    return value === undefined ? '' : String(value);
   });
 }
 
@@ -36,7 +36,7 @@ export function translatePluginMessage({
   params,
   fallback,
 }: TranslatePluginMessageOptions): string {
-  if (!key) return fallback ?? "";
+  if (!key) return fallback ?? '';
 
   const localeMessages = messages?.[locale];
   if (localeMessages) {
@@ -48,10 +48,10 @@ export function translatePluginMessage({
       raw = getNestedValue(localeMessages, key);
     }
 
-    if (typeof raw === "string") {
+    if (typeof raw === 'string') {
       return interpolate(raw, params);
     }
-    if (typeof raw === "number") {
+    if (typeof raw === 'number') {
       return String(raw);
     }
   }
@@ -63,7 +63,7 @@ export function translatePluginMessage({
 export function createPluginTranslator(
   messages: PluginMessages | undefined,
   locale: string,
-  fallback?: (key: string, params?: PluginI18nParams) => string
+  fallback?: (key: string, params?: PluginI18nParams) => string,
 ) {
   return (key: string, params?: PluginI18nParams, defaultText?: string) =>
     translatePluginMessage({

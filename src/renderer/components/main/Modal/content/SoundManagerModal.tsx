@@ -6,15 +6,15 @@ import React, {
   useMemo,
   useRef,
   useState,
-} from "react";
-import Modal from "../Modal";
-import { useTranslation } from "@contexts/I18nContext";
-import type { SoundListItem } from "@src/types/api";
-import { useLenis } from "@hooks/useLenis";
-import { getScrollShadowState } from "@utils/scrollShadow";
-import SoundTrimModal from "./SoundTrimModal";
-import Checkbox from "@components/main/common/Checkbox";
-import TrashIcon from "@assets/svgs/trash.svg";
+} from 'react';
+import Modal from '../Modal';
+import { useTranslation } from '@contexts/I18nContext';
+import type { SoundListItem } from '@src/types/api';
+import { useLenis } from '@hooks/useLenis';
+import { getScrollShadowState } from '@utils/scrollShadow';
+import SoundTrimModal from './SoundTrimModal';
+import Checkbox from '@components/main/common/Checkbox';
+import TrashIcon from '@assets/svgs/trash.svg';
 
 interface SoundManagerModalProps {
   isOpen: boolean;
@@ -37,7 +37,7 @@ export default function SoundManagerModal({
   const [sounds, setSounds] = useState<SoundListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState('');
   const [showTrimModal, setShowTrimModal] = useState(false);
   const [editingSoundPath, setEditingSoundPath] = useState<string | null>(null);
 
@@ -56,29 +56,27 @@ export default function SoundManagerModal({
   const hasLoadedRef = useRef(false);
 
   const normalizedSelectedSound = useMemo(
-    () => (selectedSound || "").trim(),
+    () => (selectedSound || '').trim(),
     [selectedSound],
   );
 
   const editingSoundItem = useMemo(
     () =>
       editingSoundPath
-        ? sounds.find((s) => s.soundPath === editingSoundPath) ?? null
+        ? (sounds.find((s) => s.soundPath === editingSoundPath) ?? null)
         : null,
     [editingSoundPath, sounds],
   );
 
   const loadSounds = useCallback(async () => {
     setIsLoading(true);
-    setLoadError("");
+    setLoadError('');
     try {
       const nextSounds = await window.api.sound.list();
       setSounds(nextSounds);
     } catch (error) {
-      console.error("Failed to load sound list", error);
-      setLoadError(
-        t("soundManager.loadFailed") || "사운드 목록 로드 실패",
-      );
+      console.error('Failed to load sound list', error);
+      setLoadError(t('soundManager.loadFailed') || '사운드 목록 로드 실패');
     } finally {
       hasLoadedRef.current = true;
       setIsLoading(false);
@@ -166,7 +164,7 @@ export default function SoundManagerModal({
       try {
         await window.api.sound.setEnabled(item.soundPath, nextEnabled);
       } catch (error) {
-        console.error("Failed to toggle sound enabled state", error);
+        console.error('Failed to toggle sound enabled state', error);
         setSounds((prev) =>
           prev.map((s) =>
             s.soundPath === item.soundPath
@@ -175,7 +173,7 @@ export default function SoundManagerModal({
           ),
         );
         setLoadError(
-          t("soundManager.stateChangeFailed") || "사운드 상태 변경 실패",
+          t('soundManager.stateChangeFailed') || '사운드 상태 변경 실패',
         );
       } finally {
         setIsSaving(false);
@@ -195,8 +193,8 @@ export default function SoundManagerModal({
       try {
         await window.api.sound.remove(item.soundPath);
       } catch (error) {
-        console.error("Failed to delete sound", error);
-        setLoadError(t("soundManager.deleteFailed") || "사운드 삭제 실패");
+        console.error('Failed to delete sound', error);
+        setLoadError(t('soundManager.deleteFailed') || '사운드 삭제 실패');
         await loadSounds();
       } finally {
         setIsSaving(false);
@@ -209,7 +207,7 @@ export default function SoundManagerModal({
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (addFileInputRef.current) {
-        addFileInputRef.current.value = "";
+        addFileInputRef.current.value = '';
       }
       if (!file) return;
       setPendingFile(file);
@@ -251,11 +249,11 @@ export default function SoundManagerModal({
           className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="relative" style={{ contain: "inline-size" }}>
+          <div className="relative" style={{ contain: 'inline-size' }}>
             <div
               className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasTopShadow ? "opacity-100" : "opacity-0"}`}
+                skipShadowTransition ? '' : 'transition-opacity duration-150'
+              } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
             />
 
             <div
@@ -263,73 +261,79 @@ export default function SoundManagerModal({
               className="modal-content-scroll pr-[14px]"
               style={{
                 height:
-                  containerHeight !== null ? `${containerHeight}px` : "auto",
+                  containerHeight !== null ? `${containerHeight}px` : 'auto',
                 maxHeight: `${MAX_SCROLL_HEIGHT}px`,
-                overflowY: isScrollable ? "auto" : "hidden",
+                overflowY: isScrollable ? 'auto' : 'hidden',
                 transition: isFirstRender.current
-                  ? "none"
-                  : "height 100ms ease-in-out",
-                willChange: "scroll-position",
+                  ? 'none'
+                  : 'height 100ms ease-in-out',
+                willChange: 'scroll-position',
               }}
             >
-              <div ref={contentRef} className="flex flex-col gap-[19px] py-[5px]">
+              <div
+                ref={contentRef}
+                className="flex flex-col gap-[19px] py-[5px]"
+              >
                 {sounds.length === 0 && !isLoading ? (
                   <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
-                    {t("soundManager.noSounds") || "사운드 없음"}
+                    {t('soundManager.noSounds') || '사운드 없음'}
                   </div>
                 ) : (
                   sounds.map((item) => (
-                      <button
-                        key={item.soundPath}
-                        type="button"
-                        onClick={() => onSelectSound(item.soundPath)}
-                        className="w-full min-w-0 flex items-center justify-between gap-[8px]"
-                        style={{ transform: "translateZ(0)" }}
+                    <button
+                      key={item.soundPath}
+                      type="button"
+                      onClick={() => onSelectSound(item.soundPath)}
+                      className="w-full min-w-0 flex items-center justify-between gap-[8px]"
+                      style={{ transform: 'translateZ(0)' }}
+                    >
+                      <div
+                        className="flex items-center gap-[10px] flex-1 min-w-0 overflow-hidden"
+                        style={{ height: '20px' }}
                       >
-                        <div className="flex items-center gap-[10px] flex-1 min-w-0 overflow-hidden" style={{ height: "20px" }}>
+                        <button
+                          type="button"
+                          className="flex-shrink-0 flex items-center justify-center transition-colors hover:opacity-80"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDelete(item);
+                          }}
+                          title={t('tabCss.remove') || '삭제'}
+                        >
+                          <TrashIcon className="w-[14px] h-[15px]" />
+                        </button>
+                        {item.originalPath ? (
                           <button
                             type="button"
-                            className="flex-shrink-0 flex items-center justify-center transition-colors hover:opacity-80"
+                            className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left whitespace-nowrap text-ellipsis overflow-hidden block cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
+                            style={{ lineHeight: '18px' }}
+                            title={t('soundManager.editSound') || '편집'}
                             onClick={(event) => {
                               event.stopPropagation();
-                              void handleDelete(item);
+                              handleEditSound(item);
                             }}
-                            title={t("tabCss.remove") || "삭제"}
                           >
-                            <TrashIcon className="w-[14px] h-[15px]" />
+                            {item.displayName || item.fileName}
                           </button>
-                          {item.originalPath ? (
-                            <button
-                              type="button"
-                              className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left whitespace-nowrap text-ellipsis overflow-hidden block cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
-                              style={{ lineHeight: "18px" }}
-                              title={t("soundManager.editSound") || "편집"}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleEditSound(item);
-                              }}
-                            >
-                              {item.displayName || item.fileName}
-                            </button>
-                          ) : (
-                            <span
-                              className="text-white text-style-2 whitespace-nowrap text-ellipsis overflow-hidden block"
-                              style={{ lineHeight: "18px" }}
-                              title={item.fileName}
-                            >
-                              {item.displayName || item.fileName}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex-shrink-0 flex items-center justify-center w-[27px] h-[21px]">
-                          <Checkbox
-                            checked={item.enabled}
-                            onChange={() => {
-                              void handleToggle(item, !item.enabled);
-                            }}
-                          />
-                        </div>
-                      </button>
+                        ) : (
+                          <span
+                            className="text-white text-style-2 whitespace-nowrap text-ellipsis overflow-hidden block"
+                            style={{ lineHeight: '18px' }}
+                            title={item.fileName}
+                          >
+                            {item.displayName || item.fileName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 flex items-center justify-center w-[27px] h-[21px]">
+                        <Checkbox
+                          checked={item.enabled}
+                          onChange={() => {
+                            void handleToggle(item, !item.enabled);
+                          }}
+                        />
+                      </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -337,8 +341,8 @@ export default function SoundManagerModal({
 
             <div
               className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? "" : "transition-opacity duration-150"
-              } ${scrollState.hasBottomShadow ? "opacity-100" : "opacity-0"}`}
+                skipShadowTransition ? '' : 'transition-opacity duration-150'
+              } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
             />
           </div>
 
@@ -352,7 +356,7 @@ export default function SoundManagerModal({
                 addFileInputRef.current?.click();
               }}
             >
-              {`${t("soundManager.addSound") || "추가"} (${sounds.length})`}
+              {`${t('soundManager.addSound') || '추가'} (${sounds.length})`}
             </button>
             <input
               ref={addFileInputRef}
@@ -366,13 +370,13 @@ export default function SoundManagerModal({
               className="flex items-center justify-center w-[75px] h-[30px] bg-[#2A2A30] rounded-[7px] text-style-3 text-[#DCDEE7] hover:bg-[#34343c] transition-colors"
               onClick={onClose}
             >
-              {t("common.ok") || "확인"}
+              {t('common.ok') || '확인'}
             </button>
           </div>
 
           {isLoading ? (
             <p className="text-[#9FA3B2] text-style-4 mt-[8px]">
-              {t("propertiesPanel.loading") || "로딩..."}
+              {t('propertiesPanel.loading') || '로딩...'}
             </p>
           ) : null}
 

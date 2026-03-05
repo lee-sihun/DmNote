@@ -6,47 +6,47 @@ import React, {
   useState,
   useRef,
   useCallback,
-} from "react";
+} from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
   Window as TauriWindow,
-} from "@tauri-apps/api/window";
-import { LogicalPosition, PhysicalPosition } from "@tauri-apps/api/dpi";
-import { Menu } from "@tauri-apps/api/menu";
-import { isMac } from "@utils/platform";
-import { Key } from "@components/Key";
-import { useTranslation } from "@contexts/I18nContext";
+} from '@tauri-apps/api/window';
+import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
+import { Menu } from '@tauri-apps/api/menu';
+import { isMac } from '@utils/platform';
+import { Key } from '@components/Key';
+import { useTranslation } from '@contexts/I18nContext';
 import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
-} from "@constants/overlayConfig";
-import { mergeNoteSettings } from "@src/types/noteSettings";
-import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
-import { useCustomJsInjection } from "@hooks/useCustomJsInjection";
-import { useBlockBrowserShortcuts } from "@hooks/useBlockBrowserShortcuts";
-import { useNoteSystem } from "@hooks/useNoteSystem";
-import { useAppBootstrap } from "@hooks/useAppBootstrap";
-import { useBuiltinStatsSubscription } from "@hooks/useBuiltinStatsSubscription";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
+} from '@constants/overlayConfig';
+import { mergeNoteSettings } from '@src/types/noteSettings';
+import { useCustomCssInjection } from '@hooks/useCustomCssInjection';
+import { useCustomJsInjection } from '@hooks/useCustomJsInjection';
+import { useBlockBrowserShortcuts } from '@hooks/useBlockBrowserShortcuts';
+import { useNoteSystem } from '@hooks/useNoteSystem';
+import { useAppBootstrap } from '@hooks/useAppBootstrap';
+import { useBuiltinStatsSubscription } from '@hooks/useBuiltinStatsSubscription';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
-} from "@stores/keySignals";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
+} from '@stores/keySignals';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { getKeyInfoByGlobalKey } from '@utils/KeyMaps';
 import {
   createDefaultCounterSettings,
   type KeyPosition,
-} from "@src/types/keys";
-import KeyCounterLayer from "@components/overlay/KeyCounterLayer";
-import { PluginElementsRenderer } from "@components/PluginElementsRenderer";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import StatItem from "@components/overlay/StatItem";
-import StatCounterLayer from "@components/overlay/StatCounterLayer";
-import GraphItem from "@components/overlay/GraphItem";
+} from '@src/types/keys';
+import KeyCounterLayer from '@components/overlay/KeyCounterLayer';
+import { PluginElementsRenderer } from '@components/PluginElementsRenderer';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import StatItem from '@components/overlay/StatItem';
+import StatCounterLayer from '@components/overlay/StatCounterLayer';
+import GraphItem from '@components/overlay/GraphItem';
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -54,20 +54,20 @@ const FALLBACK_POSITION: KeyPosition = {
   width: 60,
   height: 60,
   hidden: false,
-  activeImage: "",
-  inactiveImage: "",
+  activeImage: '',
+  inactiveImage: '',
   activeTransparent: false,
   idleTransparent: false,
   count: 0,
-  noteColor: "#FFFFFF",
+  noteColor: '#FFFFFF',
   noteOpacity: 80,
   noteEffectEnabled: true,
   noteGlowEnabled: false,
   noteGlowSize: 20,
   noteGlowOpacity: 70,
-  noteGlowColor: "#FFFFFF",
+  noteGlowColor: '#FFFFFF',
   noteAutoYCorrection: true,
-  className: "",
+  className: '',
   counter: createDefaultCounterSettings(),
 };
 
@@ -80,7 +80,7 @@ const OverlayGraphItem = GraphItem as React.ComponentType<any>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
-  const mod = await import("@components/overlay/WebGLTracksOGL.jsx");
+  const mod = await import('@components/overlay/WebGLTracksOGL.jsx');
   return { default: mod.WebGLTracksOGL as React.ComponentType<any> };
 });
 
@@ -105,21 +105,21 @@ export default function App() {
       const isDevtoolsCombo =
         ((e.ctrlKey || e.metaKey) &&
           e.shiftKey &&
-          e.key.toLowerCase() === "i") ||
-        e.key === "F12";
+          e.key.toLowerCase() === 'i') ||
+        e.key === 'F12';
       if (!developerModeEnabled && isDevtoolsCombo) {
         e.preventDefault();
         e.stopPropagation();
       }
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [developerModeEnabled]);
 
   // 윈도우 타입
   useEffect(() => {
     try {
-      (window as any).__dmn_window_type = "overlay";
+      (window as any).__dmn_window_type = 'overlay';
     } catch (e) {
       // ignore
     }
@@ -136,7 +136,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
       positions: Record<string, any[]>;
-    }>("positions:sync", (data) => {
+    }>('positions:sync', (data) => {
       if (data?.positions) {
         useKeyStore.setState((state) => ({
           ...state,
@@ -151,7 +151,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
       positions: Record<string, any[]>;
-    }>("statPositions:sync", (data) => {
+    }>('statPositions:sync', (data) => {
       if (data?.positions) {
         useStatItemStore.setState((state) => ({
           ...state,
@@ -166,7 +166,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
       positions: Record<string, any[]>;
-    }>("graphPositions:sync", (data) => {
+    }>('graphPositions:sync', (data) => {
       if (data?.positions) {
         useGraphItemStore.setState((state) => ({
           ...state,
@@ -193,7 +193,11 @@ export default function App() {
   const globalNoteSettings = useSettingsStore((state) => state.noteSettings);
   const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
   const noteSettings = useMemo(
-    () => mergeNoteSettings(globalNoteSettings, tabNoteOverrides?.[selectedKeyType]),
+    () =>
+      mergeNoteSettings(
+        globalNoteSettings,
+        tabNoteOverrides?.[selectedKeyType],
+      ),
     [globalNoteSettings, tabNoteOverrides, selectedKeyType],
   );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
@@ -209,14 +213,14 @@ export default function App() {
     }
 
     try {
-      const mainWindow = await TauriWindow.getByLabel("main");
+      const mainWindow = await TauriWindow.getByLabel('main');
       if (!mainWindow) {
         return false;
       }
       const isMainVisible = await mainWindow.isVisible();
       return !isMainVisible;
     } catch (error) {
-      console.error("Failed to resolve main window visibility", error);
+      console.error('Failed to resolve main window visibility', error);
       return false;
     }
   }, [trayEnabled]);
@@ -224,8 +228,8 @@ export default function App() {
   // 탭 목록 (기본 탭 + 커스텀 탭)
   const BUILTIN_TABS = useMemo(
     () =>
-      ["4key", "5key", "6key", "8key"].map((id) => {
-        const num = id.replace("key", "");
+      ['4key', '5key', '6key', '8key'].map((id) => {
+        const num = id.replace('key', '');
         return { id, name: t(`mode.button${num}`) };
       }),
     [t],
@@ -239,7 +243,7 @@ export default function App() {
       getCurrentWindow()
         .startDragging()
         .catch((error) => {
-          console.error("Failed to start overlay dragging", error);
+          console.error('Failed to start overlay dragging', error);
         });
     },
     [],
@@ -249,7 +253,7 @@ export default function App() {
     try {
       await window.api.overlay.setVisible(false);
     } catch (error) {
-      console.error("Failed to close overlay window", error);
+      console.error('Failed to close overlay window', error);
     }
   }, []);
 
@@ -259,7 +263,7 @@ export default function App() {
     try {
       await window.api.settings.update({ alwaysOnTop: next });
     } catch (error) {
-      console.error("Failed to toggle always-on-top", error);
+      console.error('Failed to toggle always-on-top', error);
       setAlwaysOnTop(!next);
     }
   }, [alwaysOnTop, setAlwaysOnTop]);
@@ -268,7 +272,7 @@ export default function App() {
     try {
       await window.api.window.showMain();
     } catch (error) {
-      console.error("Failed to open settings window", error);
+      console.error('Failed to open settings window', error);
     }
   }, []);
 
@@ -276,7 +280,7 @@ export default function App() {
     try {
       await window.api.app.quit();
     } catch (error) {
-      console.error("Failed to quit application", error);
+      console.error('Failed to quit application', error);
     }
   }, []);
 
@@ -314,7 +318,7 @@ export default function App() {
 
       await win.setPosition(new PhysicalPosition(newX, newY));
     } catch (error) {
-      console.error("Failed to snap overlay to edge", error);
+      console.error('Failed to snap overlay to edge', error);
     }
   }, []);
 
@@ -331,17 +335,17 @@ export default function App() {
         menu = await Menu.new({
           items: [
             {
-              id: "toggleAlwaysOnTop",
-              text: t("settings.alwaysOnTop"),
+              id: 'toggleAlwaysOnTop',
+              text: t('settings.alwaysOnTop'),
               checked: alwaysOnTop,
               action: () => {
                 void toggleAlwaysOnTop();
               },
             },
-            { item: "Separator" },
+            { item: 'Separator' },
             {
-              id: "selectTab",
-              text: t("contextMenu.selectTab"),
+              id: 'selectTab',
+              text: t('contextMenu.selectTab'),
               items: allTabs.map((tab) => ({
                 id: `selectTab-${tab.id}`,
                 text: tab.name,
@@ -352,32 +356,32 @@ export default function App() {
               })),
             },
             {
-              id: "closeOverlay",
-              text: t("tooltip.overlayClose"),
+              id: 'closeOverlay',
+              text: t('tooltip.overlayClose'),
               action: () => {
                 void closeOverlayWindow();
               },
             },
             {
-              id: "snapToEdge",
-              text: t("contextMenu.snapToEdge"),
+              id: 'snapToEdge',
+              text: t('contextMenu.snapToEdge'),
               action: () => {
                 void snapToNearestEdge();
               },
             },
-            { item: "Separator" },
+            { item: 'Separator' },
             {
-              id: "openSettingsWindow",
-              text: t("tooltip.settings"),
+              id: 'openSettingsWindow',
+              text: t('tooltip.settings'),
               enabled: canOpenMainSettings,
               action: () => {
                 void openSettingsWindow();
               },
             },
-            { item: "Separator" },
+            { item: 'Separator' },
             {
-              id: "quitApplication",
-              text: t("contextMenu.quitApp"),
+              id: 'quitApplication',
+              text: t('contextMenu.quitApp'),
               action: () => {
                 void quitApplication();
               },
@@ -390,7 +394,7 @@ export default function App() {
           getCurrentWindow(),
         );
       } catch (error) {
-        console.error("Failed to open native overlay context menu", error);
+        console.error('Failed to open native overlay context menu', error);
       } finally {
         if (menu) {
           await menu.close().catch(() => {});
@@ -420,9 +424,9 @@ export default function App() {
       void openOverlayContextMenuAt(event.clientX, event.clientY);
     };
 
-    window.addEventListener("contextmenu", handleWindowContextMenu, true);
+    window.addEventListener('contextmenu', handleWindowContextMenu, true);
     return () => {
-      window.removeEventListener("contextmenu", handleWindowContextMenu, true);
+      window.removeEventListener('contextmenu', handleWindowContextMenu, true);
     };
   }, [openOverlayContextMenuAt]);
 
@@ -487,8 +491,8 @@ export default function App() {
 
   useEffect(() => {
     const onResize = () => setLayoutVersion((value) => value + 1);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   useEffect(() => {
@@ -497,14 +501,14 @@ export default function App() {
 
   useEffect(() => {
     // 키 이벤트 버스 초기화 (백엔드에서 한 번만 구독)
-    import("@utils/keyEventBus").then(({ keyEventBus }) => {
+    import('@utils/keyEventBus').then(({ keyEventBus }) => {
       keyEventBus.initialize();
     });
 
     // 버스를 통해 키 이벤트 수신
-    const unsubscribe = import("@utils/keyEventBus").then(({ keyEventBus }) => {
+    const unsubscribe = import('@utils/keyEventBus').then(({ keyEventBus }) => {
       return keyEventBus.subscribe(({ key, state }) => {
-        const isDown = state === "DOWN";
+        const isDown = state === 'DOWN';
         // 키 UI 업데이트 (딜레이 적용)
         updateKeySignalWithDelay(key, isDown);
         // 노트 이펙트는 즉시 처리 (딜레이 없음)
@@ -531,7 +535,7 @@ export default function App() {
         try {
           unsub?.();
         } catch (error) {
-          console.error("Failed to remove key state listener", error);
+          console.error('Failed to remove key state listener', error);
         }
       });
       // 키 딜레이 타이머 정리
@@ -570,7 +574,7 @@ export default function App() {
 
   const currentGraphPositions = useMemo<any[]>(
     () => graphPositions[selectedKeyType] ?? [],
-    [graphPositions, selectedKeyType]
+    [graphPositions, selectedKeyType],
   );
 
   const bounds = useMemo<Bounds | null>(() => {
@@ -741,7 +745,7 @@ export default function App() {
           const trackStartY = useAutoCorrection ? topMostY : position.dy;
           const keyWidth = position.width;
           const desiredNoteWidth =
-            typeof position.noteWidth === "number" &&
+            typeof position.noteWidth === 'number' &&
             Number.isFinite(position.noteWidth)
               ? Math.max(1, Math.round(position.noteWidth))
               : keyWidth;
@@ -815,13 +819,13 @@ export default function App() {
 
     // 이전 값과 비교하여 실제로 변경되었을 때만 resize 호출
     const lastParams = lastResizeParams.current;
-    const fixedPositionAnchor = overlayAnchor === "fixed-position";
+    const fixedPositionAnchor = overlayAnchor === 'fixed-position';
     const fixedPositionDeltaX =
-      fixedPositionAnchor && lastParams?.anchor === "fixed-position"
+      fixedPositionAnchor && lastParams?.anchor === 'fixed-position'
         ? currentMinX - lastParams.minX
         : 0;
     const fixedPositionDeltaY =
-      fixedPositionAnchor && lastParams?.anchor === "fixed-position"
+      fixedPositionAnchor && lastParams?.anchor === 'fixed-position'
         ? currentMinY - lastParams.minY
         : 0;
     if (
@@ -860,7 +864,7 @@ export default function App() {
           : undefined,
       })
       .catch((error) => {
-        console.error("Failed to resize overlay window", error);
+        console.error('Failed to resize overlay window', error);
       });
   }, [bounds, trackHeight, overlayAnchor]);
 
@@ -869,16 +873,16 @@ export default function App() {
       className="relative w-full h-screen m-0 overflow-hidden"
       style={{
         backgroundColor:
-          backgroundColor === "transparent" ? "transparent" : backgroundColor,
+          backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
         ...(macOS
           ? {
               // macOS(WebKit)에서 투명 전환 시 'contents' will-change + 강한 contain 조합이
               // 레이어 재구성을 유발해 반영이 늦어지는 케이스가 있어 완화.
-              willChange: "background-color",
+              willChange: 'background-color',
             }
           : {
-              willChange: "contents",
-              contain: "layout style paint",
+              willChange: 'contents',
+              contain: 'layout style paint',
             }),
       }}
       onMouseDownCapture={handleOverlayMouseDownCapture}
@@ -923,14 +927,14 @@ export default function App() {
         if (!pos || pos.hidden) return null;
 
         const defaultLabel =
-          pos.statType === "kpsAvg"
-            ? "AVG"
-            : pos.statType === "kpsMax"
-              ? "MAX"
-              : pos.statType === "total"
-                ? "Total"
-                : "KPS";
-        const label = (pos.displayText || "").trim() || defaultLabel;
+          pos.statType === 'kpsAvg'
+            ? 'AVG'
+            : pos.statType === 'kpsMax'
+              ? 'MAX'
+              : pos.statType === 'total'
+                ? 'Total'
+                : 'KPS';
+        const label = (pos.displayText || '').trim() || defaultLabel;
         const position = { ...pos, zIndex: pos.zIndex ?? index };
 
         return (

@@ -7,8 +7,8 @@ use crate::{
     app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
-        CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, LayerGroups, NoteSettings,
-        NoteSettingsPatch, SettingsPatchInput,
+        CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
+        NoteSettings, NoteSettingsPatch, SettingsPatchInput,
     },
 };
 
@@ -142,7 +142,13 @@ pub fn keys_reset_all(
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
     let selected_key_type = "4key".to_string();
     let custom_tabs: Vec<CustomTab> = Vec::new();
-    let cleared_tab_css_ids: Vec<String> = state.store.snapshot().tab_css_overrides.keys().cloned().collect();
+    let cleared_tab_css_ids: Vec<String> = state
+        .store
+        .snapshot()
+        .tab_css_overrides
+        .keys()
+        .cloned()
+        .collect();
 
     state
         .store
@@ -569,7 +575,10 @@ pub fn custom_tabs_select(
 }
 
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> Result<KeyCounters, String> {
+pub fn keys_reset_counters(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<KeyCounters, String> {
     let snapshot = state.reset_key_counters();
     state
         .persist_key_counters()
@@ -662,7 +671,9 @@ pub struct RawInputSubscribeResponse {
 
 /// Subscribe to raw input stream (increment subscriber count)
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn raw_input_subscribe(state: State<'_, AppState>) -> Result<RawInputSubscribeResponse, String> {
+pub fn raw_input_subscribe(
+    state: State<'_, AppState>,
+) -> Result<RawInputSubscribeResponse, String> {
     let count = state.subscribe_raw_input();
     log::debug!("[RawInput] Subscribe: count = {}", count);
     Ok(RawInputSubscribeResponse { count })
@@ -670,7 +681,9 @@ pub fn raw_input_subscribe(state: State<'_, AppState>) -> Result<RawInputSubscri
 
 /// Unsubscribe from raw input stream (decrement subscriber count)
 #[tauri::command(permission = "dmnote-allow-all")]
-pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> Result<RawInputSubscribeResponse, String> {
+pub fn raw_input_unsubscribe(
+    state: State<'_, AppState>,
+) -> Result<RawInputSubscribeResponse, String> {
     let count = state.unsubscribe_raw_input();
     log::debug!("[RawInput] Unsubscribe: count = {}", count);
     Ok(RawInputSubscribeResponse { count })

@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 interface RadioProps {
   value: string;
@@ -22,7 +22,7 @@ const Radio = ({ value, name, checked, onChange, children }: RadioProps) => {
       <span className="w-[15px] h-[15px] inline-block mr-[10px] rounded-full bg-[#3B4049] border border-[#989BA6] flex-shrink-0 relative">
         <span
           className={`absolute inset-0 rounded-full transform transition-all duration-200 ${
-            checked ? "bg-[#FFB400] scale-[0.5]" : "bg-transparent scale-[0.3]"
+            checked ? 'bg-[#FFB400] scale-[0.5]' : 'bg-transparent scale-[0.3]'
           }`}
         />
       </span>

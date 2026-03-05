@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import type { LayerGroups, LayerGroupDef } from "@src/types/layerGroups";
+import { create } from 'zustand';
+import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 
 interface LayerGroupStoreState {
   /** Per-mode layer group definitions (persisted via backend) */
@@ -35,7 +35,7 @@ export const useLayerGroupStore = create<LayerGroupStoreState>((set, get) => ({
         modeGroups.forEach((group) => validGroupIds.add(group.id));
       });
       const collapsedGroups = new Set(
-        Array.from(state.collapsedGroups).filter((id) => validGroupIds.has(id))
+        Array.from(state.collapsedGroups).filter((id) => validGroupIds.has(id)),
       );
       return { layerGroups: groups, collapsedGroups };
     }),
@@ -72,7 +72,7 @@ export const useLayerGroupStore = create<LayerGroupStoreState>((set, get) => ({
     const updated: LayerGroups = {
       ...current,
       [mode]: modeGroups.map((g) =>
-        g.id === groupId ? { ...g, name: newName } : g
+        g.id === groupId ? { ...g, name: newName } : g,
       ),
     };
     set({ layerGroups: updated });

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import Lenis from "lenis";
-import { LENIS_CONFIG } from "@config/lenis";
+import { useEffect, useRef, useState, useCallback } from 'react';
+import Lenis from 'lenis';
+import { LENIS_CONFIG } from '@config/lenis';
 
 interface UseLenisOptions {
   /**
@@ -86,7 +86,7 @@ export function useLenis(options: UseLenisOptions = {}) {
     // limit 계산이 갱신되지 않고 스크롤이 중간에 멈출 수 있다.
     const contentEl =
       wrapper.childElementCount === 1
-        ? (wrapper.firstElementChild as HTMLElement | null) ?? wrapper
+        ? ((wrapper.firstElementChild as HTMLElement | null) ?? wrapper)
         : wrapper;
     const lenis = new Lenis({
       wrapper,
@@ -102,7 +102,7 @@ export function useLenis(options: UseLenisOptions = {}) {
     const handleLenisScroll = () => {
       onScrollRef.current?.();
     };
-    lenis.on("scroll", handleLenisScroll);
+    lenis.on('scroll', handleLenisScroll);
 
     // RAF 루프 시작
     let rafId: number;
@@ -115,19 +115,19 @@ export function useLenis(options: UseLenisOptions = {}) {
     // 스크롤바 너비 변화를 감지 (OS/시스템 설정에 따라 스크롤바가 레이아웃 폭을 차지할 수 있음)
     let ro: ResizeObserver | null = null;
     const onResize = () => computeScrollbarWidth();
-    if (typeof ResizeObserver !== "undefined") {
+    if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(onResize);
       ro.observe(wrapper);
     } else {
-      window.addEventListener("resize", onResize);
+      window.addEventListener('resize', onResize);
     }
 
     // 클린업
     return () => {
       cancelAnimationFrame(rafId);
       if (ro) ro.disconnect();
-      else window.removeEventListener("resize", onResize);
-      lenis.off("scroll", handleLenisScroll);
+      else window.removeEventListener('resize', onResize);
+      lenis.off('scroll', handleLenisScroll);
       lenis.destroy();
       lenisRef.current = null;
     };

@@ -1,6 +1,9 @@
-import { create } from "zustand";
-import type { PluginSettingsDefinition } from "@src/types/api";
-import { LAYER_PANEL_TABS, type LayerPanelTabType } from "@components/main/Grid/PropertiesPanel/types";
+import { create } from 'zustand';
+import type { PluginSettingsDefinition } from '@src/types/api';
+import {
+  LAYER_PANEL_TABS,
+  type LayerPanelTabType,
+} from '@components/main/Grid/PropertiesPanel/types';
 
 export type PluginSettingsPanelPayload = {
   pluginId: string;
@@ -10,7 +13,7 @@ export type PluginSettingsPanelPayload = {
   onChange: (nextSettings: Record<string, any>) => void;
   onConfirm: (
     nextSettings: Record<string, any>,
-    originalSettings: Record<string, any>
+    originalSettings: Record<string, any>,
   ) => void | Promise<void>;
   onCancel: (originalSettings: Record<string, any>) => void;
   resolve: (confirmed: boolean) => void;
@@ -20,7 +23,7 @@ interface PropertiesPanelState {
   pluginSettingsPanel: PluginSettingsPanelPayload | null;
   openPluginSettingsPanel: (payload: PluginSettingsPanelPayload) => void;
   closePluginSettingsPanel: () => void;
-  
+
   // 캔버스 패널 (레이어 패널) 탭 상태
   canvasPanelActiveTab: LayerPanelTabType;
   setCanvasPanelActiveTab: (tab: LayerPanelTabType) => void;
@@ -47,7 +50,7 @@ export const usePropertiesPanelStore = create<PropertiesPanelState>(
         try {
           existing.onCancel(existing.originalSettings);
         } catch (error) {
-          console.error("[Plugin Settings] Failed to cancel settings:", error);
+          console.error('[Plugin Settings] Failed to cancel settings:', error);
         } finally {
           existing.resolve(false);
         }
@@ -55,7 +58,7 @@ export const usePropertiesPanelStore = create<PropertiesPanelState>(
       set({ pluginSettingsPanel: payload });
     },
     closePluginSettingsPanel: () => set({ pluginSettingsPanel: null }),
-    
+
     // 캔버스 패널 탭 상태
     canvasPanelActiveTab: LAYER_PANEL_TABS.LAYER,
     setCanvasPanelActiveTab: (tab) => set({ canvasPanelActiveTab: tab }),
@@ -65,10 +68,12 @@ export const usePropertiesPanelStore = create<PropertiesPanelState>(
 
     canvasPanelToggleSignal: 0,
     requestCanvasPanelToggle: () =>
-      set((state) => ({ canvasPanelToggleSignal: state.canvasPanelToggleSignal + 1 })),
+      set((state) => ({
+        canvasPanelToggleSignal: state.canvasPanelToggleSignal + 1,
+      })),
 
     renameRequestSignal: 0,
     requestRename: () =>
       set((state) => ({ renameRequestSignal: state.renameRequestSignal + 1 })),
-  })
+  }),
 );

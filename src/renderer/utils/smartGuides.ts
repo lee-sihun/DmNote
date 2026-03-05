@@ -19,9 +19,9 @@ export interface ElementBounds {
 }
 
 export interface GuideLine {
-  type: "vertical" | "horizontal";
+  type: 'vertical' | 'horizontal';
   position: number; // 가이드라인의 x 또는 y 위치
-  alignType: "left" | "center" | "right" | "top" | "middle" | "bottom";
+  alignType: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 }
 
 /**
@@ -29,8 +29,8 @@ export interface GuideLine {
  * 요소 사이의 간격을 시각화
  */
 export interface SpacingGuide {
-  type: "spacing";
-  direction: "horizontal" | "vertical";
+  type: 'spacing';
+  direction: 'horizontal' | 'vertical';
   value: number; // 간격 값 (px)
   // 간격 표시 위치
   startPos: number; // 간격 시작 위치 (x 또는 y)
@@ -48,8 +48,8 @@ export interface SpacingGuide {
  * 리사이즈 시 다른 요소와 동일한 크기로 스냅
  */
 export interface SizeMatchGuide {
-  type: "size-match";
-  dimension: "width" | "height";
+  type: 'size-match';
+  dimension: 'width' | 'height';
   value: number; // 일치하는 크기 값
   position: { x: number; y: number }; // 표시 위치
   matchedElementId: string;
@@ -97,7 +97,7 @@ export function calculateBounds(
   y: number,
   width: number,
   height: number,
-  id: string = ""
+  id: string = '',
 ): ElementBounds {
   return {
     id,
@@ -118,7 +118,7 @@ export function calculateBounds(
  * @returns 전체 요소를 감싸는 바운딩 박스
  */
 export function calculateGroupBounds(
-  elements: ElementBounds[]
+  elements: ElementBounds[],
 ): ElementBounds | null {
   if (elements.length === 0) return null;
 
@@ -132,7 +132,7 @@ export function calculateGroupBounds(
   const height = bottom - top;
 
   return {
-    id: "group",
+    id: 'group',
     left,
     top,
     right,
@@ -150,7 +150,7 @@ export function calculateGroupBounds(
 function isWithinThreshold(
   value1: number,
   value2: number,
-  threshold: number = SNAP_THRESHOLD
+  threshold: number = SNAP_THRESHOLD,
 ): boolean {
   return Math.abs(value1 - value2) <= threshold;
 }
@@ -182,7 +182,7 @@ export function calculateSnapPoints(
   draggedBounds: ElementBounds,
   otherElements: ElementBounds[],
   threshold: number = SNAP_THRESHOLD,
-  options?: SnapPointsOptions
+  options?: SnapPointsOptions,
 ): SnapResult {
   const guides: GuideLine[] = [];
   let snappedX = draggedBounds.left;
@@ -313,7 +313,7 @@ export function calculateSnapPoints(
     snappedY,
     draggedBounds.width,
     draggedBounds.height,
-    draggedBounds.id
+    draggedBounds.id,
   );
 
   for (const other of otherElements) {
@@ -324,17 +324,17 @@ export function calculateSnapPoints(
       // 왼쪽 가장자리 정렬
       if (Math.abs(snappedBounds.left - other.left) < 1) {
         guides.push({
-          type: "vertical",
+          type: 'vertical',
           position: other.left,
-          alignType: "left",
+          alignType: 'left',
         });
       }
       // 오른쪽 가장자리 정렬
       if (Math.abs(snappedBounds.right - other.right) < 1) {
         guides.push({
-          type: "vertical",
+          type: 'vertical',
           position: other.right,
-          alignType: "right",
+          alignType: 'right',
         });
       }
       // 왼쪽-오른쪽 정렬 - 임시 비활성화
@@ -356,9 +356,9 @@ export function calculateSnapPoints(
       // 중앙 정렬
       if (Math.abs(snappedBounds.centerX - other.centerX) < 1) {
         guides.push({
-          type: "vertical",
+          type: 'vertical',
           position: other.centerX,
-          alignType: "center",
+          alignType: 'center',
         });
       }
     }
@@ -368,17 +368,17 @@ export function calculateSnapPoints(
       // 상단 정렬
       if (Math.abs(snappedBounds.top - other.top) < 1) {
         guides.push({
-          type: "horizontal",
+          type: 'horizontal',
           position: other.top,
-          alignType: "top",
+          alignType: 'top',
         });
       }
       // 하단 정렬
       if (Math.abs(snappedBounds.bottom - other.bottom) < 1) {
         guides.push({
-          type: "horizontal",
+          type: 'horizontal',
           position: other.bottom,
-          alignType: "bottom",
+          alignType: 'bottom',
         });
       }
       // 상단-하단 정렬 - 임시 비활성화
@@ -400,9 +400,9 @@ export function calculateSnapPoints(
       // 중앙 정렬
       if (Math.abs(snappedBounds.centerY - other.centerY) < 1) {
         guides.push({
-          type: "horizontal",
+          type: 'horizontal',
           position: other.centerY,
-          alignType: "middle",
+          alignType: 'middle',
         });
       }
     }
@@ -421,18 +421,18 @@ export function calculateSnapPoints(
   // X축: 요소(또는 그룹) 중심이 캔버스 가로 중앙에 정렬된 경우
   if (didSnapX && Math.abs(snappedCenterBounds.centerX - CANVAS_CENTER_X) < 1) {
     guides.push({
-      type: "vertical",
+      type: 'vertical',
       position: CANVAS_CENTER_X,
-      alignType: "center",
+      alignType: 'center',
     });
   }
 
   // Y축: 요소(또는 그룹) 중심이 캔버스 세로 중앙에 정렬된 경우
   if (didSnapY && Math.abs(snappedCenterBounds.centerY - CANVAS_CENTER_Y) < 1) {
     guides.push({
-      type: "horizontal",
+      type: 'horizontal',
       position: CANVAS_CENTER_Y,
-      alignType: "middle",
+      alignType: 'middle',
     });
   }
 
@@ -442,8 +442,8 @@ export function calculateSnapPoints(
       index ===
       self.findIndex(
         (g) =>
-          g.type === guide.type && Math.abs(g.position - guide.position) < 1
-      )
+          g.type === guide.type && Math.abs(g.position - guide.position) < 1,
+      ),
   );
 
   // 간격 가이드 계산 (옵션으로 비활성화 가능)
@@ -470,7 +470,7 @@ export function calculateSnapPoints(
       centerX: snappedX + draggedBounds.width / 2,
       centerY: snappedY + draggedBounds.height / 2,
     },
-    otherElements
+    otherElements,
   );
 
   return {
@@ -491,19 +491,19 @@ export function calculateSnapPoints(
 export function calculateGuideLineExtent(
   guide: GuideLine,
   draggedBounds: ElementBounds,
-  otherElements: ElementBounds[]
+  otherElements: ElementBounds[],
 ): { start: number; end: number } {
   // 캔버스 중앙 가이드라인인지 확인
   const isCanvasCenterGuide =
-    (guide.type === "vertical" &&
+    (guide.type === 'vertical' &&
       Math.abs(guide.position - CANVAS_CENTER_X) < 1) ||
-    (guide.type === "horizontal" &&
+    (guide.type === 'horizontal' &&
       Math.abs(guide.position - CANVAS_CENTER_Y) < 1);
 
   const relevantElements = otherElements.filter((el) => {
     if (el.id === draggedBounds.id) return false;
 
-    if (guide.type === "vertical") {
+    if (guide.type === 'vertical') {
       // 수직 가이드라인: x 위치가 일치하는 요소
       return (
         Math.abs(el.left - guide.position) < 1 ||
@@ -526,7 +526,7 @@ export function calculateGuideLineExtent(
   // 캔버스 중앙 가이드라인의 경우 더 긴 범위 표시
   const CANVAS_CENTER_GUIDE_EXTENSION = 500;
 
-  if (guide.type === "vertical") {
+  if (guide.type === 'vertical') {
     const tops = relevantElements.map((el) => el.top);
     const bottoms = relevantElements.map((el) => el.bottom);
     const extension = isCanvasCenterGuide ? CANVAS_CENTER_GUIDE_EXTENSION : 20;
@@ -551,7 +551,7 @@ export function calculateGuideLineExtent(
 interface SpacingInfo {
   element: ElementBounds;
   gap: number; // 간격 값
-  direction: "left" | "right" | "above" | "below";
+  direction: 'left' | 'right' | 'above' | 'below';
 }
 
 /**
@@ -571,7 +571,7 @@ interface SpacingSnapResult {
  */
 function calculateSpacingGuides(
   draggedBounds: ElementBounds,
-  otherElements: ElementBounds[]
+  otherElements: ElementBounds[],
 ): SpacingSnapResult {
   const spacingGuides: SpacingGuide[] = [];
   let snappedX = draggedBounds.left;
@@ -601,7 +601,7 @@ function calculateSpacingGuides(
   // X축 겹침 여부 확인 함수 (수직 간격 계산 시 사용)
   const hasHorizontalOverlap = (
     a: ElementBounds,
-    b: ElementBounds
+    b: ElementBounds,
   ): boolean => {
     return a.right > b.left && a.left < b.right;
   };
@@ -609,7 +609,7 @@ function calculateSpacingGuides(
   // === 수평 간격 계산 (X축) ===
   // 드래그 요소와 Y축이 겹치는 요소들만 고려 (같은 행에 있는 요소들)
   const horizontallyRelevant = others.filter((el) =>
-    hasVerticalOverlap(draggedBounds, el)
+    hasVerticalOverlap(draggedBounds, el),
   );
 
   // 드래그 요소 기준 왼쪽/오른쪽에 있는 요소들 찾기
@@ -663,14 +663,14 @@ function calculateSpacingGuides(
 
         // 기존 간격 가이드 추가
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: existingGap.gap,
           startPos: existingGap.from.right,
           endPos: existingGap.to.left,
           crossAxisPos: Math.max(
             existingGap.from.centerY,
-            existingGap.to.centerY
+            existingGap.to.centerY,
           ),
           fromElementId: existingGap.from.id,
           toElementId: existingGap.to.id,
@@ -679,8 +679,8 @@ function calculateSpacingGuides(
 
         // 현재 간격 가이드 추가 (스냅 후)
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: existingGap.gap,
           startPos: leftNearest.right,
           endPos: snappedX,
@@ -711,14 +711,14 @@ function calculateSpacingGuides(
         didSpacingSnapX = true;
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: existingGap.gap,
           startPos: existingGap.from.right,
           endPos: existingGap.to.left,
           crossAxisPos: Math.max(
             existingGap.from.centerY,
-            existingGap.to.centerY
+            existingGap.to.centerY,
           ),
           fromElementId: existingGap.from.id,
           toElementId: existingGap.to.id,
@@ -726,8 +726,8 @@ function calculateSpacingGuides(
         });
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: existingGap.gap,
           startPos: snappedX + draggedBounds.width,
           endPos: rightNearest.left,
@@ -759,8 +759,8 @@ function calculateSpacingGuides(
 
         // 왼쪽 간격
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: Math.round(equalGap),
           startPos: leftNearest.right,
           endPos: idealX,
@@ -772,8 +772,8 @@ function calculateSpacingGuides(
 
         // 오른쪽 간격
         spacingGuides.push({
-          type: "spacing",
-          direction: "horizontal",
+          type: 'spacing',
+          direction: 'horizontal',
           value: Math.round(equalGap),
           startPos: idealX + draggedBounds.width,
           endPos: rightNearest.left,
@@ -789,7 +789,7 @@ function calculateSpacingGuides(
   // === 수직 간격 계산 (Y축) ===
   // 드래그 요소와 X축이 겹치는 요소들만 고려 (같은 열에 있는 요소들)
   const verticallyRelevant = others.filter((el) =>
-    hasHorizontalOverlap(draggedBounds, el)
+    hasHorizontalOverlap(draggedBounds, el),
   );
 
   const aboveElements = verticallyRelevant
@@ -836,14 +836,14 @@ function calculateSpacingGuides(
         didSpacingSnapY = true;
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: existingGap.gap,
           startPos: existingGap.from.bottom,
           endPos: existingGap.to.top,
           crossAxisPos: Math.max(
             existingGap.from.centerX,
-            existingGap.to.centerX
+            existingGap.to.centerX,
           ),
           fromElementId: existingGap.from.id,
           toElementId: existingGap.to.id,
@@ -851,8 +851,8 @@ function calculateSpacingGuides(
         });
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: existingGap.gap,
           startPos: aboveNearest.bottom,
           endPos: snappedY,
@@ -883,14 +883,14 @@ function calculateSpacingGuides(
         didSpacingSnapY = true;
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: existingGap.gap,
           startPos: existingGap.from.bottom,
           endPos: existingGap.to.top,
           crossAxisPos: Math.max(
             existingGap.from.centerX,
-            existingGap.to.centerX
+            existingGap.to.centerX,
           ),
           fromElementId: existingGap.from.id,
           toElementId: existingGap.to.id,
@@ -898,8 +898,8 @@ function calculateSpacingGuides(
         });
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: existingGap.gap,
           startPos: snappedY + draggedBounds.height,
           endPos: belowNearest.top,
@@ -934,8 +934,8 @@ function calculateSpacingGuides(
         didSpacingSnapY = true;
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: Math.round(equalGap),
           startPos: aboveNearest.bottom,
           endPos: idealY,
@@ -946,8 +946,8 @@ function calculateSpacingGuides(
         });
 
         spacingGuides.push({
-          type: "spacing",
-          direction: "vertical",
+          type: 'spacing',
+          direction: 'vertical',
           value: Math.round(equalGap),
           startPos: idealY + draggedBounds.height,
           endPos: belowNearest.top,
@@ -978,7 +978,7 @@ export function calculateSizeSnap(
   currentWidth: number,
   currentHeight: number,
   otherElements: ElementBounds[],
-  draggedId: string = ""
+  draggedId: string = '',
 ): SizeSnapResult {
   const sizeMatchGuides: SizeMatchGuide[] = [];
   let snappedWidth = currentWidth;
@@ -1016,8 +1016,8 @@ export function calculateSizeSnap(
     snappedWidth = closestWidthMatch.width;
     didSnapWidth = true;
     sizeMatchGuides.push({
-      type: "size-match",
-      dimension: "width",
+      type: 'size-match',
+      dimension: 'width',
       value: closestWidthMatch.width,
       position: { x: closestWidthMatch.centerX, y: closestWidthMatch.top - 15 },
       matchedElementId: closestWidthMatch.id,
@@ -1034,8 +1034,8 @@ export function calculateSizeSnap(
     snappedHeight = closestHeightMatch.height;
     didSnapHeight = true;
     sizeMatchGuides.push({
-      type: "size-match",
-      dimension: "height",
+      type: 'size-match',
+      dimension: 'height',
       value: closestHeightMatch.height,
       position: {
         x: closestHeightMatch.right + 15,

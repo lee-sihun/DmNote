@@ -1,20 +1,20 @@
-import { useCallback, useRef, useState } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { useSmartGuidesStore } from "@stores/useSmartGuidesStore";
-import { useSettingsStore } from "@stores/useSettingsStore";
+import { useCallback, useRef, useState } from 'react';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateSizeSnap,
-} from "@utils/smartGuides";
-import type { SelectedElement } from "@stores/useGridSelectionStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
-import type { KeyPositions } from "@src/types/keys";
-import type { ElementBounds } from "@utils/smartGuides";
+} from '@utils/smartGuides';
+import type { SelectedElement } from '@stores/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import type { KeyPositions } from '@src/types/keys';
+import type { ElementBounds } from '@utils/smartGuides';
 
 interface ResizeHandle {
   id: string;
@@ -101,7 +101,7 @@ export function useGridResize({
         currentPositions,
         currentStatPositions,
         currentGraphPositions,
-        currentPluginElements
+        currentPluginElements,
       );
   }, []);
 
@@ -115,7 +115,7 @@ export function useGridResize({
         width: number;
         height: number;
         handle?: ResizeHandle;
-      }
+      },
     ) => {
       const smartGuidesStore = useSmartGuidesStore.getState();
       const gridSettings = useSettingsStore.getState().gridSettings;
@@ -138,7 +138,7 @@ export function useGridResize({
           newBounds.y,
           newBounds.width,
           newBounds.height,
-          elementId
+          elementId,
         );
 
         const snapResult = calculateSnapPoints(
@@ -147,7 +147,7 @@ export function useGridResize({
           undefined,
           {
             disableSpacing: !spacingGuidesEnabled,
-          }
+          },
         );
         const handle = newBounds.handle;
 
@@ -200,7 +200,7 @@ export function useGridResize({
               finalWidth,
               finalHeight,
               otherElements,
-              elementId
+              elementId,
             );
 
             if (sizeSnapResult.didSnapWidth) {
@@ -237,7 +237,7 @@ export function useGridResize({
                 finalY,
                 finalWidth,
                 finalHeight,
-                elementId
+                elementId,
               );
               smartGuidesStore.setDraggedBounds(snappedBounds);
 
@@ -254,17 +254,17 @@ export function useGridResize({
                   const filteredSpacingGuides = snapResult.spacingGuides.filter(
                     (guide) => {
                       // 수평 방향 간격 가이드 (좌우 간격)
-                      if (guide.direction === "horizontal") {
+                      if (guide.direction === 'horizontal') {
                         // 좌우 핸들이 아니면 표시 안 함
                         if (handle.dx === 0) return false;
-                        
+
                         // 드래그 중인 요소와 관련된 가이드만 표시
-                        const isDraggedElement = 
-                          guide.fromElementId === elementId || 
+                        const isDraggedElement =
+                          guide.fromElementId === elementId ||
                           guide.toElementId === elementId;
-                        
+
                         if (!isDraggedElement) return false;
-                        
+
                         // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
                         if (handle.dx === -1) {
                           return guide.toElementId === elementId;
@@ -274,19 +274,19 @@ export function useGridResize({
                           return guide.fromElementId === elementId;
                         }
                       }
-                      
+
                       // 수직 방향 간격 가이드 (상하 간격)
-                      if (guide.direction === "vertical") {
+                      if (guide.direction === 'vertical') {
                         // 상하 핸들이 아니면 표시 안 함
                         if (handle.dy === 0) return false;
-                        
+
                         // 드래그 중인 요소와 관련된 가이드만 표시
-                        const isDraggedElement = 
-                          guide.fromElementId === elementId || 
+                        const isDraggedElement =
+                          guide.fromElementId === elementId ||
                           guide.toElementId === elementId;
-                        
+
                         if (!isDraggedElement) return false;
-                        
+
                         // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
                         if (handle.dy === -1) {
                           return guide.toElementId === elementId;
@@ -296,9 +296,9 @@ export function useGridResize({
                           return guide.fromElementId === elementId;
                         }
                       }
-                      
+
                       return false;
-                    }
+                    },
                   );
                   smartGuidesStore.setSpacingGuides(filteredSpacingGuides);
                 } else {
@@ -312,7 +312,7 @@ export function useGridResize({
               // Size Match 가이드 업데이트 (정렬 스냅과 별개로 항상 표시)
               if (hasSizeSnap) {
                 smartGuidesStore.setSizeMatchGuides(
-                  sizeSnapResult.sizeMatchGuides
+                  sizeSnapResult.sizeMatchGuides,
                 );
               } else {
                 smartGuidesStore.setSizeMatchGuides([]);
@@ -335,7 +335,7 @@ export function useGridResize({
                 finalY,
                 finalWidth,
                 finalHeight,
-                elementId
+                elementId,
               );
               smartGuidesStore.setDraggedBounds(snappedBounds);
               smartGuidesStore.setActiveGuides(snapResult.guides);
@@ -347,17 +347,17 @@ export function useGridResize({
                 const filteredSpacingGuides = snapResult.spacingGuides.filter(
                   (guide) => {
                     // 수평 방향 간격 가이드 (좌우 간격)
-                    if (guide.direction === "horizontal") {
+                    if (guide.direction === 'horizontal') {
                       // 좌우 핸들이 아니면 표시 안 함
                       if (handle.dx === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === elementId || 
+                      const isDraggedElement =
+                        guide.fromElementId === elementId ||
                         guide.toElementId === elementId;
-                      
+
                       if (!isDraggedElement) return false;
-                      
+
                       // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
                       if (handle.dx === -1) {
                         return guide.toElementId === elementId;
@@ -367,19 +367,19 @@ export function useGridResize({
                         return guide.fromElementId === elementId;
                       }
                     }
-                    
+
                     // 수직 방향 간격 가이드 (상하 간격)
-                    if (guide.direction === "vertical") {
+                    if (guide.direction === 'vertical') {
                       // 상하 핸들이 아니면 표시 안 함
                       if (handle.dy === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === elementId || 
+                      const isDraggedElement =
+                        guide.fromElementId === elementId ||
                         guide.toElementId === elementId;
-                      
+
                       if (!isDraggedElement) return false;
-                      
+
                       // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
                       if (handle.dy === -1) {
                         return guide.toElementId === elementId;
@@ -389,9 +389,9 @@ export function useGridResize({
                         return guide.fromElementId === elementId;
                       }
                     }
-                    
+
                     return false;
-                  }
+                  },
                 );
                 smartGuidesStore.setSpacingGuides(filteredSpacingGuides);
               } else {
@@ -415,7 +415,7 @@ export function useGridResize({
       setPreviewBounds(previewData);
       finalBoundsRef.current = previewData;
     },
-    [getOtherElements]
+    [getOtherElements],
   );
 
   const handleKeyResizePreview = useCallback(
@@ -427,11 +427,11 @@ export function useGridResize({
         width: number;
         height: number;
         handle?: ResizeHandle;
-      }
+      },
     ) => {
       handleElementResizePreview(`key-${index}`, newBounds);
     },
-    [handleElementResizePreview]
+    [handleElementResizePreview],
   );
 
   const handleStatResizePreview = useCallback(
@@ -443,11 +443,11 @@ export function useGridResize({
         width: number;
         height: number;
         handle?: ResizeHandle;
-      }
+      },
     ) => {
       handleElementResizePreview(`stat-${index}`, newBounds);
     },
-    [handleElementResizePreview]
+    [handleElementResizePreview],
   );
 
   const handleGraphResizePreview = useCallback(
@@ -459,11 +459,11 @@ export function useGridResize({
         width: number;
         height: number;
         handle?: ResizeHandle;
-      }
+      },
     ) => {
       handleElementResizePreview(`graph-${index}`, newBounds);
     },
-    [handleElementResizePreview]
+    [handleElementResizePreview],
   );
 
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
@@ -476,7 +476,7 @@ export function useGridResize({
         width: number;
         height: number;
         handle?: ResizeHandle;
-      }
+      },
     ) => {
       const smartGuidesStore = useSmartGuidesStore.getState();
       const gridSettings = useSettingsStore.getState().gridSettings;
@@ -499,7 +499,7 @@ export function useGridResize({
           newBounds.y,
           newBounds.width,
           newBounds.height,
-          fullId
+          fullId,
         );
 
         const snapResult = calculateSnapPoints(
@@ -508,7 +508,7 @@ export function useGridResize({
           undefined,
           {
             disableSpacing: !spacingGuidesEnabled,
-          }
+          },
         );
         const handle = newBounds.handle;
 
@@ -555,7 +555,7 @@ export function useGridResize({
               finalWidth,
               finalHeight,
               otherElements,
-              fullId
+              fullId,
             );
 
             if (sizeSnapResult.didSnapWidth) {
@@ -589,7 +589,7 @@ export function useGridResize({
                 finalY,
                 finalWidth,
                 finalHeight,
-                fullId
+                fullId,
               );
               smartGuidesStore.setDraggedBounds(snappedBounds);
 
@@ -601,56 +601,56 @@ export function useGridResize({
                   snapResult.spacingGuides &&
                   snapResult.spacingGuides.length > 0
                 ) {
-                // 핸들 방향에 따라 간격 가이드 필터링
-                const filteredSpacingGuides = snapResult.spacingGuides.filter(
-                  (guide) => {
-                    // 수평 방향 간격 가이드 (좌우 간격)
-                    if (guide.direction === "horizontal") {
-                      // 좌우 핸들이 아니면 표시 안 함
-                      if (handle.dx === 0) return false;
-                      
-                      // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === fullId || 
-                        guide.toElementId === fullId;
-                      
-                      if (!isDraggedElement) return false;
-                      
-                      // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
-                      if (handle.dx === -1) {
-                        return guide.toElementId === fullId;
+                  // 핸들 방향에 따라 간격 가이드 필터링
+                  const filteredSpacingGuides = snapResult.spacingGuides.filter(
+                    (guide) => {
+                      // 수평 방향 간격 가이드 (좌우 간격)
+                      if (guide.direction === 'horizontal') {
+                        // 좌우 핸들이 아니면 표시 안 함
+                        if (handle.dx === 0) return false;
+
+                        // 드래그 중인 요소와 관련된 가이드만 표시
+                        const isDraggedElement =
+                          guide.fromElementId === fullId ||
+                          guide.toElementId === fullId;
+
+                        if (!isDraggedElement) return false;
+
+                        // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
+                        if (handle.dx === -1) {
+                          return guide.toElementId === fullId;
+                        }
+                        // 오른쪽 핸들(dx: 1): 오른쪽 간격만 표시
+                        if (handle.dx === 1) {
+                          return guide.fromElementId === fullId;
+                        }
                       }
-                      // 오른쪽 핸들(dx: 1): 오른쪽 간격만 표시
-                      if (handle.dx === 1) {
-                        return guide.fromElementId === fullId;
+
+                      // 수직 방향 간격 가이드 (상하 간격)
+                      if (guide.direction === 'vertical') {
+                        // 상하 핸들이 아니면 표시 안 함
+                        if (handle.dy === 0) return false;
+
+                        // 드래그 중인 요소와 관련된 가이드만 표시
+                        const isDraggedElement =
+                          guide.fromElementId === fullId ||
+                          guide.toElementId === fullId;
+
+                        if (!isDraggedElement) return false;
+
+                        // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
+                        if (handle.dy === -1) {
+                          return guide.toElementId === fullId;
+                        }
+                        // 아래쪽 핸들(dy: 1): 아래쪽 간격만 표시
+                        if (handle.dy === 1) {
+                          return guide.fromElementId === fullId;
+                        }
                       }
-                    }
-                    
-                    // 수직 방향 간격 가이드 (상하 간격)
-                    if (guide.direction === "vertical") {
-                      // 상하 핸들이 아니면 표시 안 함
-                      if (handle.dy === 0) return false;
-                      
-                      // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === fullId || 
-                        guide.toElementId === fullId;
-                      
-                      if (!isDraggedElement) return false;
-                      
-                      // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
-                      if (handle.dy === -1) {
-                        return guide.toElementId === fullId;
-                      }
-                      // 아래쪽 핸들(dy: 1): 아래쪽 간격만 표시
-                      if (handle.dy === 1) {
-                        return guide.fromElementId === fullId;
-                      }
-                    }
-                    
-                    return false;
-                  }
-                );
+
+                      return false;
+                    },
+                  );
                   smartGuidesStore.setSpacingGuides(filteredSpacingGuides);
                 } else {
                   smartGuidesStore.setSpacingGuides([]);
@@ -663,7 +663,7 @@ export function useGridResize({
               // Size Match 가이드 업데이트
               if (hasSizeSnap) {
                 smartGuidesStore.setSizeMatchGuides(
-                  sizeSnapResult.sizeMatchGuides
+                  sizeSnapResult.sizeMatchGuides,
                 );
               } else {
                 smartGuidesStore.setSizeMatchGuides([]);
@@ -686,7 +686,7 @@ export function useGridResize({
                 finalY,
                 finalWidth,
                 finalHeight,
-                fullId
+                fullId,
               );
               smartGuidesStore.setDraggedBounds(snappedBounds);
               smartGuidesStore.setActiveGuides(snapResult.guides);
@@ -698,15 +698,15 @@ export function useGridResize({
                 const filteredSpacingGuides = snapResult.spacingGuides.filter(
                   (guide) => {
                     // 수평 방향 간격 가이드 (좌우 간격)
-                    if (guide.direction === "horizontal") {
+                    if (guide.direction === 'horizontal') {
                       // 좌우 핸들이 아니면 표시 안 함
                       if (handle.dx === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 필터링
-                      const isDraggedElement = 
-                        guide.fromElementId === fullId || 
+                      const isDraggedElement =
+                        guide.fromElementId === fullId ||
                         guide.toElementId === fullId;
-                      
+
                       if (isDraggedElement) {
                         // 왼쪽 핸들(dx: -1): 왼쪽 간격만 표시
                         if (handle.dx === -1) {
@@ -720,19 +720,19 @@ export function useGridResize({
                       // 다른 요소들 사이의 참조 간격은 항상 표시
                       return !isDraggedElement;
                     }
-                    
+
                     // 수직 방향 간격 가이드 (상하 간격)
-                    if (guide.direction === "vertical") {
+                    if (guide.direction === 'vertical') {
                       // 상하 핸들이 아니면 표시 안 함
                       if (handle.dy === 0) return false;
-                      
+
                       // 드래그 중인 요소와 관련된 가이드만 표시
-                      const isDraggedElement = 
-                        guide.fromElementId === fullId || 
+                      const isDraggedElement =
+                        guide.fromElementId === fullId ||
                         guide.toElementId === fullId;
-                      
+
                       if (!isDraggedElement) return false;
-                      
+
                       // 위쪽 핸들(dy: -1): 위쪽 간격만 표시
                       if (handle.dy === -1) {
                         return guide.toElementId === fullId;
@@ -742,9 +742,9 @@ export function useGridResize({
                         return guide.fromElementId === fullId;
                       }
                     }
-                    
+
                     return false;
-                  }
+                  },
                 );
                 smartGuidesStore.setSpacingGuides(filteredSpacingGuides);
               } else {
@@ -768,7 +768,7 @@ export function useGridResize({
       setPreviewBounds(previewData);
       finalBoundsRef.current = previewData;
     },
-    [getOtherElements]
+    [getOtherElements],
   );
 
   // 통합 리사이즈 핸들러 (키 및 플러그인 요소 지원) - 프리뷰 모드
@@ -783,13 +783,13 @@ export function useGridResize({
       if (selectedElements.length !== 1) return;
 
       const element = selectedElements[0];
-      if (element.type === "key" && element.index !== undefined) {
+      if (element.type === 'key' && element.index !== undefined) {
         handleKeyResizePreview(element.index, newBounds);
-      } else if (element.type === "stat" && element.index !== undefined) {
+      } else if (element.type === 'stat' && element.index !== undefined) {
         handleStatResizePreview(element.index, newBounds);
-      } else if (element.type === "graph" && element.index !== undefined) {
+      } else if (element.type === 'graph' && element.index !== undefined) {
         handleGraphResizePreview(element.index, newBounds);
-      } else if (element.type === "plugin") {
+      } else if (element.type === 'plugin') {
         handlePluginResizePreview(element.id, newBounds);
       }
     },
@@ -799,7 +799,7 @@ export function useGridResize({
       handleStatResizePreview,
       handleGraphResizePreview,
       handlePluginResizePreview,
-    ]
+    ],
   );
 
   // 리사이즈 종료 처리 - 실제 요소에 최종 bounds 적용
@@ -814,10 +814,10 @@ export function useGridResize({
 
     // 최종 bounds를 실제 요소에 적용
     const finalBounds = finalBoundsRef.current;
-      if (finalBounds && selectedElements.length === 1) {
-        const element = selectedElements[0];
+    if (finalBounds && selectedElements.length === 1) {
+      const element = selectedElements[0];
 
-        if (element.type === "key" && element.index !== undefined) {
+      if (element.type === 'key' && element.index !== undefined) {
         // 키 요소에 최종 크기 적용
         const positions = useKeyStore.getState().positions;
         const setPositions = useKeyStore.getState().setPositions;
@@ -833,71 +833,71 @@ export function useGridResize({
                   width: finalBounds.width,
                   height: finalBounds.height,
                 }
-              : pos
+              : pos,
           ),
         };
         setPositions(nextPositions);
 
         // 백엔드에 저장
-          window.api.keys.updatePositions(nextPositions).catch((error) => {
-            console.error("Failed to update key positions after resize", error);
-          });
-        } else if (element.type === "stat" && element.index !== undefined) {
-          const statStore = useStatItemStore.getState();
-          const statPositions = statStore.positions as any;
-          const current = statPositions[selectedKeyType] || [];
-          const nextPositions = {
-            ...statPositions,
-            [selectedKeyType]: current.map((pos: any, i: number) =>
-              i === element.index
-                ? {
-                    ...pos,
-                    dx: finalBounds.x,
-                    dy: finalBounds.y,
-                    width: finalBounds.width,
-                    height: finalBounds.height,
-                  }
-                : pos
-            ),
-          };
-          statStore.setPositions(nextPositions);
-          window.api.statItems.updatePositions(nextPositions).catch((error) => {
-            console.error("Failed to update stat positions after resize", error);
-          });
-        } else if (element.type === "graph" && element.index !== undefined) {
-          const graphStore = useGraphItemStore.getState();
-          const graphPositions = graphStore.positions as any;
-          const current = graphPositions[selectedKeyType] || [];
-          const nextPositions = {
-            ...graphPositions,
-            [selectedKeyType]: current.map((pos: any, i: number) =>
-              i === element.index
-                ? {
-                    ...pos,
-                    dx: finalBounds.x,
-                    dy: finalBounds.y,
-                    width: finalBounds.width,
-                    height: finalBounds.height,
-                  }
-                : pos
-            ),
-          };
-          graphStore.setPositions(nextPositions);
-          window.api.graphItems.updatePositions(nextPositions).catch((error) => {
-            console.error("Failed to update graph positions after resize", error);
-          });
-        } else if (element.type === "plugin") {
-          // 플러그인 요소에 최종 크기 적용
-          const pluginStore = usePluginDisplayElementStore.getState();
-          pluginStore.updateElement(element.id, {
-            position: { x: finalBounds.x, y: finalBounds.y },
-            measuredSize: {
-              width: finalBounds.width,
-              height: finalBounds.height,
-            },
-          });
-        }
+        window.api.keys.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update key positions after resize', error);
+        });
+      } else if (element.type === 'stat' && element.index !== undefined) {
+        const statStore = useStatItemStore.getState();
+        const statPositions = statStore.positions as any;
+        const current = statPositions[selectedKeyType] || [];
+        const nextPositions = {
+          ...statPositions,
+          [selectedKeyType]: current.map((pos: any, i: number) =>
+            i === element.index
+              ? {
+                  ...pos,
+                  dx: finalBounds.x,
+                  dy: finalBounds.y,
+                  width: finalBounds.width,
+                  height: finalBounds.height,
+                }
+              : pos,
+          ),
+        };
+        statStore.setPositions(nextPositions);
+        window.api.statItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update stat positions after resize', error);
+        });
+      } else if (element.type === 'graph' && element.index !== undefined) {
+        const graphStore = useGraphItemStore.getState();
+        const graphPositions = graphStore.positions as any;
+        const current = graphPositions[selectedKeyType] || [];
+        const nextPositions = {
+          ...graphPositions,
+          [selectedKeyType]: current.map((pos: any, i: number) =>
+            i === element.index
+              ? {
+                  ...pos,
+                  dx: finalBounds.x,
+                  dy: finalBounds.y,
+                  width: finalBounds.width,
+                  height: finalBounds.height,
+                }
+              : pos,
+          ),
+        };
+        graphStore.setPositions(nextPositions);
+        window.api.graphItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update graph positions after resize', error);
+        });
+      } else if (element.type === 'plugin') {
+        // 플러그인 요소에 최종 크기 적용
+        const pluginStore = usePluginDisplayElementStore.getState();
+        pluginStore.updateElement(element.id, {
+          position: { x: finalBounds.x, y: finalBounds.y },
+          measuredSize: {
+            width: finalBounds.width,
+            height: finalBounds.height,
+          },
+        });
       }
+    }
 
     // 프리뷰 상태 클리어
     setPreviewBounds(null);
@@ -944,7 +944,7 @@ export function useGridResize({
 
       // 키 요소들 업데이트
       const keyUpdates = finalData.elementBounds.filter(
-        ({ element }) => element.type === "key" && element.index !== undefined
+        ({ element }) => element.type === 'key' && element.index !== undefined,
       );
 
       if (keyUpdates.length > 0) {
@@ -952,7 +952,7 @@ export function useGridResize({
           ...positions,
           [selectedKeyType]: current.map((pos, i) => {
             const update = keyUpdates.find(
-              ({ element }) => element.index === i
+              ({ element }) => element.index === i,
             );
             if (update) {
               return {
@@ -971,22 +971,24 @@ export function useGridResize({
         // 백엔드에 저장
         window.api.keys.updatePositions(nextPositions).catch((error) => {
           console.error(
-            "Failed to update key positions after group resize",
-            error
+            'Failed to update key positions after group resize',
+            error,
           );
         });
       }
 
       // 통계 요소들 업데이트
       const statUpdates = finalData.elementBounds.filter(
-        ({ element }) => element.type === "stat" && element.index !== undefined
+        ({ element }) => element.type === 'stat' && element.index !== undefined,
       );
 
       if (statUpdates.length > 0) {
         const nextStatPositions = {
           ...statPositions,
           [selectedKeyType]: currentStats.map((pos: any, i: number) => {
-            const update = statUpdates.find(({ element }) => element.index === i);
+            const update = statUpdates.find(
+              ({ element }) => element.index === i,
+            );
             if (update) {
               return {
                 ...pos,
@@ -1001,24 +1003,29 @@ export function useGridResize({
         };
 
         statStore.setPositions(nextStatPositions);
-        window.api.statItems.updatePositions(nextStatPositions).catch((error) => {
-          console.error(
-            "Failed to update stat positions after group resize",
-            error
-          );
-        });
+        window.api.statItems
+          .updatePositions(nextStatPositions)
+          .catch((error) => {
+            console.error(
+              'Failed to update stat positions after group resize',
+              error,
+            );
+          });
       }
 
       // 그래프 요소들 업데이트
       const graphUpdates = finalData.elementBounds.filter(
-        ({ element }) => element.type === "graph" && element.index !== undefined
+        ({ element }) =>
+          element.type === 'graph' && element.index !== undefined,
       );
 
       if (graphUpdates.length > 0) {
         const nextGraphPositions = {
           ...graphPositions,
           [selectedKeyType]: currentGraphs.map((pos: any, i: number) => {
-            const update = graphUpdates.find(({ element }) => element.index === i);
+            const update = graphUpdates.find(
+              ({ element }) => element.index === i,
+            );
             if (update) {
               return {
                 ...pos,
@@ -1033,17 +1040,19 @@ export function useGridResize({
         };
 
         graphStore.setPositions(nextGraphPositions);
-        window.api.graphItems.updatePositions(nextGraphPositions).catch((error) => {
-          console.error(
-            "Failed to update graph positions after group resize",
-            error
-          );
-        });
+        window.api.graphItems
+          .updatePositions(nextGraphPositions)
+          .catch((error) => {
+            console.error(
+              'Failed to update graph positions after group resize',
+              error,
+            );
+          });
       }
 
       // 플러그인 요소들 업데이트
       const pluginUpdates = finalData.elementBounds.filter(
-        ({ element }) => element.type === "plugin"
+        ({ element }) => element.type === 'plugin',
       );
 
       for (const { element, bounds } of pluginUpdates) {

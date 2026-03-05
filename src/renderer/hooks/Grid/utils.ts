@@ -2,7 +2,7 @@
  * Grid 유틸리티 함수들
  */
 
-import { useSettingsStore } from "@stores/useSettingsStore";
+import { useSettingsStore } from '@stores/useSettingsStore';
 
 /**
  * 값을 그리드 스냅에 맞춰 반올림
@@ -12,7 +12,8 @@ import { useSettingsStore } from "@stores/useSettingsStore";
  */
 export const snapToGrid = (value: number, gridSize?: number): number => {
   if (!Number.isFinite(value)) return 0;
-  const snapSize = gridSize ?? useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
+  const snapSize =
+    gridSize ?? useSettingsStore.getState().gridSettings?.gridSnapSize ?? 5;
   return Math.round(value / snapSize) * snapSize;
 };
 
@@ -26,7 +27,7 @@ export const snapToGrid = (value: number, gridSize?: number): number => {
 export const snapCursorToGrid = (
   x: number,
   y: number,
-  gridSize?: number
+  gridSize?: number,
 ): { x: number; y: number } => ({
   x: snapToGrid(x, gridSize),
   y: snapToGrid(y, gridSize),

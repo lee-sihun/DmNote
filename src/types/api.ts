@@ -1,20 +1,20 @@
-import { BootstrapPayload } from "@src/types/app";
-import { CustomCss } from "@src/types/css";
-import { CustomJs, JsPlugin } from "@src/types/js";
+import { BootstrapPayload } from '@src/types/app';
+import { CustomCss } from '@src/types/css';
+import { CustomJs, JsPlugin } from '@src/types/js';
 import {
   CustomTab,
   KeyMappings,
   KeyPositions,
   KeyCounters,
-} from "@src/types/keys";
-import type { StatItemPositions } from "@src/types/statItems";
-import type { GraphItemPositions } from "@src/types/graphItems";
-import type { LayerGroups } from "@src/types/layerGroups";
+} from '@src/types/keys';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
+import type { LayerGroups } from '@src/types/layerGroups';
 import {
   SettingsDiff,
   SettingsPatchInput,
   SettingsState,
-} from "@src/types/settings";
+} from '@src/types/settings';
 
 export type ModeChangePayload = { mode: string };
 export type CustomTabsChangePayload = {
@@ -22,7 +22,7 @@ export type CustomTabsChangePayload = {
   selectedKeyType: string;
 };
 export type KeyStatePayload = { key: string; state: string; mode: string };
-export type InputDevice = "keyboard" | "mouse" | "gamepad" | "unknown";
+export type InputDevice = 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
 export type RawInputPayload = {
   device: InputDevice;
   label: string;
@@ -50,7 +50,7 @@ export type OverlayBounds = {
   width: number;
   height: number;
 };
-export type OverlayState = BootstrapPayload["overlay"];
+export type OverlayState = BootstrapPayload['overlay'];
 export type OverlayVisibilityPayload = { visible: boolean };
 export type OverlayLockPayload = { locked: boolean };
 export type OverlayAnchorPayload = { anchor: string };
@@ -91,7 +91,7 @@ export type SoundListItem = {
   sizeBytes: number;
   modifiedAtMs?: number;
   enabled: boolean;
-  source: "local" | "builtin";
+  source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;
   trimEndRatio?: number;
@@ -129,7 +129,7 @@ export type SoundUpdateProcessedWavResult = {
 export type CounterAnimationPreset = {
   id: string;
   name: string;
-  source: "builtin" | "user";
+  source: 'builtin' | 'user';
   labelKey?: string;
   bezier: [number, number, number, number];
   scale: number;
@@ -171,13 +171,13 @@ export type CounterAnimationDeleteResponse = {
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
-  css: import("@src/types/css").TabCss | null;
+  css: import('@src/types/css').TabCss | null;
 };
 export type TabCssLoadResult = {
   success: boolean;
   error?: string;
   tabId: string;
-  css?: import("@src/types/css").TabCss;
+  css?: import('@src/types/css').TabCss;
 };
 export type TabCssClearResult = {
   success: boolean;
@@ -191,13 +191,13 @@ export type TabCssToggleResult = {
 export type TabCssSetResult = {
   success: boolean;
   tabId: string;
-  css?: import("@src/types/css").TabCss;
+  css?: import('@src/types/css').TabCss;
 };
 
 // 탭별 노트 트랙 설정 타입
 export type TabNoteResponse = {
   tabId: string;
-  settings: import("@src/types/noteSettings").TabNoteSettings | null;
+  settings: import('@src/types/noteSettings').TabNoteSettings | null;
 };
 export type TabNoteClearResult = {
   success: boolean;
@@ -206,7 +206,7 @@ export type TabNoteClearResult = {
 export type TabNoteSetResult = {
   success: boolean;
   tabId: string;
-  settings?: import("@src/types/noteSettings").TabNoteSettings;
+  settings?: import('@src/types/noteSettings').TabNoteSettings;
 };
 
 export type JsTogglePayload = { enabled: boolean };
@@ -257,7 +257,7 @@ export type AppAutoUpdateResult = {
 export type BridgeMessage<T = any> = { type: string; data?: T };
 export type BridgeMessageListener<T = any> = (data: T) => void;
 export type BridgeAnyListener = (type: string, data: any) => void;
-export type WindowTarget = "main" | "overlay";
+export type WindowTarget = 'main' | 'overlay';
 
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
@@ -277,7 +277,7 @@ export type PluginMenuItem<TContext = any> = {
   label: string;
   disabled?: boolean | ((context: TContext) => boolean);
   visible?: boolean | ((context: TContext) => boolean);
-  position?: "top" | "bottom";
+  position?: 'top' | 'bottom';
   onClick: (context: TContext) => void | Promise<void>;
 };
 
@@ -328,15 +328,15 @@ export type PluginDisplayElementContextMenu = {
  * - bottom-right: 우하단 기준
  */
 export type ElementResizeAnchor =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "center-left"
-  | "center"
-  | "center-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'center-left'
+  | 'center'
+  | 'center-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right';
 
 export type PluginDisplayElement = {
   id: string;
@@ -390,27 +390,25 @@ export interface PluginDefinitionContextMenuItem {
     | boolean
     | ((context: PluginDisplayElementActionContext) => boolean);
   visible?: boolean | ((context: PluginDisplayElementActionContext) => boolean);
-  position?: "top" | "bottom";
+  position?: 'top' | 'bottom';
 }
 
 export type PluginSettingType =
-  | "boolean"
-  | "color"
-  | "number"
-  | "string"
-  | "select"
-  | "divider";
+  | 'boolean'
+  | 'color'
+  | 'number'
+  | 'string'
+  | 'select'
+  | 'divider';
 
 export type PluginSettingSchema =
   | {
-      type: "divider";
+      type: 'divider';
       label?: string;
-      visible?:
-        | boolean
-        | ((settings: Record<string, any>) => boolean);
+      visible?: boolean | ((settings: Record<string, any>) => boolean);
     }
   | {
-      type: Exclude<PluginSettingType, "divider">;
+      type: Exclude<PluginSettingType, 'divider'>;
       default: any;
       label: string;
       min?: number; // for number
@@ -418,9 +416,7 @@ export type PluginSettingSchema =
       step?: number; // for number
       options?: { label: string; value: any }[]; // for select
       placeholder?: string; // for string/number
-      visible?:
-        | boolean
-        | ((settings: Record<string, any>) => boolean);
+      visible?: boolean | ((settings: Record<string, any>) => boolean);
     };
 
 export interface PluginDefinitionHookContext {
@@ -451,7 +447,7 @@ export interface PluginDefinitionHookContext {
    * 'key' event payload: { key: string, state: 'DOWN' | 'UP', mode: string }
    * 'rawKey' event payload: { device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown', label: string, labels: string[], state: 'DOWN' | 'UP' }
    */
-  onHook: (event: "key" | "rawKey", callback: (...args: any[]) => void) => void;
+  onHook: (event: 'key' | 'rawKey', callback: (...args: any[]) => void) => void;
   expose: (actions: Record<string, (...args: any[]) => any>) => void;
   locale: string;
   t: PluginTranslateFn;
@@ -500,7 +496,7 @@ export interface PluginDefinition {
    * - 'none': 둘 다 콘텐츠 따라감
    * @default 'both'
    */
-  preserveAxis?: "width" | "height" | "both" | "none";
+  preserveAxis?: 'width' | 'height' | 'both' | 'none';
   /**
    * 요소 크기 변경 시 기준점 (기본값)
    * 인스턴스별로 setAnchor()를 통해 오버라이드 가능
@@ -517,7 +513,7 @@ export interface PluginDefinition {
    * - "panel": 속성 패널 (기본값)
    * - "modal": 기존 모달
    */
-  settingsUI?: "panel" | "modal";
+  settingsUI?: 'panel' | 'modal';
   settings?: Record<string, PluginSettingSchema>;
   messages?: PluginMessages;
   template: (
@@ -549,7 +545,7 @@ export interface PluginSettingsDefinition {
    * - "panel": 속성 패널 (기본값)
    * - "modal": 기존 모달
    */
-  settingsUI?: "panel" | "modal";
+  settingsUI?: 'panel' | 'modal';
   /** 설정 변경 시 호출되는 콜백 */
   onChange?: (
     newSettings: Record<string, any>,
@@ -649,7 +645,7 @@ export type DisplayElementTemplateFactory = (
 
 export type DisplayElementTemplate = DisplayElementTemplateFunction;
 
-export type PluginDisplayElementConfig = Omit<PluginDisplayElement, "id"> & {
+export type PluginDisplayElementConfig = Omit<PluginDisplayElement, 'id'> & {
   state?: Record<string, any>;
   template?: DisplayElementTemplateFunction;
 };
@@ -658,8 +654,8 @@ export type Unsubscribe = () => void;
 
 // UI Components Options
 export interface ButtonOptions {
-  variant?: "primary" | "danger" | "secondary";
-  size?: "small" | "medium" | "large";
+  variant?: 'primary' | 'danger' | 'secondary';
+  size?: 'small' | 'medium' | 'large';
   disabled?: boolean;
   fullWidth?: boolean;
   onClick?: string | (() => void | Promise<void>);
@@ -673,7 +669,7 @@ export interface CheckboxOptions {
 }
 
 export interface InputOptions {
-  type?: "text" | "number" | "color";
+  type?: 'text' | 'number' | 'color';
   placeholder?: string;
   value?: string | number;
   disabled?: boolean;
@@ -714,7 +710,7 @@ export interface DMNoteAPI {
     quit(): Promise<void>;
   };
   window: {
-    type: "main" | "overlay";
+    type: 'main' | 'overlay';
     minimize(): Promise<void>;
     close(): Promise<void>;
     showMain(): Promise<void>;
@@ -767,9 +763,7 @@ export interface DMNoteAPI {
   };
   graphItems: {
     getPositions(): Promise<GraphItemPositions>;
-    updatePositions(
-      positions: GraphItemPositions,
-    ): Promise<GraphItemPositions>;
+    updatePositions(positions: GraphItemPositions): Promise<GraphItemPositions>;
     onPositionsChanged(
       listener: (positions: GraphItemPositions) => void,
     ): Unsubscribe;
@@ -810,30 +804,30 @@ export interface DMNoteAPI {
     onContent(listener: (payload: CustomCss) => void): Unsubscribe;
     // 탭별 CSS API
     tab: {
-      getAll(): Promise<import("@src/types/css").TabCssOverrides>;
+      getAll(): Promise<import('@src/types/css').TabCssOverrides>;
       get(tabId: string): Promise<TabCssResponse>;
       load(tabId: string): Promise<TabCssLoadResult>;
       clear(tabId: string): Promise<TabCssClearResult>;
       set(
         tabId: string,
-        css: import("@src/types/css").TabCss | null,
+        css: import('@src/types/css').TabCss | null,
       ): Promise<TabCssSetResult>;
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
   };
   noteTab: {
-    getAll(): Promise<import("@src/types/noteSettings").TabNoteOverrides>;
+    getAll(): Promise<import('@src/types/noteSettings').TabNoteOverrides>;
     get(tabId: string): Promise<TabNoteResponse>;
     set(
       tabId: string,
-      settings: import("@src/types/noteSettings").TabNoteSettings | null,
+      settings: import('@src/types/noteSettings').TabNoteSettings | null,
     ): Promise<TabNoteSetResult>;
     clear(tabId: string): Promise<TabNoteClearResult>;
     onChanged(listener: (payload: TabNoteResponse) => void): Unsubscribe;
     onChangedAll(
       listener: (
-        payload: import("@src/types/noteSettings").TabNoteOverrides,
+        payload: import('@src/types/noteSettings').TabNoteOverrides,
       ) => void,
     ): Unsubscribe;
   };

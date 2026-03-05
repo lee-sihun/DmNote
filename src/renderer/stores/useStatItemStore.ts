@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import type { StatItemPositions } from "@src/types/statItems";
+import { create } from 'zustand';
+import type { StatItemPositions } from '@src/types/statItems';
 
 interface StatItemStoreState {
   positions: StatItemPositions;
@@ -14,4 +14,3 @@ export const useStatItemStore = create<StatItemStoreState>((set) => ({
   setPositions: (positions) => set({ positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),
 }));
-

@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
-import NoteSetting from "./NoteSetting";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { mergeNoteSettings } from "@src/types/noteSettings";
-import type { NoteSettings, TabNoteSettings } from "@src/types/noteSettings";
-import { useTranslation } from "@contexts/I18nContext";
+import React, { useEffect, useState, useCallback } from 'react';
+import NoteSetting from './NoteSetting';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import { mergeNoteSettings } from '@src/types/noteSettings';
+import type { NoteSettings, TabNoteSettings } from '@src/types/noteSettings';
+import { useTranslation } from '@contexts/I18nContext';
 
 type Props = {
   isOpen: boolean;
@@ -29,7 +29,7 @@ export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
         setTabOverride(res.settings ?? null);
       })
       .catch((err) => {
-        console.error("Failed to load tab note settings", err);
+        console.error('Failed to load tab note settings', err);
         setTabOverride(null);
       })
       .finally(() => setLoading(false));
@@ -53,7 +53,7 @@ export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
           hasOverride ? override : null,
         );
       } catch (error) {
-        console.error("Failed to save tab note settings", error);
+        console.error('Failed to save tab note settings', error);
       }
     },
     [globalSettings, selectedKeyType],

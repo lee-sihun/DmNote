@@ -1,9 +1,9 @@
-import React, { memo, useEffect, useRef } from "react";
-import { Renderer, Camera, Transform, Program, Geometry, Mesh } from "ogl";
-import { animationScheduler } from "../../utils/animationScheduler";
-import { resolvedFadeValues } from "../../../types/noteSettings";
-import { MAX_NOTES } from "@stores/noteBuffer";
-import { isMac } from "@utils/platform";
+import React, { memo, useEffect, useRef } from 'react';
+import { Renderer, Camera, Transform, Program, Geometry, Mesh } from 'ogl';
+import { animationScheduler } from '../../utils/animationScheduler';
+import { resolvedFadeValues } from '../../../types/noteSettings';
+import { MAX_NOTES } from '@stores/noteBuffer';
+import { isMac } from '@utils/platform';
 
 const vertexShader = `
   attribute vec3 position;
@@ -216,18 +216,18 @@ const buildPlaneGeometry = (gl) =>
   });
 
 const INSTANCED_ATTRIBUTE_KEYS = Object.freeze([
-  "noteInfo",
-  "noteSize",
-  "noteColorTop",
-  "noteColorBottom",
-  "noteRadius",
-  "noteGlow",
-  "noteGlowColorTop",
-  "noteGlowColorBottom",
-  "trackIndex",
+  'noteInfo',
+  'noteSize',
+  'noteColorTop',
+  'noteColorBottom',
+  'noteRadius',
+  'noteGlow',
+  'noteGlowColorTop',
+  'noteGlowColorBottom',
+  'trackIndex',
 ]);
 
-const FINALIZE_ATTRIBUTE_KEYS = Object.freeze(["noteInfo"]);
+const FINALIZE_ATTRIBUTE_KEYS = Object.freeze(['noteInfo']);
 
 const markAttributesDirty = (geometry, keys) => {
   if (!geometry) return;
@@ -245,18 +245,14 @@ const markAttributesDirty = (geometry, keys) => {
 const markInstancedAttributesDirty = (
   geometry,
   activeCount,
-  keys = INSTANCED_ATTRIBUTE_KEYS
+  keys = INSTANCED_ATTRIBUTE_KEYS,
 ) => {
   if (!geometry) return;
   geometry.instancedCount = Math.min(activeCount, MAX_NOTES);
   markAttributesDirty(geometry, keys);
 };
 
-const queueAttributeUpload = (
-  pendingUpdate,
-  keys,
-  activeCount = undefined
-) => {
+const queueAttributeUpload = (pendingUpdate, keys, activeCount = undefined) => {
   if (!pendingUpdate) return;
   if (activeCount !== undefined) {
     pendingUpdate.instancedCount = Math.min(activeCount, MAX_NOTES);
@@ -354,55 +350,55 @@ export const WebGLTracksOGL = memo(
       cameraRef.current = camera;
 
       const geometry = buildPlaneGeometry(gl);
-      geometry.addAttribute("noteInfo", {
+      geometry.addAttribute('noteInfo', {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteInfo,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteSize", {
+      geometry.addAttribute('noteSize', {
         instanced: 1,
         size: 2,
         data: noteBuffer.noteSize,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteColorTop", {
+      geometry.addAttribute('noteColorTop', {
         instanced: 1,
         size: 4,
         data: noteBuffer.noteColorTop,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteColorBottom", {
+      geometry.addAttribute('noteColorBottom', {
         instanced: 1,
         size: 4,
         data: noteBuffer.noteColorBottom,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteRadius", {
+      geometry.addAttribute('noteRadius', {
         instanced: 1,
         size: 1,
         data: noteBuffer.noteRadius,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteGlow", {
+      geometry.addAttribute('noteGlow', {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlow,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteGlowColorTop", {
+      geometry.addAttribute('noteGlowColorTop', {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlowColorTop,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("noteGlowColorBottom", {
+      geometry.addAttribute('noteGlowColorBottom', {
         instanced: 1,
         size: 3,
         data: noteBuffer.noteGlowColorBottom,
         usage: gl.DYNAMIC_DRAW,
       });
-      geometry.addAttribute("trackIndex", {
+      geometry.addAttribute('trackIndex', {
         instanced: 1,
         size: 1,
         data: noteBuffer.trackIndex,
@@ -465,7 +461,10 @@ export const WebGLTracksOGL = memo(
             frameClock.stableTime = currentTime;
             frameClock.nextFrameTime = currentTime + interval;
           } else {
-            if (currentTime + FRAME_PACING_EPSILON_MS < frameClock.nextFrameTime) {
+            if (
+              currentTime + FRAME_PACING_EPSILON_MS <
+              frameClock.nextFrameTime
+            ) {
               return;
             }
 
@@ -495,7 +494,7 @@ export const WebGLTracksOGL = memo(
             if (pendingUpdateRef.current.dirtyKeys.size > 0) {
               markAttributesDirty(
                 geometryTarget,
-                pendingUpdateRef.current.dirtyKeys
+                pendingUpdateRef.current.dirtyKeys,
               );
             }
           }
@@ -519,21 +518,21 @@ export const WebGLTracksOGL = memo(
         if (event.activeCount !== undefined) {
           geometryTarget.instancedCount = Math.min(
             event.activeCount,
-            MAX_NOTES
+            MAX_NOTES,
           );
         }
 
         // Version 체크는 clear 이벤트만 적용 (전체 리셋 시)
-        if (event.type === "clear") {
+        if (event.type === 'clear') {
           lastVersionRef.current = event.version ?? lastVersionRef.current;
         }
 
         switch (event.type) {
-          case "add":
+          case 'add':
             queueAttributeUpload(
               pendingUpdateRef.current,
               INSTANCED_ATTRIBUTE_KEYS,
-              event.activeCount
+              event.activeCount,
             );
             if (!isAnimating.current && noteBuffer.activeCount > 0) {
               resetFrameClock(frameClockRef.current);
@@ -541,12 +540,12 @@ export const WebGLTracksOGL = memo(
               isAnimating.current = true;
             }
             break;
-          case "finalize":
+          case 'finalize':
             // 즉시 GPU 업로드하지 않고 다음 프레임에 배치 처리
             queueAttributeUpload(
               pendingUpdateRef.current,
               FINALIZE_ATTRIBUTE_KEYS,
-              event.activeCount
+              event.activeCount,
             );
             if (!isAnimating.current && noteBuffer.activeCount > 0) {
               resetFrameClock(frameClockRef.current);
@@ -554,10 +553,13 @@ export const WebGLTracksOGL = memo(
               isAnimating.current = true;
             }
             break;
-          case "cleanup":
-          case "clear":
+          case 'cleanup':
+          case 'clear':
             // cleanup/clear는 즉시 처리 (빈도가 낮음)
-            markInstancedAttributesDirty(geometryTarget, noteBuffer.activeCount);
+            markInstancedAttributesDirty(
+              geometryTarget,
+              noteBuffer.activeCount,
+            );
             pendingUpdateRef.current.dirtyKeys.clear();
             pendingUpdateRef.current.dirtySinceFrame = false;
             pendingUpdateRef.current.instancedCount = null;
@@ -569,7 +571,7 @@ export const WebGLTracksOGL = memo(
                 if (!rendererRef.current) return;
                 const { gl: context } = rendererRef.current;
                 context.clear(
-                  context.COLOR_BUFFER_BIT | context.DEPTH_BUFFER_BIT
+                  context.COLOR_BUFFER_BIT | context.DEPTH_BUFFER_BIT,
                 );
               });
             }
@@ -602,7 +604,7 @@ export const WebGLTracksOGL = memo(
         }
       };
 
-      window.addEventListener("resize", handleResize);
+      window.addEventListener('resize', handleResize);
       handleResize();
 
       if (noteBuffer.activeCount > 0 && !isAnimating.current) {
@@ -613,14 +615,14 @@ export const WebGLTracksOGL = memo(
 
       return () => {
         unsubscribe();
-        window.removeEventListener("resize", handleResize);
+        window.removeEventListener('resize', handleResize);
         if (isAnimating.current) {
           animationScheduler.remove(animate);
         }
         resetFrameClock(frameClockRef.current);
         geometryRef.current?.remove();
         rendererRef.current?.gl
-          ?.getExtension("WEBGL_lose_context")
+          ?.getExtension('WEBGL_lose_context')
           ?.loseContext?.();
         rendererRef.current = null;
         programRef.current = null;
@@ -656,14 +658,14 @@ export const WebGLTracksOGL = memo(
       <canvas
         ref={canvasRef}
         style={{
-          position: "absolute",
+          position: 'absolute',
           top: 0,
           left: 0,
-          width: "100%",
-          height: "100%",
-          pointerEvents: "none",
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
         }}
       />
     );
-  }
+  },
 );

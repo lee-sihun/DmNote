@@ -1,10 +1,10 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 import type {
   PluginMenuItem,
   PluginMenuItemInternal,
   KeyMenuContext,
   GridMenuContext,
-} from "@src/types/api";
+} from '@src/types/api';
 
 interface PluginMenuState {
   keyMenuItems: PluginMenuItemInternal<KeyMenuContext>[];
@@ -15,7 +15,7 @@ interface PluginMenuState {
   removeMenuItem: (fullId: string) => void;
   updateMenuItem: (
     fullId: string,
-    updates: Partial<PluginMenuItem<any>>
+    updates: Partial<PluginMenuItem<any>>,
   ) => void;
   clearByPluginId: (pluginId: string) => void;
   clearAll: () => void;
@@ -26,7 +26,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
   gridMenuItems: [],
 
   addKeyMenuItem: (item) => {
-    const pluginId = (window as any).__dmn_current_plugin_id || "unknown";
+    const pluginId = (window as any).__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
 
     // 중복 제거 (같은 fullId가 있으면 교체)
@@ -45,7 +45,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
   },
 
   addGridMenuItem: (item) => {
-    const pluginId = (window as any).__dmn_current_plugin_id || "unknown";
+    const pluginId = (window as any).__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
 
     // 중복 제거 (같은 fullId가 있으면 교체)
@@ -67,27 +67,27 @@ export const usePluginMenuStore = create<PluginMenuState>((set, get) => ({
     set((state) => ({
       keyMenuItems: state.keyMenuItems.filter((item) => item.fullId !== fullId),
       gridMenuItems: state.gridMenuItems.filter(
-        (item) => item.fullId !== fullId
+        (item) => item.fullId !== fullId,
       ),
     })),
 
   updateMenuItem: (fullId, updates) =>
     set((state) => ({
       keyMenuItems: state.keyMenuItems.map((item) =>
-        item.fullId === fullId ? { ...item, ...updates } : item
+        item.fullId === fullId ? { ...item, ...updates } : item,
       ),
       gridMenuItems: state.gridMenuItems.map((item) =>
-        item.fullId === fullId ? { ...item, ...updates } : item
+        item.fullId === fullId ? { ...item, ...updates } : item,
       ),
     })),
 
   clearByPluginId: (pluginId) =>
     set((state) => ({
       keyMenuItems: state.keyMenuItems.filter(
-        (item) => item.pluginId !== pluginId
+        (item) => item.pluginId !== pluginId,
       ),
       gridMenuItems: state.gridMenuItems.filter(
-        (item) => item.pluginId !== pluginId
+        (item) => item.pluginId !== pluginId,
       ),
     })),
 

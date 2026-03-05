@@ -1,22 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { useUIStore } from "@stores/useUIStore";
-import FolderIcon from "@assets/svgs/folder.svg";
-import SettingIcon from "@assets/svgs/setting.svg";
-import CloseEyeIcon from "@assets/svgs/close_eye.svg";
-import OpenEyeIcon from "@assets/svgs/open_eye.svg";
-import ChevronDownIcon from "@assets/svgs/chevron-down.svg";
-import TurnIcon from "@assets/svgs/turn_arrow.svg";
-import FloatingTooltip from "../Modal/FloatingTooltip";
-import ListPopup, { ListItem } from "../Modal/ListPopup";
-import { TooltipGroup } from "../Modal/TooltipGroup";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { getCounterSnapshot } from "@stores/keyCounterSignals";
+import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from '@contexts/I18nContext';
+import { useUIStore } from '@stores/useUIStore';
+import FolderIcon from '@assets/svgs/folder.svg';
+import SettingIcon from '@assets/svgs/setting.svg';
+import CloseEyeIcon from '@assets/svgs/close_eye.svg';
+import OpenEyeIcon from '@assets/svgs/open_eye.svg';
+import ChevronDownIcon from '@assets/svgs/chevron-down.svg';
+import TurnIcon from '@assets/svgs/turn_arrow.svg';
+import FloatingTooltip from '../Modal/FloatingTooltip';
+import ListPopup, { ListItem } from '../Modal/ListPopup';
+import { TooltipGroup } from '../Modal/TooltipGroup';
+import { useHistoryStore } from '@stores/useHistoryStore';
+import { useKeyStore } from '@stores/useKeyStore';
+import { useStatItemStore } from '@stores/useStatItemStore';
+import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { getCounterSnapshot } from '@stores/keyCounterSignals';
 
 type SettingToolProps = {
   isSettingsOpen?: boolean;
@@ -42,16 +42,16 @@ const SettingTool = ({
   // const { noteEffect } = useSettingsStore();
   // const setExtrasPopupOpen = useUIStore((state) => state.setExtrasPopupOpen);
   const setExportImportPopupOpen = useUIStore(
-    (state) => state.setExportImportPopupOpen
+    (state) => state.setExportImportPopupOpen,
   );
   const pushHistoryState = useHistoryStore((state) => state.pushState);
 
   // isExportImportOpen 상태를 설정하면서 전역 스토어에도 동기화
   const setIsExportImportOpen = (
-    value: boolean | ((prev: boolean) => boolean)
+    value: boolean | ((prev: boolean) => boolean),
   ) => {
     setIsExportImportOpenLocal((prev) => {
-      const newValue = typeof value === "function" ? value(prev) : value;
+      const newValue = typeof value === 'function' ? value(prev) : value;
       setExportImportPopupOpen(newValue);
       return newValue;
     });
@@ -77,7 +77,7 @@ const SettingTool = ({
         setIsOverlayVisible(state.visible);
       })
       .catch((error) => {
-        console.error("Failed to fetch overlay visibility", error);
+        console.error('Failed to fetch overlay visibility', error);
       });
 
     unsubscribe = window.api.overlay.onVisibility(({ visible }) => {
@@ -97,7 +97,7 @@ const SettingTool = ({
     const next = !isOverlayVisible;
     setIsOverlayVisible(next);
     window.api.overlay.setVisible(next).catch((error) => {
-      console.error("Failed to toggle overlay", error);
+      console.error('Failed to toggle overlay', error);
     });
   };
 
@@ -105,11 +105,11 @@ const SettingTool = ({
     try {
       const result = await window.api.presets.save();
       showAlert?.(
-        result?.success ? t("preset.saveSuccess") : t("preset.saveFail")
+        result?.success ? t('preset.saveSuccess') : t('preset.saveFail'),
       );
     } catch (error) {
-      console.error("Failed to save preset", error);
-      showAlert?.(t("preset.saveFail"));
+      console.error('Failed to save preset', error);
+      showAlert?.(t('preset.saveFail'));
     }
   };
 
@@ -135,15 +135,15 @@ const SettingTool = ({
           before.graphPositions,
           before.pluginElements,
           before.layerGroups,
-          before.keyCounters
+          before.keyCounters,
         );
       }
       showAlert?.(
-        result?.success ? t("preset.loadSuccess") : t("preset.loadFail")
+        result?.success ? t('preset.loadSuccess') : t('preset.loadFail'),
       );
     } catch (error) {
-      console.error("Failed to load preset", error);
-      showAlert?.(t("preset.loadFail"));
+      console.error('Failed to load preset', error);
+      showAlert?.(t('preset.loadFail'));
     }
   };
 
@@ -151,34 +151,35 @@ const SettingTool = ({
     try {
       const result = await window.api.presets.saveTab();
       showAlert?.(
-        result?.success
-          ? t("preset.saveTabSuccess")
-          : t("preset.saveTabFail")
+        result?.success ? t('preset.saveTabSuccess') : t('preset.saveTabFail'),
       );
     } catch (error) {
-      console.error("Failed to save tab preset", error);
-      showAlert?.(t("preset.saveTabFail"));
+      console.error('Failed to save tab preset', error);
+      showAlert?.(t('preset.saveTabFail'));
     }
   };
 
   const resolvePresetLoadTabErrorMessage = (error: unknown): string => {
-    let code = "";
-    if (typeof error === "string") {
+    let code = '';
+    if (typeof error === 'string') {
       code = error;
-    } else if (error && typeof error === "object") {
+    } else if (error && typeof error === 'object') {
       const message = (error as { message?: unknown }).message;
-      if (typeof message === "string") {
+      if (typeof message === 'string') {
         code = message;
       }
     }
 
-    if (code.includes("tab-preset-ambiguous-source")) {
-      return t("preset.loadTabAmbiguousSource");
+    if (code.includes('tab-preset-ambiguous-source')) {
+      return t('preset.loadTabAmbiguousSource');
     }
-    if (code.includes("invalid-tab-preset") || code.includes("invalid-preset")) {
-      return t("preset.loadTabInvalidPreset");
+    if (
+      code.includes('invalid-tab-preset') ||
+      code.includes('invalid-preset')
+    ) {
+      return t('preset.loadTabInvalidPreset');
     }
-    return t("preset.loadTabFail");
+    return t('preset.loadTabFail');
   };
 
   const handlePresetLoadTab = async () => {
@@ -193,16 +194,14 @@ const SettingTool = ({
           before.graphPositions,
           before.pluginElements,
           before.layerGroups,
-          before.keyCounters
+          before.keyCounters,
         );
       }
       showAlert?.(
-        result?.success
-          ? t("preset.loadTabSuccess")
-          : t("preset.loadTabFail")
+        result?.success ? t('preset.loadTabSuccess') : t('preset.loadTabFail'),
       );
     } catch (error) {
-      console.error("Failed to load tab preset", error);
+      console.error('Failed to load tab preset', error);
       showAlert?.(resolvePresetLoadTabErrorMessage(error));
     }
   };
@@ -212,12 +211,12 @@ const SettingTool = ({
       {!isSettingsOpen && (
         <TooltipGroup>
           <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[0px]">
-            <FloatingTooltip content={t("tooltip.exportPreset")}>
+            <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button icon={<FolderIcon />} onClick={handlePresetSave} />
             </FloatingTooltip>
 
             <FloatingTooltip
-              content={t("tooltip.importExport")}
+              content={t('tooltip.importExport')}
               disabled={isExportImportOpen}
             >
               <ChevronButton
@@ -234,30 +233,30 @@ const SettingTool = ({
                 textAlign="left"
                 items={[
                   {
-                    id: "import",
-                    label: t("preset.import"),
+                    id: 'import',
+                    label: t('preset.import'),
                     children: [
-                      { id: "import-all", label: t("preset.importAll") },
-                      { id: "import-tab", label: t("preset.importTab") },
+                      { id: 'import-all', label: t('preset.importAll') },
+                      { id: 'import-tab', label: t('preset.importTab') },
                     ],
                   },
                   {
-                    id: "export",
-                    label: t("preset.export"),
+                    id: 'export',
+                    label: t('preset.export'),
                     children: [
-                      { id: "export-all", label: t("preset.exportAll") },
-                      { id: "export-tab", label: t("preset.exportTab") },
+                      { id: 'export-all', label: t('preset.exportAll') },
+                      { id: 'export-tab', label: t('preset.exportTab') },
                     ],
                   },
                 ]}
                 onSelect={async (id) => {
-                  if (id === "import-all") {
+                  if (id === 'import-all') {
                     await handlePresetLoad();
-                  } else if (id === "import-tab") {
+                  } else if (id === 'import-tab') {
                     await handlePresetLoadTab();
-                  } else if (id === "export-all") {
+                  } else if (id === 'export-all') {
                     await handlePresetSave();
-                  } else if (id === "export-tab") {
+                  } else if (id === 'export-tab') {
                     await handlePresetSaveTab();
                   }
                   setIsExportImportOpen(false);
@@ -272,8 +271,8 @@ const SettingTool = ({
           <FloatingTooltip
             content={
               isOverlayVisible
-                ? t("tooltip.overlayClose")
-                : t("tooltip.overlayOpen")
+                ? t('tooltip.overlayClose')
+                : t('tooltip.overlayOpen')
             }
           >
             <Button
@@ -284,7 +283,7 @@ const SettingTool = ({
           <div className="flex items-center">
             <FloatingTooltip
               content={
-                isSettingsOpen ? t("tooltip.back") : t("tooltip.settings")
+                isSettingsOpen ? t('tooltip.back') : t('tooltip.settings')
               }
             >
               <Button
@@ -340,8 +339,8 @@ const Button = ({ icon, isSelected = false, onClick }: ButtonProps) => {
       type="button"
       className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
         isSelected
-          ? "bg-button-active"
-          : "bg-button-primary hover:bg-button-hover"
+          ? 'bg-button-active'
+          : 'bg-button-primary hover:bg-button-hover'
       }`}
       onClick={onClick}
     >
@@ -363,15 +362,15 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
         type="button"
         className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-button-active ${
           isSelected
-            ? "bg-button-active hover:bg-button-active"
-            : "bg-button-primary hover:bg-button-hover"
+            ? 'bg-button-active hover:bg-button-active'
+            : 'bg-button-primary hover:bg-button-hover'
         }`}
         onClick={onClick}
       >
         <ChevronDownIcon />
       </button>
     );
-  }
+  },
 );
 
 export default SettingTool;

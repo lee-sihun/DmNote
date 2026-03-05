@@ -16,7 +16,7 @@ const EDGE_EPS = 1; // 스크롤 상/하단 근접 판정 오차
  */
 export function getScrollShadowState(
   container: HTMLElement | null,
-  content?: HTMLElement | null
+  content?: HTMLElement | null,
 ): ScrollShadowState {
   if (!container) {
     return { hasTopShadow: false, hasBottomShadow: false };
@@ -37,7 +37,7 @@ export function getScrollShadowState(
   const sampleTopY = Math.min(containerRect.bottom - 2, containerRect.top + 2);
   const sampleBottomY = Math.max(
     containerRect.top + 2,
-    containerRect.bottom - 2
+    containerRect.bottom - 2,
   );
 
   const findElementAt = (y: number): HTMLElement | null => {

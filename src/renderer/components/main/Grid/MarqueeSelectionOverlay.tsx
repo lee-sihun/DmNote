@@ -1,8 +1,8 @@
-import React from "react";
+import React from 'react';
 import {
   useGridSelectionStore,
   getMarqueeRect,
-} from "@stores/useGridSelectionStore";
+} from '@stores/useGridSelectionStore';
 
 interface MarqueeSelectionOverlayProps {
   zoom?: number;
@@ -17,7 +17,7 @@ export const MarqueeSelectionOverlay: React.FC<
   MarqueeSelectionOverlayProps
 > = ({ zoom = 1, panX = 0, panY = 0 }) => {
   const isMarqueeSelecting = useGridSelectionStore(
-    (state) => state.isMarqueeSelecting
+    (state) => state.isMarqueeSelecting,
   );
   const marqueeStart = useGridSelectionStore((state) => state.marqueeStart);
   const marqueeEnd = useGridSelectionStore((state) => state.marqueeEnd);
@@ -30,14 +30,14 @@ export const MarqueeSelectionOverlay: React.FC<
   return (
     <div
       style={{
-        position: "absolute",
+        position: 'absolute',
         left: rect.left * zoom + panX,
         top: rect.top * zoom + panY,
         width: rect.width * zoom,
         height: rect.height * zoom,
-        backgroundColor: "rgba(59, 130, 246, 0.15)",
-        border: "1px dashed rgba(59, 130, 246, 0.8)",
-        pointerEvents: "none",
+        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        border: '1px dashed rgba(59, 130, 246, 0.8)',
+        pointerEvents: 'none',
         zIndex: 9998,
       }}
     />

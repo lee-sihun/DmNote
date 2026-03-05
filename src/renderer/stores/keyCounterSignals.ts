@@ -1,13 +1,13 @@
-import { signal, type Signal } from "@preact/signals-react";
-import type { KeyCounters } from "@src/types/keys";
+import { signal, type Signal } from '@preact/signals-react';
+import type { KeyCounters } from '@src/types/keys';
 
 const keyCounterSignals = new Map<string, Signal<number>>();
 
 const composeKey = (mode: string, key: string) => `${mode}::${key}`;
 
 export function getKeyCounterSignal(mode: string, key: string): Signal<number> {
-  const safeMode = mode || "__unknown_mode__";
-  const safeKey = key || "__unknown_key__";
+  const safeMode = mode || '__unknown_mode__';
+  const safeKey = key || '__unknown_key__';
   const composed = composeKey(safeMode, safeKey);
   let s = keyCounterSignals.get(composed);
   if (!s) {
@@ -25,7 +25,7 @@ export function setKeyCounter(mode: string, key: string, value: number) {
 export function getCounterSnapshot(): KeyCounters {
   const snapshot: KeyCounters = {};
   for (const [composed, signalRef] of keyCounterSignals.entries()) {
-    const [mode, key] = composed.split("::");
+    const [mode, key] = composed.split('::');
     if (!snapshot[mode]) {
       snapshot[mode] = {};
     }
