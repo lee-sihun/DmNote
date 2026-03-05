@@ -935,7 +935,7 @@ impl AppState {
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
-            .visible(false)
+            .visible(true)
             .inner_size(bounds.width, bounds.height)
             .position(bounds.x, bounds.y)
             .shadow(false)
@@ -989,9 +989,12 @@ impl AppState {
         // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
         // store의 overlay_visible 상태에 따라 조건부 표시
         if snapshot.overlay_visible {
+            // .visible(true)로 생성되었으므로 이미 보이는 상태
+            // SW_SHOWNOACTIVATE로 다시 표시하여 포커스를 빼앗지 않는 상태 보장
             show_overlay_window(&window, snapshot.always_on_top)?;
             *self.overlay_visible.write() = true;
         } else {
+            hide_overlay_window(&window)?;
             *self.overlay_visible.write() = false;
         }
 
