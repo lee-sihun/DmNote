@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
-import type { CounterTabContentProps } from './types';
+import type { CounterTabContentProps } from '../types';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
@@ -11,7 +11,7 @@ import {
   FontStyleToggle,
   NumberInput,
   SectionDivider,
-} from './PropertyInputs';
+} from '../PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';

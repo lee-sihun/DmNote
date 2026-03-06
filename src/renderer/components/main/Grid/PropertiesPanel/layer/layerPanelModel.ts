@@ -9,7 +9,7 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
-import type { LayerItem, DisplayItem } from './types';
+import type { LayerItem, DisplayItem } from '../types';
 
 // ============================================================================
 // layerItems 생성

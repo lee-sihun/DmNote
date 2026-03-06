@@ -27,7 +27,7 @@ import {
   CounterTabContent,
   TABS,
   TabType,
-} from './index';
+} from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';

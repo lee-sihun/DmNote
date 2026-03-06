@@ -7,7 +7,7 @@ import {
   TextInput,
   SectionDivider,
   FontStyleToggle,
-} from './index';
+} from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';

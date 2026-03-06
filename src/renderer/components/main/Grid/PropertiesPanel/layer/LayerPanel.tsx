@@ -2,10 +2,10 @@ import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { SidebarToggleIcon, ModeToggleIcon } from './PropertyInputs';
-import { LAYER_PANEL_TABS, type LayerPanelTabType } from './types';
+import { SidebarToggleIcon, ModeToggleIcon } from '../PropertyInputs';
+import { LAYER_PANEL_TABS, type LayerPanelTabType } from '../types';
 import LayerTabContent from './LayerTabContent';
-import GridTabContent from './GridTabContent';
+import GridTabContent from '../GridTabContent';
 
 // ============================================================================
 // 레이어 패널 Props

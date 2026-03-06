@@ -12,7 +12,7 @@ import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
-import type { LayerItem, DisplayItem } from './types';
+import type { LayerItem, DisplayItem } from '../types';
 
 // ============================================================================
 // 파라미터 타입

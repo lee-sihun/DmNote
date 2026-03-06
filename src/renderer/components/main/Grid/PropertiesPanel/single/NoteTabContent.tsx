@@ -1,13 +1,13 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
-import type { NoteTabContentProps } from './types';
+import type { NoteTabContentProps } from '../types';
 import type { NoteColor, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,
   OptionalNumberInput,
   SectionDivider,
-} from './PropertyInputs';
+} from '../PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { isGradientColor } from '@utils/color/colorUtils';

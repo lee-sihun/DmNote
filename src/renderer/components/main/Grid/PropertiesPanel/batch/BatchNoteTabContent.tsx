@@ -5,7 +5,7 @@ import {
   NumberInput,
   OptionalNumberInput,
   SectionDivider,
-} from './index';
+} from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';

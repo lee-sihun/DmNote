@@ -5,7 +5,7 @@ import {
   NumberInput,
   FontStyleToggle,
   SectionDivider,
-} from './index';
+} from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';

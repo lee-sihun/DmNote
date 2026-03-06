@@ -20,7 +20,7 @@ import {
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { ListItem } from '@components/main/Modal/ListPopup';
-import type { LayerItem, DisplayItem } from './types';
+import type { LayerItem, DisplayItem } from '../types';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 
 // ============================================================================

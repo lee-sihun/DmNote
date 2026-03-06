@@ -15,7 +15,7 @@ import ListPopup from '@components/main/Modal/ListPopup';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
-import type { LayerItem } from './types';
+import type { LayerItem } from '../types';
 import { buildLayerItems, buildDisplayItems } from './layerPanelModel';
 import {
   FolderIcon,

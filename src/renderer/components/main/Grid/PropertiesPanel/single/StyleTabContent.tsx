@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect } from 'react';
-import type { StyleTabContentProps } from './types';
+import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -8,13 +8,13 @@ import {
   TextInput,
   FontStyleToggle,
   SectionDivider,
-} from './PropertyInputs';
-import ImagePicker from '../../Modal/content/pickers/ImagePicker';
-import ColorPicker from '../../Modal/content/pickers/ColorPicker';
-import FontPicker from '../../Modal/content/pickers/FontPicker';
-import FontManagerModal from '../../Modal/content/managers/FontManagerModal';
-import SoundPicker from '../../Modal/content/pickers/SoundPicker';
-import Checkbox from '../../common/Checkbox';
+} from '../PropertyInputs';
+import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
+import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
+import FontPicker from '../../../Modal/content/pickers/FontPicker';
+import FontManagerModal from '../../../Modal/content/managers/FontManagerModal';
+import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
+import Checkbox from '../../../common/Checkbox';
 
 // 피커 타겟 타입
 type PickerTarget =
