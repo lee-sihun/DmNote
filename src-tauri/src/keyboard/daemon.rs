@@ -62,7 +62,7 @@ impl HotkeyState {
     /// Update modifier state and check for hotkey triggers
     /// Returns Some(command) if a hotkey was triggered
     fn update(&mut self, vk_code: u32, is_down: bool) -> Option<DaemonCommand> {
-        // VK codes for modifiers
+        // 수정자 키 VK 코드
         const VK_LCONTROL: u32 = 0xA2;
         const VK_RCONTROL: u32 = 0xA3;
         const VK_LSHIFT: u32 = 0xA0;
@@ -147,7 +147,7 @@ impl ParsedHotkey {
 
 #[cfg(target_os = "windows")]
 fn vk_from_key_code(code: &str) -> Option<u32> {
-    // Uses KeyboardEvent.code-style keys (e.g., KeyO, Tab, Digit1).
+    // KeyboardEvent.code 스타일 키 사용 (예: KeyO, Tab, Digit1)
     if let Some(rest) = code.strip_prefix("Key") {
         if rest.len() == 1 {
             let ch = rest.chars().next()?.to_ascii_uppercase();
@@ -523,13 +523,13 @@ fn run_raw_input() -> Result<()> {
         RI_KEY_BREAK, RI_KEY_E0, WM_DESTROY, WM_INPUT, WM_QUIT, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
     };
 
-    // Try to connect to named pipe; fall back to stdout if unavailable
+    // Named pipe 연결 시도; 불가 시 stdout으로 폴백
     let mut sink: Box<dyn Write + Send> = match pipe_client_connect("dmnote_keys_v1") {
         Ok(file) => Box::new(file),
         Err(_) => Box::new(std::io::stdout()),
     };
 
-    // Global hotkey state tracker
+    // 글로벌 단축키 상태 추적기
     let hotkeys = load_hotkeys_from_env();
     let mut hotkey_state = HotkeyState::new(
         hotkeys.toggle_overlay,
@@ -537,7 +537,7 @@ fn run_raw_input() -> Result<()> {
         hotkeys.toggle_always_on_top,
     );
 
-    // Raw Input mouse button flags (not exposed as constants in windows crate today).
+    // Raw Input 마우스 버튼 플래그 (windows 크레이트에 상수 미노출)
     const RI_MOUSE_LEFT_BUTTON_DOWN: u16 = 0x0001;
     const RI_MOUSE_LEFT_BUTTON_UP: u16 = 0x0002;
     const RI_MOUSE_RIGHT_BUTTON_DOWN: u16 = 0x0004;
@@ -548,7 +548,7 @@ fn run_raw_input() -> Result<()> {
     const RI_MOUSE_BUTTON_4_UP: u16 = 0x0080;
     const RI_MOUSE_BUTTON_5_DOWN: u16 = 0x0100;
     const RI_MOUSE_BUTTON_5_UP: u16 = 0x0200;
-    // Wheel constants kept for completeness but not used (wheel events disabled).
+    // 휠 상수 — 완전성을 위해 유지하나 미사용 (휠 이벤트 비활성화)
     const _RI_MOUSE_WHEEL: u16 = 0x0400;
     const _RI_MOUSE_HWHEEL: u16 = 0x0800;
 
@@ -560,7 +560,7 @@ fn run_raw_input() -> Result<()> {
     ) -> LRESULT {
         match msg {
             WM_DESTROY => {
-                // Signal message loop to quit; keyboard daemon process should exit shortly after.
+                // 메시지 루프 종료 신호; 키보드 데몬 프로세스도 곧 종료됨
                 PostQuitMessage(0);
                 LRESULT(0)
             }
@@ -569,7 +569,7 @@ fn run_raw_input() -> Result<()> {
     }
 
     unsafe {
-        // Register a minimal window class for receiving WM_INPUT.
+        // WM_INPUT 수신용 최소 윈도우 클래스 등록
         let class_name: Vec<u16> = "DmNoteRawInput"
             .encode_utf16()
             .chain(std::iter::once(0))
@@ -605,7 +605,7 @@ fn run_raw_input() -> Result<()> {
             None,
         )?;
 
-        // Register for Raw Input keyboard + mouse events, even when not in focus.
+        // Raw Input 키보드 + 마우스 이벤트 등록 (비포커스 상태에서도 수신)
         let devices = [
             RAWINPUTDEVICE {
                 usUsagePage: 0x01,
@@ -624,11 +624,11 @@ fn run_raw_input() -> Result<()> {
         RegisterRawInputDevices(&devices, size_of::<RAWINPUTDEVICE>() as u32)
             .map_err(|e| anyhow!("RegisterRawInputDevices failed: {e}"))?;
 
-        // Message loop: process WM_INPUT and translate to HookMessage.
+        // 메시지 루프: WM_INPUT 처리 후 HookMessage로 변환
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
             if msg.message == WM_INPUT {
-                // First query required buffer size.
+                // 필요한 버퍼 크기 먼저 조회
                 let mut size: u32 = 0;
                 let header_size = size_of::<RAWINPUTHEADER>() as u32;
                 let hraw = HRAWINPUT(msg.lParam.0 as *mut c_void);
@@ -665,11 +665,11 @@ fn run_raw_input() -> Result<()> {
                         let flags = kbd.Flags as u32;
 
                         let is_e0 = (flags & RI_KEY_E0) != 0;
-                        // RI_KEY_E1 is not currently exposed in windows crate constants.
+                        // RI_KEY_E1은 windows 크레이트 상수에 미노출
                         const RI_KEY_E1: u32 = 0x0004;
                         let is_e1 = (flags & RI_KEY_E1) != 0;
 
-                        // Prefix scan code for MAPVK_VSC_TO_VK_EX (E0/E1 in high byte).
+                        // MAPVK_VSC_TO_VK_EX용 스캔 코드 접두사 처리 (상위 바이트에 E0/E1)
                         let scan_code_prefixed = if is_e0 {
                             scan_code | 0xE000
                         } else if is_e1 {
@@ -678,8 +678,8 @@ fn run_raw_input() -> Result<()> {
                             scan_code
                         };
 
-                        // Normalize virtual key so that left/right modifiers and others
-                        // match expected labels. Prefer scancode-based recovery for fake keys.
+                        // 가상 키 정규화 — 좌/우 수정자 키 등이 예상 레이블과 일치하도록 처리
+                        // 가짜 키는 스캔 코드 기반 복구 우선
                         let mut vk_norm = vkey;
                         if vk_norm == 0 || vk_norm == 0xFF {
                             let mapped =
@@ -687,8 +687,8 @@ fn run_raw_input() -> Result<()> {
                             if mapped != 0 {
                                 vk_norm = mapped;
                             } else {
-                                // Fake/incomplete key events can appear as VK 0/255.
-                                // Skip unresolved events instead of forcing a wrong key label.
+                                // VK 0/255인 가짜/불완전 키 이벤트 발생 가능
+                                // 잘못된 키 레이블 강제 대신 미해석 이벤트 건너뜀
                                 let _ = TranslateMessage(&msg);
                                 DispatchMessageW(&msg);
                                 continue;
@@ -736,8 +736,8 @@ fn run_raw_input() -> Result<()> {
 
                         let key = Some(KeyboardKey::from(vk_norm));
 
-                        // Map Raw Input flags to KeyPress (down/up),
-                        // using RI_KEY_BREAK similar to multiinput.
+                        // Raw Input 플래그를 KeyPress (down/up)로 매핑
+                        // multiinput과 동일하게 RI_KEY_BREAK 사용
                         let is_break = (flags & RI_KEY_BREAK) != 0;
                         let pressed = if is_break {
                             KeyPress::Up(false)
@@ -745,17 +745,17 @@ fn run_raw_input() -> Result<()> {
                             KeyPress::Down(false)
                         };
 
-                        // Check for global hotkeys (Ctrl+Shift+O for overlay toggle)
+                        // 글로벌 단축키 확인 (Ctrl+Shift+O로 오버레이 토글)
                         if let Some(command) = hotkey_state.update(vk_norm, !is_break) {
                             let _ = write_command(&mut sink, &command);
-                            // Continue processing the key event normally
+                            // 키 이벤트는 계속 정상 처리
                         }
 
-                        // Map Raw Input extended flag to low-level hook-style flags
-                        // so that keyboard_labels' numpad/extended logic behaves identically.
+                        // Raw Input 확장 플래그를 low-level hook 스타일 플래그로 매핑
+                        // keyboard_labels의 넘패드/확장 키 로직이 동일하게 동작하도록 처리
                         let mut ll_flags = 0u32;
                         if is_e0 {
-                            // LLKHF_EXTENDED == 0x01 in keyboard_labels.rs
+                            // keyboard_labels.rs에서 LLKHF_EXTENDED == 0x01
                             ll_flags |= 0x01;
                         }
 

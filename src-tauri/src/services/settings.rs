@@ -112,8 +112,8 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
     }
     if let Some(value) = patch.font_settings.as_ref() {
         let mut next = value.clone();
-        // Do not persist base64(data URI) cssContent for local fonts; store only the path and
-        // generate @font-face in the renderer.
+        // 로컬 폰트의 base64(data URI) cssContent는 저장하지 않음;
+        // 경로만 유지하고 @font-face는 renderer에서 생성
         for font in next.custom_fonts.iter_mut() {
             if font.font_type == FontType::Local {
                 font.css_content = None;

@@ -269,9 +269,9 @@ impl From<u32> for KeyboardKey {
 pub fn build_key_labels(event: &KeyboardEvent) -> Vec<String> {
     let mut labels = Vec::new();
 
-    // Handle Right Alt / Han/Eng key specifically by VK code first
-    // VK_RMENU (0xA5/165): Right Alt in US keyboard layout -> map to "21"
-    // VK_HANGUL (0x15/21): Han/Eng toggle in Korean IME (same physical key) -> use "21"
+    // Right Alt / 한영키를 VK 코드로 우선 처리
+    // VK_RMENU (0xA5/165): US 레이아웃의 Right Alt → "21"로 매핑
+    // VK_HANGUL (0x15/21): 한국어 IME 한영 전환 (동일 물리 키) → "21" 사용
     if let Some(vk_code) = event.vk_code {
         if vk_code == 0xA5 || vk_code == 0x15 {
             labels.push("21".to_string());
@@ -492,9 +492,9 @@ fn other_key_labels(code: u32) -> Vec<String> {
         189 => vec!["MINUS".to_string(), "-".to_string()],
         93 => vec!["CONTEXT MENU".to_string(), "APPS".to_string()],
         19 => vec!["PAUSE".to_string()],
-        // VK_END (0x23 / 35) is not mapped in KeyboardKey,
-        // so it comes through as Other(35); normalize to "END"
-        // to match frontend key map expectations.
+        // VK_END (0x23 / 35)는 KeyboardKey에 매핑되지 않아
+        // Other(35)로 전달됨; 프론트엔드 키 맵과 일치시키기 위해
+        // "END"로 정규화
         35 => vec!["END".to_string()],
         _ => vec![code.to_string()],
     }

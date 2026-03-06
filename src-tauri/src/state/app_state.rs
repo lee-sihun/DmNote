@@ -255,7 +255,7 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // Avoid sending the full settings payload (can be large with embedded fonts).
+        // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등으로 용량이 클 수 있음)
         let mut payload = diff.clone();
         payload.full = None;
         app.emit("settings:changed", payload)?;
@@ -480,7 +480,7 @@ impl AppState {
         let shortcuts_json = serde_json::to_string(&self.store.settings_snapshot().shortcuts)
             .unwrap_or_else(|_| "{}".to_string());
 
-        // Prepare Named Pipe server asynchronously to avoid blocking before spawning the daemon.
+        // Named Pipe 서버를 비동기로 준비 (daemon 스폰 전 블로킹 방지)
         #[cfg(target_os = "windows")]
         let pipe_receiver: Option<std::sync::mpsc::Receiver<Option<std::fs::File>>> = {
             use std::sync::mpsc;
@@ -524,13 +524,13 @@ impl AppState {
             .name("keyboard-daemon-reader".into())
             .spawn(move || {
             let mut keys_state_emit_count: u64 = 0;
-                // Prefer Named Pipe if available; otherwise, use stdout
+                // Named Pipe 우선 사용; 불가 시 stdout fallback
                 #[allow(unused_mut)]
                 let mut reader: BufReader<Box<dyn std::io::Read + Send>> = {
                     #[cfg(target_os = "windows")]
                     {
                         if let Some(rx) = pipe_receiver {
-                            // Wait a short time for the pipe to be ready; otherwise, fall back to stdout.
+                            // Pipe 준비 대기; 타임아웃 시 stdout fallback
                             match rx.recv_timeout(Duration::from_millis(1500)) {
                                 Ok(Some(f)) => BufReader::new(Box::new(f)),
                                 _ => BufReader::new(Box::new(stdout)),
@@ -545,7 +545,7 @@ impl AppState {
                     }
                 };
                 let mut overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
-                // Elevate reader thread priority slightly on Windows
+                // Windows에서 reader 스레드 우선순위 약간 상향
                 #[cfg(target_os = "windows")]
                 unsafe {
                     use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL};
@@ -562,7 +562,7 @@ impl AppState {
                                 continue;
                             }
 
-                            // First, try to parse as DaemonCommand (global hotkeys)
+                            // DaemonCommand(글로벌 단축키) 파싱 우선 시도
                             if let Ok(command) = serde_json::from_str::<crate::ipc::DaemonCommand>(s) {
                                 match command {
                                     crate::ipc::DaemonCommand::ToggleOverlay => {
@@ -609,7 +609,7 @@ impl AppState {
                                 continue;
                             }
 
-                            // Preferred: JSON encoded HookMessage (with device).
+                            // 우선 형식: JSON 인코딩된 HookMessage (device 포함)
                             let parsed: Option<crate::ipc::HookMessage> =
                                 serde_json::from_str(s).ok();
 
@@ -619,7 +619,7 @@ impl AppState {
                                 }
                                 msg
                             } else {
-                                // Legacy compact format: "D:<label>" / "U:<label>"
+                                // 레거시 간소 형식: "D:<label>" / "U:<label>"
                                 if s.len() < 3
                                     || !s.as_bytes().get(1).map(|c| *c == b':').unwrap_or(false)
                                 {
@@ -660,7 +660,7 @@ impl AppState {
                                 .cloned()
                                 .unwrap_or_else(|| String::from(""));
 
-                            // Emit raw input stream only when there are subscribers
+                            // 구독자가 있을 때만 raw input 스트림 emit
                             let app_state = app_handle.state::<AppState>();
                             if app_state.raw_input_subscriber_count() > 0 {
                                 let raw_payload = json!({
@@ -670,11 +670,11 @@ impl AppState {
                                     "device": device_str,
                                 });
 
-                                // Emit to main window first, then fallback to app-wide emit
+                                // 메인 윈도우에 우선 emit
                                 if let Some(main) = app_handle.get_webview_window("main") {
                                     let _ = main.emit("input:raw", &raw_payload);
                                 }
-                                // Also emit to overlay for plugins running there
+                                // 오버레이에도 emit (플러그인용)
                                 if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
                                     let _ = overlay.emit("input:raw", &raw_payload);
                                 }
@@ -1162,7 +1162,7 @@ impl AppState {
         }
 
         if diff.changed.shortcuts.is_some() {
-            // Restart keyboard daemon to apply updated global hotkeys.
+            // 변경된 글로벌 단축키 적용을 위해 키보드 daemon 재시작
             if let Some(task) = self.keyboard_task.write().take() {
                 drop(task);
             }
@@ -1277,7 +1277,7 @@ impl AppState {
     pub fn unsubscribe_raw_input(&self) -> u32 {
         let prev = self.raw_input_subscribers.fetch_sub(1, Ordering::SeqCst);
         if prev == 0 {
-            // Prevent underflow
+            // 언더플로우 방지
             self.raw_input_subscribers.store(0, Ordering::SeqCst);
             0
         } else {
@@ -1535,7 +1535,7 @@ fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<(
     }
     #[cfg(target_os = "macos")]
     {
-        // Ensure the overlay does not become key/main window when shown.
+        // 오버레이 표시 시 key/main 윈도우 전환 방지
         let _ = window.set_focusable(false);
         apply_macos_overlay_fullscreen_behavior(window, _always_on_top);
         window.show()?;

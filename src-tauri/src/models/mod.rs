@@ -100,9 +100,9 @@ impl Default for SoundLibraryEntry {
     }
 }
 
-// Serialize as:
-// - Solid: JSON string (e.g., "#FF00FF")
-// - Gradient: object with explicit type { type: "gradient", top, bottom }
+// 직렬화 형식:
+// - Solid: JSON 문자열 (예: "#FF00FF")
+// - Gradient: 명시적 type 필드를 포함한 객체 { type: "gradient", top, bottom }
 impl Serialize for NoteColor {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -121,10 +121,10 @@ impl Serialize for NoteColor {
     }
 }
 
-// Deserialize accepts both shapes:
-// - string => Solid
-// - object with { type: "gradient", top, bottom } => Gradient
-// - object with { top, bottom } (no type) => Gradient (backward compatibility)
+// 역직렬화 허용 형식:
+// - 문자열 => Solid
+// - { type: "gradient", top, bottom } 객체 => Gradient
+// - { top, bottom } (type 없음) => Gradient (하위 호환)
 impl<'de> Deserialize<'de> for NoteColor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -359,7 +359,7 @@ pub struct KeyCounterColor {
 impl Default for KeyCounterColor {
     fn default() -> Self {
         Self {
-            // Match renderer defaults (src/types/keys.ts)
+            // 렌더러 기본값과 일치 (src/types/keys.ts)
             idle: "rgba(121, 121, 121, 0.9)".to_string(),
             active: "#FFFFFF".to_string(),
         }
@@ -636,7 +636,7 @@ pub struct KeyCounterSettings {
 
 fn default_stroke_color() -> KeyCounterColor {
     KeyCounterColor {
-        // No outline by default (match renderer defaults)
+        // 기본값: 외곽선 없음 (렌더러 기본값과 일치)
         idle: "transparent".to_string(),
         active: "transparent".to_string(),
     }
@@ -757,7 +757,7 @@ fn default_reverse_fade_bottom_px() -> u32 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteSettings {
-    // Legacy: global note rounding (migrated to per-key noteBorderRadius).
+    // Legacy: 전역 노트 라운딩 (개별 키 noteBorderRadius로 마이그레이션됨)
     #[serde(default, skip_serializing)]
     pub border_radius: Option<u32>,
     #[serde(default = "default_note_frame_limit")]

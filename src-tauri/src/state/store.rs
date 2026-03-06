@@ -50,8 +50,7 @@ impl AppStore {
             (default_path, initialize_default_state(), true)
         };
 
-        // Migration: local fonts used to store base64(data URI) cssContent in store.json. Convert them
-        // to path-based fonts stored under the app data directory so settings updates stay fast.
+        // 마이그레이션: 로컬 폰트 base64 cssContent → 앱 데이터 경로 기반 파일로 변환
         if migrate_local_fonts_to_app_data(&dir, &mut state) {
             needs_persist = true;
         }
@@ -69,7 +68,7 @@ impl AppStore {
             store.persist_locked(&snapshot)?;
         }
 
-        // macOS: WKWebView uses Metal; keep the setting explicit in store.json.
+        // macOS: WKWebView Metal 설정 강제 적용
         #[cfg(target_os = "macos")]
         {
             let should_force = store.state.read().angle_mode != "metal";
@@ -290,7 +289,7 @@ fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> {
             });
             (normalize_state(data), needs_persist)
         }
-        // Repair legacy/invalid store files and persist the normalized state.
+        // 레거시/비정상 store 파일 복구 후 정규화 상태 저장
         Err(_) => (repair_legacy_state(&content), true),
     };
     if needs_persist {
@@ -354,7 +353,7 @@ fn migrate_local_fonts_to_app_data(app_data_dir: &Path, data: &mut AppStoreData)
         if !local_path.is_empty() {
             let source = PathBuf::from(local_path);
 
-            // If it's already inside the app data fonts directory, keep it and just drop cssContent.
+            // 이미 앱 데이터 fonts 디렉터리 내부에 있으면 cssContent만 제거
             if source.starts_with(&fonts_dir) && source.exists() {
                 if font.css_content.is_some() {
                     font.css_content = None;
@@ -387,8 +386,7 @@ fn migrate_local_fonts_to_app_data(app_data_dir: &Path, data: &mut AppStoreData)
             }
         }
 
-        // If we can't import the font file, disable it and remove any stored cssContent to avoid
-        // bloating the store (and slowing down unrelated settings updates).
+        // 폰트 파일 임포트 실패 시 비활성화하고 cssContent 제거 (store 비대화 방지)
         if font.enabled {
             font.enabled = false;
             changed = true;
@@ -790,7 +788,7 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         merge_default_positions(&mut data.key_positions, default_positions());
     }
 
-    // Legacy migration: global noteSettings.borderRadius -> per-key noteBorderRadius
+    // 레거시 마이그레이션: 전역 noteSettings.borderRadius → 키별 noteBorderRadius
     if let Some(legacy_border_radius) = data.note_settings.border_radius.take() {
         for positions in data.key_positions.values_mut() {
             for pos in positions.iter_mut() {
@@ -799,7 +797,7 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         }
     }
 
-    // Legacy migration: fadePosition enum -> per-direction pixel fade values
+    // 레거시 마이그레이션: fadePosition enum → 방향별 픽셀 fade 값
     data.note_settings.migrate_fade_position();
     for tab in data.tab_note_overrides.values_mut() {
         tab.migrate_fade_position();
@@ -810,9 +808,8 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     data.counter_animation_presets =
         crate::models::normalize_user_counter_animation_presets(data.counter_animation_presets);
 
-    // Migration: old default counter settings were persisted with inverted active colors
-    // (black text / outlined). Align them with the renderer defaults if they still match
-    // the legacy pattern (to avoid overwriting user customizations).
+    // 마이그레이션: 기존 기본 카운터 설정의 반전된 active 색상 보정
+    // (레거시 패턴에 해당하는 경우만 적용, 사용자 커스텀은 유지)
     for positions in data.key_positions.values_mut() {
         for pos in positions.iter_mut() {
             pos.counter.migrate_legacy_defaults();
@@ -839,14 +836,14 @@ fn normalize_state(mut data: AppStoreData) -> AppStoreData {
 }
 
 fn merge_default_modes(target: &mut KeyMappings, defaults: &KeyMappings) {
-    // Only seed missing modes; keep intentionally empty modes as-is.
+    // 누락된 모드만 기본값으로 채움; 의도적으로 비운 모드는 유지
     for (mode, value) in defaults.iter() {
         target.entry(mode.clone()).or_insert_with(|| value.clone());
     }
 }
 
 fn merge_default_positions(target: &mut KeyPositions, defaults: &KeyPositions) {
-    // Only seed missing modes; keep intentionally empty modes as-is.
+    // 누락된 모드만 기본값으로 채움; 의도적으로 비운 모드는 유지
     for (mode, positions) in defaults.iter() {
         target
             .entry(mode.clone())

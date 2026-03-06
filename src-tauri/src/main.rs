@@ -256,7 +256,7 @@ fn main() {
 fn apply_webview2_additional_args(arg: &str) {
     use std::env;
     const KEY: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
-    // Append the argument if it's not already present to preserve user-provided args.
+    // 기존 사용자 인자를 유지하면서, 없는 경우에만 추가
     let existing = env::var(KEY).unwrap_or_default();
     let already_present = existing
         .split_whitespace()
@@ -681,7 +681,7 @@ fn apply_embedded_webview2_fixed_runtime_override() {
     };
 
     if needs_extract {
-        // Clean up previous attempts.
+        // 이전 추출 시도 정리
         let _ = fs::remove_dir_all(&extract_dir);
         if let Err(err) = fs::create_dir_all(&extract_dir) {
             log::warn!(

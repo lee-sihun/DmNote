@@ -259,7 +259,7 @@ pub fn preset_load_tab(
         tab.migrate_fade_position();
     }
 
-    // Restore embedded assets
+    // 내장 에셋 복원
     restore_preset_local_images(
         &app,
         &mut src_key_positions,
@@ -275,7 +275,7 @@ pub fn preset_load_tab(
         embedded_local_sounds.as_deref(),
     )?;
 
-    // Merge into full store snapshot
+    // 전체 스토어 스냅샷에 병합
     snapshot
         .keys
         .insert(current_tab_id.clone(), src_keys.clone());
@@ -393,7 +393,7 @@ fn restore_preset_local_fonts(
             continue;
         }
 
-        // Local fonts should always be served from the copied file path.
+        // 로컬 폰트는 항상 복사된 파일 경로로 제공
         font.css_content = None;
 
         if let Some(embedded) = embedded_map.get(font.id.as_str()) {
@@ -425,7 +425,7 @@ fn restore_preset_local_fonts(
             continue;
         }
 
-        // Backward compatibility: keep legacy absolute paths when available.
+        // 하위 호환: 기존 절대 경로가 유효하면 유지
         let has_existing_valid_path = font
             .local_path
             .as_ref()
@@ -593,7 +593,7 @@ fn restore_position_image_reference(
         return Ok(());
     }
 
-    // Legacy preset compatibility: convert data URL images to appdata file paths.
+    // 레거시 Preset 호환: data URL 이미지를 appdata 파일 경로로 변환
     if let Some((bytes, extension)) = decode_image_data_url(trimmed) {
         let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
         fs::write(&dest_path, bytes)
@@ -602,7 +602,7 @@ fn restore_position_image_reference(
         return Ok(());
     }
 
-    // Legacy compatibility: absolute local paths are copied into appdata/images.
+    // 레거시 호환: 로컬 절대 경로를 appdata/images로 복사
     if let Some(source_path) = super::local_source_path_from_image_ref(trimmed) {
         if source_path.exists() {
             if source_path.starts_with(images_dir) {
@@ -624,7 +624,7 @@ fn restore_position_image_reference(
             return Ok(());
         }
 
-        // Preset imported on another machine: unresolved absolute paths should fallback cleanly.
+        // 다른 기기에서 import된 Preset: 해석 불가한 절대 경로는 정상 fallback 처리
         *image_ref = None;
         return Ok(());
     }

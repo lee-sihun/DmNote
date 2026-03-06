@@ -41,8 +41,8 @@ pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
         .unwrap_or("Unknown Font")
         .to_string();
 
-    // Copy into app data directory so it works with the asset protocol scope
-    // and survives if the user moves/deletes the original file.
+    // asset protocol scope 호환 및 원본 파일 이동/삭제 대비를 위해
+    // app data 디렉터리로 복사
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

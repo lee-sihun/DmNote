@@ -109,7 +109,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
     let snapshot = state.store.snapshot();
     let tab_id = snapshot.selected_key_type.clone();
 
-    // Build single-tab maps for embed helpers
+    // 단일 탭 맵 구성 (embed helper용)
     let mut tab_key_positions: KeyPositions = HashMap::new();
     if let Some(positions) = snapshot.key_positions.get(&tab_id) {
         tab_key_positions.insert(tab_id.clone(), positions.clone());
@@ -143,13 +143,13 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
             &tab_graph_positions,
         )?;
 
-    // Single-tab keys map
+    // 단일 탭 키 매핑
     let mut tab_keys: KeyMappings = HashMap::new();
     if let Some(keys) = snapshot.keys.get(&tab_id) {
         tab_keys.insert(tab_id.clone(), keys.clone());
     }
 
-    // custom_tabs: only include if this is a custom (non-builtin) tab
+    // custom_tabs: 커스텀(비내장) 탭인 경우에만 포함
     let custom_tabs = if BUILTIN_TAB_IDS.contains(&tab_id.as_str()) {
         None
     } else {
@@ -161,7 +161,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
         found.map(|ct| vec![ct])
     };
 
-    // tab_note_overrides: only the current tab's entry
+    // tab_note_overrides: 현재 탭 항목만 포함
     let tab_note_overrides = {
         let mut m: TabNoteOverrides = HashMap::new();
         if let Some(settings) = snapshot.tab_note_overrides.get(&tab_id) {
@@ -306,7 +306,7 @@ fn build_preset_font_payload(
                 data_base64: BASE64_STANDARD.encode(bytes),
             });
 
-            // Preset portability: paths are reconstructed at import time.
+            // Preset 이식성: import 시 경로 재구성
             next_font.local_path = None;
             next_font.css_content = None;
         }
@@ -407,7 +407,7 @@ fn rewrite_position_image_reference(
         return Ok(());
     }
 
-    // Keep external URLs as-is.
+    // 외부 URL은 그대로 유지
     if is_remote_or_virtual_image_ref(trimmed) {
         return Ok(());
     }
