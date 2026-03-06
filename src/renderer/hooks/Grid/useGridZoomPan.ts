@@ -295,37 +295,42 @@ export function useGridZoomPan({
   const handleWheelRef = useRef(handleWheel);
   const handleMiddleMouseDownRef = useRef(handleMiddleMouseDown);
   const handleKeyDownRef = useRef(handleKeyDown);
+  // eslint-disable-next-line react-hooks/refs -- 매 렌더 ref 동기화 (의도적)
+  handleWheelRef.current = handleWheel;
+  // eslint-disable-next-line react-hooks/refs -- 매 렌더 ref 동기화 (의도적)
+  handleMiddleMouseDownRef.current = handleMiddleMouseDown;
+  // eslint-disable-next-line react-hooks/refs -- 매 렌더 ref 동기화 (의도적)
+  handleKeyDownRef.current = handleKeyDown;
+
+  // container DOM 요소를 상태로 추적 (ref.current는 dependency로 사용 불가)
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
-    handleWheelRef.current = handleWheel;
-    handleMiddleMouseDownRef.current = handleMiddleMouseDown;
-    handleKeyDownRef.current = handleKeyDown;
-  });
+    setContainerEl(containerRef.current);
+  }, [containerRef]);
 
   // 휠 이벤트 등록
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    if (!containerEl) return;
 
     const handler = (e: WheelEvent) => handleWheelRef.current(e);
-    container.addEventListener('wheel', handler, { passive: false });
+    containerEl.addEventListener('wheel', handler, { passive: false });
 
     return () => {
-      container.removeEventListener('wheel', handler);
+      containerEl.removeEventListener('wheel', handler);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [containerEl]);
 
   // 미들 버튼 드래그 이벤트 등록 (캡처 단계에서 처리하여 요소 이벤트보다 먼저 잡음)
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    if (!containerEl) return;
 
     const handler = (e: MouseEvent) => handleMiddleMouseDownRef.current(e);
-    container.addEventListener('mousedown', handler, true);
+    containerEl.addEventListener('mousedown', handler, true);
 
     return () => {
-      container.removeEventListener('mousedown', handler, true);
+      containerEl.removeEventListener('mousedown', handler, true);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [containerEl]);
 
   // 키보드 이벤트 등록
   useEffect(() => {

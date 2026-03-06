@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -108,6 +108,10 @@ export function useKeyManager() {
   const redo = useHistoryStore((state) => state.redo);
 
   const [selectedKey, setSelectedKey] = useState<SelectedKey>(null);
+
+  // preview 시작 시 히스토리 저장 여부 추적
+  // preview가 store를 직접 변경하므로, commit 시점이 아닌 preview 시작 시점에 저장해야 함
+  const previewHistorySavedRef = useRef(false);
 
   // ────────────────────────────────────────────────────────────────────────
   // 키 CRUD
@@ -321,6 +325,12 @@ export function useKeyManager() {
     const current = state.positions[mode] || [];
     if (!current[index]) return;
 
+    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+      previewHistorySavedRef.current = true;
+    }
+
     // 프리뷰는 필드별 undefined 체크를 유지해야 하므로 직접 매핑
     const updatedPositions: KeyPositions = {
       ...state.positions,
@@ -462,6 +472,12 @@ export function useKeyManager() {
     }>,
   ) => {
     if (updates.length === 0) return;
+
+    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+      previewHistorySavedRef.current = true;
+    }
 
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
@@ -708,7 +724,11 @@ export function useKeyManager() {
     const mode = state.selectedKeyType || selectedKeyType;
     if (!(state.positions[mode] || [])[index]) return;
 
-    pushCurrentStateToHistory();
+    // preview에서 이미 히스토리를 저장했으면 skip
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+    }
+    previewHistorySavedRef.current = false;
     const updatedPositions = updateKeyStyle(
       state.positions,
       mode,
@@ -737,9 +757,11 @@ export function useKeyManager() {
     );
     if (updatedPositions === state.positions) return;
 
-    if (!options?.skipHistory) {
+    // preview에서 이미 히스토리를 저장했으면 skip
+    if (!options?.skipHistory && !previewHistorySavedRef.current) {
       pushCurrentStateToHistory();
     }
+    previewHistorySavedRef.current = false;
     persistPositionsWithFlag(
       updatedPositions,
       setPositions,
