@@ -526,98 +526,93 @@ export function useBatchHandlers({
     (el) => el.type === 'graph',
   );
 
-  const getKeyLikePosition = 
-    (type: KeyLikeType, index: number) => {
-      if (type === 'key') return keyPositions[selectedKeyType]?.[index] ?? null;
-      if (type === 'stat')
-        return statPositions[selectedKeyType]?.[index] ?? null;
-      return graphPositions?.[selectedKeyType]?.[index] ?? null;
-    };
+  const getKeyLikePosition = (type: KeyLikeType, index: number) => {
+    if (type === 'key') return keyPositions[selectedKeyType]?.[index] ?? null;
+    if (type === 'stat') return statPositions[selectedKeyType]?.[index] ?? null;
+    return graphPositions?.[selectedKeyType]?.[index] ?? null;
+  };
 
-  const dispatchKeyUpdates = 
-    (
-      updates: Array<{ index: number } & Partial<KeyPosition>>,
-      kind: 'preview' | 'commit',
-      options?: BatchCommitOptions,
-    ) => {
-      if (updates.length === 0) return;
-      if (kind === 'preview') {
-        if (onKeyBatchPreview) {
-          onKeyBatchPreview(updates);
-          return;
-        }
-        if (onKeyPreview) {
-          updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
-          return;
-        }
+  const dispatchKeyUpdates = (
+    updates: Array<{ index: number } & Partial<KeyPosition>>,
+    kind: 'preview' | 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onKeyBatchPreview) {
+        onKeyBatchPreview(updates);
         return;
       }
-
-      if (onKeyBatchUpdate) {
-        onKeyBatchUpdate(updates, options);
+      if (onKeyPreview) {
+        updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
         return;
       }
-      updates.forEach((update) => onKeyUpdate(update));
-    };
+      return;
+    }
 
-  const dispatchStatUpdates = 
-    (
-      updates: Array<{ index: number } & Partial<StatItemPosition>>,
-      kind: 'preview' | 'commit',
-      options?: BatchCommitOptions,
-    ) => {
-      if (updates.length === 0) return;
-      if (kind === 'preview') {
-        if (onStatBatchPreview) {
-          onStatBatchPreview(updates);
-          return;
-        }
-        if (onStatPreview) {
-          updates.forEach(({ index, ...rest }) => onStatPreview(index, rest));
-          return;
-        }
-        // preview 핸들러가 없으면 즉시 반영
-        updates.forEach((update) => onStatUpdate(update));
+    if (onKeyBatchUpdate) {
+      onKeyBatchUpdate(updates, options);
+      return;
+    }
+    updates.forEach((update) => onKeyUpdate(update));
+  };
+
+  const dispatchStatUpdates = (
+    updates: Array<{ index: number } & Partial<StatItemPosition>>,
+    kind: 'preview' | 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onStatBatchPreview) {
+        onStatBatchPreview(updates);
         return;
       }
-
-      if (onStatBatchUpdate) {
-        onStatBatchUpdate(updates, options);
+      if (onStatPreview) {
+        updates.forEach(({ index, ...rest }) => onStatPreview(index, rest));
         return;
       }
+      // preview 핸들러가 없으면 즉시 반영
       updates.forEach((update) => onStatUpdate(update));
-    };
+      return;
+    }
 
-  const dispatchGraphUpdates = 
-    (
-      updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-      kind: 'preview' | 'commit',
-      options?: BatchCommitOptions,
-    ) => {
-      if (updates.length === 0) return;
-      if (kind === 'preview') {
-        if (onGraphBatchPreview) {
-          onGraphBatchPreview(updates);
-          return;
-        }
-        if (onGraphPreview) {
-          updates.forEach(({ index, ...rest }) => onGraphPreview(index, rest));
-          return;
-        }
-        if (onGraphUpdate) {
-          updates.forEach((update) => onGraphUpdate(update));
-        }
+    if (onStatBatchUpdate) {
+      onStatBatchUpdate(updates, options);
+      return;
+    }
+    updates.forEach((update) => onStatUpdate(update));
+  };
+
+  const dispatchGraphUpdates = (
+    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+    kind: 'preview' | 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onGraphBatchPreview) {
+        onGraphBatchPreview(updates);
         return;
       }
-
-      if (onGraphBatchUpdate) {
-        onGraphBatchUpdate(updates, options);
+      if (onGraphPreview) {
+        updates.forEach(({ index, ...rest }) => onGraphPreview(index, rest));
         return;
       }
       if (onGraphUpdate) {
         updates.forEach((update) => onGraphUpdate(update));
       }
-    };
+      return;
+    }
+
+    if (onGraphBatchUpdate) {
+      onGraphBatchUpdate(updates, options);
+      return;
+    }
+    if (onGraphUpdate) {
+      updates.forEach((update) => onGraphUpdate(update));
+    }
+  };
 
   const getSelectedLayoutElements = (): LayoutElement[] => {
     return selectedKeyLikeElements
@@ -640,402 +635,411 @@ export function useBatchHandlers({
       .filter((element): element is LayoutElement => element !== null);
   };
 
-  const dispatchKeyLikeUpdates = 
-    (
-      updates: KeyLikeBatchUpdate[],
-      kind: 'preview' | 'commit' = 'commit',
-      options?: BatchCommitOptions,
-    ) => {
-      const keyUpdates = updates
-        .filter((u) => u.type === 'key')
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      const statUpdates = updates
-        .filter((u) => u.type === 'stat')
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<StatItemPosition>
-      >;
-      const graphUpdates = updates
-        .filter((u) => u.type === 'graph')
-        .map(({ type: _t, ...rest }) => rest) as Array<
-        { index: number } & Partial<GraphItemPosition>
-      >;
+  const dispatchKeyLikeUpdates = (
+    updates: KeyLikeBatchUpdate[],
+    kind: 'preview' | 'commit' = 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    const keyUpdates = updates
+      .filter((u) => u.type === 'key')
+      .map(({ type: _t, ...rest }) => rest) as Array<
+      { index: number } & Partial<KeyPosition>
+    >;
+    const statUpdates = updates
+      .filter((u) => u.type === 'stat')
+      .map(({ type: _t, ...rest }) => rest) as Array<
+      { index: number } & Partial<StatItemPosition>
+    >;
+    const graphUpdates = updates
+      .filter((u) => u.type === 'graph')
+      .map(({ type: _t, ...rest }) => rest) as Array<
+      { index: number } & Partial<GraphItemPosition>
+    >;
 
-      if (kind === 'preview') {
-        dispatchKeyUpdates(keyUpdates, 'preview');
-        dispatchStatUpdates(statUpdates, 'preview');
-        dispatchGraphUpdates(graphUpdates, 'preview');
-        return;
-      }
+    if (kind === 'preview') {
+      dispatchKeyUpdates(keyUpdates, 'preview');
+      dispatchStatUpdates(statUpdates, 'preview');
+      dispatchGraphUpdates(graphUpdates, 'preview');
+      return;
+    }
 
-      let hasSavedHistory = options?.skipHistory === true;
-      if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
-      if (statUpdates.length > 0) {
-        dispatchStatUpdates(statUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
-      if (graphUpdates.length > 0) {
-        dispatchGraphUpdates(graphUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-      }
-    };
+    let hasSavedHistory = options?.skipHistory === true;
+    if (keyUpdates.length > 0) {
+      dispatchKeyUpdates(keyUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+    if (statUpdates.length > 0) {
+      dispatchStatUpdates(statUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+    if (graphUpdates.length > 0) {
+      dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+    }
+  };
 
   // 스타일 변경 (프리뷰)
-  const handleBatchStyleChange = 
-    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      const keyUpdates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [property]: value })) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      dispatchKeyUpdates(keyUpdates, 'preview');
+  const handleBatchStyleChange = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    const keyUpdates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<KeyPosition>
+    >;
+    dispatchKeyUpdates(keyUpdates, 'preview');
 
-      const statUpdates = selectedStats
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [property]: value })) as Array<
-        { index: number } & Partial<StatItemPosition>
-      >;
-      dispatchStatUpdates(statUpdates, 'preview');
+    const statUpdates = selectedStats
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<StatItemPosition>
+    >;
+    dispatchStatUpdates(statUpdates, 'preview');
 
-      const graphUpdates = selectedGraphs
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [property]: value })) as Array<
-        { index: number } & Partial<GraphItemPosition>
-      >;
-      dispatchGraphUpdates(graphUpdates, 'preview');
-    };
+    const graphUpdates = selectedGraphs
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<GraphItemPosition>
+    >;
+    dispatchGraphUpdates(graphUpdates, 'preview');
+  };
 
   // 스타일 변경 완료 (저장)
-  const handleBatchStyleChangeComplete = 
-    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      const currentKeys = keyPositions[selectedKeyType] || [];
-      const currentStats = statPositions[selectedKeyType] || [];
+  const handleBatchStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    const currentKeys = keyPositions[selectedKeyType] || [];
+    const currentStats = statPositions[selectedKeyType] || [];
 
-      const keyUpdates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const index = el.index!;
-          const pos = currentKeys[index];
-          if (pos) {
-            if (
-              property === 'backgroundColor' &&
-              pos.activeBackgroundColor == null
-            ) {
-              return {
-                index,
-                backgroundColor: value,
-                activeBackgroundColor:
-                  pos.activeBackgroundColor ??
-                  pos.backgroundColor ??
-                  DEFAULT_ACTIVE_BACKGROUND_COLOR,
-              };
-            }
-            if (property === 'borderColor' && pos.activeBorderColor == null) {
-              return {
-                index,
-                borderColor: value,
-                activeBorderColor:
-                  pos.activeBorderColor ??
-                  pos.borderColor ??
-                  DEFAULT_ACTIVE_BORDER_COLOR,
-              };
-            }
-            if (property === 'fontColor' && pos.activeFontColor == null) {
-              return {
-                index,
-                fontColor: value,
-                activeFontColor:
-                  pos.activeFontColor ??
-                  pos.fontColor ??
-                  DEFAULT_ACTIVE_FONT_COLOR,
-              };
-            }
+    const keyUpdates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => {
+        const index = el.index!;
+        const pos = currentKeys[index];
+        if (pos) {
+          if (
+            property === 'backgroundColor' &&
+            pos.activeBackgroundColor == null
+          ) {
+            return {
+              index,
+              backgroundColor: value,
+              activeBackgroundColor:
+                pos.activeBackgroundColor ??
+                pos.backgroundColor ??
+                DEFAULT_ACTIVE_BACKGROUND_COLOR,
+            };
           }
-          return { index, [property]: value } as {
-            index: number;
-          } & Partial<KeyPosition>;
-        });
-      let hasSavedHistory = false;
-      if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates as Array<{ index: number } & Partial<KeyPosition>>, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
-
-      const statUpdates = selectedStats
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const index = el.index!;
-          const pos = currentStats[index];
-          if (pos) {
-            if (
-              property === 'backgroundColor' &&
-              pos.activeBackgroundColor == null
-            ) {
-              return {
-                index,
-                backgroundColor: value,
-                activeBackgroundColor:
-                  pos.activeBackgroundColor ??
-                  pos.backgroundColor ??
-                  DEFAULT_ACTIVE_BACKGROUND_COLOR,
-              } as { index: number } & Partial<StatItemPosition>;
-            }
-            if (property === 'borderColor' && pos.activeBorderColor == null) {
-              return {
-                index,
-                borderColor: value,
-                activeBorderColor:
-                  pos.activeBorderColor ??
-                  pos.borderColor ??
-                  DEFAULT_ACTIVE_BORDER_COLOR,
-              } as { index: number } & Partial<StatItemPosition>;
-            }
-            if (property === 'fontColor' && pos.activeFontColor == null) {
-              return {
-                index,
-                fontColor: value,
-                activeFontColor:
-                  pos.activeFontColor ??
-                  pos.fontColor ??
-                  DEFAULT_ACTIVE_FONT_COLOR,
-              } as { index: number } & Partial<StatItemPosition>;
-            }
+          if (property === 'borderColor' && pos.activeBorderColor == null) {
+            return {
+              index,
+              borderColor: value,
+              activeBorderColor:
+                pos.activeBorderColor ??
+                pos.borderColor ??
+                DEFAULT_ACTIVE_BORDER_COLOR,
+            };
           }
-          return { index, [property]: value } as { index: number } & Partial<StatItemPosition>;
-        });
-      if (statUpdates.length > 0) {
-        dispatchStatUpdates(statUpdates, 'commit', {
+          if (property === 'fontColor' && pos.activeFontColor == null) {
+            return {
+              index,
+              fontColor: value,
+              activeFontColor:
+                pos.activeFontColor ??
+                pos.fontColor ??
+                DEFAULT_ACTIVE_FONT_COLOR,
+            };
+          }
+        }
+        return { index, [property]: value } as {
+          index: number;
+        } & Partial<KeyPosition>;
+      });
+    let hasSavedHistory = false;
+    if (keyUpdates.length > 0) {
+      dispatchKeyUpdates(
+        keyUpdates as Array<{ index: number } & Partial<KeyPosition>>,
+        'commit',
+        {
           skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
+        },
+      );
+      hasSavedHistory = true;
+    }
 
-      const graphUpdates = selectedGraphs
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [property]: value })) as Array<
-        { index: number } & Partial<GraphItemPosition>
-      >;
-      if (graphUpdates.length > 0) {
-        dispatchGraphUpdates(graphUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-      }
-    };
+    const statUpdates = selectedStats
+      .filter((el) => el.index !== undefined)
+      .map((el) => {
+        const index = el.index!;
+        const pos = currentStats[index];
+        if (pos) {
+          if (
+            property === 'backgroundColor' &&
+            pos.activeBackgroundColor == null
+          ) {
+            return {
+              index,
+              backgroundColor: value,
+              activeBackgroundColor:
+                pos.activeBackgroundColor ??
+                pos.backgroundColor ??
+                DEFAULT_ACTIVE_BACKGROUND_COLOR,
+            } as { index: number } & Partial<StatItemPosition>;
+          }
+          if (property === 'borderColor' && pos.activeBorderColor == null) {
+            return {
+              index,
+              borderColor: value,
+              activeBorderColor:
+                pos.activeBorderColor ??
+                pos.borderColor ??
+                DEFAULT_ACTIVE_BORDER_COLOR,
+            } as { index: number } & Partial<StatItemPosition>;
+          }
+          if (property === 'fontColor' && pos.activeFontColor == null) {
+            return {
+              index,
+              fontColor: value,
+              activeFontColor:
+                pos.activeFontColor ??
+                pos.fontColor ??
+                DEFAULT_ACTIVE_FONT_COLOR,
+            } as { index: number } & Partial<StatItemPosition>;
+          }
+        }
+        return { index, [property]: value } as {
+          index: number;
+        } & Partial<StatItemPosition>;
+      });
+    if (statUpdates.length > 0) {
+      dispatchStatUpdates(statUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+
+    const graphUpdates = selectedGraphs
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<GraphItemPosition>
+    >;
+    if (graphUpdates.length > 0) {
+      dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+    }
+  };
 
   // 정렬 핸들러
-  const handleBatchAlign = 
-    (
-      direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
-    ) => {
-      const elements = getSelectedLayoutElements();
+  const handleBatchAlign = (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => {
+    const elements = getSelectedLayoutElements();
 
-      if (elements.length < 2) return;
+    if (elements.length < 2) return;
 
-      const minX = Math.min(...elements.map((k) => k.x));
-      const maxX = Math.max(...elements.map((k) => k.x + k.width));
-      const minY = Math.min(...elements.map((k) => k.y));
-      const maxY = Math.max(...elements.map((k) => k.y + k.height));
+    const minX = Math.min(...elements.map((k) => k.x));
+    const maxX = Math.max(...elements.map((k) => k.x + k.width));
+    const minY = Math.min(...elements.map((k) => k.y));
+    const maxY = Math.max(...elements.map((k) => k.y + k.height));
 
-      let updates: KeyLikeBatchUpdate[] = [];
+    let updates: KeyLikeBatchUpdate[] = [];
 
-      switch (direction) {
-        case 'left':
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dx: minX,
-          }));
-          break;
-        case 'centerH': {
-          const centerX = (minX + maxX) / 2;
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dx: centerX - k.width / 2,
-          }));
-          break;
-        }
-        case 'right':
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dx: maxX - k.width,
-          }));
-          break;
-        case 'top':
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dy: minY,
-          }));
-          break;
-        case 'centerV': {
-          const centerY = (minY + maxY) / 2;
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dy: centerY - k.height / 2,
-          }));
-          break;
-        }
-        case 'bottom':
-          updates = elements.map((k) => ({
-            type: k.type,
-            index: k.index,
-            dy: maxY - k.height,
-          }));
-          break;
+    switch (direction) {
+      case 'left':
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dx: minX,
+        }));
+        break;
+      case 'centerH': {
+        const centerX = (minX + maxX) / 2;
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dx: centerX - k.width / 2,
+        }));
+        break;
       }
+      case 'right':
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dx: maxX - k.width,
+        }));
+        break;
+      case 'top':
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dy: minY,
+        }));
+        break;
+      case 'centerV': {
+        const centerY = (minY + maxY) / 2;
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dy: centerY - k.height / 2,
+        }));
+        break;
+      }
+      case 'bottom':
+        updates = elements.map((k) => ({
+          type: k.type,
+          index: k.index,
+          dy: maxY - k.height,
+        }));
+        break;
+    }
 
-      dispatchKeyLikeUpdates(updates);
-    };
+    dispatchKeyLikeUpdates(updates);
+  };
 
   // 분배 핸들러
-  const handleBatchDistribute = 
-    (direction: 'horizontal' | 'vertical') => {
-      const elements = getSelectedLayoutElements();
+  const handleBatchDistribute = (direction: 'horizontal' | 'vertical') => {
+    const elements = getSelectedLayoutElements();
 
-      if (elements.length < 3) return;
+    if (elements.length < 3) return;
 
-      let updates: KeyLikeBatchUpdate[];
+    let updates: KeyLikeBatchUpdate[];
 
-      if (direction === 'horizontal') {
-        const sorted = [...elements].sort((a, b) => a.x - b.x);
-        const first = sorted[0];
-        const last = sorted[sorted.length - 1];
-        const totalSpan = last.x + last.width - first.x;
-        const totalWidths = sorted.reduce((sum, k) => sum + k.width, 0);
-        const gap = (totalSpan - totalWidths) / (sorted.length - 1);
+    if (direction === 'horizontal') {
+      const sorted = [...elements].sort((a, b) => a.x - b.x);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const totalSpan = last.x + last.width - first.x;
+      const totalWidths = sorted.reduce((sum, k) => sum + k.width, 0);
+      const gap = (totalSpan - totalWidths) / (sorted.length - 1);
 
-        let currentX = first.x;
-        updates = sorted.map((k) => {
-          const newX = currentX;
-          currentX += k.width + gap;
-          return { type: k.type, index: k.index, dx: newX };
-        });
-      } else {
-        const sorted = [...elements].sort((a, b) => a.y - b.y);
-        const first = sorted[0];
-        const last = sorted[sorted.length - 1];
-        const totalSpan = last.y + last.height - first.y;
-        const totalHeights = sorted.reduce((sum, k) => sum + k.height, 0);
-        const gap = (totalSpan - totalHeights) / (sorted.length - 1);
+      let currentX = first.x;
+      updates = sorted.map((k) => {
+        const newX = currentX;
+        currentX += k.width + gap;
+        return { type: k.type, index: k.index, dx: newX };
+      });
+    } else {
+      const sorted = [...elements].sort((a, b) => a.y - b.y);
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const totalSpan = last.y + last.height - first.y;
+      const totalHeights = sorted.reduce((sum, k) => sum + k.height, 0);
+      const gap = (totalSpan - totalHeights) / (sorted.length - 1);
 
-        let currentY = first.y;
-        updates = sorted.map((k) => {
-          const newY = currentY;
-          currentY += k.height + gap;
-          return { type: k.type, index: k.index, dy: newY };
-        });
-      }
+      let currentY = first.y;
+      updates = sorted.map((k) => {
+        const newY = currentY;
+        currentY += k.height + gap;
+        return { type: k.type, index: k.index, dy: newY };
+      });
+    }
 
-      dispatchKeyLikeUpdates(updates);
-    };
+    dispatchKeyLikeUpdates(updates);
+  };
 
   /**
    * 간격 적용 공통 로직 (preview/commit 공용)
    * 반환: 변경이 필요한 업데이트 배열 (없으면 빈 배열)
    */
-  const computeSpacingUpdates = 
-    (spacing: number): KeyLikeBatchUpdate[] => {
-      const originalElements = getSelectedLayoutElements();
-      if (originalElements.length < 2) return [];
+  const computeSpacingUpdates = (spacing: number): KeyLikeBatchUpdate[] => {
+    const originalElements = getSelectedLayoutElements();
+    if (originalElements.length < 2) return [];
 
-      const elements = originalElements.map((element) => ({ ...element }));
-      const axisPlan = inferSpacingAxisPlan(elements);
-      if (!axisPlan.applyHorizontal && !axisPlan.applyVertical) return [];
+    const elements = originalElements.map((element) => ({ ...element }));
+    const axisPlan = inferSpacingAxisPlan(elements);
+    if (!axisPlan.applyHorizontal && !axisPlan.applyVertical) return [];
 
-      const normalizedSpacing = roundToSpacingPrecision(Math.max(0, spacing));
-      const updateMap = new Map<string, KeyLikeBatchUpdate>();
+    const normalizedSpacing = roundToSpacingPrecision(Math.max(0, spacing));
+    const updateMap = new Map<string, KeyLikeBatchUpdate>();
 
-      const appliedHorizontal = axisPlan.applyHorizontal
-        ? applyAxisSpacing(
-            elements,
-            'horizontal',
-            normalizedSpacing,
-            updateMap,
-            axisPlan.horizontalGroups,
-          )
-        : false;
-      let appliedVertical = false;
-      if (axisPlan.applyVertical) {
-        appliedVertical = applyVerticalRowSpacing(
-          axisPlan.horizontalGroups,
+    const appliedHorizontal = axisPlan.applyHorizontal
+      ? applyAxisSpacing(
+          elements,
+          'horizontal',
           normalizedSpacing,
           updateMap,
-        );
-
-        // 행 기반 수직 적용이 불가능한 경우(예: 행이 1개로 인식됨)에는
-        // 열 기반 수직 간격 적용으로 보완한다.
-        if (!appliedVertical) {
-          appliedVertical = applyAxisSpacing(
-            elements,
-            'vertical',
-            normalizedSpacing,
-            updateMap,
-            axisPlan.verticalGroups,
-          );
-        }
-      }
-
-      if (!appliedHorizontal && !appliedVertical) return [];
-
-      const originalById = new Map(
-        originalElements.map((element) => [
-          getLayoutElementKey(element.type, element.index),
-          element,
-        ]),
+          axisPlan.horizontalGroups,
+        )
+      : false;
+    let appliedVertical = false;
+    if (axisPlan.applyVertical) {
+      appliedVertical = applyVerticalRowSpacing(
+        axisPlan.horizontalGroups,
+        normalizedSpacing,
+        updateMap,
       );
 
-      return Array.from(updateMap.values()).filter((update) => {
-        const original = originalById.get(
-          getLayoutElementKey(update.type, update.index),
+      // 행 기반 수직 적용이 불가능한 경우(예: 행이 1개로 인식됨)에는
+      // 열 기반 수직 간격 적용으로 보완한다.
+      if (!appliedVertical) {
+        appliedVertical = applyAxisSpacing(
+          elements,
+          'vertical',
+          normalizedSpacing,
+          updateMap,
+          axisPlan.verticalGroups,
         );
-        if (!original) return false;
+      }
+    }
 
-        const dxChanged =
-          update.dx !== undefined &&
-          Math.abs(update.dx - original.x) > POSITION_CHANGE_EPSILON;
-        const dyChanged =
-          update.dy !== undefined &&
-          Math.abs(update.dy - original.y) > POSITION_CHANGE_EPSILON;
+    if (!appliedHorizontal && !appliedVertical) return [];
 
-        return dxChanged || dyChanged;
-      });
-    };
+    const originalById = new Map(
+      originalElements.map((element) => [
+        getLayoutElementKey(element.type, element.index),
+        element,
+      ]),
+    );
+
+    return Array.from(updateMap.values()).filter((update) => {
+      const original = originalById.get(
+        getLayoutElementKey(update.type, update.index),
+      );
+      if (!original) return false;
+
+      const dxChanged =
+        update.dx !== undefined &&
+        Math.abs(update.dx - original.x) > POSITION_CHANGE_EPSILON;
+      const dyChanged =
+        update.dy !== undefined &&
+        Math.abs(update.dy - original.y) > POSITION_CHANGE_EPSILON;
+
+      return dxChanged || dyChanged;
+    });
+  };
 
   // 간격 프리뷰 (타이핑 중 시각적 반영, 히스토리 미저장)
-  const handleBatchSpacingPreview = 
-    (spacing: number) => {
-      const updates = computeSpacingUpdates(spacing);
-      if (updates.length === 0) return;
-      dispatchKeyLikeUpdates(updates, 'preview');
-    };
+  const handleBatchSpacingPreview = (spacing: number) => {
+    const updates = computeSpacingUpdates(spacing);
+    if (updates.length === 0) return;
+    dispatchKeyLikeUpdates(updates, 'preview');
+  };
 
   // 간격 커밋
-  const handleBatchSpacingCommit = 
-    (spacing: number, options?: BatchCommitOptions) => {
-      const updates = computeSpacingUpdates(spacing);
-      if (updates.length === 0) return;
-      dispatchKeyLikeUpdates(updates, 'commit', options);
-    };
+  const handleBatchSpacingCommit = (
+    spacing: number,
+    options?: BatchCommitOptions,
+  ) => {
+    const updates = computeSpacingUpdates(spacing);
+    if (updates.length === 0) return;
+    dispatchKeyLikeUpdates(updates, 'commit', options);
+  };
 
   // 기존 호환용 (외부에서 직접 호출 시 commit 모드)
-  const handleBatchSpacing = 
-    (spacing: number, options?: BatchCommitOptions) => {
-      handleBatchSpacingCommit(spacing, options);
-    };
+  const handleBatchSpacing = (
+    spacing: number,
+    options?: BatchCommitOptions,
+  ) => {
+    handleBatchSpacingCommit(spacing, options);
+  };
 
   const getBatchSpacingValue = () => {
     const elements = getSelectedLayoutElements();
@@ -1077,198 +1081,217 @@ export function useBatchHandlers({
   };
 
   // 일괄 크기 변경 핸들러
-  const handleBatchResize = 
-    (dimension: 'width' | 'height', value: number) => {
-      let hasSavedHistory = false;
+  const handleBatchResize = (dimension: 'width' | 'height', value: number) => {
+    let hasSavedHistory = false;
 
-      const keyUpdates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
+    const keyUpdates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+      { index: number } & Partial<KeyPosition>
+    >;
+    if (keyUpdates.length > 0) {
+      dispatchKeyUpdates(keyUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
 
-      const statUpdates = selectedStats
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
-        { index: number } & Partial<StatItemPosition>
-      >;
-      if (statUpdates.length > 0) {
-        dispatchStatUpdates(statUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
+    const statUpdates = selectedStats
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+      { index: number } & Partial<StatItemPosition>
+    >;
+    if (statUpdates.length > 0) {
+      dispatchStatUpdates(statUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
 
-      const graphUpdates = selectedGraphs
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
-        { index: number } & Partial<GraphItemPosition>
-      >;
-      if (graphUpdates.length > 0) {
-        dispatchGraphUpdates(graphUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-      }
-    };
+    const graphUpdates = selectedGraphs
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+      { index: number } & Partial<GraphItemPosition>
+    >;
+    if (graphUpdates.length > 0) {
+      dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+    }
+  };
 
   // 카운터 업데이트 핸들러
-  const handleBatchCounterUpdate = 
-    (updates: Partial<KeyCounterSettings>) => {
-      const keyUpdates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const pos = keyPositions[selectedKeyType]?.[el.index!];
-          if (!pos) return null;
-          const currentSettings = normalizeCounterSettings(pos.counter);
-          const newSettings = { ...currentSettings, ...updates };
-          return { index: el.index!, counter: newSettings };
-        })
-        .filter(
-          (update): update is { index: number; counter: KeyCounterSettings } =>
-            update !== null,
-        );
-      let hasSavedHistory = false;
-      if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates as Array<{ index: number } & Partial<KeyPosition>>, 'commit', {
+  const handleBatchCounterUpdate = (updates: Partial<KeyCounterSettings>) => {
+    const keyUpdates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => {
+        const pos = keyPositions[selectedKeyType]?.[el.index!];
+        if (!pos) return null;
+        const currentSettings = normalizeCounterSettings(pos.counter);
+        const newSettings = { ...currentSettings, ...updates };
+        return { index: el.index!, counter: newSettings };
+      })
+      .filter(
+        (update): update is { index: number; counter: KeyCounterSettings } =>
+          update !== null,
+      );
+    let hasSavedHistory = false;
+    if (keyUpdates.length > 0) {
+      dispatchKeyUpdates(
+        keyUpdates as Array<{ index: number } & Partial<KeyPosition>>,
+        'commit',
+        {
           skipHistory: hasSavedHistory,
-        });
-        hasSavedHistory = true;
-      }
+        },
+      );
+      hasSavedHistory = true;
+    }
 
-      const statUpdates = selectedStats
-        .filter((el) => el.index !== undefined)
-        .map((el) => {
-          const pos = statPositions[selectedKeyType]?.[el.index!];
-          if (!pos) return null;
-          const currentSettings = normalizeCounterSettings(
-            pos.counter,
-          );
-          const newSettings = { ...currentSettings, ...updates };
-          return { index: el.index!, counter: newSettings } as { index: number } & Partial<StatItemPosition>;
-        })
-        .filter((update): update is { index: number; counter: KeyCounterSettings } & Partial<StatItemPosition> => update !== null);
-      if (statUpdates.length > 0) {
-        dispatchStatUpdates(statUpdates, 'commit', {
-          skipHistory: hasSavedHistory,
-        });
-      }
-    };
+    const statUpdates = selectedStats
+      .filter((el) => el.index !== undefined)
+      .map((el) => {
+        const pos = statPositions[selectedKeyType]?.[el.index!];
+        if (!pos) return null;
+        const currentSettings = normalizeCounterSettings(pos.counter);
+        const newSettings = { ...currentSettings, ...updates };
+        return { index: el.index!, counter: newSettings } as {
+          index: number;
+        } & Partial<StatItemPosition>;
+      })
+      .filter(
+        (
+          update,
+        ): update is {
+          index: number;
+          counter: KeyCounterSettings;
+        } & Partial<StatItemPosition> => update !== null,
+      );
+    if (statUpdates.length > 0) {
+      dispatchStatUpdates(statUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+    }
+  };
 
   // 노트 색상 변경 (프리뷰) - 키 요소만
-  const handleBatchNoteColorChange = 
-    (newColor: NoteColor) => {
-      let colorValue: NoteColor;
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        colorValue = {
-          type: 'gradient',
-          top: newColor.top,
-          bottom: newColor.bottom,
-        };
-      } else {
-        colorValue = newColor;
-      }
+  const handleBatchNoteColorChange = (newColor: NoteColor) => {
+    let colorValue: NoteColor;
+    if (
+      newColor &&
+      typeof newColor === 'object' &&
+      newColor.type === 'gradient'
+    ) {
+      colorValue = {
+        type: 'gradient',
+        top: newColor.top,
+        bottom: newColor.bottom,
+      };
+    } else {
+      colorValue = newColor;
+    }
 
-      const updates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, noteColor: colorValue }));
+    const updates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
-      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'preview');
-    };
+    dispatchKeyUpdates(
+      updates as Array<{ index: number } & Partial<KeyPosition>>,
+      'preview',
+    );
+  };
 
   // 노트 색상 변경 완료 (저장) - 키 요소만
-  const handleBatchNoteColorChangeComplete = 
-    (newColor: NoteColor) => {
-      let colorValue: NoteColor;
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        colorValue = {
-          type: 'gradient',
-          top: newColor.top,
-          bottom: newColor.bottom,
-        };
-      } else {
-        colorValue = newColor;
-      }
+  const handleBatchNoteColorChangeComplete = (newColor: NoteColor) => {
+    let colorValue: NoteColor;
+    if (
+      newColor &&
+      typeof newColor === 'object' &&
+      newColor.type === 'gradient'
+    ) {
+      colorValue = {
+        type: 'gradient',
+        top: newColor.top,
+        bottom: newColor.bottom,
+      };
+    } else {
+      colorValue = newColor;
+    }
 
-      const updates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, noteColor: colorValue }));
+    const updates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
-      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'commit');
-    };
+    dispatchKeyUpdates(
+      updates as Array<{ index: number } & Partial<KeyPosition>>,
+      'commit',
+    );
+  };
 
   // 글로우 색상 변경 (프리뷰) - 키 요소만
-  const handleBatchGlowColorChange = 
-    (newColor: NoteColor) => {
-      let colorValue: NoteColor;
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        colorValue = {
-          type: 'gradient',
-          top: newColor.top,
-          bottom: newColor.bottom,
-        };
-      } else {
-        colorValue = newColor;
-      }
+  const handleBatchGlowColorChange = (newColor: NoteColor) => {
+    let colorValue: NoteColor;
+    if (
+      newColor &&
+      typeof newColor === 'object' &&
+      newColor.type === 'gradient'
+    ) {
+      colorValue = {
+        type: 'gradient',
+        top: newColor.top,
+        bottom: newColor.bottom,
+      };
+    } else {
+      colorValue = newColor;
+    }
 
-      const updates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
+    const updates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
-      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'preview');
-    };
+    dispatchKeyUpdates(
+      updates as Array<{ index: number } & Partial<KeyPosition>>,
+      'preview',
+    );
+  };
 
   // 글로우 색상 변경 완료 (저장) - 키 요소만
-  const handleBatchGlowColorChangeComplete = 
-    (newColor: NoteColor) => {
-      let colorValue: NoteColor;
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        colorValue = {
-          type: 'gradient',
-          top: newColor.top,
-          bottom: newColor.bottom,
-        };
-      } else {
-        colorValue = newColor;
-      }
+  const handleBatchGlowColorChangeComplete = (newColor: NoteColor) => {
+    let colorValue: NoteColor;
+    if (
+      newColor &&
+      typeof newColor === 'object' &&
+      newColor.type === 'gradient'
+    ) {
+      colorValue = {
+        type: 'gradient',
+        top: newColor.top,
+        bottom: newColor.bottom,
+      };
+    } else {
+      colorValue = newColor;
+    }
 
-      const updates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
+    const updates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
-      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'commit');
-    };
+    dispatchKeyUpdates(
+      updates as Array<{ index: number } & Partial<KeyPosition>>,
+      'commit',
+    );
+  };
 
-  const handleKeyOnlyStyleChangeComplete = 
-    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      const keyUpdates = selectedKeys
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, [property]: value })) as Array<
-        { index: number } & Partial<KeyPosition>
-      >;
-      dispatchKeyUpdates(keyUpdates, 'commit');
-    };
+  const handleKeyOnlyStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    const keyUpdates = selectedKeys
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<KeyPosition>
+    >;
+    dispatchKeyUpdates(keyUpdates, 'commit');
+  };
 
   return {
     handleBatchStyleChange,

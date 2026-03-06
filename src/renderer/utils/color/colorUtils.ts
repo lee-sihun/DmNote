@@ -27,7 +27,9 @@ const isGradientColor = (value: unknown): value is GradientColor =>
   typeof value === 'object' &&
   (value as GradientColor).type === 'gradient';
 
-const normalizeColorInput = (value: string | GradientColor | null | undefined): string => {
+const normalizeColorInput = (
+  value: string | GradientColor | null | undefined,
+): string => {
   if (!value) return '#561ecb';
   if (typeof value === 'string') {
     // RGBA 포맷 처리
@@ -61,7 +63,12 @@ const buildGradient = (topHex: string, bottomHex: string): GradientColor => ({
 
 const HEX_LENGTHS: number[] = [3, 4, 6, 8];
 
-const rgbToHsv = (r: number, g: number, b: number, a: number = 1): { h: number; s: number; v: number; a: number } => {
+const rgbToHsv = (
+  r: number,
+  g: number,
+  b: number,
+  a: number = 1,
+): { h: number; s: number; v: number; a: number } => {
   const rn = r / 255;
   const gn = g / 255;
   const bn = b / 255;
@@ -148,7 +155,9 @@ const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value));
 };
 
-const parseRgbaString = (value: string): { r: number; g: number; b: number; a: number } | null => {
+const parseRgbaString = (
+  value: string,
+): { r: number; g: number; b: number; a: number } | null => {
   if (typeof value !== 'string') return null;
   const match = value.match(RGBA_REGEX);
   if (!match) return null;
@@ -161,7 +170,9 @@ const parseRgbaString = (value: string): { r: number; g: number; b: number; a: n
   return { r, g, b, a };
 };
 
-const toColorObject = (value: string | Partial<ColorObject> | null | undefined): ColorObject | null => {
+const toColorObject = (
+  value: string | Partial<ColorObject> | null | undefined,
+): ColorObject | null => {
   if (!value) {
     return null;
   }
@@ -185,7 +196,10 @@ const toColorObject = (value: string | Partial<ColorObject> | null | undefined):
   return null;
 };
 
-const toCssRgba = (value: string | null | undefined, fallback: string = '#000000'): CssRgbaResult => {
+const toCssRgba = (
+  value: string | null | undefined,
+  fallback: string = '#000000',
+): CssRgbaResult => {
   let candidate: string | null | undefined = value;
   if (
     !candidate ||

@@ -128,159 +128,155 @@ export function useGridSelection({
 
   // 선택된 요소들 일괄 이동 함수 (배치 업데이트)
   const moveSelectedElements = (
-      deltaX: number,
-      deltaY: number,
-      saveHistory = false,
-      syncToOverlay = true,
-    ) => {
-      if (selectedElements.length === 0) return;
+    deltaX: number,
+    deltaY: number,
+    saveHistory = false,
+    syncToOverlay = true,
+  ) => {
+    if (selectedElements.length === 0) return;
 
-      // 현재 상태 직접 가져오기 (클로저 문제 방지)
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
+    // 현재 상태 직접 가져오기 (클로저 문제 방지)
+    const currentPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
 
-      // 히스토리 저장 (옵션)
-      if (saveHistory) {
-        const { keyMappings: km } = useKeyStore.getState();
-        const currentStatPositions = useStatItemStore.getState().positions;
-        const currentGraphPositions = useGraphItemStore.getState().positions;
-        useHistoryStore
-          .getState()
-          .pushState(
-            km,
-            currentPositions,
-            currentStatPositions,
-            currentGraphPositions,
-            currentPluginElements,
-          );
-      }
+    // 히스토리 저장 (옵션)
+    if (saveHistory) {
+      const { keyMappings: km } = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      useHistoryStore
+        .getState()
+        .pushState(
+          km,
+          currentPositions,
+          currentStatPositions,
+          currentGraphPositions,
+          currentPluginElements,
+        );
+    }
 
-      // 키 위치 배치 업데이트
-      const keyUpdates = selectedElements.filter(
-        (el) => el.type === 'key' && el.index !== undefined,
-      );
-      if (keyUpdates.length > 0) {
-        const newPositions = { ...currentPositions };
-        const tabPositions = [...(newPositions[selectedKeyType] || [])];
+    // 키 위치 배치 업데이트
+    const keyUpdates = selectedElements.filter(
+      (el) => el.type === 'key' && el.index !== undefined,
+    );
+    if (keyUpdates.length > 0) {
+      const newPositions = { ...currentPositions };
+      const tabPositions = [...(newPositions[selectedKeyType] || [])];
 
-        keyUpdates.forEach((el) => {
-          if (el.index === undefined) return;
-          const currentPos = tabPositions[el.index];
-          if (currentPos) {
-            tabPositions[el.index] = {
-              ...currentPos,
-              dx: currentPos.dx + deltaX,
-              dy: currentPos.dy + deltaY,
-            };
-          }
-        });
-
-        newPositions[selectedKeyType] = tabPositions;
-        useKeyStore.getState().setPositions(newPositions);
-
-        // syncToOverlay가 true일 때만 API 호출 (드래그 중에는 false)
-        if (syncToOverlay) {
-          window.api.keys
-            .updatePositions(newPositions)
-            .catch((error: Error) => {
-              console.error('Failed to sync key positions to overlay', error);
-            });
+      keyUpdates.forEach((el) => {
+        if (el.index === undefined) return;
+        const currentPos = tabPositions[el.index];
+        if (currentPos) {
+          tabPositions[el.index] = {
+            ...currentPos,
+            dx: currentPos.dx + deltaX,
+            dy: currentPos.dy + deltaY,
+          };
         }
-      }
+      });
 
-      // 통계 요소 배치 업데이트
-      const statUpdates = selectedElements.filter(
-        (el) => el.type === 'stat' && el.index !== undefined,
-      );
-      if (statUpdates.length > 0) {
-        const currentStatPositions = useStatItemStore.getState().positions;
-        const newStatPositions = { ...currentStatPositions };
-        const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
+      newPositions[selectedKeyType] = tabPositions;
+      useKeyStore.getState().setPositions(newPositions);
 
-        statUpdates.forEach((el) => {
-          if (el.index === undefined) return;
-          const currentPos = tabPositions[el.index];
-          if (currentPos) {
-            tabPositions[el.index] = {
-              ...currentPos,
-              dx: currentPos.dx + deltaX,
-              dy: currentPos.dy + deltaY,
-            };
-          }
+      // syncToOverlay가 true일 때만 API 호출 (드래그 중에는 false)
+      if (syncToOverlay) {
+        window.api.keys.updatePositions(newPositions).catch((error: Error) => {
+          console.error('Failed to sync key positions to overlay', error);
         });
+      }
+    }
 
-        newStatPositions[selectedKeyType] = tabPositions;
-        useStatItemStore.getState().setPositions(newStatPositions);
+    // 통계 요소 배치 업데이트
+    const statUpdates = selectedElements.filter(
+      (el) => el.type === 'stat' && el.index !== undefined,
+    );
+    if (statUpdates.length > 0) {
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const newStatPositions = { ...currentStatPositions };
+      const tabPositions = [...(newStatPositions[selectedKeyType] || [])];
 
-        if (syncToOverlay) {
-          window.api.statItems
-            .updatePositions(newStatPositions)
-            .catch((error: Error) => {
-              console.error('Failed to sync stat positions to overlay', error);
-            });
+      statUpdates.forEach((el) => {
+        if (el.index === undefined) return;
+        const currentPos = tabPositions[el.index];
+        if (currentPos) {
+          tabPositions[el.index] = {
+            ...currentPos,
+            dx: currentPos.dx + deltaX,
+            dy: currentPos.dy + deltaY,
+          };
         }
+      });
+
+      newStatPositions[selectedKeyType] = tabPositions;
+      useStatItemStore.getState().setPositions(newStatPositions);
+
+      if (syncToOverlay) {
+        window.api.statItems
+          .updatePositions(newStatPositions)
+          .catch((error: Error) => {
+            console.error('Failed to sync stat positions to overlay', error);
+          });
       }
+    }
 
-      // 그래프 요소 배치 업데이트
-      const graphUpdates = selectedElements.filter(
-        (el) => el.type === 'graph' && el.index !== undefined,
-      );
-      if (graphUpdates.length > 0) {
-        const currentGraphPositions = useGraphItemStore.getState().positions;
-        const newGraphPositions = { ...currentGraphPositions };
-        const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
+    // 그래프 요소 배치 업데이트
+    const graphUpdates = selectedElements.filter(
+      (el) => el.type === 'graph' && el.index !== undefined,
+    );
+    if (graphUpdates.length > 0) {
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      const newGraphPositions = { ...currentGraphPositions };
+      const tabPositions = [...(newGraphPositions[selectedKeyType] || [])];
 
-        graphUpdates.forEach((el) => {
-          if (el.index === undefined) return;
-          const currentPos = tabPositions[el.index];
-          if (currentPos) {
-            tabPositions[el.index] = {
-              ...currentPos,
-              dx: currentPos.dx + deltaX,
-              dy: currentPos.dy + deltaY,
-            };
-          }
-        });
-
-        newGraphPositions[selectedKeyType] = tabPositions;
-        useGraphItemStore.getState().setPositions(newGraphPositions);
-
-        if (syncToOverlay) {
-          window.api.graphItems
-            .updatePositions(newGraphPositions)
-            .catch((error: Error) => {
-              console.error('Failed to sync graph positions to overlay', error);
-            });
+      graphUpdates.forEach((el) => {
+        if (el.index === undefined) return;
+        const currentPos = tabPositions[el.index];
+        if (currentPos) {
+          tabPositions[el.index] = {
+            ...currentPos,
+            dx: currentPos.dx + deltaX,
+            dy: currentPos.dy + deltaY,
+          };
         }
-      }
+      });
 
-      // 플러그인 요소 배치 업데이트
-      const pluginUpdates = selectedElements.filter(
-        (el) => el.type === 'plugin',
-      );
-      if (pluginUpdates.length > 0) {
-        const newElements = currentPluginElements.map((pluginEl) => {
-          const isSelected = pluginUpdates.some(
-            (sel) => sel.id === pluginEl.fullId,
-          );
-          if (isSelected) {
-            return {
-              ...pluginEl,
-              position: {
-                x: pluginEl.position.x + deltaX,
-                y: pluginEl.position.y + deltaY,
-              },
-            };
-          }
-          return pluginEl;
-        });
-        // syncToOverlay가 false이면 오버레이 동기화 스킵 (드래그 중)
-        usePluginDisplayElementStore
-          .getState()
-          .setElements(newElements, { skipSync: !syncToOverlay });
+      newGraphPositions[selectedKeyType] = tabPositions;
+      useGraphItemStore.getState().setPositions(newGraphPositions);
+
+      if (syncToOverlay) {
+        window.api.graphItems
+          .updatePositions(newGraphPositions)
+          .catch((error: Error) => {
+            console.error('Failed to sync graph positions to overlay', error);
+          });
       }
-    };
+    }
+
+    // 플러그인 요소 배치 업데이트
+    const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
+    if (pluginUpdates.length > 0) {
+      const newElements = currentPluginElements.map((pluginEl) => {
+        const isSelected = pluginUpdates.some(
+          (sel) => sel.id === pluginEl.fullId,
+        );
+        if (isSelected) {
+          return {
+            ...pluginEl,
+            position: {
+              x: pluginEl.position.x + deltaX,
+              y: pluginEl.position.y + deltaY,
+            },
+          };
+        }
+        return pluginEl;
+      });
+      // syncToOverlay가 false이면 오버레이 동기화 스킵 (드래그 중)
+      usePluginDisplayElementStore
+        .getState()
+        .setElements(newElements, { skipSync: !syncToOverlay });
+    }
+  };
 
   // 선택된 요소들 삭제 함수 (배치 삭제)
   const deleteSelectedElements = async () => {
@@ -452,21 +448,15 @@ export function useGridSelection({
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(normalized.keyPositions);
       useStatItemStore.getState().setPositions(normalized.statPositions);
-      useGraphItemStore
-        .getState()
-        .setPositions(normalized.graphPositions);
+      useGraphItemStore.getState().setPositions(normalized.graphPositions);
       if (normalized.groupsChanged) {
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
 
       try {
         await window.api.keys.updatePositions(normalized.keyPositions);
-        await window.api.statItems.updatePositions(
-          normalized.statPositions,
-        );
-        await window.api.graphItems.updatePositions(
-          normalized.graphPositions,
-        );
+        await window.api.statItems.updatePositions(normalized.statPositions);
+        await window.api.graphItems.updatePositions(normalized.graphPositions);
         if (normalized.groupsChanged) {
           await window.api.layerGroups.update(normalized.layerGroups);
         }
@@ -734,7 +724,10 @@ export function useGridSelection({
         });
       }
 
-      const updatedPositions: StatItemPositions = { ...current, [selectedKeyType]: posArray };
+      const updatedPositions: StatItemPositions = {
+        ...current,
+        [selectedKeyType]: posArray,
+      };
       useStatItemStore.getState().setPositions(updatedPositions);
     }
 
@@ -753,7 +746,10 @@ export function useGridSelection({
         });
       }
 
-      const updatedPositions: GraphItemPositions = { ...current, [selectedKeyType]: posArray };
+      const updatedPositions: GraphItemPositions = {
+        ...current,
+        [selectedKeyType]: posArray,
+      };
       useGraphItemStore.getState().setPositions(updatedPositions);
     }
 

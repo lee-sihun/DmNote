@@ -87,7 +87,7 @@ export function useLenis(options: UseLenisOptions = {}) {
     // limit 계산이 갱신되지 않고 스크롤이 중간에 멈출 수 있다.
     const contentEl =
       wrapper.childElementCount === 1
-        ? ((wrapper.firstElementChild as HTMLElement | null) ?? wrapper)
+        ? (wrapper.firstElementChild as HTMLElement | null) ?? wrapper
         : wrapper;
     const lenis = new Lenis({
       wrapper,

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React from 'react';
 import {
   useCounterSettings,
   computeOutsideStyle,
@@ -23,7 +23,7 @@ interface StatCounterLayerProps {
   positions: CounterPosition[];
 }
 
-const StatCounter = memo(({ position, previewValue = 0 }: StatCounterProps) => {
+function StatCounter({ position, previewValue = 0 }: StatCounterProps) {
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
   const dy = Number.isFinite(position?.dy) ? position.dy! : 0;
   const width = Number.isFinite(position?.width) ? position.width! : 60;
@@ -65,25 +65,27 @@ const StatCounter = memo(({ position, previewValue = 0 }: StatCounterProps) => {
         className="counter pointer-events-none select-none"
         data-text={count}
         data-counter-state="inactive"
-        style={{
-          fontSize: `${counterSettings.fontSize ?? 16}px`,
-          fontFamily: counterSettings.fontFamily
-            ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
-            : undefined,
-          fontWeight: counterSettings.fontWeight ?? 400,
-          fontStyle: counterSettings.fontItalic ? 'italic' : 'normal',
-          textDecoration,
-          lineHeight: 1,
-          '--counter-color-default': fill.css,
-          '--counter-stroke-color-default': stroke.css,
-          '--counter-stroke-width-default': strokeWidth,
-        } as React.CSSProperties}
+        style={
+          {
+            fontSize: `${counterSettings.fontSize ?? 16}px`,
+            fontFamily: counterSettings.fontFamily
+              ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
+              : undefined,
+            fontWeight: counterSettings.fontWeight ?? 400,
+            fontStyle: counterSettings.fontItalic ? 'italic' : 'normal',
+            textDecoration,
+            lineHeight: 1,
+            '--counter-color-default': fill.css,
+            '--counter-stroke-color-default': stroke.css,
+            '--counter-stroke-width-default': strokeWidth,
+          } as React.CSSProperties
+        }
       >
         {count}
       </span>
     </div>
   );
-});
+}
 
 export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
   if (!positions?.length) {

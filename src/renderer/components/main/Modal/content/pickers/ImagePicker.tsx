@@ -111,7 +111,10 @@ export default function ImagePicker({
   };
 
   // 고정 위치 상태
-  const [fixedPosition, setFixedPosition] = useState<{ x: number; y: number } | null>(null);
+  const [fixedPosition, setFixedPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement>(null);
 
   // panelElement가 있을 때 고정 위치 계산 (패널 기준, ColorPicker와 동일한 위치)

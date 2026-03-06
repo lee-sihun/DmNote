@@ -37,10 +37,7 @@ export {
   SingleGraphPanel,
   SingleKeyStatPanel,
 } from './SingleSelectionPanel';
-export {
-  BatchKeyLikePanel,
-  BatchGraphOnlyPanel,
-} from './BatchSelectionPanel';
+export { BatchKeyLikePanel, BatchGraphOnlyPanel } from './BatchSelectionPanel';
 export { default as PluginSettingsPanelView } from './PluginSettingsPanelView';
 
 // 커스텀 hook

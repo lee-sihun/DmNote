@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
@@ -103,7 +103,7 @@ export default function CounterAnimationPicker({
     y: number;
   } | null>(null);
 
-  const loadLibrary = useCallback(async () => {
+  const loadLibrary = async () => {
     setIsLoading(true);
     setErrorText('');
     try {
@@ -118,12 +118,12 @@ export default function CounterAnimationPicker({
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  };
 
   useEffect(() => {
     if (!open) return;
     void loadLibrary();
-  }, [loadLibrary, open]);
+  });
 
   useEffect(() => {
     if (open) return;
@@ -136,19 +136,19 @@ export default function CounterAnimationPicker({
   const selectedPresetId = findMatchingPresetId(animation, library);
 
   const filterOptions = [
-      {
-        value: 'all',
-        label: t('counterSetting.filterAll') || '전체',
-      },
-      {
-        value: 'builtin',
-        label: t('counterSetting.filterBuiltin') || '내장',
-      },
-      {
-        value: 'user',
-        label: t('counterSetting.filterUser') || '사용자정의',
-      },
-    ];
+    {
+      value: 'all',
+      label: t('counterSetting.filterAll') || '전체',
+    },
+    {
+      value: 'builtin',
+      label: t('counterSetting.filterBuiltin') || '내장',
+    },
+    {
+      value: 'user',
+      label: t('counterSetting.filterUser') || '사용자정의',
+    },
+  ];
 
   const filteredItems = (() => {
     const query = searchQuery.trim().toLowerCase();
@@ -172,34 +172,34 @@ export default function CounterAnimationPicker({
   })();
 
   const handlePresetSelect = (preset: CounterAnimationPreset) => {
-      setActionMenuPresetId(null);
-      onAnimationChange(applyPresetToAnimation(animation, preset));
-    };
+    setActionMenuPresetId(null);
+    onAnimationChange(applyPresetToAnimation(animation, preset));
+  };
 
   const handleDeletePreset = async (preset: CounterAnimationPreset) => {
-      const confirmed = await window.api.ui.dialog.confirm(
-        t('counterSetting.deleteAnimationConfirm') ||
-          '애니메이션을 삭제하시겠습니까?',
-        {
-          confirmText: t('contextMenu.delete') || '삭제',
-          cancelText: t('common.cancel') || '취소',
-          danger: true,
-        },
+    const confirmed = await window.api.ui.dialog.confirm(
+      t('counterSetting.deleteAnimationConfirm') ||
+        '애니메이션을 삭제하시겠습니까?',
+      {
+        confirmText: t('contextMenu.delete') || '삭제',
+        cancelText: t('common.cancel') || '취소',
+        danger: true,
+      },
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await window.api.counterAnimation.remove(preset.id);
+      await loadLibrary();
+    } catch (error) {
+      console.error('Failed to delete counter animation preset', error);
+      setErrorText(
+        t('counterSetting.deleteAnimationFailed') ||
+          '애니메이션 삭제에 실패했습니다.',
       );
-
-      if (!confirmed) return;
-
-      try {
-        await window.api.counterAnimation.remove(preset.id);
-        await loadLibrary();
-      } catch (error) {
-        console.error('Failed to delete counter animation preset', error);
-        setErrorText(
-          t('counterSetting.deleteAnimationFailed') ||
-            '애니메이션 삭제에 실패했습니다.',
-        );
-      }
-    };
+    }
+  };
 
   const openCreateModal = () => {
     setEditorState({ mode: 'create', preset: null });
@@ -227,18 +227,18 @@ export default function CounterAnimationPicker({
   })();
 
   const handleEditorSaved = async ({
-      preset,
-      mode,
-    }: {
-      preset: CounterAnimationPreset;
-      mode: 'create' | 'edit';
-      affectedUsageCount: number;
-    }) => {
-      await loadLibrary();
-      if (mode === 'create' || selectedPresetId === preset.id) {
-        onAnimationChange(applyPresetToAnimation(animation, preset));
-      }
-    };
+    preset,
+    mode,
+  }: {
+    preset: CounterAnimationPreset;
+    mode: 'create' | 'edit';
+    affectedUsageCount: number;
+  }) => {
+    await loadLibrary();
+    if (mode === 'create' || selectedPresetId === preset.id) {
+      onAnimationChange(applyPresetToAnimation(animation, preset));
+    }
+  };
 
   const handlePickerClose = () => {
     if (actionMenuPresetId !== null) return;

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/statItems';
@@ -27,7 +27,7 @@ interface StatCounterLayerProps {
   positions: StatPosition[];
 }
 
-const StatCounter = memo(({ position, statType }: StatCounterProps) => {
+function StatCounter({ position, statType }: StatCounterProps) {
   useSignals();
 
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
@@ -75,7 +75,7 @@ const StatCounter = memo(({ position, statType }: StatCounterProps) => {
       />
     </div>
   );
-});
+}
 
 export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
   if (!positions?.length) {

@@ -3,8 +3,12 @@ import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
-import KeyTabContent, { type KeyTabContentRef } from '../settings/KeyTabContent';
-import NoteTabContent, { type NoteTabContentRef } from '../settings/NoteTabContent';
+import KeyTabContent, {
+  type KeyTabContentRef,
+} from '../settings/KeyTabContent';
+import NoteTabContent, {
+  type NoteTabContentRef,
+} from '../settings/NoteTabContent';
 import CounterTabContent, {
   type CounterTabContentRef,
 } from '../settings/CounterTabContent';
@@ -108,7 +112,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   const counterTabRef = React.useRef<CounterTabContentRef>(null);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -117,7 +121,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         ? prev
         : nextState,
     );
-  }, []);
+  };
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const {
@@ -198,7 +202,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [activeTab, wrapperElement, updateScrollState]);
+  }, [activeTab, wrapperElement]);
 
   // 탭 변경 시 스크롤 최상단으로 초기화
   React.useEffect(() => {
@@ -244,24 +248,24 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
 
   // 이미지 변경 핸들러 (KeyTab용)
   const handleIdleImageChange = (imageUrl: string) => {
-      setKeyState((prev) => ({ ...prev, inactiveImage: imageUrl }));
-      handleKeyPreview({ inactiveImage: imageUrl });
-    };
+    setKeyState((prev) => ({ ...prev, inactiveImage: imageUrl }));
+    handleKeyPreview({ inactiveImage: imageUrl });
+  };
 
   const handleActiveImageChange = (imageUrl: string) => {
-      setKeyState((prev) => ({ ...prev, activeImage: imageUrl }));
-      handleKeyPreview({ activeImage: imageUrl });
-    };
+    setKeyState((prev) => ({ ...prev, activeImage: imageUrl }));
+    handleKeyPreview({ activeImage: imageUrl });
+  };
 
   const handleIdleTransparentChange = (checked: boolean) => {
-      setKeyState((prev) => ({ ...prev, idleTransparent: checked }));
-      handleKeyPreview({ idleTransparent: checked });
-    };
+    setKeyState((prev) => ({ ...prev, idleTransparent: checked }));
+    handleKeyPreview({ idleTransparent: checked });
+  };
 
   const handleActiveTransparentChange = (checked: boolean) => {
-      setKeyState((prev) => ({ ...prev, activeTransparent: checked }));
-      handleKeyPreview({ activeTransparent: checked });
-    };
+    setKeyState((prev) => ({ ...prev, activeTransparent: checked }));
+    handleKeyPreview({ activeTransparent: checked });
+  };
 
   return (
     <Modal onClick={handleClose} animate={!initialSkipRef.current}>
@@ -376,7 +380,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           onClose={() =>
             setNoteState((prev) => ({ ...prev, showPicker: false }))
           }
-          position={"right"}
+          position={'right'}
         />
       )}
 
@@ -390,16 +394,14 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
               ? toGradient(noteState.glowColor, noteState.glowGradientBottom)
               : noteState.glowColor
           }
-          onColorChange={(c) =>
-            noteTabRef.current?.handleGlowColorChange(c)
-          }
+          onColorChange={(c) => noteTabRef.current?.handleGlowColorChange(c)}
           onColorChangeComplete={(c) =>
             noteTabRef.current?.handleGlowColorChangeComplete(c)
           }
           onClose={() =>
             setNoteState((prev) => ({ ...prev, showGlowPicker: false }))
           }
-          position={"right"}
+          position={'right'}
         />
       )}
 
@@ -430,7 +432,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           }
           solidOnly={true}
           interactiveRefs={counterTabRef.current?.colorPickerInteractiveRefs}
-          position={"right"}
+          position={'right'}
         />
       )}
     </Modal>

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import CountDisplay from '@components/overlay/counters/CountDisplay';
@@ -29,8 +29,7 @@ interface KeyCounterLayerProps {
   mode: string;
 }
 
-
-const KeyCounter = memo(({ globalKey, position, mode }: KeyCounterProps) => {
+function KeyCounter({ globalKey, position, mode }: KeyCounterProps) {
   useSignals();
   const counterSignal = getKeyCounterSignal(mode ?? '', globalKey);
   const count = counterSignal?.value ?? 0;
@@ -83,9 +82,13 @@ const KeyCounter = memo(({ globalKey, position, mode }: KeyCounterProps) => {
       />
     </div>
   );
-});
+}
 
-export default function KeyCounterLayer({ keys, positions, mode }: KeyCounterLayerProps) {
+export default function KeyCounterLayer({
+  keys,
+  positions,
+  mode,
+}: KeyCounterLayerProps) {
   if (!keys?.length || !positions?.length) {
     return null;
   }

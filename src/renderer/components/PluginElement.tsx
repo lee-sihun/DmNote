@@ -1,9 +1,4 @@
-import React, {
-  useRef,
-  useEffect,
-  useState,
-  useCallback,
-  } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
 import {
@@ -186,34 +181,36 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   }, [locale]);
 
   const pluginTranslate = (
-      key: string,
-      params?: Record<string, string | number>,
-      fallback?: string,
-    ) =>
-      translatePluginMessage({
-        messages: definition?.messages,
-        locale,
-        key,
-        params,
-        fallback,
-      });
+    key: string,
+    params?: Record<string, string | number>,
+    fallback?: string,
+  ) =>
+    translatePluginMessage({
+      messages: definition?.messages,
+      locale,
+      key,
+      params,
+      fallback,
+    });
 
-  const pluginTranslateStable = useCallback((
-      key: string,
-      params?: Record<string, string | number>,
-      fallback?: string,
-    ) =>
-      translatePluginMessage({
-        messages: definition?.messages,
-        locale: localeRef.current,
-        key,
-        params,
-        fallback,
-      }), [definition?.messages]);
+  const pluginTranslateStable = (
+    key: string,
+    params?: Record<string, string | number>,
+    fallback?: string,
+  ) =>
+    translatePluginMessage({
+      messages: definition?.messages,
+      locale: localeRef.current,
+      key,
+      params,
+      fallback,
+    });
 
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
-  const exposedActionsRef = useRef<Record<string, (...args: unknown[]) => unknown>>({});
+  const exposedActionsRef = useRef<
+    Record<string, (...args: unknown[]) => unknown>
+  >({});
 
   // Settings 변경 감지용 ref와 콜백 리스트
   const prevSettingsRef = useRef<Record<string, unknown> | null>(null);
@@ -467,9 +464,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           element.onPositionChange &&
           typeof element.onPositionChange === 'string'
         ) {
-          const handler = (window as unknown as Record<string, unknown>)[element.onPositionChange];
+          const handler = (window as unknown as Record<string, unknown>)[
+            element.onPositionChange
+          ];
           if (typeof handler === 'function') {
-            (handler as (pos: { x: number; y: number }) => void)({ x: newX, y: newY });
+            (handler as (pos: { x: number; y: number }) => void)({
+              x: newX,
+              y: newY,
+            });
           }
         }
       }
@@ -488,257 +490,256 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // 선택 요소 드래그 핸들러 (스마트 가이드 포함)
   const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
-      if (!isSelectionMode || e.button !== 0) return;
+    if (!isSelectionMode || e.button !== 0) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
-      // 드래그 시작 전 기존 스마트 가이드 클리어 (이전 드래그가 정상 종료되지 않은 경우 대비)
-      useSmartGuidesStore.getState().clearGuides();
+    // 드래그 시작 전 기존 스마트 가이드 클리어 (이전 드래그가 정상 종료되지 않은 경우 대비)
+    useSmartGuidesStore.getState().clearGuides();
 
-      // 드래그 시작 시 애니메이션 비활성화
-      useGridSelectionStore.getState().setDraggingOrResizing(true);
+    // 드래그 시작 시 애니메이션 비활성화
+    useGridSelectionStore.getState().setDraggingOrResizing(true);
 
-      // 드래그 시작 시 히스토리 저장
-      onMultiDragStart?.();
+    // 드래그 시작 시 히스토리 저장
+    onMultiDragStart?.();
 
-      // 현재 요소의 시작 위치 저장 (스냅 계산용)
-      const startX = element.position.x;
-      const startY = element.position.y;
-      const currentWidth =
-        element.measuredSize?.width ?? element.estimatedSize?.width ?? 200;
-      const currentHeight =
-        element.measuredSize?.height ?? element.estimatedSize?.height ?? 150;
-      const elementId = element.fullId;
+    // 현재 요소의 시작 위치 저장 (스냅 계산용)
+    const startX = element.position.x;
+    const startY = element.position.y;
+    const currentWidth =
+      element.measuredSize?.width ?? element.estimatedSize?.width ?? 200;
+    const currentHeight =
+      element.measuredSize?.height ?? element.estimatedSize?.height ?? 150;
+    const elementId = element.fullId;
 
-      multiDragRef.current = {
-        isDragging: true,
-        startX: e.clientX,
-        startY: e.clientY,
-        lastSnappedDeltaX: 0,
-        lastSnappedDeltaY: 0,
-      };
-
-      let rafId: number | null = null;
-      // 드래그 종료 플래그 (rAF 콜백에서 체크)
-      let dragEnded = false;
-      const smartGuidesStore = useSmartGuidesStore.getState();
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        if (!multiDragRef.current.isDragging || dragEnded) return;
-
-        if (rafId) return;
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-
-          // 드래그가 종료되었으면 rAF 콜백에서도 무시
-          if (dragEnded) return;
-
-          const currentZoom = zoom;
-          // raw delta (스냅 전)
-          const rawDeltaX =
-            (moveEvent.clientX - multiDragRef.current.startX) / currentZoom;
-          const rawDeltaY =
-            (moveEvent.clientY - multiDragRef.current.startY) / currentZoom;
-
-          // 이동 후 예상 위치
-          const newX = startX + rawDeltaX;
-          const newY = startY + rawDeltaY;
-
-          // 스마트 가이드 계산 (현재 요소 기준으로 다른 비선택 요소들과 스냅)
-          const otherElements = getOtherElements(elementId);
-
-          // gridSettings에서 정렬/간격 가이드 활성화 여부 확인
-          const gridSettings = useSettingsStore.getState().gridSettings;
-          const alignmentGuidesEnabled =
-            gridSettings?.alignmentGuides !== false;
-          const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
-
-          // 선택된 다른 요소들도 제외 (자기 자신만 기준)
-          const nonSelectedElements = otherElements.filter(
-            (el) =>
-              !selectedElements.some(
-                (sel) =>
-                  sel.id === el.id ||
-                  (sel.type === 'key' && el.id === `key-${sel.index}`),
-              ),
-          );
-
-          const draggedBounds = calculateBounds(
-            newX,
-            newY,
-            currentWidth,
-            currentHeight,
-            elementId,
-          );
-
-          // 다중 선택 시 그룹 전체의 bounds 계산 (캔버스 중앙 스냅용)
-          let groupBounds = null;
-          if (selectedElements.length > 1) {
-            // 선택된 요소들의 현재 bounds 수집
-            const selectedBoundsArray = selectedElements
-              .map((sel) => {
-                // 현재 드래그 중인 요소인 경우 새 위치 사용
-                if (sel.id === elementId) {
-                  return draggedBounds;
-                }
-                // 다른 선택된 요소들은 otherElements에서 찾아서 이동량 적용
-                const found = otherElements.find(
-                  (el) =>
-                    el.id === sel.id ||
-                    (sel.type === 'key' && el.id === `key-${sel.index}`),
-                );
-                if (found) {
-                  return calculateBounds(
-                    found.left + rawDeltaX,
-                    found.top + rawDeltaY,
-                    found.width,
-                    found.height,
-                    found.id,
-                  );
-                }
-                return null;
-              })
-              .filter((b): b is NonNullable<typeof b> => b !== null);
-            groupBounds = calculateGroupBounds(selectedBoundsArray);
-          }
-
-          // 다중 선택 시 그룹 바운딩 박스를 스냅 기준으로 사용
-          const snapTargetBounds =
-            selectedElements.length > 1 && groupBounds
-              ? groupBounds
-              : draggedBounds;
-
-          const snapResult = alignmentGuidesEnabled
-            ? calculateSnapPoints(
-                snapTargetBounds,
-                nonSelectedElements,
-                undefined,
-                {
-                  groupBounds,
-                  disableSpacing: !spacingGuidesEnabled,
-                },
-              )
-            : null;
-
-          let finalX: number;
-          let finalY: number;
-
-          // 스마트 가이드 스냅 적용
-          if (snapResult?.didSnapX) {
-            // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
-            if (selectedElements.length > 1 && groupBounds) {
-              const groupSnapDeltaX = snapResult.snappedX - groupBounds.left;
-              finalX = newX + groupSnapDeltaX;
-            } else {
-              finalX = snapResult.snappedX;
-            }
-          } else {
-            // 그리드 스냅
-            const snapSize = gridSettings?.gridSnapSize || 5;
-            finalX = Math.round(newX / snapSize) * snapSize;
-          }
-
-          if (snapResult?.didSnapY) {
-            // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
-            if (selectedElements.length > 1 && groupBounds) {
-              const groupSnapDeltaY = snapResult.snappedY - groupBounds.top;
-              finalY = newY + groupSnapDeltaY;
-            } else {
-              finalY = snapResult.snappedY;
-            }
-          } else {
-            // 그리드 스냅
-            const snapSize = gridSettings?.gridSnapSize || 5;
-            finalY = Math.round(newY / snapSize) * snapSize;
-          }
-
-          // 스냅된 delta 계산
-          const snappedDeltaX = Math.round(finalX - startX);
-          const snappedDeltaY = Math.round(finalY - startY);
-
-          // 가이드라인 업데이트
-          if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
-            // 다중 선택 시 그룹 바운딩 박스를 표시
-            const displayBounds =
-              selectedElements.length > 1 && groupBounds
-                ? calculateBounds(
-                    groupBounds.left +
-                      (snapResult.didSnapX
-                        ? snapResult.snappedX - groupBounds.left
-                        : 0),
-                    groupBounds.top +
-                      (snapResult.didSnapY
-                        ? snapResult.snappedY - groupBounds.top
-                        : 0),
-                    groupBounds.width,
-                    groupBounds.height,
-                    'group',
-                  )
-                : calculateBounds(
-                    finalX,
-                    finalY,
-                    currentWidth,
-                    currentHeight,
-                    elementId,
-                  );
-            smartGuidesStore.setDraggedBounds(displayBounds);
-            smartGuidesStore.setActiveGuides(snapResult.guides);
-
-            // 간격 가이드도 업데이트
-            if (
-              spacingGuidesEnabled &&
-              snapResult.spacingGuides &&
-              snapResult.spacingGuides.length > 0
-            ) {
-              smartGuidesStore.setSpacingGuides(snapResult.spacingGuides);
-            } else {
-              smartGuidesStore.setSpacingGuides([]);
-            }
-          } else {
-            smartGuidesStore.clearGuides();
-          }
-
-          // 이전 delta와의 차이만큼 이동
-          const moveDeltaX =
-            snappedDeltaX - multiDragRef.current.lastSnappedDeltaX;
-          const moveDeltaY =
-            snappedDeltaY - multiDragRef.current.lastSnappedDeltaY;
-
-          if (moveDeltaX !== 0 || moveDeltaY !== 0) {
-            multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
-            multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
-            onMultiDrag?.(moveDeltaX, moveDeltaY);
-          }
-        });
-      };
-
-      const handleMouseUp = () => {
-        // 드래그 종료 플래그 설정 (rAF 콜백 무시)
-        dragEnded = true;
-        // 진행 중인 rAF 취소
-        if (rafId) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
-        }
-        multiDragRef.current.isDragging = false;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        // window blur 시에도 cleanup 되도록 이벤트 제거
-        window.removeEventListener('blur', handleMouseUp);
-        // 스마트 가이드 클리어
-        useSmartGuidesStore.getState().clearGuides();
-        // 드래그 종료 시 애니메이션 복원
-        useGridSelectionStore.getState().setDraggingOrResizing(false);
-        // 드래그 종료 시 오버레이 동기화
-        onMultiDragEnd?.();
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
-      window.addEventListener('blur', handleMouseUp);
+    multiDragRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastSnappedDeltaX: 0,
+      lastSnappedDeltaY: 0,
     };
+
+    let rafId: number | null = null;
+    // 드래그 종료 플래그 (rAF 콜백에서 체크)
+    let dragEnded = false;
+    const smartGuidesStore = useSmartGuidesStore.getState();
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!multiDragRef.current.isDragging || dragEnded) return;
+
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+
+        // 드래그가 종료되었으면 rAF 콜백에서도 무시
+        if (dragEnded) return;
+
+        const currentZoom = zoom;
+        // raw delta (스냅 전)
+        const rawDeltaX =
+          (moveEvent.clientX - multiDragRef.current.startX) / currentZoom;
+        const rawDeltaY =
+          (moveEvent.clientY - multiDragRef.current.startY) / currentZoom;
+
+        // 이동 후 예상 위치
+        const newX = startX + rawDeltaX;
+        const newY = startY + rawDeltaY;
+
+        // 스마트 가이드 계산 (현재 요소 기준으로 다른 비선택 요소들과 스냅)
+        const otherElements = getOtherElements(elementId);
+
+        // gridSettings에서 정렬/간격 가이드 활성화 여부 확인
+        const gridSettings = useSettingsStore.getState().gridSettings;
+        const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
+        const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
+
+        // 선택된 다른 요소들도 제외 (자기 자신만 기준)
+        const nonSelectedElements = otherElements.filter(
+          (el) =>
+            !selectedElements.some(
+              (sel) =>
+                sel.id === el.id ||
+                (sel.type === 'key' && el.id === `key-${sel.index}`),
+            ),
+        );
+
+        const draggedBounds = calculateBounds(
+          newX,
+          newY,
+          currentWidth,
+          currentHeight,
+          elementId,
+        );
+
+        // 다중 선택 시 그룹 전체의 bounds 계산 (캔버스 중앙 스냅용)
+        let groupBounds = null;
+        if (selectedElements.length > 1) {
+          // 선택된 요소들의 현재 bounds 수집
+          const selectedBoundsArray = selectedElements
+            .map((sel) => {
+              // 현재 드래그 중인 요소인 경우 새 위치 사용
+              if (sel.id === elementId) {
+                return draggedBounds;
+              }
+              // 다른 선택된 요소들은 otherElements에서 찾아서 이동량 적용
+              const found = otherElements.find(
+                (el) =>
+                  el.id === sel.id ||
+                  (sel.type === 'key' && el.id === `key-${sel.index}`),
+              );
+              if (found) {
+                return calculateBounds(
+                  found.left + rawDeltaX,
+                  found.top + rawDeltaY,
+                  found.width,
+                  found.height,
+                  found.id,
+                );
+              }
+              return null;
+            })
+            .filter((b): b is NonNullable<typeof b> => b !== null);
+          groupBounds = calculateGroupBounds(selectedBoundsArray);
+        }
+
+        // 다중 선택 시 그룹 바운딩 박스를 스냅 기준으로 사용
+        const snapTargetBounds =
+          selectedElements.length > 1 && groupBounds
+            ? groupBounds
+            : draggedBounds;
+
+        const snapResult = alignmentGuidesEnabled
+          ? calculateSnapPoints(
+              snapTargetBounds,
+              nonSelectedElements,
+              undefined,
+              {
+                groupBounds,
+                disableSpacing: !spacingGuidesEnabled,
+              },
+            )
+          : null;
+
+        let finalX: number;
+        let finalY: number;
+
+        // 스마트 가이드 스냅 적용
+        if (snapResult?.didSnapX) {
+          // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
+          if (selectedElements.length > 1 && groupBounds) {
+            const groupSnapDeltaX = snapResult.snappedX - groupBounds.left;
+            finalX = newX + groupSnapDeltaX;
+          } else {
+            finalX = snapResult.snappedX;
+          }
+        } else {
+          // 그리드 스냅
+          const snapSize = gridSettings?.gridSnapSize || 5;
+          finalX = Math.round(newX / snapSize) * snapSize;
+        }
+
+        if (snapResult?.didSnapY) {
+          // 다중 선택 시: 그룹 바운딩 박스의 스냅 이동량을 개별 요소에 적용
+          if (selectedElements.length > 1 && groupBounds) {
+            const groupSnapDeltaY = snapResult.snappedY - groupBounds.top;
+            finalY = newY + groupSnapDeltaY;
+          } else {
+            finalY = snapResult.snappedY;
+          }
+        } else {
+          // 그리드 스냅
+          const snapSize = gridSettings?.gridSnapSize || 5;
+          finalY = Math.round(newY / snapSize) * snapSize;
+        }
+
+        // 스냅된 delta 계산
+        const snappedDeltaX = Math.round(finalX - startX);
+        const snappedDeltaY = Math.round(finalY - startY);
+
+        // 가이드라인 업데이트
+        if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
+          // 다중 선택 시 그룹 바운딩 박스를 표시
+          const displayBounds =
+            selectedElements.length > 1 && groupBounds
+              ? calculateBounds(
+                  groupBounds.left +
+                    (snapResult.didSnapX
+                      ? snapResult.snappedX - groupBounds.left
+                      : 0),
+                  groupBounds.top +
+                    (snapResult.didSnapY
+                      ? snapResult.snappedY - groupBounds.top
+                      : 0),
+                  groupBounds.width,
+                  groupBounds.height,
+                  'group',
+                )
+              : calculateBounds(
+                  finalX,
+                  finalY,
+                  currentWidth,
+                  currentHeight,
+                  elementId,
+                );
+          smartGuidesStore.setDraggedBounds(displayBounds);
+          smartGuidesStore.setActiveGuides(snapResult.guides);
+
+          // 간격 가이드도 업데이트
+          if (
+            spacingGuidesEnabled &&
+            snapResult.spacingGuides &&
+            snapResult.spacingGuides.length > 0
+          ) {
+            smartGuidesStore.setSpacingGuides(snapResult.spacingGuides);
+          } else {
+            smartGuidesStore.setSpacingGuides([]);
+          }
+        } else {
+          smartGuidesStore.clearGuides();
+        }
+
+        // 이전 delta와의 차이만큼 이동
+        const moveDeltaX =
+          snappedDeltaX - multiDragRef.current.lastSnappedDeltaX;
+        const moveDeltaY =
+          snappedDeltaY - multiDragRef.current.lastSnappedDeltaY;
+
+        if (moveDeltaX !== 0 || moveDeltaY !== 0) {
+          multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
+          multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
+          onMultiDrag?.(moveDeltaX, moveDeltaY);
+        }
+      });
+    };
+
+    const handleMouseUp = () => {
+      // 드래그 종료 플래그 설정 (rAF 콜백 무시)
+      dragEnded = true;
+      // 진행 중인 rAF 취소
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      multiDragRef.current.isDragging = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      // window blur 시에도 cleanup 되도록 이벤트 제거
+      window.removeEventListener('blur', handleMouseUp);
+      // 스마트 가이드 클리어
+      useSmartGuidesStore.getState().clearGuides();
+      // 드래그 종료 시 애니메이션 복원
+      useGridSelectionStore.getState().setDraggingOrResizing(false);
+      // 드래그 종료 시 오버레이 동기화
+      onMultiDragEnd?.();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    // window blur 시에도 드래그 종료 처리 (창이 포커스를 잃었을 때)
+    window.addEventListener('blur', handleMouseUp);
+  };
 
   const { ref: draggableRef, dx: renderX, dy: renderY } = draggable;
 
@@ -1007,10 +1008,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           e.type === 'click'
             ? 'data-plugin-handler'
             : e.type === 'input'
-              ? 'data-plugin-handler-input'
-              : e.type === 'change'
-                ? 'data-plugin-handler-change'
-                : null;
+            ? 'data-plugin-handler-input'
+            : e.type === 'change'
+            ? 'data-plugin-handler-change'
+            : null;
 
         if (!handlerAttr) return;
 
@@ -1027,7 +1028,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         if (!handlerName) return;
 
         // 핸들러 실행 (자동 래핑되어 있음)
-        const handler = (window as unknown as Record<string, unknown>)[handlerName];
+        const handler = (window as unknown as Record<string, unknown>)[
+          handlerName
+        ];
         if (typeof handler === 'function') {
           (handler as (e: Event) => void)(e);
         }
@@ -1207,14 +1210,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       exposedActionsRef.current = {};
       cleanups.forEach((fn) => fn());
     };
-  }, [
-    windowType,
-    definition,
-    element.fullId,
-    pluginTranslateStable,
-    updateElement,
-    updateElementBatched,
-  ]);
+  });
 
   const elementStyle: React.CSSProperties = (() => {
     const shouldPromoteTransformLayer =
@@ -1237,8 +1233,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         element.draggable && windowType === 'main'
           ? 'move'
           : element.onClick && windowType === 'main'
-            ? 'pointer'
-            : 'default',
+          ? 'pointer'
+          : 'default',
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
       pointerEvents: windowType === 'main' ? 'auto' : 'none',
     };
@@ -1255,14 +1251,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   })();
 
   const attachRef = (node: HTMLDivElement | null) => {
-      if (node) {
-        containerRef.current = node;
-        // 선택 모드가 아닐 때만 드래그 ref 연결
-        if (element.draggable && windowType === 'main' && !isSelectionMode) {
-          draggableRef(node);
-        }
+    if (node) {
+      containerRef.current = node;
+      // 선택 모드가 아닐 때만 드래그 ref 연결
+      if (element.draggable && windowType === 'main' && !isSelectionMode) {
+        draggableRef(node);
       }
-    };
+    }
+  };
 
   // 컨텍스트 메뉴 핸들러
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -1295,7 +1291,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const deletePluginElement = () => {
     // onDelete 핸들러 호출 (자동 래핑되어 있음)
     if (element.onDelete && typeof element.onDelete === 'string') {
-      const handler = (window as unknown as Record<string, unknown>)[element.onDelete];
+      const handler = (window as unknown as Record<string, unknown>)[
+        element.onDelete
+      ];
       if (typeof handler === 'function') {
         (handler as () => void)();
       }
@@ -1465,7 +1463,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     // onClick 핸들러 실행 (자동 래핑되어 있음)
     if (typeof element.onClick === 'string') {
-      const handler = (window as unknown as Record<string, unknown>)[element.onClick];
+      const handler = (window as unknown as Record<string, unknown>)[
+        element.onClick
+      ];
       if (typeof handler === 'function') {
         (handler as (e: React.MouseEvent) => void)(e);
       }
@@ -1510,32 +1510,32 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   })();
 
   const createActionsProxy = (elementId: string) =>
-      new Proxy(
-        {},
-        {
-          get: (_target, prop: string | symbol) => {
-            if (typeof prop !== 'string') return undefined;
-            return (...args: unknown[]) => {
-              try {
-                window.api?.bridge?.sendTo(
-                  'overlay',
-                  'plugin:displayElement:invokeAction',
-                  {
-                    elementId,
-                    action: prop,
-                    args,
-                  },
-                );
-              } catch (error) {
-                console.error(
-                  '[PluginElement] Failed to invoke exposed action',
-                  error,
-                );
-              }
-            };
-          },
+    new Proxy(
+      {},
+      {
+        get: (_target, prop: string | symbol) => {
+          if (typeof prop !== 'string') return undefined;
+          return (...args: unknown[]) => {
+            try {
+              window.api?.bridge?.sendTo(
+                'overlay',
+                'plugin:displayElement:invokeAction',
+                {
+                  elementId,
+                  action: prop,
+                  args,
+                },
+              );
+            } catch (error) {
+              console.error(
+                '[PluginElement] Failed to invoke exposed action',
+                error,
+              );
+            }
+          };
         },
-      );
+      },
+    );
 
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {

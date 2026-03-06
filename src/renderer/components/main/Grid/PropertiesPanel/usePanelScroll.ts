@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { TABS, TabType } from './types';
 
@@ -21,7 +21,7 @@ interface UsePanelScrollReturn {
 
 export function usePanelScroll(
   activeTab: TabType,
-  selectedElementsLength: number,
+  _selectedElementsLength: number,
 ): UsePanelScrollReturn {
   // Thumb refs (탭별, 직접 DOM 조작으로 리렌더링 방지)
   const batchThumbRefs = useRef<Record<TabType, HTMLDivElement | null>>({
@@ -69,13 +69,16 @@ export function usePanelScroll(
   };
 
   // thumb DOM 직접 업데이트 (리렌더링 없이 성능 최적화)
-  const updateThumbDOM = useCallback((thumbEl: HTMLDivElement | null, scrollEl: HTMLDivElement | null) => {
-      if (!thumbEl || !scrollEl) return;
-      const thumb = calculateThumb(scrollEl);
-      thumbEl.style.top = `${thumb.top}px`;
-      thumbEl.style.height = `${thumb.height}px`;
-      thumbEl.style.display = thumb.visible ? 'block' : 'none';
-    }, []);
+  const updateThumbDOM = (
+    thumbEl: HTMLDivElement | null,
+    scrollEl: HTMLDivElement | null,
+  ) => {
+    if (!thumbEl || !scrollEl) return;
+    const thumb = calculateThumb(scrollEl);
+    thumbEl.style.top = `${thumb.top}px`;
+    thumbEl.style.height = `${thumb.height}px`;
+    thumbEl.style.display = thumb.visible ? 'block' : 'none';
+  };
 
   // Lenis 스크롤 적용 (탭별 6개 훅: batch 3개 + single 3개)
   const { scrollContainerRef: batchLenisStyleRef } = useLenis({
@@ -130,13 +133,14 @@ export function usePanelScroll(
 
   // callback ref를 합성하여 Lenis와 내부 ref 모두 업데이트 (탭별)
   const batchScrollRefFor = (tab: TabType) => (node: HTMLDivElement | null) => {
-      batchScrollElementRefs.current[tab] = node;
-      if (tab === TABS.STYLE) batchLenisStyleRef(node);
-      if (tab === TABS.NOTE) batchLenisNoteRef(node);
-      if (tab === TABS.COUNTER) batchLenisCounterRef(node);
-    };
+    batchScrollElementRefs.current[tab] = node;
+    if (tab === TABS.STYLE) batchLenisStyleRef(node);
+    if (tab === TABS.NOTE) batchLenisNoteRef(node);
+    if (tab === TABS.COUNTER) batchLenisCounterRef(node);
+  };
 
-  const singleScrollRefFor = (tab: TabType) => (node: HTMLDivElement | null) => {
+  const singleScrollRefFor =
+    (tab: TabType) => (node: HTMLDivElement | null) => {
       singleScrollElementRefs.current[tab] = node;
       if (tab === TABS.STYLE) singleLenisStyleRef(node);
       if (tab === TABS.NOTE) singleLenisNoteRef(node);
@@ -144,28 +148,28 @@ export function usePanelScroll(
     };
 
   const batchThumbRefFor = (tab: TabType) => (node: HTMLDivElement | null) => {
-      batchThumbRefs.current[tab] = node;
-    };
+    batchThumbRefs.current[tab] = node;
+  };
 
   const singleThumbRefFor = (tab: TabType) => (node: HTMLDivElement | null) => {
-      singleThumbRefs.current[tab] = node;
-    };
+    singleThumbRefs.current[tab] = node;
+  };
 
-  const updateThumbs = useCallback((tab: TabType) => {
-      updateThumbDOM(
-        batchThumbRefs.current[tab],
-        batchScrollElementRefs.current[tab],
-      );
-      updateThumbDOM(
-        singleThumbRefs.current[tab],
-        singleScrollElementRefs.current[tab],
-      );
-    }, [updateThumbDOM]);
+  const updateThumbs = (tab: TabType) => {
+    updateThumbDOM(
+      batchThumbRefs.current[tab],
+      batchScrollElementRefs.current[tab],
+    );
+    updateThumbDOM(
+      singleThumbRefs.current[tab],
+      singleScrollElementRefs.current[tab],
+    );
+  };
 
   // 탭 변경 또는 선택 변경 시 thumb 업데이트
   useEffect(() => {
     updateThumbs(activeTab);
-  }, [updateThumbs, activeTab, selectedElementsLength]);
+  });
 
   return {
     batchScrollRefFor,

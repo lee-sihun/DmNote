@@ -70,12 +70,16 @@ const Dropdown: React.FC<DropdownProps> = ({
       <button
         ref={buttonRef}
         type="button"
-        className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${fullWidth ? 'w-full' : ''}`}
+        className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
+          fullWidth ? 'w-full' : ''
+        }`}
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
       >
         <span
-          className={`truncate leading-[23px] ${!selected ? 'text-[#DBDEE8]' : ''}`}
+          className={`truncate leading-[23px] ${
+            !selected ? 'text-[#DBDEE8]' : ''
+          }`}
         >
           {selected ? selected.label : placeholder}
         </span>
@@ -99,9 +103,9 @@ const Dropdown: React.FC<DropdownProps> = ({
       </button>
       {open && (
         <div
-          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${fullWidth ? 'right-0' : ''} ${
-            openUpward ? 'bottom-[25px]' : 'top-[25px]'
-          }`}
+          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${
+            fullWidth ? 'right-0' : ''
+          } ${openUpward ? 'bottom-[25px]' : 'top-[25px]'}`}
         >
           {options.length === 0 ? (
             <div className="px-4 py-3 text-[#9AA0AA] text-[18px] font-medium">

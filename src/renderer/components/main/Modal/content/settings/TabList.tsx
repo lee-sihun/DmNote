@@ -37,7 +37,9 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
     scrollbarWidth,
   } = useLenis();
 
-  const isCustomSelected = !['4key', '5key', '6key', '8key'].includes(selectedKeyType);
+  const isCustomSelected = !['4key', '5key', '6key', '8key'].includes(
+    selectedKeyType,
+  );
 
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {

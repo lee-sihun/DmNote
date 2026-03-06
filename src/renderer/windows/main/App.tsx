@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/useCustomCssInjection';
@@ -183,7 +183,7 @@ export default function App() {
     shortcuts,
   } = useSettingsStore();
 
-  const matchesShortcut = useCallback((event: KeyboardEvent, binding?: ShortcutBinding) => {
+  const matchesShortcut = (event: KeyboardEvent, binding?: ShortcutBinding) => {
     if (!binding?.key) return false;
     const ctrl = !!binding.ctrl;
     const shift = !!binding.shift;
@@ -196,7 +196,7 @@ export default function App() {
       event.altKey === alt &&
       event.metaKey === meta
     );
-  }, []);
+  };
 
   // 개발자 모드 비활성 시 DevTools 단축키 차단
   useEffect(() => {
@@ -295,7 +295,6 @@ export default function App() {
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   }, [
-    matchesShortcut,
     selectedKeyType,
     setSelectedKeyType,
     isBootstrapped,
@@ -331,16 +330,16 @@ export default function App() {
 
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [matchesShortcut, shortcuts?.toggleSettingsPanel, isSettingsOpen]);
+  }, [shortcuts?.toggleSettingsPanel, isSettingsOpen]);
 
-  const showAlert = useCallback((message: string, confirmText?: string) => {
+  const showAlert = (message: string, confirmText?: string) => {
     setAlertState({
       isOpen: true,
       message,
       type: 'alert',
       confirmText: confirmText || t('common.confirm'),
     });
-  }, [t]);
+  };
 
   const handleUpdatePrimaryAction = async () => {
     if (!updateInfo) return;
@@ -375,7 +374,7 @@ export default function App() {
     dismissUpdate();
   };
 
-  const showConfirm = useCallback((
+  const showConfirm = (
     message: string,
     onConfirm: () => void,
     onCancel?: () => void,
@@ -386,7 +385,7 @@ export default function App() {
     cancelCallbackRef.current =
       typeof onCancel === 'function' ? onCancel : null;
     setAlertState({ isOpen: true, message, confirmText, type: 'confirm' });
-  }, [t]);
+  };
 
   const closeAlert = () => {
     setAlertState({
@@ -414,7 +413,7 @@ export default function App() {
   };
 
   // Custom Dialog 핸들러
-  const showCustomDialog = useCallback((
+  const showCustomDialog = (
     html: string,
     options?: {
       onConfirm?: () => void;
@@ -435,7 +434,7 @@ export default function App() {
       cancelText: options?.cancelText,
       showCancel: options?.showCancel ?? false,
     });
-  }, []);
+  };
 
   const closeCustomDialog = () => {
     setCustomDialogState({
@@ -463,16 +462,18 @@ export default function App() {
   };
 
   // Global Color Picker 핸들러
-  const showColorPickerImpl = useRef<(options: {
-    initialColor: string;
-    onColorChange: (color: string) => void;
-    position?: { x: number; y: number };
-    id?: string;
-    referenceElement?: HTMLElement;
-    onClose?: () => void;
-    onColorChangeComplete?: (color: string) => void;
-  }) => void>(() => {});
-  const showColorPicker = useCallback((options: {
+  const showColorPickerImpl = useRef<
+    (options: {
+      initialColor: string;
+      onColorChange: (color: string) => void;
+      position?: { x: number; y: number };
+      id?: string;
+      referenceElement?: HTMLElement;
+      onClose?: () => void;
+      onColorChangeComplete?: (color: string) => void;
+    }) => void
+  >(() => {});
+  const showColorPicker = (options: {
     initialColor: string;
     onColorChange: (color: string) => void;
     position?: { x: number; y: number };
@@ -482,7 +483,7 @@ export default function App() {
     onColorChangeComplete?: (color: string) => void;
   }) => {
     showColorPickerImpl.current(options);
-  }, []);
+  };
 
   const openColorPickerWithOptions = (options: {
     initialColor: string;
@@ -564,8 +565,10 @@ export default function App() {
   };
 
   const colorPickerStateRef = useRef(colorPickerState);
-  useEffect(() => { colorPickerStateRef.current = colorPickerState; }, [colorPickerState]);
-  const getColorPickerState = useCallback(() => colorPickerStateRef.current, []);
+  useEffect(() => {
+    colorPickerStateRef.current = colorPickerState;
+  }, [colorPickerState]);
+  const getColorPickerState = () => colorPickerStateRef.current;
 
   // Dialog API를 전역으로 노출
   useEffect(() => {
@@ -582,13 +585,7 @@ export default function App() {
       delete window.__dmn_showColorPicker;
       delete window.__dmn_getColorPickerState;
     };
-  }, [
-    showAlert,
-    showConfirm,
-    showCustomDialog,
-    showColorPicker,
-    getColorPickerState,
-  ]);
+  });
 
   return (
     <div className="bg-[#111012] w-full h-full flex flex-col overflow-hidden rounded-[7px] border border-[rgba(255,255,255,0.1)]">

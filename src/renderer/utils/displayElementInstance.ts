@@ -241,9 +241,7 @@ export class DisplayElementInstance extends String {
     }
 
     if (typeof output === 'object' && output !== null) {
-      const htmlString = renderToStaticMarkup(
-        output as React.ReactElement,
-      );
+      const htmlString = renderToStaticMarkup(output as React.ReactElement);
       this.updateElement(this.id, { html: htmlString });
       return;
     }

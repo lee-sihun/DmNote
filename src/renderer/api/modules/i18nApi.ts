@@ -1,7 +1,4 @@
-import {
-  fetchLocale,
-  getI18nListeners,
-} from './shared';
+import { fetchLocale, getI18nListeners } from './shared';
 
 export const i18nApi = {
   getLocale: async () => {

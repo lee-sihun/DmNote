@@ -1,8 +1,4 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useGridViewStore } from '@stores/useGridViewStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
@@ -240,56 +236,53 @@ export default function GridMinimap({
 
   // 미니맵 좌표를 팬 값으로 변환
   const minimapToGridPan = (minimapX: number, minimapY: number) => {
-      // 미니맵 좌표를 그리드 좌표로 변환 (중앙 정렬 오프셋 적용)
-      const gridX = (minimapX - offsetX) / minimapScale + bounds.minX;
-      const gridY = (minimapY - offsetY) / minimapScale + bounds.minY;
+    // 미니맵 좌표를 그리드 좌표로 변환 (중앙 정렬 오프셋 적용)
+    const gridX = (minimapX - offsetX) / minimapScale + bounds.minX;
+    const gridY = (minimapY - offsetY) / minimapScale + bounds.minY;
 
-      // 뷰포트 중앙이 해당 위치로 오도록 팬 설정
-      const newPanX = -(gridX * zoom - containerSize.width / 2);
-      const newPanY = -(gridY * zoom - containerSize.height / 2);
+    // 뷰포트 중앙이 해당 위치로 오도록 팬 설정
+    const newPanX = -(gridX * zoom - containerSize.width / 2);
+    const newPanY = -(gridY * zoom - containerSize.height / 2);
 
-      return { panX: newPanX, panY: newPanY };
-    };
+    return { panX: newPanX, panY: newPanY };
+  };
 
   // 미니맵 클릭으로 팬 이동
   const handleMinimapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-      if (isDragging) return; // 드래그 중에는 클릭 무시
+    if (isDragging) return; // 드래그 중에는 클릭 무시
 
-      const minimapRect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - minimapRect.left;
-      const clickY = e.clientY - minimapRect.top;
+    const minimapRect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - minimapRect.left;
+    const clickY = e.clientY - minimapRect.top;
+
+    const { panX: newPanX, panY: newPanY } = minimapToGridPan(clickX, clickY);
+    setPan(mode, newPanX, newPanY);
+  };
+
+  // 드래그 시작
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+
+    const minimapRect = e.currentTarget.getBoundingClientRect();
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const clickX = moveEvent.clientX - minimapRect.left;
+      const clickY = moveEvent.clientY - minimapRect.top;
 
       const { panX: newPanX, panY: newPanY } = minimapToGridPan(clickX, clickY);
       setPan(mode, newPanX, newPanY);
     };
 
-  // 드래그 시작
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setIsDragging(true);
-
-      const minimapRect = e.currentTarget.getBoundingClientRect();
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const clickX = moveEvent.clientX - minimapRect.left;
-        const clickY = moveEvent.clientY - minimapRect.top;
-
-        const { panX: newPanX, panY: newPanY } = minimapToGridPan(
-          clickX,
-          clickY,
-        );
-        setPan(mode, newPanX, newPanY);
-      };
-
-      const handleMouseUp = () => {
-        setIsDragging(false);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // 키 개수와 플러그인 요소가 모두 없으면 미니맵 숨김
   if (

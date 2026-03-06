@@ -47,7 +47,12 @@ const PREVIEW_SOURCES: Record<string, string> = {
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
-  showConfirm: (msg: string, onConfirm: () => void, onCancel?: () => void, confirmText?: string) => void;
+  showConfirm: (
+    msg: string,
+    onConfirm: () => void,
+    onCancel?: () => void,
+    confirmText?: string,
+  ) => void;
 }
 
 interface PluginError {
@@ -61,7 +66,10 @@ interface PluginToDelete {
   namespace: string;
 }
 
-export default function Settings({ showAlert, showConfirm }: SettingsProps): React.ReactElement {
+export default function Settings({
+  showAlert,
+  showConfirm,
+}: SettingsProps): React.ReactElement {
   const { t, i18n } = useTranslation();
   const isMacOS: boolean = isMac();
   const {
@@ -106,9 +114,12 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [isScrollHovered, setIsScrollHovered] = useState<boolean>(false);
   const [isPluginModalOpen, setPluginModalOpen] = useState<boolean>(false);
-  const [isDataDeleteModalOpen, setDataDeleteModalOpen] = useState<boolean>(false);
+  const [isDataDeleteModalOpen, setDataDeleteModalOpen] =
+    useState<boolean>(false);
   const [isShortcutModalOpen, setShortcutModalOpen] = useState<boolean>(false);
-  const [pluginToDelete, setPluginToDelete] = useState<PluginToDelete | null>(null);
+  const [pluginToDelete, setPluginToDelete] = useState<PluginToDelete | null>(
+    null,
+  );
   const [isReloadingPlugins, setIsReloadingPlugins] = useState<boolean>(false);
   const [isAddingPlugins, setIsAddingPlugins] = useState<boolean>(false);
   const [pendingPluginId, setPendingPluginId] = useState<string | null>(null);
@@ -133,7 +144,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     { value: 'gl', label: 'OpenGL' },
   ];
 
-  const macAngleOptions: { value: string; label: string }[] = [{ value: 'metal', label: 'Metal' }];
+  const macAngleOptions: { value: string; label: string }[] = [
+    { value: 'metal', label: 'Metal' },
+  ];
 
   useEffect(() => {
     if (isMacOS && angleMode !== 'metal') {
@@ -232,7 +245,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const formatPluginErrors = (errors: PluginError[] = []): string =>
     errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
 
-  const canReloadPlugins: boolean = jsPlugins.some((plugin: JsPlugin) => plugin.path);
+  const canReloadPlugins: boolean = jsPlugins.some(
+    (plugin: JsPlugin) => plugin.path,
+  );
 
   const handleReloadPlugins = async (): Promise<void> => {
     if (isReloadingPlugins) return;
@@ -317,11 +332,17 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     }
   };
 
-  const handlePluginToggle = async (pluginId: string, nextState: boolean): Promise<void> => {
+  const handlePluginToggle = async (
+    pluginId: string,
+    nextState: boolean,
+  ): Promise<void> => {
     if (pendingPluginId) return;
     setPendingPluginId(pluginId);
     try {
-      const result: JsPluginUpdateResult = await window.api.js.setPluginEnabled(pluginId, nextState);
+      const result: JsPluginUpdateResult = await window.api.js.setPluginEnabled(
+        pluginId,
+        nextState,
+      );
       if (!result.success) {
         showAlert?.(t('settings.jsPluginToggleFailed'));
       }
@@ -336,16 +357,23 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const handlePluginRemove = async (pluginId: string): Promise<void> => {
     if (pendingPluginId) return;
 
-    const plugin: JsPlugin | undefined = jsPlugins.find((p: JsPlugin) => p.id === pluginId);
+    const plugin: JsPlugin | undefined = jsPlugins.find(
+      (p: JsPlugin) => p.id === pluginId,
+    );
     if (!plugin) return;
 
     try {
       // 실제 플러그인 네임스페이스 추출 (@id 또는 파일명 기반)
-      const pluginNamespace: string = extractPluginId(plugin.content, plugin.name);
+      const pluginNamespace: string = extractPluginId(
+        plugin.content,
+        plugin.name,
+      );
 
       // 네임스페이스를 prefix로 사용하는 데이터가 있는지 확인
       // 백엔드에서 자동으로 "plugin_data_" 를 붙이므로 순수 네임스페이스만 전달
-      const hasData: boolean = await window.api.plugin.storage.hasData(pluginNamespace);
+      const hasData: boolean = await window.api.plugin.storage.hasData(
+        pluginNamespace,
+      );
       console.warn(
         '[PluginRemove] namespace=',
         pluginNamespace,
@@ -389,13 +417,18 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const removePluginWithData = async (pluginId: string): Promise<void> => {
     setPendingPluginId(pluginId);
     try {
-      const plugin: JsPlugin | undefined = jsPlugins.find((p: JsPlugin) => p.id === pluginId);
+      const plugin: JsPlugin | undefined = jsPlugins.find(
+        (p: JsPlugin) => p.id === pluginId,
+      );
       if (!plugin) {
         throw new Error('Plugin not found');
       }
 
       // 실제 네임스페이스를 다시 추출
-      const pluginNamespace: string = extractPluginId(plugin.content, plugin.name);
+      const pluginNamespace: string = extractPluginId(
+        plugin.content,
+        plugin.name,
+      );
 
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
       const result: JsRemoveResult = await window.api.js.remove(pluginId);
@@ -516,7 +549,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     }
   };
 
-  const _handleResetCounters = async (event: React.MouseEvent): Promise<void> => {
+  const _handleResetCounters = async (
+    event: React.MouseEvent,
+  ): Promise<void> => {
     event.stopPropagation();
     try {
       const snapshot: KeyCounters = await window.api.keys.resetCounters();
@@ -911,7 +946,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
           onRemove={handlePluginRemove}
           plugins={jsPlugins}
           isAdding={isAddingPlugins}
-          pendingPluginAction={pendingPluginId ? { id: pendingPluginId, op: 'toggle' } : null}
+          pendingPluginAction={
+            pendingPluginId ? { id: pendingPluginId, op: 'toggle' } : null
+          }
           t={t}
         />
       )}

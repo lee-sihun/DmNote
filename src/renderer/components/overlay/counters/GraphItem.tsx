@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/statItems';
 import GraphPanel from '@components/graph/GraphPanel';
@@ -57,7 +57,10 @@ function createInitialHistory(speed: number | undefined): number[] {
   return new Array(targetSize).fill(0);
 }
 
-export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGraphItemProps) {
+export default function OverlayGraphItem({
+  position,
+  index = 0,
+}: OverlayGraphItemProps) {
   const {
     statType = 'kps',
     graphType = 'line',
@@ -82,12 +85,13 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
   } = position ?? ({} as Partial<GraphPosition>);
 
   const statSignal = getStatValueSignal(statType as StatItemType);
-  const imageSrc = resolveImageSource(inactiveImage) ||
-      resolveImageSource(activeImage) ||
-      null;
+  const imageSrc =
+    resolveImageSource(inactiveImage) ||
+    resolveImageSource(activeImage) ||
+    null;
   const resolvedImageFit = idleImageFit || imageFit || 'cover';
-  const [uid] = useState(() =>
-    `graph-overlay-${Math.random().toString(36).slice(2, 11)}`,
+  const [uid] = useState(
+    () => `graph-overlay-${Math.random().toString(36).slice(2, 11)}`,
   );
   const graphSpeedRef = useRef<number>(normalizeGraphSpeed(graphSpeed));
   const historyBufferRef = useRef<number[]>(createInitialHistory(graphSpeed));
@@ -184,4 +188,4 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
       interactive={false}
     />
   );
-});
+}

@@ -6,7 +6,9 @@ import { useTranslation } from '@contexts/useTranslation';
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string) => Promise<{ error?: string } | void> | { error?: string } | void;
+  onSubmit: (
+    name: string,
+  ) => Promise<{ error?: string } | void> | { error?: string } | void;
   existingNames?: string[];
 };
 

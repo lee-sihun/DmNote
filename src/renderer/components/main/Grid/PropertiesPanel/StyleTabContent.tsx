@@ -1,9 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useState,
-  useRef,
-  useEffect,
-} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { StyleTabContentProps } from './types';
 import type { ImageFit, KeyPosition } from '@src/types/keys';
 import {
@@ -179,7 +175,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   ]);
 
   // interactiveRefs
-  const colorPickerInteractiveRefs = [bgColorBtnRef, borderColorBtnRef, fontColorBtnRef];
+  const colorPickerInteractiveRefs = [
+    bgColorBtnRef,
+    borderColorBtnRef,
+    fontColorBtnRef,
+  ];
 
   // 실제 사용할 이미지 버튼 ref (외부에서 제공되면 외부 것 사용)
   const _actualImageButtonRef = imageButtonRef || internalImageButtonRef;
@@ -199,130 +199,143 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     }
   };
 
-  const resolveColorProperty = (target: StyleColorTarget): StyleColorProperty => {
-      if (colorState !== 'active') return target;
-      switch (target) {
-        case 'backgroundColor':
-          return 'activeBackgroundColor';
-        case 'borderColor':
-          return 'activeBorderColor';
-        case 'fontColor':
-          return 'activeFontColor';
-        default:
-          return target;
-      }
-    };
+  const resolveColorProperty = (
+    target: StyleColorTarget,
+  ): StyleColorProperty => {
+    if (colorState !== 'active') return target;
+    switch (target) {
+      case 'backgroundColor':
+        return 'activeBackgroundColor';
+      case 'borderColor':
+        return 'activeBorderColor';
+      case 'fontColor':
+        return 'activeFontColor';
+      default:
+        return target;
+    }
+  };
 
-  const activeColorPropertyFor = (target: StyleColorTarget): ActiveStyleColorProperty => {
-      switch (target) {
-        case 'backgroundColor':
-          return 'activeBackgroundColor';
-        case 'borderColor':
-          return 'activeBorderColor';
-        case 'fontColor':
-          return 'activeFontColor';
-      }
-    };
+  const activeColorPropertyFor = (
+    target: StyleColorTarget,
+  ): ActiveStyleColorProperty => {
+    switch (target) {
+      case 'backgroundColor':
+        return 'activeBackgroundColor';
+      case 'borderColor':
+        return 'activeBorderColor';
+      case 'fontColor':
+        return 'activeFontColor';
+    }
+  };
 
   const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
   // 현재 피커 색상값 가져오기
   const colorValueFor = (target: StyleColorTarget): string => {
-      return localColors[resolveColorProperty(target)];
-    };
+    return localColors[resolveColorProperty(target)];
+  };
 
   // 드래그 중 로컬 상태만 업데이트
   const handleColorChange = (target: StyleColorTarget, color: string) => {
-      const prop = resolveColorProperty(target);
-      setLocalColors((prev) => ({ ...prev, [prop]: color }));
-    };
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  };
 
   // 드래그 완료 시 부모에게 전달
-  const handleColorChangeComplete = (target: StyleColorTarget, color: string) => {
-      const prop = resolveColorProperty(target);
-      setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  const handleColorChangeComplete = (
+    target: StyleColorTarget,
+    color: string,
+  ) => {
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
 
-      const updates: Partial<KeyPosition> = {
-        [prop]: color,
-      } as Partial<KeyPosition>;
+    const updates: Partial<KeyPosition> = {
+      [prop]: color,
+    } as Partial<KeyPosition>;
 
-      // "idle" 상태에서만 변경했을 때 active 값이 비어 있으면,
-      // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
-      if (colorState !== 'active') {
-        const activeProp = activeColorPropertyFor(target);
-        const currentActive = keyPosition[activeProp];
-        if (!isNonEmptyString(currentActive)) {
-          updates[activeProp] = localColors[activeProp];
-        }
+    // "idle" 상태에서만 변경했을 때 active 값이 비어 있으면,
+    // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
+    if (colorState !== 'active') {
+      const activeProp = activeColorPropertyFor(target);
+      const currentActive = keyPosition[activeProp];
+      if (!isNonEmptyString(currentActive)) {
+        updates[activeProp] = localColors[activeProp];
       }
+    }
 
-      onKeyUpdate({ index: keyIndex, ...updates });
-    };
+    onKeyUpdate({ index: keyIndex, ...updates });
+  };
 
   // 위치 변경 핸들러
   const handlePositionXChange = (value: number) => {
-      if (onLocalDxChange) {
-        onLocalDxChange(value);
-      }
-      onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
-    };
+    if (onLocalDxChange) {
+      onLocalDxChange(value);
+    }
+    onPositionChange(keyIndex, value, localDy ?? keyPosition.dy);
+  };
 
   const handlePositionYChange = (value: number) => {
-      if (onLocalDyChange) {
-        onLocalDyChange(value);
-      }
-      onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
-    };
+    if (onLocalDyChange) {
+      onLocalDyChange(value);
+    }
+    onPositionChange(keyIndex, localDx ?? keyPosition.dx, value);
+  };
 
   // 크기 변경 핸들러
   const handleWidthChange = (value: number) => {
-      if (onLocalWidthChange) {
-        onLocalWidthChange(value);
-        onKeyPreview?.(keyIndex, { width: value });
-      } else {
-        onKeyUpdate({ index: keyIndex, width: value });
-      }
-    };
+    if (onLocalWidthChange) {
+      onLocalWidthChange(value);
+      onKeyPreview?.(keyIndex, { width: value });
+    } else {
+      onKeyUpdate({ index: keyIndex, width: value });
+    }
+  };
 
   const handleHeightChange = (value: number) => {
-      if (onLocalHeightChange) {
-        onLocalHeightChange(value);
-        onKeyPreview?.(keyIndex, { height: value });
-      } else {
-        onKeyUpdate({ index: keyIndex, height: value });
-      }
-    };
+    if (onLocalHeightChange) {
+      onLocalHeightChange(value);
+      onKeyPreview?.(keyIndex, { height: value });
+    } else {
+      onKeyUpdate({ index: keyIndex, height: value });
+    }
+  };
 
   // 스타일 변경 핸들러
-  const _handleStyleChange = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      onKeyPreview?.(keyIndex, { [property]: value });
-    };
+  const _handleStyleChange = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    onKeyPreview?.(keyIndex, { [property]: value });
+  };
 
-  const handleStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      onKeyUpdate({ index: keyIndex, [property]: value });
-    };
+  const handleStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    onKeyUpdate({ index: keyIndex, [property]: value });
+  };
 
   // 이미지 변경 핸들러
   const handleIdleImageChange = (imageUrl: string) => {
-      onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
-      onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
-    };
+    onKeyPreview?.(keyIndex, { inactiveImage: imageUrl });
+    onKeyUpdate({ index: keyIndex, inactiveImage: imageUrl });
+  };
 
   const handleActiveImageChange = (imageUrl: string) => {
-      onKeyPreview?.(keyIndex, { activeImage: imageUrl });
-      onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
-    };
+    onKeyPreview?.(keyIndex, { activeImage: imageUrl });
+    onKeyUpdate({ index: keyIndex, activeImage: imageUrl });
+  };
 
   const handleIdleTransparentChange = (checked: boolean) => {
-      onKeyPreview?.(keyIndex, { idleTransparent: checked });
-      onKeyUpdate({ index: keyIndex, idleTransparent: checked });
-    };
+    onKeyPreview?.(keyIndex, { idleTransparent: checked });
+    onKeyUpdate({ index: keyIndex, idleTransparent: checked });
+  };
 
   const handleActiveTransparentChange = (checked: boolean) => {
-      onKeyPreview?.(keyIndex, { activeTransparent: checked });
-      onKeyUpdate({ index: keyIndex, activeTransparent: checked });
-    };
+    onKeyPreview?.(keyIndex, { activeTransparent: checked });
+    onKeyUpdate({ index: keyIndex, activeTransparent: checked });
+  };
 
   const handleIdleImageReset = () => {
     onKeyPreview?.(keyIndex, { inactiveImage: '' });
@@ -335,19 +348,19 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   };
 
   const handleIdleImageFitChange = (fit: ImageFit) => {
-      onKeyPreview?.(keyIndex, { idleImageFit: fit });
-      onKeyUpdate({ index: keyIndex, idleImageFit: fit });
-    };
+    onKeyPreview?.(keyIndex, { idleImageFit: fit });
+    onKeyUpdate({ index: keyIndex, idleImageFit: fit });
+  };
 
   const handleActiveImageFitChange = (fit: ImageFit) => {
-      onKeyPreview?.(keyIndex, { activeImageFit: fit });
-      onKeyUpdate({ index: keyIndex, activeImageFit: fit });
-    };
+    onKeyPreview?.(keyIndex, { activeImageFit: fit });
+    onKeyUpdate({ index: keyIndex, activeImageFit: fit });
+  };
 
   // 표시 텍스트 핸들러
   const handleDisplayTextChange = (value: string) => {
-      onKeyPreview?.(keyIndex, { displayText: value });
-    };
+    onKeyPreview?.(keyIndex, { displayText: value });
+  };
 
   const handleDisplayTextBlur = () => {
     onKeyUpdate({
@@ -358,8 +371,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
   // 클래스명 핸들러
   const handleClassNameChange = (value: string) => {
-      onKeyPreview?.(keyIndex, { className: value });
-    };
+    onKeyPreview?.(keyIndex, { className: value });
+  };
 
   const handleClassNameBlur = () => {
     onKeyUpdate({ index: keyIndex, className: keyPosition.className || '' });
@@ -418,9 +431,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       {/* 위치 */}
       <PropertyRow label={t('propertiesPanel.position') || '위치'}>
         <NumberInput
-          value={
-            isIndividualMode ? keyPosition.dx : (localDx ?? keyPosition.dx)
-          }
+          value={isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx}
           onChange={handlePositionXChange}
           prefix="X"
           min={-9999}
@@ -429,9 +440,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           decimalScale={1}
         />
         <NumberInput
-          value={
-            isIndividualMode ? keyPosition.dy : (localDy ?? keyPosition.dy)
-          }
+          value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
           onChange={handlePositionYChange}
           prefix="Y"
           min={-9999}
@@ -446,8 +455,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         <NumberInput
           value={
             isIndividualMode
-              ? (keyPosition.width ?? 60)
-              : (localWidth ?? keyPosition.width ?? 60)
+              ? keyPosition.width ?? 60
+              : localWidth ?? keyPosition.width ?? 60
           }
           onChange={handleWidthChange}
           onBlur={onSizeBlur}
@@ -460,8 +469,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         <NumberInput
           value={
             isIndividualMode
-              ? (keyPosition.height ?? 60)
-              : (localHeight ?? keyPosition.height ?? 60)
+              ? keyPosition.height ?? 60
+              : localHeight ?? keyPosition.height ?? 60
           }
           onChange={handleHeightChange}
           onBlur={onSizeBlur}
@@ -750,8 +759,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             pickerFor === 'backgroundColor'
               ? bgColorBtnRef
               : pickerFor === 'borderColor'
-                ? borderColorBtnRef
-                : fontColorBtnRef
+              ? borderColorBtnRef
+              : fontColorBtnRef
           }
           panelElement={panelElement}
           color={colorValueFor(pickerFor as StyleColorTarget)}

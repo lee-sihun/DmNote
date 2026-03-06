@@ -1,9 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { CounterTabContentProps } from './types';
 import type {
   KeyCounterAnimationSettings,
@@ -82,7 +78,9 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     onKeyUpdate({ index: keyIndex, counter: newSettings });
   };
 
-  const handleAnimationUpdate = (nextAnimation: KeyCounterAnimationSettings) => {
+  const handleAnimationUpdate = (
+    nextAnimation: KeyCounterAnimationSettings,
+  ) => {
     handleCounterUpdate({ animation: nextAnimation });
   };
 
@@ -97,11 +95,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     return '#ffffff';
   };
 
-  const activeColorFor = (target: Exclude<PickerTarget, null>, state: ColorState): string => {
+  const activeColorFor = (
+    target: Exclude<PickerTarget, null>,
+    state: ColorState,
+  ): string => {
     if (target === 'fill') {
-      return state === 'active'
-        ? localColors.fillActive
-        : localColors.fillIdle;
+      return state === 'active' ? localColors.fillActive : localColors.fillIdle;
     }
     return state === 'active'
       ? localColors.strokeActive
@@ -117,50 +116,50 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           ? 'fillActive'
           : 'fillIdle'
         : colorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
+        ? 'strokeActive'
+        : 'strokeIdle';
 
     setLocalColors((prev) => ({ ...prev, [key]: color }));
   };
 
   // 드래그 완료 시 부모에게 전달
   const handleColorChangeComplete = (color: string) => {
-      if (!pickerFor) return;
+    if (!pickerFor) return;
 
-      const key =
-        pickerFor === 'fill'
-          ? colorState === 'active'
-            ? 'fillActive'
-            : 'fillIdle'
-          : colorState === 'active'
-            ? 'strokeActive'
-            : 'strokeIdle';
+    const key =
+      pickerFor === 'fill'
+        ? colorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle'
+        : colorState === 'active'
+        ? 'strokeActive'
+        : 'strokeIdle';
 
-      setLocalColors((prev) => ({ ...prev, [key]: color }));
+    setLocalColors((prev) => ({ ...prev, [key]: color }));
 
-      if (pickerFor === 'fill') {
-        if (colorState === 'active') {
-          handleCounterUpdate({
-            fill: { ...counterSettings.fill, active: color },
-          });
-        } else {
-          handleCounterUpdate({
-            fill: { ...counterSettings.fill, idle: color },
-          });
-        }
-        return;
-      }
-
+    if (pickerFor === 'fill') {
       if (colorState === 'active') {
         handleCounterUpdate({
-          stroke: { ...counterSettings.stroke, active: color },
+          fill: { ...counterSettings.fill, active: color },
         });
       } else {
         handleCounterUpdate({
-          stroke: { ...counterSettings.stroke, idle: color },
+          fill: { ...counterSettings.fill, idle: color },
         });
       }
-    };
+      return;
+    }
+
+    if (colorState === 'active') {
+      handleCounterUpdate({
+        stroke: { ...counterSettings.stroke, active: color },
+      });
+    } else {
+      handleCounterUpdate({
+        stroke: { ...counterSettings.stroke, idle: color },
+      });
+    }
+  };
 
   return (
     <>
@@ -389,7 +388,9 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           solidOnly={true}
           interactiveRefs={colorPickerInteractiveRefs}
           stateMode={colorState}
-          onStateModeChange={(mode: string) => setColorState(mode as ColorState)}
+          onStateModeChange={(mode: string) =>
+            setColorState(mode as ColorState)
+          }
         />
       )}
 

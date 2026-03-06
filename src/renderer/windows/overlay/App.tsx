@@ -1,11 +1,4 @@
-import React, {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useState,
-  useRef,
-} from 'react';
+import React, { Suspense, lazy, useEffect, useState, useRef } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -99,14 +92,21 @@ interface OverlayGraphItemProps {
 }
 
 const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
-const OverlayStatItem = StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
-const OverlayStatCounterLayer = StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
-const OverlayGraphItem = GraphItem as React.ComponentType<OverlayGraphItemProps>;
+const OverlayStatItem =
+  StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
+const OverlayStatCounterLayer =
+  StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
+const OverlayGraphItem =
+  GraphItem as React.ComponentType<OverlayGraphItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
   const mod = await import('@components/overlay/rendering/WebGLTracksOGL.jsx');
-  return { default: mod.WebGLTracksOGL as unknown as React.ComponentType<Record<string, unknown>> };
+  return {
+    default: mod.WebGLTracksOGL as unknown as React.ComponentType<
+      Record<string, unknown>
+    >,
+  };
 });
 
 type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
@@ -217,9 +217,9 @@ export default function App() {
   const globalNoteSettings = useSettingsStore((state) => state.noteSettings);
   const tabNoteOverrides = useSettingsStore((state) => state.tabNoteOverrides);
   const noteSettings = mergeNoteSettings(
-        globalNoteSettings,
-        tabNoteOverrides?.[selectedKeyType],
-      );
+    globalNoteSettings,
+    tabNoteOverrides?.[selectedKeyType],
+  );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(
@@ -247,21 +247,22 @@ export default function App() {
 
   // 탭 목록 (기본 탭 + 커스텀 탭)
   const BUILTIN_TABS = ['4key', '5key', '6key', '8key'].map((id) => {
-        const num = id.replace('key', '');
-        return { id, name: t(`mode.button${num}`) };
+    const num = id.replace('key', '');
+    return { id, name: t(`mode.button${num}`) };
+  });
+
+  const handleOverlayMouseDownCapture = (
+    e: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    // 좌클릭은 창 전체 드래그 유지
+    if (e.button !== 0) return;
+
+    getCurrentWindow()
+      .startDragging()
+      .catch((error) => {
+        console.error('Failed to start overlay dragging', error);
       });
-
-  const handleOverlayMouseDownCapture = 
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      // 좌클릭은 창 전체 드래그 유지
-      if (e.button !== 0) return;
-
-      getCurrentWindow()
-        .startDragging()
-        .catch((error) => {
-          console.error('Failed to start overlay dragging', error);
-        });
-    };
+  };
 
   const closeOverlayWindow = async () => {
     try {
@@ -336,91 +337,90 @@ export default function App() {
     }
   };
 
-  const openOverlayContextMenuAtImpl = useRef<(x: number, y: number) => Promise<void>>(async () => {});
+  const openOverlayContextMenuAtImpl = useRef<
+    (x: number, y: number) => Promise<void>
+  >(async () => {});
   openOverlayContextMenuAtImpl.current = async (x: number, y: number) => {
-      const canOpenMainSettings = await resolveCanOpenMainSettings();
-      const allTabs = [
-        ...BUILTIN_TABS,
-        ...customTabs.map((tab) => ({ id: tab.id, name: tab.name })),
-      ];
+    const canOpenMainSettings = await resolveCanOpenMainSettings();
+    const allTabs = [
+      ...BUILTIN_TABS,
+      ...customTabs.map((tab) => ({ id: tab.id, name: tab.name })),
+    ];
 
-      let menu: Menu | null = null;
-      try {
-        menu = await Menu.new({
-          items: [
-            {
-              id: 'toggleAlwaysOnTop',
-              text: t('settings.alwaysOnTop'),
-              checked: alwaysOnTop,
+    let menu: Menu | null = null;
+    try {
+      menu = await Menu.new({
+        items: [
+          {
+            id: 'toggleAlwaysOnTop',
+            text: t('settings.alwaysOnTop'),
+            checked: alwaysOnTop,
+            action: () => {
+              void toggleAlwaysOnTop();
+            },
+          },
+          { item: 'Separator' },
+          {
+            id: 'selectTab',
+            text: t('contextMenu.selectTab'),
+            items: allTabs.map((tab) => ({
+              id: `selectTab-${tab.id}`,
+              text: tab.name,
+              checked: tab.id === selectedKeyType,
               action: () => {
-                void toggleAlwaysOnTop();
+                setSelectedKeyType(tab.id);
               },
+            })),
+          },
+          {
+            id: 'closeOverlay',
+            text: t('tooltip.overlayClose'),
+            action: () => {
+              void closeOverlayWindow();
             },
-            { item: 'Separator' },
-            {
-              id: 'selectTab',
-              text: t('contextMenu.selectTab'),
-              items: allTabs.map((tab) => ({
-                id: `selectTab-${tab.id}`,
-                text: tab.name,
-                checked: tab.id === selectedKeyType,
-                action: () => {
-                  setSelectedKeyType(tab.id);
-                },
-              })),
+          },
+          {
+            id: 'snapToEdge',
+            text: t('contextMenu.snapToEdge'),
+            action: () => {
+              void snapToNearestEdge();
             },
-            {
-              id: 'closeOverlay',
-              text: t('tooltip.overlayClose'),
-              action: () => {
-                void closeOverlayWindow();
-              },
+          },
+          { item: 'Separator' },
+          {
+            id: 'openSettingsWindow',
+            text: t('tooltip.settings'),
+            enabled: canOpenMainSettings,
+            action: () => {
+              void openSettingsWindow();
             },
-            {
-              id: 'snapToEdge',
-              text: t('contextMenu.snapToEdge'),
-              action: () => {
-                void snapToNearestEdge();
-              },
+          },
+          { item: 'Separator' },
+          {
+            id: 'quitApplication',
+            text: t('contextMenu.quitApp'),
+            action: () => {
+              void quitApplication();
             },
-            { item: 'Separator' },
-            {
-              id: 'openSettingsWindow',
-              text: t('tooltip.settings'),
-              enabled: canOpenMainSettings,
-              action: () => {
-                void openSettingsWindow();
-              },
-            },
-            { item: 'Separator' },
-            {
-              id: 'quitApplication',
-              text: t('contextMenu.quitApp'),
-              action: () => {
-                void quitApplication();
-              },
-            },
-          ],
-        });
+          },
+        ],
+      });
 
-        await menu.popup(
-          new LogicalPosition(Math.round(x), Math.round(y)),
-          getCurrentWindow(),
-        );
-      } catch (error) {
-        console.error('Failed to open native overlay context menu', error);
-      } finally {
-        if (menu) {
-          await menu.close().catch(() => {});
-        }
+      await menu.popup(
+        new LogicalPosition(Math.round(x), Math.round(y)),
+        getCurrentWindow(),
+      );
+    } catch (error) {
+      console.error('Failed to open native overlay context menu', error);
+    } finally {
+      if (menu) {
+        await menu.close().catch(() => {});
       }
-    };
-  const openOverlayContextMenuAt = useCallback(
-    async (x: number, y: number) => {
-      await openOverlayContextMenuAtImpl.current(x, y);
-    },
-    [],
-  );
+    }
+  };
+  const openOverlayContextMenuAt = async (x: number, y: number) => {
+    await openOverlayContextMenuAtImpl.current(x, y);
+  };
 
   useEffect(() => {
     const handleWindowContextMenu = (event: MouseEvent) => {
@@ -433,7 +433,7 @@ export default function App() {
     return () => {
       window.removeEventListener('contextmenu', handleWindowContextMenu, true);
     };
-  }, [openOverlayContextMenuAt]);
+  }, []);
 
   const {
     notesRef,
@@ -463,33 +463,30 @@ export default function App() {
   const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
 
   // 키 딜레이 적용된 신호 업데이트
-  const updateKeySignalWithDelay = useCallback(
-    (key: string, isDown: boolean) => {
-      const delayMs = keyDisplayDelayMsRef.current;
+  const updateKeySignalWithDelay = (key: string, isDown: boolean) => {
+    const delayMs = keyDisplayDelayMsRef.current;
 
-      let timerEntry = keyDelayTimersRef.current.get(key);
-      if (!timerEntry) {
-        timerEntry = { timers: new Set() };
-        keyDelayTimersRef.current.set(key, timerEntry);
-      }
+    let timerEntry = keyDelayTimersRef.current.get(key);
+    if (!timerEntry) {
+      timerEntry = { timers: new Set() };
+      keyDelayTimersRef.current.set(key, timerEntry);
+    }
 
-      if (delayMs <= 0) {
-        // 딜레이가 0일 경우 즉시 업데이트
-        // 기존 타이머 모두 취소
-        timerEntry.timers.forEach((timer) => clearTimeout(timer));
-        timerEntry.timers.clear();
-        setKeyActiveSignal(key, isDown);
-        return;
-      }
+    if (delayMs <= 0) {
+      // 딜레이가 0일 경우 즉시 업데이트
+      // 기존 타이머 모두 취소
+      timerEntry.timers.forEach((timer) => clearTimeout(timer));
+      timerEntry.timers.clear();
+      setKeyActiveSignal(key, isDown);
+      return;
+    }
 
-      const timer = setTimeout(() => {
-        setKeyActiveSignal(key, isDown);
-        timerEntry?.timers.delete(timer);
-      }, delayMs);
-      timerEntry.timers.add(timer);
-    },
-    [],
-  );
+    const timer = setTimeout(() => {
+      setKeyActiveSignal(key, isDown);
+      timerEntry?.timers.delete(timer);
+    }, delayMs);
+    timerEntry.timers.add(timer);
+  };
 
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
   const [_layoutVersion, setLayoutVersion] = useState(0);
@@ -511,29 +508,32 @@ export default function App() {
     });
 
     // 버스를 통해 키 이벤트 수신
-    const unsubscribe = import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
-      return keyEventBus.subscribe(({ key, state }) => {
-        const isDown = state === 'DOWN';
-        // 키 UI 업데이트 (딜레이 적용)
-        updateKeySignalWithDelay(key, isDown);
-        // 노트 이펙트는 즉시 처리 (딜레이 없음)
-        if (noteEffect) {
-          // 개별 키의 noteEffectEnabled 확인
-          const currentKeys = keyMappings[selectedKeyType] ?? [];
-          const currentPositions = positions[selectedKeyType] ?? [];
-          const keyIndex = currentKeys.indexOf(key);
-          const keyPosition = currentPositions[keyIndex];
-          const keyNoteEffectEnabled = keyPosition?.noteEffectEnabled !== false;
+    const unsubscribe = import('@utils/core/keyEventBus').then(
+      ({ keyEventBus }) => {
+        return keyEventBus.subscribe(({ key, state }) => {
+          const isDown = state === 'DOWN';
+          // 키 UI 업데이트 (딜레이 적용)
+          updateKeySignalWithDelay(key, isDown);
+          // 노트 이펙트는 즉시 처리 (딜레이 없음)
+          if (noteEffect) {
+            // 개별 키의 noteEffectEnabled 확인
+            const currentKeys = keyMappings[selectedKeyType] ?? [];
+            const currentPositions = positions[selectedKeyType] ?? [];
+            const keyIndex = currentKeys.indexOf(key);
+            const keyPosition = currentPositions[keyIndex];
+            const keyNoteEffectEnabled =
+              keyPosition?.noteEffectEnabled !== false;
 
-          if (keyNoteEffectEnabled) {
-            requestAnimationFrame(() => {
-              if (isDown) handleKeyDown(key);
-              else handleKeyUp(key);
-            });
+            if (keyNoteEffectEnabled) {
+              requestAnimationFrame(() => {
+                if (isDown) handleKeyDown(key);
+                else handleKeyUp(key);
+              });
+            }
           }
-        }
-      });
-    });
+        });
+      },
+    );
 
     const keyDelayTimers = keyDelayTimersRef.current;
 
@@ -554,15 +554,7 @@ export default function App() {
       // 안전하게 모든 키 신호 초기화(선택적)
       resetAllKeySignals();
     };
-  }, [
-    handleKeyDown,
-    handleKeyUp,
-    noteEffect,
-    updateKeySignalWithDelay,
-    keyMappings,
-    positions,
-    selectedKeyType,
-  ]);
+  });
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
 
@@ -722,50 +714,48 @@ export default function App() {
   })();
 
   const webglTracks = currentKeys
-        .map((key, index) => {
-          const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
-          if (originalPosition.hidden) return null;
-          const position = displayPositions[index] ?? originalPosition;
-          // noteAutoYCorrection이 false면 원래 위치 사용, 아니면 topMostY로 보정
-          const useAutoCorrection = position.noteAutoYCorrection !== false;
-          const trackStartY = useAutoCorrection ? topMostY : position.dy;
-          const keyWidth = position.width;
-          const desiredNoteWidth =
-            typeof position.noteWidth === 'number' &&
-            Number.isFinite(position.noteWidth)
-              ? Math.max(1, Math.round(position.noteWidth))
-              : keyWidth;
-          const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
+    .map((key, index) => {
+      const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
+      if (originalPosition.hidden) return null;
+      const position = displayPositions[index] ?? originalPosition;
+      // noteAutoYCorrection이 false면 원래 위치 사용, 아니면 topMostY로 보정
+      const useAutoCorrection = position.noteAutoYCorrection !== false;
+      const trackStartY = useAutoCorrection ? topMostY : position.dy;
+      const keyWidth = position.width;
+      const desiredNoteWidth =
+        typeof position.noteWidth === 'number' &&
+        Number.isFinite(position.noteWidth)
+          ? Math.max(1, Math.round(position.noteWidth))
+          : keyWidth;
+      const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
 
-          return {
-            trackKey: key,
-            trackIndex: position.zIndex ?? index,
-            position: {
-              ...position,
-              dx: position.dx + noteOffsetX,
-              dy: trackStartY,
-            },
-            width: desiredNoteWidth,
-            height: trackHeight,
-            noteColor: position.noteColor,
-            noteOpacity: position.noteOpacity,
-            noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
-            noteOpacityBottom:
-              position.noteOpacityBottom ?? position.noteOpacity,
-            noteGlowEnabled: position.noteGlowEnabled ?? false,
-            noteGlowSize: position.noteGlowSize ?? 20,
-            noteGlowOpacity: position.noteGlowOpacity ?? 70,
-            noteGlowOpacityTop:
-              position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
-            noteGlowOpacityBottom:
-              position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
-            noteGlowColor: position.noteGlowColor ?? position.noteColor,
-            flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
-            borderRadius:
-              position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
-          };
-        })
-        .filter(Boolean);
+      return {
+        trackKey: key,
+        trackIndex: position.zIndex ?? index,
+        position: {
+          ...position,
+          dx: position.dx + noteOffsetX,
+          dy: trackStartY,
+        },
+        width: desiredNoteWidth,
+        height: trackHeight,
+        noteColor: position.noteColor,
+        noteOpacity: position.noteOpacity,
+        noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
+        noteOpacityBottom: position.noteOpacityBottom ?? position.noteOpacity,
+        noteGlowEnabled: position.noteGlowEnabled ?? false,
+        noteGlowSize: position.noteGlowSize ?? 20,
+        noteGlowOpacity: position.noteGlowOpacity ?? 70,
+        noteGlowOpacityTop:
+          position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
+        noteGlowOpacityBottom:
+          position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
+        noteGlowColor: position.noteGlowColor ?? position.noteColor,
+        flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
+        borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
+      };
+    })
+    .filter(Boolean);
 
   useEffect(() => {
     updateTrackLayouts(webglTracks);
@@ -906,10 +896,10 @@ export default function App() {
           pos.statType === 'kpsAvg'
             ? 'AVG'
             : pos.statType === 'kpsMax'
-              ? 'MAX'
-              : pos.statType === 'total'
-                ? 'Total'
-                : 'KPS';
+            ? 'MAX'
+            : pos.statType === 'total'
+            ? 'Total'
+            : 'KPS';
         const label = (pos.displayText || '').trim() || defaultLabel;
         const position = { ...pos, zIndex: pos.zIndex ?? index };
 

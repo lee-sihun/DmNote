@@ -147,11 +147,11 @@ export function setupPluginDropdownInteractions(
         '.plugin-dropdown',
       ) as DropdownContainerElement | null;
       const menu = dropdown
-        ? ((dropdown.querySelector(
+        ? (dropdown.querySelector(
             '[data-dropdown-menu]',
           ) as DropdownMenuElement | null) ??
           dropdown.__pluginDropdownMenuRef ??
-          null)
+          null
         : null;
 
       if (dropdown && menu) {

@@ -4,7 +4,10 @@ import { useLenis } from '@hooks/useLenis';
 import Modal from '@components/main/Modal/Modal';
 import Checkbox from '@components/main/common/Checkbox';
 import TrashIcon from '@assets/svgs/trash.svg';
-import { getScrollShadowState, ScrollShadowState } from '@utils/grid/scrollShadow';
+import {
+  getScrollShadowState,
+  ScrollShadowState,
+} from '@utils/grid/scrollShadow';
 
 interface Plugin {
   id: string;
@@ -46,12 +49,15 @@ export function PluginManagerModal({
     hasTopShadow: false,
     hasBottomShadow: false,
   });
-  const [skipShadowTransition, setSkipShadowTransition] = React.useState<boolean>(true);
-  const [containerHeight, setContainerHeight] = React.useState<number | null>(null);
+  const [skipShadowTransition, setSkipShadowTransition] =
+    React.useState<boolean>(true);
+  const [containerHeight, setContainerHeight] = React.useState<number | null>(
+    null,
+  );
   const isFirstRender = React.useRef<boolean>(true);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -60,7 +66,7 @@ export function PluginManagerModal({
         ? prev
         : nextState,
     );
-  }, []);
+  };
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
@@ -107,7 +113,7 @@ export function PluginManagerModal({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [isOpen, plugins.length, wrapperElement, updateScrollState]);
+  }, [isOpen, plugins.length, wrapperElement]);
 
   if (!isOpen) return null;
 
@@ -115,7 +121,9 @@ export function PluginManagerModal({
     <Modal onClick={onClose}>
       <div
         className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
-        onClick={(event: React.MouseEvent<HTMLDivElement>) => event.stopPropagation()}
+        onClick={(event: React.MouseEvent<HTMLDivElement>) =>
+          event.stopPropagation()
+        }
       >
         {/* 스크롤 영역 */}
         <div className="relative">

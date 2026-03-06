@@ -123,7 +123,9 @@ export const bezierToCssString = (
   bezier: CounterAnimationBezier | number[],
 ): string => {
   const [x1, y1, x2, y2] = clampCounterBezier(bezier);
-  return `cubic-bezier(${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(2)}, ${y2.toFixed(2)})`;
+  return `cubic-bezier(${x1.toFixed(2)}, ${y1.toFixed(2)}, ${x2.toFixed(
+    2,
+  )}, ${y2.toFixed(2)})`;
 };
 
 export const findBezierPresetId = (

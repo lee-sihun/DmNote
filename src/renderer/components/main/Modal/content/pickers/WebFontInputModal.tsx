@@ -138,7 +138,9 @@ export default function WebFontInputModal({
     t('webFontInput.fixedHint') || '@font-face CSS를 추가할 수 있습니다.';
   const submitButtonLabel = t('webFontInput.submit') || '저장';
 
-  const placeholderText = `${t('webFontInput.cssLabel') || '@font-face CSS'}\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`;
+  const placeholderText = `${
+    t('webFontInput.cssLabel') || '@font-face CSS'
+  }\n\n@font-face {\n  font-family: 'FontName';\n  src: url('https://...') format('woff2');\n  font-weight: 400;\n  font-style: normal;\n}`;
 
   const resetEditorContent = (nextValue = '') => {
     setCssInput(nextValue);

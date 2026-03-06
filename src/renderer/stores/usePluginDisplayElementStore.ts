@@ -86,10 +86,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
         // 메인 윈도우에서만 오버레이로 동기화
         // state만 변경된 경우 동기화 스킵 (오버레이에서 자체 관리)
         // skipSync 옵션이 true인 경우 동기화 스킵 (리사이즈 중 등)
-        if (
-          window.__dmn_window_type === 'main' &&
-          !options?.skipSync
-        ) {
+        if (window.__dmn_window_type === 'main' && !options?.skipSync) {
           const updateKeys = Object.keys(updates);
           const isStateOnlyUpdate =
             updateKeys.length === 1 && updateKeys[0] === 'state';
@@ -162,10 +159,7 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
       set(() => {
         // 메인 윈도우에서만 오버레이로 동기화
         // skipSync 옵션이 true인 경우 동기화 스킵 (드래그 중 등)
-        if (
-          window.__dmn_window_type === 'main' &&
-          !options?.skipSync
-        ) {
+        if (window.__dmn_window_type === 'main' && !options?.skipSync) {
           syncToOverlayThrottled(elements);
         }
         return { elements };

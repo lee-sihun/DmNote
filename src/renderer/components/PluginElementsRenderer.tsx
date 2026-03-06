@@ -2,7 +2,10 @@ import React, { useEffect } from 'react';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { PluginElement } from './PluginElement';
-import type { PluginDisplayElementInternal, ElementResizeAnchor } from '@src/types/api';
+import type {
+  PluginDisplayElementInternal,
+  ElementResizeAnchor,
+} from '@src/types/api';
 import { invokeExposedAction } from '@utils/displayElementActions';
 import {
   useGridSelectionStore,
@@ -177,7 +180,9 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
       resizeAnchor: string;
     }>('plugin:displayElement:updateAnchor', (data) => {
       if (data?.fullId && data?.resizeAnchor) {
-        updateElement(data.fullId, { resizeAnchor: data.resizeAnchor as ElementResizeAnchor });
+        updateElement(data.fullId, {
+          resizeAnchor: data.resizeAnchor as ElementResizeAnchor,
+        });
       }
     });
 

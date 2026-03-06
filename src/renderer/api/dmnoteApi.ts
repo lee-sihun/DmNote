@@ -1,11 +1,20 @@
 import { appApi, windowApi } from './modules/appApi';
 import { settingsApi } from './modules/settingsApi';
 import { keysApi } from './modules/keysApi';
-import { statItemsApi, graphItemsApi, layerGroupsApi } from './modules/itemsApi';
+import {
+  statItemsApi,
+  graphItemsApi,
+  layerGroupsApi,
+} from './modules/itemsApi';
 import { overlayApi } from './modules/overlayApi';
 import { cssApi } from './modules/cssApi';
 import { noteTabApi } from './modules/noteTabApi';
-import { fontApi, imageApi, soundApi, counterAnimationApi } from './modules/resourceApi';
+import {
+  fontApi,
+  imageApi,
+  soundApi,
+  counterAnimationApi,
+} from './modules/resourceApi';
 import { jsApi } from './modules/jsApi';
 import { presetsApi } from './modules/presetsApi';
 import { bridgeApi } from './modules/bridgeApi';

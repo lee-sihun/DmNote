@@ -44,9 +44,27 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
 };
 
 const RenameIcon: React.FC = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 20H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M12 20H21"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -239,7 +257,9 @@ interface SingleGraphPanelProps {
   handleRenameStart: () => void;
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
-  handleGraphUpdate: (data: Partial<GraphItemPosition> & { index: number }) => void;
+  handleGraphUpdate: (
+    data: Partial<GraphItemPosition> & { index: number },
+  ) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
@@ -287,8 +307,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   const resolvedGraphStatType =
     (singleGraphPosition.statType as StatItemType) || 'kps';
   const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
-  const graphTitle =
-    singleGraphPosition.layerName || graphDefaultTitle;
+  const graphTitle = singleGraphPosition.layerName || graphDefaultTitle;
 
   return (
     <div
@@ -506,14 +525,11 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             <SectionDivider />
 
             <PropertyRow
-              label={
-                t('propertiesPanel.backgroundColor') || 'Background Color'
-              }
+              label={t('propertiesPanel.backgroundColor') || 'Background Color'}
             >
               <ColorInput
                 value={
-                  singleGraphPosition.backgroundColor ||
-                  'rgba(17, 17, 20, 0.9)'
+                  singleGraphPosition.backgroundColor || 'rgba(17, 17, 20, 0.9)'
                 }
                 onChange={() => {}}
                 onChangeComplete={(value) =>
@@ -532,8 +548,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             >
               <ColorInput
                 value={
-                  singleGraphPosition.borderColor ||
-                  'rgba(255, 255, 255, 0.1)'
+                  singleGraphPosition.borderColor || 'rgba(255, 255, 255, 0.1)'
                 }
                 onChange={() => {}}
                 onChangeComplete={(value) =>
@@ -588,9 +603,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 ref={graphImageButtonRef}
                 type="button"
                 className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                  showGraphImagePicker
-                    ? 'border-[#459BF8]'
-                    : 'border-[#3A3943]'
+                  showGraphImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
                 } text-[#DBDEE8] text-style-4`}
                 onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
               >
@@ -620,9 +633,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   />
                 </div>
 
-                <PropertyRow
-                  label={t('propertiesPanel.className') || '클래스'}
-                >
+                <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
                   <TextInput
                     value={graphClassNameDraft}
                     onChange={setGraphClassNameDraft}
@@ -754,12 +765,19 @@ interface SingleKeyStatPanelProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
-  handleStatUpdate: (data: Partial<StatItemPosition> & { index: number }) => void;
-  handleStatPreview: (index: number, updates: Partial<StatItemPosition>) => void;
+  handleStatUpdate: (
+    data: Partial<StatItemPosition> & { index: number },
+  ) => void;
+  handleStatPreview: (
+    index: number,
+    updates: Partial<StatItemPosition>,
+  ) => void;
   isListening: boolean;
   handleKeyListen: () => void;
   localState: Partial<KeyPosition> & { dx?: number; dy?: number };
-  setLocalState: React.Dispatch<React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>>;
+  setLocalState: React.Dispatch<
+    React.SetStateAction<Partial<KeyPosition> & { dx?: number; dy?: number }>
+  >;
   handleSizeBlur: () => void;
   showImagePicker: boolean;
   setShowImagePicker: (value: boolean) => void;

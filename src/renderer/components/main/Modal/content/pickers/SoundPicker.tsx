@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/api';
 import PlusIcon from '@assets/svgs/plus2.svg';
@@ -36,7 +36,7 @@ export default function SoundPicker({
 
   const normalizedSelectedSound = (selectedSound || '').trim();
 
-  const loadSounds = useCallback(async () => {
+  const loadSounds = async () => {
     setIsLoading(true);
     setLoadError('');
     try {
@@ -48,17 +48,17 @@ export default function SoundPicker({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!open) return;
     void loadSounds();
-  }, [open, loadSounds]);
+  }, [open]);
 
   const filterOptions = [
-      { value: 'all', label: t('soundPicker.filterAll') || '전체' },
-      { value: 'local', label: t('soundPicker.filterLocal') || '로컬 사운드' },
-    ];
+    { value: 'all', label: t('soundPicker.filterAll') || '전체' },
+    { value: 'local', label: t('soundPicker.filterLocal') || '로컬 사운드' },
+  ];
 
   const filteredSounds = (() => {
     const query = searchQuery.trim().toLowerCase();

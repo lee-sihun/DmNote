@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
@@ -36,7 +36,7 @@ export default function Alert({
   });
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el);
     setScrollState((prev) =>
@@ -45,7 +45,7 @@ export default function Alert({
         ? prev
         : nextState,
     );
-  }, []);
+  };
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const {
@@ -65,7 +65,7 @@ export default function Alert({
       const timer = setTimeout(() => updateScrollState(wrapperElement), 0);
       return () => clearTimeout(timer);
     }
-  }, [isCustom, message, wrapperElement, updateScrollState]);
+  }, [isCustom, message, wrapperElement]);
 
   if (!isOpen) return null;
 

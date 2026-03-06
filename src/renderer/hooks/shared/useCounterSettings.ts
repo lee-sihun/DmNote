@@ -4,7 +4,10 @@ import {
 } from '@src/types/keys';
 import type { KeyCounterSettings } from '@src/types/keys';
 
-export { computeOutsideStyle, OUTSIDE_OFFSET } from '@utils/counter/counterPositioning';
+export {
+  computeOutsideStyle,
+  OUTSIDE_OFFSET,
+} from '@utils/counter/counterPositioning';
 
 /**
  * Normalizes a raw counter config into a full `KeyCounterSettings` object.

@@ -8,7 +8,10 @@ import {
   useSettingsStore,
   type SettingsStateSnapshot,
 } from '@stores/useSettingsStore';
-import { applyCounterSnapshot, setKeyCounter } from '@stores/signals/keyCounterSignals';
+import {
+  applyCounterSnapshot,
+  setKeyCounter,
+} from '@stores/signals/keyCounterSignals';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import type { SettingsDiff, OverlayResizeAnchor } from '@src/types/settings';
 import {
@@ -193,11 +196,9 @@ export function useAppBootstrap() {
         backgroundColor: bootstrap.settings.backgroundColor,
         language: bootstrap.settings.language,
         laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
-        developerModeEnabled:
-          bootstrap.settings.developerModeEnabled ?? false,
+        developerModeEnabled: bootstrap.settings.developerModeEnabled ?? false,
         trayEnabled: bootstrap.settings.trayEnabled ?? false,
-        autoUpdateEnabled:
-          bootstrap.settings.autoUpdateEnabled ?? true,
+        autoUpdateEnabled: bootstrap.settings.autoUpdateEnabled ?? true,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
         gridSettings:

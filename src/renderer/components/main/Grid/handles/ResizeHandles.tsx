@@ -56,7 +56,19 @@ interface ResizeHandlesProps {
   onResize?: (result: ResizeResult) => void;
   onResizeEnd?: () => void;
   elementId?: string;
-  getOtherElements?: (excludeIds: string | string[]) => { id: string; left: number; top: number; right: number; bottom: number; centerX: number; centerY: number; width: number; height: number }[];
+  getOtherElements?: (
+    excludeIds: string | string[],
+  ) => {
+    id: string;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    centerX: number;
+    centerY: number;
+    width: number;
+    height: number;
+  }[];
 }
 
 interface ResizeState {
@@ -116,7 +128,10 @@ const HANDLES: HandleDef[] = [
 ];
 
 // 핸들 시각적 스타일 반환
-const getHandleStyle = (type: string, isHovered: boolean): React.CSSProperties => {
+const getHandleStyle = (
+  type: string,
+  isHovered: boolean,
+): React.CSSProperties => {
   const baseStyle: React.CSSProperties = {
     backgroundColor: isHovered ? 'rgba(59, 130, 246, 1)' : 'white',
     border: '1.5px solid rgba(59, 130, 246, 0.9)',
@@ -213,155 +228,155 @@ export default function ResizeHandles({
   });
 
   const handleMouseDown = (e: React.MouseEvent, handle: HandleDef) => {
-      e.preventDefault();
-      e.stopPropagation();
-      lockCustomCursor(handle.cursor, e.nativeEvent);
+    e.preventDefault();
+    e.stopPropagation();
+    lockCustomCursor(handle.cursor, e.nativeEvent);
 
-      const startAspectRatio =
-        Number.isFinite(bounds?.width) &&
-        Number.isFinite(bounds?.height) &&
-        bounds!.width > 0 &&
-        bounds!.height > 0
-          ? bounds!.width / bounds!.height
-          : 1;
+    const startAspectRatio =
+      Number.isFinite(bounds?.width) &&
+      Number.isFinite(bounds?.height) &&
+      bounds!.width > 0 &&
+      bounds!.height > 0
+        ? bounds!.width / bounds!.height
+        : 1;
 
-      resizeRef.current = {
-        isResizing: true,
-        handleId: handle.id,
-        startMouseX: e.clientX,
-        startMouseY: e.clientY,
-        startBounds: { ...bounds! },
-        handle,
-        startAspectRatio,
-      };
-
-      onResizeStart?.(handle);
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        if (!resizeRef.current.isResizing) return;
-
-        const {
-          handle,
-          startMouseX,
-          startMouseY,
-          startBounds,
-          startAspectRatio,
-        } = resizeRef.current;
-
-        // 마우스 이동량 계산 (줌 보정)
-        const rawDeltaX = (moveEvent.clientX - startMouseX) / zoom;
-        const rawDeltaY = (moveEvent.clientY - startMouseY) / zoom;
-
-        // store에서 스냅 크기 가져오기
-        const snapSize =
-          useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
-
-        const snap = (value: number): number => Math.round(value / snapSize) * snapSize;
-
-        // 새 bounds 계산 (스냅 전)
-        let nextWidth = startBounds!.width;
-        let nextHeight = startBounds!.height;
-
-        // 핸들 방향에 따라 크기 조정 (크기만 계산)
-        if (handle!.dx === -1) {
-          nextWidth = Math.max(MIN_SIZE, startBounds!.width - rawDeltaX);
-        } else if (handle!.dx === 1) {
-          nextWidth = Math.max(MIN_SIZE, startBounds!.width + rawDeltaX);
-        }
-
-        if (handle!.dy === -1) {
-          nextHeight = Math.max(MIN_SIZE, startBounds!.height - rawDeltaY);
-        } else if (handle!.dy === 1) {
-          nextHeight = Math.max(MIN_SIZE, startBounds!.height + rawDeltaY);
-        }
-
-        const keepAspect =
-          !!moveEvent.shiftKey &&
-          Number.isFinite(startAspectRatio) &&
-          startAspectRatio > 0 &&
-          Number.isFinite(startBounds!.width) &&
-          Number.isFinite(startBounds!.height) &&
-          startBounds!.width > 0 &&
-          startBounds!.height > 0;
-
-        let newWidth = nextWidth;
-        let newHeight = nextHeight;
-
-        if (keepAspect) {
-          const isCorner = handle!.dx !== 0 && handle!.dy !== 0;
-          const primary =
-            handle!.dx !== 0 && handle!.dy === 0
-              ? 'width'
-              : handle!.dy !== 0 && handle!.dx === 0
-                ? 'height'
-                : isCorner
-                  ? (() => {
-                      const relW =
-                        Math.abs(newWidth - startBounds!.width) /
-                        startBounds!.width;
-                      const relH =
-                        Math.abs(newHeight - startBounds!.height) /
-                        startBounds!.height;
-                      return relW >= relH ? 'width' : 'height';
-                    })()
-                  : 'width';
-
-          if (primary === 'width') {
-            newWidth = Math.max(MIN_SIZE, snap(newWidth));
-            const scale = newWidth / startBounds!.width;
-            newHeight = Math.max(MIN_SIZE, startBounds!.height * scale);
-          } else {
-            newHeight = Math.max(MIN_SIZE, snap(newHeight));
-            const scale = newHeight / startBounds!.height;
-            newWidth = Math.max(MIN_SIZE, startBounds!.width * scale);
-          }
-        } else {
-          newWidth = Math.max(MIN_SIZE, snap(newWidth));
-          newHeight = Math.max(MIN_SIZE, snap(newHeight));
-        }
-
-        // 위치 계산 (크기/비율 확정 후 앵커 기준으로 재계산)
-        let newX = startBounds!.x;
-        let newY = startBounds!.y;
-
-        if (handle!.dx === -1) {
-          newX = startBounds!.x + (startBounds!.width - newWidth);
-        } else if (handle!.dx === 0) {
-          newX = startBounds!.x + (startBounds!.width - newWidth) / 2;
-        }
-
-        if (handle!.dy === -1) {
-          newY = startBounds!.y + (startBounds!.height - newHeight);
-        } else if (handle!.dy === 0) {
-          newY = startBounds!.y + (startBounds!.height - newHeight) / 2;
-        }
-
-        // 위치는 항상 스냅 적용
-        newX = snap(newX);
-        newY = snap(newY);
-
-        onResize?.({
-          x: newX,
-          y: newY,
-          width: newWidth,
-          height: newHeight,
-          handle: handle!,
-        });
-      };
-
-      const handleMouseUp = () => {
-        resizeRef.current.isResizing = false;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        window.removeEventListener('blur', handleMouseUp);
-        unlockCustomCursor();
-        onResizeEnd?.();
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      window.addEventListener('blur', handleMouseUp);
+    resizeRef.current = {
+      isResizing: true,
+      handleId: handle.id,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startBounds: { ...bounds! },
+      handle,
+      startAspectRatio,
     };
+
+    onResizeStart?.(handle);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizeRef.current.isResizing) return;
+
+      const {
+        handle,
+        startMouseX,
+        startMouseY,
+        startBounds,
+        startAspectRatio,
+      } = resizeRef.current;
+
+      // 마우스 이동량 계산 (줌 보정)
+      const rawDeltaX = (moveEvent.clientX - startMouseX) / zoom;
+      const rawDeltaY = (moveEvent.clientY - startMouseY) / zoom;
+
+      // store에서 스냅 크기 가져오기
+      const snapSize =
+        useSettingsStore.getState().gridSettings?.gridSnapSize || 5;
+
+      const snap = (value: number): number =>
+        Math.round(value / snapSize) * snapSize;
+
+      // 새 bounds 계산 (스냅 전)
+      let nextWidth = startBounds!.width;
+      let nextHeight = startBounds!.height;
+
+      // 핸들 방향에 따라 크기 조정 (크기만 계산)
+      if (handle!.dx === -1) {
+        nextWidth = Math.max(MIN_SIZE, startBounds!.width - rawDeltaX);
+      } else if (handle!.dx === 1) {
+        nextWidth = Math.max(MIN_SIZE, startBounds!.width + rawDeltaX);
+      }
+
+      if (handle!.dy === -1) {
+        nextHeight = Math.max(MIN_SIZE, startBounds!.height - rawDeltaY);
+      } else if (handle!.dy === 1) {
+        nextHeight = Math.max(MIN_SIZE, startBounds!.height + rawDeltaY);
+      }
+
+      const keepAspect =
+        !!moveEvent.shiftKey &&
+        Number.isFinite(startAspectRatio) &&
+        startAspectRatio > 0 &&
+        Number.isFinite(startBounds!.width) &&
+        Number.isFinite(startBounds!.height) &&
+        startBounds!.width > 0 &&
+        startBounds!.height > 0;
+
+      let newWidth = nextWidth;
+      let newHeight = nextHeight;
+
+      if (keepAspect) {
+        const isCorner = handle!.dx !== 0 && handle!.dy !== 0;
+        const primary =
+          handle!.dx !== 0 && handle!.dy === 0
+            ? 'width'
+            : handle!.dy !== 0 && handle!.dx === 0
+            ? 'height'
+            : isCorner
+            ? (() => {
+                const relW =
+                  Math.abs(newWidth - startBounds!.width) / startBounds!.width;
+                const relH =
+                  Math.abs(newHeight - startBounds!.height) /
+                  startBounds!.height;
+                return relW >= relH ? 'width' : 'height';
+              })()
+            : 'width';
+
+        if (primary === 'width') {
+          newWidth = Math.max(MIN_SIZE, snap(newWidth));
+          const scale = newWidth / startBounds!.width;
+          newHeight = Math.max(MIN_SIZE, startBounds!.height * scale);
+        } else {
+          newHeight = Math.max(MIN_SIZE, snap(newHeight));
+          const scale = newHeight / startBounds!.height;
+          newWidth = Math.max(MIN_SIZE, startBounds!.width * scale);
+        }
+      } else {
+        newWidth = Math.max(MIN_SIZE, snap(newWidth));
+        newHeight = Math.max(MIN_SIZE, snap(newHeight));
+      }
+
+      // 위치 계산 (크기/비율 확정 후 앵커 기준으로 재계산)
+      let newX = startBounds!.x;
+      let newY = startBounds!.y;
+
+      if (handle!.dx === -1) {
+        newX = startBounds!.x + (startBounds!.width - newWidth);
+      } else if (handle!.dx === 0) {
+        newX = startBounds!.x + (startBounds!.width - newWidth) / 2;
+      }
+
+      if (handle!.dy === -1) {
+        newY = startBounds!.y + (startBounds!.height - newHeight);
+      } else if (handle!.dy === 0) {
+        newY = startBounds!.y + (startBounds!.height - newHeight) / 2;
+      }
+
+      // 위치는 항상 스냅 적용
+      newX = snap(newX);
+      newY = snap(newY);
+
+      onResize?.({
+        x: newX,
+        y: newY,
+        width: newWidth,
+        height: newHeight,
+        handle: handle!,
+      });
+    };
+
+    const handleMouseUp = () => {
+      resizeRef.current.isResizing = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      unlockCustomCursor();
+      onResizeEnd?.();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+  };
 
   if (!bounds) return null;
 

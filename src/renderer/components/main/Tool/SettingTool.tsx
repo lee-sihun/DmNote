@@ -31,8 +31,8 @@ const SettingTool = ({
   onOpenSettings,
   onCloseSettings,
   showAlert,
-  // onOpenNoteSetting,
-}: SettingToolProps) => {
+}: // onOpenNoteSetting,
+SettingToolProps) => {
   const { t } = useTranslation();
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
   const [isExportImportOpenLocal, setIsExportImportOpenLocal] = useState(false);

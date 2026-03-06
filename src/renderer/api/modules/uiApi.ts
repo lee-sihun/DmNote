@@ -50,7 +50,10 @@ export const uiApi = {
       usePluginMenuStore.getState().removeMenuItem(fullId);
     },
 
-    updateMenuItem: (fullId: string, updates: Partial<PluginMenuItem<unknown>>) => {
+    updateMenuItem: (
+      fullId: string,
+      updates: Partial<PluginMenuItem<unknown>>,
+    ) => {
       if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return;
@@ -67,9 +70,7 @@ export const uiApi = {
 
       const pluginId = window.__dmn_current_plugin_id;
       if (!pluginId) {
-        console.warn(
-          '[UI API] clearMyMenuItems called outside plugin context',
-        );
+        console.warn('[UI API] clearMyMenuItems called outside plugin context');
         return;
       }
 
@@ -127,9 +128,7 @@ export const uiApi = {
       return new Promise<boolean>((resolve) => {
         const showCustomDialog = window.__dmn_showCustomDialog;
         if (typeof showCustomDialog !== 'function') {
-          console.warn(
-            '[Dialog API] showCustomDialog function not available',
-          );
+          console.warn('[Dialog API] showCustomDialog function not available');
           resolve(false);
           return;
         }
@@ -199,9 +198,7 @@ export const uiApi = {
               if (currentValue === '' || isNaN(parseFloat(currentValue))) {
                 const defaultValue = minStr ? parseFloat(minStr) : 0;
                 targetEl.value = String(defaultValue);
-                targetEl.dispatchEvent(
-                  new Event('change', { bubbles: true }),
-                );
+                targetEl.dispatchEvent(new Event('change', { bubbles: true }));
                 return;
               }
 
@@ -217,9 +214,7 @@ export const uiApi = {
 
               if (clampedValue !== numValue) {
                 targetEl.value = String(clampedValue);
-                targetEl.dispatchEvent(
-                  new Event('change', { bubbles: true }),
-                );
+                targetEl.dispatchEvent(new Event('change', { bubbles: true }));
               }
             }
           };
@@ -230,10 +225,10 @@ export const uiApi = {
               e.type === 'click'
                 ? 'data-plugin-handler'
                 : e.type === 'input'
-                  ? 'data-plugin-handler-input'
-                  : e.type === 'change'
-                    ? 'data-plugin-handler-change'
-                    : null;
+                ? 'data-plugin-handler-input'
+                : e.type === 'change'
+                ? 'data-plugin-handler-change'
+                : null;
 
             if (!handlerAttr) return;
 
@@ -248,7 +243,9 @@ export const uiApi = {
 
             if (!handlerName) return;
 
-            const handler = (window as unknown as Record<string, unknown>)[handlerName];
+            const handler = (window as unknown as Record<string, unknown>)[
+              handlerName
+            ];
             if (typeof handler === 'function') {
               (handler as (e: Event) => void)(e);
             }

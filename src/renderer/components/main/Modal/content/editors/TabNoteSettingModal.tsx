@@ -43,7 +43,8 @@ export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
       const keys = Object.keys(normalized) as (keyof NoteSettings)[];
       for (const key of keys) {
         if (normalized[key] !== globalSettings[key]) {
-          (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] = normalized[key];
+          (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] =
+            normalized[key];
         }
       }
       // 모든 값이 전역과 동일하면 오버라이드 제거

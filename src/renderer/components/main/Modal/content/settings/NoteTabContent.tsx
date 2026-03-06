@@ -91,10 +91,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
       ref,
       () => {
         const handleColorChangeInner = (newColor: ColorChangeValue) => {
-          if (
-            typeof newColor === 'object' &&
-            newColor.type === 'gradient'
-          ) {
+          if (typeof newColor === 'object' && newColor.type === 'gradient') {
             setState((prev) => ({
               ...prev,
               colorMode: COLOR_MODES.gradient,
@@ -113,10 +110,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         };
 
         const handleColorChangeCompleteInner = (newColor: ColorChangeValue) => {
-          if (
-            typeof newColor === 'object' &&
-            newColor.type === 'gradient'
-          ) {
+          if (typeof newColor === 'object' && newColor.type === 'gradient') {
             setState((prev) => ({
               ...prev,
               colorMode: COLOR_MODES.gradient,
@@ -137,10 +131,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         };
 
         const handleGlowColorChangeInner = (newColor: ColorChangeValue) => {
-          if (
-            typeof newColor === 'object' &&
-            newColor.type === 'gradient'
-          ) {
+          if (typeof newColor === 'object' && newColor.type === 'gradient') {
             setState((prev) => ({
               ...prev,
               glowColorMode: COLOR_MODES.gradient,
@@ -158,11 +149,10 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           }
         };
 
-        const handleGlowColorChangeCompleteInner = (newColor: ColorChangeValue) => {
-          if (
-            typeof newColor === 'object' &&
-            newColor.type === 'gradient'
-          ) {
+        const handleGlowColorChangeCompleteInner = (
+          newColor: ColorChangeValue,
+        ) => {
+          if (typeof newColor === 'object' && newColor.type === 'gradient') {
             setState((prev) => ({
               ...prev,
               glowColorMode: COLOR_MODES.gradient,

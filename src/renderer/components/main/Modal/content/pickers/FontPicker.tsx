@@ -1,4 +1,4 @@
-import React, { useState, } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/fonts';
@@ -70,15 +70,15 @@ export default function FontPicker({
 
   // 필터 옵션
   const filterOptions = [
-      { value: 'all', label: t('fontPicker.filterAll') || '전체' },
-      { value: 'builtin', label: t('fontPicker.filterBuiltin') || '내장' },
-      { value: 'web', label: t('fontPicker.filterWeb') || '웹' },
-      { value: 'local', label: t('fontPicker.filterLocal') || '로컬' },
-    ];
+    { value: 'all', label: t('fontPicker.filterAll') || '전체' },
+    { value: 'builtin', label: t('fontPicker.filterBuiltin') || '내장' },
+    { value: 'web', label: t('fontPicker.filterWeb') || '웹' },
+    { value: 'local', label: t('fontPicker.filterLocal') || '로컬' },
+  ];
 
   const handleFontClick = (font: CustomFont) => {
-      onFontSelect(font.name);
-    };
+    onFontSelect(font.name);
+  };
 
   return (
     <CommonListPickerPopup<CustomFont>

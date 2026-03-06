@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
@@ -55,7 +49,10 @@ function TabSwitch({ activeTab, onTabChange }: TabSwitchProps) {
   );
 }
 
-function sanitizeNumericValue(value: string | number | undefined, key: ConstraintKey): number {
+function sanitizeNumericValue(
+  value: string | number | undefined,
+  key: ConstraintKey,
+): number {
   const parsed = parseInt(String(value), 10);
   if (Number.isNaN(parsed)) {
     return NOTE_SETTINGS_CONSTRAINTS[key].default;
@@ -89,7 +86,9 @@ export default function NoteSetting({
   const [trackHeight, setTrackHeight] = useState<string>(
     String(sanitizeNumericValue(initial.trackHeight, 'trackHeight')),
   );
-  const [reverse, setReverse] = useState<boolean>(Boolean(initial.reverse || false));
+  const [reverse, setReverse] = useState<boolean>(
+    Boolean(initial.reverse || false),
+  );
   const [fadeTopPx, setFadeTopPx] = useState<string>(
     String(sanitizeNumericValue(initial.fadeTopPx, 'fadeTopPx')),
   );
@@ -131,15 +130,16 @@ export default function NoteSetting({
   );
   const tabContentRef = useRef<HTMLDivElement>(null);
   const [tabContentHeight, setTabContentHeight] = useState<number | null>(null);
-  const [disableHeightTransition, setDisableHeightTransition] = useState<boolean>(true);
+  const [disableHeightTransition, setDisableHeightTransition] =
+    useState<boolean>(true);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
 
-  const updateTabContentHeight = useCallback(() => {
+  const updateTabContentHeight = () => {
     const element = tabContentRef.current;
     if (!element) return;
     const nextHeight = element.offsetHeight;
     setTabContentHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-  }, []);
+  };
 
   const calculatedDelay = (() => {
     const safeSpeed = sanitizeNumericValue(speed, 'speed');
@@ -161,7 +161,7 @@ export default function NoteSetting({
 
   useLayoutEffect(() => {
     updateTabContentHeight();
-  }, [activeTab, updateTabContentHeight]);
+  }, [activeTab]);
 
   useEffect(() => {
     const element = tabContentRef.current;
@@ -173,7 +173,7 @@ export default function NoteSetting({
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [activeTab, updateTabContentHeight]);
+  }, [activeTab]);
 
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
@@ -194,7 +194,7 @@ export default function NoteSetting({
     if (!isAnimating && !disableHeightTransition) {
       requestAnimationFrame(() => updateTabContentHeight());
     }
-  }, [isAnimating, disableHeightTransition, updateTabContentHeight]);
+  }, [isAnimating, disableHeightTransition]);
 
   const handleSave = async () => {
     const normalized = {

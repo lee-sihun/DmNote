@@ -71,10 +71,7 @@ export function useGridKeyboard({
   // 선택 요소 키보드 조작
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        typeof window !== 'undefined' &&
-        window.__dmn_isKeyListening
-      ) {
+      if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
         return;
       }
       // 입력 요소에서는 무시
@@ -351,10 +348,7 @@ export function useGridKeyboard({
   // Undo/Redo 단축키 처리
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        typeof window !== 'undefined' &&
-        window.__dmn_isKeyListening
-      ) {
+      if (typeof window !== 'undefined' && window.__dmn_isKeyListening) {
         return;
       }
       // 입력 요소에서는 단축키 무시

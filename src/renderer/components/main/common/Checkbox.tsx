@@ -26,7 +26,9 @@ const Checkbox = ({ checked, onChange }: CheckboxProps) => {
     >
       <div
         className={`absolute w-[12px] h-[12px] rounded-[75px] top-[2px] transition-all duration-75 ease-in-out 
-          ${isChecked ? 'left-[13px] bg-[#FFB400]' : 'left-[2px] bg-[#989BA6]'}`}
+          ${
+            isChecked ? 'left-[13px] bg-[#FFB400]' : 'left-[2px] bg-[#989BA6]'
+          }`}
       />
     </div>
   );

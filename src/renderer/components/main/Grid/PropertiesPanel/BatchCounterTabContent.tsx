@@ -81,9 +81,11 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   const [showFontManager, setShowFontManager] = useState(false);
   const [showAnimationPicker, setShowAnimationPicker] = useState(false);
 
-  const handleAnimationUpdate = (nextAnimation: KeyCounterSettings['animation']) => {
-      handleBatchCounterUpdate({ animation: nextAnimation });
-    };
+  const handleAnimationUpdate = (
+    nextAnimation: KeyCounterSettings['animation'],
+  ) => {
+    handleBatchCounterUpdate({ animation: nextAnimation });
+  };
 
   const getDisplayColor = (color: string): string => {
     if (!color) return '#ffffff';

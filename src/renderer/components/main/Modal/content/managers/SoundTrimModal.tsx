@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import {
@@ -44,7 +39,10 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function createAudioContext(): AudioContext {
-  const ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const ctor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext })
+      .webkitAudioContext;
   return new ctor();
 }
 
@@ -391,7 +389,7 @@ export default function SoundTrimModal({
     setIsPlaying(false);
   };
 
-  const redrawWaveformStatic = useCallback((pausedRatio?: number | null) => {
+  const redrawWaveformStatic = (pausedRatio?: number | null) => {
     const canvas = canvasRef.current;
     const currentPeaks = peaksRef.current;
     if (canvas && currentPeaks.length > 0) {
@@ -405,7 +403,7 @@ export default function SoundTrimModal({
         viewEndRef.current,
       );
     }
-  }, []);
+  };
 
   // 일시정지: 현재 위치 저장 및 일시정지 위치에 표시기 표시
   const pausePlayback = () => {
@@ -525,9 +523,9 @@ export default function SoundTrimModal({
       fileInputRef.current.value = '';
     }
   };
-  const resetState = useCallback(() => {
+  const resetState = () => {
     resetStateImpl.current();
-  }, []);
+  };
 
   const closeModal = () => {
     resetState();
@@ -538,10 +536,15 @@ export default function SoundTrimModal({
     if (!isOpen) {
       resetState();
     }
-  }, [isOpen, resetState]);
+  }, [isOpen]);
 
-  const processFileImpl = useRef<(file: File, signal?: { cancelled: boolean }) => Promise<void>>(async () => {});
-  processFileImpl.current = async (file: File, signal?: { cancelled: boolean }) => {
+  const processFileImpl = useRef<
+    (file: File, signal?: { cancelled: boolean }) => Promise<void>
+  >(async () => {});
+  processFileImpl.current = async (
+    file: File,
+    signal?: { cancelled: boolean },
+  ) => {
     stopPlayback();
     setErrorText('');
     setIsDecoding(true);
@@ -580,9 +583,9 @@ export default function SoundTrimModal({
       }
     }
   };
-  const processFile = useCallback(async (file: File, signal?: { cancelled: boolean }) => {
+  const processFile = async (file: File, signal?: { cancelled: boolean }) => {
     await processFileImpl.current(file, signal);
-  }, []);
+  };
 
   // 편집 모드: 백엔드에서 원본 오디오 로드
   useEffect(() => {
@@ -645,7 +648,7 @@ export default function SoundTrimModal({
     return () => {
       signal.cancelled = true;
     };
-  }, [isOpen, initialFile, isEditMode, processFile]);
+  }, [isOpen, initialFile, isEditMode]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -676,7 +679,7 @@ export default function SoundTrimModal({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isOpen, isPlaying, redrawWaveformStatic]);
+  }, [isOpen, isPlaying]);
 
   const selectFile = () => {
     fileInputRef.current?.click();
@@ -695,7 +698,7 @@ export default function SoundTrimModal({
   viewPanRatioRef.current = viewPanRatio;
   const isWheelProcessingRef = useRef(false);
 
-  const handleWheel = useCallback((e: WheelEvent) => {
+  const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (!audioBuffer) return;
     if (isWheelProcessingRef.current) return;
@@ -728,7 +731,7 @@ export default function SoundTrimModal({
 
     setViewZoom(newZoom);
     setViewPanRatio(newPan);
-  }, [audioBuffer]);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -736,10 +739,10 @@ export default function SoundTrimModal({
     if (!node) return;
     node.addEventListener('wheel', handleWheel, { passive: false });
     return () => node.removeEventListener('wheel', handleWheel);
-  }, [isOpen, handleWheel]);
+  });
 
   // 중간 버튼 드래그: 줌 시 수평 패닝
-  const handleMiddleDown = useCallback((e: MouseEvent) => {
+  const handleMiddleDown = (e: MouseEvent) => {
     if (e.button !== 1) return;
     if (!audioBufferRef.current) return;
     e.preventDefault();
@@ -776,7 +779,7 @@ export default function SoundTrimModal({
     middleDragCleanupRef.current = cleanup;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', cleanup);
-  }, []);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -787,7 +790,7 @@ export default function SoundTrimModal({
       node.removeEventListener('mousedown', handleMiddleDown);
       middleDragCleanupRef.current?.();
     };
-  }, [isOpen, handleMiddleDown]);
+  }, [isOpen]);
 
   // 커서 overlay 루트가 모달 포털보다 DOM 순서상 위에 위치하도록 보장
   useEffect(() => {
@@ -872,7 +875,9 @@ export default function SoundTrimModal({
     handleDragCleanupRef.current?.();
   };
 
-  const handleWaveformPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleWaveformPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
     if (event.button !== 0) return;
     if (!audioBuffer) return;
     const host = waveformRef.current;
@@ -906,8 +911,7 @@ export default function SoundTrimModal({
     } else if (pickEnd) {
       nextTarget = 'end';
     } else {
-      nextTarget =
-        Math.abs(x - startX) < Math.abs(x - endX) ? 'start' : 'end';
+      nextTarget = Math.abs(x - startX) < Math.abs(x - endX) ? 'start' : 'end';
     }
 
     dragTargetRef.current = nextTarget;
@@ -1169,8 +1173,8 @@ export default function SoundTrimModal({
             {isSaving
               ? t('soundTrimModal.saving')
               : isEditMode
-                ? t('soundTrimModal.submitEdit')
-                : t('soundTrimModal.submit')}
+              ? t('soundTrimModal.submitEdit')
+              : t('soundTrimModal.submit')}
           </button>
           <button
             type="button"

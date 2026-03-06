@@ -30,7 +30,9 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
   const offsetY = panY % scaledGridSize;
 
   // 고유 패턴 ID (여러 그리드가 있을 경우 충돌 방지)
-  const patternIdRef = useRef(`grid-pattern-${Math.random().toString(36).substr(2, 9)}`);
+  const patternIdRef = useRef(
+    `grid-pattern-${Math.random().toString(36).substr(2, 9)}`,
+  );
   const patternId = patternIdRef.current;
 
   return (

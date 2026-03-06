@@ -1,7 +1,11 @@
 /* eslint-disable react-hooks/purity */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect } from 'react';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
-import { createNoteBuffer, NoteBuffer, TrackLayoutInput } from '@stores/signals/noteBuffer';
+import {
+  createNoteBuffer,
+  NoteBuffer,
+  TrackLayoutInput,
+} from '@stores/signals/noteBuffer';
 
 interface Note {
   id: string;
@@ -80,7 +84,11 @@ const releaseNote = (note: Note, pool: Note[]): void => {
   pool.push(note);
 };
 
-const releaseAllNotes = (notesByKey: Record<string, Note[]>, pool: Note[], lookup: Map<string, Note>): void => {
+const releaseAllNotes = (
+  notesByKey: Record<string, Note[]>,
+  pool: Note[],
+  lookup: Map<string, Note>,
+): void => {
   const keys = Object.keys(notesByKey);
   for (const keyName of keys) {
     const keyNotes = notesByKey[keyName];
@@ -98,7 +106,10 @@ const releaseAllNotes = (notesByKey: Record<string, Note[]>, pool: Note[], looku
   }
 };
 
-export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions): UseNoteSystemReturn {
+export function useNoteSystem({
+  noteEffect,
+  noteSettings,
+}: UseNoteSystemOptions): UseNoteSystemReturn {
   const notesRef = useRef<Record<string, Note[]>>({});
   const noteEffectEnabled = useRef<boolean>(true);
   const activeNotes = useRef<Map<string, NoteState[]>>(new Map());
@@ -112,15 +123,17 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
   const notePoolRef = useRef<Note[]>([]);
   const noteLookupRef = useRef<Map<string, Note>>(new Map());
   const noteBufferRef = useRef<NoteBuffer>(createNoteBuffer());
-  const finalizeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const finalizeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
   // 이벤트 기반 클린업을 위한 refs
   const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextCleanupTimeRef = useRef<number>(Infinity);
 
-  const notifySubscribers = useCallback((event: NoteEvent): void => {
+  const notifySubscribers = (event: NoteEvent): void => {
     if (subscribers.current.size === 0) return;
     subscribers.current.forEach((callback) => callback(event));
-  }, []);
+  };
 
   const subscribe = (callback: NoteSubscriber): (() => void) => {
     subscribers.current.add(callback);
@@ -242,26 +255,26 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
 
   // 이벤트 기반 클린업 스케줄러
   const scheduleCleanup = (finalizedNote: Note): void => {
-      if (!finalizedNote || !finalizedNote.endTime) return;
+    if (!finalizedNote || !finalizedNote.endTime) return;
 
-      const flowSpeed = flowSpeedRef.current;
-      const trackHeight =
-        trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
+    const flowSpeed = flowSpeedRef.current;
+    const trackHeight =
+      trackHeightRef.current || DEFAULT_NOTE_SETTINGS.trackHeight;
 
-      // 이 노트가 화면 밖으로 완전히 사라질 시간 계산
-      const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
-      const newCleanupTime = finalizedNote.endTime + travelTimeMs;
+    // 이 노트가 화면 밖으로 완전히 사라질 시간 계산
+    const travelTimeMs = ((trackHeight + 200) * 1000) / flowSpeed;
+    const newCleanupTime = finalizedNote.endTime + travelTimeMs;
 
-      // 현재 예약된 것보다 더 빨리 실행해야 하는 경우에만 재스케줄
-      if (newCleanupTime < nextCleanupTimeRef.current) {
-        if (cleanupTimerRef.current !== null) {
-          clearTimeout(cleanupTimerRef.current);
-        }
-        const delay = Math.max(0, newCleanupTime - performance.now());
-        cleanupTimerRef.current = setTimeout(runCleanup, delay);
-        nextCleanupTimeRef.current = newCleanupTime;
+    // 현재 예약된 것보다 더 빨리 실행해야 하는 경우에만 재스케줄
+    if (newCleanupTime < nextCleanupTimeRef.current) {
+      if (cleanupTimerRef.current !== null) {
+        clearTimeout(cleanupTimerRef.current);
       }
-    };
+      const delay = Math.max(0, newCleanupTime - performance.now());
+      cleanupTimerRef.current = setTimeout(runCleanup, delay);
+      nextCleanupTimeRef.current = newCleanupTime;
+    }
+  };
 
   useEffect(() => {
     const settings = noteSettings || DEFAULT_NOTE_SETTINGS;
@@ -323,61 +336,65 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
         version: noteBufferRef.current.version,
       });
     }
-  }, [noteEffect, notifySubscribers]);
+  }, [noteEffect]);
 
   const createNote = (keyName: string, startTimeOverride?: number): string => {
-      const startTime = startTimeOverride ?? performance.now();
-      const noteId = `${keyName}_${startTime}`;
-      const currentNotes = notesRef.current;
-      let keyNotes = currentNotes[keyName];
-      if (!keyNotes) {
-        keyNotes = [];
-        currentNotes[keyName] = keyNotes;
-      }
+    const startTime = startTimeOverride ?? performance.now();
+    const noteId = `${keyName}_${startTime}`;
+    const currentNotes = notesRef.current;
+    let keyNotes = currentNotes[keyName];
+    if (!keyNotes) {
+      keyNotes = [];
+      currentNotes[keyName] = keyNotes;
+    }
 
-      const newNote = acquireNote(notePoolRef.current);
-      newNote.id = noteId;
-      newNote.keyName = keyName;
-      newNote.startTime = startTime;
-      newNote.endTime = null;
-      newNote.isActive = true;
+    const newNote = acquireNote(notePoolRef.current);
+    newNote.id = noteId;
+    newNote.keyName = keyName;
+    newNote.startTime = startTime;
+    newNote.endTime = null;
+    newNote.isActive = true;
 
-      keyNotes.push(newNote);
-      noteLookupRef.current.set(noteId, newNote);
+    keyNotes.push(newNote);
+    noteLookupRef.current.set(noteId, newNote);
 
-      const slot = noteBufferRef.current.allocate(keyName, noteId, startTime);
-      if (slot >= 0) {
-        notifySubscribers({
-          type: 'add',
-          note: newNote,
-          slot,
-          activeCount: noteBufferRef.current.activeCount,
-          version: noteBufferRef.current.version,
-        });
-      } else {
-        notifySubscribers({ type: 'add', note: newNote });
-      }
-      return noteId;
-    };
-
-  const finalizeNote = (keyName: string, noteId: string, endTimeOverride?: number): void => {
-      const endTime = endTimeOverride ?? performance.now();
-      const note = noteLookupRef.current.get(noteId);
-      if (!note || note.keyName !== keyName || !note.isActive) return;
-
-      note.endTime = endTime;
-      note.isActive = false;
-      const slot = noteBufferRef.current.finalize(noteId, endTime);
+    const slot = noteBufferRef.current.allocate(keyName, noteId, startTime);
+    if (slot >= 0) {
       notifySubscribers({
-        type: 'finalize',
-        note,
+        type: 'add',
+        note: newNote,
         slot,
         activeCount: noteBufferRef.current.activeCount,
         version: noteBufferRef.current.version,
       });
-      // 이벤트 기반 클린업 스케줄링
-      scheduleCleanup(note);
-    };
+    } else {
+      notifySubscribers({ type: 'add', note: newNote });
+    }
+    return noteId;
+  };
+
+  const finalizeNote = (
+    keyName: string,
+    noteId: string,
+    endTimeOverride?: number,
+  ): void => {
+    const endTime = endTimeOverride ?? performance.now();
+    const note = noteLookupRef.current.get(noteId);
+    if (!note || note.keyName !== keyName || !note.isActive) return;
+
+    note.endTime = endTime;
+    note.isActive = false;
+    const slot = noteBufferRef.current.finalize(noteId, endTime);
+    notifySubscribers({
+      type: 'finalize',
+      note,
+      slot,
+      activeCount: noteBufferRef.current.activeCount,
+      version: noteBufferRef.current.version,
+    });
+    // 이벤트 기반 클린업 스케줄링
+    scheduleCleanup(note);
+  };
 
   const removeState = (keyName: string, state: NoteState): void => {
     const stateList = activeNotes.current.get(keyName);
@@ -397,159 +414,163 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
     return Math.round((minPx * 1000) / flowSpeed);
   };
 
-  const scheduleNoteFinalization = (keyName: string, state: NoteState, options: { forceMinLength?: boolean } = {}): void => {
-      const { forceMinLength = false } = options;
-      if (!state?.noteId || state.startTime == null) return;
+  const scheduleNoteFinalization = (
+    keyName: string,
+    state: NoteState,
+    options: { forceMinLength?: boolean } = {},
+  ): void => {
+    const { forceMinLength = false } = options;
+    if (!state?.noteId || state.startTime == null) return;
 
-      const releaseTime = state.releaseTime ?? performance.now();
-      const noteRef = state.noteId
-        ? noteLookupRef.current.get(state.noteId)
-        : null;
-      const baselineStart =
-        noteRef?.startTime ?? state.startTime ?? state.downTime ?? releaseTime;
-      const clampedStart = Math.min(releaseTime, baselineStart);
-      const holdDurationFromStart = Math.max(0, releaseTime - clampedStart);
-      const minLengthMs = computeMinLengthMs();
-      const desiredDuration = forceMinLength
-        ? minLengthMs
-        : Math.max(minLengthMs, holdDurationFromStart);
-      const safeDuration = Math.max(desiredDuration, 1);
-      const targetEndTime = state.startTime + safeDuration;
+    const releaseTime = state.releaseTime ?? performance.now();
+    const noteRef = state.noteId
+      ? noteLookupRef.current.get(state.noteId)
+      : null;
+    const baselineStart =
+      noteRef?.startTime ?? state.startTime ?? state.downTime ?? releaseTime;
+    const clampedStart = Math.min(releaseTime, baselineStart);
+    const holdDurationFromStart = Math.max(0, releaseTime - clampedStart);
+    const minLengthMs = computeMinLengthMs();
+    const desiredDuration = forceMinLength
+      ? minLengthMs
+      : Math.max(minLengthMs, holdDurationFromStart);
+    const safeDuration = Math.max(desiredDuration, 1);
+    const targetEndTime = state.startTime + safeDuration;
 
-      if (state.finalizeTimer) {
-        clearTimeout(state.finalizeTimer);
-        finalizeTimersRef.current.delete(state.noteId);
-        state.finalizeTimer = null;
-      }
+    if (state.finalizeTimer) {
+      clearTimeout(state.finalizeTimer);
+      finalizeTimersRef.current.delete(state.noteId);
+      state.finalizeTimer = null;
+    }
 
-      const finalizeState = (): void => {
-        finalizeTimersRef.current.delete(state.noteId!);
-        state.finalizeTimer = null;
-        finalizeNote(keyName, state.noteId!, targetEndTime);
-        removeState(keyName, state);
-      };
-
-      const delay = Math.max(0, targetEndTime - performance.now());
-      if (delay <= 0) {
-        finalizeState();
-        return;
-      }
-
-      const timer = setTimeout(finalizeState, delay);
-      state.finalizeTimer = timer;
-      finalizeTimersRef.current.set(state.noteId, timer);
+    const finalizeState = (): void => {
+      finalizeTimersRef.current.delete(state.noteId!);
+      state.finalizeTimer = null;
+      finalizeNote(keyName, state.noteId!, targetEndTime);
+      removeState(keyName, state);
     };
+
+    const delay = Math.max(0, targetEndTime - performance.now());
+    if (delay <= 0) {
+      finalizeState();
+      return;
+    }
+
+    const timer = setTimeout(finalizeState, delay);
+    state.finalizeTimer = timer;
+    finalizeTimersRef.current.set(state.noteId, timer);
+  };
 
   // 노트 생성/완료
   const handleKeyDown = (keyName: string): void => {
-      if (!noteEffectEnabled.current) return;
+    if (!noteEffectEnabled.current) return;
 
-      const useDelay = delayEnabledRef.current && delayMsRef.current > 0;
-      let stateList = activeNotes.current.get(keyName);
-      if (!stateList) {
-        stateList = [];
-        activeNotes.current.set(keyName, stateList);
-      }
+    const useDelay = delayEnabledRef.current && delayMsRef.current > 0;
+    let stateList = activeNotes.current.get(keyName);
+    if (!stateList) {
+      stateList = [];
+      activeNotes.current.set(keyName, stateList);
+    }
 
-      if (stateList.some((state) => !state.released)) {
-        return;
-      }
+    if (stateList.some((state) => !state.released)) {
+      return;
+    }
 
-      if (useDelay) {
-        const delayMs = delayMsRef.current;
-        const downTime = performance.now();
-        const state: NoteState = {
-          useDelay: true,
-          downTime,
-          releaseTime: null,
-          startTime: null,
-          startTimer: null,
-          finalizeTimer: null,
-          noteId: null,
-          created: false,
-          released: false,
-          delayMs,
-          releasedBeforeStart: false,
-        };
-
-        const startTimer = setTimeout(() => {
-          state.startTimer = null;
-          if (!noteEffectEnabled.current) {
-            removeState(keyName, state);
-            return;
-          }
-
-          const overrideStart = state.downTime! + state.delayMs!;
-          const noteId = createNote(keyName, overrideStart);
-          state.noteId = noteId;
-          state.created = true;
-          state.startTime = overrideStart;
-
-          if (state.released) {
-            const forceMinLength = !!state.releasedBeforeStart;
-            scheduleNoteFinalization(keyName, state, { forceMinLength });
-            state.releasedBeforeStart = false;
-          }
-        }, delayMs);
-
-        state.startTimer = startTimer;
-        stateList.push(state);
-        return;
-      }
-
-      const noteId = createNote(keyName);
-      const createdNote = noteLookupRef.current.get(noteId);
-      const noteStartTime = createdNote?.startTime ?? performance.now();
-      stateList.push({
-        useDelay: false,
-        noteId,
-        created: true,
-        released: false,
+    if (useDelay) {
+      const delayMs = delayMsRef.current;
+      const downTime = performance.now();
+      const state: NoteState = {
+        useDelay: true,
+        downTime,
+        releaseTime: null,
+        startTime: null,
         startTimer: null,
         finalizeTimer: null,
-        startTime: noteStartTime,
-        releaseTime: null,
-      });
-    };
+        noteId: null,
+        created: false,
+        released: false,
+        delayMs,
+        releasedBeforeStart: false,
+      };
+
+      const startTimer = setTimeout(() => {
+        state.startTimer = null;
+        if (!noteEffectEnabled.current) {
+          removeState(keyName, state);
+          return;
+        }
+
+        const overrideStart = state.downTime! + state.delayMs!;
+        const noteId = createNote(keyName, overrideStart);
+        state.noteId = noteId;
+        state.created = true;
+        state.startTime = overrideStart;
+
+        if (state.released) {
+          const forceMinLength = !!state.releasedBeforeStart;
+          scheduleNoteFinalization(keyName, state, { forceMinLength });
+          state.releasedBeforeStart = false;
+        }
+      }, delayMs);
+
+      state.startTimer = startTimer;
+      stateList.push(state);
+      return;
+    }
+
+    const noteId = createNote(keyName);
+    const createdNote = noteLookupRef.current.get(noteId);
+    const noteStartTime = createdNote?.startTime ?? performance.now();
+    stateList.push({
+      useDelay: false,
+      noteId,
+      created: true,
+      released: false,
+      startTimer: null,
+      finalizeTimer: null,
+      startTime: noteStartTime,
+      releaseTime: null,
+    });
+  };
 
   const handleKeyUp = (keyName: string): void => {
-      if (!noteEffectEnabled.current) return;
+    if (!noteEffectEnabled.current) return;
 
-      const stateList = activeNotes.current.get(keyName);
-      if (!stateList || stateList.length === 0) return;
+    const stateList = activeNotes.current.get(keyName);
+    if (!stateList || stateList.length === 0) return;
 
-      let state: NoteState | null = null;
-      for (let i = stateList.length - 1; i >= 0; i -= 1) {
-        if (!stateList[i].released) {
-          state = stateList[i];
-          break;
-        }
+    let state: NoteState | null = null;
+    for (let i = stateList.length - 1; i >= 0; i -= 1) {
+      if (!stateList[i].released) {
+        state = stateList[i];
+        break;
       }
+    }
 
-      if (!state) return;
+    if (!state) return;
 
-      const now = performance.now();
-      state.released = true;
-      state.releaseTime = now;
+    const now = performance.now();
+    state.released = true;
+    state.releaseTime = now;
 
-      if (!state.useDelay) {
-        if (state.created && state.noteId) {
-          finalizeNote(keyName, state.noteId);
-        }
-        removeState(keyName, state);
-        return;
-      }
-
-      if (state.startTimer) {
-        state.releasedBeforeStart = true;
-        // 아직 노트가 생성되지 않았으므로 타이머가 실행되면 finalize를 스케줄링한다
-        return;
-      }
-
+    if (!state.useDelay) {
       if (state.created && state.noteId) {
-        scheduleNoteFinalization(keyName, state);
+        finalizeNote(keyName, state.noteId);
       }
-    };
+      removeState(keyName, state);
+      return;
+    }
+
+    if (state.startTimer) {
+      state.releasedBeforeStart = true;
+      // 아직 노트가 생성되지 않았으므로 타이머가 실행되면 finalize를 스케줄링한다
+      return;
+    }
+
+    if (state.created && state.noteId) {
+      scheduleNoteFinalization(keyName, state);
+    }
+  };
 
   // 화면 밖으로 나간 노트 제거 - 언마운트 시 타이머 정리
   useEffect(() => {
@@ -587,11 +608,7 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
       }
       finalizeTimersCurrent.clear();
 
-      releaseAllNotes(
-        notesCurrent,
-        notePoolCurrent,
-        noteLookupCurrent,
-      );
+      releaseAllNotes(notesCurrent, notePoolCurrent, noteLookupCurrent);
       noteLookupCurrent.clear();
       noteBufferCurrent.clear();
     };

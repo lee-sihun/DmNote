@@ -97,15 +97,15 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
 
   // 헤더/탭 영역 빈 공간 클릭 시 선택 해제
   const handleHeaderEmptyClick = (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      // 버튼, 입력 등 인터랙티브 요소 클릭은 무시
-      if (target.closest('button, input')) return;
-      // 레이어 리스트 영역은 자체 핸들러가 있으므로 무시
-      if (target.closest('.properties-panel-overlay-scroll')) return;
-      onSelectionFromPanel?.();
-      clearSelection();
-    };
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    // 버튼, 입력 등 인터랙티브 요소 클릭은 무시
+    if (target.closest('button, input')) return;
+    // 레이어 리스트 영역은 자체 핸들러가 있으므로 무시
+    if (target.closest('.properties-panel-overlay-scroll')) return;
+    onSelectionFromPanel?.();
+    clearSelection();
+  };
 
   return (
     <div

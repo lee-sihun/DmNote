@@ -8,7 +8,12 @@ import { usePluginMenuStore } from '@stores/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import type { KeyPosition } from '@src/types/keys';
-import type { PluginMenuItemInternal, KeyMenuContext, GridMenuContext, PluginMessages } from '@src/types/api';
+import type {
+  PluginMenuItemInternal,
+  KeyMenuContext,
+  GridMenuContext,
+  PluginMessages,
+} from '@src/types/api';
 
 interface MenuItem {
   id: string;
@@ -81,142 +86,149 @@ export function useGridContextMenu({
   })();
 
   const resolvePluginLabel = (pluginId: string, rawLabel: string) =>
-      translatePluginMessage({
-        messages: pluginMessagesById.get(pluginId),
-        locale,
-        key: rawLabel,
-        fallback: rawLabel,
-      });
+    translatePluginMessage({
+      messages: pluginMessagesById.get(pluginId),
+      locale,
+      key: rawLabel,
+      fallback: rawLabel,
+    });
 
   // 키 메뉴 아이템 생성 (기본 + 플러그인)
   const getKeyMenuItems = (contextIndex: number | null): MenuItem[] => {
-      const baseItems: MenuItem[] = [
-        { id: 'delete', label: t('contextMenu.deleteKey') },
-        { id: 'duplicate', label: t('contextMenu.duplicateKey') },
-        { id: 'counterReset', label: t('contextMenu.counterReset') },
-        { id: 'bringToFront', label: t('contextMenu.bringToFront') },
-        // { id: "bringForward", label: t("contextMenu.bringForward") },
-        // { id: "sendBackward", label: t("contextMenu.sendBackward") },
-        { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-      ];
+    const baseItems: MenuItem[] = [
+      { id: 'delete', label: t('contextMenu.deleteKey') },
+      { id: 'duplicate', label: t('contextMenu.duplicateKey') },
+      { id: 'counterReset', label: t('contextMenu.counterReset') },
+      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+      // { id: "bringForward", label: t("contextMenu.bringForward") },
+      // { id: "sendBackward", label: t("contextMenu.sendBackward") },
+      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+    ];
 
-      // 플러그인 메뉴 필터링 (조건부 표시)
-      const keyPosition = contextIndex !== null
+    // 플러그인 메뉴 필터링 (조건부 표시)
+    const keyPosition =
+      contextIndex !== null
         ? positions[selectedKeyType]?.[contextIndex]
         : undefined;
-      const context: KeyContext | null =
-        contextIndex !== null && keyPosition
-          ? {
-              keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
-              index: contextIndex,
-              position: keyPosition,
-              mode: selectedKeyType,
-            }
-          : null;
-
-      const filterPluginItems = (items: PluginMenuItemInternal<unknown>[]): MenuItem[] => {
-        if (!context) return [];
-        return items
-          .filter((item) => {
-            // visible 체크
-            if (item.visible === false) return false;
-            if (typeof item.visible === 'function' && !item.visible(context))
-              return false;
-            return true;
-          })
-          .map((item) => ({
-            id: item.fullId,
-            label: resolvePluginLabel(item.pluginId, item.label),
-            disabled:
-              typeof item.disabled === 'function'
-                ? item.disabled(context)
-                : item.disabled || false,
-            isPlugin: true,
-          }));
-      };
-
-      const topPluginItems = filterPluginItems(
-        pluginKeyMenuItems.filter((i) => i.position === 'top'),
-      );
-      const bottomPluginItems = filterPluginItems(
-        pluginKeyMenuItems.filter((i) => i.position !== 'top'),
-      );
-
-      return [...topPluginItems, ...baseItems, ...bottomPluginItems];
-    };
-
-  // 그리드 메뉴 아이템 생성 (기본 + 플러그인)
-  const getStatMenuItems = (_contextIndex: number | null): MenuItem[] => [
-      { id: 'delete', label: t('contextMenu.deleteStat') },
-      { id: 'duplicate', label: t('contextMenu.duplicateStat') },
-      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
-      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    ];
-
-  const getGraphMenuItems = (_contextIndex: number | null): MenuItem[] => [
-      { id: 'delete', label: t('contextMenu.deleteGraph') },
-      { id: 'duplicate', label: t('contextMenu.duplicateGraph') },
-      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
-      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    ];
-
-  const getGridMenuItems = (gridAddLocalPos: { dx: number; dy: number } | null): MenuItem[] => {
-      const topBaseItems: MenuItem[] = [
-        { id: 'add', label: t('contextMenu.addKey') },
-        { id: 'addStat', label: t('contextMenu.addStat') },
-        { id: 'addGraph', label: t('contextMenu.addGraph') },
-      ];
-      const bottomBaseItems: MenuItem[] = [
-        { id: 'tabCss', label: t('contextMenu.tabCssSetting') },
-        {
-          id: 'tabNote',
-          label: t('contextMenu.tabNoteSetting'),
-          disabled: !noteEffect,
-        },
-      ];
-
-      // 플러그인 메뉴 필터링
-      const context: GridContext | null = gridAddLocalPos
+    const context: KeyContext | null =
+      contextIndex !== null && keyPosition
         ? {
-            position: gridAddLocalPos,
+            keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
+            index: contextIndex,
+            position: keyPosition,
             mode: selectedKeyType,
           }
         : null;
 
-      const filterPluginItems = (items: PluginMenuItemInternal<unknown>[]): MenuItem[] => {
-        if (!context) return [];
-        return items
-          .filter((item) => {
-            if (item.visible === false) return false;
-            if (typeof item.visible === 'function' && !item.visible(context))
-              return false;
-            return true;
-          })
-          .map((item) => ({
-            id: item.fullId,
-            label: resolvePluginLabel(item.pluginId, item.label),
-            disabled:
-              typeof item.disabled === 'function'
-                ? item.disabled(context)
-                : item.disabled || false,
-            isPlugin: true,
-          }));
-      };
-
-      const topPluginItems = filterPluginItems(
-        pluginGridMenuItems.filter((i) => i.position === 'top'),
-      );
-      const bottomPluginItems = filterPluginItems(
-        pluginGridMenuItems.filter((i) => i.position !== 'top'),
-      );
-
-      return [
-        ...topPluginItems,
-        ...topBaseItems,
-        ...bottomPluginItems,
-        ...bottomBaseItems,
-      ];
+    const filterPluginItems = (
+      items: PluginMenuItemInternal<unknown>[],
+    ): MenuItem[] => {
+      if (!context) return [];
+      return items
+        .filter((item) => {
+          // visible 체크
+          if (item.visible === false) return false;
+          if (typeof item.visible === 'function' && !item.visible(context))
+            return false;
+          return true;
+        })
+        .map((item) => ({
+          id: item.fullId,
+          label: resolvePluginLabel(item.pluginId, item.label),
+          disabled:
+            typeof item.disabled === 'function'
+              ? item.disabled(context)
+              : item.disabled || false,
+          isPlugin: true,
+        }));
     };
+
+    const topPluginItems = filterPluginItems(
+      pluginKeyMenuItems.filter((i) => i.position === 'top'),
+    );
+    const bottomPluginItems = filterPluginItems(
+      pluginKeyMenuItems.filter((i) => i.position !== 'top'),
+    );
+
+    return [...topPluginItems, ...baseItems, ...bottomPluginItems];
+  };
+
+  // 그리드 메뉴 아이템 생성 (기본 + 플러그인)
+  const getStatMenuItems = (_contextIndex: number | null): MenuItem[] => [
+    { id: 'delete', label: t('contextMenu.deleteStat') },
+    { id: 'duplicate', label: t('contextMenu.duplicateStat') },
+    { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+    { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+  ];
+
+  const getGraphMenuItems = (_contextIndex: number | null): MenuItem[] => [
+    { id: 'delete', label: t('contextMenu.deleteGraph') },
+    { id: 'duplicate', label: t('contextMenu.duplicateGraph') },
+    { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+    { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+  ];
+
+  const getGridMenuItems = (
+    gridAddLocalPos: { dx: number; dy: number } | null,
+  ): MenuItem[] => {
+    const topBaseItems: MenuItem[] = [
+      { id: 'add', label: t('contextMenu.addKey') },
+      { id: 'addStat', label: t('contextMenu.addStat') },
+      { id: 'addGraph', label: t('contextMenu.addGraph') },
+    ];
+    const bottomBaseItems: MenuItem[] = [
+      { id: 'tabCss', label: t('contextMenu.tabCssSetting') },
+      {
+        id: 'tabNote',
+        label: t('contextMenu.tabNoteSetting'),
+        disabled: !noteEffect,
+      },
+    ];
+
+    // 플러그인 메뉴 필터링
+    const context: GridContext | null = gridAddLocalPos
+      ? {
+          position: gridAddLocalPos,
+          mode: selectedKeyType,
+        }
+      : null;
+
+    const filterPluginItems = (
+      items: PluginMenuItemInternal<unknown>[],
+    ): MenuItem[] => {
+      if (!context) return [];
+      return items
+        .filter((item) => {
+          if (item.visible === false) return false;
+          if (typeof item.visible === 'function' && !item.visible(context))
+            return false;
+          return true;
+        })
+        .map((item) => ({
+          id: item.fullId,
+          label: resolvePluginLabel(item.pluginId, item.label),
+          disabled:
+            typeof item.disabled === 'function'
+              ? item.disabled(context)
+              : item.disabled || false,
+          isPlugin: true,
+        }));
+    };
+
+    const topPluginItems = filterPluginItems(
+      pluginGridMenuItems.filter((i) => i.position === 'top'),
+    );
+    const bottomPluginItems = filterPluginItems(
+      pluginGridMenuItems.filter((i) => i.position !== 'top'),
+    );
+
+    return [
+      ...topPluginItems,
+      ...topBaseItems,
+      ...bottomPluginItems,
+      ...bottomBaseItems,
+    ];
+  };
 
   return {
     getKeyMenuItems,

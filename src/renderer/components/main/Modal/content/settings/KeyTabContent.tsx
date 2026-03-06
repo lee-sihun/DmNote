@@ -169,61 +169,61 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
 
     // 이미지 변경 핸들러
     const _handleIdleImageChange = (imageUrl: string) => {
-        setState((prev) => ({ ...prev, inactiveImage: imageUrl }));
-        onPreview({ inactiveImage: imageUrl });
-      };
+      setState((prev) => ({ ...prev, inactiveImage: imageUrl }));
+      onPreview({ inactiveImage: imageUrl });
+    };
 
     const _handleActiveImageChange = (imageUrl: string) => {
-        setState((prev) => ({ ...prev, activeImage: imageUrl }));
-        onPreview({ activeImage: imageUrl });
-      };
+      setState((prev) => ({ ...prev, activeImage: imageUrl }));
+      onPreview({ activeImage: imageUrl });
+    };
 
     // 크기 변경 핸들러
     const handleWidthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newValue = e.target.value;
-        if (newValue === '') {
-          setState((prev) => ({ ...prev, width: '' }));
-        } else {
-          const numValue = parseInt(newValue, 10);
-          if (!Number.isNaN(numValue)) {
-            const clamped = Math.min(Math.max(numValue, 1), 999);
-            setState((prev) => ({ ...prev, width: clamped }));
-            onPreview({ width: clamped });
-          }
+      const newValue = e.target.value;
+      if (newValue === '') {
+        setState((prev) => ({ ...prev, width: '' }));
+      } else {
+        const numValue = parseInt(newValue, 10);
+        if (!Number.isNaN(numValue)) {
+          const clamped = Math.min(Math.max(numValue, 1), 999);
+          setState((prev) => ({ ...prev, width: clamped }));
+          onPreview({ width: clamped });
         }
-      };
+      }
+    };
 
     const handleHeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newValue = e.target.value;
-        if (newValue === '') {
-          setState((prev) => ({ ...prev, height: '' }));
-        } else {
-          const numValue = parseInt(newValue, 10);
-          if (!Number.isNaN(numValue)) {
-            const clamped = Math.min(Math.max(numValue, 1), 999);
-            setState((prev) => ({ ...prev, height: clamped }));
-            onPreview({ height: clamped });
-          }
+      const newValue = e.target.value;
+      if (newValue === '') {
+        setState((prev) => ({ ...prev, height: '' }));
+      } else {
+        const numValue = parseInt(newValue, 10);
+        if (!Number.isNaN(numValue)) {
+          const clamped = Math.min(Math.max(numValue, 1), 999);
+          setState((prev) => ({ ...prev, height: clamped }));
+          onPreview({ height: clamped });
         }
-      };
+      }
+    };
 
     // 투명 토글 핸들러
     const _handleIdleTransparentChange = (checked: boolean) => {
-        setState((prev) => ({ ...prev, idleTransparent: checked }));
-        onPreview({ idleTransparent: checked });
-      };
+      setState((prev) => ({ ...prev, idleTransparent: checked }));
+      onPreview({ idleTransparent: checked });
+    };
 
     const _handleActiveTransparentChange = (checked: boolean) => {
-        setState((prev) => ({ ...prev, activeTransparent: checked }));
-        onPreview({ activeTransparent: checked });
-      };
+      setState((prev) => ({ ...prev, activeTransparent: checked }));
+      onPreview({ activeTransparent: checked });
+    };
 
     // 클래스 변경 핸들러
     const handleClassNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setState((prev) => ({ ...prev, className: value }));
-        onPreview({ className: value });
-      };
+      const value = e.target.value;
+      setState((prev) => ({ ...prev, className: value }));
+      onPreview({ className: value });
+    };
 
     return (
       <div className="flex flex-col gap-[19px]">

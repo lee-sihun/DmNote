@@ -1,6 +1,5 @@
 import React, {
   type ChangeEvent,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -57,10 +56,10 @@ export default function SoundManagerModal({
   const normalizedSelectedSound = (selectedSound || '').trim();
 
   const editingSoundItem = editingSoundPath
-        ? (sounds.find((s) => s.soundPath === editingSoundPath) ?? null)
-        : null;
+    ? sounds.find((s) => s.soundPath === editingSoundPath) ?? null
+    : null;
 
-  const loadSounds = useCallback(async () => {
+  const loadSounds = async () => {
     setIsLoading(true);
     setLoadError('');
     try {
@@ -73,14 +72,14 @@ export default function SoundManagerModal({
       hasLoadedRef.current = true;
       setIsLoading(false);
     }
-  }, [t]);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     void loadSounds();
-  }, [isOpen, loadSounds]);
+  });
 
-  const updateScrollState = useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -89,7 +88,7 @@ export default function SoundManagerModal({
         ? prev
         : nextState,
     );
-  }, []);
+  };
 
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
     onScroll: () => updateScrollState(wrapperElement),
@@ -142,63 +141,61 @@ export default function SoundManagerModal({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [isOpen, sounds, wrapperElement, updateScrollState]);
+  }, [isOpen, sounds, wrapperElement]);
 
   const handleToggle = async (item: SoundListItem, nextEnabled: boolean) => {
-      if (isSaving) return;
-      setIsSaving(true);
+    if (isSaving) return;
+    setIsSaving(true);
+    setSounds((prev) =>
+      prev.map((s) =>
+        s.soundPath === item.soundPath ? { ...s, enabled: nextEnabled } : s,
+      ),
+    );
+    try {
+      await window.api.sound.setEnabled(item.soundPath, nextEnabled);
+    } catch (error) {
+      console.error('Failed to toggle sound enabled state', error);
       setSounds((prev) =>
         prev.map((s) =>
-          s.soundPath === item.soundPath ? { ...s, enabled: nextEnabled } : s,
+          s.soundPath === item.soundPath ? { ...s, enabled: !nextEnabled } : s,
         ),
       );
-      try {
-        await window.api.sound.setEnabled(item.soundPath, nextEnabled);
-      } catch (error) {
-        console.error('Failed to toggle sound enabled state', error);
-        setSounds((prev) =>
-          prev.map((s) =>
-            s.soundPath === item.soundPath
-              ? { ...s, enabled: !nextEnabled }
-              : s,
-          ),
-        );
-        setLoadError(
-          t('soundManager.stateChangeFailed') || '사운드 상태 변경 실패',
-        );
-      } finally {
-        setIsSaving(false);
-      }
-    };
+      setLoadError(
+        t('soundManager.stateChangeFailed') || '사운드 상태 변경 실패',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleDelete = async (item: SoundListItem) => {
-      if (isSaving) return;
-      setIsSaving(true);
-      setSounds((prev) => prev.filter((s) => s.soundPath !== item.soundPath));
-      if (normalizedSelectedSound === item.soundPath) {
-        onSelectSound(null);
-      }
-      try {
-        await window.api.sound.remove(item.soundPath);
-      } catch (error) {
-        console.error('Failed to delete sound', error);
-        setLoadError(t('soundManager.deleteFailed') || '사운드 삭제 실패');
-        await loadSounds();
-      } finally {
-        setIsSaving(false);
-      }
-    };
+    if (isSaving) return;
+    setIsSaving(true);
+    setSounds((prev) => prev.filter((s) => s.soundPath !== item.soundPath));
+    if (normalizedSelectedSound === item.soundPath) {
+      onSelectSound(null);
+    }
+    try {
+      await window.api.sound.remove(item.soundPath);
+    } catch (error) {
+      console.error('Failed to delete sound', error);
+      setLoadError(t('soundManager.deleteFailed') || '사운드 삭제 실패');
+      await loadSounds();
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleAddFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (addFileInputRef.current) {
-        addFileInputRef.current.value = '';
-      }
-      if (!file) return;
-      setPendingFile(file);
-      setEditingSoundPath(null);
-      setShowTrimModal(true);
-    };
+    const file = event.target.files?.[0];
+    if (addFileInputRef.current) {
+      addFileInputRef.current.value = '';
+    }
+    if (!file) return;
+    setPendingFile(file);
+    setEditingSoundPath(null);
+    setShowTrimModal(true);
+  };
 
   const handleEditSound = (item: SoundListItem) => {
     if (!item.originalPath) return;
@@ -213,12 +210,12 @@ export default function SoundManagerModal({
   };
 
   const handleTrimSaved = (soundPath: string) => {
-      onSelectSound(soundPath);
-      setShowTrimModal(false);
-      setEditingSoundPath(null);
-      setPendingFile(null);
-      void loadSounds();
-    };
+    onSelectSound(soundPath);
+    setShowTrimModal(false);
+    setEditingSoundPath(null);
+    setPendingFile(null);
+    void loadSounds();
+  };
 
   if (!isOpen) return null;
 

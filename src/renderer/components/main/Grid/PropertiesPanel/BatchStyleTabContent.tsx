@@ -143,8 +143,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       spacingDebounceTimerRef.current = null;
       const spacing = lastSpacingRef.current;
       if (spacing === null) return;
-      if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing))
-        return;
+      if (isSameSpacingValue(lastCommittedSpacingRef.current, spacing)) return;
       commitSpacing(spacing);
     }, SPACING_COMMIT_DEBOUNCE_MS);
   };

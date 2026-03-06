@@ -90,8 +90,8 @@ export const displayElementApi = {
     const stateSnapshot = initialState
       ? { ...initialState }
       : templateFn
-        ? {}
-        : undefined;
+      ? {}
+      : undefined;
 
     const htmlContent = typeof initialHtml === 'string' ? initialHtml : '';
 
@@ -186,7 +186,10 @@ export const displayElementApi = {
   /**
    * 디스플레이 요소의 상태를 업데이트합니다.
    */
-  setState: (target: DisplayElementTarget, updates: Record<string, unknown>) => {
+  setState: (
+    target: DisplayElementTarget,
+    updates: Record<string, unknown>,
+  ) => {
     const instance = resolveInstance(target);
     if (!instance) return;
     instance.setState(updates || {});

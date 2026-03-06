@@ -7,7 +7,9 @@ import {
 
 interface PaletteProps {
   color: string;
-  onColorChange: (color: string | { type: 'gradient'; top: string; bottom: string }) => void;
+  onColorChange: (
+    color: string | { type: 'gradient'; top: string; bottom: string },
+  ) => void;
 }
 
 interface ColorProps {
@@ -29,7 +31,9 @@ export default function Palette({ color, onColorChange }: PaletteProps) {
     'transparent',
   ];
 
-  const handleColorChange = (next: string | { type: 'gradient'; top: string; bottom: string }): void => {
+  const handleColorChange = (
+    next: string | { type: 'gradient'; top: string; bottom: string },
+  ): void => {
     if (typeof next === 'string') {
       const parsed = parseHexColor(next);
       if (!parsed) {

@@ -122,7 +122,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       try {
         const saved = await namespacedStorage.get(SETTINGS_KEY);
         if (saved && typeof saved === 'object') {
-          currentSettings = { ...defaultSettings, ...(saved as Record<string, unknown>) };
+          currentSettings = {
+            ...defaultSettings,
+            ...(saved as Record<string, unknown>),
+          };
         }
         isInitialized = true;
       } catch (err) {
@@ -201,7 +204,9 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             dialogSettings,
           );
           if (schema.type === 'divider') {
-            htmlContent += `<div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
+            htmlContent += `<div data-setting-key="${key}" style="${
+              _vis ? '' : 'display:none'
+            }" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
             const value =
               dialogSettings[key] !== undefined
@@ -231,7 +236,9 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             if (schema.type === 'boolean') {
               componentHtml = window.api.ui.components.checkbox({
                 checked: !!value,
-                onChange: handleChange as (checked: boolean) => void | Promise<void>,
+                onChange: handleChange as (
+                  checked: boolean,
+                ) => void | Promise<void>,
               });
             } else if (schema.type === 'color') {
               const handleColorClick = (e: Event) => {
@@ -305,9 +312,12 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
               }
 
               componentHtml = window.api.ui.components.input({
-                type: schema.type === 'string' ? 'text' : (schema.type as 'number'),
+                type:
+                  schema.type === 'string' ? 'text' : (schema.type as 'number'),
                 value: value as string | number,
-                onChange: handleChange as (value: string) => void | Promise<void>,
+                onChange: handleChange as (
+                  value: string,
+                ) => void | Promise<void>,
                 min: schema.min,
                 max: schema.max,
                 step: schema.step,
@@ -324,12 +334,16 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
               componentHtml = window.api.ui.components.dropdown({
                 options: translatedOptions,
                 selected: value as string,
-                onChange: handleChange as (value: string) => void | Promise<void>,
+                onChange: handleChange as (
+                  value: string,
+                ) => void | Promise<void>,
               });
             }
 
             htmlContent += `
-            <div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="flex justify-between w-full items-center">
+            <div data-setting-key="${key}" style="${
+              _vis ? '' : 'display:none'
+            }" class="flex justify-between w-full items-center">
               <p class="text-white text-style-2">${labelText}</p>
               ${componentHtml}
             </div>

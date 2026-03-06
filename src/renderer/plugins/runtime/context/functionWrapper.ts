@@ -35,10 +35,7 @@ export const wrapFunctionWithContext = (
       }
     }
 
-    if (
-      result &&
-      typeof (result as { then?: unknown }).then === 'function'
-    ) {
+    if (result && typeof (result as { then?: unknown }).then === 'function') {
       return (result as Promise<unknown>).finally(() => {
         window.__dmn_current_plugin_id = prev;
       });
@@ -67,10 +64,7 @@ export const wrapFunctionWithContext = (
 /**
  * 객체/배열의 모든 함수를 재귀적으로 래핑합니다.
  */
-export const wrapApiValue = (
-  value: unknown,
-  pluginId: string,
-): unknown => {
+export const wrapApiValue = (value: unknown, pluginId: string): unknown => {
   if (typeof value === 'function') {
     return wrapFunctionWithContext(value, pluginId);
   }

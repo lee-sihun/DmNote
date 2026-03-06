@@ -1,7 +1,4 @@
-import type {
-  DMNoteAPI,
-  PluginDisplayElementInternal,
-} from '@src/types/api';
+import type { DMNoteAPI, PluginDisplayElementInternal } from '@src/types/api';
 
 declare global {
   interface Window {
@@ -45,9 +42,7 @@ declare global {
     };
     __dmn_element_restorers?: Map<
       string,
-      (
-        el: PluginDisplayElementInternal,
-      ) => PluginDisplayElementInternal
+      (el: PluginDisplayElementInternal) => PluginDisplayElementInternal
     >;
     __dmn_plugin_messages?: Record<
       string,
@@ -55,7 +50,9 @@ declare global {
     >;
     __dmn_plugin_window_proxy?: Window;
     __dmn_custom_js_cleanup?: () => void;
-    [key: `__dmn_handler_${string}`]: ((...args: unknown[]) => void | Promise<void>) | undefined;
+    [key: `__dmn_handler_${string}`]:
+      | ((...args: unknown[]) => void | Promise<void>)
+      | undefined;
   }
 
   // dmn 전역 변수 (window. 없이 바로 접근 가능)

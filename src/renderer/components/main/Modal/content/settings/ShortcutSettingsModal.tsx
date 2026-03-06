@@ -44,10 +44,10 @@ function formatShortcut(binding: ShortcutBinding, macOS: boolean): string {
     key.startsWith('Key') && key.length === 4
       ? key.slice(3)
       : key.startsWith('Digit') && key.length === 6
-        ? key.slice(5)
-        : key === 'Space'
-          ? 'Space'
-          : key;
+      ? key.slice(5)
+      : key === 'Space'
+      ? 'Space'
+      : key;
 
   parts.push(displayKey);
   return parts.join(' + ');
@@ -127,7 +127,7 @@ export default function ShortcutSettingsModal({
   const [hasOverflow, setHasOverflow] = React.useState(false);
   const isFirstRender = React.useRef(true);
 
-  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const next = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -136,7 +136,7 @@ export default function ShortcutSettingsModal({
         ? prev
         : next,
     );
-  }, []);
+  };
 
   const {
     scrollContainerRef: scrollRef,
@@ -192,7 +192,7 @@ export default function ShortcutSettingsModal({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [isOpen, draft, wrapperElement, updateScrollState]);
+  }, [isOpen, draft, wrapperElement]);
 
   React.useEffect(() => {
     if (!isListening) return;
@@ -263,77 +263,77 @@ export default function ShortcutSettingsModal({
   }, [isListening, listeningKey]);
 
   const actions = [
-        // 오버레이
-        {
-          section: 'overlay' as const,
-          key: 'toggleOverlay' as const,
-          label: t('shortcutSetting.toggleOverlay'),
-          help: t('shortcutSetting.toggleOverlayHint'),
-        },
-        {
-          section: 'overlay' as const,
-          key: 'toggleOverlayLock' as const,
-          label: t('shortcutSetting.toggleOverlayLock'),
-          help: t('shortcutSetting.toggleOverlayLockHint'),
-        },
-        {
-          section: 'overlay' as const,
-          key: 'toggleAlwaysOnTop' as const,
-          label: t('shortcutSetting.toggleAlwaysOnTop'),
-          help: t('shortcutSetting.toggleAlwaysOnTopHint'),
-        },
+    // 오버레이
+    {
+      section: 'overlay' as const,
+      key: 'toggleOverlay' as const,
+      label: t('shortcutSetting.toggleOverlay'),
+      help: t('shortcutSetting.toggleOverlayHint'),
+    },
+    {
+      section: 'overlay' as const,
+      key: 'toggleOverlayLock' as const,
+      label: t('shortcutSetting.toggleOverlayLock'),
+      help: t('shortcutSetting.toggleOverlayLockHint'),
+    },
+    {
+      section: 'overlay' as const,
+      key: 'toggleAlwaysOnTop' as const,
+      label: t('shortcutSetting.toggleAlwaysOnTop'),
+      help: t('shortcutSetting.toggleAlwaysOnTopHint'),
+    },
 
-        // 캔버스
-        {
-          section: 'canvas' as const,
-          key: 'toggleSettingsPanel' as const,
-          label: t('shortcutSetting.toggleSidePanel'),
-          help: t('shortcutSetting.toggleSidePanelHint'),
-        },
-        {
-          section: 'canvas' as const,
-          key: 'switchKeyMode' as const,
-          label: t('shortcutSetting.switchKeyMode'),
-          help: t('shortcutSetting.switchKeyModeHint'),
-        },
-        {
-          section: 'canvas' as const,
-          key: 'zoomIn' as const,
-          label: t('shortcutSetting.zoomIn'),
-          help: t('shortcutSetting.zoomInHint'),
-        },
-        {
-          section: 'canvas' as const,
-          key: 'zoomOut' as const,
-          label: t('shortcutSetting.zoomOut'),
-          help: t('shortcutSetting.zoomOutHint'),
-        },
-        {
-          section: 'canvas' as const,
-          key: 'resetZoom' as const,
-          label: t('shortcutSetting.resetZoom'),
-          help: t('shortcutSetting.resetZoomHint'),
-        },
-      ] as const;
+    // 캔버스
+    {
+      section: 'canvas' as const,
+      key: 'toggleSettingsPanel' as const,
+      label: t('shortcutSetting.toggleSidePanel'),
+      help: t('shortcutSetting.toggleSidePanelHint'),
+    },
+    {
+      section: 'canvas' as const,
+      key: 'switchKeyMode' as const,
+      label: t('shortcutSetting.switchKeyMode'),
+      help: t('shortcutSetting.switchKeyModeHint'),
+    },
+    {
+      section: 'canvas' as const,
+      key: 'zoomIn' as const,
+      label: t('shortcutSetting.zoomIn'),
+      help: t('shortcutSetting.zoomInHint'),
+    },
+    {
+      section: 'canvas' as const,
+      key: 'zoomOut' as const,
+      label: t('shortcutSetting.zoomOut'),
+      help: t('shortcutSetting.zoomOutHint'),
+    },
+    {
+      section: 'canvas' as const,
+      key: 'resetZoom' as const,
+      label: t('shortcutSetting.resetZoom'),
+      help: t('shortcutSetting.resetZoomHint'),
+    },
+  ] as const;
 
   const overlayActions = actions.filter((a) => a.section === 'overlay');
   const canvasActions = actions.filter((a) => a.section === 'canvas');
 
   const validate = (next: ShortcutsState) => {
-      const entries = actions.map((a) => [a.key, next[a.key]] as const);
-      for (let i = 0; i < entries.length; i++) {
-        for (let j = i + 1; j < entries.length; j++) {
-          const [keyA, bindA] = entries[i];
-          const [keyB, bindB] = entries[j];
-          if (bindA.key && bindB.key && isSameShortcut(bindA, bindB)) {
-            const nameA = actions.find((a) => a.key === keyA)?.label || keyA;
-            const nameB = actions.find((a) => a.key === keyB)?.label || keyB;
-            return t('shortcutSetting.duplicate', { a: nameA, b: nameB });
-          }
+    const entries = actions.map((a) => [a.key, next[a.key]] as const);
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const [keyA, bindA] = entries[i];
+        const [keyB, bindB] = entries[j];
+        if (bindA.key && bindB.key && isSameShortcut(bindA, bindB)) {
+          const nameA = actions.find((a) => a.key === keyA)?.label || keyA;
+          const nameB = actions.find((a) => a.key === keyB)?.label || keyB;
+          return t('shortcutSetting.duplicate', { a: nameA, b: nameB });
         }
       }
-      return null;
-    };
+    }
+    return null;
+  };
 
   const handleStartListening = (key: ShortcutKey) => {
     setError(null);

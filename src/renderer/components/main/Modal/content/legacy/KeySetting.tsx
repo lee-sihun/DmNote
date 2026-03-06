@@ -61,7 +61,9 @@ export default function KeySetting({
     getKeyInfoByGlobalKey(key).displayName,
   );
   const [isListening, setIsListening] = useState<boolean>(false);
-  const [activeImage, setActiveImage] = useState<string>(keyData.activeImage || '');
+  const [activeImage, setActiveImage] = useState<string>(
+    keyData.activeImage || '',
+  );
   const [inactiveImage, setInactiveImage] = useState<string>(
     keyData.inactiveImage || '',
   );
@@ -82,7 +84,9 @@ export default function KeySetting({
 
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
   const initialSkipRef = useRef<boolean>(skipAnimation);
-  const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listeningFlagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // 키 리스닝 플래그를 전역으로 노출 (Grid 단축키 등에서 체크)
   useEffect(() => {
@@ -126,18 +130,20 @@ export default function KeySetting({
       return undefined;
     }
 
-    const unsubscribe = window.api.keys.onRawInput((payload: RawInputPayload) => {
-      if (!payload || payload.state !== 'DOWN') return;
-      const targetLabel =
-        payload.label ||
-        (Array.isArray(payload.labels) ? payload.labels[0] : null);
-      if (!targetLabel) return;
+    const unsubscribe = window.api.keys.onRawInput(
+      (payload: RawInputPayload) => {
+        if (!payload || payload.state !== 'DOWN') return;
+        const targetLabel =
+          payload.label ||
+          (Array.isArray(payload.labels) ? payload.labels[0] : null);
+        if (!targetLabel) return;
 
-      const info = getKeyInfoByGlobalKey(targetLabel);
-      setKey(info.globalKey);
-      setDisplayKey(info.displayName);
-      setIsListening(false);
-    });
+        const info = getKeyInfoByGlobalKey(targetLabel);
+        setKey(info.globalKey);
+        setDisplayKey(info.displayName);
+        setIsListening(false);
+      },
+    );
 
     return () => {
       try {

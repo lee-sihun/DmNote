@@ -1,6 +1,10 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type { KeyPosition, NoteColor, KeyCounterSettings } from '@src/types/keys';
+import type {
+  KeyPosition,
+  NoteColor,
+  KeyCounterSettings,
+} from '@src/types/keys';
 import type { GraphItemPosition, GraphItemType } from '@src/types/graphItems';
 import type { SelectedElement } from '@stores/useGridSelectionStore';
 import {
@@ -26,9 +30,27 @@ import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 const RenameIcon: React.FC = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 20H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M12 20H21"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -148,7 +170,9 @@ interface BatchKeyLikePanelProps {
   batchLocalColors: BatchLocalColors;
   setBatchLocalColors: React.Dispatch<React.SetStateAction<BatchLocalColors>>;
   batchLocalOpacities: { noteOpacity: number; glowOpacity: number };
-  setBatchLocalOpacities: React.Dispatch<React.SetStateAction<{ noteOpacity: number; glowOpacity: number }>>;
+  setBatchLocalOpacities: React.Dispatch<
+    React.SetStateAction<{ noteOpacity: number; glowOpacity: number }>
+  >;
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
   handleBatchPickerColorChange: (newColor: NoteColor) => void;
   handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
@@ -203,9 +227,11 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   getSelectedKeyOnlyPositions: _getSelectedKeyOnlyPositions,
   handleBatchKeyOnlyStyleChangeComplete,
   handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
-  handleBatchNoteColorChangeCompleteKeysOnly: _handleBatchNoteColorChangeCompleteKeysOnly,
+  handleBatchNoteColorChangeCompleteKeysOnly:
+    _handleBatchNoteColorChangeCompleteKeysOnly,
   handleBatchGlowColorChangeKeysOnly: _handleBatchGlowColorChangeKeysOnly,
-  handleBatchGlowColorChangeCompleteKeysOnly: _handleBatchGlowColorChangeCompleteKeysOnly,
+  handleBatchGlowColorChangeCompleteKeysOnly:
+    _handleBatchGlowColorChangeCompleteKeysOnly,
   handleBatchNoteColorChange: _handleBatchNoteColorChange,
   handleBatchNoteColorChangeComplete: _handleBatchNoteColorChangeComplete,
   handleBatchGlowColorChange: _handleBatchGlowColorChange,
@@ -273,7 +299,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
     const mixedFn =
       selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn((pos) => pos.noteColor, '#FFFFFF' as NoteColor);
+    const { isMixed, value } = mixedFn(
+      (pos) => pos.noteColor,
+      '#FFFFFF' as NoteColor,
+    );
     if (isMixed)
       return {
         style: { backgroundColor: '#666' },
@@ -391,10 +420,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         isStat: selectedKeyLikeElements[0]?.type === 'stat',
       }
     : undefined;
-  const noteOpacityMixed = getMixedValue(
-    (pos) => pos.noteOpacity,
-    80,
-  ).isMixed;
+  const noteOpacityMixed = getMixedValue((pos) => pos.noteOpacity, 80).isMixed;
   const glowOpacityMixed = getMixedValue(
     (pos) => pos.noteGlowOpacity,
     70,
@@ -421,7 +447,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     true,
   );
   const hasLineGraph = getSelectedGraphsData().some(
-    (data) => ((data.position as GraphItemPosition | undefined)?.graphType || 'line') === 'line',
+    (data) =>
+      ((data.position as GraphItemPosition | undefined)?.graphType ||
+        'line') === 'line',
   );
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
@@ -435,8 +463,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           ? 'fillActive'
           : 'fillIdle'
         : batchCounterColorState === 'active'
-          ? 'strokeActive'
-          : 'strokeIdle';
+        ? 'strokeActive'
+        : 'strokeIdle';
 
     if (batchPickerFor === target) {
       return batchLocalColors[key];
@@ -447,8 +475,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         ? batchCounterSettings.fill.active
         : batchCounterSettings.fill.idle
       : batchCounterColorState === 'active'
-        ? batchCounterSettings.stroke.active
-        : batchCounterSettings.stroke.idle;
+      ? batchCounterSettings.stroke.active
+      : batchCounterSettings.stroke.idle;
   };
 
   return (
@@ -566,9 +594,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   hasGraphSelection ? (
                     <>
                       <PropertyRow
-                        label={
-                          t('propertiesPanel.graphShape') || 'Graph Shape'
-                        }
+                        label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                       >
                         {graphTypeState.isMixed ? (
                           <span className="text-[#6B6D75] text-style-4 italic">
@@ -604,9 +630,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       )}
 
                       <PropertyRow
-                        label={
-                          t('propertiesPanel.graphSpeed') || 'Graph Speed'
-                        }
+                        label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                       >
                         {graphSpeedState.isMixed ? (
                           <span className="text-[#6B6D75] text-style-4 italic">
@@ -634,9 +658,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       </PropertyRow>
 
                       <PropertyRow
-                        label={
-                          t('propertiesPanel.graphColor') || 'Graph Color'
-                        }
+                        label={t('propertiesPanel.graphColor') || 'Graph Color'}
                       >
                         {graphColorState.isMixed ? (
                           <span className="text-[#6B6D75] text-style-4 italic">
@@ -689,9 +711,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchSpacing={batchSpacing}
                 handleBatchResize={handleBatchResize}
                 handleBatchStyleChange={handleBatchStyleChange}
-                handleBatchStyleChangeComplete={
-                  handleBatchStyleChangeComplete
-                }
+                handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
                 getKeyOnlyMixedValue={getMixedValueKeysOnly}
                 handleKeyOnlyStyleChangeComplete={
                   handleKeyOnlyStyleChangeComplete
@@ -816,8 +836,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               batchPickerFor === 'noteColor'
                 ? batchLocalOpacities.noteOpacity
                 : batchPickerFor === 'glowColor'
-                  ? batchLocalOpacities.glowOpacity
-                  : undefined
+                ? batchLocalOpacities.glowOpacity
+                : undefined
             }
             onOpacityPercentChange={(value: number) => {
               if (batchPickerFor === 'noteColor') {
@@ -853,15 +873,15 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               batchPickerFor === 'noteColor'
                 ? t('keySetting.noteOpacity') || '노트 투명도'
                 : batchPickerFor === 'glowColor'
-                  ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
-                  : undefined
+                ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
+                : undefined
             }
             opacityPercentMixed={
               batchPickerFor === 'noteColor'
                 ? noteOpacityMixed
                 : batchPickerFor === 'glowColor'
-                  ? glowOpacityMixed
-                  : false
+                ? glowOpacityMixed
+                : false
             }
           />
         )}
@@ -886,8 +906,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               styleMixedValueGetter((pos) => pos.idleTransparent, false).value
             }
             activeTransparent={
-              styleMixedValueGetter((pos) => pos.activeTransparent, false)
-                .value
+              styleMixedValueGetter((pos) => pos.activeTransparent, false).value
             }
             onIdleImageChange={(imageUrl: string) => {
               handleBatchStyleChangeComplete('inactiveImage', imageUrl);
@@ -1030,7 +1049,9 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
     true,
   );
   const hasLineGraph = getSelectedGraphsData().some(
-    (data) => ((data.position as GraphItemPosition | undefined)?.graphType || 'line') === 'line',
+    (data) =>
+      ((data.position as GraphItemPosition | undefined)?.graphType ||
+        'line') === 'line',
   );
   const batchGraphSpacing = getBatchSpacingValue();
 
@@ -1209,8 +1230,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
 
                   <div className="flex justify-between items-center w-full h-[23px]">
                     <p className="text-white text-style-2">
-                      {t('propertiesPanel.graphAnimation') ||
-                        'Graph Animation'}
+                      {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {graphAnimationState.isMixed ? (

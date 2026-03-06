@@ -29,7 +29,14 @@ const parseColor = (hex: string) => {
 const convertLinearToSRGB = (rgb: readonly number[]) =>
   [linearToSRGB(rgb[0]), linearToSRGB(rgb[1]), linearToSRGB(rgb[2])] as const;
 
-const extractColorStops = (color: string | { type: string; top?: string; bottom?: string } | undefined | null, fallback = '#FFFFFF') => {
+const extractColorStops = (
+  color:
+    | string
+    | { type: string; top?: string; bottom?: string }
+    | undefined
+    | null,
+  fallback = '#FFFFFF',
+) => {
   if (!color) {
     const c = parseColor(fallback);
     return {

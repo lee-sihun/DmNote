@@ -30,7 +30,9 @@ interface DefineElementDependencies {
   pluginId: string;
   namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
-  wrapFunctionWithContext: (fn: (...args: unknown[]) => unknown) => (...args: unknown[]) => unknown;
+  wrapFunctionWithContext: (
+    fn: (...args: unknown[]) => unknown,
+  ) => (...args: unknown[]) => unknown;
   isReloading: () => boolean;
 }
 
@@ -205,10 +207,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             return item.onClick({ ...ctx, actions });
           }
 
-          if (
-            item.action &&
-            typeof actions[item.action] === 'function'
-          ) {
+          if (item.action && typeof actions[item.action] === 'function') {
             return actions[item.action]();
           }
         },
@@ -294,7 +293,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             currentSettings,
           );
           if (schema.type === 'divider') {
-            htmlContent += `<div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
+            htmlContent += `<div data-setting-key="${key}" style="${
+              _vis ? '' : 'display:none'
+            }" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
             const value =
               currentSettings[key] !== undefined
@@ -398,9 +399,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
               componentHtml = window.api.ui.components.input({
                 type:
-                  schema.type === 'string'
-                    ? 'text'
-                    : (schema.type as 'number'),
+                  schema.type === 'string' ? 'text' : (schema.type as 'number'),
                 value: value as string | number,
                 onChange: wrappedChange as unknown as (
                   value: string,
@@ -428,7 +427,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
 
             htmlContent += `
-            <div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="flex justify-between w-full items-center">
+            <div data-setting-key="${key}" style="${
+              _vis ? '' : 'display:none'
+            }" class="flex justify-between w-full items-center">
               <p class="text-white text-style-2">${labelText}</p>
               ${componentHtml}
             </div>
@@ -542,7 +543,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     }
 
     // Undo/Redo를 위한 요소 복원 함수 등록
-    const restoreElementForUndo = (savedElement: PluginDisplayElementInternal) => {
+    const restoreElementForUndo = (
+      savedElement: PluginDisplayElementInternal,
+    ) => {
       const previousPluginId = window.__dmn_current_plugin_id;
       window.__dmn_current_plugin_id = pluginId;
 

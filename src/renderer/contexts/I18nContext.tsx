@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useState,
-  } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SettingsDiff, SettingsState } from '@src/types/settings';
 import { I18nContext } from './I18nContextDef';
@@ -226,18 +223,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   };
 
   const t = function translate(
-        key: string,
-        params?: Record<string, string | number>,
-      ): string {
-        const raw = getNestedValue(messages, key);
-        if (typeof raw === 'string') {
-          return interpolate(raw, params);
-        }
-        if (typeof raw === 'number') {
-          return String(raw);
-        }
-        return key;
-      };
+    key: string,
+    params?: Record<string, string | number>,
+  ): string {
+    const raw = getNestedValue(messages, key);
+    if (typeof raw === 'string') {
+      return interpolate(raw, params);
+    }
+    if (typeof raw === 'number') {
+      return String(raw);
+    }
+    return key;
+  };
 
   const value: I18nContextValue = {
     locale,
@@ -249,4 +246,3 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
-

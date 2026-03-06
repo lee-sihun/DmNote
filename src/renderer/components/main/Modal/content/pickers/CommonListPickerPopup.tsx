@@ -157,7 +157,9 @@ export default function CommonListPickerPopup<T>({
     };
   }, [open, wrapperElement, items.length]);
 
-  const scrollbarCompensation = hasOverflow ? scrollbarWidth + SCROLL_CONTENT_GUTTER : 0;
+  const scrollbarCompensation = hasOverflow
+    ? scrollbarWidth + SCROLL_CONTENT_GUTTER
+    : 0;
 
   const effectiveOffsetY = fixedPosition ? 0 : -93;
 

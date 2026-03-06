@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import FloatingPopup from './FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 
@@ -53,7 +53,7 @@ const SubMenu = ({
     id: string | null;
     close: (() => void) | null;
   }>({ id: null, close: null });
-  const pos = useMemo(() => {
+  const pos = (() => {
     if (!anchorRect) return null;
 
     const padding = 5;
@@ -88,7 +88,7 @@ const SubMenu = ({
       right?: number;
       top: number;
     };
-  }, [anchorRect, items]);
+  })();
 
   const itemHeight = 28;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
@@ -113,7 +113,9 @@ const SubMenu = ({
           node;
         if (needsScroll) subLenisRef(node);
       }}
-      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${needsScroll ? ' listpopup-scroll' : ''}`}
+      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
+        needsScroll ? ' listpopup-scroll' : ''
+      }`}
       style={{
         left: pos.left,
         right: pos.right,
@@ -387,7 +389,9 @@ const ListPopup = ({
             ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
             : undefined
         }
-        className={`flex flex-col gap-[1px]${needsScroll ? ' listpopup-scroll' : ''}`}
+        className={`flex flex-col gap-[1px]${
+          needsScroll ? ' listpopup-scroll' : ''
+        }`}
       >
         {items.map((it) => (
           <MenuItemRow

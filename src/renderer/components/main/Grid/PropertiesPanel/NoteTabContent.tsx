@@ -1,9 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { NoteTabContentProps } from './types';
 import type { NoteColor, KeyPosition } from '@src/types/keys';
 import {
@@ -291,90 +287,93 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
   // 통합 색상 변경 핸들러 (pickerFor 기반)
   const handleColorChange = (target: 'note' | 'glow', newColor: NoteColor) => {
-      if (target === 'note') {
-        if (
-          newColor &&
-          typeof newColor === 'object' &&
-          newColor.type === 'gradient'
-        ) {
-          setNoteColorMode(COLOR_MODES.gradient);
-          setNoteColorTop(newColor.top);
-          setNoteGradientBottom(newColor.bottom);
-        } else {
-          const solidColor = newColor as string;
-          setNoteColorMode(COLOR_MODES.solid);
-          setNoteColorTop(solidColor);
-          setNoteGradientBottom(solidColor);
-        }
+    if (target === 'note') {
+      if (
+        newColor &&
+        typeof newColor === 'object' &&
+        newColor.type === 'gradient'
+      ) {
+        setNoteColorMode(COLOR_MODES.gradient);
+        setNoteColorTop(newColor.top);
+        setNoteGradientBottom(newColor.bottom);
       } else {
-        if (
-          newColor &&
-          typeof newColor === 'object' &&
-          newColor.type === 'gradient'
-        ) {
-          setGlowColorMode(COLOR_MODES.gradient);
-          setGlowColorTop(newColor.top);
-          setGlowGradientBottom(newColor.bottom);
-        } else {
-          const solidColor = newColor as string;
-          setGlowColorMode(COLOR_MODES.solid);
-          setGlowColorTop(solidColor);
-          setGlowGradientBottom(solidColor);
-        }
+        const solidColor = newColor as string;
+        setNoteColorMode(COLOR_MODES.solid);
+        setNoteColorTop(solidColor);
+        setNoteGradientBottom(solidColor);
       }
-    };
-
-  const handleColorChangeComplete = (target: 'note' | 'glow', newColor: NoteColor) => {
-      let colorValue: NoteColor;
-
-      if (target === 'note') {
-        if (
-          newColor &&
-          typeof newColor === 'object' &&
-          newColor.type === 'gradient'
-        ) {
-          setNoteColorMode(COLOR_MODES.gradient);
-          setNoteColorTop(newColor.top);
-          setNoteGradientBottom(newColor.bottom);
-          colorValue = {
-            type: 'gradient',
-            top: newColor.top,
-            bottom: newColor.bottom,
-          };
-        } else {
-          const solidColor = newColor as string;
-          setNoteColorMode(COLOR_MODES.solid);
-          setNoteColorTop(solidColor);
-          setNoteGradientBottom(solidColor);
-          colorValue = newColor;
-        }
-        onKeyPreview?.(keyIndex, { noteColor: colorValue });
-        onKeyUpdate({ index: keyIndex, noteColor: colorValue });
+    } else {
+      if (
+        newColor &&
+        typeof newColor === 'object' &&
+        newColor.type === 'gradient'
+      ) {
+        setGlowColorMode(COLOR_MODES.gradient);
+        setGlowColorTop(newColor.top);
+        setGlowGradientBottom(newColor.bottom);
       } else {
-        if (
-          newColor &&
-          typeof newColor === 'object' &&
-          newColor.type === 'gradient'
-        ) {
-          setGlowColorMode(COLOR_MODES.gradient);
-          setGlowColorTop(newColor.top);
-          setGlowGradientBottom(newColor.bottom);
-          colorValue = {
-            type: 'gradient',
-            top: newColor.top,
-            bottom: newColor.bottom,
-          };
-        } else {
-          const solidColor = newColor as string;
-          setGlowColorMode(COLOR_MODES.solid);
-          setGlowColorTop(solidColor);
-          setGlowGradientBottom(solidColor);
-          colorValue = newColor;
-        }
-        onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
-        onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
+        const solidColor = newColor as string;
+        setGlowColorMode(COLOR_MODES.solid);
+        setGlowColorTop(solidColor);
+        setGlowGradientBottom(solidColor);
       }
-    };
+    }
+  };
+
+  const handleColorChangeComplete = (
+    target: 'note' | 'glow',
+    newColor: NoteColor,
+  ) => {
+    let colorValue: NoteColor;
+
+    if (target === 'note') {
+      if (
+        newColor &&
+        typeof newColor === 'object' &&
+        newColor.type === 'gradient'
+      ) {
+        setNoteColorMode(COLOR_MODES.gradient);
+        setNoteColorTop(newColor.top);
+        setNoteGradientBottom(newColor.bottom);
+        colorValue = {
+          type: 'gradient',
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
+      } else {
+        const solidColor = newColor as string;
+        setNoteColorMode(COLOR_MODES.solid);
+        setNoteColorTop(solidColor);
+        setNoteGradientBottom(solidColor);
+        colorValue = newColor;
+      }
+      onKeyPreview?.(keyIndex, { noteColor: colorValue });
+      onKeyUpdate({ index: keyIndex, noteColor: colorValue });
+    } else {
+      if (
+        newColor &&
+        typeof newColor === 'object' &&
+        newColor.type === 'gradient'
+      ) {
+        setGlowColorMode(COLOR_MODES.gradient);
+        setGlowColorTop(newColor.top);
+        setGlowGradientBottom(newColor.bottom);
+        colorValue = {
+          type: 'gradient',
+          top: newColor.top,
+          bottom: newColor.bottom,
+        };
+      } else {
+        const solidColor = newColor as string;
+        setGlowColorMode(COLOR_MODES.solid);
+        setGlowColorTop(solidColor);
+        setGlowGradientBottom(solidColor);
+        colorValue = newColor;
+      }
+      onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
+      onKeyUpdate({ index: keyIndex, noteGlowColor: colorValue });
+    }
+  };
 
   // ColorPicker에 전달할 색상 (내부 상태 기반)
   const notePickerColor = (() => {
@@ -397,9 +396,12 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   };
 
   // 스타일 변경 완료 핸들러
-  const handleStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      onKeyUpdate({ index: keyIndex, [property]: value });
-    };
+  const handleStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    onKeyUpdate({ index: keyIndex, [property]: value });
+  };
 
   return (
     <>
@@ -544,8 +546,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                 ? { top: localNoteOpacityTop, bottom: localNoteOpacityBottom }
                 : localNoteOpacity
               : glowColorMode === COLOR_MODES.gradient
-                ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
-                : localGlowOpacity
+              ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
+              : localGlowOpacity
           }
           onOpacityPercentChange={(
             value: number,

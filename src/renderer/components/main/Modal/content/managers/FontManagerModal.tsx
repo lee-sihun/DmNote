@@ -1,7 +1,6 @@
 import {
   Suspense,
   lazy,
-  useCallback,
   useState,
   useRef,
   useEffect,
@@ -78,10 +77,10 @@ export default function FontManagerModal({
   const previewCssCacheRef = useRef<Map<string, string>>(new Map());
 
   // preview용 font-family 이름 생성 (syncFontCSS의 영향을 받지 않도록 별도 이름 사용)
-  const getPreviewFontFamily = useCallback((fontName: string) => `${fontName}__preview`, []);
+  const getPreviewFontFamily = (fontName: string) => `${fontName}__preview`;
 
   // preview CSS 주입 (syncFontCSS의 'font-' prefix와 다른 'fontpreview-' prefix 사용)
-  const injectPreviewCSS = useCallback((id: string, css: string) => {
+  const injectPreviewCSS = (id: string, css: string) => {
     const styleId = `fontpreview-${id}`;
     const existing = document.getElementById(styleId);
     if (existing) {
@@ -92,13 +91,13 @@ export default function FontManagerModal({
       style.textContent = css;
       document.head.appendChild(style);
     }
-  }, []);
+  };
 
   // preview CSS 제거
-  const removePreviewCSS = useCallback((id: string) => {
+  const removePreviewCSS = (id: string) => {
     const style = document.getElementById(`fontpreview-${id}`);
     if (style) style.remove();
-  }, []);
+  };
 
   // 모달이 열려있는 동안 모든 폰트의 CSS를 임시로 주입 (enabled 상태와 상관없이 미리보기 가능)
   // 폰트가 변경될 때 CSS가 실제로 달라진 항목만 갱신하여 폰트가 많아도 부담을 줄임
@@ -121,10 +120,10 @@ export default function FontManagerModal({
           ext === 'otf'
             ? 'opentype'
             : ext === 'woff'
-              ? 'woff'
-              : ext === 'woff2'
-                ? 'woff2'
-                : 'truetype';
+            ? 'woff'
+            : ext === 'woff2'
+            ? 'woff2'
+            : 'truetype';
         css = `@font-face {\n  font-family: '${previewFontFamily}';\n  src: url('${url}') format('${format}');\n  font-weight: normal;\n  font-style: normal;\n  font-display: swap;\n}`;
       } else if (font.type === 'web' && font.cssContent) {
         // 웹폰트 CSS에서 font-family를 preview 이름으로 교체
@@ -153,13 +152,7 @@ export default function FontManagerModal({
     });
 
     previewIdsRef.current = nextPreviewIds;
-  }, [
-    isOpen,
-    currentFonts,
-    getPreviewFontFamily,
-    injectPreviewCSS,
-    removePreviewCSS,
-  ]);
+  }, [isOpen, currentFonts]);
 
   // 모달이 닫힐 때만 모든 preview CSS 제거
   useEffect(() => {
@@ -169,7 +162,7 @@ export default function FontManagerModal({
     previewIdsRef.current.forEach((id) => removePreviewCSS(id));
     previewIdsRef.current.clear();
     previewCssCacheRef.current.clear();
-  }, [isOpen, removePreviewCSS]);
+  }, [isOpen]);
 
   // 폰트 매니저가 열려 있는 동안 WebFontInputModal 코드를 미리 로드
   useEffect(() => {
@@ -183,7 +176,7 @@ export default function FontManagerModal({
   }, [isOpen]);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = useCallback((el: HTMLElement | null) => {
+  const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -192,7 +185,7 @@ export default function FontManagerModal({
         ? prev
         : nextState,
     );
-  }, []);
+  };
 
   // Lenis smooth scroll 적용
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
@@ -241,7 +234,7 @@ export default function FontManagerModal({
       resizeObserver.disconnect();
       cancelAnimationFrame(rafId);
     };
-  }, [isOpen, activeTab, currentFonts, wrapperElement, updateScrollState]);
+  }, [isOpen, activeTab, currentFonts, wrapperElement]);
 
   const persistFonts = (nextFonts: CustomFont[]) => {
     setAll(nextFonts);
@@ -253,7 +246,10 @@ export default function FontManagerModal({
       });
   };
 
-  const isDuplicateFontFamily = (fontFamily: string, options?: { excludeId?: string | null }) => {
+  const isDuplicateFontFamily = (
+    fontFamily: string,
+    options?: { excludeId?: string | null },
+  ) => {
     const normalizedFamily = normalizeFontFamilyName(fontFamily);
     if (!normalizedFamily) return false;
 

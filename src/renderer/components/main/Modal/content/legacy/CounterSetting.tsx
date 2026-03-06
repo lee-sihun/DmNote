@@ -36,9 +36,13 @@ export default function CounterSettingModal({
     initialSettings ?? createDefaultCounterSettings(),
   );
 
-  const [placement, setPlacement] = useState<KeyCounterPlacement>(resolvedSettings.placement);
+  const [placement, setPlacement] = useState<KeyCounterPlacement>(
+    resolvedSettings.placement,
+  );
   const [align, setAlign] = useState<KeyCounterAlign>(resolvedSettings.align);
-  const [alignMode, setAlignMode] = useState<KeyCounterAlignMode>(resolvedSettings.alignMode);
+  const [alignMode, setAlignMode] = useState<KeyCounterAlignMode>(
+    resolvedSettings.alignMode,
+  );
   const [gap, setGap] = useState<number>(resolvedSettings.gap ?? 6);
   const [_isGapFocused, setIsGapFocused] = useState<boolean>(false);
   const [displayGap, setDisplayGap] = useState<string>(
@@ -46,8 +50,12 @@ export default function CounterSettingModal({
   );
 
   const [fillIdle, setFillIdle] = useState<string>(resolvedSettings.fill.idle);
-  const [fillActive, setFillActive] = useState<string>(resolvedSettings.fill.active);
-  const [strokeIdle, setStrokeIdle] = useState<string>(resolvedSettings.stroke.idle);
+  const [fillActive, setFillActive] = useState<string>(
+    resolvedSettings.fill.active,
+  );
+  const [strokeIdle, setStrokeIdle] = useState<string>(
+    resolvedSettings.stroke.idle,
+  );
   const [strokeActive, setStrokeActive] = useState<string>(
     resolvedSettings.stroke.active,
   );
@@ -116,7 +124,17 @@ export default function CounterSettingModal({
       stroke: { idle: strokeIdle, active: strokeActive },
     };
     onPreview(payload);
-  }, [placement, align, alignMode, gap, fillIdle, fillActive, onPreview, strokeActive, strokeIdle]);
+  }, [
+    placement,
+    align,
+    alignMode,
+    gap,
+    fillIdle,
+    fillActive,
+    onPreview,
+    strokeActive,
+    strokeIdle,
+  ]);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget | null>(null);
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
@@ -435,7 +453,9 @@ export default function CounterSettingModal({
             referenceRef={referenceRefFor()}
             color={colorValueFor(pickerFor)}
             onColorChange={(c: string) => setColorFor(pickerFor, c)}
-            onColorChangeComplete={(c: string) => handleColorComplete(pickerFor, c)}
+            onColorChangeComplete={(c: string) =>
+              handleColorComplete(pickerFor, c)
+            }
             onClose={closePicker}
             solidOnly={true}
             interactiveRefs={colorPickerInteractiveRefs}

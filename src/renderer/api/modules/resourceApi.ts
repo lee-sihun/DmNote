@@ -67,9 +67,7 @@ export const soundApi = {
       },
     ),
   setLatencyLogging: (enabled: boolean) =>
-    invoke('key_sound_set_latency_logging', { enabled }).then(
-      () => undefined,
-    ),
+    invoke('key_sound_set_latency_logging', { enabled }).then(() => undefined),
 };
 
 export const counterAnimationApi = {

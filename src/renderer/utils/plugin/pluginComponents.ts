@@ -96,8 +96,8 @@ export function createButton(
   const widthClass = fullWidth
     ? 'w-full'
     : variant === 'danger'
-      ? 'w-[75px]'
-      : 'w-[150px]';
+    ? 'w-[75px]'
+    : 'w-[150px]';
 
   const disabledClass = disabled
     ? 'opacity-50 cursor-not-allowed pointer-events-none'
@@ -156,8 +156,8 @@ export function createCheckbox(options: CheckboxOptions = {}): string {
   // 내부 input[type=checkbox] 추가 (실제 상태 유지)
   return `<label ${labelIdAttr} class="relative inline-block w-[27px] h-[16px] rounded-[75px] cursor-pointer transition-colors duration-75 ${bgClass}" data-checkbox-toggle ${onChangeAttr}>
     <input type="checkbox" ${inputIdAttr} ${
-      checked ? 'checked' : ''
-    } class="absolute opacity-0 w-0 h-0" />
+    checked ? 'checked' : ''
+  } class="absolute opacity-0 w-0 h-0" />
     <div class="absolute w-[12px] h-[12px] rounded-[75px] top-[2px] transition-all duration-75 ease-in-out ${knobClass}"></div>
   </label>`;
 }

@@ -1,4 +1,4 @@
-import { useState, } from 'react';
+import { useState } from 'react';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
 import { useGraphItemStore } from '@stores/useGraphItemStore';
@@ -519,11 +519,11 @@ export function useKeyManager() {
               activeTransparent:
                 updates.activeTransparent !== undefined
                   ? updates.activeTransparent
-                  : (pos.activeTransparent ?? false),
+                  : pos.activeTransparent ?? false,
               idleTransparent:
                 updates.idleTransparent !== undefined
                   ? updates.idleTransparent
-                  : (pos.idleTransparent ?? false),
+                  : pos.idleTransparent ?? false,
               width:
                 typeof updates.width === 'number' &&
                 !Number.isNaN(updates.width)
@@ -537,7 +537,7 @@ export function useKeyManager() {
               className:
                 updates.className !== undefined
                   ? updates.className
-                  : (pos.className ?? ''),
+                  : pos.className ?? '',
               // 새 스타일 속성들
               backgroundColor:
                 updates.backgroundColor !== undefined
@@ -679,11 +679,11 @@ export function useKeyManager() {
           activeTransparent:
             update.activeTransparent !== undefined
               ? update.activeTransparent
-              : (pos.activeTransparent ?? false),
+              : pos.activeTransparent ?? false,
           idleTransparent:
             update.idleTransparent !== undefined
               ? update.idleTransparent
-              : (pos.idleTransparent ?? false),
+              : pos.idleTransparent ?? false,
           width:
             typeof update.width === 'number' && !Number.isNaN(update.width)
               ? update.width
@@ -695,7 +695,7 @@ export function useKeyManager() {
           className:
             update.className !== undefined
               ? update.className
-              : (pos.className ?? ''),
+              : pos.className ?? '',
           backgroundColor:
             update.backgroundColor !== undefined
               ? update.backgroundColor
@@ -1402,103 +1402,101 @@ export function useKeyManager() {
 
   // 속성 패널에서 키 매핑 변경 (인덱스로 키 코드 업데이트)
   const handleKeyMappingChange = (index: number, newKey: string) => {
-      saveToHistory();
+    saveToHistory();
 
-      const mapping = keyMappings[selectedKeyType] || [];
-      const updatedMappings: KeyMappings = {
-        ...keyMappings,
-        [selectedKeyType]: mapping.map((key, i) =>
-          i === index ? newKey : key,
-        ),
-      };
-
-      setKeyMappings(updatedMappings);
-      window.api.keys.update(updatedMappings).catch((error) => {
-        console.error('Failed to update key mapping', error);
-      });
+    const mapping = keyMappings[selectedKeyType] || [];
+    const updatedMappings: KeyMappings = {
+      ...keyMappings,
+      [selectedKeyType]: mapping.map((key, i) => (i === index ? newKey : key)),
     };
+
+    setKeyMappings(updatedMappings);
+    window.api.keys.update(updatedMappings).catch((error) => {
+      console.error('Failed to update key mapping', error);
+    });
+  };
 
   // 속성 패널에서 인덱스로 키 속성 업데이트 (히스토리 포함)
-  const handleKeyStyleUpdate = (index: number, updates: Partial<KeyPositions[string][number]>) => {
-      const state = useKeyStore.getState();
-      const mode = state.selectedKeyType || selectedKeyType;
-      const currentPositions = state.positions;
-      const current = currentPositions[mode] || [];
-      if (!current[index]) return;
+  const handleKeyStyleUpdate = (
+    index: number,
+    updates: Partial<KeyPositions[string][number]>,
+  ) => {
+    const state = useKeyStore.getState();
+    const mode = state.selectedKeyType || selectedKeyType;
+    const currentPositions = state.positions;
+    const current = currentPositions[mode] || [];
+    if (!current[index]) return;
 
-      // 히스토리에 현재 상태 저장
-      saveToHistory();
+    // 히스토리에 현재 상태 저장
+    saveToHistory();
 
-      const updatedPositions: KeyPositions = {
-        ...currentPositions,
-        [mode]: current.map((pos, i) =>
-          i === index ? { ...pos, ...updates } : pos,
-        ),
-      };
-
-      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-      setLocalUpdateInProgress(true);
-      setPositions(updatedPositions);
-      window.api.keys
-        .updatePositions(updatedPositions)
-        .catch((error) => {
-          console.error('Failed to update key style', error);
-        })
-        .finally(() => {
-          setLocalUpdateInProgress(false);
-        });
+    const updatedPositions: KeyPositions = {
+      ...currentPositions,
+      [mode]: current.map((pos, i) =>
+        i === index ? { ...pos, ...updates } : pos,
+      ),
     };
+
+    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
+    setLocalUpdateInProgress(true);
+    setPositions(updatedPositions);
+    window.api.keys
+      .updatePositions(updatedPositions)
+      .catch((error) => {
+        console.error('Failed to update key style', error);
+      })
+      .finally(() => {
+        setLocalUpdateInProgress(false);
+      });
+  };
 
   // 다중 선택 시 여러 키를 한 번에 업데이트 (배치 업데이트)
   const handleKeyBatchStyleUpdate = (
-      updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
-      options?: { skipHistory?: boolean },
-    ) => {
-      if (updates.length === 0) return;
+    updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
 
-      const state = useKeyStore.getState();
-      const mode = state.selectedKeyType || selectedKeyType;
-      const currentPositions = state.positions;
-      const current = currentPositions[mode] || [];
+    const state = useKeyStore.getState();
+    const mode = state.selectedKeyType || selectedKeyType;
+    const currentPositions = state.positions;
+    const current = currentPositions[mode] || [];
 
-      // 업데이트할 인덱스들을 Map으로 변환하여 O(1) 조회
-      const updateMap = new Map<
-        number,
-        Partial<KeyPositions[string][number]>
-      >();
-      for (const { index, ...rest } of updates) {
-        if (current[index]) {
-          updateMap.set(index, rest);
-        }
+    // 업데이트할 인덱스들을 Map으로 변환하여 O(1) 조회
+    const updateMap = new Map<number, Partial<KeyPositions[string][number]>>();
+    for (const { index, ...rest } of updates) {
+      if (current[index]) {
+        updateMap.set(index, rest);
       }
+    }
 
-      if (updateMap.size === 0) return;
+    if (updateMap.size === 0) return;
 
-      // 히스토리에 현재 상태 저장 (한 번만)
-      if (!options?.skipHistory) {
-        saveToHistory();
-      }
+    // 히스토리에 현재 상태 저장 (한 번만)
+    if (!options?.skipHistory) {
+      saveToHistory();
+    }
 
-      const updatedPositions: KeyPositions = {
-        ...currentPositions,
-        [mode]: current.map((pos, i) => {
-          const update = updateMap.get(i);
-          return update ? { ...pos, ...update } : pos;
-        }),
-      };
-
-      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-      setLocalUpdateInProgress(true);
-      setPositions(updatedPositions);
-      window.api.keys
-        .updatePositions(updatedPositions)
-        .catch((error) => {
-          console.error('Failed to batch update key styles', error);
-        })
-        .finally(() => {
-          setLocalUpdateInProgress(false);
-        });
+    const updatedPositions: KeyPositions = {
+      ...currentPositions,
+      [mode]: current.map((pos, i) => {
+        const update = updateMap.get(i);
+        return update ? { ...pos, ...update } : pos;
+      }),
     };
+
+    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
+    setLocalUpdateInProgress(true);
+    setPositions(updatedPositions);
+    window.api.keys
+      .updatePositions(updatedPositions)
+      .catch((error) => {
+        console.error('Failed to batch update key styles', error);
+      })
+      .finally(() => {
+        setLocalUpdateInProgress(false);
+      });
+  };
 
   return {
     selectedKey,

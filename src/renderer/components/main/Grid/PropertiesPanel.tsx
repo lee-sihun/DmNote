@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-  useRef,
-} from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import { useKeyStore } from '@stores/useKeyStore';
@@ -19,7 +14,11 @@ import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import type { KeyPosition } from '@src/types/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/statItems';
 import type { GraphItemPosition } from '@src/types/graphItems';
-import type { PluginSettingSchema, PluginMessages, RawInputPayload } from '@src/types/api';
+import type {
+  PluginSettingSchema,
+  PluginMessages,
+  RawInputPayload,
+} from '@src/types/api';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -152,17 +151,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   );
 
   const selectedPluginElement = (() => {
-if (selectedPluginElements.length !== 1) return null;
+    if (selectedPluginElements.length !== 1) return null;
     return (
       pluginElements.find((el) => el.fullId === selectedPluginElements[0].id) ||
       null
     );
-})();
+  })();
 
   const selectedPluginDefinition = (() => {
-if (!selectedPluginElement?.definitionId) return null;
+    if (!selectedPluginElement?.definitionId) return null;
     return pluginDefinitions.get(selectedPluginElement.definitionId) || null;
-})();
+  })();
 
   const pluginSettingsUI = selectedPluginDefinition?.settingsUI ?? 'panel';
   const hasSinglePluginSelection =
@@ -174,13 +173,13 @@ if (!selectedPluginElement?.definitionId) return null;
     hasSinglePluginSelection && !!selectedPluginDefinition?.resizable;
 
   const pluginDisplaySize = (() => {
-const measured = selectedPluginElement?.measuredSize;
+    const measured = selectedPluginElement?.measuredSize;
     const estimated = selectedPluginElement?.estimatedSize;
     return {
       width: measured?.width ?? estimated?.width ?? 200,
       height: measured?.height ?? estimated?.height ?? 150,
     };
-})();
+  })();
 
   // 단일 키 선택인 경우의 데이터
   const singleKeyIndex =
@@ -202,18 +201,18 @@ const measured = selectedPluginElement?.measuredSize;
     selectedStatElements.length === 1 ? selectedStatElements[0].index : null;
   const singleStatPosition: StatItemPosition | null =
     singleStatIndex !== null
-      ? (statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null)
+      ? statItemPositions[selectedKeyType]?.[singleStatIndex] ?? null
       : null;
   const singleGraphIndex =
     selectedGraphElements.length === 1 ? selectedGraphElements[0].index : null;
   const singleGraphPosition: GraphItemPosition | null =
     singleGraphIndex !== null
-      ? (graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null)
+      ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const selectedGroupInfo = (() => {
-if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
+    if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       return null;
     }
 
@@ -250,10 +249,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
 
     const totalMembers =
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
-      statModePositions.filter((pos) => pos?.groupId === groupId)
-        .length +
-      graphModePositions.filter((pos) => pos?.groupId === groupId)
-        .length;
+      statModePositions.filter((pos) => pos?.groupId === groupId).length +
+      graphModePositions.filter((pos) => pos?.groupId === groupId).length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
@@ -263,7 +260,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     if (!groupDef) return null;
 
     return { id: groupDef.id, name: groupDef.name, memberCount: totalMembers };
-})();
+  })();
 
   // 로컬 상태 (실시간 편집용)
   const [localState, setLocalState] = useState<
@@ -386,8 +383,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     if (selectedGroupInfo) return selectedGroupInfo.name || '';
     if (singleKeyPosition) return singleKeyPosition.layerName || '';
     if (singleStatPosition) return singleStatPosition.layerName || '';
-    if (singleGraphPosition)
-      return singleGraphPosition.layerName || '';
+    if (singleGraphPosition) return singleGraphPosition.layerName || '';
     return '';
   };
 
@@ -407,46 +403,39 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   };
 
   const handleGroupRenameCommit = async (groupId: string, value: string) => {
-      const trimmed = value.trim();
-      if (trimmed === '') return;
+    const trimmed = value.trim();
+    if (trimmed === '') return;
 
-      const currentGroups = useLayerGroupStore.getState().layerGroups;
-      const currentModeGroups = currentGroups[selectedKeyType] || [];
-      const currentGroup = currentModeGroups.find(
-        (group) => group.id === groupId,
-      );
-      if (!currentGroup || currentGroup.name === trimmed) return;
+    const currentGroups = useLayerGroupStore.getState().layerGroups;
+    const currentModeGroups = currentGroups[selectedKeyType] || [];
+    const currentGroup = currentModeGroups.find(
+      (group) => group.id === groupId,
+    );
+    if (!currentGroup || currentGroup.name === trimmed) return;
 
-      const { keyMappings: km, positions: pos } = useKeyStore.getState();
-      const statPos = useStatItemStore.getState().positions;
-      const graphPos = useGraphItemStore.getState().positions;
-      const pluginEls = usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km, positions: pos } = useKeyStore.getState();
+    const statPos = useStatItemStore.getState().positions;
+    const graphPos = useGraphItemStore.getState().positions;
+    const pluginEls = usePluginDisplayElementStore.getState().elements;
 
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          pos,
-          statPos,
-          graphPos,
-          pluginEls,
-          currentGroups,
-        );
+    useHistoryStore
+      .getState()
+      .pushState(km, pos, statPos, graphPos, pluginEls, currentGroups);
 
-      const updated = {
-        ...currentGroups,
-        [selectedKeyType]: currentModeGroups.map((group) =>
-          group.id === groupId ? { ...group, name: trimmed } : group,
-        ),
-      };
-
-      useLayerGroupStore.getState().setLayerGroups(updated);
-      try {
-        await window.api.layerGroups.update(updated);
-      } catch (error) {
-        console.error('Failed to rename group', error);
-      }
+    const updated = {
+      ...currentGroups,
+      [selectedKeyType]: currentModeGroups.map((group) =>
+        group.id === groupId ? { ...group, name: trimmed } : group,
+      ),
     };
+
+    useLayerGroupStore.getState().setLayerGroups(updated);
+    try {
+      await window.api.layerGroups.update(updated);
+    } catch (error) {
+      console.error('Failed to rename group', error);
+    }
+  };
 
   // 레이어 이름 변경 시작
   const handleRenameStartImpl = useRef<() => void>(() => {});
@@ -459,62 +448,65 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       renameInputRef.current?.select();
     });
   };
-  const handleRenameStart = useCallback(() => {
+  const handleRenameStart = () => {
     handleRenameStartImpl.current();
-  }, []);
+  };
 
   // 레이어 이름 변경 커밋
   const handleRenameCommit = async (value: string) => {
-      setIsRenaming(false);
+    setIsRenaming(false);
 
-      if (selectedGroupInfo) {
-        await handleGroupRenameCommit(selectedGroupInfo.id, value);
-        return;
-      }
+    if (selectedGroupInfo) {
+      await handleGroupRenameCommit(selectedGroupInfo.id, value);
+      return;
+    }
 
-      const trimmed = value.trim();
-      const defaultTitle = getCurrentDefaultTitle();
-      const newLayerName =
-        trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
+    const trimmed = value.trim();
+    const defaultTitle = getCurrentDefaultTitle();
+    const newLayerName =
+      trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
 
-      if (singleKeyIndex !== null && singleKeyPosition) {
-        onKeyUpdate({ index: singleKeyIndex, layerName: newLayerName } as Partial<KeyPosition> & { index: number });
-      } else if (singleStatIndex !== null && singleStatPosition) {
-        const mode = selectedKeyType;
-        const current = useStatItemStore.getState().positions;
-        const list = current[mode] || [];
-        if (list[singleStatIndex]) {
-          const nextList = list.map((pos, i) =>
-            i === singleStatIndex ? { ...pos, layerName: newLayerName } : pos,
-          );
-          const nextPositions = { ...current, [mode]: nextList };
-          useStatItemStore.getState().setLocalUpdateInProgress(true);
-          useStatItemStore.getState().setPositions(nextPositions);
-          try {
-            await window.api.statItems.updatePositions(nextPositions);
-          } finally {
-            useStatItemStore.getState().setLocalUpdateInProgress(false);
-          }
-        }
-      } else if (singleGraphIndex !== null && singleGraphPosition) {
-        const mode = selectedKeyType;
-        const current = useGraphItemStore.getState().positions;
-        const list = current[mode] || [];
-        if (list[singleGraphIndex]) {
-          const nextList = list.map((pos, i) =>
-            i === singleGraphIndex ? { ...pos, layerName: newLayerName } : pos,
-          );
-          const nextPositions = { ...current, [mode]: nextList };
-          useGraphItemStore.getState().setLocalUpdateInProgress(true);
-          useGraphItemStore.getState().setPositions(nextPositions);
-          try {
-            await window.api.graphItems.updatePositions(nextPositions);
-          } finally {
-            useGraphItemStore.getState().setLocalUpdateInProgress(false);
-          }
+    if (singleKeyIndex !== null && singleKeyPosition) {
+      onKeyUpdate({
+        index: singleKeyIndex,
+        layerName: newLayerName,
+      } as Partial<KeyPosition> & { index: number });
+    } else if (singleStatIndex !== null && singleStatPosition) {
+      const mode = selectedKeyType;
+      const current = useStatItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list[singleStatIndex]) {
+        const nextList = list.map((pos, i) =>
+          i === singleStatIndex ? { ...pos, layerName: newLayerName } : pos,
+        );
+        const nextPositions = { ...current, [mode]: nextList };
+        useStatItemStore.getState().setLocalUpdateInProgress(true);
+        useStatItemStore.getState().setPositions(nextPositions);
+        try {
+          await window.api.statItems.updatePositions(nextPositions);
+        } finally {
+          useStatItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
-    };
+    } else if (singleGraphIndex !== null && singleGraphPosition) {
+      const mode = selectedKeyType;
+      const current = useGraphItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list[singleGraphIndex]) {
+        const nextList = list.map((pos, i) =>
+          i === singleGraphIndex ? { ...pos, layerName: newLayerName } : pos,
+        );
+        const nextPositions = { ...current, [mode]: nextList };
+        useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useGraphItemStore.getState().setPositions(nextPositions);
+        try {
+          await window.api.graphItems.updatePositions(nextPositions);
+        } finally {
+          useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
+    }
+  };
 
   // 레이어 이름 변경 취소
   const handleRenameCancel = () => {
@@ -543,7 +535,6 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     singleKeyPosition,
     singleStatPosition,
     singleGraphPosition,
-    handleRenameStart,
   ]);
 
   // 선택이 변경되면 rename 모드 해제
@@ -580,34 +571,26 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     return { top, height, visible: true };
   };
 
-  const updatePluginThumbDOM = useCallback(() => {
+  const updatePluginThumbDOM = () => {
     if (!pluginThumbRef.current || !pluginScrollElementRef.current) return;
     const thumb = calculatePluginThumb(pluginScrollElementRef.current);
     pluginThumbRef.current.style.top = `${thumb.top}px`;
     pluginThumbRef.current.style.height = `${thumb.height}px`;
     pluginThumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  }, []);
+  };
 
   const { scrollContainerRef: pluginLenisRef } = useLenis({
     onScroll: updatePluginThumbDOM,
   });
 
   const setPluginScrollRef = (node: HTMLDivElement | null) => {
-      pluginScrollElementRef.current = node;
-      pluginLenisRef(node);
-    };
+    pluginScrollElementRef.current = node;
+    pluginLenisRef(node);
+  };
 
   const setPluginThumbRef = (node: HTMLDivElement | null) => {
     pluginThumbRef.current = node;
   };
-
-  const pluginSettingsSchemaCount = pluginSettingsPanel?.definition?.settings
-        ? Object.keys(pluginSettingsPanel.definition.settings).length
-        : 0;
-
-  const pluginElementSchemaCount = selectedPluginDefinition?.settings
-        ? Object.keys(selectedPluginDefinition.settings).length
-        : 0;
 
   useEffect(() => {
     const hasPluginPanel =
@@ -622,20 +605,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       updatePluginThumbDOM();
     });
     return () => cancelAnimationFrame(raf);
-  }, [
-    pluginSettingsPanel,
-    pluginSettingsSchemaCount,
-    selectedPluginElement?.fullId,
-    selectedPluginDefinition?.id,
-    pluginElementSchemaCount,
-    showSettings,
-    showModalHint,
-    hasSinglePluginSelection,
-    selectedPluginElements.length,
-    selectedKeyLikeElements.length,
-    selectedGraphElements.length,
-    updatePluginThumbDOM,
-  ]);
+  });
 
   // 배치 편집용 로컬 ColorPicker 상태
   type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
@@ -681,10 +651,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     } else {
       setLocalState({});
     }
-  }, [
-    singleKeyPosition,
-    singleStatPosition,
-  ]);
+  }, [singleKeyPosition, singleStatPosition]);
 
   useEffect(() => {
     setGraphClassNameDraft(singleGraphPosition?.className || '');
@@ -923,26 +890,28 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       return undefined;
     }
 
-    const unsubscribe = window.api.keys.onRawInput((payload: RawInputPayload) => {
-      if (!payload || payload.state !== 'DOWN') return;
-      const targetLabel =
-        payload.label ||
-        (Array.isArray(payload.labels) ? payload.labels[0] : null);
-      if (!targetLabel) return;
+    const unsubscribe = window.api.keys.onRawInput(
+      (payload: RawInputPayload) => {
+        if (!payload || payload.state !== 'DOWN') return;
+        const targetLabel =
+          payload.label ||
+          (Array.isArray(payload.labels) ? payload.labels[0] : null);
+        if (!targetLabel) return;
 
-      const info = getKeyInfoByGlobalKey(targetLabel);
+        const info = getKeyInfoByGlobalKey(targetLabel);
 
-      justAssignedRef.current = true;
-      setTimeout(() => {
-        justAssignedRef.current = false;
-      }, 100);
+        justAssignedRef.current = true;
+        setTimeout(() => {
+          justAssignedRef.current = false;
+        }, 100);
 
-      setIsListening(false);
+        setIsListening(false);
 
-      if (singleKeyIndex !== null && onKeyMappingChange) {
-        onKeyMappingChange(singleKeyIndex, info.globalKey);
-      }
-    });
+        if (singleKeyIndex !== null && onKeyMappingChange) {
+          onKeyMappingChange(singleKeyIndex, info.globalKey);
+        }
+      },
+    );
 
     return () => {
       try {
@@ -976,16 +945,16 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       setShowBatchImagePicker(false);
     }
   };
-  const handleTogglePanel = useCallback(() => {
+  const handleTogglePanel = () => {
     handleTogglePanelImpl.current();
-  }, []);
+  };
 
   const handleToggleMode = () => {
     setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
   };
 
   const pluginDefaultSettings = (() => {
-const defaults: Record<string, unknown> = {};
+    const defaults: Record<string, unknown> = {};
     if (selectedPluginDefinition?.settings) {
       Object.entries(selectedPluginDefinition.settings).forEach(
         ([key, schema]) => {
@@ -996,12 +965,12 @@ const defaults: Record<string, unknown> = {};
       );
     }
     return defaults;
-})();
+  })();
 
-  const resolvedPluginSettings = ({
-      ...pluginDefaultSettings,
-      ...(selectedPluginElement?.settings || {}),
-    });
+  const resolvedPluginSettings = {
+    ...pluginDefaultSettings,
+    ...(selectedPluginElement?.settings || {}),
+  };
 
   const ensurePluginSettingsHistory = () => {
     if (!selectedPluginElement) return;
@@ -1034,76 +1003,76 @@ const defaults: Record<string, unknown> = {};
   };
 
   const handlePluginPositionXChange = (value: number) => {
-      if (!selectedPluginElement) return;
-      ensurePluginTransformHistory();
-      updatePluginElement(selectedPluginElement.fullId, {
-        position: {
-          x: value,
-          y: selectedPluginElement.position.y,
-        },
-      });
-    };
+    if (!selectedPluginElement) return;
+    ensurePluginTransformHistory();
+    updatePluginElement(selectedPluginElement.fullId, {
+      position: {
+        x: value,
+        y: selectedPluginElement.position.y,
+      },
+    });
+  };
 
   const handlePluginPositionYChange = (value: number) => {
-      if (!selectedPluginElement) return;
-      ensurePluginTransformHistory();
-      updatePluginElement(selectedPluginElement.fullId, {
-        position: {
-          x: selectedPluginElement.position.x,
-          y: value,
-        },
-      });
-    };
+    if (!selectedPluginElement) return;
+    ensurePluginTransformHistory();
+    updatePluginElement(selectedPluginElement.fullId, {
+      position: {
+        x: selectedPluginElement.position.x,
+        y: value,
+      },
+    });
+  };
 
   const handlePluginWidthChange = (value: number) => {
-      if (!selectedPluginElement) return;
-      ensurePluginTransformHistory();
-      const baseHeight =
-        selectedPluginElement.measuredSize?.height ??
-        selectedPluginElement.estimatedSize?.height ??
-        150;
-      updatePluginElement(selectedPluginElement.fullId, {
-        measuredSize: {
-          width: value,
-          height: baseHeight,
-        },
-      });
-    };
+    if (!selectedPluginElement) return;
+    ensurePluginTransformHistory();
+    const baseHeight =
+      selectedPluginElement.measuredSize?.height ??
+      selectedPluginElement.estimatedSize?.height ??
+      150;
+    updatePluginElement(selectedPluginElement.fullId, {
+      measuredSize: {
+        width: value,
+        height: baseHeight,
+      },
+    });
+  };
 
   const handlePluginHeightChange = (value: number) => {
-      if (!selectedPluginElement) return;
-      ensurePluginTransformHistory();
-      const baseWidth =
-        selectedPluginElement.measuredSize?.width ??
-        selectedPluginElement.estimatedSize?.width ??
-        200;
-      updatePluginElement(selectedPluginElement.fullId, {
-        measuredSize: {
-          width: baseWidth,
-          height: value,
-        },
-      });
-    };
+    if (!selectedPluginElement) return;
+    ensurePluginTransformHistory();
+    const baseWidth =
+      selectedPluginElement.measuredSize?.width ??
+      selectedPluginElement.estimatedSize?.width ??
+      200;
+    updatePluginElement(selectedPluginElement.fullId, {
+      measuredSize: {
+        width: baseWidth,
+        height: value,
+      },
+    });
+  };
 
   const handlePluginSettingChange = (key: string, value: unknown) => {
-      if (!selectedPluginElement) return;
-      ensurePluginSettingsHistory();
-      updatePluginElement(selectedPluginElement.fullId, {
-        settings: {
-          ...resolvedPluginSettings,
-          [key]: value,
-        },
-      });
-    };
+    if (!selectedPluginElement) return;
+    ensurePluginSettingsHistory();
+    updatePluginElement(selectedPluginElement.fullId, {
+      settings: {
+        ...resolvedPluginSettings,
+        [key]: value,
+      },
+    });
+  };
 
   const handlePluginSettingsPanelChange = (key: string, value: unknown) => {
-      if (!pluginSettingsPanel) return;
-      setPluginPanelSettings((prev) => {
-        const next = { ...prev, [key]: value };
-        pluginSettingsPanel.onChange(next);
-        return next;
-      });
-    };
+    if (!pluginSettingsPanel) return;
+    setPluginPanelSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      pluginSettingsPanel.onChange(next);
+      return next;
+    });
+  };
 
   const handlePluginSettingsPanelConfirm = async () => {
     if (!pluginSettingsPanel) return;
@@ -1133,9 +1102,9 @@ const defaults: Record<string, unknown> = {};
       closePluginSettingsPanel();
     }
   };
-  const handlePluginSettingsPanelCancel = useCallback(() => {
+  const handlePluginSettingsPanelCancel = () => {
     handlePluginSettingsPanelCancelImpl.current();
-  }, []);
+  };
 
   // 외부(단축키 등)에서 보낸 사이드 패널 토글 요청 처리
   const prevToggleSignalRef = useRef<number>(canvasPanelToggleSignal);
@@ -1148,25 +1117,120 @@ const defaults: Record<string, unknown> = {};
       return;
     }
     handleTogglePanel();
-  }, [
-    canvasPanelToggleSignal,
-    handlePluginSettingsPanelCancel,
-    handleTogglePanel,
-    pluginSettingsPanel,
-  ]);
+  });
 
   const handleKeyListen = () => {
     if (justAssignedRef.current) return;
     setIsListening(true);
   };
 
-  const handleStatUpdate = (data: Partial<StatItemPosition> & { index: number }) => {
-      const { index, ...updates } = data;
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (!list[index]) return;
+  const handleStatUpdate = (
+    data: Partial<StatItemPosition> & { index: number },
+  ) => {
+    const { index, ...updates } = data;
+    const mode = selectedKeyType;
+    const current = useStatItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
 
+    const currentPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km } = useKeyStore.getState();
+    pushHistoryState(
+      km,
+      currentPositions,
+      current,
+      useGraphItemStore.getState().positions,
+      currentPluginElements,
+    );
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useStatItemStore.getState().setLocalUpdateInProgress(true);
+    useStatItemStore.getState().setPositions(nextPositions);
+    window.api.statItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to update stat item', error);
+      })
+      .finally(() => {
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleStatPreview = (
+    index: number,
+    updates: Partial<StatItemPosition>,
+  ) => {
+    const mode = selectedKeyType;
+    const current = useStatItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+    useStatItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleStatBatchPreview = (
+    updates: Array<{ index: number } & Partial<StatItemPosition>>,
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useStatItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<StatItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+    useStatItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleStatBatchUpdate = (
+    updates: Array<{ index: number } & Partial<StatItemPosition>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useStatItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<StatItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!options?.skipHistory) {
       const currentPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -1178,133 +1242,140 @@ const defaults: Record<string, unknown> = {};
         useGraphItemStore.getState().positions,
         currentPluginElements,
       );
+    }
 
-      const nextList = list.map((pos, i) =>
-        i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-      );
-      const nextPositions = { ...current, [mode]: nextList };
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
 
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setPositions(nextPositions);
-      window.api.statItems
-        .updatePositions(nextPositions)
-        .catch((error) => {
-          console.error('Failed to update stat item', error);
-        })
-        .finally(() => {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-        });
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
-    };
-
-  const handleStatPreview = (index: number, updates: Partial<StatItemPosition>) => {
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (!list[index]) return;
-
-      const nextList = list.map((pos, i) =>
-        i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
-      );
-      const nextPositions = { ...current, [mode]: nextList };
-      useStatItemStore.getState().setPositions(nextPositions);
-    };
-
-  const handleStatBatchPreview = (updates: Array<{ index: number } & Partial<StatItemPosition>>) => {
-      if (updates.length === 0) return;
-
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list.length === 0) return;
-
-      const updateMap = new Map<number, Partial<StatItemPosition>>();
-      for (const { index, ...rest } of updates) {
-        if (list[index]) {
-          updateMap.set(index, rest);
-        }
-      }
-      if (updateMap.size === 0) return;
-
-      const nextList = list.map((pos, i) => {
-        const update = updateMap.get(i);
-        return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    useStatItemStore.getState().setLocalUpdateInProgress(true);
+    useStatItemStore.getState().setPositions(nextPositions);
+    window.api.statItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to batch update stat items', error);
+      })
+      .finally(() => {
+        useStatItemStore.getState().setLocalUpdateInProgress(false);
       });
-      const nextPositions = { ...current, [mode]: nextList };
-      useStatItemStore.getState().setPositions(nextPositions);
-    };
-
-  const handleStatBatchUpdate = (
-      updates: Array<{ index: number } & Partial<StatItemPosition>>,
-      options?: { skipHistory?: boolean },
-    ) => {
-      if (updates.length === 0) return;
-
-      const mode = selectedKeyType;
-      const current = useStatItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list.length === 0) return;
-
-      const updateMap = new Map<number, Partial<StatItemPosition>>();
-      for (const { index, ...rest } of updates) {
-        if (list[index]) {
-          updateMap.set(index, rest);
-        }
-      }
-      if (updateMap.size === 0) return;
-
-      if (!options?.skipHistory) {
-        const currentPositions = useKeyStore.getState().positions;
-        const currentPluginElements =
-          usePluginDisplayElementStore.getState().elements;
-        const { keyMappings: km } = useKeyStore.getState();
-        pushHistoryState(
-          km,
-          currentPositions,
-          current,
-          useGraphItemStore.getState().positions,
-          currentPluginElements,
-        );
-      }
-
-      const nextList = list.map((pos, i) => {
-        const update = updateMap.get(i);
-        return update ? ({ ...pos, ...update } as StatItemPosition) : pos;
+    try {
+      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
+        positions: nextPositions,
       });
-      const nextPositions = { ...current, [mode]: nextList };
+    } catch {
+      // ignore
+    }
+  };
 
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setPositions(nextPositions);
-      window.api.statItems
-        .updatePositions(nextPositions)
-        .catch((error) => {
-          console.error('Failed to batch update stat items', error);
-        })
-        .finally(() => {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-        });
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
+  const handleGraphUpdate = (
+    data: Partial<GraphItemPosition> & { index: number },
+  ) => {
+    const { index, ...updates } = data;
+    const mode = selectedKeyType;
+    const current = useGraphItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    const currentPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km } = useKeyStore.getState();
+    pushHistoryState(
+      km,
+      currentPositions,
+      useStatItemStore.getState().positions,
+      current,
+      currentPluginElements,
+    );
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useGraphItemStore.getState().setPositions(nextPositions);
+    window.api.graphItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to update graph item', error);
+      })
+      .finally(() => {
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleGraphPreview = (
+    index: number,
+    updates: Partial<GraphItemPosition>,
+  ) => {
+    const mode = selectedKeyType;
+    const current = useGraphItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+    useGraphItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleGraphBatchPreview = (
+    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useGraphItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<GraphItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
       }
-    };
+    }
+    if (updateMap.size === 0) return;
 
-  const handleGraphUpdate = (data: Partial<GraphItemPosition> & { index: number }) => {
-      const { index, ...updates } = data;
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (!list[index]) return;
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+    useGraphItemStore.getState().setPositions(nextPositions);
+  };
 
+  const handleGraphBatchUpdate = (
+    updates: Array<{ index: number } & Partial<GraphItemPosition>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useGraphItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<GraphItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!options?.skipHistory) {
       const currentPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -1316,125 +1387,32 @@ const defaults: Record<string, unknown> = {};
         current,
         currentPluginElements,
       );
+    }
 
-      const nextList = list.map((pos, i) =>
-        i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-      );
-      const nextPositions = { ...current, [mode]: nextList };
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
 
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setPositions(nextPositions);
-      window.api.graphItems
-        .updatePositions(nextPositions)
-        .catch((error) => {
-          console.error('Failed to update graph item', error);
-        })
-        .finally(() => {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        });
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
-    };
-
-  const handleGraphPreview = (index: number, updates: Partial<GraphItemPosition>) => {
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (!list[index]) return;
-
-      const nextList = list.map((pos, i) =>
-        i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
-      );
-      const nextPositions = { ...current, [mode]: nextList };
-      useGraphItemStore.getState().setPositions(nextPositions);
-    };
-
-  const handleGraphBatchPreview = (updates: Array<{ index: number } & Partial<GraphItemPosition>>) => {
-      if (updates.length === 0) return;
-
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list.length === 0) return;
-
-      const updateMap = new Map<number, Partial<GraphItemPosition>>();
-      for (const { index, ...rest } of updates) {
-        if (list[index]) {
-          updateMap.set(index, rest);
-        }
-      }
-      if (updateMap.size === 0) return;
-
-      const nextList = list.map((pos, i) => {
-        const update = updateMap.get(i);
-        return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useGraphItemStore.getState().setPositions(nextPositions);
+    window.api.graphItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to batch update graph items', error);
+      })
+      .finally(() => {
+        useGraphItemStore.getState().setLocalUpdateInProgress(false);
       });
-      const nextPositions = { ...current, [mode]: nextList };
-      useGraphItemStore.getState().setPositions(nextPositions);
-    };
-
-  const handleGraphBatchUpdate = (
-      updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-      options?: { skipHistory?: boolean },
-    ) => {
-      if (updates.length === 0) return;
-
-      const mode = selectedKeyType;
-      const current = useGraphItemStore.getState().positions;
-      const list = current[mode] || [];
-      if (list.length === 0) return;
-
-      const updateMap = new Map<number, Partial<GraphItemPosition>>();
-      for (const { index, ...rest } of updates) {
-        if (list[index]) {
-          updateMap.set(index, rest);
-        }
-      }
-      if (updateMap.size === 0) return;
-
-      if (!options?.skipHistory) {
-        const currentPositions = useKeyStore.getState().positions;
-        const currentPluginElements =
-          usePluginDisplayElementStore.getState().elements;
-        const { keyMappings: km } = useKeyStore.getState();
-        pushHistoryState(
-          km,
-          currentPositions,
-          useStatItemStore.getState().positions,
-          current,
-          currentPluginElements,
-        );
-      }
-
-      const nextList = list.map((pos, i) => {
-        const update = updateMap.get(i);
-        return update ? ({ ...pos, ...update } as GraphItemPosition) : pos;
+    try {
+      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
+        positions: nextPositions,
       });
-      const nextPositions = { ...current, [mode]: nextList };
-
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setPositions(nextPositions);
-      window.api.graphItems
-        .updatePositions(nextPositions)
-        .catch((error) => {
-          console.error('Failed to batch update graph items', error);
-        })
-        .finally(() => {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        });
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
-    };
+    } catch {
+      // ignore
+    }
+  };
 
   // 크기 변경 완료 (blur 시 저장)
   const handleSizeBlur = () => {
@@ -1446,7 +1424,10 @@ const defaults: Record<string, unknown> = {};
       if (singleKeyIndex !== null) {
         onKeyUpdate({ index: singleKeyIndex, ...updates });
       } else if (singleStatIndex !== null) {
-        handleStatUpdate({ index: singleStatIndex, ...(updates as Partial<StatItemPosition>) });
+        handleStatUpdate({
+          index: singleStatIndex,
+          ...(updates as Partial<StatItemPosition>),
+        });
       }
     }
   };
@@ -1480,7 +1461,9 @@ const defaults: Record<string, unknown> = {};
       .map((el) => {
         const index = el.index!;
         const position = graphItemPositions[selectedKeyType]?.[index];
-        const graphLabel = `${getStatTypeLabel(position?.statType ?? null)} Graph`;
+        const graphLabel = `${getStatTypeLabel(
+          position?.statType ?? null,
+        )} Graph`;
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
@@ -1506,7 +1489,9 @@ const defaults: Record<string, unknown> = {};
           return { index, position, keyCode: null, keyInfo };
         }
         const position = graphItemPositions[selectedKeyType]?.[index];
-        const graphLabel = `${getStatTypeLabel(position?.statType ?? null)} Graph`;
+        const graphLabel = `${getStatTypeLabel(
+          position?.statType ?? null,
+        )} Graph`;
         const keyInfo = { globalKey: graphLabel, displayName: graphLabel };
         return { index, position, keyCode: null, keyInfo };
       })
@@ -1514,71 +1499,69 @@ const defaults: Record<string, unknown> = {};
   };
 
   const getMixedValue = <T,>(
-      getter: (pos: KeyPosition) => T | undefined,
-      defaultValue: T,
-    ): { isMixed: boolean; value: T } => {
-      const keysData = getSelectedKeysData();
-      if (keysData.length === 0) return { isMixed: false, value: defaultValue };
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const keysData = getSelectedKeysData();
+    if (keysData.length === 0) return { isMixed: false, value: defaultValue };
 
-      const firstValue = getter(keysData[0].position!) ?? defaultValue;
-      const isMixed = keysData.some((data) => {
-        const val = getter(data.position!) ?? defaultValue;
-        if (typeof val === 'object' && typeof firstValue === 'object') {
-          return JSON.stringify(val) !== JSON.stringify(firstValue);
-        }
-        return val !== firstValue;
-      });
+    const firstValue = getter(keysData[0].position!) ?? defaultValue;
+    const isMixed = keysData.some((data) => {
+      const val = getter(data.position!) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
 
-      return { isMixed, value: firstValue };
-    };
+    return { isMixed, value: firstValue };
+  };
 
   const getMixedValueGraphs = <T,>(
-      getter: (pos: GraphItemPosition) => T | undefined,
-      defaultValue: T,
-    ): { isMixed: boolean; value: T } => {
-      const graphsData = getSelectedGraphsData();
-      if (graphsData.length === 0)
-        return { isMixed: false, value: defaultValue };
+    getter: (pos: GraphItemPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const graphsData = getSelectedGraphsData();
+    if (graphsData.length === 0) return { isMixed: false, value: defaultValue };
 
-      const firstValue = getter(graphsData[0].position!) ?? defaultValue;
-      const isMixed = graphsData.some((data) => {
-        const val = getter(data.position!) ?? defaultValue;
-        if (typeof val === 'object' && typeof firstValue === 'object') {
-          return JSON.stringify(val) !== JSON.stringify(firstValue);
-        }
-        return val !== firstValue;
-      });
+    const firstValue = getter(graphsData[0].position!) ?? defaultValue;
+    const isMixed = graphsData.some((data) => {
+      const val = getter(data.position!) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
 
-      return { isMixed, value: firstValue };
-    };
+    return { isMixed, value: firstValue };
+  };
 
   const getMixedValueGraphsAsKey = <T,>(
-      getter: (pos: KeyPosition) => T | undefined,
-      defaultValue: T,
-    ): { isMixed: boolean; value: T } => {
-      return getMixedValueGraphs((pos) => getter(pos), defaultValue);
-    };
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    return getMixedValueGraphs((pos) => getter(pos), defaultValue);
+  };
 
   const getMixedValueBatch = <T,>(
-      getter: (pos: KeyPosition) => T | undefined,
-      defaultValue: T,
-    ): { isMixed: boolean; value: T } => {
-      const batchData = getSelectedBatchStyleData();
-      if (batchData.length === 0)
-        return { isMixed: false, value: defaultValue };
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const batchData = getSelectedBatchStyleData();
+    if (batchData.length === 0) return { isMixed: false, value: defaultValue };
 
-      const firstValue =
-        getter(batchData[0].position as KeyPosition) ?? defaultValue;
-      const isMixed = batchData.some((data) => {
-        const val = getter(data.position as KeyPosition) ?? defaultValue;
-        if (typeof val === 'object' && typeof firstValue === 'object') {
-          return JSON.stringify(val) !== JSON.stringify(firstValue);
-        }
-        return val !== firstValue;
-      });
+    const firstValue =
+      getter(batchData[0].position as KeyPosition) ?? defaultValue;
+    const isMixed = batchData.some((data) => {
+      const val = getter(data.position as KeyPosition) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
 
-      return { isMixed, value: firstValue };
-    };
+    return { isMixed, value: firstValue };
+  };
 
   // ============================================================================
   // 다중 선택 일괄 편집 핸들러 (훅 사용)
@@ -1601,7 +1584,11 @@ const defaults: Record<string, unknown> = {};
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
-    selectedKeyLikeElements: selectedBatchStyleElements as { type: 'key' | 'stat' | 'graph'; id: string; index?: number }[],
+    selectedKeyLikeElements: selectedBatchStyleElements as {
+      type: 'key' | 'stat' | 'graph';
+      id: string;
+      index?: number;
+    }[],
     keyPositions: positions,
     statPositions: statItemPositions,
     graphPositions: graphItemPositions,
@@ -1632,337 +1619,339 @@ const defaults: Record<string, unknown> = {};
   };
 
   const getMixedValueKeysOnly = <T,>(
-      getter: (pos: KeyPosition) => T | undefined,
-      defaultValue: T,
-    ): { isMixed: boolean; value: T } => {
-      const data = getSelectedKeyOnlyPositions();
-      if (data.length === 0) return { isMixed: false, value: defaultValue };
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const data = getSelectedKeyOnlyPositions();
+    if (data.length === 0) return { isMixed: false, value: defaultValue };
 
-      const firstValue = getter(data[0].position) ?? defaultValue;
-      const isMixed = data.some(({ position }) => {
-        const val = getter(position) ?? defaultValue;
-        if (typeof val === 'object' && typeof firstValue === 'object') {
-          return JSON.stringify(val) !== JSON.stringify(firstValue);
-        }
-        return val !== firstValue;
-      });
+    const firstValue = getter(data[0].position) ?? defaultValue;
+    const isMixed = data.some(({ position }) => {
+      const val = getter(position) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
 
-      return { isMixed, value: firstValue };
-    };
+    return { isMixed, value: firstValue };
+  };
 
   const dispatchKeyOnlyBatchUpdates = (
-      updates: Array<{ index: number } & Partial<KeyPosition>>,
-      kind: 'preview' | 'commit',
-    ) => {
-      if (updates.length === 0) return;
-      if (kind === 'preview') {
-        if (onKeyBatchPreview) {
-          onKeyBatchPreview(updates);
-          return;
-        }
-        if (onKeyPreview) {
-          updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
-          return;
-        }
+    updates: Array<{ index: number } & Partial<KeyPosition>>,
+    kind: 'preview' | 'commit',
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onKeyBatchPreview) {
+        onKeyBatchPreview(updates);
         return;
       }
-
-      if (onKeyBatchUpdate) {
-        onKeyBatchUpdate(updates);
+      if (onKeyPreview) {
+        updates.forEach(({ index, ...rest }) => onKeyPreview(index, rest));
         return;
       }
-      updates.forEach((update) => onKeyUpdate(update));
-    };
+      return;
+    }
 
-  const handleBatchKeyOnlyStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
-      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-        index,
-        [property]: value,
-      })) as Array<{ index: number } & Partial<KeyPosition>>;
-      dispatchKeyOnlyBatchUpdates(updates, 'commit');
-    };
+    if (onKeyBatchUpdate) {
+      onKeyBatchUpdate(updates);
+      return;
+    }
+    updates.forEach((update) => onKeyUpdate(update));
+  };
+
+  const handleBatchKeyOnlyStyleChangeComplete = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      [property]: value,
+    })) as Array<{ index: number } & Partial<KeyPosition>>;
+    dispatchKeyOnlyBatchUpdates(updates, 'commit');
+  };
 
   const handleBatchNoteColorChangeKeysOnly = (value: NoteColor) => {
-      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-        index,
-        noteColor: value,
-      }));
-      dispatchKeyOnlyBatchUpdates(updates, 'preview');
-    };
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      noteColor: value,
+    }));
+    dispatchKeyOnlyBatchUpdates(updates, 'preview');
+  };
 
   const handleBatchNoteColorChangeCompleteKeysOnly = (value: NoteColor) => {
-      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-        index,
-        noteColor: value,
-      }));
-      dispatchKeyOnlyBatchUpdates(updates, 'commit');
-    };
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      noteColor: value,
+    }));
+    dispatchKeyOnlyBatchUpdates(updates, 'commit');
+  };
 
   const handleBatchGlowColorChangeKeysOnly = (value: NoteColor) => {
-      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-        index,
-        noteGlowColor: value,
-      }));
-      dispatchKeyOnlyBatchUpdates(updates, 'preview');
-    };
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      noteGlowColor: value,
+    }));
+    dispatchKeyOnlyBatchUpdates(updates, 'preview');
+  };
 
   const handleBatchGlowColorChangeCompleteKeysOnly = (value: NoteColor) => {
-      const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
-        index,
-        noteGlowColor: value,
-      }));
-      dispatchKeyOnlyBatchUpdates(updates, 'commit');
-    };
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      noteGlowColor: value,
+    }));
+    dispatchKeyOnlyBatchUpdates(updates, 'commit');
+  };
 
-  const handleGraphBatchSharedSetting = (updates: Partial<GraphItemPosition>) => {
-      const batchUpdates = selectedGraphElements
-        .filter((el) => el.index !== undefined)
-        .map((el) => ({ index: el.index!, ...updates })) as Array<
-        { index: number } & Partial<GraphItemPosition>
-      >;
-      handleGraphBatchUpdate(batchUpdates);
-    };
+  const handleGraphBatchSharedSetting = (
+    updates: Partial<GraphItemPosition>,
+  ) => {
+    const batchUpdates = selectedGraphElements
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, ...updates })) as Array<
+      { index: number } & Partial<GraphItemPosition>
+    >;
+    handleGraphBatchUpdate(batchUpdates);
+  };
 
   const renderPluginSettingsForm = (
-      schema: Record<string, PluginSettingSchema> | undefined,
-      values: Record<string, unknown>,
-      messages: PluginMessages | undefined,
-      colorIdPrefix: string,
-      onChange: (key: string, value: unknown) => void,
-      options?: { wrap?: boolean },
-    ) => {
-      if (!schema || Object.keys(schema).length === 0) {
-        return (
-          <p className="text-[#6B6D75] text-style-4 text-center">
-            {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
-          </p>
-        );
-      }
+    schema: Record<string, PluginSettingSchema> | undefined,
+    values: Record<string, unknown>,
+    messages: PluginMessages | undefined,
+    colorIdPrefix: string,
+    onChange: (key: string, value: unknown) => void,
+    options?: { wrap?: boolean },
+  ) => {
+    if (!schema || Object.keys(schema).length === 0) {
+      return (
+        <p className="text-[#6B6D75] text-style-4 text-center">
+          {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
+        </p>
+      );
+    }
 
-      const translate = (key?: string, fallback?: string) => {
-        if (!key) return fallback || '';
-        return translatePluginMessage({
-          messages,
-          locale,
-          key,
-          fallback,
-        });
-      };
-
-      const getPluginInputWidth = (
-        type: 'string' | 'number',
-        value: unknown,
-      ): string => {
-        if (type === 'number') {
-          return '60px';
-        }
-        const strVal = String(value ?? '');
-        if (strVal.length <= 4) return '60px';
-        if (strVal.length <= 10) return '100px';
-        return '200px';
-      };
-
-      const wrap = options?.wrap !== false;
-      const rows = Object.entries(schema).map(([key, setting]) => {
-        const schemaValue = setting as PluginSettingSchema;
-
-        if (schemaValue.visible !== undefined) {
-          const vis =
-            typeof schemaValue.visible === 'function'
-              ? schemaValue.visible(values)
-              : schemaValue.visible;
-          if (!vis) return null;
-        }
-
-        if (schemaValue.type === 'divider') {
-          return <SectionDivider key={`divider-${key}`} />;
-        }
-        const rawValue =
-          values[key] !== undefined ? values[key] : schemaValue.default;
-        const labelText = translate(schemaValue.label, schemaValue.label);
-        const placeholderText =
-          typeof schemaValue.placeholder === 'string'
-            ? translate(schemaValue.placeholder, schemaValue.placeholder)
-            : schemaValue.placeholder;
-
-        let control: React.ReactNode = null;
-
-        if (schemaValue.type === 'boolean') {
-          const checked = !!rawValue;
-          control = (
-            <Checkbox
-              checked={checked}
-              onChange={() => onChange(key, !checked)}
-            />
-          );
-        } else if (schemaValue.type === 'color') {
-          const colorValue =
-            typeof rawValue === 'string'
-              ? rawValue
-              : (schemaValue.default as string) || '#FFFFFF';
-          control = (
-            <ColorInput
-              value={colorValue}
-              onChange={(color) => onChange(key, color)}
-              colorId={`${colorIdPrefix}-${key}`}
-              panelElement={panelElement}
-              solidOnly={true}
-            />
-          );
-        } else if (schemaValue.type === 'number') {
-          const numericValue = Number(rawValue);
-          const normalizedValue = Number.isFinite(numericValue)
-            ? numericValue
-            : typeof schemaValue.default === 'number'
-              ? schemaValue.default
-              : 0;
-          control = (
-            <NumberInput
-              value={normalizedValue}
-              min={schemaValue.min}
-              max={schemaValue.max}
-              onChange={(nextValue) => onChange(key, nextValue)}
-              width={getPluginInputWidth('number', rawValue)}
-            />
-          );
-        } else if (schemaValue.type === 'string') {
-          const stringValue =
-            rawValue === undefined || rawValue === null ? '' : String(rawValue);
-          control = (
-            <TextInput
-              value={stringValue}
-              onChange={(nextValue) => onChange(key, nextValue)}
-              placeholder={
-                typeof placeholderText === 'string'
-                  ? placeholderText
-                  : undefined
-              }
-              width={getPluginInputWidth('string', stringValue)}
-            />
-          );
-        } else if (schemaValue.type === 'select') {
-          const options = (schemaValue.options || []).map((option) => ({
-            label: translate(option.label, option.label),
-            value: String(option.value),
-          }));
-          const optionMap = new Map(
-            (schemaValue.options || []).map((option) => [
-              String(option.value),
-              option.value,
-            ]),
-          );
-          const selectedValue = optionMap.has(String(rawValue))
-            ? String(rawValue)
-            : String(schemaValue.default ?? '');
-          control = (
-            <Dropdown
-              value={selectedValue}
-              options={options}
-              placeholder={
-                typeof placeholderText === 'string' &&
-                placeholderText.trim().length > 0
-                  ? placeholderText
-                  : undefined
-              }
-              onChange={(nextValue) =>
-                onChange(key, optionMap.get(nextValue) ?? nextValue)
-              }
-            />
-          );
-        }
-
-        if (schemaValue.type === 'boolean') {
-          return (
-            <div
-              key={key}
-              className="flex justify-between items-center w-full h-[23px]"
-            >
-              <p className="text-white text-style-2">{labelText}</p>
-              <div className="flex items-center gap-[10.5px]">{control}</div>
-            </div>
-          );
-        }
-
-        return (
-          <PropertyRow key={key} label={labelText}>
-            {control}
-          </PropertyRow>
-        );
+    const translate = (key?: string, fallback?: string) => {
+      if (!key) return fallback || '';
+      return translatePluginMessage({
+        messages,
+        locale,
+        key,
+        fallback,
       });
+    };
 
-      const filtered = rows.filter(Boolean);
+    const getPluginInputWidth = (
+      type: 'string' | 'number',
+      value: unknown,
+    ): string => {
+      if (type === 'number') {
+        return '60px';
+      }
+      const strVal = String(value ?? '');
+      if (strVal.length <= 4) return '60px';
+      if (strVal.length <= 10) return '100px';
+      return '200px';
+    };
 
-      if (!wrap) {
-        return <>{filtered}</>;
+    const wrap = options?.wrap !== false;
+    const rows = Object.entries(schema).map(([key, setting]) => {
+      const schemaValue = setting as PluginSettingSchema;
+
+      if (schemaValue.visible !== undefined) {
+        const vis =
+          typeof schemaValue.visible === 'function'
+            ? schemaValue.visible(values)
+            : schemaValue.visible;
+        if (!vis) return null;
       }
 
-      return <div className="flex flex-col gap-[12px]">{filtered}</div>;
-    };
+      if (schemaValue.type === 'divider') {
+        return <SectionDivider key={`divider-${key}`} />;
+      }
+      const rawValue =
+        values[key] !== undefined ? values[key] : schemaValue.default;
+      const labelText = translate(schemaValue.label, schemaValue.label);
+      const placeholderText =
+        typeof schemaValue.placeholder === 'string'
+          ? translate(schemaValue.placeholder, schemaValue.placeholder)
+          : schemaValue.placeholder;
+
+      let control: React.ReactNode = null;
+
+      if (schemaValue.type === 'boolean') {
+        const checked = !!rawValue;
+        control = (
+          <Checkbox
+            checked={checked}
+            onChange={() => onChange(key, !checked)}
+          />
+        );
+      } else if (schemaValue.type === 'color') {
+        const colorValue =
+          typeof rawValue === 'string'
+            ? rawValue
+            : (schemaValue.default as string) || '#FFFFFF';
+        control = (
+          <ColorInput
+            value={colorValue}
+            onChange={(color) => onChange(key, color)}
+            colorId={`${colorIdPrefix}-${key}`}
+            panelElement={panelElement}
+            solidOnly={true}
+          />
+        );
+      } else if (schemaValue.type === 'number') {
+        const numericValue = Number(rawValue);
+        const normalizedValue = Number.isFinite(numericValue)
+          ? numericValue
+          : typeof schemaValue.default === 'number'
+          ? schemaValue.default
+          : 0;
+        control = (
+          <NumberInput
+            value={normalizedValue}
+            min={schemaValue.min}
+            max={schemaValue.max}
+            onChange={(nextValue) => onChange(key, nextValue)}
+            width={getPluginInputWidth('number', rawValue)}
+          />
+        );
+      } else if (schemaValue.type === 'string') {
+        const stringValue =
+          rawValue === undefined || rawValue === null ? '' : String(rawValue);
+        control = (
+          <TextInput
+            value={stringValue}
+            onChange={(nextValue) => onChange(key, nextValue)}
+            placeholder={
+              typeof placeholderText === 'string' ? placeholderText : undefined
+            }
+            width={getPluginInputWidth('string', stringValue)}
+          />
+        );
+      } else if (schemaValue.type === 'select') {
+        const options = (schemaValue.options || []).map((option) => ({
+          label: translate(option.label, option.label),
+          value: String(option.value),
+        }));
+        const optionMap = new Map(
+          (schemaValue.options || []).map((option) => [
+            String(option.value),
+            option.value,
+          ]),
+        );
+        const selectedValue = optionMap.has(String(rawValue))
+          ? String(rawValue)
+          : String(schemaValue.default ?? '');
+        control = (
+          <Dropdown
+            value={selectedValue}
+            options={options}
+            placeholder={
+              typeof placeholderText === 'string' &&
+              placeholderText.trim().length > 0
+                ? placeholderText
+                : undefined
+            }
+            onChange={(nextValue) =>
+              onChange(key, optionMap.get(nextValue) ?? nextValue)
+            }
+          />
+        );
+      }
+
+      if (schemaValue.type === 'boolean') {
+        return (
+          <div
+            key={key}
+            className="flex justify-between items-center w-full h-[23px]"
+          >
+            <p className="text-white text-style-2">{labelText}</p>
+            <div className="flex items-center gap-[10.5px]">{control}</div>
+          </div>
+        );
+      }
+
+      return (
+        <PropertyRow key={key} label={labelText}>
+          {control}
+        </PropertyRow>
+      );
+    });
+
+    const filtered = rows.filter(Boolean);
+
+    if (!wrap) {
+      return <>{filtered}</>;
+    }
+
+    return <div className="flex flex-col gap-[12px]">{filtered}</div>;
+  };
 
   // 배치 편집용 interactiveRefs
   const batchColorPickerInteractiveRefs = [
-      batchNoteColorButtonRef,
-      batchGlowColorButtonRef,
-      batchCounterFillButtonRef,
-      batchCounterStrokeButtonRef,
-    ];
+    batchNoteColorButtonRef,
+    batchGlowColorButtonRef,
+    batchCounterFillButtonRef,
+    batchCounterStrokeButtonRef,
+  ];
 
   // 배치 피커 토글
   const handleBatchPickerToggle = (target: BatchPickerTarget) => {
-      if (target && target !== batchPickerFor) {
-        const keysData = getSelectedKeysData();
-        const keyOnly = getSelectedKeyOnlyPositions();
-        const firstPos =
-          (target === 'noteColor' || target === 'glowColor') &&
-          keyOnly.length > 0
-            ? keyOnly[0].position
-            : keysData[0]?.position;
-        if (firstPos) {
-          const counterSettings = normalizeCounterSettings(firstPos.counter);
-          setBatchLocalColors({
-            noteColor: (() => {
-              const nc = firstPos.noteColor;
-              if (
-                nc &&
-                typeof nc === 'object' &&
-                'type' in nc &&
-                nc.type === 'gradient'
-              ) {
-                return { type: 'gradient', top: nc.top, bottom: nc.bottom };
-              }
-              return typeof nc === 'string' ? nc : '#FFFFFF';
-            })(),
-            glowColor: (() => {
-              const gc = firstPos.noteGlowColor ?? firstPos.noteColor;
-              if (
-                gc &&
-                typeof gc === 'object' &&
-                'type' in gc &&
-                gc.type === 'gradient'
-              ) {
-                return { type: 'gradient', top: gc.top, bottom: gc.bottom };
-              }
-              return typeof gc === 'string' ? gc : '#FFFFFF';
-            })(),
-            fillIdle: counterSettings.fill.idle,
-            fillActive: counterSettings.fill.active,
-            strokeIdle: counterSettings.stroke.idle,
-            strokeActive: counterSettings.stroke.active,
-          });
-          setBatchLocalOpacities({
-            noteOpacity:
-              typeof firstPos.noteOpacity === 'number'
-                ? firstPos.noteOpacity
-                : 80,
-            glowOpacity:
-              typeof firstPos.noteGlowOpacity === 'number'
-                ? firstPos.noteGlowOpacity
-                : 70,
-          });
-        }
+    if (target && target !== batchPickerFor) {
+      const keysData = getSelectedKeysData();
+      const keyOnly = getSelectedKeyOnlyPositions();
+      const firstPos =
+        (target === 'noteColor' || target === 'glowColor') && keyOnly.length > 0
+          ? keyOnly[0].position
+          : keysData[0]?.position;
+      if (firstPos) {
+        const counterSettings = normalizeCounterSettings(firstPos.counter);
+        setBatchLocalColors({
+          noteColor: (() => {
+            const nc = firstPos.noteColor;
+            if (
+              nc &&
+              typeof nc === 'object' &&
+              'type' in nc &&
+              nc.type === 'gradient'
+            ) {
+              return { type: 'gradient', top: nc.top, bottom: nc.bottom };
+            }
+            return typeof nc === 'string' ? nc : '#FFFFFF';
+          })(),
+          glowColor: (() => {
+            const gc = firstPos.noteGlowColor ?? firstPos.noteColor;
+            if (
+              gc &&
+              typeof gc === 'object' &&
+              'type' in gc &&
+              gc.type === 'gradient'
+            ) {
+              return { type: 'gradient', top: gc.top, bottom: gc.bottom };
+            }
+            return typeof gc === 'string' ? gc : '#FFFFFF';
+          })(),
+          fillIdle: counterSettings.fill.idle,
+          fillActive: counterSettings.fill.active,
+          strokeIdle: counterSettings.stroke.idle,
+          strokeActive: counterSettings.stroke.active,
+        });
+        setBatchLocalOpacities({
+          noteOpacity:
+            typeof firstPos.noteOpacity === 'number'
+              ? firstPos.noteOpacity
+              : 80,
+          glowOpacity:
+            typeof firstPos.noteGlowOpacity === 'number'
+              ? firstPos.noteGlowOpacity
+              : 70,
+        });
       }
-      setBatchPickerFor((prev) => (prev === target ? null : target));
-    };
+    }
+    setBatchPickerFor((prev) => (prev === target ? null : target));
+  };
 
   const getBatchPickerColor = (): NoteColor | string => {
     switch (batchPickerFor) {
@@ -1999,125 +1988,125 @@ const defaults: Record<string, unknown> = {};
   };
 
   const handleBatchPickerColorChange = (newColor: NoteColor) => {
-      if (!batchPickerFor) return;
+    if (!batchPickerFor) return;
 
-      if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [batchPickerFor]: newColor,
-        }));
-      } else if (batchPickerFor === 'fill') {
-        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        const key =
-          batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [key]: solidColor,
-        }));
-      } else if (batchPickerFor === 'stroke') {
-        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        const key =
-          batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [key]: solidColor,
-        }));
+    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [batchPickerFor]: newColor,
+      }));
+    } else if (batchPickerFor === 'fill') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const key =
+        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [key]: solidColor,
+      }));
+    } else if (batchPickerFor === 'stroke') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const key =
+        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [key]: solidColor,
+      }));
+    }
+
+    const isGradientNoteLikeColor =
+      !!newColor &&
+      typeof newColor === 'object' &&
+      newColor.type === 'gradient';
+
+    if (
+      isGradientNoteLikeColor &&
+      (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor')
+    ) {
+      return;
+    }
+
+    if (batchPickerFor === 'noteColor') {
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchNoteColorChangeKeysOnly(newColor);
+      } else {
+        handleBatchNoteColorChange(newColor);
       }
-
-      const isGradientNoteLikeColor =
-        !!newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient';
-
-      if (
-        isGradientNoteLikeColor &&
-        (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor')
-      ) {
-        return;
+    } else if (batchPickerFor === 'glowColor') {
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchGlowColorChangeKeysOnly(newColor);
+      } else {
+        handleBatchGlowColorChange(newColor);
       }
-
-      if (batchPickerFor === 'noteColor') {
-        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-          handleBatchNoteColorChangeKeysOnly(newColor);
-        } else {
-          handleBatchNoteColorChange(newColor);
-        }
-      } else if (batchPickerFor === 'glowColor') {
-        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-          handleBatchGlowColorChangeKeysOnly(newColor);
-        } else {
-          handleBatchGlowColorChange(newColor);
-        }
-      }
-    };
+    }
+  };
 
   const handleBatchPickerColorChangeComplete = (newColor: NoteColor) => {
-      if (!batchPickerFor) return;
+    if (!batchPickerFor) return;
 
-      if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [batchPickerFor]: newColor,
-        }));
-      } else if (batchPickerFor === 'fill') {
-        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        const key =
-          batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [key]: solidColor,
-        }));
-      } else if (batchPickerFor === 'stroke') {
-        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        const key =
-          batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
-        setBatchLocalColors((prev) => ({
-          ...prev,
-          [key]: solidColor,
-        }));
+    if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [batchPickerFor]: newColor,
+      }));
+    } else if (batchPickerFor === 'fill') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const key =
+        batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [key]: solidColor,
+      }));
+    } else if (batchPickerFor === 'stroke') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const key =
+        batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        [key]: solidColor,
+      }));
+    }
+
+    const keysData = getSelectedKeysData();
+    const firstCounter = keysData[0]?.position
+      ? normalizeCounterSettings(keysData[0].position.counter)
+      : createDefaultCounterSettings();
+
+    if (batchPickerFor === 'noteColor') {
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchNoteColorChangeCompleteKeysOnly(newColor);
+      } else {
+        handleBatchNoteColorChangeComplete(newColor);
       }
-
-      const keysData = getSelectedKeysData();
-      const firstCounter = keysData[0]?.position
-        ? normalizeCounterSettings(keysData[0].position.counter)
-        : createDefaultCounterSettings();
-
-      if (batchPickerFor === 'noteColor') {
-        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-          handleBatchNoteColorChangeCompleteKeysOnly(newColor);
-        } else {
-          handleBatchNoteColorChangeComplete(newColor);
-        }
-      } else if (batchPickerFor === 'glowColor') {
-        if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
-          handleBatchGlowColorChangeCompleteKeysOnly(newColor);
-        } else {
-          handleBatchGlowColorChangeComplete(newColor);
-        }
-      } else if (batchPickerFor === 'fill') {
-        const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        if (batchCounterColorState === 'active') {
-          handleBatchCounterUpdate({
-            fill: { ...firstCounter.fill, active: fillColor },
-          });
-        } else {
-          handleBatchCounterUpdate({
-            fill: { ...firstCounter.fill, idle: fillColor },
-          });
-        }
-      } else if (batchPickerFor === 'stroke') {
-        const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
-        if (batchCounterColorState === 'active') {
-          handleBatchCounterUpdate({
-            stroke: { ...firstCounter.stroke, active: strokeColor },
-          });
-        } else {
-          handleBatchCounterUpdate({
-            stroke: { ...firstCounter.stroke, idle: strokeColor },
-          });
-        }
+    } else if (batchPickerFor === 'glowColor') {
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchGlowColorChangeCompleteKeysOnly(newColor);
+      } else {
+        handleBatchGlowColorChangeComplete(newColor);
       }
-    };
+    } else if (batchPickerFor === 'fill') {
+      const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      if (batchCounterColorState === 'active') {
+        handleBatchCounterUpdate({
+          fill: { ...firstCounter.fill, active: fillColor },
+        });
+      } else {
+        handleBatchCounterUpdate({
+          fill: { ...firstCounter.fill, idle: fillColor },
+        });
+      }
+    } else if (batchPickerFor === 'stroke') {
+      const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      if (batchCounterColorState === 'active') {
+        handleBatchCounterUpdate({
+          stroke: { ...firstCounter.stroke, active: strokeColor },
+        });
+      } else {
+        handleBatchCounterUpdate({
+          stroke: { ...firstCounter.stroke, idle: strokeColor },
+        });
+      }
+    }
+  };
 
   // ============================================================================
   // 렌더링
@@ -2236,11 +2225,17 @@ const defaults: Record<string, unknown> = {};
         getSelectedGraphsData={getSelectedGraphsData}
         getSelectedBatchStyleData={getSelectedBatchStyleData}
         getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
-        handleBatchKeyOnlyStyleChangeComplete={handleBatchKeyOnlyStyleChangeComplete}
+        handleBatchKeyOnlyStyleChangeComplete={
+          handleBatchKeyOnlyStyleChangeComplete
+        }
         handleBatchNoteColorChangeKeysOnly={handleBatchNoteColorChangeKeysOnly}
-        handleBatchNoteColorChangeCompleteKeysOnly={handleBatchNoteColorChangeCompleteKeysOnly}
+        handleBatchNoteColorChangeCompleteKeysOnly={
+          handleBatchNoteColorChangeCompleteKeysOnly
+        }
         handleBatchGlowColorChangeKeysOnly={handleBatchGlowColorChangeKeysOnly}
-        handleBatchGlowColorChangeCompleteKeysOnly={handleBatchGlowColorChangeCompleteKeysOnly}
+        handleBatchGlowColorChangeCompleteKeysOnly={
+          handleBatchGlowColorChangeCompleteKeysOnly
+        }
         batchScrollRefFor={batchScrollRefFor}
         batchThumbRefFor={batchThumbRefFor}
         batchNoteColorButtonRef={batchNoteColorButtonRef}
@@ -2260,7 +2255,9 @@ const defaults: Record<string, unknown> = {};
         setBatchLocalOpacities={setBatchLocalOpacities}
         handleBatchPickerToggle={handleBatchPickerToggle}
         handleBatchPickerColorChange={handleBatchPickerColorChange}
-        handleBatchPickerColorChangeComplete={handleBatchPickerColorChangeComplete}
+        handleBatchPickerColorChangeComplete={
+          handleBatchPickerColorChangeComplete
+        }
         getBatchPickerColor={getBatchPickerColor}
         getBatchPickerRef={getBatchPickerRef}
         batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}

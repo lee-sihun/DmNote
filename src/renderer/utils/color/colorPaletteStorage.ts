@@ -36,7 +36,10 @@ export const addToPalette = (type: PaletteType, color: PaletteColor): void => {
   // 중복 체크를 위한 비교 함수
   const isSameColor = (a: PaletteColor, b: PaletteColor): boolean => {
     if (type === 'solid') {
-      return normalizeForComparison(a as string) === normalizeForComparison(b as string);
+      return (
+        normalizeForComparison(a as string) ===
+        normalizeForComparison(b as string)
+      );
     }
     // gradient 비교
     if (

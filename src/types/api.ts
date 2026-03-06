@@ -409,9 +409,7 @@ export type PluginSettingSchema =
   | {
       type: 'divider';
       label?: string;
-      visible?:
-        | boolean
-        | ((settings: Record<string, unknown>) => boolean);
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
     }
   | {
       type: Exclude<PluginSettingType, 'divider'>;
@@ -422,9 +420,7 @@ export type PluginSettingSchema =
       step?: number; // for number
       options?: { label: string; value: string | number | boolean }[]; // for select
       placeholder?: string; // for string/number
-      visible?:
-        | boolean
-        | ((settings: Record<string, unknown>) => boolean);
+      visible?: boolean | ((settings: Record<string, unknown>) => boolean);
     };
 
 export interface PluginDefinitionHookContext {
@@ -455,7 +451,10 @@ export interface PluginDefinitionHookContext {
    * 'key' event payload: { key: string, state: 'DOWN' | 'UP', mode: string }
    * 'rawKey' event payload: { device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown', label: string, labels: string[], state: 'DOWN' | 'UP' }
    */
-  onHook: (event: 'key' | 'rawKey', callback: (...args: unknown[]) => void) => void;
+  onHook: (
+    event: 'key' | 'rawKey',
+    callback: (...args: unknown[]) => void,
+  ) => void;
   expose: (actions: Record<string, (...args: unknown[]) => unknown>) => void;
   locale: string;
   t: PluginTranslateFn;
@@ -912,7 +911,10 @@ export interface DMNoteAPI {
   bridge: {
     send(type: string, data?: unknown): Promise<void>;
     sendTo(target: WindowTarget, type: string, data?: unknown): Promise<void>;
-    on<T = unknown>(type: string, listener: BridgeMessageListener<T>): Unsubscribe;
+    on<T = unknown>(
+      type: string,
+      listener: BridgeMessageListener<T>,
+    ): Unsubscribe;
     once<T = unknown>(
       type: string,
       listener: BridgeMessageListener<T>,

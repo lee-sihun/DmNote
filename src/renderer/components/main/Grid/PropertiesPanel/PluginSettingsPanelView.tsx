@@ -1,5 +1,9 @@
 import React from 'react';
-import type { PluginSettingSchema, PluginMessages, PluginSettingValue } from '@src/types/api';
+import type {
+  PluginSettingSchema,
+  PluginMessages,
+  PluginSettingValue,
+} from '@src/types/api';
 import type { PluginSettingsPanelPayload } from '@stores/usePropertiesPanelStore';
 import { SidebarToggleIcon } from './PropertyInputs';
 
@@ -7,7 +11,10 @@ interface PluginSettingsPanelViewProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
   pluginSettingsPanel: PluginSettingsPanelPayload;
   pluginPanelSettings: Record<string, unknown>;
-  handlePluginSettingsPanelChange: (key: string, value: PluginSettingValue) => void;
+  handlePluginSettingsPanelChange: (
+    key: string,
+    value: PluginSettingValue,
+  ) => void;
   handlePluginSettingsPanelConfirm: () => void;
   handlePluginSettingsPanelCancel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;

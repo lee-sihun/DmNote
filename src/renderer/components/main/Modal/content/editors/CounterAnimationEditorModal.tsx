@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
@@ -187,21 +182,21 @@ export default function CounterAnimationEditorModal({
   const [previewActive, setPreviewActive] = useState(false);
   const [previewCss, setPreviewCss] = useState('');
 
-  const cancelAutoFit = useCallback(() => {
+  const cancelAutoFit = () => {
     if (autoFitRafRef.current) {
       cancelAnimationFrame(autoFitRafRef.current);
       autoFitRafRef.current = null;
     }
-  }, []);
+  };
 
-  const applyView = useCallback((offset: { x: number; y: number }, scale: number) => {
+  const applyView = (offset: { x: number; y: number }, scale: number) => {
     viewOffsetRef.current = offset;
     viewScaleRef.current = scale;
     setViewOffset(offset);
     setViewScale(scale);
-  }, []);
+  };
 
-  const computeAutoFit = useCallback((bezier: CounterAnimationBezier) => {
+  const computeAutoFit = (bezier: CounterAnimationBezier) => {
     const pts = [
       { x: EDITOR_PADDING, y: EDITOR_PADDING + EDITOR_SIZE },
       { x: EDITOR_PADDING + EDITOR_SIZE, y: EDITOR_PADDING },
@@ -262,7 +257,7 @@ export default function CounterAnimationEditorModal({
       offset: { x: cx - vbSize / 2, y: cy - vbSize / 2 },
       scale: fitScale,
     };
-  }, []);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -287,7 +282,7 @@ export default function CounterAnimationEditorModal({
     pinchStartDistRef.current = 0;
     setPreviewCount(0);
     setPreviewActive(false);
-  }, [applyView, computeAutoFit, initialPreset, isOpen, mode]);
+  }, [initialPreset, isOpen, mode]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -297,9 +292,9 @@ export default function CounterAnimationEditorModal({
     activePointersRef.current.clear();
     pinchStartDistRef.current = 0;
     cancelAutoFit();
-  }, [cancelAutoFit, isOpen]);
+  }, [isOpen]);
 
-  useEffect(() => () => cancelAutoFit(), [cancelAutoFit]);
+  useEffect(() => () => cancelAutoFit(), []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -384,111 +379,115 @@ export default function CounterAnimationEditorModal({
     window.addEventListener('pointercancel', handleUp);
   };
 
-  const animateViewToFit = useCallback((bezier: CounterAnimationBezier) => {
+  const animateViewToFit = (bezier: CounterAnimationBezier) => {
     cancelAutoFit();
 
     const target = computeAutoFit(bezier);
     const fromOffset = { ...viewOffsetRef.current };
     const fromScale = viewScaleRef.current;
 
-      const EPS = 1e-3;
-      if (
-        Math.abs(target.offset.x - fromOffset.x) < EPS &&
-        Math.abs(target.offset.y - fromOffset.y) < EPS &&
-        Math.abs(target.scale - fromScale) < EPS
-      ) {
-        return;
-      }
+    const EPS = 1e-3;
+    if (
+      Math.abs(target.offset.x - fromOffset.x) < EPS &&
+      Math.abs(target.offset.y - fromOffset.y) < EPS &&
+      Math.abs(target.scale - fromScale) < EPS
+    ) {
+      return;
+    }
 
-      const start = performance.now();
-      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const start = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
-      const tick = (now: number) => {
-        const elapsed = now - start;
-        const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
-        const k = easeOutCubic(t);
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / AUTO_FIT_DURATION);
+      const k = easeOutCubic(t);
 
-        const newOffset = {
-          x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
-          y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
-        };
-        const newScale = fromScale + (target.scale - fromScale) * k;
-
-        applyView(newOffset, newScale);
-
-        if (t < 1) {
-          autoFitRafRef.current = requestAnimationFrame(tick);
-        } else {
-          autoFitRafRef.current = null;
-        }
+      const newOffset = {
+        x: fromOffset.x + (target.offset.x - fromOffset.x) * k,
+        y: fromOffset.y + (target.offset.y - fromOffset.y) * k,
       };
+      const newScale = fromScale + (target.scale - fromScale) * k;
 
-      autoFitRafRef.current = requestAnimationFrame(tick);
-  }, [cancelAutoFit, computeAutoFit, applyView]);
+      applyView(newOffset, newScale);
 
-  const updateBezierFromClient = useCallback((clientX: number, clientY: number, target: DragTarget) => {
-      if (!target || !svgRef.current) return;
-      const rect = svgRef.current.getBoundingClientRect();
-
-      const fracX = (clientX - rect.left) / rect.width;
-      const fracY = (clientY - rect.top) / rect.height;
-
-      const scale = viewScaleRef.current;
-      const offset = viewOffsetRef.current;
-      const vbSize = TOTAL_SIZE / scale;
-
-      const worldX = offset.x + fracX * vbSize;
-      const worldY = offset.y + fracY * vbSize;
-
-      const bezierX = (worldX - EDITOR_PADDING) / EDITOR_SIZE;
-      const bezierY = 1 - (worldY - EDITOR_PADDING) / EDITOR_SIZE;
-
-      const current = localBezierRef.current;
-      const nextBezier: CounterAnimationBezier =
-        target === 'p1'
-          ? [
-              Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -4), 4),
-              current[2],
-              current[3],
-            ]
-          : [
-              current[0],
-              current[1],
-              Math.min(Math.max(bezierX, 0), 1),
-              Math.min(Math.max(bezierY, -4), 4),
-            ];
-
-      const clamped = clampCounterBezier(nextBezier);
-      localBezierRef.current = clamped;
-      setLocalBezier(clamped);
-      setBezierInput(formatBezierInput(clamped));
-      draggedBezierRef.current = clamped;
-
-      const hx =
-        EDITOR_PADDING +
-        (target === 'p1' ? clamped[0] : clamped[2]) * EDITOR_SIZE;
-      const hy =
-        EDITOR_PADDING +
-        (1 - (target === 'p1' ? clamped[1] : clamped[3])) * EDITOR_SIZE;
-
-      // 축소 시 auto-pan 과도 이동 방지용 margin 제한
-      const effectiveScale = Math.max(scale, 0.8);
-      const margin = PAN_MARGIN / effectiveScale;
-      let nx = offset.x;
-      let ny = offset.y;
-
-      if (hx < offset.x + margin) nx = hx - margin;
-      else if (hx > offset.x + vbSize - margin) nx = hx - vbSize + margin;
-      if (hy < offset.y + margin) ny = hy - margin;
-      else if (hy > offset.y + vbSize - margin) ny = hy - vbSize + margin;
-
-      if (nx !== offset.x || ny !== offset.y) {
-        const next = { x: nx, y: ny };
-        viewOffsetRef.current = next;
-        setViewOffset(next);
+      if (t < 1) {
+        autoFitRafRef.current = requestAnimationFrame(tick);
+      } else {
+        autoFitRafRef.current = null;
       }
-  }, []);
+    };
+
+    autoFitRafRef.current = requestAnimationFrame(tick);
+  };
+
+  const updateBezierFromClient = (
+    clientX: number,
+    clientY: number,
+    target: DragTarget,
+  ) => {
+    if (!target || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+
+    const fracX = (clientX - rect.left) / rect.width;
+    const fracY = (clientY - rect.top) / rect.height;
+
+    const scale = viewScaleRef.current;
+    const offset = viewOffsetRef.current;
+    const vbSize = TOTAL_SIZE / scale;
+
+    const worldX = offset.x + fracX * vbSize;
+    const worldY = offset.y + fracY * vbSize;
+
+    const bezierX = (worldX - EDITOR_PADDING) / EDITOR_SIZE;
+    const bezierY = 1 - (worldY - EDITOR_PADDING) / EDITOR_SIZE;
+
+    const current = localBezierRef.current;
+    const nextBezier: CounterAnimationBezier =
+      target === 'p1'
+        ? [
+            Math.min(Math.max(bezierX, 0), 1),
+            Math.min(Math.max(bezierY, -4), 4),
+            current[2],
+            current[3],
+          ]
+        : [
+            current[0],
+            current[1],
+            Math.min(Math.max(bezierX, 0), 1),
+            Math.min(Math.max(bezierY, -4), 4),
+          ];
+
+    const clamped = clampCounterBezier(nextBezier);
+    localBezierRef.current = clamped;
+    setLocalBezier(clamped);
+    setBezierInput(formatBezierInput(clamped));
+    draggedBezierRef.current = clamped;
+
+    const hx =
+      EDITOR_PADDING +
+      (target === 'p1' ? clamped[0] : clamped[2]) * EDITOR_SIZE;
+    const hy =
+      EDITOR_PADDING +
+      (1 - (target === 'p1' ? clamped[1] : clamped[3])) * EDITOR_SIZE;
+
+    // 축소 시 auto-pan 과도 이동 방지용 margin 제한
+    const effectiveScale = Math.max(scale, 0.8);
+    const margin = PAN_MARGIN / effectiveScale;
+    let nx = offset.x;
+    let ny = offset.y;
+
+    if (hx < offset.x + margin) nx = hx - margin;
+    else if (hx > offset.x + vbSize - margin) nx = hx - vbSize + margin;
+    if (hy < offset.y + margin) ny = hy - margin;
+    else if (hy > offset.y + vbSize - margin) ny = hy - vbSize + margin;
+
+    if (nx !== offset.x || ny !== offset.y) {
+      const next = { x: nx, y: ny };
+      viewOffsetRef.current = next;
+      setViewOffset(next);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -595,9 +594,12 @@ export default function CounterAnimationEditorModal({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  }, [isOpen, applyView, updateBezierFromClient, animateViewToFit]);
+  });
 
-  const handlePointPointerDown = (event: React.PointerEvent<SVGCircleElement>, target: DragTarget) => {
+  const handlePointPointerDown = (
+    event: React.PointerEvent<SVGCircleElement>,
+    target: DragTarget,
+  ) => {
     if (event.button !== 0 || spaceHeldRef.current) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1171,14 +1173,14 @@ export default function CounterAnimationEditorModal({
                       count={previewCount}
                       fillColor={
                         previewActive
-                          ? (counterSettings?.fill.active ?? '#FFFFFF')
-                          : (counterSettings?.fill.idle ??
-                            'rgba(121, 121, 121, 0.9)')
+                          ? counterSettings?.fill.active ?? '#FFFFFF'
+                          : counterSettings?.fill.idle ??
+                            'rgba(121, 121, 121, 0.9)'
                       }
                       strokeColor={
                         previewActive
-                          ? (counterSettings?.stroke.active ?? 'transparent')
-                          : (counterSettings?.stroke.idle ?? 'transparent')
+                          ? counterSettings?.stroke.active ?? 'transparent'
+                          : counterSettings?.stroke.idle ?? 'transparent'
                       }
                       globalKey="preview"
                       active={previewActive}
@@ -1202,14 +1204,14 @@ export default function CounterAnimationEditorModal({
                   const useInline = keyVisual?.useInlineStyles === true;
                   const keyActive = previewActive && !keyVisual?.isStat;
                   const stateBackgroundColor = keyActive
-                    ? (keyVisual?.activeBackgroundColor ??
-                      keyVisual?.backgroundColor)
+                    ? keyVisual?.activeBackgroundColor ??
+                      keyVisual?.backgroundColor
                     : keyVisual?.backgroundColor;
                   const stateBorderColor = keyActive
-                    ? (keyVisual?.activeBorderColor ?? keyVisual?.borderColor)
+                    ? keyVisual?.activeBorderColor ?? keyVisual?.borderColor
                     : keyVisual?.borderColor;
                   const stateFontColor = keyActive
-                    ? (keyVisual?.activeFontColor ?? keyVisual?.fontColor)
+                    ? keyVisual?.activeFontColor ?? keyVisual?.fontColor
                     : keyVisual?.fontColor;
                   const defaultBgColor = keyActive
                     ? 'rgba(121, 121, 121, 0.9)'
@@ -1229,17 +1231,25 @@ export default function CounterAnimationEditorModal({
                     backgroundColor:
                       useInline && stateBackgroundColor
                         ? stateBackgroundColor
-                        : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
+                        : `var(--key-bg, ${
+                            stateBackgroundColor || defaultBgColor
+                          })`,
                     borderRadius: useInline
                       ? `${br}px`
                       : `var(--key-radius, ${br}px)`,
                     border: useInline
-                      ? `${bw}px solid ${stateBorderColor || defaultBorderColor}`
-                      : `var(--key-border, ${bw}px solid ${stateBorderColor || defaultBorderColor})`,
+                      ? `${bw}px solid ${
+                          stateBorderColor || defaultBorderColor
+                        }`
+                      : `var(--key-border, ${bw}px solid ${
+                          stateBorderColor || defaultBorderColor
+                        })`,
                     color:
                       useInline && stateFontColor
                         ? stateFontColor
-                        : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
+                        : `var(--key-text-color, ${
+                            stateFontColor || defaultTextColor
+                          })`,
                     boxSizing: 'border-box',
                     overflow: 'hidden',
                   };
@@ -1292,14 +1302,18 @@ export default function CounterAnimationEditorModal({
                       }
                     >
                       <div
-                        className={`flex items-center justify-center shadow-2xl ${keyVisual?.className || ''}`}
+                        className={`flex items-center justify-center shadow-2xl ${
+                          keyVisual?.className || ''
+                        }`}
                         style={keyBoxStyle}
                         data-state={keyActive ? 'active' : 'inactive'}
                         data-key-element="true"
                       >
                         {isInside ? (
                           <div
-                            className={`flex ${isHorizontal ? '' : 'flex-col'} w-full h-full items-center pointer-events-none select-none`}
+                            className={`flex ${
+                              isHorizontal ? '' : 'flex-col'
+                            } w-full h-full items-center pointer-events-none select-none`}
                             style={{
                               justifyContent: isBetween
                                 ? 'space-between'

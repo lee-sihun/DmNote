@@ -1,12 +1,13 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useLayoutEffect,
-} from 'react';
+import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import { Saturation, Hue, Alpha, useColor, type IColor } from 'react-color-palette';
+import {
+  Saturation,
+  Hue,
+  Alpha,
+  useColor,
+  type IColor,
+} from 'react-color-palette';
 import 'react-color-palette/css';
 import FloatingPopup from '../../FloatingPopup';
 import {
@@ -41,10 +42,15 @@ interface ColorPickerWrapperProps {
   onClose?: () => void;
   solidOnly?: boolean;
   stateMode?: string;
-  onStateModeChange?: React.Dispatch<React.SetStateAction<string>> | ((mode: string) => void);
+  onStateModeChange?:
+    | React.Dispatch<React.SetStateAction<string>>
+    | ((mode: string) => void);
   opacityPercent?: number | { top: number; bottom: number };
   onOpacityPercentChange?: (value: number, target: OpacityTarget) => void;
-  onOpacityPercentChangeComplete?: (value: number, target: OpacityTarget) => void;
+  onOpacityPercentChangeComplete?: (
+    value: number,
+    target: OpacityTarget,
+  ) => void;
   opacityPercentLabel?: string;
   opacityPercentMixed?: boolean;
   interactiveRefs?: React.RefObject<HTMLElement>[];
@@ -97,16 +103,19 @@ export default function ColorPickerWrapper({
   const initialMode = solidOnly
     ? MODES.solid
     : isGradientColor(color)
-      ? MODES.gradient
-      : MODES.solid;
+    ? MODES.gradient
+    : MODES.solid;
   const [mode, setMode] = useState<string>(initialMode);
   const baseColor = normalizeColorInput(color);
   const [selectedColor, setSelectedColor] = useColor(baseColor);
-  const [alpha, setAlpha] = useState<number>(() => extractAlphaFromColor(color));
+  const [alpha, setAlpha] = useState<number>(() =>
+    extractAlphaFromColor(color),
+  );
   const [alphaPercentInput, setAlphaPercentInput] = useState<string>(() =>
     String(Math.round(extractAlphaFromColor(color) * 100)),
   );
-  const [isAlphaPercentFocused, setIsAlphaPercentFocused] = useState<boolean>(false);
+  const [isAlphaPercentFocused, setIsAlphaPercentFocused] =
+    useState<boolean>(false);
   const [gradientTop, setGradientTop] = useState<string>(() =>
     isGradientColor(color)
       ? color.top.replace('#', '')
@@ -357,8 +366,13 @@ export default function ColorPickerWrapper({
     onColorChange?.(buildGradient(`#${gradientTop}`, `#${gradientBottom}`));
   }, [mode, gradientTop, gradientBottom, onColorChange, solidOnly]);
 
-  const applyColor = (next: IColor | string | Partial<ColorObject>, isComplete: boolean = false) => {
-    const parsed = toColorObject(next as string | Partial<ColorObject> | null | undefined);
+  const applyColor = (
+    next: IColor | string | Partial<ColorObject>,
+    isComplete: boolean = false,
+  ) => {
+    const parsed = toColorObject(
+      next as string | Partial<ColorObject> | null | undefined,
+    );
     if (!parsed) return;
     setSelectedColor(parsed);
     if (!solidOnly && mode === MODES.gradient) {
@@ -489,13 +503,14 @@ export default function ColorPickerWrapper({
     onColorChangeComplete?.(gradient);
   };
 
-  const handleGradientInputChange = (setter: React.Dispatch<React.SetStateAction<string>>) => (raw: string) => {
-    const sanitized = raw
-      .replace(/[^0-9a-fA-F]/g, '')
-      .slice(0, 8)
-      .toUpperCase();
-    setter(sanitized);
-  };
+  const handleGradientInputChange =
+    (setter: React.Dispatch<React.SetStateAction<string>>) => (raw: string) => {
+      const sanitized = raw
+        .replace(/[^0-9a-fA-F]/g, '')
+        .slice(0, 8)
+        .toUpperCase();
+      setter(sanitized);
+    };
 
   const selectGradient = (side: GradientSide) => {
     setGradientSelected(side);
@@ -527,7 +542,10 @@ export default function ColorPickerWrapper({
   };
 
   // 고정 위치 상태
-  const [fixedPosition, setFixedPosition] = useState<{ x: number; y: number } | null>(null);
+  const [fixedPosition, setFixedPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement | null>(null);
   const showStateSwitch =
     stateMode != null && typeof onStateModeChange === 'function';
@@ -555,16 +573,19 @@ export default function ColorPickerWrapper({
   const resolvedOpacityTop = resolvedOpacityPercent?.top;
   const resolvedOpacityBottom = resolvedOpacityPercent?.bottom;
 
-  const [opacityPercentSolidInput, setOpacityPercentSolidInput] = useState<string>(
-    () => (showOpacityControl ? String(Math.round(resolvedOpacitySolid!)) : ''),
+  const [opacityPercentSolidInput, setOpacityPercentSolidInput] =
+    useState<string>(() =>
+      showOpacityControl ? String(Math.round(resolvedOpacitySolid!)) : '',
+    );
+  const [opacityPercentTopInput, setOpacityPercentTopInput] = useState<string>(
+    () => (showOpacityControl ? String(Math.round(resolvedOpacityTop!)) : ''),
   );
-  const [opacityPercentTopInput, setOpacityPercentTopInput] = useState<string>(() =>
-    showOpacityControl ? String(Math.round(resolvedOpacityTop!)) : '',
-  );
-  const [opacityPercentBottomInput, setOpacityPercentBottomInput] = useState<string>(
-    () => (showOpacityControl ? String(Math.round(resolvedOpacityBottom!)) : ''),
-  );
-  const [opacityPercentFocusTarget, setOpacityPercentFocusTarget] = useState<OpacityTarget | null>(null);
+  const [opacityPercentBottomInput, setOpacityPercentBottomInput] =
+    useState<string>(() =>
+      showOpacityControl ? String(Math.round(resolvedOpacityBottom!)) : '',
+    );
+  const [opacityPercentFocusTarget, setOpacityPercentFocusTarget] =
+    useState<OpacityTarget | null>(null);
 
   useEffect(() => {
     if (!showOpacityControl) return;
@@ -742,8 +763,14 @@ export default function ColorPickerWrapper({
     <FloatingPopup
       open={open}
       referenceRef={referenceRef}
-      fixedX={fixedPosition?.x ?? (typeof position === 'object' ? position?.x : undefined)}
-      fixedY={fixedPosition?.y ?? (typeof position === 'object' ? position?.y : undefined)}
+      fixedX={
+        fixedPosition?.x ??
+        (typeof position === 'object' ? position?.x : undefined)
+      }
+      fixedY={
+        fixedPosition?.y ??
+        (typeof position === 'object' ? position?.y : undefined)
+      }
       placement={placement}
       offset={32}
       offsetY={effectiveOffsetY}
@@ -827,44 +854,44 @@ export default function ColorPickerWrapper({
               solidOnly
                 ? alpha
                 : showOpacityControl
-                  ? clampOpacityPercent(opacityPercent as number) / 100
-                  : undefined
+                ? clampOpacityPercent(opacityPercent as number) / 100
+                : undefined
             }
             alphaPercentValue={
               solidOnly
                 ? alphaPercentInput
                 : showOpacityControl
-                  ? opacityPercentSolidInput
-                  : undefined
+                ? opacityPercentSolidInput
+                : undefined
             }
             alphaPercentFocused={
               solidOnly
                 ? isAlphaPercentFocused
                 : showOpacityControl
-                  ? opacityPercentFocusTarget === 'solid'
-                  : false
+                ? opacityPercentFocusTarget === 'solid'
+                : false
             }
             onAlphaPercentChange={
               solidOnly
                 ? handleAlphaPercentChange
                 : showOpacityControl
-                  ? handleOpacityPercentSolidChange
-                  : undefined
+                ? handleOpacityPercentSolidChange
+                : undefined
             }
             onAlphaPercentCommit={
               solidOnly
                 ? commitAlphaPercent
                 : showOpacityControl
-                  ? commitOpacityPercentSolid
-                  : undefined
+                ? commitOpacityPercentSolid
+                : undefined
             }
             onAlphaPercentFocusChange={
               solidOnly
                 ? setIsAlphaPercentFocused
                 : showOpacityControl
-                  ? (focused: boolean) =>
-                      setOpacityPercentFocusTarget(focused ? 'solid' : null)
-                  : undefined
+                ? (focused: boolean) =>
+                    setOpacityPercentFocusTarget(focused ? 'solid' : null)
+                : undefined
             }
           />
         ) : (
@@ -958,7 +985,9 @@ function ColorPaletteSection({
     filledSolid.push(null);
   }
 
-  const filledGradient: (string | GradientColor | null)[] = [...gradientPalette];
+  const filledGradient: (string | GradientColor | null)[] = [
+    ...gradientPalette,
+  ];
   while (filledGradient.length < PALETTE_SIZE) {
     filledGradient.push(null);
   }
@@ -1002,7 +1031,12 @@ interface PaletteSlotProps {
   solidOnly?: boolean;
 }
 
-function PaletteSlot({ color, type, onClick, solidOnly: _solidOnly }: PaletteSlotProps) {
+function PaletteSlot({
+  color,
+  type,
+  onClick,
+  solidOnly: _solidOnly,
+}: PaletteSlotProps) {
   const isEmpty = !color;
 
   // 배경 스타일 계산
@@ -1011,7 +1045,12 @@ function PaletteSlot({ color, type, onClick, solidOnly: _solidOnly }: PaletteSlo
       return { backgroundColor: '#2A2A30' };
     }
 
-    if (type === 'gradient' && color && typeof color === 'object' && (color as GradientColor).type === 'gradient') {
+    if (
+      type === 'gradient' &&
+      color &&
+      typeof color === 'object' &&
+      (color as GradientColor).type === 'gradient'
+    ) {
       const gradientColor = color as GradientColor;
       return {
         background: `linear-gradient(to bottom, ${gradientColor.top}, ${gradientColor.bottom})`,
@@ -1034,7 +1073,12 @@ function PaletteSlot({ color, type, onClick, solidOnly: _solidOnly }: PaletteSlo
   // 툴팁 텍스트 생성
   const getTitle = (): string => {
     if (isEmpty) return '';
-    if (type === 'gradient' && color && typeof color === 'object' && (color as GradientColor).type === 'gradient') {
+    if (
+      type === 'gradient' &&
+      color &&
+      typeof color === 'object' &&
+      (color as GradientColor).type === 'gradient'
+    ) {
       const gradientColor = color as GradientColor;
       const topHex = gradientColor.top.replace('#', '').toUpperCase();
       const bottomHex = gradientColor.bottom.replace('#', '').toUpperCase();
@@ -1215,7 +1259,9 @@ const Input = ({
             type="text"
             inputMode="numeric"
             value={alphaPercentValue ?? ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onAlphaPercentChange?.(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              onAlphaPercentChange?.(e.target.value)
+            }
             onFocus={() => onAlphaPercentFocusChange?.(true)}
             onBlur={() => {
               onAlphaPercentFocusChange?.(false);
@@ -1282,7 +1328,9 @@ function GradientInputs({
         rightFocused={rightFocusTarget === 'top'}
         onRightValueChange={(raw: string) => onRightValueChange?.('top', raw)}
         onRightCommit={() => onRightCommit?.('top')}
-        onRightFocusChange={(focused: boolean) => onRightFocusChange?.('top', focused)}
+        onRightFocusChange={(focused: boolean) =>
+          onRightFocusChange?.('top', focused)
+        }
         rightTitle={rightTitle}
       />
       <GradientInput
@@ -1294,7 +1342,9 @@ function GradientInputs({
         onSelect={() => onSelect?.('bottom')}
         rightValue={rightBottomValue}
         rightFocused={rightFocusTarget === 'bottom'}
-        onRightValueChange={(raw: string) => onRightValueChange?.('bottom', raw)}
+        onRightValueChange={(raw: string) =>
+          onRightValueChange?.('bottom', raw)
+        }
         onRightCommit={() => onRightCommit?.('bottom')}
         onRightFocusChange={(focused: boolean) =>
           onRightFocusChange?.('bottom', focused)
@@ -1352,7 +1402,9 @@ function GradientInput({
         <input
           type="text"
           value={value}
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) => onChange?.(event.target.value)}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+            onChange?.(event.target.value)
+          }
           onFocus={() => onSelect?.()}
           onBlur={onCommit}
           onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1374,7 +1426,9 @@ function GradientInput({
             type="text"
             inputMode="numeric"
             value={rightValue ?? ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onRightValueChange?.(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              onRightValueChange?.(e.target.value)
+            }
             onFocus={() => onRightFocusChange?.(true)}
             onBlur={() => {
               onRightFocusChange?.(false);
