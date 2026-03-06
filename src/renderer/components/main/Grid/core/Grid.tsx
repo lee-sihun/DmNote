@@ -351,184 +351,30 @@ const Grid = ({
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
     if (selected.type === 'key') {
-      try {
-        await onMoveForward(selected.index);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected key forward', error);
-      }
+      await onMoveForward(selected.index);
     } else if (selected.type === 'stat') {
-      const store = useStatItemStore.getState();
-      const current = store.positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const target = tabPositions[selected.index];
-      if (!target) return;
-
-      // 히스토리 저장
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentPositions,
-          current,
-          currentGraphPositions,
-          currentPluginElements,
-        );
-      const currentZIndex = target.zIndex ?? selected.index;
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p,
-        ),
-      };
-      store.setLocalUpdateInProgress(true);
-      store.setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected stat item forward', error);
-      } finally {
-        store.setLocalUpdateInProgress(false);
-      }
+      await moveStatForward(selected.index);
     } else if (selected.type === 'plugin') {
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
-      const store = useGraphItemStore.getState();
-      const current = store.positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const target = tabPositions[selected.index];
-      if (!target) return;
-
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentPositions,
-          currentStatPositions,
-          current,
-          currentPluginElements,
-        );
-      const currentZIndex = target.zIndex ?? selected.index;
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex + 1 } : p,
-        ),
-      };
-      store.setLocalUpdateInProgress(true);
-      store.setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected graph item forward', error);
-      } finally {
-        store.setLocalUpdateInProgress(false);
-      }
+      await moveGraphForward(selected.index);
     }
+    syncSelectedElementsToOverlay();
   };
 
   const handleSelectedMoveBackward = async () => {
     if (selectedElements.length !== 1) return;
     const selected = selectedElements[0];
     if (selected.type === 'key') {
-      try {
-        await onMoveBackward(selected.index);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected key backward', error);
-      }
+      await onMoveBackward(selected.index);
     } else if (selected.type === 'stat') {
-      const store = useStatItemStore.getState();
-      const current = store.positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const target = tabPositions[selected.index];
-      if (!target) return;
-
-      // 히스토리 저장
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      const currentGraphPositions = useGraphItemStore.getState().positions;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentPositions,
-          current,
-          currentGraphPositions,
-          currentPluginElements,
-        );
-      const currentZIndex = target.zIndex ?? selected.index;
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p,
-        ),
-      };
-      store.setLocalUpdateInProgress(true);
-      store.setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected stat item backward', error);
-      } finally {
-        store.setLocalUpdateInProgress(false);
-      }
+      await moveStatBackward(selected.index);
     } else if (selected.type === 'plugin') {
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
-      const store = useGraphItemStore.getState();
-      const current = store.positions;
-      const tabPositions = current[selectedKeyType] || [];
-      const target = tabPositions[selected.index];
-      if (!target) return;
-
-      const currentPositions = useKeyStore.getState().positions;
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const { keyMappings: km } = useKeyStore.getState();
-      const currentStatPositions = useStatItemStore.getState().positions;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentPositions,
-          currentStatPositions,
-          current,
-          currentPluginElements,
-        );
-      const currentZIndex = target.zIndex ?? selected.index;
-      const updatedPositions = {
-        ...current,
-        [selectedKeyType]: tabPositions.map((p, i) =>
-          i === selected.index ? { ...p, zIndex: currentZIndex - 1 } : p,
-        ),
-      };
-      store.setLocalUpdateInProgress(true);
-      store.setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-        syncSelectedElementsToOverlay();
-      } catch (error) {
-        console.error('Failed to move selected graph item backward', error);
-      } finally {
-        store.setLocalUpdateInProgress(false);
-      }
+      await moveGraphBackward(selected.index);
     }
+    syncSelectedElementsToOverlay();
   };
 
   // 키보드 단축키 훅 사용
@@ -659,14 +505,17 @@ const Grid = ({
     deleteStatAtIndex,
     moveStatToFront,
     moveStatToBack,
+    moveStatForward,
+    moveStatBackward,
+    addStatAtPosition,
     placeDuplicateStat,
     deleteGraphAtIndex,
     moveGraphToFront,
     moveGraphToBack,
+    moveGraphForward,
+    moveGraphBackward,
+    addGraphAtPosition,
     placeDuplicateGraph,
-    persistStatPositions,
-    persistGraphPositions,
-    pushHistorySnapshot,
   } = canvasActions;
 
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
@@ -733,96 +582,6 @@ const Grid = ({
     if (typeof onAddKeyAt === 'function') {
       onAddKeyAt(dx, dy);
     }
-  };
-
-  const addStatAtPosition = (dx: number, dy: number) => {
-    const current = useStatItemStore.getState().positions;
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
-    const list = [...(current[selectedKeyType] || [])];
-    list.push({
-      statType: 'kps',
-      dx,
-      dy,
-      width: 60,
-      height: 60,
-      hidden: false,
-      activeImage: '',
-      inactiveImage: '',
-      soundPath: '',
-      soundVolume: 100,
-      activeTransparent: false,
-      idleTransparent: false,
-      count: 0,
-      noteColor: '#FFFFFF',
-      noteOpacity: 80,
-      noteEffectEnabled: true,
-      noteGlowEnabled: false,
-      noteGlowSize: 20,
-      noteGlowOpacity: 70,
-      noteGlowColor: '#FFFFFF',
-      noteAutoYCorrection: true,
-      className: '',
-      counter: createDefaultCounterSettings(),
-    });
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: list,
-    };
-    persistStatPositions(nextPositions, 'Failed to add stat item');
-  };
-
-  const addGraphAtPosition = (dx: number, dy: number) => {
-    const current = useGraphItemStore.getState().positions;
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
-    const list = [...(current[selectedKeyType] || [])];
-    list.push({
-      statType: 'kps',
-      graphType: 'line',
-      graphSpeed: 1000,
-      graphColor: '#86EFAC',
-      showAvgLine: true,
-      graphAnimationEnabled: true,
-      dx,
-      dy,
-      width: 120,
-      height: 60,
-      hidden: false,
-      activeImage: '',
-      inactiveImage: '',
-      soundPath: '',
-      soundVolume: 100,
-      activeTransparent: false,
-      idleTransparent: false,
-      count: 0,
-      noteColor: '#FFFFFF',
-      noteOpacity: 80,
-      noteEffectEnabled: true,
-      noteGlowEnabled: false,
-      noteGlowSize: 20,
-      noteGlowOpacity: 70,
-      noteGlowColor: '#FFFFFF',
-      noteAutoYCorrection: true,
-      className: '',
-      counter: createDefaultCounterSettings(),
-      backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      borderColor: 'rgba(113, 113, 113, 0.9)',
-      borderWidth: 3,
-      borderRadius: 10,
-      fontColor: '#FFFFFF',
-      activeFontColor: '#FFFFFF',
-      fontSize: 12,
-      useInlineStyles: false,
-      displayText: '',
-    });
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: list,
-    };
-    persistGraphPositions(nextPositions, 'Failed to add graph item');
   };
 
   useEffect(() => {

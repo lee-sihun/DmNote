@@ -139,6 +139,9 @@ export interface CanvasActions {
   deleteStatAtIndex: (index: number) => void;
   moveStatToFront: (index: number) => void;
   moveStatToBack: (index: number) => void;
+  moveStatForward: (index: number) => Promise<void>;
+  moveStatBackward: (index: number) => Promise<void>;
+  addStatAtPosition: (dx: number, dy: number) => void;
   beginDuplicateStat: (sourceIndex: number) => DuplicateState | null;
   placeDuplicateStat: (
     templatePosition: StatItemPosition,
@@ -149,13 +152,16 @@ export interface CanvasActions {
   deleteGraphAtIndex: (index: number) => void;
   moveGraphToFront: (index: number) => void;
   moveGraphToBack: (index: number) => void;
+  moveGraphForward: (index: number) => Promise<void>;
+  moveGraphBackward: (index: number) => Promise<void>;
+  addGraphAtPosition: (dx: number, dy: number) => void;
   beginDuplicateGraph: (sourceIndex: number) => DuplicateState | null;
   placeDuplicateGraph: (
     templatePosition: GraphItemPosition,
     dx: number,
     dy: number,
   ) => void;
-  // Stat position persist (Grid에서 직접 사용)
+  // persist 헬퍼 (Grid에서 직접 사용)
   persistStatPositions: typeof persistStatPositions;
   persistGraphPositions: typeof persistGraphPositions;
   pushHistorySnapshot: typeof pushHistorySnapshot;
@@ -207,6 +213,48 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       ),
     };
     persistStatPositions(nextPositions, 'Failed to move stat item to front');
+  };
+
+  const moveStatForward = async (index: number) => {
+    const store = useStatItemStore.getState();
+    const current = store.positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+
+    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
+      ),
+    };
+    await persistStatPositions(
+      updatedPositions,
+      'Failed to move stat item forward',
+    );
+  };
+
+  const moveStatBackward = async (index: number) => {
+    const store = useStatItemStore.getState();
+    const current = store.positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+
+    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
+      ),
+    };
+    await persistStatPositions(
+      updatedPositions,
+      'Failed to move stat item backward',
+    );
   };
 
   const moveStatToBack = (index: number) => {
@@ -322,6 +370,48 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to move graph item to front');
   };
 
+  const moveGraphForward = async (index: number) => {
+    const store = useGraphItemStore.getState();
+    const current = store.positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+
+    pushHistorySnapshot(useStatItemStore.getState().positions, current);
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
+      ),
+    };
+    await persistGraphPositions(
+      updatedPositions,
+      'Failed to move graph item forward',
+    );
+  };
+
+  const moveGraphBackward = async (index: number) => {
+    const store = useGraphItemStore.getState();
+    const current = store.positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+
+    pushHistorySnapshot(useStatItemStore.getState().positions, current);
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
+      ),
+    };
+    await persistGraphPositions(
+      updatedPositions,
+      'Failed to move graph item backward',
+    );
+  };
+
   const moveGraphToBack = (index: number) => {
     const store = useGraphItemStore.getState();
     const current = store.positions;
@@ -374,15 +464,105 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to duplicate graph item');
   };
 
+  const addStatAtPosition = (dx: number, dy: number) => {
+    const current = useStatItemStore.getState().positions;
+    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
+
+    const list = [...(current[selectedKeyType] || [])];
+    list.push({
+      statType: 'kps',
+      dx,
+      dy,
+      width: 60,
+      height: 60,
+      hidden: false,
+      activeImage: '',
+      inactiveImage: '',
+      soundPath: '',
+      soundVolume: 100,
+      activeTransparent: false,
+      idleTransparent: false,
+      count: 0,
+      noteColor: '#FFFFFF',
+      noteOpacity: 80,
+      noteEffectEnabled: true,
+      noteGlowEnabled: false,
+      noteGlowSize: 20,
+      noteGlowOpacity: 70,
+      noteGlowColor: '#FFFFFF',
+      noteAutoYCorrection: true,
+      className: '',
+      counter: createDefaultCounterSettings(),
+    });
+
+    const nextPositions = { ...current, [selectedKeyType]: list };
+    persistStatPositions(nextPositions, 'Failed to add stat item');
+  };
+
+  const addGraphAtPosition = (dx: number, dy: number) => {
+    const current = useGraphItemStore.getState().positions;
+    pushHistorySnapshot(useStatItemStore.getState().positions, current);
+
+    const list = [...(current[selectedKeyType] || [])];
+    list.push({
+      statType: 'kps',
+      graphType: 'line',
+      graphSpeed: 1000,
+      graphColor: '#86EFAC',
+      showAvgLine: true,
+      graphAnimationEnabled: true,
+      dx,
+      dy,
+      width: 120,
+      height: 60,
+      hidden: false,
+      activeImage: '',
+      inactiveImage: '',
+      soundPath: '',
+      soundVolume: 100,
+      activeTransparent: false,
+      idleTransparent: false,
+      count: 0,
+      noteColor: '#FFFFFF',
+      noteOpacity: 80,
+      noteEffectEnabled: true,
+      noteGlowEnabled: false,
+      noteGlowSize: 20,
+      noteGlowOpacity: 70,
+      noteGlowColor: '#FFFFFF',
+      noteAutoYCorrection: true,
+      className: '',
+      counter: createDefaultCounterSettings(),
+      backgroundColor: 'rgba(46, 46, 47, 0.9)',
+      borderColor: 'rgba(113, 113, 113, 0.9)',
+      borderWidth: 3,
+      borderRadius: 10,
+      fontColor: '#FFFFFF',
+      activeFontColor: '#FFFFFF',
+      fontSize: 12,
+      useInlineStyles: false,
+      displayText: '',
+    });
+
+    const nextPositions = { ...current, [selectedKeyType]: list };
+    persistGraphPositions(nextPositions, 'Failed to add graph item');
+  };
+
   return {
     deleteStatAtIndex,
     moveStatToFront,
     moveStatToBack,
+    moveStatForward,
+    moveStatBackward,
+    addStatAtPosition,
     beginDuplicateStat,
     placeDuplicateStat,
     deleteGraphAtIndex,
     moveGraphToFront,
     moveGraphToBack,
+    moveGraphForward,
+    moveGraphBackward,
+    addGraphAtPosition,
     beginDuplicateGraph,
     placeDuplicateGraph,
     persistStatPositions,
