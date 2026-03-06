@@ -1,4 +1,5 @@
 'use no memo';
+import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
 import { getKeySignal } from '@stores/signals/keySignals';
@@ -25,7 +26,7 @@ interface KeyCounterLayerProps {
   mode: string;
 }
 
-const KeyCounter = ({ globalKey, position, mode }: KeyCounterProps) => {
+const KeyCounter = React.memo(({ globalKey, position, mode }: KeyCounterProps) => {
   useSignals();
   const counterSignal = getKeyCounterSignal(mode ?? '', globalKey);
   const count = counterSignal?.value ?? 0;
@@ -39,9 +40,9 @@ const KeyCounter = ({ globalKey, position, mode }: KeyCounterProps) => {
       globalKey={globalKey}
     />
   );
-};
+});
 
-const KeyCounterLayer = ({ keys, positions, mode }: KeyCounterLayerProps) => {
+const KeyCounterLayer = React.memo(({ keys, positions, mode }: KeyCounterLayerProps) => {
   if (!keys?.length || !positions?.length) return null;
 
   return (
@@ -63,6 +64,6 @@ const KeyCounterLayer = ({ keys, positions, mode }: KeyCounterLayerProps) => {
       })}
     </div>
   );
-};
+});
 
 export default KeyCounterLayer;

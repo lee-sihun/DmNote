@@ -14,3 +14,4 @@ src-tauri/webview2-fixed-runtime/*
 
 .claude
 .omc
+.mcp.json

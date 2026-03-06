@@ -1,4 +1,5 @@
 'use no memo';
+import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
@@ -23,7 +24,7 @@ interface StatCounterLayerProps {
   positions: StatPosition[];
 }
 
-const StatCounter = ({ position, statType }: StatCounterProps) => {
+const StatCounter = React.memo(({ position, statType }: StatCounterProps) => {
   useSignals();
   const count = (getStatValueSignal(statType as StatItemType).value ?? 0) | 0;
 
@@ -35,9 +36,9 @@ const StatCounter = ({ position, statType }: StatCounterProps) => {
       globalKey={`stat:${statType}`}
     />
   );
-};
+});
 
-const StatCounterLayer = ({ positions }: StatCounterLayerProps) => {
+const StatCounterLayer = React.memo(({ positions }: StatCounterLayerProps) => {
   if (!positions?.length) return null;
 
   return (
@@ -57,6 +58,6 @@ const StatCounterLayer = ({ positions }: StatCounterLayerProps) => {
       })}
     </div>
   );
-};
+});
 
 export default StatCounterLayer;

@@ -77,7 +77,7 @@ interface KeyProps {
   counterEnabled?: boolean;
 }
 
-const DraggableKey = ({
+const DraggableKey = React.memo(({
   index,
   elementId,
   position,
@@ -645,7 +645,7 @@ const DraggableKey = ({
       )}
     </div>
   );
-};
+});
 
 export default DraggableKey;
 

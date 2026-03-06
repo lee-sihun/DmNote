@@ -1,4 +1,3 @@
-'use no memo';
 import { useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,

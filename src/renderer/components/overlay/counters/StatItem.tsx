@@ -1,5 +1,5 @@
 'use no memo';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
@@ -19,7 +19,7 @@ interface StatItemProps {
   active?: boolean;
 }
 
-const StatItem = ({
+const StatItem = React.memo(({
   statType,
   position,
   label,
@@ -89,6 +89,6 @@ const StatItem = ({
       )}
     </div>
   );
-};
+});
 
 export default StatItem;
