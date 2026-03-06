@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -6,7 +7,7 @@ import React, {
 } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import Modal from '../../Modal';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import {
   NOTE_SETTINGS_CONSTRAINTS,
   clampValue,
@@ -133,12 +134,12 @@ export default function NoteSetting({
   const [disableHeightTransition, setDisableHeightTransition] = useState<boolean>(true);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
 
-  const updateTabContentHeight = () => {
+  const updateTabContentHeight = useCallback(() => {
     const element = tabContentRef.current;
     if (!element) return;
     const nextHeight = element.offsetHeight;
     setTabContentHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-  };
+  }, []);
 
   const calculatedDelay = (() => {
     const safeSpeed = sanitizeNumericValue(speed, 'speed');

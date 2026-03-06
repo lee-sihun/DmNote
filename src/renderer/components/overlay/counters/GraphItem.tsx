@@ -58,8 +58,6 @@ function createInitialHistory(speed: number | undefined): number[] {
 }
 
 export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGraphItemProps) {
-  if (!position || position.hidden) return null;
-
   const {
     statType = 'kps',
     graphType = 'line',
@@ -81,14 +79,14 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
     width = 200,
     height = 100,
     className,
-  } = position;
+  } = position ?? ({} as Partial<GraphPosition>);
 
   const statSignal = getStatValueSignal(statType as StatItemType);
   const imageSrc = resolveImageSource(inactiveImage) ||
       resolveImageSource(activeImage) ||
       null;
   const resolvedImageFit = idleImageFit || imageFit || 'cover';
-  const uidRef = useRef<string>(
+  const [uid] = useState(() =>
     `graph-overlay-${Math.random().toString(36).slice(2, 11)}`,
   );
   const graphSpeedRef = useRef<number>(normalizeGraphSpeed(graphSpeed));
@@ -98,7 +96,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
   const valueCountRef = useRef<number>(0);
 
   const [graphState, setGraphState] = useState<GraphState>(() => ({
-    history: [...historyBufferRef.current],
+    history: createInitialHistory(graphSpeed),
     avg: 0,
     maxval: 1,
   }));
@@ -157,6 +155,8 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
     return () => clearInterval(interval);
   }, [statSignal]);
 
+  if (!position || position.hidden) return null;
+
   return (
     <GraphPanel
       dx={dx}
@@ -179,7 +179,7 @@ export default memo(function OverlayGraphItem({ position, index = 0 }: OverlayGr
       history={graphState.history}
       avg={graphState.avg}
       maxval={graphState.maxval}
-      uid={uidRef.current}
+      uid={uid}
       withOffsetVars={true}
       interactive={false}
     />

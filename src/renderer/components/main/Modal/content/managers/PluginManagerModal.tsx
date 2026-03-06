@@ -51,7 +51,7 @@ export function PluginManagerModal({
   const isFirstRender = React.useRef<boolean>(true);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -60,7 +60,7 @@ export function PluginManagerModal({
         ? prev
         : nextState,
     );
-  };
+  }, []);
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({

@@ -8,14 +8,14 @@ import {
 export type PluginSettingsPanelPayload = {
   pluginId: string;
   definition: PluginSettingsDefinition;
-  settings: Record<string, any>;
-  originalSettings: Record<string, any>;
-  onChange: (nextSettings: Record<string, any>) => void;
+  settings: Record<string, unknown>;
+  originalSettings: Record<string, unknown>;
+  onChange: (nextSettings: Record<string, unknown>) => void;
   onConfirm: (
-    nextSettings: Record<string, any>,
-    originalSettings: Record<string, any>,
+    nextSettings: Record<string, unknown>,
+    originalSettings: Record<string, unknown>,
   ) => void | Promise<void>;
-  onCancel: (originalSettings: Record<string, any>) => void;
+  onCancel: (originalSettings: Record<string, unknown>) => void;
   resolve: (confirmed: boolean) => void;
 };
 

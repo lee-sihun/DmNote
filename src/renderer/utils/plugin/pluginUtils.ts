@@ -3,10 +3,15 @@
  * 플러그인별로 컴포넌트 이벤트 핸들러를 등록하고 관리합니다.
  */
 
+type PluginHandler = (...args: unknown[]) => unknown;
+
 let handlerIdCounter = 0;
 
 // 플러그인별 핸들러 맵: pluginId -> handlerId -> handler function
-const componentHandlers = new Map<string, Map<string, (...args: any[]) => any>>();
+const componentHandlers = new Map<string, Map<string, PluginHandler>>();
+
+// window에 동적 키로 핸들러를 등록/삭제하기 위한 헬퍼
+const windowRecord = window as unknown as Record<string, unknown>;
 
 /**
  * 컴포넌트 핸들러를 등록하고 고유 ID를 반환합니다.
@@ -17,7 +22,7 @@ const componentHandlers = new Map<string, Map<string, (...args: any[]) => any>>(
  */
 export function registerComponentHandler(
   pluginId: string,
-  handler: (...args: any[]) => any,
+  handler: PluginHandler,
 ): string {
   const handlerId = `__dmn_component_handler_${++handlerIdCounter}`;
 
@@ -29,7 +34,7 @@ export function registerComponentHandler(
   pluginHandlers.set(handlerId, handler);
 
   // 전역에 핸들러 등록
-  (window as any)[handlerId] = handler;
+  windowRecord[handlerId] = handler;
 
   return handlerId;
 }
@@ -45,7 +50,7 @@ export function clearComponentHandlers(pluginId: string): void {
 
   // 전역 핸들러 제거
   for (const handlerId of pluginHandlers.keys()) {
-    delete (window as any)[handlerId];
+    delete windowRecord[handlerId];
   }
 
   // 플러그인 핸들러 맵 제거

@@ -24,7 +24,7 @@ let isInitialLoading = false;
 export const saveToHistory = (): void => {
   if (isUndoRedoInProgress) return;
   if (isInitialLoading) return;
-  if ((window as any).__dmn_window_type !== 'main') return;
+  if (window.__dmn_window_type !== 'main') return;
 
   const { keyMappings, positions } = useKeyStore.getState();
   const statPositions = useStatItemStore.getState().positions;

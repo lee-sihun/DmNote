@@ -1,4 +1,4 @@
-type ActionMap = Record<string, (...args: any[]) => any>;
+type ActionMap = Record<string, (...args: unknown[]) => unknown>;
 
 const actionRegistry = new Map<string, ActionMap>();
 
@@ -27,7 +27,7 @@ export const clearExposedActions = (elementId: string) => {
 export const invokeExposedAction = async (
   elementId: string,
   action: string,
-  args: any[] = [],
+  args: unknown[] = [],
 ) => {
   const actions = actionRegistry.get(elementId);
   if (!actions) {

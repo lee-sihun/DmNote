@@ -1,13 +1,6 @@
-import React, { createContext, useRef } from 'react';
-
-export type TooltipGroupContextType = {
-  getEffectiveDelay: (baseDelay: number) => number;
-  shouldAnimate: () => boolean;
-  consumeAnimation: () => void;
-};
-
-export const TooltipGroupContext =
-  createContext<TooltipGroupContextType | null>(null);
+import React, { useRef } from 'react';
+import { TooltipGroupContext } from './TooltipGroupContext';
+import type { TooltipGroupContextType } from './TooltipGroupContext';
 
 /**
  * TooltipGroup: 툴팁 트리거 그룹 래핑

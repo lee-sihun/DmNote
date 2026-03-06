@@ -1,6 +1,7 @@
 import React, {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useState,
   useRef,
@@ -14,7 +15,7 @@ import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
 import { isMac } from '@utils/core/platform';
 import { Key } from '@components/Key';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
@@ -39,6 +40,8 @@ import {
   createDefaultCounterSettings,
   type KeyPosition,
 } from '@src/types/keys';
+import type { StatItemPosition } from '@src/types/statItems';
+import type { GraphItemPosition } from '@src/types/graphItems';
 import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import { PluginElementsRenderer } from '@components/PluginElementsRenderer';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
@@ -71,15 +74,39 @@ const FALLBACK_POSITION: KeyPosition = {
 
 const PADDING = 30;
 
-const OverlayKey = Key as React.ComponentType<any>;
-const OverlayStatItem = StatItem as React.ComponentType<any>;
-const OverlayStatCounterLayer = StatCounterLayer as React.ComponentType<any>;
-const OverlayGraphItem = GraphItem as React.ComponentType<any>;
+interface OverlayKeyProps {
+  keyName: string;
+  globalKey: string;
+  position: KeyPosition;
+  mode?: string;
+  counterEnabled?: boolean;
+}
+
+interface OverlayStatItemProps {
+  statType: string;
+  label?: string;
+  position: Record<string, unknown>;
+  counterEnabled?: boolean;
+}
+
+interface OverlayStatCounterLayerProps {
+  positions: Record<string, unknown>[];
+}
+
+interface OverlayGraphItemProps {
+  index?: number;
+  position: Record<string, unknown>;
+}
+
+const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
+const OverlayStatItem = StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
+const OverlayStatCounterLayer = StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
+const OverlayGraphItem = GraphItem as React.ComponentType<OverlayGraphItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
   const mod = await import('@components/overlay/rendering/WebGLTracksOGL.jsx');
-  return { default: mod.WebGLTracksOGL as React.ComponentType<any> };
+  return { default: mod.WebGLTracksOGL as unknown as React.ComponentType<Record<string, unknown>> };
 });
 
 type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
@@ -116,13 +143,13 @@ export default function App() {
   // 윈도우 타입
   useEffect(() => {
     try {
-      (window as any).__dmn_window_type = 'overlay';
+      window.__dmn_window_type = 'overlay';
     } catch {
       // 무시
     }
     return () => {
       try {
-        delete (window as any).__dmn_window_type;
+        window.__dmn_window_type = undefined;
       } catch {
         // 무시
       }
@@ -132,7 +159,7 @@ export default function App() {
   // 메인에서 bridge를 통한 positions 동기화 수신
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, any[]>;
+      positions: Record<string, KeyPosition[]>;
     }>('positions:sync', (data) => {
       if (data?.positions) {
         useKeyStore.setState((state) => ({
@@ -147,7 +174,7 @@ export default function App() {
   // 메인에서 bridge를 통한 statPositions 동기화 수신
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, any[]>;
+      positions: Record<string, StatItemPosition[]>;
     }>('statPositions:sync', (data) => {
       if (data?.positions) {
         useStatItemStore.setState((state) => ({
@@ -162,7 +189,7 @@ export default function App() {
   // 메인에서 bridge를 통한 graphPositions 동기화 수신
   useEffect(() => {
     const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, any[]>;
+      positions: Record<string, GraphItemPosition[]>;
     }>('graphPositions:sync', (data) => {
       if (data?.positions) {
         useGraphItemStore.setState((state) => ({
@@ -309,8 +336,8 @@ export default function App() {
     }
   };
 
-  const openOverlayContextMenuAt = 
-    async (x: number, y: number) => {
+  const openOverlayContextMenuAtImpl = useRef<(x: number, y: number) => Promise<void>>(async () => {});
+  openOverlayContextMenuAtImpl.current = async (x: number, y: number) => {
       const canOpenMainSettings = await resolveCanOpenMainSettings();
       const allTabs = [
         ...BUILTIN_TABS,
@@ -388,6 +415,12 @@ export default function App() {
         }
       }
     };
+  const openOverlayContextMenuAt = useCallback(
+    async (x: number, y: number) => {
+      await openOverlayContextMenuAtImpl.current(x, y);
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleWindowContextMenu = (event: MouseEvent) => {
@@ -430,7 +463,7 @@ export default function App() {
   const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
 
   // 키 딜레이 적용된 신호 업데이트
-  const updateKeySignalWithDelay = 
+  const updateKeySignalWithDelay = useCallback(
     (key: string, isDown: boolean) => {
       const delayMs = keyDisplayDelayMsRef.current;
 
@@ -454,7 +487,9 @@ export default function App() {
         timerEntry?.timers.delete(timer);
       }, delayMs);
       timerEntry.timers.add(timer);
-    };
+    },
+    [],
+  );
 
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
   const [_layoutVersion, setLayoutVersion] = useState(0);
@@ -500,6 +535,8 @@ export default function App() {
       });
     });
 
+    const keyDelayTimers = keyDelayTimersRef.current;
+
     return () => {
       unsubscribe.then((unsub) => {
         try {
@@ -509,11 +546,11 @@ export default function App() {
         }
       });
       // 키 딜레이 타이머 정리
-      keyDelayTimersRef.current.forEach((timerEntry) => {
+      keyDelayTimers.forEach((timerEntry) => {
         timerEntry.timers.forEach((timer) => clearTimeout(timer));
         timerEntry.timers.clear();
       });
-      keyDelayTimersRef.current.clear();
+      keyDelayTimers.clear();
       // 안전하게 모든 키 신호 초기화(선택적)
       resetAllKeySignals();
     };
@@ -559,7 +596,7 @@ export default function App() {
     });
 
     // 통계 요소 위치
-    currentStatPositions.forEach((pos: any) => {
+    currentStatPositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
       ys.push(pos.dy);
@@ -568,7 +605,7 @@ export default function App() {
     });
 
     // 그래프 요소 위치
-    currentGraphPositions.forEach((pos: any) => {
+    currentGraphPositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
       ys.push(pos.dy);
@@ -644,7 +681,7 @@ export default function App() {
     const offsetX = PADDING - bounds.minX;
     const offsetY = topOffset - bounds.minY;
 
-    return currentStatPositions.map((position: any) => ({
+    return currentStatPositions.map((position) => ({
       ...position,
       dx: position.dx + offsetX,
       dy: position.dy + offsetY,
@@ -660,7 +697,7 @@ export default function App() {
     const offsetX = PADDING - bounds.minX;
     const offsetY = topOffset - bounds.minY;
 
-    return currentGraphPositions.map((position: any) => ({
+    return currentGraphPositions.map((position) => ({
       ...position,
       dx: position.dx + offsetX,
       dy: position.dy + offsetY,
@@ -862,7 +899,7 @@ export default function App() {
           />
         );
       })}
-      {displayStatPositions.map((pos: any, index: number) => {
+      {displayStatPositions.map((pos, index) => {
         if (!pos || pos.hidden) return null;
 
         const defaultLabel =
@@ -886,7 +923,7 @@ export default function App() {
           />
         );
       })}
-      {displayGraphPositions.map((pos: any, index: number) => {
+      {displayGraphPositions.map((pos, index) => {
         if (!pos || pos.hidden) return null;
         const graphPosition = { ...pos, zIndex: pos.zIndex ?? index };
         return (

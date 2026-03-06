@@ -13,7 +13,7 @@ export const appApi = {
 };
 
 export const windowApi = {
-  type: (window as any).__dmn_window_type as 'main' | 'overlay',
+  type: window.__dmn_window_type as 'main' | 'overlay',
   minimize: () => invoke<void>('window_minimize'),
   close: () => invoke<void>('window_close'),
   showMain: () => invoke<void>('window_show_main'),

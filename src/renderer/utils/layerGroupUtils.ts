@@ -326,7 +326,7 @@ export function buildLayerItemsForMode(
       id: `stat-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
-      groupId: (pos as any).groupId,
+      groupId: pos.groupId,
     });
   });
 
@@ -336,18 +336,18 @@ export function buildLayerItemsForMode(
       id: `graph-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
-      groupId: (pos as any).groupId,
+      groupId: pos.groupId,
     });
   });
 
   pluginElements
-    .filter((el) => (el as any).tabId === mode)
+    .filter((el) => el.tabId === mode)
     .forEach((el) => {
       items.push({
         type: 'plugin',
         id: el.fullId,
         zIndex: el.zIndex ?? 0,
-        groupId: (el as any).groupId,
+        groupId: el.groupId,
       });
     });
 

@@ -8,7 +8,7 @@ import {
   arrow,
   autoUpdate,
 } from '@floating-ui/react';
-import { TooltipGroupContext } from './TooltipGroup';
+import { TooltipGroupContext } from './TooltipGroupContext';
 
 type FloatingTooltipProps = {
   content: React.ReactNode;

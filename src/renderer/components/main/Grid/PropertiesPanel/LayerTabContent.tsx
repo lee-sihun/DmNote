@@ -1,10 +1,11 @@
 import React, {
+  useCallback,
   useRef,
   useState,
   useEffect,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import {
   useGridSelectionStore,
   type SelectedElement,
@@ -259,12 +260,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
   // 더블클릭과 클릭(특히 '이미 선택된 아이템 클릭 시 선택 해제') 충돌 방지용 타이머
   const pendingDeselectTimerRef = useRef<number | null>(null);
-  const clearPendingDeselect = () => {
+  const clearPendingDeselect = useCallback(() => {
     if (pendingDeselectTimerRef.current !== null) {
       window.clearTimeout(pendingDeselectTimerRef.current);
       pendingDeselectTimerRef.current = null;
     }
-  };
+  }, []);
   useEffect(() => {
     return () => clearPendingDeselect();
   }, [clearPendingDeselect]);
@@ -318,13 +319,13 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     return { top, height, visible: true };
   };
 
-  const updateThumbDOM = () => {
+  const updateThumbDOM = useCallback(() => {
     if (!thumbRef.current || !scrollElementRef.current) return;
     const thumb = calculateThumb(scrollElementRef.current);
     thumbRef.current.style.top = `${thumb.top}px`;
     thumbRef.current.style.height = `${thumb.height}px`;
     thumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
+  }, []);
 
   const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
     onScroll: updateThumbDOM,
@@ -378,10 +379,10 @@ const items: LayerItem[] = [];
         type: 'stat',
         id: `stat-${index}`,
         index,
-        name: (pos as any).layerName || defaultName,
+        name: pos.layerName || defaultName,
         zIndex: pos.zIndex ?? index,
         hidden: !!pos.hidden,
-        groupId: (pos as any).groupId,
+        groupId: pos.groupId,
       });
     });
 
@@ -400,10 +401,10 @@ const items: LayerItem[] = [];
         type: 'graph',
         id: `graph-${index}`,
         index,
-        name: (pos as any).layerName || defaultName,
+        name: pos.layerName || defaultName,
         zIndex: pos.zIndex ?? index,
         hidden: !!pos.hidden,
-        groupId: (pos as any).groupId,
+        groupId: pos.groupId,
       });
     });
 
@@ -415,7 +416,7 @@ const items: LayerItem[] = [];
         name: el.definitionId || 'Plugin',
         zIndex: el.zIndex ?? 0,
         hidden: !!el.hidden,
-        groupId: (el as any).groupId,
+        groupId: undefined,
       });
     });
 
@@ -548,21 +549,19 @@ const items: LayerItem[] = [];
 
       // 드래그 중인 아이템을 연속으로 건너뛰기
       let prevIdx = safeSlotIndex - 1;
-      while (
-        prevIdx >= 0 &&
-        getDisplayItem(prevIdx)?.displayType === 'layer' &&
-        draggingItemIds.has((getDisplayItem(prevIdx) as any).item.id)
-      ) {
+      while (prevIdx >= 0) {
+        const di = getDisplayItem(prevIdx);
+        if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
+          break;
         prevIdx--;
       }
       const prevDisplayItem = getDisplayItem(prevIdx);
 
       let nextIdx = safeSlotIndex;
-      while (
-        nextIdx < currentDisplay.length &&
-        getDisplayItem(nextIdx)?.displayType === 'layer' &&
-        draggingItemIds.has((getDisplayItem(nextIdx) as any).item.id)
-      ) {
+      while (nextIdx < currentDisplay.length) {
+        const di = getDisplayItem(nextIdx);
+        if (di?.displayType !== 'layer' || !draggingItemIds.has(di.item.id))
+          break;
         nextIdx++;
       }
       const nextDisplayItem = getDisplayItem(nextIdx);
@@ -897,8 +896,8 @@ const items: LayerItem[] = [];
         .pushState(
           km,
           pos,
-          currentStatPositions as any,
-          currentGraphPositions as any,
+          currentStatPositions,
+          currentGraphPositions,
           currentPluginElements,
         );
 
@@ -1235,8 +1234,8 @@ const items: LayerItem[] = [];
           .pushState(
             km,
             pos,
-            currentStatPositions as any,
-            currentGraphPositions as any,
+            currentStatPositions,
+            currentGraphPositions,
             currentPluginElements,
             historyLayerGroups,
           );
@@ -1292,8 +1291,8 @@ const items: LayerItem[] = [];
         .pushState(
           km,
           pos,
-          statPos as any,
-          graphPos as any,
+          statPos,
+          graphPos,
           pluginEls,
           currentGroups,
         );
@@ -1336,8 +1335,8 @@ const items: LayerItem[] = [];
         .pushState(
           km,
           pos,
-          currentStatPositions as any,
-          currentGraphPositions as any,
+          currentStatPositions,
+          currentGraphPositions,
           currentPluginElements,
         );
 
@@ -1454,7 +1453,7 @@ const items: LayerItem[] = [];
             (item) => item.groupId === contextMenuGroupId,
           );
           const elements = children.map((child) => ({
-            type: child.type as any,
+            type: child.type,
             id: child.id,
             index: child.index,
           }));
@@ -1535,7 +1534,7 @@ const items: LayerItem[] = [];
           // 단일 아이템만 그룹에서 제거
           const elements = [
             {
-              type: contextMenuItem.type as any,
+              type: contextMenuItem.type,
               id: contextMenuItem.id,
               index: contextMenuItem.index,
             },
@@ -1586,8 +1585,8 @@ const items: LayerItem[] = [];
             .pushState(
               km,
               pos,
-              currentStatPositions as any,
-              currentGraphPositions as any,
+              currentStatPositions,
+              currentGraphPositions,
               currentPluginElements,
               currentLayerGroups,
             );
@@ -1934,8 +1933,8 @@ const items: LayerItem[] = [];
         .pushState(
           km,
           currentPositions,
-          currentStatPositions as any,
-          currentGraphPositions as any,
+          currentStatPositions,
+          currentGraphPositions,
           currentPluginElements,
           currentLayerGroups,
         );
@@ -2148,8 +2147,8 @@ const items: LayerItem[] = [];
         .pushState(
           km,
           currentPositions,
-          currentStatPositions as any,
-          currentGraphPositions as any,
+          currentStatPositions,
+          currentGraphPositions,
           currentPluginElements,
           currentLayerGroups,
         );

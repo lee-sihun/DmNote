@@ -56,7 +56,7 @@ interface ResizeHandlesProps {
   onResize?: (result: ResizeResult) => void;
   onResizeEnd?: () => void;
   elementId?: string;
-  getOtherElements?: (id: string) => any[];
+  getOtherElements?: (excludeIds: string | string[]) => { id: string; left: number; top: number; right: number; bottom: number; centerX: number; centerY: number; width: number; height: number }[];
 }
 
 interface ResizeState {

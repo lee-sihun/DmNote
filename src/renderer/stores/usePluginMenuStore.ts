@@ -15,7 +15,7 @@ interface PluginMenuState {
   removeMenuItem: (fullId: string) => void;
   updateMenuItem: (
     fullId: string,
-    updates: Partial<PluginMenuItem<any>>,
+    updates: Partial<PluginMenuItem<unknown>>,
   ) => void;
   clearByPluginId: (pluginId: string) => void;
   clearAll: () => void;
@@ -26,7 +26,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
   gridMenuItems: [],
 
   addKeyMenuItem: (item) => {
-    const pluginId = (window as any).__dmn_current_plugin_id || 'unknown';
+    const pluginId = window.__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
 
     // 중복 제거 (같은 fullId가 있으면 교체)
@@ -45,7 +45,7 @@ export const usePluginMenuStore = create<PluginMenuState>((set, _get) => ({
   },
 
   addGridMenuItem: (item) => {
-    const pluginId = (window as any).__dmn_current_plugin_id || 'unknown';
+    const pluginId = window.__dmn_current_plugin_id || 'unknown';
     const fullId = `${pluginId}:${item.id}`;
 
     // 중복 제거 (같은 fullId가 있으면 교체)

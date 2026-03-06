@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import { SidebarToggleIcon, ModeToggleIcon } from './PropertyInputs';

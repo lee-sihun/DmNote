@@ -11,7 +11,7 @@ interface CounterPosition {
   width?: number;
   height?: number;
   hidden?: boolean;
-  counter?: any;
+  counter?: unknown;
 }
 
 interface StatCounterProps {

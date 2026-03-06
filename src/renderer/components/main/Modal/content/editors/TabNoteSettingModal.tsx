@@ -5,7 +5,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { mergeNoteSettings } from '@src/types/noteSettings';
 import type { NoteSettings, TabNoteSettings } from '@src/types/noteSettings';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 
 type Props = {
   isOpen: boolean;
@@ -43,7 +43,7 @@ export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
       const keys = Object.keys(normalized) as (keyof NoteSettings)[];
       for (const key of keys) {
         if (normalized[key] !== globalSettings[key]) {
-          (override as any)[key] = normalized[key];
+          (override as Record<string, NoteSettings[keyof NoteSettings]>)[key] = normalized[key];
         }
       }
       // 모든 값이 전역과 동일하면 오버라이드 제거

@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -186,21 +187,21 @@ export default function CounterAnimationEditorModal({
   const [previewActive, setPreviewActive] = useState(false);
   const [previewCss, setPreviewCss] = useState('');
 
-  const cancelAutoFit = () => {
+  const cancelAutoFit = useCallback(() => {
     if (autoFitRafRef.current) {
       cancelAnimationFrame(autoFitRafRef.current);
       autoFitRafRef.current = null;
     }
-  };
+  }, []);
 
-  const applyView = (offset: { x: number; y: number }, scale: number) => {
+  const applyView = useCallback((offset: { x: number; y: number }, scale: number) => {
     viewOffsetRef.current = offset;
     viewScaleRef.current = scale;
     setViewOffset(offset);
     setViewScale(scale);
-  };
+  }, []);
 
-  const computeAutoFit = (bezier: CounterAnimationBezier) => {
+  const computeAutoFit = useCallback((bezier: CounterAnimationBezier) => {
     const pts = [
       { x: EDITOR_PADDING, y: EDITOR_PADDING + EDITOR_SIZE },
       { x: EDITOR_PADDING + EDITOR_SIZE, y: EDITOR_PADDING },
@@ -261,7 +262,7 @@ export default function CounterAnimationEditorModal({
       offset: { x: cx - vbSize / 2, y: cy - vbSize / 2 },
       scale: fitScale,
     };
-  };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -383,7 +384,7 @@ export default function CounterAnimationEditorModal({
     window.addEventListener('pointercancel', handleUp);
   };
 
-  const animateViewToFit = (bezier: CounterAnimationBezier) => {
+  const animateViewToFit = useCallback((bezier: CounterAnimationBezier) => {
     cancelAutoFit();
 
     const target = computeAutoFit(bezier);
@@ -423,9 +424,9 @@ export default function CounterAnimationEditorModal({
       };
 
       autoFitRafRef.current = requestAnimationFrame(tick);
-  };
+  }, [cancelAutoFit, computeAutoFit, applyView]);
 
-  const updateBezierFromClient = (clientX: number, clientY: number, target: DragTarget) => {
+  const updateBezierFromClient = useCallback((clientX: number, clientY: number, target: DragTarget) => {
       if (!target || !svgRef.current) return;
       const rect = svgRef.current.getBoundingClientRect();
 
@@ -487,7 +488,7 @@ export default function CounterAnimationEditorModal({
         viewOffsetRef.current = next;
         setViewOffset(next);
       }
-  };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;

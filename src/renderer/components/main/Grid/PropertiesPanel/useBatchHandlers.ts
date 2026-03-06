@@ -691,7 +691,7 @@ export function useBatchHandlers({
 
   // 스타일 변경 (프리뷰)
   const handleBatchStyleChange = 
-    (property: keyof KeyPosition, value: any) => {
+    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [property]: value })) as Array<
@@ -716,7 +716,7 @@ export function useBatchHandlers({
 
   // 스타일 변경 완료 (저장)
   const handleBatchStyleChangeComplete = 
-    (property: keyof KeyPosition, value: any) => {
+    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       const currentKeys = keyPositions[selectedKeyType] || [];
       const currentStats = statPositions[selectedKeyType] || [];
 
@@ -766,7 +766,7 @@ export function useBatchHandlers({
         });
       let hasSavedHistory = false;
       if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates, 'commit', {
+        dispatchKeyUpdates(keyUpdates as Array<{ index: number } & Partial<KeyPosition>>, 'commit', {
           skipHistory: hasSavedHistory,
         });
         hasSavedHistory = true;
@@ -789,7 +789,7 @@ export function useBatchHandlers({
                   pos.activeBackgroundColor ??
                   pos.backgroundColor ??
                   DEFAULT_ACTIVE_BACKGROUND_COLOR,
-              } as any;
+              } as { index: number } & Partial<StatItemPosition>;
             }
             if (property === 'borderColor' && pos.activeBorderColor == null) {
               return {
@@ -799,7 +799,7 @@ export function useBatchHandlers({
                   pos.activeBorderColor ??
                   pos.borderColor ??
                   DEFAULT_ACTIVE_BORDER_COLOR,
-              } as any;
+              } as { index: number } & Partial<StatItemPosition>;
             }
             if (property === 'fontColor' && pos.activeFontColor == null) {
               return {
@@ -809,10 +809,10 @@ export function useBatchHandlers({
                   pos.activeFontColor ??
                   pos.fontColor ??
                   DEFAULT_ACTIVE_FONT_COLOR,
-              } as any;
+              } as { index: number } & Partial<StatItemPosition>;
             }
           }
-          return { index, [property]: value } as any;
+          return { index, [property]: value } as { index: number } & Partial<StatItemPosition>;
         });
       if (statUpdates.length > 0) {
         dispatchStatUpdates(statUpdates, 'commit', {
@@ -1135,7 +1135,7 @@ export function useBatchHandlers({
         );
       let hasSavedHistory = false;
       if (keyUpdates.length > 0) {
-        dispatchKeyUpdates(keyUpdates as any, 'commit', {
+        dispatchKeyUpdates(keyUpdates as Array<{ index: number } & Partial<KeyPosition>>, 'commit', {
           skipHistory: hasSavedHistory,
         });
         hasSavedHistory = true;
@@ -1147,19 +1147,14 @@ export function useBatchHandlers({
           const pos = statPositions[selectedKeyType]?.[el.index!];
           if (!pos) return null;
           const currentSettings = normalizeCounterSettings(
-            (pos as any).counter,
+            pos.counter,
           );
           const newSettings = { ...currentSettings, ...updates };
-          return { index: el.index!, counter: newSettings } as any;
+          return { index: el.index!, counter: newSettings } as { index: number } & Partial<StatItemPosition>;
         })
-        .filter((update) => update !== null) as Array<
-        {
-          index: number;
-          counter: KeyCounterSettings;
-        } & Partial<StatItemPosition>
-      >;
+        .filter((update): update is { index: number; counter: KeyCounterSettings } & Partial<StatItemPosition> => update !== null);
       if (statUpdates.length > 0) {
-        dispatchStatUpdates(statUpdates as any, 'commit', {
+        dispatchStatUpdates(statUpdates, 'commit', {
           skipHistory: hasSavedHistory,
         });
       }
@@ -1167,7 +1162,7 @@ export function useBatchHandlers({
 
   // 노트 색상 변경 (프리뷰) - 키 요소만
   const handleBatchNoteColorChange = 
-    (newColor: any) => {
+    (newColor: NoteColor) => {
       let colorValue: NoteColor;
       if (
         newColor &&
@@ -1187,12 +1182,12 @@ export function useBatchHandlers({
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
-      dispatchKeyUpdates(updates as any, 'preview');
+      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'preview');
     };
 
   // 노트 색상 변경 완료 (저장) - 키 요소만
   const handleBatchNoteColorChangeComplete = 
-    (newColor: any) => {
+    (newColor: NoteColor) => {
       let colorValue: NoteColor;
       if (
         newColor &&
@@ -1212,12 +1207,12 @@ export function useBatchHandlers({
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, noteColor: colorValue }));
 
-      dispatchKeyUpdates(updates as any, 'commit');
+      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'commit');
     };
 
   // 글로우 색상 변경 (프리뷰) - 키 요소만
   const handleBatchGlowColorChange = 
-    (newColor: any) => {
+    (newColor: NoteColor) => {
       let colorValue: NoteColor;
       if (
         newColor &&
@@ -1237,12 +1232,12 @@ export function useBatchHandlers({
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
-      dispatchKeyUpdates(updates as any, 'preview');
+      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'preview');
     };
 
   // 글로우 색상 변경 완료 (저장) - 키 요소만
   const handleBatchGlowColorChangeComplete = 
-    (newColor: any) => {
+    (newColor: NoteColor) => {
       let colorValue: NoteColor;
       if (
         newColor &&
@@ -1262,11 +1257,11 @@ export function useBatchHandlers({
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, noteGlowColor: colorValue }));
 
-      dispatchKeyUpdates(updates as any, 'commit');
+      dispatchKeyUpdates(updates as Array<{ index: number } & Partial<KeyPosition>>, 'commit');
     };
 
   const handleKeyOnlyStyleChangeComplete = 
-    (property: keyof KeyPosition, value: any) => {
+    (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       const keyUpdates = selectedKeys
         .filter((el) => el.index !== undefined)
         .map((el) => ({ index: el.index!, [property]: value })) as Array<

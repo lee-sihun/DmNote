@@ -4,7 +4,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Checkbox from '@components/main/common/Checkbox';
 import {
   COLOR_MODES,
@@ -23,13 +23,21 @@ interface NoteTabContentProps {
   onPreview: (updates: Omit<NotePreviewData, 'type'>) => void;
 }
 
+interface GradientColorInput {
+  type: 'gradient';
+  top: string;
+  bottom: string;
+}
+
+type ColorChangeValue = string | GradientColorInput;
+
 export interface NoteTabContentRef {
   colorButtonRef: React.RefObject<HTMLButtonElement>;
   glowColorButtonRef: React.RefObject<HTMLButtonElement>;
-  handleColorChange: (newColor: any) => void;
-  handleColorChangeComplete: (newColor: any) => void;
-  handleGlowColorChange: (newColor: any) => void;
-  handleGlowColorChangeComplete: (newColor: any) => void;
+  handleColorChange: (newColor: ColorChangeValue) => void;
+  handleColorChangeComplete: (newColor: ColorChangeValue) => void;
+  handleGlowColorChange: (newColor: ColorChangeValue) => void;
+  handleGlowColorChangeComplete: (newColor: ColorChangeValue) => void;
 }
 
 // ============================================================================
@@ -78,118 +86,114 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         ? 'Gradient'
         : state.glowColor.replace(/^#/, '');
 
-    // 색상 변경 핸들러
-    const handleColorChange = (newColor: any) => {
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        setState((prev) => ({
-          ...prev,
-          colorMode: COLOR_MODES.gradient,
-          noteColor: newColor.top,
-          gradientBottom: newColor.bottom,
-        }));
-      } else {
-        setState((prev) => ({
-          ...prev,
-          colorMode: COLOR_MODES.solid,
-          noteColor: newColor,
-          gradientBottom: newColor,
-        }));
-      }
-    };
-
-    const handleColorChangeComplete = (newColor: any) => {
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        setState((prev) => ({
-          ...prev,
-          colorMode: COLOR_MODES.gradient,
-          noteColor: newColor.top,
-          gradientBottom: newColor.bottom,
-        }));
-        onPreview({ noteColor: toGradient(newColor.top, newColor.bottom) });
-      } else {
-        setState((prev) => ({
-          ...prev,
-          colorMode: COLOR_MODES.solid,
-          noteColor: newColor,
-          gradientBottom: newColor,
-        }));
-        onPreview({ noteColor: newColor });
-      }
-    };
-
-    const handleGlowColorChange = (newColor: any) => {
-      if (
-        newColor &&
-        typeof newColor === 'object' &&
-        newColor.type === 'gradient'
-      ) {
-        setState((prev) => ({
-          ...prev,
-          glowColorMode: COLOR_MODES.gradient,
-          glowColor: newColor.top,
-          glowGradientBottom: newColor.bottom,
-        }));
-      } else {
-        setState((prev) => ({
-          ...prev,
-          glowColorMode: COLOR_MODES.solid,
-          glowColor: newColor,
-          glowGradientBottom: newColor,
-        }));
-      }
-    };
-
-    const handleGlowColorChangeComplete = (newColor: any) => {
-        if (
-          newColor &&
-          typeof newColor === 'object' &&
-          newColor.type === 'gradient'
-        ) {
-          setState((prev) => ({
-            ...prev,
-            glowColorMode: COLOR_MODES.gradient,
-            glowColor: newColor.top,
-            glowGradientBottom: newColor.bottom,
-          }));
-          onPreview({
-            noteGlowColor: toGradient(newColor.top, newColor.bottom),
-          });
-        } else {
-          setState((prev) => ({
-            ...prev,
-            glowColorMode: COLOR_MODES.solid,
-            glowColor: newColor,
-            glowGradientBottom: newColor,
-          }));
-          onPreview({ noteGlowColor: newColor });
-        }
-      };
-
     // ref를 통해 버튼 refs와 핸들러 노출
     useImperativeHandle(
       ref,
-      () => ({
-        colorButtonRef,
-        glowColorButtonRef,
-        handleColorChange,
-        handleColorChangeComplete,
-        handleGlowColorChange,
-        handleGlowColorChangeComplete,
-      }),
-      [
-        handleColorChange,
-        handleColorChangeComplete,
-        handleGlowColorChange,
-        handleGlowColorChangeComplete,
-      ],
+      () => {
+        const handleColorChangeInner = (newColor: ColorChangeValue) => {
+          if (
+            typeof newColor === 'object' &&
+            newColor.type === 'gradient'
+          ) {
+            setState((prev) => ({
+              ...prev,
+              colorMode: COLOR_MODES.gradient,
+              noteColor: newColor.top,
+              gradientBottom: newColor.bottom,
+            }));
+          } else {
+            const solidColor = newColor as string;
+            setState((prev) => ({
+              ...prev,
+              colorMode: COLOR_MODES.solid,
+              noteColor: solidColor,
+              gradientBottom: solidColor,
+            }));
+          }
+        };
+
+        const handleColorChangeCompleteInner = (newColor: ColorChangeValue) => {
+          if (
+            typeof newColor === 'object' &&
+            newColor.type === 'gradient'
+          ) {
+            setState((prev) => ({
+              ...prev,
+              colorMode: COLOR_MODES.gradient,
+              noteColor: newColor.top,
+              gradientBottom: newColor.bottom,
+            }));
+            onPreview({ noteColor: toGradient(newColor.top, newColor.bottom) });
+          } else {
+            const solidColor = newColor as string;
+            setState((prev) => ({
+              ...prev,
+              colorMode: COLOR_MODES.solid,
+              noteColor: solidColor,
+              gradientBottom: solidColor,
+            }));
+            onPreview({ noteColor: solidColor });
+          }
+        };
+
+        const handleGlowColorChangeInner = (newColor: ColorChangeValue) => {
+          if (
+            typeof newColor === 'object' &&
+            newColor.type === 'gradient'
+          ) {
+            setState((prev) => ({
+              ...prev,
+              glowColorMode: COLOR_MODES.gradient,
+              glowColor: newColor.top,
+              glowGradientBottom: newColor.bottom,
+            }));
+          } else {
+            const solidColor = newColor as string;
+            setState((prev) => ({
+              ...prev,
+              glowColorMode: COLOR_MODES.solid,
+              glowColor: solidColor,
+              glowGradientBottom: solidColor,
+            }));
+          }
+        };
+
+        const handleGlowColorChangeCompleteInner = (newColor: ColorChangeValue) => {
+          if (
+            typeof newColor === 'object' &&
+            newColor.type === 'gradient'
+          ) {
+            setState((prev) => ({
+              ...prev,
+              glowColorMode: COLOR_MODES.gradient,
+              glowColor: newColor.top,
+              glowGradientBottom: newColor.bottom,
+            }));
+            onPreview({
+              noteGlowColor: toGradient(newColor.top, newColor.bottom),
+            });
+          } else {
+            const solidColor = newColor as string;
+            setState((prev) => ({
+              ...prev,
+              glowColorMode: COLOR_MODES.solid,
+              glowColor: solidColor,
+              glowGradientBottom: solidColor,
+            }));
+            onPreview({ noteGlowColor: solidColor });
+          }
+        };
+
+        return {
+          colorButtonRef,
+          glowColorButtonRef,
+          handleColorChange: handleColorChangeInner,
+          handleColorChangeComplete: handleColorChangeCompleteInner,
+          handleGlowColorChange: handleGlowColorChangeInner,
+          handleGlowColorChangeComplete: handleGlowColorChangeCompleteInner,
+        };
+      },
+      [setState, onPreview],
     );
 
     // 불투명도 핸들러

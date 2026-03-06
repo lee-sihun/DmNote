@@ -26,7 +26,7 @@ export function css(
 }
 
 // uhtml 호환용 더미 함수
-export const render = (_target: HTMLElement, _template: any) => {
+export const render = (_target: HTMLElement, _template: unknown) => {
   // React/Preact render 로직은 컴포넌트에서 처리
   // 마이그레이션 중 render() 호출 시 경고 또는 처리 필요
   // PluginElement.tsx에서 해당 render 함수 사용 제거 예정

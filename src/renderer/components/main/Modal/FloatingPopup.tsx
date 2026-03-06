@@ -7,12 +7,13 @@ import {
   shift,
   flip,
   autoUpdate,
+  type Placement,
 } from '@floating-ui/react';
 
 type FloatingPopupProps = {
   open: boolean;
   referenceRef?: React.RefObject<HTMLElement>;
-  placement?: any;
+  placement?: string;
   offset?: number;
   offsetX?: number;
   offsetY?: number;
@@ -43,7 +44,7 @@ const FloatingPopup = ({
   closeOnScroll = false,
 }: FloatingPopupProps) => {
   const { x, y, refs, strategy, update } = useFloating({
-    placement,
+    placement: placement as Placement,
     middleware: [fuiOffset(offset), shift(), flip()],
     whileElementsMounted: autoUpdate,
   });
@@ -57,7 +58,7 @@ const FloatingPopup = ({
   useEffect(() => {
     if (referenceRef && referenceRef.current)
       refs.setReference(referenceRef.current);
-  }, [referenceRef, refs.setReference]);
+  }, [referenceRef, refs]);
 
   useEffect(() => {
     if (open && autoClose) {
@@ -268,7 +269,7 @@ const FloatingPopup = ({
         floatingRef.current = node;
       }}
       style={{
-        position: isFixed ? 'fixed' : (strategy as any),
+        position: isFixed ? 'fixed' : strategy,
         left,
         top,
       }}

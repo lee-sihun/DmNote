@@ -1,6 +1,7 @@
 import {
   Suspense,
   lazy,
+  useCallback,
   useState,
   useRef,
   useEffect,
@@ -77,10 +78,10 @@ export default function FontManagerModal({
   const previewCssCacheRef = useRef<Map<string, string>>(new Map());
 
   // preview용 font-family 이름 생성 (syncFontCSS의 영향을 받지 않도록 별도 이름 사용)
-  const getPreviewFontFamily = (fontName: string) => `${fontName}__preview`;
+  const getPreviewFontFamily = useCallback((fontName: string) => `${fontName}__preview`, []);
 
   // preview CSS 주입 (syncFontCSS의 'font-' prefix와 다른 'fontpreview-' prefix 사용)
-  const injectPreviewCSS = (id: string, css: string) => {
+  const injectPreviewCSS = useCallback((id: string, css: string) => {
     const styleId = `fontpreview-${id}`;
     const existing = document.getElementById(styleId);
     if (existing) {
@@ -91,13 +92,13 @@ export default function FontManagerModal({
       style.textContent = css;
       document.head.appendChild(style);
     }
-  };
+  }, []);
 
   // preview CSS 제거
-  const removePreviewCSS = (id: string) => {
+  const removePreviewCSS = useCallback((id: string) => {
     const style = document.getElementById(`fontpreview-${id}`);
     if (style) style.remove();
-  };
+  }, []);
 
   // 모달이 열려있는 동안 모든 폰트의 CSS를 임시로 주입 (enabled 상태와 상관없이 미리보기 가능)
   // 폰트가 변경될 때 CSS가 실제로 달라진 항목만 갱신하여 폰트가 많아도 부담을 줄임
@@ -182,7 +183,7 @@ export default function FontManagerModal({
   }, [isOpen]);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -191,7 +192,7 @@ export default function FontManagerModal({
         ? prev
         : nextState,
     );
-  };
+  }, []);
 
   // Lenis smooth scroll 적용
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({

@@ -58,20 +58,20 @@ export const bridgeApi = (() => {
   });
 
   return {
-    send: (type: string, data?: any) =>
+    send: (type: string, data?: unknown) =>
       invoke<void>('plugin_bridge_send', {
         messageType: type,
         data: data ?? null,
       }),
 
-    sendTo: (target: WindowTarget, type: string, data?: any) =>
+    sendTo: (target: WindowTarget, type: string, data?: unknown) =>
       invoke<void>('plugin_bridge_send_to', {
         target,
         messageType: type,
         data: data ?? null,
       }),
 
-    on: <T = any>(type: string, listener: BridgeMessageListener<T>) => {
+    on: <T = unknown>(type: string, listener: BridgeMessageListener<T>) => {
       if (!listeners.has(type)) {
         listeners.set(type, new Set());
       }
@@ -88,7 +88,7 @@ export const bridgeApi = (() => {
       };
     },
 
-    once: <T = any>(type: string, listener: BridgeMessageListener<T>) => {
+    once: <T = unknown>(type: string, listener: BridgeMessageListener<T>) => {
       if (!onceListeners.has(type)) {
         onceListeners.set(type, new Set());
       }

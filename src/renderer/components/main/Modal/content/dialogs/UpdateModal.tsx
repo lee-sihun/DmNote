@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 
 interface UpdateInfo {

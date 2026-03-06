@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/api';
 import PlusIcon from '@assets/svgs/plus2.svg';
 import CommonListPickerPopup from './CommonListPickerPopup';
@@ -36,7 +36,7 @@ export default function SoundPicker({
 
   const normalizedSelectedSound = (selectedSound || '').trim();
 
-  const loadSounds = async () => {
+  const loadSounds = useCallback(async () => {
     setIsLoading(true);
     setLoadError('');
     try {
@@ -48,7 +48,7 @@ export default function SoundPicker({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!open) return;

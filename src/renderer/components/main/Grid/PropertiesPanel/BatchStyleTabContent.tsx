@@ -53,10 +53,10 @@ interface BatchStyleTabContentProps {
   ) => void;
   batchSpacing: { isMixed: boolean; value: number };
   handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
-  handleBatchStyleChange: (property: keyof KeyPosition, value: any) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
   handleBatchStyleChangeComplete: (
     property: keyof KeyPosition,
-    value: any,
+    value: unknown,
   ) => void;
   // 키 전용 (사운드 등)
   getKeyOnlyMixedValue?: <T>(
@@ -65,7 +65,7 @@ interface BatchStyleTabContentProps {
   ) => { isMixed: boolean; value: T };
   handleKeyOnlyStyleChangeComplete?: (
     property: keyof KeyPosition,
-    value: any,
+    value: unknown,
   ) => void;
   // 이미지 피커
   showBatchImagePicker: boolean;

@@ -7,6 +7,8 @@
 import { usePluginMenuStore } from '@stores/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import type { KeyPosition } from '@src/types/keys';
+import type { PluginMenuItemInternal, KeyMenuContext, GridMenuContext, PluginMessages } from '@src/types/api';
 
 interface MenuItem {
   id: string;
@@ -18,7 +20,7 @@ interface MenuItem {
 interface KeyContext {
   keyCode: string;
   index: number;
-  position: any;
+  position: KeyPosition;
   mode: string;
 }
 
@@ -30,7 +32,7 @@ interface GridContext {
 interface UseGridContextMenuParams {
   selectedKeyType: string;
   keyMappings: Record<string, string[]>;
-  positions: Record<string, any[]>;
+  positions: Record<string, KeyPosition[]>;
   locale: string;
   t: (key: string) => string;
   noteEffect?: boolean;
@@ -43,8 +45,8 @@ interface UseGridContextMenuReturn {
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ) => MenuItem[];
-  pluginKeyMenuItems: any[];
-  pluginGridMenuItems: any[];
+  pluginKeyMenuItems: PluginMenuItemInternal<KeyMenuContext>[];
+  pluginGridMenuItems: PluginMenuItemInternal<GridMenuContext>[];
   resolvePluginLabel: (pluginId: string, rawLabel: string) => string;
 }
 
@@ -69,7 +71,7 @@ export function useGridContextMenu({
   );
 
   const pluginMessagesById = (() => {
-    const map = new Map<string, any>();
+    const map = new Map<string, PluginMessages>();
     pluginDefinitions.forEach((def) => {
       if (!map.has(def.pluginId)) {
         map.set(def.pluginId, def.messages);
@@ -99,17 +101,20 @@ export function useGridContextMenu({
       ];
 
       // 플러그인 메뉴 필터링 (조건부 표시)
+      const keyPosition = contextIndex !== null
+        ? positions[selectedKeyType]?.[contextIndex]
+        : undefined;
       const context: KeyContext | null =
-        contextIndex !== null
+        contextIndex !== null && keyPosition
           ? {
               keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
               index: contextIndex,
-              position: positions[selectedKeyType]?.[contextIndex] || {},
+              position: keyPosition,
               mode: selectedKeyType,
             }
           : null;
 
-      const filterPluginItems = (items: any[]): MenuItem[] => {
+      const filterPluginItems = (items: PluginMenuItemInternal<unknown>[]): MenuItem[] => {
         if (!context) return [];
         return items
           .filter((item) => {
@@ -178,7 +183,7 @@ export function useGridContextMenu({
           }
         : null;
 
-      const filterPluginItems = (items: any[]): MenuItem[] => {
+      const filterPluginItems = (items: PluginMenuItemInternal<unknown>[]): MenuItem[] => {
         if (!context) return [];
         return items
           .filter((item) => {

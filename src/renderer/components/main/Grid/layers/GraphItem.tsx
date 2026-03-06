@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
 import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
@@ -94,8 +94,6 @@ export default function GraphItem({
   zIndex = 0,
   isViewportTransforming = false,
 }: GraphItemProps) {
-  if (position?.hidden) return null;
-
   const macOS = isMac();
   const {
     dx = 0,
@@ -116,7 +114,7 @@ export default function GraphItem({
     idleImageFit,
     imageFit,
     useInlineStyles = false,
-  } = position;
+  } = position ?? ({} as Partial<GraphPosition>);
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
@@ -128,7 +126,7 @@ export default function GraphItem({
   );
 
   const isSelectionMode = isSelected;
-  const uidRef = useRef<string>(
+  const [uid] = useState(() =>
     `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
   const multiDragRef = useRef<{
@@ -164,6 +162,8 @@ export default function GraphItem({
     getOtherElements,
     disabled: isSelectionMode,
   });
+
+  if (position?.hidden) return null;
 
   const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
       if (!isSelectionMode || e.button !== 0) return;
@@ -454,7 +454,7 @@ export default function GraphItem({
       history={previewHistory}
       avg={PREVIEW_AVG}
       maxval={PREVIEW_MAX}
-      uid={uidRef.current}
+      uid={uid}
       withOffsetVars={true}
       interactive={true}
       dataEditing={isDraggingOrResizing}

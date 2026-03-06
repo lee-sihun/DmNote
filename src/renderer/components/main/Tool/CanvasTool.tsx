@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useRef } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import MoveIcon from '@assets/svgs/move.svg';
 import EraserIcon from '@assets/svgs/eraser.svg';
 import LayerIcon from '@assets/svgs/layer.svg';

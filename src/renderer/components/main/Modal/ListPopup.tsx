@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import FloatingPopup from './FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 
@@ -53,14 +53,8 @@ const SubMenu = ({
     id: string | null;
     close: (() => void) | null;
   }>({ id: null, close: null });
-  const [pos, setPos] = useState<{
-    left?: number;
-    right?: number;
-    top: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!anchorRect) return;
+  const pos = useMemo(() => {
+    if (!anchorRect) return null;
 
     const padding = 5;
     const normalLeft = anchorRect.right + 2;
@@ -83,13 +77,18 @@ const SubMenu = ({
     if (top < padding) top = padding;
 
     if (flipToLeft) {
-      setPos({ right: window.innerWidth - anchorRect.left + 2, top });
-    } else {
-      setPos({ left: normalLeft, top });
+      return { right: window.innerWidth - anchorRect.left + 2, top } as {
+        left?: number;
+        right?: number;
+        top: number;
+      };
     }
+    return { left: normalLeft, top } as {
+      left?: number;
+      right?: number;
+      top: number;
+    };
   }, [anchorRect, items]);
-
-  if (!pos) return null;
 
   const itemHeight = 28;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
@@ -104,6 +103,8 @@ const SubMenu = ({
     duration: 0.5,
     wheelMultiplier: 0.7,
   });
+
+  if (!pos) return null;
 
   return (
     <div

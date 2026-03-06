@@ -1,7 +1,9 @@
 import React, { memo, useEffect, useRef } from 'react';
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from 'ogl';
+import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
 import { resolvedFadeValues } from '@src/types/noteSettings';
+import type { NoteSettings } from '@src/types/noteSettings';
 import { MAX_NOTES } from '@stores/signals/noteBuffer';
 import { isMac } from '@utils/core/platform';
 
@@ -204,7 +206,7 @@ const fragmentShader = `
   }
 `;
 
-const buildPlaneGeometry = (gl: any): any =>
+const buildPlaneGeometry = (gl: OGLRenderingContext): Geometry =>
   new Geometry(gl, {
     position: {
       size: 3,
@@ -230,23 +232,23 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
 const FINALIZE_ATTRIBUTE_KEYS: readonly string[] = Object.freeze(['noteInfo']);
 
 const markAttributesDirty = (
-  geometry: any,
+    geometry: Geometry | null,
   keys?: Iterable<string> | null,
 ): void => {
   if (!geometry) return;
   const attributes = geometry.attributes;
   if (!attributes) return;
   const targetKeys = keys ?? Object.keys(attributes);
-  (targetKeys as any).forEach((key: string) => {
+  for (const key of targetKeys) {
     const attr = attributes[key];
     if (attr) {
       attr.needsUpdate = true;
     }
-  });
+  }
 };
 
 const markInstancedAttributesDirty = (
-  geometry: any,
+    geometry: Geometry | null,
   activeCount: number,
   keys: Iterable<string> = INSTANCED_ATTRIBUTE_KEYS,
 ): void => {
@@ -317,10 +319,10 @@ interface NoteBuffer {
 }
 
 interface WebGLTracksOGLProps {
-  tracks: any;
-  notesRef: any;
+  tracks: unknown;
+  notesRef: unknown;
   subscribe: (callback: (event: NoteEvent) => void) => () => void;
-  noteSettings: any;
+  noteSettings: NoteSettings;
   laboratoryEnabled?: boolean;
   noteBuffer: NoteBuffer | null;
 }
@@ -335,11 +337,11 @@ export const WebGLTracksOGL = memo(
     noteBuffer,
   }: WebGLTracksOGLProps) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const rendererRef = useRef<any>(null);
-    const sceneRef = useRef<any>(null);
-    const cameraRef = useRef<any>(null);
-    const programRef = useRef<any>(null);
-    const geometryRef = useRef<any>(null);
+    const rendererRef = useRef<Renderer | null>(null);
+    const sceneRef = useRef<Transform | null>(null);
+    const cameraRef = useRef<Camera | null>(null);
+    const programRef = useRef<Program | null>(null);
+    const geometryRef = useRef<Geometry | null>(null);
     const isAnimating = useRef<boolean>(false);
     const lastVersionRef = useRef<number>(noteBuffer?.version ?? 0);
     const pendingUpdateRef = useRef<PendingUpdate>({
@@ -660,13 +662,15 @@ export const WebGLTracksOGL = memo(
         isAnimating.current = true;
       }
 
+      const frameClock = frameClockRef.current;
+
       return () => {
         unsubscribe();
         window.removeEventListener('resize', handleResize);
         if (isAnimating.current) {
           animationScheduler.remove(animate);
         }
-        resetFrameClock(frameClockRef.current);
+        resetFrameClock(frameClock);
         geometryRef.current?.remove();
         rendererRef.current?.gl
           ?.getExtension('WEBGL_lose_context')
@@ -677,7 +681,7 @@ export const WebGLTracksOGL = memo(
         cameraRef.current = null;
         sceneRef.current = null;
       };
-    }, [noteBuffer, subscribe]);
+    }, [noteBuffer, subscribe, noteSettings]);
 
     useEffect(() => {
       if (!programRef.current) return;
@@ -690,16 +694,7 @@ export const WebGLTracksOGL = memo(
       const fade = resolvedFadeValues(noteSettings);
       uniforms.uFadeTopPx.value = fade.topPx;
       uniforms.uFadeBottomPx.value = fade.bottomPx;
-    }, [
-      noteSettings.speed,
-      noteSettings.trackHeight,
-      noteSettings.reverse,
-      noteSettings.frameLimit,
-      noteSettings.fadeTopPx,
-      noteSettings.fadeBottomPx,
-      noteSettings.reverseFadeTopPx,
-      noteSettings.reverseFadeBottomPx,
-    ]);
+    }, [noteSettings]);
 
     return (
       <canvas

@@ -251,7 +251,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       // 현재 표시되던 active 값을 함께 저장해(active가 idle로 덮이는 현상 방지)
       if (colorState !== 'active') {
         const activeProp = activeColorPropertyFor(target);
-        const currentActive = (keyPosition as any)?.[activeProp] as unknown;
+        const currentActive = keyPosition[activeProp];
         if (!isNonEmptyString(currentActive)) {
           updates[activeProp] = localColors[activeProp];
         }
@@ -295,11 +295,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     };
 
   // 스타일 변경 핸들러
-  const _handleStyleChange = (property: keyof KeyPosition, value: any) => {
+  const _handleStyleChange = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       onKeyPreview?.(keyIndex, { [property]: value });
     };
 
-  const handleStyleChangeComplete = (property: keyof KeyPosition, value: any) => {
+  const handleStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       onKeyUpdate({ index: keyIndex, [property]: value });
     };
 

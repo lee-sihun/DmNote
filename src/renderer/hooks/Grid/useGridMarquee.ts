@@ -2,7 +2,7 @@
  * Grid 마퀴(범위 선택) 관련 로직 훅
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -10,11 +10,14 @@ import {
   type SelectedElement,
 } from '@stores/useGridSelectionStore';
 import type { PluginDisplayElementInternal } from '@src/types/api';
+import type { KeyPositions } from '@src/types/keys';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
 
 interface UseGridMarqueeParams {
-  positions: Record<string, any[]>;
-  statPositions: Record<string, any[]>;
-  graphPositions: Record<string, any[]>;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
@@ -63,17 +66,24 @@ export function useGridMarquee({
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
   // 마퀴 선택 중 마우스 이동 핸들러
-  const handleMarqueeMouseMove = (e: MouseEvent) => {
-    if (!isMarqueeSelecting) return;
+  const handleMarqueeMouseMoveImpl = useRef<(e: MouseEvent) => void>(() => {});
+  useEffect(() => {
+    handleMarqueeMouseMoveImpl.current = (e: MouseEvent) => {
+      if (!isMarqueeSelecting) return;
 
-    const gridCoords = clientToGridCoords(e.clientX, e.clientY);
-    if (gridCoords) {
-      updateMarqueeSelection(gridCoords.x, gridCoords.y);
-    }
-  };
+      const gridCoords = clientToGridCoords(e.clientX, e.clientY);
+      if (gridCoords) {
+        updateMarqueeSelection(gridCoords.x, gridCoords.y);
+      }
+    };
+  });
+  const handleMarqueeMouseMove = useCallback((e: MouseEvent) => {
+    handleMarqueeMouseMoveImpl.current(e);
+  }, []);
 
   // 마퀴 선택 완료 시 요소 선택 처리
-  const handleMarqueeMouseUp = () => {
+  const handleMarqueeMouseUpImpl = useRef<() => void>(() => {});
+  useEffect(() => { handleMarqueeMouseUpImpl.current = () => {
     if (!isMarqueeSelecting) return;
 
     const rect = getMarqueeRect(marqueeStart, marqueeEnd);
@@ -166,7 +176,10 @@ export function useGridMarquee({
     }
 
     endMarqueeSelection();
-  };
+  }; });
+  const handleMarqueeMouseUp = useCallback(() => {
+    handleMarqueeMouseUpImpl.current();
+  }, []);
 
   // 마퀴 선택 이벤트 등록
   useEffect(() => {

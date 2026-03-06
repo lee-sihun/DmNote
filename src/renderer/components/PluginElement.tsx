@@ -2,12 +2,14 @@ import React, {
   useRef,
   useEffect,
   useState,
+  useCallback,
   } from 'react';
 import { createPortal } from 'react-dom';
 import { isMac } from '@utils/core/platform';
 import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
+  DisplayElementTemplateHelpers,
 } from '@src/types/api';
 import { useDraggable } from '@hooks/Grid';
 import { useHistoryStore } from '@stores/useHistoryStore';
@@ -29,7 +31,7 @@ import {
 } from '@stores/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/useKeyStore';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import ListPopup, { ListItem } from './main/Modal/ListPopup';
 import { html, styleMap, css } from '@utils/core/templateEngine';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
@@ -196,7 +198,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         fallback,
       });
 
-  const pluginTranslateStable = (
+  const pluginTranslateStable = useCallback((
       key: string,
       params?: Record<string, string | number>,
       fallback?: string,
@@ -207,19 +209,19 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         key,
         params,
         fallback,
-      });
+      }), [definition?.messages]);
 
   const positions = useKeyStore((state) => state.positions);
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
-  const exposedActionsRef = useRef<Record<string, (...args: any[]) => any>>({});
+  const exposedActionsRef = useRef<Record<string, (...args: unknown[]) => unknown>>({});
 
   // Settings 변경 감지용 ref와 콜백 리스트
-  const prevSettingsRef = useRef<Record<string, any> | null>(null);
+  const prevSettingsRef = useRef<Record<string, unknown> | null>(null);
   const settingsChangeListenersRef = useRef<
     Set<
       (
-        newSettings: Record<string, any>,
-        oldSettings: Record<string, any>,
+        newSettings: Record<string, unknown>,
+        oldSettings: Record<string, unknown>,
       ) => void
     >
   >(new Set());
@@ -261,7 +263,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
   // Settings 변경 시 measuredSize 리셋 (main 윈도우, resizable 요소만)
   // 설정 변경으로 UI가 변할 수 있으므로 새로 측정하도록 함
-  const prevSettingsForResizeRef = useRef<Record<string, any> | null>(null);
+  const prevSettingsForResizeRef = useRef<Record<string, unknown> | null>(null);
   // 설정 변경으로 재측정이 필요한 상태인지 플래그
   const needsRemeasureRef = useRef(false);
   // 사용자가 설정한(또는 초기 측정된) preserveAxis 축의 크기
@@ -350,9 +352,12 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   }, [
     windowType,
     definition?.resizable,
+    definition?.resizeAnchor,
     element.settings,
     element.fullId,
     element.measuredSize,
+    element.position,
+    element.resizeAnchor,
     updateElement,
   ]);
 
@@ -462,9 +467,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           element.onPositionChange &&
           typeof element.onPositionChange === 'string'
         ) {
-          const handler = (window as any)[element.onPositionChange];
+          const handler = (window as unknown as Record<string, unknown>)[element.onPositionChange];
           if (typeof handler === 'function') {
-            handler({ x: newX, y: newY });
+            (handler as (pos: { x: number; y: number }) => void)({ x: newX, y: newY });
           }
         }
       }
@@ -771,7 +776,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
       try {
         return definition.template(renderState, settings, {
-          html: html as any,
+          html: html as unknown as DisplayElementTemplateHelpers['html'],
           styleMap,
           css,
           locale,
@@ -1022,9 +1027,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         if (!handlerName) return;
 
         // 핸들러 실행 (자동 래핑되어 있음)
-        const handler = (window as any)[handlerName];
+        const handler = (window as unknown as Record<string, unknown>)[handlerName];
         if (typeof handler === 'function') {
-          handler(e);
+          (handler as (e: Event) => void)(e);
         }
       };
 
@@ -1058,7 +1063,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     shadowRoot,
     renderedContent, // 컨텐츠 변경 시 크기 재측정
     zoom,
+    definition?.preserveAxis,
+    definition?.resizable,
     definition?.resizeAnchor,
+    element.measuredSize,
   ]);
 
   // Overlay 로직 (onMount)
@@ -1080,7 +1088,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     const cleanups: (() => void)[] = [];
 
     const context = {
-      setState: (updates: Record<string, any>) => {
+      setState: (updates: Record<string, unknown>) => {
         // rAF 기반 배치 업데이트 사용 (성능 최적화)
         const currentElement = usePluginDisplayElementStore
           .getState()
@@ -1120,7 +1128,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           currentElement?.resizeAnchor || definition?.resizeAnchor || 'top-left'
         );
       },
-      onHook: (event: string, callback: (...args: any[]) => void) => {
+      onHook: (event: string, callback: (...args: unknown[]) => void) => {
         // console.log(`[PluginElement] onHook registered for ${event}`);
         if (event === 'key') {
           // 백엔드 재구독 대신 키 이벤트 버스 사용
@@ -1150,7 +1158,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           });
         }
       },
-      expose: (actions: Record<string, (...args: any[]) => any>) => {
+      expose: (actions: Record<string, (...args: unknown[]) => unknown>) => {
         if (!actions || typeof actions !== 'object') return;
         const validEntries = Object.entries(actions).filter(
           ([, fn]) => typeof fn === 'function',
@@ -1176,8 +1184,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       },
       onSettingsChange: (
         listener: (
-          newSettings: Record<string, any>,
-          oldSettings: Record<string, any>,
+          newSettings: Record<string, unknown>,
+          oldSettings: Record<string, unknown>,
         ) => void,
       ) => {
         settingsChangeListenersRef.current.add(listener);
@@ -1201,9 +1209,10 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     };
   }, [
     windowType,
-    definition?.id,
+    definition,
     element.fullId,
     pluginTranslateStable,
+    updateElement,
     updateElementBatched,
   ]);
 
@@ -1286,9 +1295,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const deletePluginElement = () => {
     // onDelete 핸들러 호출 (자동 래핑되어 있음)
     if (element.onDelete && typeof element.onDelete === 'string') {
-      const handler = (window as any)[element.onDelete];
+      const handler = (window as unknown as Record<string, unknown>)[element.onDelete];
       if (typeof handler === 'function') {
-        handler();
+        (handler as () => void)();
       }
     }
 
@@ -1456,9 +1465,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     // onClick 핸들러 실행 (자동 래핑되어 있음)
     if (typeof element.onClick === 'string') {
-      const handler = (window as any)[element.onClick];
+      const handler = (window as unknown as Record<string, unknown>)[element.onClick];
       if (typeof handler === 'function') {
-        handler(e);
+        (handler as (e: React.MouseEvent) => void)(e);
       }
     }
   };
@@ -1506,7 +1515,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         {
           get: (_target, prop: string | symbol) => {
             if (typeof prop !== 'string') return undefined;
-            return (...args: any[]) => {
+            return (...args: unknown[]) => {
               try {
                 window.api?.bridge?.sendTo(
                   'overlay',
@@ -1560,8 +1569,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       if (typeof renderedContent === 'string') {
         return <div dangerouslySetInnerHTML={{ __html: renderedContent }} />;
       }
-      // React Element인 경우
-      return renderedContent as React.ReactNode;
+      // React Element인 경우 (DisplayElementTemplateResult -> ReactNode)
+      return renderedContent as unknown as React.ReactNode;
     }
 
     // 템플릿이 없고 html 속성만 있는 경우 (레거시)
@@ -1587,7 +1596,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         onContextMenu={handleContextMenu}
       >
         {element.scoped && shadowRoot
-          ? createPortal(renderContent(), shadowRoot as any)
+          ? createPortal(renderContent(), shadowRoot as unknown as Element)
           : renderContent()}
       </div>
 

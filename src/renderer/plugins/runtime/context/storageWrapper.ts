@@ -11,11 +11,11 @@ export const createNamespacedStorage = (
   originalStorage: typeof window.api.plugin.storage,
 ) => {
   return {
-    get: async <T = any>(key: string) => {
+    get: async <T = unknown>(key: string) => {
       const prefixedKey = `${pluginId}/${key}`;
       return await originalStorage.get<T>(prefixedKey as string);
     },
-    set: (key: string, value: any) =>
+    set: (key: string, value: unknown) =>
       originalStorage.set(`${pluginId}/${key}`, value),
     remove: (key: string) => originalStorage.remove(`${pluginId}/${key}`),
     clear: async () => {

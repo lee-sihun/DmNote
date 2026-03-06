@@ -2,10 +2,10 @@ import { invoke } from '@tauri-apps/api/core';
 
 export const pluginApi = {
   storage: {
-    get: <T = any>(key: string) =>
+    get: <T = unknown>(key: string) =>
       invoke<T | null>('plugin_storage_get', { key }),
 
-    set: (key: string, value: any) =>
+    set: (key: string, value: unknown) =>
       invoke<void>('plugin_storage_set', { key, value }),
 
     remove: (key: string) => invoke<void>('plugin_storage_remove', { key }),

@@ -1,12 +1,12 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState } from 'react';
 import Modal from '../../Modal';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (name: string) => Promise<any> | any;
+  onSubmit: (name: string) => Promise<{ error?: string } | void> | { error?: string } | void;
   existingNames?: string[];
 };
 
@@ -45,7 +45,7 @@ export default function TabNameModal({
       return;
     }
     const res = await onSubmit(name.trim());
-    if (res?.error) {
+    if (res && typeof res === 'object' && 'error' in res && res.error) {
       const map: Record<string, string> = {
         'max-reached': t('tabs.errors.max'),
         'duplicate-name': t('tabs.name.duplicate'),

@@ -1,22 +1,23 @@
 import React from 'react';
-import type { PluginSettingSchema, PluginMessages } from '@src/types/api';
+import type { PluginSettingSchema, PluginMessages, PluginSettingValue } from '@src/types/api';
+import type { PluginSettingsPanelPayload } from '@stores/usePropertiesPanelStore';
 import { SidebarToggleIcon } from './PropertyInputs';
 
 interface PluginSettingsPanelViewProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
-  pluginSettingsPanel: any;
-  pluginPanelSettings: Record<string, any>;
-  handlePluginSettingsPanelChange: (key: string, value: any) => void;
+  pluginSettingsPanel: PluginSettingsPanelPayload;
+  pluginPanelSettings: Record<string, unknown>;
+  handlePluginSettingsPanelChange: (key: string, value: PluginSettingValue) => void;
   handlePluginSettingsPanelConfirm: () => void;
   handlePluginSettingsPanelCancel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
   setPluginThumbRef: (node: HTMLDivElement | null) => void;
   renderPluginSettingsForm: (
     schema: Record<string, PluginSettingSchema> | undefined,
-    values: Record<string, any>,
+    values: Record<string, unknown>,
     messages: PluginMessages | undefined,
     colorIdPrefix: string,
-    onChange: (key: string, value: any) => void,
+    onChange: (key: string, value: unknown) => void,
     options?: { wrap?: boolean },
   ) => React.ReactNode;
   t: (key: string) => string | undefined;

@@ -37,7 +37,7 @@ interface StatItemPosition {
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
-  counter?: any;
+  counter?: unknown;
   zIndex?: number;
 }
 
@@ -57,8 +57,6 @@ export default memo(function StatItem({
   active = false,
 }: StatItemProps) {
   useSignals();
-
-  if (position?.hidden) return null;
 
   const {
     dx,
@@ -112,9 +110,6 @@ export default memo(function StatItem({
   }, [inactiveImageSrc, activeImageSrc]);
 
   const isTransparent: boolean = active ? activeTransparent : idleTransparent;
-  if (isTransparent) {
-    return null;
-  }
 
   const useInline: boolean = useInlineStyles === true;
   const labelText: string = displayText || label || '';
@@ -247,6 +242,8 @@ export default memo(function StatItem({
     fontUnderline,
     fontStrikethrough,
   ]);
+
+  if (position?.hidden || isTransparent) return null;
 
   const counterFillColor: string = active
     ? counterSettings.fill.active

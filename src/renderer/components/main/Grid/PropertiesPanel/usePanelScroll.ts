@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { TABS, TabType } from './types';
 
@@ -69,13 +69,13 @@ export function usePanelScroll(
   };
 
   // thumb DOM 직접 업데이트 (리렌더링 없이 성능 최적화)
-  const updateThumbDOM = (thumbEl: HTMLDivElement | null, scrollEl: HTMLDivElement | null) => {
+  const updateThumbDOM = useCallback((thumbEl: HTMLDivElement | null, scrollEl: HTMLDivElement | null) => {
       if (!thumbEl || !scrollEl) return;
       const thumb = calculateThumb(scrollEl);
       thumbEl.style.top = `${thumb.top}px`;
       thumbEl.style.height = `${thumb.height}px`;
       thumbEl.style.display = thumb.visible ? 'block' : 'none';
-    };
+    }, []);
 
   // Lenis 스크롤 적용 (탭별 6개 훅: batch 3개 + single 3개)
   const { scrollContainerRef: batchLenisStyleRef } = useLenis({
@@ -151,7 +151,7 @@ export function usePanelScroll(
       singleThumbRefs.current[tab] = node;
     };
 
-  const updateThumbs = (tab: TabType) => {
+  const updateThumbs = useCallback((tab: TabType) => {
       updateThumbDOM(
         batchThumbRefs.current[tab],
         batchScrollElementRefs.current[tab],
@@ -160,7 +160,7 @@ export function usePanelScroll(
         singleThumbRefs.current[tab],
         singleScrollElementRefs.current[tab],
       );
-    };
+    }, [updateThumbDOM]);
 
   // 탭 변경 또는 선택 변경 시 thumb 업데이트
   useEffect(() => {

@@ -389,7 +389,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           solidOnly={true}
           interactiveRefs={colorPickerInteractiveRefs}
           stateMode={colorState}
-          onStateModeChange={setColorState as any}
+          onStateModeChange={(mode: string) => setColorState(mode as ColorState)}
         />
       )}
 

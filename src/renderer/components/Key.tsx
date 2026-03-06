@@ -8,6 +8,7 @@ import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
+  type KeyCounterSettings,
 } from '@src/types/keys';
 import { useSmartGuidesElements } from '@hooks/Grid';
 import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
@@ -20,6 +21,7 @@ import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
+  type ElementBounds,
 } from '@utils/grid/smartGuides';
 
 interface KeyPosition {
@@ -52,7 +54,7 @@ interface KeyPosition {
   fontItalic?: boolean;
   fontUnderline?: boolean;
   fontStrikethrough?: boolean;
-  counter?: any;
+  counter?: KeyCounterSettings;
   zIndex?: number;
 }
 
@@ -125,7 +127,6 @@ export default function DraggableKey({
   counterPreviewValue = 0,
   counterValueSignal,
 }: DraggableKeyProps) {
-  if (position?.hidden) return null;
   useSignals();
 
   const macOS = isMac();
@@ -171,11 +172,11 @@ export default function DraggableKey({
   const { getOtherElements } = useSmartGuidesElements();
 
   const gridSnapSize = useSettingsStore(
-    (state: any) => state.gridSettings?.gridSnapSize || 5,
+    (state) => state.gridSettings?.gridSnapSize || 5,
   );
 
   const isDraggingOrResizing = useGridSelectionStore(
-    (state: any) => state.isDraggingOrResizing,
+    (state) => state.isDraggingOrResizing,
   );
 
   const multiDragRef = useRef<{
@@ -266,7 +267,7 @@ export default function DraggableKey({
           const otherElements = getOtherElements(currentElementId);
 
           const nonSelectedElements = otherElements.filter(
-            (el: any) => !selectedElements.some((sel) => sel.id === el.id),
+            (el) => !selectedElements.some((sel) => sel.id === el.id),
           );
 
           const draggedBounds = calculateBounds(
@@ -277,7 +278,7 @@ export default function DraggableKey({
             currentElementId,
           );
 
-          let groupBounds: any = null;
+          let groupBounds: ElementBounds | null = null;
           if (selectedElements.length > 1) {
             const selectedBoundsArray = selectedElements
               .map((sel) => {
@@ -287,7 +288,7 @@ export default function DraggableKey({
                 ) {
                   return draggedBounds;
                 }
-                const found = otherElements.find((el: any) => el.id === sel.id);
+                const found = otherElements.find((el) => el.id === sel.id);
                 if (found) {
                   return calculateBounds(
                     found.left + rawDeltaX,
@@ -429,6 +430,7 @@ export default function DraggableKey({
       onMultiDrag,
       onMultiDragStart,
       onMultiDragEnd,
+      effectiveElementId,
       dx,
       dy,
       width,
@@ -585,6 +587,8 @@ export default function DraggableKey({
     fontUnderline,
     fontStrikethrough,
   ]);
+
+  if (position?.hidden) return null;
 
   const counterFillColor = counterSettings.fill.idle;
   const counterStrokeColor = counterSettings.stroke.idle;
@@ -767,10 +771,6 @@ export const Key = memo(
 
     const isTransparent = active ? activeTransparent : idleTransparent;
 
-    if (isTransparent) {
-      return null;
-    }
-
     const currentImageSrc =
       (active && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
     const hasCurrentImage = !!currentImageSrc;
@@ -834,21 +834,18 @@ export const Key = memo(
       active,
       hasCurrentImage,
       activeImageSrc,
+      stateBackgroundColor,
+      stateBorderColor,
+      stateFontColor,
       dx,
       dy,
       width,
       height,
       position.zIndex,
       useInline,
-      backgroundColor,
-      activeBackgroundColor,
-      borderColor,
-      activeBorderColor,
       borderWidth,
       borderRadius,
       fontSize,
-      fontColor,
-      activeFontColor,
     ]);
 
     const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
@@ -893,6 +890,10 @@ export const Key = memo(
       fontStrikethrough,
     ]);
 
+    if (isTransparent) {
+      return null;
+    }
+
     const counterSettings = normalizeCounterSettings(
       position?.counter ?? createDefaultCounterSettings(),
     );
@@ -901,10 +902,9 @@ export const Key = memo(
       counterSettings.enabled &&
       counterSettings.placement === 'inside';
 
-    let counterSignal: any;
-    if (showInsideCounter) {
-      counterSignal = getKeyCounterSignal(mode ?? '', globalKey);
-    }
+    const counterSignal = showInsideCounter
+      ? getKeyCounterSignal(mode ?? '', globalKey)
+      : undefined;
 
     const counterValue = counterSignal?.value ?? 0;
 

@@ -6,6 +6,7 @@ import {
   KeyMappings,
   KeyPositions,
   KeyCounters,
+  KeyPosition,
 } from '@src/types/keys';
 import type { StatItemPositions } from '@src/types/statItems';
 import type { GraphItemPositions } from '@src/types/graphItems';
@@ -15,6 +16,9 @@ import {
   SettingsPatchInput,
   SettingsState,
 } from '@src/types/settings';
+
+/** Value type for plugin settings (boolean, string, or number) */
+export type PluginSettingValue = string | number | boolean;
 
 export type ModeChangePayload = { mode: string };
 export type CustomTabsChangePayload = {
@@ -254,16 +258,16 @@ export type AppAutoUpdateResult = {
   downloadUrl: string;
 };
 
-export type BridgeMessage<T = any> = { type: string; data?: T };
-export type BridgeMessageListener<T = any> = (data: T) => void;
-export type BridgeAnyListener = (type: string, data: any) => void;
+export type BridgeMessage<T = unknown> = { type: string; data?: T };
+export type BridgeMessageListener<T = unknown> = (data: T) => void;
+export type BridgeAnyListener = (type: string, data: unknown) => void;
 export type WindowTarget = 'main' | 'overlay';
 
 // UI Plugin 컨텍스트 메뉴 types
 export type KeyMenuContext = {
   keyCode: string;
   index: number;
-  position: any; // KeyPosition from keys.ts
+  position: KeyPosition;
   mode: string;
 };
 
@@ -272,7 +276,7 @@ export type GridMenuContext = {
   mode: string;
 };
 
-export type PluginMenuItem<TContext = any> = {
+export type PluginMenuItem<TContext = unknown> = {
   id: string;
   label: string;
   disabled?: boolean | ((context: TContext) => boolean);
@@ -281,7 +285,7 @@ export type PluginMenuItem<TContext = any> = {
   onClick: (context: TContext) => void | Promise<void>;
 };
 
-export type PluginMenuItemInternal<TContext = any> =
+export type PluginMenuItemInternal<TContext = unknown> =
   PluginMenuItem<TContext> & {
     pluginId: string;
     fullId: string;
@@ -289,9 +293,9 @@ export type PluginMenuItemInternal<TContext = any> =
 
 export interface DisplayElementInstance {
   readonly id: string;
-  setState(updates: Record<string, any>): void;
-  setData(updates: Record<string, any>): void;
-  getState(): Record<string, any>;
+  setState(updates: Record<string, unknown>): void;
+  setData(updates: Record<string, unknown>): void;
+  getState(): Record<string, unknown>;
   setText(selector: string, text: string): void;
   setHTML(selector: string, html: string): void;
   setStyle(selector: string, styles: Record<string, string>): void;
@@ -306,7 +310,7 @@ export interface DisplayElementInstance {
 // UI Plugin Display Element types
 export type PluginDisplayElementActionContext = {
   element: PluginDisplayElement;
-  actions: Record<string, (...args: any[]) => any>;
+  actions: Record<string, (...args: unknown[]) => unknown>;
 };
 
 export type PluginDisplayElementContextMenu = {
@@ -367,12 +371,12 @@ export type PluginDisplayElement = {
   onDelete?: string | (() => void | Promise<void>); // 삭제 핸들러 ID 또는 함수 (메인 윈도우에서만)
   contextMenu?: PluginDisplayElementContextMenu;
   definitionId?: string;
-  settings?: Record<string, any>;
-  state?: Record<string, any>;
+  settings?: Record<string, unknown>;
+  state?: Record<string, unknown>;
   tabId?: string; // 탭 ID (4key, 5key, custom-tab-id 등)
 };
 
-export type PluginMessages = Record<string, Record<string, any>>;
+export type PluginMessages = Record<string, Record<string, unknown>>;
 export type PluginI18nParams = Record<string, string | number>;
 export type PluginTranslateFn = (
   key: string,
@@ -405,23 +409,27 @@ export type PluginSettingSchema =
   | {
       type: 'divider';
       label?: string;
-      visible?: boolean | ((settings: Record<string, any>) => boolean);
+      visible?:
+        | boolean
+        | ((settings: Record<string, unknown>) => boolean);
     }
   | {
       type: Exclude<PluginSettingType, 'divider'>;
-      default: any;
+      default: string | number | boolean;
       label: string;
       min?: number; // for number
       max?: number; // for number
       step?: number; // for number
-      options?: { label: string; value: any }[]; // for select
+      options?: { label: string; value: string | number | boolean }[]; // for select
       placeholder?: string; // for string/number
-      visible?: boolean | ((settings: Record<string, any>) => boolean);
+      visible?:
+        | boolean
+        | ((settings: Record<string, unknown>) => boolean);
     };
 
 export interface PluginDefinitionHookContext {
-  setState: (updates: Record<string, any>) => void;
-  getSettings: () => Record<string, any>;
+  setState: (updates: Record<string, unknown>) => void;
+  getSettings: () => Record<string, unknown>;
   /**
    * Set the resize anchor for this element instance
    * @param anchor - The anchor position for resize operations
@@ -447,8 +455,8 @@ export interface PluginDefinitionHookContext {
    * 'key' event payload: { key: string, state: 'DOWN' | 'UP', mode: string }
    * 'rawKey' event payload: { device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown', label: string, labels: string[], state: 'DOWN' | 'UP' }
    */
-  onHook: (event: 'key' | 'rawKey', callback: (...args: any[]) => void) => void;
-  expose: (actions: Record<string, (...args: any[]) => any>) => void;
+  onHook: (event: 'key' | 'rawKey', callback: (...args: unknown[]) => void) => void;
+  expose: (actions: Record<string, (...args: unknown[]) => unknown>) => void;
   locale: string;
   t: PluginTranslateFn;
   onLocaleChange: (listener: (locale: string) => void) => Unsubscribe;
@@ -468,8 +476,8 @@ export interface PluginDefinitionHookContext {
    */
   onSettingsChange: (
     listener: (
-      newSettings: Record<string, any>,
-      oldSettings: Record<string, any>,
+      newSettings: Record<string, unknown>,
+      oldSettings: Record<string, unknown>,
     ) => void,
   ) => void;
 }
@@ -517,11 +525,11 @@ export interface PluginDefinition {
   settings?: Record<string, PluginSettingSchema>;
   messages?: PluginMessages;
   template: (
-    state: Record<string, any>,
-    settings: Record<string, any>,
+    state: Record<string, unknown>,
+    settings: Record<string, unknown>,
     helpers: DisplayElementTemplateHelpers,
   ) => DisplayElementTemplateResult | string;
-  previewState?: Record<string, any>;
+  previewState?: Record<string, unknown>;
   onMount?: (context: PluginDefinitionHookContext) => void | (() => void);
 }
 
@@ -548,8 +556,8 @@ export interface PluginSettingsDefinition {
   settingsUI?: 'panel' | 'modal';
   /** 설정 변경 시 호출되는 콜백 */
   onChange?: (
-    newSettings: Record<string, any>,
-    oldSettings: Record<string, any>,
+    newSettings: Record<string, unknown>,
+    oldSettings: Record<string, unknown>,
   ) => void;
 }
 
@@ -558,9 +566,9 @@ export interface PluginSettingsDefinition {
  */
 export interface PluginSettingsInstance {
   /** 현재 설정값 조회 */
-  get(): Record<string, any>;
+  get(): Record<string, unknown>;
   /** 설정값 변경 */
-  set(updates: Record<string, any>): Promise<void>;
+  set(updates: Record<string, unknown>): Promise<void>;
   /** 설정 다이얼로그 열기 */
   open(): Promise<boolean>;
   /** 설정을 기본값으로 초기화 */
@@ -572,8 +580,8 @@ export interface PluginSettingsInstance {
    */
   subscribe(
     listener: (
-      newSettings: Record<string, any>,
-      oldSettings: Record<string, any>,
+      newSettings: Record<string, unknown>,
+      oldSettings: Record<string, unknown>,
     ) => void,
   ): Unsubscribe;
 }
@@ -590,16 +598,19 @@ export type PluginDisplayElementInternal = PluginDisplayElement & {
   width?: number;
   /** 리사이즈 시 사용되는 명시적 높이 */
   height?: number;
+  /** 레이어 그룹 ID */
+  groupId?: string;
   // 자동 생성된 핸들러 ID (함수가 전달된 경우)
   _onClickId?: string;
   _onPositionChangeId?: string;
   _onDeleteId?: string;
 };
 
-export interface DisplayElementTemplateResult {
-  // ReactNode or similar
-  [key: string]: any;
-}
+// Intentionally open interface – acts as a structural marker for
+// template return values that are rendered as React elements.
+// Consumers cast the value to ReactNode before rendering.
+// Using Record<string, unknown> would break React element assignability.
+export type DisplayElementTemplateResult = Record<string, never>;
 
 export interface DisplayElementTemplateHelpers {
   html(
@@ -618,12 +629,12 @@ export interface DisplayElementTemplateHelpers {
 }
 
 export type DisplayElementTemplateFunction = (
-  state: Record<string, any>,
+  state: Record<string, unknown>,
   helpers?: DisplayElementTemplateHelpers,
 ) => string | DisplayElementTemplateResult;
 
 export type DisplayElementTemplateValueResolver = (
-  state: Record<string, any>,
+  state: Record<string, unknown>,
   helpers: DisplayElementTemplateHelpers,
 ) => unknown;
 
@@ -635,8 +646,8 @@ export type DisplayElementTemplateFactoryValue =
   | boolean
   | null
   | undefined
-  | Record<string, any>
-  | Array<any>;
+  | Record<string, unknown>
+  | Array<unknown>;
 
 export type DisplayElementTemplateFactory = (
   strings: TemplateStringsArray,
@@ -646,7 +657,7 @@ export type DisplayElementTemplateFactory = (
 export type DisplayElementTemplate = DisplayElementTemplateFunction;
 
 export type PluginDisplayElementConfig = Omit<PluginDisplayElement, 'id'> & {
-  state?: Record<string, any>;
+  state?: Record<string, unknown>;
   template?: DisplayElementTemplateFunction;
 };
 
@@ -899,10 +910,10 @@ export interface DMNoteAPI {
     loadTab(): Promise<PresetOperationResult>;
   };
   bridge: {
-    send(type: string, data?: any): Promise<void>;
-    sendTo(target: WindowTarget, type: string, data?: any): Promise<void>;
-    on<T = any>(type: string, listener: BridgeMessageListener<T>): Unsubscribe;
-    once<T = any>(
+    send(type: string, data?: unknown): Promise<void>;
+    sendTo(target: WindowTarget, type: string, data?: unknown): Promise<void>;
+    on<T = unknown>(type: string, listener: BridgeMessageListener<T>): Unsubscribe;
+    once<T = unknown>(
       type: string,
       listener: BridgeMessageListener<T>,
     ): Unsubscribe;
@@ -934,8 +945,8 @@ export interface DMNoteAPI {
   };
   plugin: {
     storage: {
-      get<T = any>(key: string): Promise<T | null>;
-      set(key: string, value: any): Promise<void>;
+      get<T = unknown>(key: string): Promise<T | null>;
+      set(key: string, value: unknown): Promise<void>;
       remove(key: string): Promise<void>;
       clear(): Promise<void>;
       keys(): Promise<string[]>;
@@ -955,7 +966,7 @@ export interface DMNoteAPI {
       removeMenuItem(fullId: string): void;
       updateMenuItem(
         fullId: string,
-        updates: Partial<PluginMenuItem<any>>,
+        updates: Partial<PluginMenuItem<unknown>>,
       ): void;
       clearMyMenuItems(): void;
     };
@@ -969,11 +980,11 @@ export interface DMNoteAPI {
       get(fullId: string): DisplayElementInstance | undefined;
       setState(
         target: string | DisplayElementInstance,
-        updates: Record<string, any>,
+        updates: Record<string, unknown>,
       ): void;
       setData(
         target: string | DisplayElementInstance,
-        updates: Record<string, any>,
+        updates: Record<string, unknown>,
       ): void;
       setText(
         target: string | DisplayElementInstance,

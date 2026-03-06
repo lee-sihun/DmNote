@@ -30,7 +30,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     const SETTINGS_KEY = '__plugin_settings__';
 
     // 기본값 계산
-    const defaultSettings: Record<string, any> = {};
+    const defaultSettings: Record<string, unknown> = {};
     if (definition.settings) {
       for (const [key, schema] of Object.entries(definition.settings)) {
         if (schema.type !== 'divider') {
@@ -40,21 +40,21 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     }
 
     // 현재 설정값 (메모리 캐시)
-    let currentSettings: Record<string, any> = { ...defaultSettings };
+    let currentSettings: Record<string, unknown> = { ...defaultSettings };
     let isInitialized = false;
 
     // 설정 변경 구독자 목록
     const subscribers: Set<
       (
-        newSettings: Record<string, any>,
-        oldSettings: Record<string, any>,
+        newSettings: Record<string, unknown>,
+        oldSettings: Record<string, unknown>,
       ) => void
     > = new Set();
 
     // 모든 구독자에게 변경 알림
     const notifySubscribers = (
-      newSettings: Record<string, any>,
-      oldSettings: Record<string, any>,
+      newSettings: Record<string, unknown>,
+      oldSettings: Record<string, unknown>,
     ) => {
       subscribers.forEach((listener) => {
         try {
@@ -77,7 +77,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       elements.forEach((el) => {
         // state에 _settingsVersion을 증가시켜 리렌더링 트리거
         const currentState = el.state || {};
-        const version = (currentState._settingsVersion || 0) + 1;
+        const version = (Number(currentState._settingsVersion) || 0) + 1;
         usePluginDisplayElementStore.getState().updateElement(el.fullId, {
           state: { ...currentState, _settingsVersion: version },
         });
@@ -85,8 +85,8 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     };
 
     // 오버레이에 설정 변경 알림 (메인 → 오버레이 동기화)
-    const notifyOverlay = (newSettings: Record<string, any>) => {
-      if ((window as any).__dmn_window_type === 'main') {
+    const notifyOverlay = (newSettings: Record<string, unknown>) => {
+      if (window.__dmn_window_type === 'main') {
         try {
           // JSON 직렬화/역직렬화로 순수 데이터만 복사 (순환 참조 및 특수 객체 제거)
           const safeSettings = JSON.parse(JSON.stringify(newSettings));
@@ -110,7 +110,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       if (!definition.messages) return fallback || key;
       return translatePluginMessage({
         messages: definition.messages,
-        locale: (window as any).__dmn_current_locale || 'ko',
+        locale: window.__dmn_current_locale || 'ko',
         key,
         params,
         fallback,
@@ -122,7 +122,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       try {
         const saved = await namespacedStorage.get(SETTINGS_KEY);
         if (saved && typeof saved === 'object') {
-          currentSettings = { ...defaultSettings, ...saved };
+          currentSettings = { ...defaultSettings, ...(saved as Record<string, unknown>) };
         }
         isInitialized = true;
       } catch (err) {
@@ -150,7 +150,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       const originalSettings = { ...currentSettings };
 
       // 실시간 미리보기 적용 함수
-      const applyPreview = (newSettings: Record<string, any>) => {
+      const applyPreview = (newSettings: Record<string, unknown>) => {
         currentSettings = { ...newSettings };
         triggerPanelRerender();
         notifyOverlay(currentSettings);
@@ -160,9 +160,9 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       const _evalVisible = (
         visible:
           | boolean
-          | ((settings: Record<string, any>) => boolean)
+          | ((settings: Record<string, unknown>) => boolean)
           | undefined,
-        settings: Record<string, any>,
+        settings: Record<string, unknown>,
       ): boolean => {
         if (visible === undefined) return true;
         return typeof visible === 'function' ? visible(settings) : visible;
@@ -176,7 +176,13 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
             `[data-setting-key="${k}"]`,
           ) as HTMLElement | null;
           if (el)
-            el.style.display = _evalVisible(s.visible, dialogSettings)
+            el.style.display = _evalVisible(
+              s.visible as
+                | boolean
+                | ((settings: Record<string, unknown>) => boolean)
+                | undefined,
+              dialogSettings,
+            )
               ? ''
               : 'none';
         }
@@ -187,7 +193,13 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
 
       if (definition.settings && Object.keys(definition.settings).length > 0) {
         for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalVisible(schema.visible, dialogSettings);
+          const _vis = _evalVisible(
+            schema.visible as
+              | boolean
+              | ((settings: Record<string, unknown>) => boolean)
+              | undefined,
+            dialogSettings,
+          );
           if (schema.type === 'divider') {
             htmlContent += `<div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
@@ -202,39 +214,39 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 ? translate(schema.placeholder, undefined, schema.placeholder)
                 : schema.placeholder;
 
-            const handleChange = (newValue: any) => {
+            const handleChange = (newValue: unknown) => {
               // 플러그인 컨텍스트 설정
-              const prev = (window as any).__dmn_current_plugin_id;
-              (window as any).__dmn_current_plugin_id = pluginId;
+              const prev = window.__dmn_current_plugin_id;
+              window.__dmn_current_plugin_id = pluginId;
               try {
                 dialogSettings[key] = newValue;
                 // 실시간 미리보기 적용
                 applyPreview(dialogSettings);
                 _updateVisibility();
               } finally {
-                (window as any).__dmn_current_plugin_id = prev;
+                window.__dmn_current_plugin_id = prev;
               }
             };
 
             if (schema.type === 'boolean') {
               componentHtml = window.api.ui.components.checkbox({
                 checked: !!value,
-                onChange: handleChange,
+                onChange: handleChange as (checked: boolean) => void | Promise<void>,
               });
             } else if (schema.type === 'color') {
-              const handleColorClick = (e: any) => {
+              const handleColorClick = (e: Event) => {
                 const target = (e.target as HTMLElement).closest('button');
                 if (!target) return;
 
                 const pickerId = `plugin-settings-${pluginId}-${key}`;
 
                 if (
-                  (window as any).__dmn_showColorPicker &&
-                  (window as any).__dmn_getColorPickerState
+                  window.__dmn_showColorPicker &&
+                  window.__dmn_getColorPickerState
                 ) {
-                  const state = (window as any).__dmn_getColorPickerState();
+                  const state = window.__dmn_getColorPickerState();
                   if (state?.isOpen && state.id === pickerId) {
-                    (window as any).__dmn_showColorPicker({
+                    window.__dmn_showColorPicker({
                       initialColor: state.color,
                       id: pickerId,
                     });
@@ -246,7 +258,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
                 target.classList.add('border-[#459BF8]');
 
                 window.api.ui.pickColor({
-                  initialColor: dialogSettings[key],
+                  initialColor: String(dialogSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
                   onColorChange: (newColor) => {
@@ -293,9 +305,9 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
               }
 
               componentHtml = window.api.ui.components.input({
-                type: schema.type === 'string' ? 'text' : (schema.type as any),
-                value: value,
-                onChange: handleChange,
+                type: schema.type === 'string' ? 'text' : (schema.type as 'number'),
+                value: value as string | number,
+                onChange: handleChange as (value: string) => void | Promise<void>,
                 min: schema.min,
                 max: schema.max,
                 step: schema.step,
@@ -304,15 +316,15 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
               });
             } else if (schema.type === 'select') {
               const translatedOptions = (schema.options || []).map(
-                (option: { label: string; value: any }) => ({
+                (option: { label: string; value: string }) => ({
                   ...option,
                   label: translate(option.label, undefined, option.label),
                 }),
               );
               componentHtml = window.api.ui.components.dropdown({
                 options: translatedOptions,
-                selected: value,
-                onChange: handleChange,
+                selected: value as string,
+                onChange: handleChange as (value: string) => void | Promise<void>,
               });
             }
 
@@ -328,7 +340,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
         const noSettingsText = await window.api.settings
           .get()
           .then((s) => {
-            const locale = (s as any).language || 'ko';
+            const locale = s.language || 'ko';
             return locale === 'en'
               ? 'No settings available.'
               : '설정할 항목이 없습니다.';
@@ -342,7 +354,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       const [saveText, cancelText] = await window.api.settings
         .get()
         .then((s) => {
-          const locale = (s as any).language || 'ko';
+          const locale = s.language || 'ko';
           return locale === 'en' ? ['Apply', 'Cancel'] : ['저장', '취소'];
         })
         .catch(() => ['저장', '취소']);
@@ -392,7 +404,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       const panelSettings = { ...currentSettings };
       const originalSettings = { ...currentSettings };
 
-      const applyPreview = (newSettings: Record<string, any>) => {
+      const applyPreview = (newSettings: Record<string, unknown>) => {
         currentSettings = { ...newSettings };
         triggerPanelRerender();
         notifyOverlay(currentSettings);
@@ -405,12 +417,12 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
           settings: panelSettings,
           originalSettings,
           onChange: (nextSettings) => {
-            const prev = (window as any).__dmn_current_plugin_id;
-            (window as any).__dmn_current_plugin_id = pluginId;
+            const prev = window.__dmn_current_plugin_id;
+            window.__dmn_current_plugin_id = pluginId;
             try {
               applyPreview(nextSettings);
             } finally {
-              (window as any).__dmn_current_plugin_id = prev;
+              window.__dmn_current_plugin_id = prev;
             }
           },
           onConfirm: async (nextSettings, prevSettings) => {
@@ -443,7 +455,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     const openSettingsDialog = async (): Promise<boolean> => {
       const settingsUI = definition.settingsUI ?? 'panel';
       const canUsePanel =
-        settingsUI !== 'modal' && (window as any).__dmn_window_type === 'main';
+        settingsUI !== 'modal' && window.__dmn_window_type === 'main';
 
       if (canUsePanel) {
         try {
@@ -460,10 +472,10 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
     };
 
     // 오버레이에서 설정 변경 메시지 수신 리스너
-    if ((window as any).__dmn_window_type === 'overlay') {
+    if (window.__dmn_window_type === 'overlay') {
       const bridgeCleanup = window.api?.bridge?.on(
         'plugin:settings:changed',
-        (data: { pluginId: string; settings: Record<string, any> }) => {
+        (data: { pluginId: string; settings: Record<string, unknown> }) => {
           if (data.pluginId === pluginId) {
             const oldSettings = { ...currentSettings };
             currentSettings = { ...defaultSettings, ...data.settings };
@@ -502,7 +514,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       get: () => {
         return { ...currentSettings };
       },
-      set: async (updates: Record<string, any>) => {
+      set: async (updates: Record<string, unknown>) => {
         const oldSettings = { ...currentSettings };
         currentSettings = { ...currentSettings, ...updates };
         await saveSettings();
@@ -557,8 +569,8 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       },
       subscribe: (
         listener: (
-          newSettings: Record<string, any>,
-          oldSettings: Record<string, any>,
+          newSettings: Record<string, unknown>,
+          oldSettings: Record<string, unknown>,
         ) => void,
       ): Unsubscribe => {
         subscribers.add(listener);

@@ -18,6 +18,12 @@ import {
 } from '@stores/useGridSelectionStore';
 import { PASTE_OFFSET } from './constants';
 import type { KeyMappings, KeyPositions, KeyPosition } from '@src/types/keys';
+import type { StatItemPosition, StatItemPositions } from '@src/types/statItems';
+import type {
+  GraphItemPosition,
+  GraphItemPositions,
+} from '@src/types/graphItems';
+import type { PluginDisplayElementInternal } from '@src/types/api';
 import {
   normalizeLayerGroupsForMode,
   buildNextLayerGroupName,
@@ -81,7 +87,7 @@ export function useGridSelection({
     // 통계 요소 위치 동기화
     const currentStatPositions = useStatItemStore.getState().positions;
     window.api.statItems
-      .updatePositions(currentStatPositions as any)
+      .updatePositions(currentStatPositions)
       .catch((error: Error) => {
         console.error('Failed to sync stat positions to overlay', error);
       });
@@ -96,7 +102,7 @@ export function useGridSelection({
     // 그래프 요소 위치 동기화
     const currentGraphPositions = useGraphItemStore.getState().positions;
     window.api.graphItems
-      .updatePositions(currentGraphPositions as any)
+      .updatePositions(currentGraphPositions)
       .catch((error: Error) => {
         console.error('Failed to sync graph positions to overlay', error);
       });
@@ -144,8 +150,8 @@ export function useGridSelection({
           .pushState(
             km,
             currentPositions,
-            currentStatPositions as any,
-            currentGraphPositions as any,
+            currentStatPositions,
+            currentGraphPositions,
             currentPluginElements,
           );
       }
@@ -205,11 +211,11 @@ export function useGridSelection({
         });
 
         newStatPositions[selectedKeyType] = tabPositions;
-        useStatItemStore.getState().setPositions(newStatPositions as any);
+        useStatItemStore.getState().setPositions(newStatPositions);
 
         if (syncToOverlay) {
           window.api.statItems
-            .updatePositions(newStatPositions as any)
+            .updatePositions(newStatPositions)
             .catch((error: Error) => {
               console.error('Failed to sync stat positions to overlay', error);
             });
@@ -238,11 +244,11 @@ export function useGridSelection({
         });
 
         newGraphPositions[selectedKeyType] = tabPositions;
-        useGraphItemStore.getState().setPositions(newGraphPositions as any);
+        useGraphItemStore.getState().setPositions(newGraphPositions);
 
         if (syncToOverlay) {
           window.api.graphItems
-            .updatePositions(newGraphPositions as any)
+            .updatePositions(newGraphPositions)
             .catch((error: Error) => {
               console.error('Failed to sync graph positions to overlay', error);
             });
@@ -314,8 +320,8 @@ export function useGridSelection({
         .pushState(
           km,
           pos,
-          currentStatPositions as any,
-          currentGraphPositions as any,
+          currentStatPositions,
+          currentGraphPositions,
           currentPluginElements,
           currentLayerGroups,
         );
@@ -384,9 +390,9 @@ export function useGridSelection({
       };
 
       useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setPositions(updatedPositions as any);
+      useStatItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.statItems.updatePositions(updatedPositions as any);
+        await window.api.statItems.updatePositions(updatedPositions);
       } catch (error) {
         console.error('Failed to delete stat items', error);
       } finally {
@@ -414,9 +420,9 @@ export function useGridSelection({
       };
 
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setPositions(updatedPositions as any);
+      useGraphItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.graphItems.updatePositions(updatedPositions as any);
+        await window.api.graphItems.updatePositions(updatedPositions);
       } catch (error) {
         console.error('Failed to delete graph items', error);
       } finally {
@@ -435,8 +441,8 @@ export function useGridSelection({
     const normalized = normalizeLayerGroupsForMode({
       mode: selectedKeyType,
       keyPositions: useKeyStore.getState().positions,
-      statPositions: useStatItemStore.getState().positions as any,
-      graphPositions: useGraphItemStore.getState().positions as any,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
       layerGroups: useLayerGroupStore.getState().layerGroups,
     });
 
@@ -445,10 +451,10 @@ export function useGridSelection({
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(normalized.keyPositions);
-      useStatItemStore.getState().setPositions(normalized.statPositions as any);
+      useStatItemStore.getState().setPositions(normalized.statPositions);
       useGraphItemStore
         .getState()
-        .setPositions(normalized.graphPositions as any);
+        .setPositions(normalized.graphPositions);
       if (normalized.groupsChanged) {
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
@@ -456,10 +462,10 @@ export function useGridSelection({
       try {
         await window.api.keys.updatePositions(normalized.keyPositions);
         await window.api.statItems.updatePositions(
-          normalized.statPositions as any,
+          normalized.statPositions,
         );
         await window.api.graphItems.updatePositions(
-          normalized.graphPositions as any,
+          normalized.graphPositions,
         );
         if (normalized.groupsChanged) {
           await window.api.layerGroups.update(normalized.layerGroups);
@@ -589,8 +595,8 @@ export function useGridSelection({
     historyStore.pushState(
       { ...km },
       { ...pos },
-      { ...(useStatItemStore.getState().positions as any) },
-      { ...(currentGraphPositions as any) },
+      { ...useStatItemStore.getState().positions },
+      { ...currentGraphPositions },
       [...currentPluginElements],
       { ...currentLayerGroups },
     );
@@ -632,9 +638,9 @@ export function useGridSelection({
     };
 
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
-    const statsToAdd: { position: any }[] = [];
-    const graphsToAdd: { position: any }[] = [];
-    const pluginsToAdd: any[] = [];
+    const statsToAdd: { position: StatItemPosition }[] = [];
+    const graphsToAdd: { position: GraphItemPosition }[] = [];
+    const pluginsToAdd: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
 
     for (const item of currentClipboard) {
       if (item.type === 'key') {
@@ -642,7 +648,7 @@ export function useGridSelection({
           keyCode: item.keyCode,
           position: {
             ...item.position,
-            groupId: remapGroupId((item.position as any).groupId),
+            groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -651,7 +657,7 @@ export function useGridSelection({
         statsToAdd.push({
           position: {
             ...item.position,
-            groupId: remapGroupId((item.position as any).groupId),
+            groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -660,7 +666,7 @@ export function useGridSelection({
         graphsToAdd.push({
           position: {
             ...item.position,
-            groupId: remapGroupId((item.position as any).groupId),
+            groupId: remapGroupId(item.position.groupId),
             dx: (item.position.dx || 0) + PASTE_OFFSET,
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
@@ -668,10 +674,10 @@ export function useGridSelection({
       } else if (item.type === 'plugin') {
         pluginsToAdd.push({
           ...item.element,
-          groupId: remapGroupId((item.element as any).groupId),
+          groupId: remapGroupId(item.element.groupId),
           position: {
-            x: ((item.element as any).position?.x || 0) + PASTE_OFFSET,
-            y: ((item.element as any).position?.y || 0) + PASTE_OFFSET,
+            x: (item.element.position?.x || 0) + PASTE_OFFSET,
+            y: (item.element.position?.y || 0) + PASTE_OFFSET,
           },
           tabId: selectedKeyType,
         });
@@ -728,8 +734,8 @@ export function useGridSelection({
         });
       }
 
-      const updatedPositions = { ...current, [selectedKeyType]: posArray };
-      useStatItemStore.getState().setPositions(updatedPositions as any);
+      const updatedPositions: StatItemPositions = { ...current, [selectedKeyType]: posArray };
+      useStatItemStore.getState().setPositions(updatedPositions);
     }
 
     // 그래프 요소 추가
@@ -747,8 +753,8 @@ export function useGridSelection({
         });
       }
 
-      const updatedPositions = { ...current, [selectedKeyType]: posArray };
-      useGraphItemStore.getState().setPositions(updatedPositions as any);
+      const updatedPositions: GraphItemPositions = { ...current, [selectedKeyType]: posArray };
+      useGraphItemStore.getState().setPositions(updatedPositions);
     }
 
     // 플러그인 요소 추가
@@ -759,7 +765,7 @@ export function useGridSelection({
       for (const elementData of pluginsToAdd) {
         // 새로운 고유 ID 생성
         const newFullId = `${elementData.pluginId}:${
-          elementData.elementId
+          elementData.id
         }:${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const newElement = {
           ...elementData,
@@ -820,8 +826,8 @@ export function useGridSelection({
 
     // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
     useKeyStore.getState().setPositions(patch.keyPositions);
-    useStatItemStore.getState().setPositions(patch.statPositions as any);
-    useGraphItemStore.getState().setPositions(patch.graphPositions as any);
+    useStatItemStore.getState().setPositions(patch.statPositions);
+    useGraphItemStore.getState().setPositions(patch.graphPositions);
     for (const { fullId, zIndex } of patch.pluginUpdates) {
       usePluginDisplayElementStore
         .getState()

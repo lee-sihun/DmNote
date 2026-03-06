@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { PluginDisplayElement } from '@src/types/api';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { html, styleMap, css } from '@utils/core/templateEngine';
@@ -11,7 +12,7 @@ import type {
  * 두 값이 동일한지 깊은 비교
  * 배열과 객체를 재귀적으로 비교하여 불필요한 업데이트 방지
  */
-function deepEqual(a: any, b: any): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null) return a === b;
   if (typeof a !== typeof b) return false;
@@ -25,12 +26,14 @@ function deepEqual(a: any, b: any): boolean {
   }
 
   if (typeof a === 'object') {
-    const keysA = Object.keys(a);
-    const keysB = Object.keys(b);
+    const objA = a as Record<string, unknown>;
+    const objB = b as Record<string, unknown>;
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
     if (keysA.length !== keysB.length) return false;
     for (const key of keysA) {
-      if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
-      if (!deepEqual(a[key], b[key])) return false;
+      if (!Object.prototype.hasOwnProperty.call(objB, key)) return false;
+      if (!deepEqual(objA[key], objB[key])) return false;
     }
     return true;
   }
@@ -42,7 +45,7 @@ interface DisplayElementInstanceOptions {
   fullId: string;
   pluginId: string;
   scoped?: boolean;
-  initialState?: Record<string, any>;
+  initialState?: Record<string, unknown>;
   template?: DisplayElementTemplate;
   updateElement: (
     fullId: string,
@@ -65,7 +68,7 @@ export class DisplayElementInstance extends String {
   private readonly removeElement: (fullId: string) => void;
 
   private destroyed = false;
-  private state?: Record<string, any>;
+  private state?: Record<string, unknown>;
   private template?: DisplayElementTemplate;
   private readonly templateHelpers: DisplayElementTemplateHelpers;
 
@@ -78,7 +81,7 @@ export class DisplayElementInstance extends String {
     this.removeElement = options.removeElement;
     this.template = options.template;
     this.templateHelpers = {
-      html,
+      html: html as unknown as DisplayElementTemplateHelpers['html'],
       styleMap,
       css,
       locale: options.locale,
@@ -92,7 +95,7 @@ export class DisplayElementInstance extends String {
     }
   }
 
-  setState(updates: Record<string, any>): void {
+  setState(updates: Record<string, unknown>): void {
     if (!this.ensureActive()) return;
     if (!updates || typeof updates !== 'object') return;
 
@@ -113,11 +116,11 @@ export class DisplayElementInstance extends String {
     this.renderFromTemplate();
   }
 
-  setData(updates: Record<string, any>): void {
+  setData(updates: Record<string, unknown>): void {
     this.setState(updates);
   }
 
-  getState(): Record<string, any> {
+  getState(): Record<string, unknown> {
     return { ...(this.state || {}) };
   }
 
@@ -217,7 +220,7 @@ export class DisplayElementInstance extends String {
     return true;
   }
 
-  private ensureState(): Record<string, any> {
+  private ensureState(): Record<string, unknown> {
     if (!this.state) {
       this.state = {};
     }
@@ -226,7 +229,7 @@ export class DisplayElementInstance extends String {
 
   private renderFromTemplate(): void {
     if (!this.template || !this.state) return;
-    let output: any;
+    let output: unknown;
     try {
       output = this.template({ ...this.state }, this.templateHelpers);
     } catch (error) {
@@ -238,7 +241,9 @@ export class DisplayElementInstance extends String {
     }
 
     if (typeof output === 'object' && output !== null) {
-      const htmlString = renderToStaticMarkup(output);
+      const htmlString = renderToStaticMarkup(
+        output as React.ReactElement,
+      );
       this.updateElement(this.id, { html: htmlString });
       return;
     }

@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type { NoteColor } from '@src/types/keys';
-import type { GraphItemPosition } from '@src/types/graphItems';
+import type { KeyPosition, NoteColor, KeyCounterSettings } from '@src/types/keys';
+import type { GraphItemPosition, GraphItemType } from '@src/types/graphItems';
+import type { SelectedElement } from '@stores/useGridSelectionStore';
 import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
@@ -37,13 +38,35 @@ const RenameIcon: React.FC = () => (
 
 type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
 
+type MixedValueResult<T> = { isMixed: boolean; value: T };
+type MixedValueGetter<P> = <T>(
+  getter: (pos: P) => T | undefined,
+  defaultValue: T,
+) => MixedValueResult<T>;
+
+interface KeyData {
+  index: number;
+  position: KeyPosition | undefined;
+  keyCode: string | null;
+  keyInfo: { globalKey: string; displayName: string } | null;
+}
+
+interface BatchLocalColors {
+  noteColor: NoteColor;
+  glowColor: NoteColor;
+  fillIdle: string;
+  fillActive: string;
+  strokeIdle: string;
+  strokeActive: string;
+}
+
 interface BatchKeyLikePanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
-  selectedBatchStyleElements: any[];
-  selectedKeyElements: any[];
-  selectedStatElements: any[];
-  selectedGraphElements: any[];
-  selectedKeyLikeElements: any[];
+  selectedBatchStyleElements: SelectedElement[];
+  selectedKeyElements: SelectedElement[];
+  selectedStatElements: SelectedElement[];
+  selectedGraphElements: SelectedElement[];
+  selectedKeyLikeElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -58,34 +81,51 @@ interface BatchKeyLikePanelProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   // batch handlers
-  handleBatchAlign: any;
-  handleBatchDistribute: any;
-  handleBatchSpacing: any;
-  handleBatchSpacingPreview: any;
-  handleBatchSpacingCommit: any;
-  getBatchSpacingValue: () => any;
-  handleBatchResize: any;
-  handleBatchStyleChange: any;
-  handleBatchStyleChangeComplete: any;
-  handleKeyOnlyStyleChangeComplete: any;
-  handleBatchCounterUpdate: any;
-  handleBatchNoteColorChange: any;
-  handleBatchNoteColorChangeComplete: any;
-  handleBatchGlowColorChange: any;
-  handleBatchGlowColorChangeComplete: any;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  handleBatchSpacingPreview: (spacing: number) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
+  handleKeyOnlyStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
+  handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
+  handleBatchNoteColorChange: (value: NoteColor) => void;
+  handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
+  handleBatchGlowColorChange: (value: NoteColor) => void;
+  handleBatchGlowColorChangeComplete: (value: NoteColor) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
   // mixed value getters
-  getMixedValue: any;
-  getMixedValueBatch: any;
-  getMixedValueGraphs: any;
-  getMixedValueGraphsAsKey: any;
-  getMixedValueKeysOnly: any;
-  getSelectedKeysData: () => any[];
-  getSelectedGraphsData: () => any[];
-  getSelectedBatchStyleData: () => any[];
-  getSelectedKeyOnlyPositions: () => any[];
+  getMixedValue: MixedValueGetter<KeyPosition>;
+  getMixedValueBatch: MixedValueGetter<KeyPosition>;
+  getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
+  getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
+  getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
+  getSelectedKeysData: () => KeyData[];
+  getSelectedGraphsData: () => KeyData[];
+  getSelectedBatchStyleData: () => KeyData[];
+  getSelectedKeyOnlyPositions: () => { index: number; position: KeyPosition }[];
   // batch key-only handlers
-  handleBatchKeyOnlyStyleChangeComplete: any;
+  handleBatchKeyOnlyStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
   handleBatchNoteColorChangeKeysOnly: (value: NoteColor) => void;
   handleBatchNoteColorChangeCompleteKeysOnly: (value: NoteColor) => void;
   handleBatchGlowColorChangeKeysOnly: (value: NoteColor) => void;
@@ -105,28 +145,14 @@ interface BatchKeyLikePanelProps {
   setBatchPickerFor: (value: BatchPickerTarget) => void;
   batchCounterColorState: 'idle' | 'active';
   setBatchCounterColorState: (value: 'idle' | 'active') => void;
-  batchLocalColors: {
-    noteColor: any;
-    glowColor: any;
-    fillIdle: string;
-    fillActive: string;
-    strokeIdle: string;
-    strokeActive: string;
-  };
-  setBatchLocalColors: React.Dispatch<React.SetStateAction<{
-    noteColor: any;
-    glowColor: any;
-    fillIdle: string;
-    fillActive: string;
-    strokeIdle: string;
-    strokeActive: string;
-  }>>;
+  batchLocalColors: BatchLocalColors;
+  setBatchLocalColors: React.Dispatch<React.SetStateAction<BatchLocalColors>>;
   batchLocalOpacities: { noteOpacity: number; glowOpacity: number };
   setBatchLocalOpacities: React.Dispatch<React.SetStateAction<{ noteOpacity: number; glowOpacity: number }>>;
   handleBatchPickerToggle: (target: BatchPickerTarget) => void;
-  handleBatchPickerColorChange: (newColor: any) => void;
-  handleBatchPickerColorChangeComplete: (newColor: any) => void;
-  getBatchPickerColor: () => any;
+  handleBatchPickerColorChange: (newColor: NoteColor) => void;
+  handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
+  getBatchPickerColor: () => NoteColor | string;
   getBatchPickerRef: () => React.RefObject<HTMLButtonElement | null> | null;
   batchColorPickerInteractiveRefs: React.RefObject<HTMLButtonElement | null>[];
   panelElement: HTMLDivElement | null;
@@ -247,7 +273,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
     const mixedFn =
       selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn((pos: any) => pos.noteColor, '#FFFFFF');
+    const { isMixed, value } = mixedFn((pos) => pos.noteColor, '#FFFFFF' as NoteColor);
     if (isMixed)
       return {
         style: { backgroundColor: '#666' },
@@ -304,8 +330,8 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
     const mixedFn =
       selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
     const { isMixed, value } = mixedFn(
-      (pos: any) => pos.noteGlowColor ?? pos.noteColor,
-      '#FFFFFF',
+      (pos) => pos.noteGlowColor ?? pos.noteColor,
+      '#FFFFFF' as NoteColor,
     );
     if (isMixed)
       return {
@@ -366,36 +392,36 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       }
     : undefined;
   const noteOpacityMixed = getMixedValue(
-    (pos: any) => pos.noteOpacity,
+    (pos) => pos.noteOpacity,
     80,
   ).isMixed;
   const glowOpacityMixed = getMixedValue(
-    (pos: any) => pos.noteGlowOpacity,
+    (pos) => pos.noteGlowOpacity,
     70,
   ).isMixed;
   const batchSpacing = getBatchSpacingValue();
   const graphTypeState = getMixedValueGraphs(
-    (pos: any) => pos.graphType || 'line',
-    'line',
+    (pos) => pos.graphType || 'line',
+    'line' as string,
   );
   const showAvgLineState = getMixedValueGraphs(
-    (pos: any) => pos.showAvgLine ?? true,
+    (pos) => pos.showAvgLine ?? true,
     true,
   );
   const graphSpeedState = getMixedValueGraphs(
-    (pos: any) => Math.round(pos.graphSpeed || 1000),
+    (pos) => Math.round(pos.graphSpeed || 1000),
     1000,
   );
   const graphColorState = getMixedValueGraphs(
-    (pos: any) => pos.graphColor || '#86EFAC',
+    (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
   const graphAnimationState = getMixedValueGraphs(
-    (pos: any) => pos.graphAnimationEnabled ?? true,
+    (pos) => pos.graphAnimationEnabled ?? true,
     true,
   );
   const hasLineGraph = getSelectedGraphsData().some(
-    (data: any) => (data.position?.graphType || 'line') === 'line',
+    (data) => ((data.position as GraphItemPosition | undefined)?.graphType || 'line') === 'line',
   );
   const graphShapeOptions = [
     { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
@@ -554,7 +580,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                           value={graphTypeState.value}
                           onChange={(value) =>
                             handleGraphBatchSharedSetting({
-                              graphType: value as any,
+                              graphType: value as GraphItemType,
                             })
                           }
                         />
@@ -847,20 +873,20 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
             referenceRef={batchImageButtonRef}
             panelElement={panelElement}
             idleImage={
-              styleMixedValueGetter((pos: any) => pos.inactiveImage, '').isMixed
+              styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
                 ? ''
-                : styleMixedValueGetter((pos: any) => pos.inactiveImage, '').value
+                : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
             }
             activeImage={
-              styleMixedValueGetter((pos: any) => pos.activeImage, '').isMixed
+              styleMixedValueGetter((pos) => pos.activeImage, '').isMixed
                 ? ''
-                : styleMixedValueGetter((pos: any) => pos.activeImage, '').value
+                : styleMixedValueGetter((pos) => pos.activeImage, '').value
             }
             idleTransparent={
-              styleMixedValueGetter((pos: any) => pos.idleTransparent, false).value
+              styleMixedValueGetter((pos) => pos.idleTransparent, false).value
             }
             activeTransparent={
-              styleMixedValueGetter((pos: any) => pos.activeTransparent, false)
+              styleMixedValueGetter((pos) => pos.activeTransparent, false)
                 .value
             }
             onIdleImageChange={(imageUrl: string) => {
@@ -895,7 +921,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
 interface BatchGraphOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
-  selectedGraphElements: any[];
+  selectedGraphElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -907,19 +933,30 @@ interface BatchGraphOnlyPanelProps {
   handleRenameStart: () => void;
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
-  handleBatchAlign: any;
-  handleBatchDistribute: any;
-  handleBatchSpacing: any;
-  handleBatchSpacingPreview: any;
-  handleBatchSpacingCommit: any;
-  getBatchSpacingValue: () => any;
-  handleBatchResize: any;
-  handleBatchStyleChange: any;
-  handleBatchStyleChangeComplete: any;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  handleBatchSpacingPreview: (spacing: number) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
   handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
-  getMixedValueGraphs: any;
-  getMixedValueGraphsAsKey: any;
-  getSelectedGraphsData: () => any[];
+  getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
+  getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
+  getSelectedGraphsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -973,27 +1010,27 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
     { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
   ];
   const graphTypeState = getMixedValueGraphs(
-    (pos: any) => pos.graphType || 'line',
-    'line',
+    (pos) => pos.graphType || 'line',
+    'line' as string,
   );
   const showAvgLineState = getMixedValueGraphs(
-    (pos: any) => pos.showAvgLine ?? true,
+    (pos) => pos.showAvgLine ?? true,
     true,
   );
   const graphSpeedState = getMixedValueGraphs(
-    (pos: any) => Math.round(pos.graphSpeed || 1000),
+    (pos) => Math.round(pos.graphSpeed || 1000),
     1000,
   );
   const graphColorState = getMixedValueGraphs(
-    (pos: any) => pos.graphColor || '#86EFAC',
+    (pos) => pos.graphColor || '#86EFAC',
     '#86EFAC',
   );
   const graphAnimationState = getMixedValueGraphs(
-    (pos: any) => pos.graphAnimationEnabled ?? true,
+    (pos) => pos.graphAnimationEnabled ?? true,
     true,
   );
   const hasLineGraph = getSelectedGraphsData().some(
-    (data: any) => (data.position?.graphType || 'line') === 'line',
+    (data) => ((data.position as GraphItemPosition | undefined)?.graphType || 'line') === 'line',
   );
   const batchGraphSpacing = getBatchSpacingValue();
 
@@ -1103,7 +1140,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                       value={graphTypeState.value}
                       onChange={(value) =>
                         handleGraphBatchSharedSetting({
-                          graphType: value as any,
+                          graphType: value as GraphItemType,
                         })
                       }
                     />
@@ -1230,20 +1267,20 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           referenceRef={batchImageButtonRef}
           panelElement={panelElement}
           idleImage={
-            getMixedValueGraphs((pos: any) => pos.inactiveImage, '').isMixed
+            getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
               ? ''
-              : getMixedValueGraphs((pos: any) => pos.inactiveImage, '').value
+              : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
           }
           activeImage={
-            getMixedValueGraphs((pos: any) => pos.activeImage, '').isMixed
+            getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
               ? ''
-              : getMixedValueGraphs((pos: any) => pos.activeImage, '').value
+              : getMixedValueGraphs((pos) => pos.activeImage, '').value
           }
           idleTransparent={
-            getMixedValueGraphs((pos: any) => pos.idleTransparent, false).value
+            getMixedValueGraphs((pos) => pos.idleTransparent, false).value
           }
           activeTransparent={
-            getMixedValueGraphs((pos: any) => pos.activeTransparent, false).value
+            getMixedValueGraphs((pos) => pos.activeTransparent, false).value
           }
           onIdleImageChange={(imageUrl: string) => {
             handleGraphBatchSharedSetting({ inactiveImage: imageUrl });

@@ -2,7 +2,7 @@
 import React from 'react';
 import Modal from '@components/main/Modal/Modal';
 import { useLenis } from '@hooks/useLenis';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { isMac } from '@utils/core/platform';
 // import { TooltipGroup } from "@components/main/Modal/TooltipGroup";
 // import FloatingTooltip from "@components/main/Modal/FloatingTooltip";
@@ -127,7 +127,7 @@ export default function ShortcutSettingsModal({
   const [hasOverflow, setHasOverflow] = React.useState(false);
   const isFirstRender = React.useRef(true);
 
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const next = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -136,7 +136,7 @@ export default function ShortcutSettingsModal({
         ? prev
         : next,
     );
-  };
+  }, []);
 
   const {
     scrollContainerRef: scrollRef,
@@ -197,7 +197,7 @@ export default function ShortcutSettingsModal({
   React.useEffect(() => {
     if (!isListening) return;
 
-    (window as any).__dmn_isKeyListening = true;
+    window.__dmn_isKeyListening = true;
 
     const block = (e: Event) => {
       e.preventDefault();
@@ -255,7 +255,7 @@ export default function ShortcutSettingsModal({
     window.addEventListener('keypress', block, true);
 
     return () => {
-      (window as any).__dmn_isKeyListening = false;
+      window.__dmn_isKeyListening = false;
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', block, true);
       window.removeEventListener('keypress', block, true);

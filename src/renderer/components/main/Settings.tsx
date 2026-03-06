@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLenis } from '@hooks/useLenis';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import Checkbox from '@components/main/common/Checkbox';
@@ -13,6 +13,19 @@ import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
 import { useUpdateCheck } from '@hooks/useUpdateCheck';
+import type { OverlayResizeAnchor } from '@src/types/settings';
+import type { ShortcutsState } from '@src/types/shortcuts';
+import type { SupportedLocale } from '@contexts/I18nContextDef';
+import type {
+  CssLoadResult,
+  JsLoadResult,
+  JsReloadResult,
+  JsRemoveResult,
+  JsPluginUpdateResult,
+  KeysResetAllResponse,
+} from '@src/types/api';
+import type { JsPlugin } from '@src/types/js';
+import type { KeyCounters } from '@src/types/keys';
 
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {
@@ -33,8 +46,8 @@ const PREVIEW_SOURCES: Record<string, string> = {
 };
 
 interface SettingsProps {
-  showAlert: (msg: string, options?: any) => void;
-  showConfirm: (msg: string, onConfirm?: any, confirmTextOrCancel?: any, confirmText?: string) => any;
+  showAlert: (msg: string, confirmText?: string) => void;
+  showConfirm: (msg: string, onConfirm: () => void, onCancel?: () => void, confirmText?: string) => void;
 }
 
 interface PluginError {
@@ -189,13 +202,13 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const handleLoadCustomCSS = async (): Promise<void> => {
     if (!useCustomCSS) return;
     try {
-      const result: any = await window.api.css.load();
-      if (result?.success) {
+      const result: CssLoadResult = await window.api.css.load();
+      if (result.success) {
         if (result.content) setCustomCSSContent(result.content);
         if (result.path) setCustomCSSPath(result.path);
         showAlert?.(t('settings.cssLoaded'));
       } else {
-        const message: string = result?.error
+        const message: string = result.error
           ? `${t('settings.cssLoadFailed')}${result.error}`
           : t('settings.cssLoadFailed');
         showAlert?.(message);
@@ -219,7 +232,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const formatPluginErrors = (errors: PluginError[] = []): string =>
     errors.map((item) => `${item.path ?? 'unknown'}: ${item.error}`).join('\n');
 
-  const canReloadPlugins: boolean = jsPlugins.some((plugin: any) => plugin.path);
+  const canReloadPlugins: boolean = jsPlugins.some((plugin: JsPlugin) => plugin.path);
 
   const handleReloadPlugins = async (): Promise<void> => {
     if (isReloadingPlugins) return;
@@ -230,9 +243,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     const startTime: number = performance.now();
     setIsReloadingPlugins(true);
     try {
-      const result: any = await window.api.js.reload();
-      const updated: any[] = result?.updated ?? [];
-      const errors: PluginError[] = result?.errors ?? [];
+      const result: JsReloadResult = await window.api.js.reload();
+      const updated: JsPlugin[] = result.updated ?? [];
+      const errors: PluginError[] = result.errors ?? [];
 
       if (errors.length && updated.length) {
         showAlert?.(
@@ -278,9 +291,9 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     if (isAddingPlugins) return;
     setIsAddingPlugins(true);
     try {
-      const result: any = await window.api.js.load();
+      const result: JsLoadResult = await window.api.js.load();
       if (!result) return;
-      const added: any[] = result.added ?? [];
+      const added: JsPlugin[] = result.added ?? [];
       const errors: PluginError[] = result.errors ?? [];
 
       if (errors.length && added.length) {
@@ -308,8 +321,8 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     if (pendingPluginId) return;
     setPendingPluginId(pluginId);
     try {
-      const result: any = await window.api.js.setPluginEnabled(pluginId, nextState);
-      if (!result?.success) {
+      const result: JsPluginUpdateResult = await window.api.js.setPluginEnabled(pluginId, nextState);
+      if (!result.success) {
         showAlert?.(t('settings.jsPluginToggleFailed'));
       }
     } catch (error) {
@@ -323,7 +336,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const handlePluginRemove = async (pluginId: string): Promise<void> => {
     if (pendingPluginId) return;
 
-    const plugin: any = jsPlugins.find((p: any) => p.id === pluginId);
+    const plugin: JsPlugin | undefined = jsPlugins.find((p: JsPlugin) => p.id === pluginId);
     if (!plugin) return;
 
     try {
@@ -359,8 +372,8 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const removePluginOnly = async (pluginId: string): Promise<void> => {
     setPendingPluginId(pluginId);
     try {
-      const result: any = await window.api.js.remove(pluginId);
-      if (!result?.success) {
+      const result: JsRemoveResult = await window.api.js.remove(pluginId);
+      if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
     } catch (error) {
@@ -376,7 +389,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const removePluginWithData = async (pluginId: string): Promise<void> => {
     setPendingPluginId(pluginId);
     try {
-      const plugin: any = jsPlugins.find((p: any) => p.id === pluginId);
+      const plugin: JsPlugin | undefined = jsPlugins.find((p: JsPlugin) => p.id === pluginId);
       if (!plugin) {
         throw new Error('Plugin not found');
       }
@@ -385,8 +398,8 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
       const pluginNamespace: string = extractPluginId(plugin.content, plugin.name);
 
       // 1) 먼저 플러그인 제거 → 클린업이 실행되며 일부 플러그인은 저장을 시도할 수 있음
-      const result: any = await window.api.js.remove(pluginId);
-      if (!result?.success) {
+      const result: JsRemoveResult = await window.api.js.remove(pluginId);
+      if (!result.success) {
         showAlert?.(t('settings.jsPluginRemoveFailed'));
       }
 
@@ -418,7 +431,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
     }
   };
 
-  const handleSaveShortcuts = async (next: any): Promise<void> => {
+  const handleSaveShortcuts = async (next: ShortcutsState): Promise<void> => {
     setShortcuts(next);
     try {
       await window.api.settings.update({ shortcuts: next });
@@ -506,7 +519,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const _handleResetCounters = async (event: React.MouseEvent): Promise<void> => {
     event.stopPropagation();
     try {
-      const snapshot: any = await window.api.keys.resetCounters();
+      const snapshot: KeyCounters = await window.api.keys.resetCounters();
       applyCounterSnapshot(snapshot);
       showAlert?.(t('settings.counterReset'));
     } catch (error) {
@@ -518,7 +531,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
   const handleResetAll = (): void => {
     const reset = async (): Promise<void> => {
       try {
-        const result: any = await window.api.keys.resetAll();
+        const result: KeysResetAllResponse = await window.api.keys.resetAll();
         if (result) {
           // 리셋 직후 메모리 상태도 바로 초기값으로 변경
           useKeyStore.setState({
@@ -537,6 +550,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
       showConfirm(
         t('settings.resetAllConfirm'),
         reset,
+        undefined,
         t('settings.initialize'),
       );
     } else {
@@ -546,7 +560,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
 
   const handleLanguageChange = (val: string): void => {
     setLanguage(val);
-    i18n.changeLanguage(val as any);
+    i18n.changeLanguage(val as SupportedLocale);
   };
 
   return (
@@ -669,7 +683,7 @@ export default function Settings({ showAlert, showConfirm }: SettingsProps): Rea
                   }))}
                   value={overlayResizeAnchor}
                   onChange={async (val: string) => {
-                    setOverlayResizeAnchor(val as any);
+                    setOverlayResizeAnchor(val as OverlayResizeAnchor);
                     try {
                       await window.api.overlay.setAnchor(val);
                     } catch (error) {

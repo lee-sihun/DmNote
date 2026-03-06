@@ -1,9 +1,15 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type { KeyPosition } from '@src/types/keys';
+import type { ImageFit, KeyPosition } from '@src/types/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/statItems';
-import type { GraphItemPosition } from '@src/types/graphItems';
-import type { PluginSettingSchema, PluginMessages } from '@src/types/api';
+import type { GraphItemPosition, GraphItemType } from '@src/types/graphItems';
+import type {
+  PluginSettingSchema,
+  PluginMessages,
+  PluginDefinitionInternal,
+  PluginDisplayElementInternal,
+} from '@src/types/api';
+import type { KeyInfo } from '@utils/core/KeyMaps';
 import {
   PropertyRow,
   NumberInput,
@@ -56,7 +62,7 @@ interface PluginSelectionPanelProps {
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
   setPluginThumbRef: (node: HTMLDivElement | null) => void;
   isPluginResizable: boolean;
-  selectedPluginElement: any;
+  selectedPluginElement: PluginDisplayElementInternal | null;
   pluginDisplaySize: { width: number; height: number };
   handlePluginPositionXChange: (value: number) => void;
   handlePluginPositionYChange: (value: number) => void;
@@ -67,15 +73,15 @@ interface PluginSelectionPanelProps {
   showSettings: boolean;
   renderPluginSettingsForm: (
     schema: Record<string, PluginSettingSchema> | undefined,
-    values: Record<string, any>,
+    values: Record<string, unknown>,
     messages: PluginMessages | undefined,
     colorIdPrefix: string,
-    onChange: (key: string, value: any) => void,
+    onChange: (key: string, value: unknown) => void,
     options?: { wrap?: boolean },
   ) => React.ReactNode;
-  selectedPluginDefinition: any;
-  resolvedPluginSettings: Record<string, any>;
-  handlePluginSettingChange: (key: string, value: any) => void;
+  selectedPluginDefinition: PluginDefinitionInternal | null;
+  resolvedPluginSettings: Record<string, unknown>;
+  handlePluginSettingChange: (key: string, value: unknown) => void;
   t: (key: string) => string | undefined;
 }
 
@@ -282,7 +288,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
     (singleGraphPosition.statType as StatItemType) || 'kps';
   const graphDefaultTitle = `${getStatTypeLabel(resolvedGraphStatType)} Graph`;
   const graphTitle =
-    (singleGraphPosition as any).layerName || graphDefaultTitle;
+    singleGraphPosition.layerName || graphDefaultTitle;
 
   return (
     <div
@@ -361,7 +367,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     dx: value,
-                  } as any)
+                  })
                 }
                 prefix="X"
                 min={-9999}
@@ -373,7 +379,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     dy: value,
-                  } as any)
+                  })
                 }
                 prefix="Y"
                 min={-9999}
@@ -388,7 +394,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     width: Math.max(20, value),
-                  } as any)
+                  })
                 }
                 prefix="W"
                 min={20}
@@ -400,7 +406,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     height: Math.max(20, value),
-                  } as any)
+                  })
                 }
                 prefix="H"
                 min={20}
@@ -419,8 +425,8 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 onChange={(value) =>
                   handleGraphUpdate({
                     index: singleGraphIndex,
-                    graphType: value as any,
-                  } as any)
+                    graphType: value as GraphItemType,
+                  })
                 }
               />
             </PropertyRow>
@@ -437,7 +443,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     handleGraphUpdate({
                       index: singleGraphIndex,
                       showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
-                    } as any)
+                    })
                   }
                 />
               </div>
@@ -455,7 +461,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     graphSpeed: snapped,
-                  } as any);
+                  });
                 }}
                 min={500}
                 max={5000}
@@ -473,7 +479,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     graphColor: value,
-                  } as any)
+                  })
                 }
                 colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
                 panelElement={panelElement}
@@ -492,7 +498,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     graphAnimationEnabled: !(
                       singleGraphPosition.graphAnimationEnabled ?? true
                     ),
-                  } as any)
+                  })
                 }
               />
             </div>
@@ -514,7 +520,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     backgroundColor: value,
-                  } as any)
+                  })
                 }
                 colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
                 panelElement={panelElement}
@@ -534,7 +540,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     borderColor: value,
-                  } as any)
+                  })
                 }
                 colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
                 panelElement={panelElement}
@@ -550,7 +556,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     borderWidth: Math.max(0, Math.min(20, value)),
-                  } as any)
+                  })
                 }
                 min={0}
                 max={20}
@@ -567,7 +573,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                   handleGraphUpdate({
                     index: singleGraphIndex,
                     borderRadius: Math.max(0, Math.min(100, value)),
-                  } as any)
+                  })
                 }
                 min={0}
                 max={100}
@@ -609,7 +615,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                         useInlineStyles: !(
                           singleGraphPosition.useInlineStyles ?? false
                         ),
-                      } as any)
+                      })
                     }
                   />
                 </div>
@@ -624,7 +630,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                       handleGraphUpdate({
                         index: singleGraphIndex,
                         className: graphClassNameDraft || '',
-                      } as any)
+                      })
                     }
                     placeholder="className"
                     width="90px"
@@ -666,49 +672,49 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             handleGraphUpdate({
               index: singleGraphIndex,
               inactiveImage: imageUrl,
-            } as any)
+            })
           }
           onActiveImageChange={(imageUrl: string) =>
             handleGraphUpdate({
               index: singleGraphIndex,
               activeImage: imageUrl,
-            } as any)
+            })
           }
           onIdleTransparentChange={(value: boolean) =>
             handleGraphUpdate({
               index: singleGraphIndex,
               idleTransparent: value,
-            } as any)
+            })
           }
           onActiveTransparentChange={(value: boolean) =>
             handleGraphUpdate({
               index: singleGraphIndex,
               activeTransparent: value,
-            } as any)
+            })
           }
-          onIdleImageFitChange={(fit: any) =>
+          onIdleImageFitChange={(fit: string) =>
             handleGraphUpdate({
               index: singleGraphIndex,
-              idleImageFit: fit,
-            } as any)
+              idleImageFit: fit as ImageFit,
+            })
           }
-          onActiveImageFitChange={(fit: any) =>
+          onActiveImageFitChange={(fit: string) =>
             handleGraphUpdate({
               index: singleGraphIndex,
-              activeImageFit: fit,
-            } as any)
+              activeImageFit: fit as ImageFit,
+            })
           }
           onIdleImageReset={() =>
             handleGraphUpdate({
               index: singleGraphIndex,
               inactiveImage: '',
-            } as any)
+            })
           }
           onActiveImageReset={() =>
             handleGraphUpdate({
               index: singleGraphIndex,
               activeImage: '',
-            } as any)
+            })
           }
           onClose={() => setShowGraphImagePicker(false)}
         />
@@ -730,7 +736,7 @@ interface SingleKeyStatPanelProps {
   singleKeyPosition: KeyPosition | null;
   singleStatPosition: StatItemPosition | null;
   singleKeyCode: string | null;
-  singleKeyInfo: any;
+  singleKeyInfo: KeyInfo | null;
   selectedKeyType: string;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -829,9 +835,9 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   const statTitle = getStatTypeLabel(resolvedStatType);
 
   const keyLikeIndex = isSingleStat ? singleStatIndex! : singleKeyIndex!;
-  const keyLikePosition = (
-    isSingleStat ? singleStatPosition! : singleKeyPosition!
-  ) as any;
+  const keyLikePosition: KeyPosition = isSingleStat
+    ? singleStatPosition!
+    : singleKeyPosition!;
 
   const keyLikeDefaultTitle = isSingleStat
     ? statTitle
@@ -839,27 +845,27 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   const keyLikeTitle = keyLikePosition?.layerName || keyLikeDefaultTitle;
 
   const keyLikeCode = isSingleStat ? null : singleKeyCode;
-  const keyLikeInfo = isSingleStat
-    ? ({
+  const keyLikeInfo: KeyInfo | null = isSingleStat
+    ? {
         browserKey: statTitle,
         globalKey: statTitle,
         displayName: statTitle,
-      } as any)
+      }
     : singleKeyInfo;
 
   const handleKeyLikePositionChange = isSingleStat
     ? (index: number, dx: number, dy: number) =>
-        handleStatUpdate({ index, dx, dy } as any)
+        handleStatUpdate({ index, dx, dy })
     : onPositionChange;
 
   const handleKeyLikeUpdate = isSingleStat
     ? (data: Partial<KeyPosition> & { index: number }) =>
-        handleStatUpdate(data as any)
+        handleStatUpdate(data as Partial<StatItemPosition> & { index: number })
     : onKeyUpdate;
 
   const handleKeyLikePreview = isSingleStat
     ? (index: number, updates: Partial<KeyPosition>) =>
-        handleStatPreview(index, updates as any)
+        handleStatPreview(index, updates as Partial<StatItemPosition>)
     : onKeyPreview;
 
   const mappingControlLayout = isSingleStat ? (

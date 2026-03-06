@@ -1,12 +1,13 @@
 import React, {
   type ChangeEvent,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from 'react';
 import Modal from '../../Modal';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/api';
 import { useLenis } from '@hooks/useLenis';
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
@@ -59,7 +60,7 @@ export default function SoundManagerModal({
         ? (sounds.find((s) => s.soundPath === editingSoundPath) ?? null)
         : null;
 
-  const loadSounds = async () => {
+  const loadSounds = useCallback(async () => {
     setIsLoading(true);
     setLoadError('');
     try {
@@ -72,14 +73,14 @@ export default function SoundManagerModal({
       hasLoadedRef.current = true;
       setIsLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     if (!isOpen) return;
     void loadSounds();
   }, [isOpen, loadSounds]);
 
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -88,7 +89,7 @@ export default function SoundManagerModal({
         ? prev
         : nextState,
     );
-  };
+  }, []);
 
   const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
     onScroll: () => updateScrollState(wrapperElement),

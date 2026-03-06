@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -53,10 +53,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     : 0;
   const supportsDecimal = resolvedDecimalScale > 0;
 
-  const normalizePrecision = (num: number): number => {
+  const normalizePrecision = useCallback((num: number): number => {
     if (!supportsDecimal) return num;
     return Number(num.toFixed(resolvedDecimalScale));
-  };
+  }, [supportsDecimal, resolvedDecimalScale]);
 
   const sanitizeNumericInput = (raw: string): string => {
     let sanitized = raw.replace(supportsDecimal ? /[^0-9.-]/g : /[^0-9-]/g, '');
@@ -104,13 +104,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     return normalizePrecision(clamped);
   };
 
-  const getDisplayValue = (val: number | string, focused: boolean): string => {
+  const getDisplayValue = useCallback((val: number | string, focused: boolean): string => {
     const normalized = typeof val === 'number' ? normalizePrecision(val) : val;
     if (hasSuffix && !focused) {
       return `${normalized}${suffix}`;
     }
     return String(normalized);
-  };
+  }, [hasSuffix, suffix, normalizePrecision]);
 
   const [localValue, setLocalValue] = useState<string>(
     isMixed ? '' : getDisplayValue(value, false),
@@ -123,7 +123,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       setLocalValue(isMixed ? '' : getDisplayValue(value, false));
       setHasUserInput(false);
     }
-  }, [value, isFocused, hasSuffix, suffix, isMixed]);
+  }, [value, isFocused, hasSuffix, suffix, isMixed, getDisplayValue]);
 
   // 숫자, 마이너스, 소수점(옵션), 백스페이스, Delete, 화살표, Tab, Enter만 허용
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -294,12 +294,12 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 }) => {
   const hasSuffix = !!suffix;
 
-  const getDisplayValue = (val: number, focused: boolean): string => {
+  const getDisplayValue = useCallback((val: number, focused: boolean): string => {
     if (hasSuffix && !focused) {
       return `${val}${suffix}`;
     }
     return String(val);
-  };
+  }, [hasSuffix, suffix]);
 
   const [localValue, setLocalValue] = useState<string>(() => {
     if (isMixed || value == null) return '';
@@ -317,7 +317,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       }
       setHasUserInput(false);
     }
-  }, [value, isFocused, isMixed, hasSuffix, suffix]);
+  }, [value, isFocused, isMixed, hasSuffix, suffix, getDisplayValue]);
 
   // 숫자/백스페이스/삭제/방향키/탭/엔터/홈/엔드만 허용 (마이너스, 소수점 불가)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

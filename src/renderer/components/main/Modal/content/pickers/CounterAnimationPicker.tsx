@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
@@ -103,7 +103,7 @@ export default function CounterAnimationPicker({
     y: number;
   } | null>(null);
 
-  const loadLibrary = async () => {
+  const loadLibrary = useCallback(async () => {
     setIsLoading(true);
     setErrorText('');
     try {
@@ -118,7 +118,7 @@ export default function CounterAnimationPicker({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     if (!open) return;

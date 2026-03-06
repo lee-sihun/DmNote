@@ -1,11 +1,13 @@
 import React, { useRef, useState } from 'react';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
 import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateSizeSnap,
+  type ElementBounds as SmartGuideElementBounds,
+  type SizeSnapResult,
+  type SpacingGuide,
 } from '@utils/grid/smartGuides';
 import {
   type CursorType,
@@ -14,6 +16,18 @@ import {
   setCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
+import type { KeyPositions } from '@src/types/keys';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
+import type { PluginDisplayElementInternal } from '@src/types/api';
+import {
+  isElementResizable,
+  getElementBounds,
+  calculateGroupBounds,
+  type Bounds,
+  type SelectedElement,
+  type ElementBounds,
+} from './groupResizeUtils';
 
 /**
  * 다중 선택 시 그룹 전체를 감싸는 리사이즈 핸들을 표시하는 컴포넌트
@@ -32,24 +46,6 @@ interface HandleDef {
   type: 'corner' | 'edge-v' | 'edge-h';
 }
 
-interface Bounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface SelectedElement {
-  id: string;
-  type: string;
-  index?: number;
-}
-
-interface ElementBounds {
-  element: SelectedElement;
-  bounds: Bounds;
-}
-
 interface HandleProps {
   handle: HandleDef;
   centerX: number;
@@ -59,11 +55,11 @@ interface HandleProps {
 
 interface GroupResizeHandlesProps {
   selectedElements: SelectedElement[];
-  positions: any;
-  statPositions: any;
-  graphPositions: any;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
   selectedKeyType: string;
-  pluginElements: any[];
+  pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
   panX?: number;
   panY?: number;
@@ -71,7 +67,7 @@ interface GroupResizeHandlesProps {
   onGroupResizeStart?: (handle: HandleDef) => void;
   onGroupResize?: (result: { groupBounds: Bounds; elementBounds: ElementBounds[]; handle: HandleDef }) => void;
   onGroupResizeEnd?: () => void;
-  getOtherElements?: (excludeIds: string[]) => any[];
+  getOtherElements?: (excludeIds: string[]) => SmartGuideElementBounds[];
 }
 
 interface ResizeState {
@@ -205,151 +201,6 @@ function Handle({ handle, centerX, centerY, onMouseDown }: HandleProps): React.R
       <div style={getHandleStyle(handle.type, isHovered)} />
     </div>
   );
-}
-
-/**
- * 요소가 리사이즈 가능한지 확인
- */
-function isElementResizable(
-  element: SelectedElement,
-  positions: any,
-  statPositions: any,
-  graphPositions: any,
-  selectedKeyType: string,
-  pluginElements: any[],
-): boolean {
-  if (element.type === 'key') {
-    // 키 요소는 항상 리사이즈 가능
-    return true;
-  } else if (element.type === 'stat') {
-    return true;
-  } else if (element.type === 'graph') {
-    return true;
-  } else if (element.type === 'plugin') {
-    const pluginEl = pluginElements.find((p: any) => p.fullId === element.id);
-    if (!pluginEl) return false;
-
-    const definitions = usePluginDisplayElementStore.getState().definitions;
-    const definition = pluginEl.definitionId
-      ? definitions.get(pluginEl.definitionId)
-      : null;
-
-    return definition?.resizable === true;
-  }
-  return false;
-}
-
-/**
- * 요소의 bounds 가져오기
- */
-function getElementBounds(
-  element: SelectedElement,
-  positions: any,
-  statPositions: any,
-  graphPositions: any,
-  selectedKeyType: string,
-  pluginElements: any[],
-): Bounds | null {
-  if (element.type === 'key' && element.index !== undefined) {
-    const pos = positions[selectedKeyType]?.[element.index];
-    if (!pos) return null;
-    return {
-      x: pos.dx,
-      y: pos.dy,
-      width: pos.width || 60,
-      height: pos.height || 60,
-    };
-  } else if (element.type === 'stat' && element.index !== undefined) {
-    const pos = statPositions?.[selectedKeyType]?.[element.index];
-    if (!pos) return null;
-    return {
-      x: pos.dx,
-      y: pos.dy,
-      width: pos.width || 60,
-      height: pos.height || 60,
-    };
-  } else if (element.type === 'graph' && element.index !== undefined) {
-    const pos = graphPositions?.[selectedKeyType]?.[element.index];
-    if (!pos) return null;
-    return {
-      x: pos.dx,
-      y: pos.dy,
-      width: pos.width || 200,
-      height: pos.height || 100,
-    };
-  } else if (element.type === 'plugin') {
-    const pluginEl = pluginElements.find((p: any) => p.fullId === element.id);
-    if (!pluginEl?.measuredSize) return null;
-    return {
-      x: pluginEl.position.x,
-      y: pluginEl.position.y,
-      width: pluginEl.measuredSize.width,
-      height: pluginEl.measuredSize.height,
-    };
-  }
-  return null;
-}
-
-/**
- * 그룹 바운딩 박스 계산 (리사이즈 가능한 요소만 포함)
- */
-function calculateGroupBounds(
-  selectedElements: SelectedElement[],
-  positions: any,
-  statPositions: any,
-  graphPositions: any,
-  selectedKeyType: string,
-  pluginElements: any[],
-): (Bounds & { elementBounds: ElementBounds[] }) | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  const elementBounds: ElementBounds[] = [];
-
-  for (const element of selectedElements) {
-    // 리사이즈 가능한 요소만 그룹 bounds 계산에 포함
-    if (
-      !isElementResizable(
-        element,
-        positions,
-        statPositions,
-        graphPositions,
-        selectedKeyType,
-        pluginElements,
-      )
-    ) {
-      continue;
-    }
-
-    const bounds = getElementBounds(
-      element,
-      positions,
-      statPositions,
-      graphPositions,
-      selectedKeyType,
-      pluginElements,
-    );
-    if (!bounds) continue;
-
-    elementBounds.push({ element, bounds });
-
-    minX = Math.min(minX, bounds.x);
-    minY = Math.min(minY, bounds.y);
-    maxX = Math.max(maxX, bounds.x + bounds.width);
-    maxY = Math.max(maxY, bounds.y + bounds.height);
-  }
-
-  if (elementBounds.length === 0) return null;
-
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-    elementBounds,
-  };
 }
 
 export default function GroupResizeHandles({
@@ -651,7 +502,7 @@ export default function GroupResizeHandles({
           }
 
           // Size Matching: 다른 요소와 동일한 크기로 스냅
-          let sizeSnapResult: any = null;
+          let sizeSnapResult: SizeSnapResult | null = null;
           if (sizeMatchGuidesEnabled) {
             sizeSnapResult = calculateSizeSnap(
               newGroupWidth,
@@ -708,7 +559,7 @@ export default function GroupResizeHandles({
               ) {
                 // 핸들 방향에 따라 간격 가이드 필터링
                 const filteredSpacingGuides = snapResult.spacingGuides.filter(
-                  (guide: any) => {
+                  (guide: SpacingGuide) => {
                     // 수평 방향 간격 가이드 (좌우 간격)
                     if (guide.direction === 'horizontal') {
                       // 좌우 핸들이 아니면 표시 안 함
@@ -767,7 +618,7 @@ export default function GroupResizeHandles({
 
             if (hasSizeSnap) {
               smartGuidesStore.setSizeMatchGuides(
-                sizeSnapResult.sizeMatchGuides,
+                sizeSnapResult!.sizeMatchGuides,
               );
             } else {
               smartGuidesStore.setSizeMatchGuides([]);
@@ -956,36 +807,3 @@ export default function GroupResizeHandles({
     </>
   );
 }
-
-/**
- * 리사이즈 불가능한 요소 ID 목록 반환
- */
-function getNonResizableElementIds(
-  selectedElements: SelectedElement[],
-  positions: any,
-  statPositions: any,
-  graphPositions: any,
-  selectedKeyType: string,
-  pluginElements: any[],
-): string[] {
-  return selectedElements
-    .filter(
-      (element) =>
-        !isElementResizable(
-          element,
-          positions,
-          statPositions,
-          graphPositions,
-          selectedKeyType,
-          pluginElements,
-        ),
-    )
-    .map((element) => element.id);
-}
-
-export {
-  calculateGroupBounds,
-  getElementBounds,
-  isElementResizable,
-  getNonResizableElementIds,
-};

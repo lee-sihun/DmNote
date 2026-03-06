@@ -13,13 +13,24 @@ import type { NamespacedStorage } from '../context';
 import type {
   PluginDefinition,
   PluginDefinitionInternal,
+  PluginDisplayElementInternal,
+  PluginDisplayElementActionContext,
+  PluginDisplayElementConfig,
 } from '@src/types/api';
+import type { SettingsState } from '@src/types/settings';
+
+interface SavedInstance {
+  position: { x: number; y: number };
+  settings?: Record<string, string | number | boolean>;
+  measuredSize?: { width: number; height: number };
+  tabId?: string;
+}
 
 interface DefineElementDependencies {
   pluginId: string;
   namespacedStorage: NamespacedStorage;
   registerCleanup: (cleanup: () => void) => void;
-  wrapFunctionWithContext: (fn: any) => any;
+  wrapFunctionWithContext: (fn: (...args: unknown[]) => unknown) => (...args: unknown[]) => unknown;
   isReloading: () => boolean;
 }
 
@@ -68,7 +79,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       await namespacedStorage.set(INSTANCES_KEY, instances);
     };
 
-    if ((window as any).__dmn_window_type === 'main') {
+    if (window.__dmn_window_type === 'main') {
       const unsubStore = usePluginDisplayElementStore.subscribe(
         (state, prevState) => {
           const currentElements = state.elements.filter(
@@ -88,7 +99,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       registerCleanup(unsubStore);
     }
 
-    const defaultSettings: Record<string, any> = {};
+    const defaultSettings: Record<string, string | number | boolean> = {};
     if (definition.settings) {
       Object.entries(definition.settings).forEach(([key, schema]) => {
         if (schema.type !== 'divider') {
@@ -112,7 +123,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     } else if (window.api?.settings?.get) {
       window.api.settings
         .get()
-        .then((settings) => applyLocale((settings as any)?.language))
+        .then((settings) => applyLocale((settings as SettingsState)?.language))
         .catch(() => undefined);
     }
 
@@ -152,7 +163,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         {
           get: (_target, prop: string | symbol) => {
             if (typeof prop !== 'string') return undefined;
-            return (...args: any[]) => {
+            return (...args: unknown[]) => {
               try {
                 window.api?.bridge?.sendTo(
                   'overlay',
@@ -183,9 +194,12 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         position: item.position,
         visible: item.visible,
         disabled: item.disabled,
-        onClick: (ctx: any) => {
+        onClick: (ctx: PluginDisplayElementActionContext) => {
           const actions =
-            ctx?.actions || buildActionsProxy(ctx?.element?.fullId || '');
+            ctx?.actions ||
+            buildActionsProxy(
+              (ctx?.element as PluginDisplayElementInternal)?.fullId || '',
+            );
 
           if (typeof item.onClick === 'function') {
             return item.onClick({ ...ctx, actions });
@@ -193,9 +207,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
           if (
             item.action &&
-            typeof (actions as any)[item.action] === 'function'
+            typeof actions[item.action] === 'function'
           ) {
-            return (actions as any)[item.action]();
+            return actions[item.action]();
           }
         },
       }));
@@ -230,7 +244,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         pluginElements,
       );
 
-      const currentSettings = {
+      const currentSettings: Record<string, unknown> = {
         ...defaultSettings,
         ...(element.settings || {}),
       };
@@ -242,9 +256,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const _evalVisible = (
         visible:
           | boolean
-          | ((settings: Record<string, any>) => boolean)
+          | ((settings: Record<string, unknown>) => boolean)
           | undefined,
-        settings: Record<string, any>,
+        settings: Record<string, unknown>,
       ): boolean => {
         if (visible === undefined) return true;
         return typeof visible === 'function' ? visible(settings) : visible;
@@ -258,7 +272,13 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             `[data-setting-key="${k}"]`,
           ) as HTMLElement | null;
           if (el)
-            el.style.display = _evalVisible(s.visible, currentSettings)
+            el.style.display = _evalVisible(
+              s.visible as
+                | boolean
+                | ((settings: Record<string, unknown>) => boolean)
+                | undefined,
+              currentSettings,
+            )
               ? ''
               : 'none';
         }
@@ -266,7 +286,13 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
       if (definition.settings) {
         for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalVisible(schema.visible, currentSettings);
+          const _vis = _evalVisible(
+            schema.visible as
+              | boolean
+              | ((settings: Record<string, unknown>) => boolean)
+              | undefined,
+            currentSettings,
+          );
           if (schema.type === 'divider') {
             htmlContent += `<div data-setting-key="${key}" style="${_vis ? '' : 'display:none'}" class="w-full h-[1px] bg-[#3A3943]"></div>`;
           } else {
@@ -281,7 +307,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 ? translate(schema.placeholder, undefined, schema.placeholder)
                 : schema.placeholder;
 
-            const handleChange = async (newValue: any) => {
+            const handleChange = async (
+              newValue: string | number | boolean,
+            ) => {
               currentSettings[key] = newValue;
               const newSettings = { ...currentSettings };
 
@@ -296,22 +324,24 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             if (schema.type === 'boolean') {
               componentHtml = window.api.ui.components.checkbox({
                 checked: !!value,
-                onChange: wrappedChange,
+                onChange: wrappedChange as unknown as (
+                  checked: boolean,
+                ) => void | Promise<void>,
               });
             } else if (schema.type === 'color') {
-              const handleColorClick = (e: any) => {
+              const handleColorClick = (e: Event) => {
                 const target = (e.target as HTMLElement).closest('button');
                 if (!target) return;
 
                 const pickerId = `plugin-${pluginId}-${instanceId}-${key}`;
 
                 if (
-                  (window as any).__dmn_showColorPicker &&
-                  (window as any).__dmn_getColorPickerState
+                  window.__dmn_showColorPicker &&
+                  window.__dmn_getColorPickerState
                 ) {
-                  const state = (window as any).__dmn_getColorPickerState();
+                  const state = window.__dmn_getColorPickerState();
                   if (state?.isOpen && state.id === pickerId) {
-                    (window as any).__dmn_showColorPicker({
+                    window.__dmn_showColorPicker({
                       initialColor: state.color,
                       id: pickerId,
                     });
@@ -323,7 +353,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 target.classList.add('border-[#459BF8]');
 
                 window.api.ui.pickColor({
-                  initialColor: currentSettings[key],
+                  initialColor: String(currentSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
                   onColorChange: (newColor) => {
@@ -367,9 +397,14 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               }
 
               componentHtml = window.api.ui.components.input({
-                type: schema.type === 'string' ? 'text' : (schema.type as any),
-                value: value,
-                onChange: wrappedChange,
+                type:
+                  schema.type === 'string'
+                    ? 'text'
+                    : (schema.type as 'number'),
+                value: value as string | number,
+                onChange: wrappedChange as unknown as (
+                  value: string,
+                ) => void | Promise<void>,
                 min: schema.min,
                 max: schema.max,
                 step: schema.step,
@@ -378,15 +413,17 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               });
             } else if (schema.type === 'select') {
               const translatedOptions = (schema.options || []).map(
-                (option: { label: string; value: any }) => ({
+                (option: { label: string; value: string }) => ({
                   ...option,
                   label: translate(option.label, undefined, option.label),
                 }),
               );
               componentHtml = window.api.ui.components.dropdown({
                 options: translatedOptions,
-                selected: value,
-                onChange: wrappedChange,
+                selected: value as string,
+                onChange: wrappedChange as unknown as (
+                  value: string,
+                ) => void | Promise<void>,
               });
             }
 
@@ -402,7 +439,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         const noSettingsText = await window.api.settings
           .get()
           .then((s) => {
-            const locale = (s as any).language || 'ko';
+            const locale = s.language || 'ko';
             return locale === 'en'
               ? 'No settings available.'
               : '설정할 항목이 없습니다.';
@@ -416,7 +453,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const [saveText, cancelText] = await window.api.settings
         .get()
         .then((s) => {
-          const locale = (s as any).language || 'ko';
+          const locale = s.language || 'ko';
           return locale === 'en' ? ['Apply', 'Cancel'] : ['저장', '취소'];
         })
         .catch(() => ['저장', '취소']);
@@ -443,7 +480,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       }
     };
 
-    if ((window as any).__dmn_window_type === 'main') {
+    if (window.__dmn_window_type === 'main') {
       const createLabel =
         definition.contextMenu?.create || `${definition.name} 생성`;
 
@@ -495,7 +532,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
               deleteLabel: definition.contextMenu?.delete || '삭제',
               customItems: buildCustomContextMenuItems(),
             },
-          } as any);
+          } as unknown as PluginDisplayElementConfig);
         },
       });
 
@@ -505,9 +542,9 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     }
 
     // Undo/Redo를 위한 요소 복원 함수 등록
-    const restoreElementForUndo = (savedElement: any) => {
-      const previousPluginId = (window as any).__dmn_current_plugin_id;
-      (window as any).__dmn_current_plugin_id = pluginId;
+    const restoreElementForUndo = (savedElement: PluginDisplayElementInternal) => {
+      const previousPluginId = window.__dmn_current_plugin_id;
+      window.__dmn_current_plugin_id = pluginId;
 
       try {
         const onClickId = useModalSettings
@@ -527,28 +564,28 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
         return restoredElement;
       } finally {
-        (window as any).__dmn_current_plugin_id = previousPluginId;
+        window.__dmn_current_plugin_id = previousPluginId;
       }
     };
 
     // 전역에 복원 함수 등록
-    if (!(window as any).__dmn_element_restorers) {
-      (window as any).__dmn_element_restorers = new Map();
+    if (!window.__dmn_element_restorers) {
+      window.__dmn_element_restorers = new Map();
     }
-    (window as any).__dmn_element_restorers.set(defId, restoreElementForUndo);
+    window.__dmn_element_restorers.set(defId, restoreElementForUndo);
 
     // 플러그인 클린업 시 복원 함수 제거
     registerCleanup(() => {
-      (window as any).__dmn_element_restorers?.delete(defId);
+      window.__dmn_element_restorers?.delete(defId);
     });
 
     // 인스턴스 복원
     setTimeout(async () => {
       try {
-        if ((window as any).__dmn_window_type === 'main') {
+        if (window.__dmn_window_type === 'main') {
           const savedInstances = (await namespacedStorage.get(
             INSTANCES_KEY,
-          )) as any[];
+          )) as SavedInstance[] | null;
 
           if (savedInstances && Array.isArray(savedInstances)) {
             // maxInstances 제한 적용: 탭별로 제한 개수만큼만 복원
@@ -557,7 +594,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
             if (maxInstances && maxInstances > 0) {
               // 탭별로 그룹화
-              const instancesByTab = new Map<string, any[]>();
+              const instancesByTab = new Map<string, SavedInstance[]>();
               savedInstances.forEach((inst) => {
                 const tabId = inst.tabId || '4key'; // 기본 탭
                 if (!instancesByTab.has(tabId)) {
@@ -575,7 +612,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
             instancesToRestore.forEach((inst) => {
               // 각 add 호출 직전에 plugin context 재설정 (비동기 경합 방지)
-              (window as any).__dmn_current_plugin_id = pluginId;
+              window.__dmn_current_plugin_id = pluginId;
 
               window.api.ui.displayElement.add({
                 html: '<!-- plugin-element -->',
@@ -592,7 +629,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   deleteLabel: definition.contextMenu?.delete || '삭제',
                   customItems: buildCustomContextMenuItems(),
                 },
-              } as any);
+              } as unknown as PluginDisplayElementConfig);
             });
           }
         }

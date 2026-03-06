@@ -4,7 +4,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import type {
@@ -58,11 +58,11 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       }
 
       if (state.isListening) {
-        (window as any).__dmn_isKeyListening = true;
+        window.__dmn_isKeyListening = true;
       } else {
         // macOS: raw input이 브라우저 keydown보다 먼저 도착할 수 있어 지연 해제
         listeningFlagTimerRef.current = setTimeout(() => {
-          (window as any).__dmn_isKeyListening = false;
+          window.__dmn_isKeyListening = false;
           listeningFlagTimerRef.current = null;
         }, 150);
       }
@@ -78,7 +78,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
     // 컴포넌트 언마운트 시 반드시 플래그 해제
     useEffect(() => {
       return () => {
-        (window as any).__dmn_isKeyListening = false;
+        window.__dmn_isKeyListening = false;
         if (listeningFlagTimerRef.current !== null) {
           clearTimeout(listeningFlagTimerRef.current);
           listeningFlagTimerRef.current = null;
@@ -128,7 +128,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         return undefined;
       }
 
-      const unsubscribe = window.api.keys.onRawInput((payload: any) => {
+      const unsubscribe = window.api.keys.onRawInput((payload) => {
         if (!payload || payload.state !== 'DOWN') return;
         const targetLabel =
           payload.label ||

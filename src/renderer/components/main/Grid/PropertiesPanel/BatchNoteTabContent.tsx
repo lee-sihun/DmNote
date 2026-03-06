@@ -19,7 +19,7 @@ interface BatchNoteTabContentProps {
   // 핸들러
   handleBatchStyleChangeComplete: (
     property: keyof KeyPosition,
-    value: any,
+    value: KeyPosition[keyof KeyPosition],
   ) => void;
   // 노트/글로우 색상 디스플레이
   getBatchNoteColorDisplay: () => {
@@ -58,9 +58,9 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 }) => {
   const { noteEffect: _noteEffect } = useSettingsStore();
 
-  const noteWidthMixed = getMixedValue(
+  const noteWidthMixed = getMixedValue<number | undefined>(
     (pos) => pos.noteWidth,
-    undefined as any,
+    undefined,
   );
 
   return (

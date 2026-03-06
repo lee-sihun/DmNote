@@ -14,6 +14,8 @@ import {
 import type { SelectedElement } from '@stores/useGridSelectionStore';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/keys';
+import type { StatItemPositions } from '@src/types/statItems';
+import type { GraphItemPositions } from '@src/types/graphItems';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 
 interface ResizeHandle {
@@ -91,8 +93,8 @@ export function useGridResize({
     const currentPositions = useKeyStore.getState().positions;
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
-    const currentStatPositions = useStatItemStore.getState().positions as any;
-    const currentGraphPositions = useGraphItemStore.getState().positions as any;
+    const currentStatPositions = useStatItemStore.getState().positions;
+    const currentGraphPositions = useGraphItemStore.getState().positions;
     const { keyMappings } = useKeyStore.getState();
     useHistoryStore
       .getState()
@@ -820,11 +822,11 @@ export function useGridResize({
         });
       } else if (element.type === 'stat' && element.index !== undefined) {
         const statStore = useStatItemStore.getState();
-        const statPositions = statStore.positions as any;
+        const statPositions = statStore.positions;
         const current = statPositions[selectedKeyType] || [];
-        const nextPositions = {
+        const nextPositions: StatItemPositions = {
           ...statPositions,
-          [selectedKeyType]: current.map((pos: any, i: number) =>
+          [selectedKeyType]: current.map((pos, i) =>
             i === element.index
               ? {
                   ...pos,
@@ -842,11 +844,11 @@ export function useGridResize({
         });
       } else if (element.type === 'graph' && element.index !== undefined) {
         const graphStore = useGraphItemStore.getState();
-        const graphPositions = graphStore.positions as any;
+        const graphPositions = graphStore.positions;
         const current = graphPositions[selectedKeyType] || [];
-        const nextPositions = {
+        const nextPositions: GraphItemPositions = {
           ...graphPositions,
-          [selectedKeyType]: current.map((pos: any, i: number) =>
+          [selectedKeyType]: current.map((pos, i) =>
             i === element.index
               ? {
                   ...pos,
@@ -909,10 +911,10 @@ export function useGridResize({
       const current = positions[selectedKeyType] || [];
       const pluginStore = usePluginDisplayElementStore.getState();
       const statStore = useStatItemStore.getState();
-      const statPositions = statStore.positions as any;
+      const statPositions = statStore.positions;
       const currentStats = statPositions[selectedKeyType] || [];
       const graphStore = useGraphItemStore.getState();
-      const graphPositions = graphStore.positions as any;
+      const graphPositions = graphStore.positions;
       const currentGraphs = graphPositions[selectedKeyType] || [];
 
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
@@ -959,9 +961,9 @@ export function useGridResize({
       );
 
       if (statUpdates.length > 0) {
-        const nextStatPositions = {
+        const nextStatPositions: StatItemPositions = {
           ...statPositions,
-          [selectedKeyType]: currentStats.map((pos: any, i: number) => {
+          [selectedKeyType]: currentStats.map((pos, i) => {
             const update = statUpdates.find(
               ({ element }) => element.index === i,
             );
@@ -996,9 +998,9 @@ export function useGridResize({
       );
 
       if (graphUpdates.length > 0) {
-        const nextGraphPositions = {
+        const nextGraphPositions: GraphItemPositions = {
           ...graphPositions,
-          [selectedKeyType]: currentGraphs.map((pos: any, i: number) => {
+          [selectedKeyType]: currentGraphs.map((pos, i) => {
             const update = graphUpdates.find(
               ({ element }) => element.index === i,
             );

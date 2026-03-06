@@ -25,17 +25,12 @@ import type { JsPlugin } from '@src/types/js';
 
 const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
 
-type CleanupAwareWindow = Window & {
-  __dmn_custom_js_cleanup?: () => void;
-};
-
 export interface CustomJsRuntime {
   initialize: () => void;
   dispose: () => void;
 }
 
 export function createCustomJsRuntime(): CustomJsRuntime {
-  const anyWindow = window as unknown as CleanupAwareWindow;
   const activeElements = new Map<
     string,
     { element: HTMLScriptElement; cleanup?: () => void; pluginId?: string }
@@ -89,8 +84,8 @@ export function createCustomJsRuntime(): CustomJsRuntime {
       { element, cleanup, pluginId },
     ] of activeElements.entries()) {
       if (pluginId) {
-        const previousPluginId = (window as any).__dmn_current_plugin_id;
-        (window as any).__dmn_current_plugin_id = pluginId;
+        const previousPluginId = window.__dmn_current_plugin_id;
+        window.__dmn_current_plugin_id = pluginId;
 
         runPluginCleanups(pluginId);
 
@@ -98,7 +93,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
           safeRun(cleanup, id);
         }
 
-        (window as any).__dmn_current_plugin_id = previousPluginId;
+        window.__dmn_current_plugin_id = previousPluginId;
       } else if (cleanup) {
         safeRun(cleanup, id);
       }
@@ -109,7 +104,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
     }
     activeElements.clear();
 
-    if ((window as any).__dmn_window_type === 'main') {
+    if (window.__dmn_window_type === 'main') {
       try {
         usePluginMenuStore.getState().clearAll();
         usePluginDisplayElementStore.getState().setElements([]);
@@ -128,16 +123,16 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 
   const injectPlugin = (plugin: JsPlugin) => {
     try {
-      const previousCleanup = anyWindow.__dmn_custom_js_cleanup;
+      const previousCleanup = window.__dmn_custom_js_cleanup;
       if (previousCleanup) {
-        delete anyWindow.__dmn_custom_js_cleanup;
+        delete window.__dmn_custom_js_cleanup;
       }
 
       const pluginId = extractPluginId(plugin.content, plugin.name);
 
-      (anyWindow as any).__dmn_current_plugin_id = pluginId;
+      window.__dmn_current_plugin_id = pluginId;
 
-      if ((window as any).__dmn_window_type === 'main') {
+      if (window.__dmn_window_type === 'main') {
         try {
           usePluginMenuStore.getState().clearByPluginId(pluginId);
           usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
@@ -165,7 +160,7 @@ export function createCustomJsRuntime(): CustomJsRuntime {
 
       // 플러그인용 Window 프록시 생성
       const proxyWindow = createPluginWindowProxy(proxiedApi);
-      (anyWindow as any).__dmn_plugin_window_proxy = proxyWindow;
+      window.__dmn_plugin_window_proxy = proxyWindow;
 
       const wrappedContent = `
 ;(function(window){
@@ -233,19 +228,19 @@ ${plugin.content}
       element.textContent = wrappedContent;
       document.head.appendChild(element);
 
-      const pluginCleanup = anyWindow.__dmn_custom_js_cleanup;
+      const pluginCleanup = window.__dmn_custom_js_cleanup;
 
       try {
-        delete (anyWindow as any).__dmn_plugin_window_proxy;
-        delete (anyWindow as any).__dmn_current_plugin_id;
+        delete window.__dmn_plugin_window_proxy;
+        delete window.__dmn_current_plugin_id;
       } catch {
         // 무시
       }
 
       if (previousCleanup) {
-        anyWindow.__dmn_custom_js_cleanup = previousCleanup;
+        window.__dmn_custom_js_cleanup = previousCleanup;
       } else {
-        delete anyWindow.__dmn_custom_js_cleanup;
+        delete window.__dmn_custom_js_cleanup;
       }
 
       activeElements.set(plugin.id, {

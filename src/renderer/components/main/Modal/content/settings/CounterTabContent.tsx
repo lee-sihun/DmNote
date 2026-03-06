@@ -5,7 +5,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Dropdown from '@components/main/common/Dropdown';
 import Checkbox from '@components/main/common/Checkbox';
 import type {
@@ -86,15 +86,6 @@ const CounterTabContent = forwardRef<
       if (ro) ro.disconnect();
     };
   }, [state.align, alignDropdownWidth]);
-
-  const colorPickerInteractiveRefs = [
-    fillIdleBtnRef,
-    fillActiveBtnRef,
-    strokeIdleBtnRef,
-    strokeActiveBtnRef,
-    fillGroupRef,
-    strokeGroupRef,
-  ];
 
   // 옵션들
   const placementOptions = [
@@ -191,94 +182,97 @@ const CounterTabContent = forwardRef<
     setState((prev) => ({ ...prev, pickerFor: null, pickerOpen: false }));
   };
 
-  // 현재 피커 색상 가져오기
-  const colorValueFor = (key: string | null): string => {
-    switch (key) {
-      case 'fillIdle':
-        return state.fillIdle;
-      case 'fillActive':
-        return state.fillActive;
-      case 'strokeIdle':
-        return state.strokeIdle;
-      case 'strokeActive':
-        return state.strokeActive;
-      default:
-        return '#FFFFFF';
-    }
-  };
-
-  // 색상 설정 핸들러
-  const setColorFor = (key: string | null, color: string) => {
-    switch (key) {
-      case 'fillIdle':
-        setState((prev) => ({ ...prev, fillIdle: color }));
-        break;
-      case 'fillActive':
-        setState((prev) => ({ ...prev, fillActive: color }));
-        break;
-      case 'strokeIdle':
-        setState((prev) => ({ ...prev, strokeIdle: color }));
-        break;
-      case 'strokeActive':
-        setState((prev) => ({ ...prev, strokeActive: color }));
-        break;
-      default:
-        break;
-    }
-  };
-
-  const handleColorComplete = (key: string | null, color: string) => {
-      // 먼저 색상 설정
-      switch (key) {
-        case 'fillIdle':
-          setState((prev) => ({ ...prev, fillIdle: color }));
-          break;
-        case 'fillActive':
-          setState((prev) => ({ ...prev, fillActive: color }));
-          break;
-        case 'strokeIdle':
-          setState((prev) => ({ ...prev, strokeIdle: color }));
-          break;
-        case 'strokeActive':
-          setState((prev) => ({ ...prev, strokeActive: color }));
-          break;
-        default:
-          break;
-      }
-
-      const payload = {
-        placement: state.placement,
-        align: state.align,
-        alignMode: state.alignMode,
-        gap: state.gap,
-        fill: {
-          idle: key === 'fillIdle' ? color : state.fillIdle,
-          active: key === 'fillActive' ? color : state.fillActive,
-        },
-        stroke: {
-          idle: key === 'strokeIdle' ? color : state.strokeIdle,
-          active: key === 'strokeActive' ? color : state.strokeActive,
-        },
-      };
-      onPreview(payload);
-    };
-
   // ref를 통해 refs와 핸들러 노출
   useImperativeHandle(
     ref,
-    () => ({
-      fillActiveBtnRef,
-      colorPickerInteractiveRefs,
-      colorValueFor,
-      setColorFor,
-      handleColorComplete,
-    }),
-    [
-      colorPickerInteractiveRefs,
-      colorValueFor,
-      setColorFor,
-      handleColorComplete,
-    ],
+    () => {
+      const colorPickerInteractiveRefsInner = [
+        fillIdleBtnRef,
+        fillActiveBtnRef,
+        strokeIdleBtnRef,
+        strokeActiveBtnRef,
+        fillGroupRef,
+        strokeGroupRef,
+      ];
+
+      const colorValueForInner = (key: string | null): string => {
+        switch (key) {
+          case 'fillIdle':
+            return state.fillIdle;
+          case 'fillActive':
+            return state.fillActive;
+          case 'strokeIdle':
+            return state.strokeIdle;
+          case 'strokeActive':
+            return state.strokeActive;
+          default:
+            return '#FFFFFF';
+        }
+      };
+
+      const setColorForInner = (key: string | null, color: string) => {
+        switch (key) {
+          case 'fillIdle':
+            setState((prev) => ({ ...prev, fillIdle: color }));
+            break;
+          case 'fillActive':
+            setState((prev) => ({ ...prev, fillActive: color }));
+            break;
+          case 'strokeIdle':
+            setState((prev) => ({ ...prev, strokeIdle: color }));
+            break;
+          case 'strokeActive':
+            setState((prev) => ({ ...prev, strokeActive: color }));
+            break;
+          default:
+            break;
+        }
+      };
+
+      const handleColorCompleteInner = (key: string | null, color: string) => {
+        switch (key) {
+          case 'fillIdle':
+            setState((prev) => ({ ...prev, fillIdle: color }));
+            break;
+          case 'fillActive':
+            setState((prev) => ({ ...prev, fillActive: color }));
+            break;
+          case 'strokeIdle':
+            setState((prev) => ({ ...prev, strokeIdle: color }));
+            break;
+          case 'strokeActive':
+            setState((prev) => ({ ...prev, strokeActive: color }));
+            break;
+          default:
+            break;
+        }
+
+        const payload = {
+          placement: state.placement,
+          align: state.align,
+          alignMode: state.alignMode,
+          gap: state.gap,
+          fill: {
+            idle: key === 'fillIdle' ? color : state.fillIdle,
+            active: key === 'fillActive' ? color : state.fillActive,
+          },
+          stroke: {
+            idle: key === 'strokeIdle' ? color : state.strokeIdle,
+            active: key === 'strokeActive' ? color : state.strokeActive,
+          },
+        };
+        onPreview(payload);
+      };
+
+      return {
+        fillActiveBtnRef,
+        colorPickerInteractiveRefs: colorPickerInteractiveRefsInner,
+        colorValueFor: colorValueForInner,
+        setColorFor: setColorForInner,
+        handleColorComplete: handleColorCompleteInner,
+      };
+    },
+    [state, setState, onPreview],
   );
 
   // 카운터 토글 핸들러

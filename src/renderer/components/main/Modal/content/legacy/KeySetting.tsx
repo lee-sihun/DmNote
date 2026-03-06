@@ -1,10 +1,11 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useState, useRef } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import ImagePicker from '../pickers/ImagePicker';
 import Modal from '../../Modal';
+import type { RawInputPayload } from '@src/types/api';
 
 interface KeyData {
   key: string;
@@ -91,11 +92,11 @@ export default function KeySetting({
     }
 
     if (isListening) {
-      (window as any).__dmn_isKeyListening = true;
+      window.__dmn_isKeyListening = true;
     } else {
       // macOS: raw input이 브라우저 keydown보다 먼저 도착할 수 있어 지연 해제
       listeningFlagTimerRef.current = setTimeout(() => {
-        (window as any).__dmn_isKeyListening = false;
+        window.__dmn_isKeyListening = false;
         listeningFlagTimerRef.current = null;
       }, 150);
     }
@@ -111,7 +112,7 @@ export default function KeySetting({
   // 컴포넌트 언마운트 시 반드시 플래그 해제
   useEffect(() => {
     return () => {
-      (window as any).__dmn_isKeyListening = false;
+      window.__dmn_isKeyListening = false;
       if (listeningFlagTimerRef.current !== null) {
         clearTimeout(listeningFlagTimerRef.current);
         listeningFlagTimerRef.current = null;
@@ -121,11 +122,11 @@ export default function KeySetting({
 
   useEffect(() => {
     if (!isListening) return undefined;
-    if (typeof window === 'undefined' || !(window as any).api?.keys?.onRawInput) {
+    if (typeof window === 'undefined' || !window.api?.keys?.onRawInput) {
       return undefined;
     }
 
-    const unsubscribe = (window as any).api.keys.onRawInput((payload: any) => {
+    const unsubscribe = window.api.keys.onRawInput((payload: RawInputPayload) => {
       if (!payload || payload.state !== 'DOWN') return;
       const targetLabel =
         payload.label ||

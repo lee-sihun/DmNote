@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import FloatingPopup from '../../FloatingPopup';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';

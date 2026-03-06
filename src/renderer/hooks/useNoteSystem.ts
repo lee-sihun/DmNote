@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/purity */
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
 import { createNoteBuffer, NoteBuffer, TrackLayoutInput } from '@stores/signals/noteBuffer';
 
@@ -117,10 +117,10 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
   const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextCleanupTimeRef = useRef<number>(Infinity);
 
-  const notifySubscribers = (event: NoteEvent): void => {
+  const notifySubscribers = useCallback((event: NoteEvent): void => {
     if (subscribers.current.size === 0) return;
     subscribers.current.forEach((callback) => callback(event));
-  };
+  }, []);
 
   const subscribe = (callback: NoteSubscriber): (() => void) => {
     subscribers.current.add(callback);
@@ -263,7 +263,8 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
       }
     };
 
-  const updateLabSettings = (settings: NoteSettings): void => {
+  useEffect(() => {
+    const settings = noteSettings || DEFAULT_NOTE_SETTINGS;
     flowSpeedRef.current =
       Number(settings?.speed) || DEFAULT_NOTE_SETTINGS.speed;
     trackHeightRef.current =
@@ -275,11 +276,7 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
     // 단노트 최소 픽셀 길이
     shortNoteMinLengthPxRef.current =
       Number(settings?.shortNoteMinLengthPx) || 0;
-  };
-
-  useEffect(() => {
-    updateLabSettings(noteSettings || DEFAULT_NOTE_SETTINGS);
-  }, [noteSettings, updateLabSettings]);
+  }, [noteSettings]);
 
   useEffect(() => {
     noteEffectEnabled.current = !!noteEffect;
@@ -556,12 +553,19 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
 
   // 화면 밖으로 나간 노트 제거 - 언마운트 시 타이머 정리
   useEffect(() => {
+    const activeNotesCurrent = activeNotes.current;
+    const finalizeTimersCurrent = finalizeTimersRef.current;
+    const notesCurrent = notesRef.current;
+    const notePoolCurrent = notePoolRef.current;
+    const noteLookupCurrent = noteLookupRef.current;
+    const noteBufferCurrent = noteBufferRef.current;
+
     return () => {
       if (cleanupTimerRef.current !== null) {
         clearTimeout(cleanupTimerRef.current);
       }
       // activeNotes에 남아있는 타이머 정리
-      for (const [, stateList] of activeNotes.current.entries()) {
+      for (const [, stateList] of activeNotesCurrent.entries()) {
         if (!Array.isArray(stateList)) continue;
         for (const state of stateList) {
           try {
@@ -576,20 +580,20 @@ export function useNoteSystem({ noteEffect, noteSettings }: UseNoteSystemOptions
           } catch {}
         }
       }
-      for (const timer of finalizeTimersRef.current.values()) {
+      for (const timer of finalizeTimersCurrent.values()) {
         try {
           clearTimeout(timer);
         } catch {}
       }
-      finalizeTimersRef.current.clear();
+      finalizeTimersCurrent.clear();
 
       releaseAllNotes(
-        notesRef.current,
-        notePoolRef.current,
-        noteLookupRef.current,
+        notesCurrent,
+        notePoolCurrent,
+        noteLookupCurrent,
       );
-      noteLookupRef.current.clear();
-      noteBufferRef.current.clear();
+      noteLookupCurrent.clear();
+      noteBufferCurrent.clear();
     };
   }, []);
 

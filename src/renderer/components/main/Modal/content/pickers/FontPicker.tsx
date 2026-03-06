@@ -1,5 +1,5 @@
 import React, { useState, } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/fonts';
 import PlusIcon from '@assets/svgs/plus2.svg';

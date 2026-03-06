@@ -194,10 +194,10 @@ export function useAppBootstrap() {
         language: bootstrap.settings.language,
         laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
         developerModeEnabled:
-          (bootstrap.settings as any).developerModeEnabled ?? false,
-        trayEnabled: (bootstrap.settings as any).trayEnabled ?? false,
+          bootstrap.settings.developerModeEnabled ?? false,
+        trayEnabled: bootstrap.settings.trayEnabled ?? false,
         autoUpdateEnabled:
-          (bootstrap.settings as any).autoUpdateEnabled ?? true,
+          bootstrap.settings.autoUpdateEnabled ?? true,
         overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
         keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
         gridSettings:
@@ -257,19 +257,19 @@ export function useAppBootstrap() {
         applyDiff(diff);
       }),
       window.api.keys.onChanged((keys) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
+        const isOverlayWindow = window.__dmn_window_type === 'overlay';
         if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
           return;
         useKeyStore.setState((state) => ({ ...state, keyMappings: keys }));
       }),
       window.api.keys.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
+        const isOverlayWindow = window.__dmn_window_type === 'overlay';
         if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
           return;
         useKeyStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.statItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
+        const isOverlayWindow = window.__dmn_window_type === 'overlay';
         if (
           !isOverlayWindow &&
           useStatItemStore.getState().isLocalUpdateInProgress
@@ -278,7 +278,7 @@ export function useAppBootstrap() {
         useStatItemStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.graphItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = (window as any).__dmn_window_type === 'overlay';
+        const isOverlayWindow = window.__dmn_window_type === 'overlay';
         if (
           !isOverlayWindow &&
           useGraphItemStore.getState().isLocalUpdateInProgress

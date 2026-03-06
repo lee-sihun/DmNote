@@ -5,7 +5,7 @@
 
 import { clearComponentHandlers } from '@utils/plugin/pluginUtils';
 
-type HandlerFunction = (...args: any[]) => void | Promise<void>;
+type HandlerFunction = (...args: unknown[]) => void | Promise<void>;
 
 class PluginHandlerRegistry {
   private handlers: Map<string, HandlerFunction> = new Map();
@@ -26,7 +26,7 @@ class PluginHandlerRegistry {
     }
     this.pluginHandlers.get(pluginId)!.add(handlerId);
 
-    (window as any)[handlerId] = handler;
+    window[handlerId as `__dmn_handler_${string}`] = handler;
 
     return handlerId;
   }
@@ -43,7 +43,7 @@ class PluginHandlerRegistry {
    */
   unregister(handlerId: string): void {
     this.handlers.delete(handlerId);
-    delete (window as any)[handlerId];
+    delete window[handlerId as `__dmn_handler_${string}`];
   }
 
   /**
@@ -54,7 +54,7 @@ class PluginHandlerRegistry {
     if (handlerIds) {
       handlerIds.forEach((id) => {
         this.handlers.delete(id);
-        delete (window as any)[id];
+        delete window[id as `__dmn_handler_${string}`];
       });
       this.pluginHandlers.delete(pluginId);
     }
@@ -67,7 +67,7 @@ class PluginHandlerRegistry {
    */
   clear(): void {
     this.handlers.forEach((_, id) => {
-      delete (window as any)[id];
+      delete window[id as `__dmn_handler_${string}`];
     });
     this.handlers.clear();
     this.pluginHandlers.clear();

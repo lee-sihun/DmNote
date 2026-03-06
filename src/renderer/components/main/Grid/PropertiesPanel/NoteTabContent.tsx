@@ -290,7 +290,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   };
 
   // 통합 색상 변경 핸들러 (pickerFor 기반)
-  const handleColorChange = (target: 'note' | 'glow', newColor: any) => {
+  const handleColorChange = (target: 'note' | 'glow', newColor: NoteColor) => {
       if (target === 'note') {
         if (
           newColor &&
@@ -301,9 +301,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           setNoteColorTop(newColor.top);
           setNoteGradientBottom(newColor.bottom);
         } else {
+          const solidColor = newColor as string;
           setNoteColorMode(COLOR_MODES.solid);
-          setNoteColorTop(newColor);
-          setNoteGradientBottom(newColor);
+          setNoteColorTop(solidColor);
+          setNoteGradientBottom(solidColor);
         }
       } else {
         if (
@@ -315,14 +316,15 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           setGlowColorTop(newColor.top);
           setGlowGradientBottom(newColor.bottom);
         } else {
+          const solidColor = newColor as string;
           setGlowColorMode(COLOR_MODES.solid);
-          setGlowColorTop(newColor);
-          setGlowGradientBottom(newColor);
+          setGlowColorTop(solidColor);
+          setGlowGradientBottom(solidColor);
         }
       }
     };
 
-  const handleColorChangeComplete = (target: 'note' | 'glow', newColor: any) => {
+  const handleColorChangeComplete = (target: 'note' | 'glow', newColor: NoteColor) => {
       let colorValue: NoteColor;
 
       if (target === 'note') {
@@ -340,9 +342,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             bottom: newColor.bottom,
           };
         } else {
+          const solidColor = newColor as string;
           setNoteColorMode(COLOR_MODES.solid);
-          setNoteColorTop(newColor);
-          setNoteGradientBottom(newColor);
+          setNoteColorTop(solidColor);
+          setNoteGradientBottom(solidColor);
           colorValue = newColor;
         }
         onKeyPreview?.(keyIndex, { noteColor: colorValue });
@@ -362,9 +365,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             bottom: newColor.bottom,
           };
         } else {
+          const solidColor = newColor as string;
           setGlowColorMode(COLOR_MODES.solid);
-          setGlowColorTop(newColor);
-          setGlowGradientBottom(newColor);
+          setGlowColorTop(solidColor);
+          setGlowGradientBottom(solidColor);
           colorValue = newColor;
         }
         onKeyPreview?.(keyIndex, { noteGlowColor: colorValue });
@@ -393,7 +397,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   };
 
   // 스타일 변경 완료 핸들러
-  const handleStyleChangeComplete = (property: keyof KeyPosition, value: any) => {
+  const handleStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       onKeyUpdate({ index: keyIndex, [property]: value });
     };
 
@@ -527,8 +531,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           }
           panelElement={panelElement}
           color={pickerFor === 'note' ? notePickerColor : glowPickerColor}
-          onColorChange={(c: any) => handleColorChange(pickerFor, c)}
-          onColorChangeComplete={(c: any) =>
+          onColorChange={(c: NoteColor) => handleColorChange(pickerFor, c)}
+          onColorChangeComplete={(c: NoteColor) =>
             handleColorChangeComplete(pickerFor, c)
           }
           onClose={() => setPickerFor(null)}

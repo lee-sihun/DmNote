@@ -5,7 +5,7 @@ import Github from '@assets/svgs/github.svg';
 import Bug from '@assets/svgs/code.svg';
 import NoteIcon from '@assets/svgs/note.svg';
 import { TooltipGroup } from '../Modal/TooltipGroup';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 

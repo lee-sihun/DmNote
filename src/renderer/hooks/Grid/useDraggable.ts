@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MIN_GRID_POSITION, MAX_GRID_POSITION } from '@stores/useGridViewStore';
 import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
@@ -120,12 +120,12 @@ export const useDraggable = ({
     setNode(nodeEle);
   };
 
-  const restoreBodyCursor = () => {
+  const restoreBodyCursor = useCallback(() => {
     if (typeof document === 'undefined') return;
     if (previousBodyCursorRef.current === null) return;
     document.body.style.cursor = previousBodyCursorRef.current;
     previousBodyCursorRef.current = null;
-  };
+  }, []);
 
   const setBodyCursor = (cursor: string) => {
     if (typeof document === 'undefined') return;
@@ -135,19 +135,20 @@ export const useDraggable = ({
     document.body.style.cursor = cursor;
   };
 
-  const handleMouseOver = () => {
+  const handleMouseOver = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
     if (node && !isDragging) node.style.cursor = 'grab';
-  };
+  }, [node, isDragging]);
 
-  const handleMouseOut = () => {
+  const handleMouseOut = useCallback(() => {
     // 미들 버튼 드래그 중이면 커서 변경하지 않음
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
     if (node && !isDragging) node.style.cursor = '';
-  };
+  }, [node, isDragging]);
 
-  const handleMouseDown = (e: MouseEvent) => {
+  const handleMouseDownImpl = useRef<(e: MouseEvent) => void>(() => {});
+  handleMouseDownImpl.current = (e: MouseEvent) => {
       if (!node) return;
 
       // 좌클릭만 처리 (미들 버튼은 그리드 팬에 사용)
@@ -413,6 +414,10 @@ export const useDraggable = ({
       document.addEventListener('mouseup', handleMouseUp);
       window.addEventListener('blur', handleMouseUp);
     };
+
+  const handleMouseDown = useCallback((e: MouseEvent) => {
+    handleMouseDownImpl.current(e);
+  }, []);
 
   useEffect(() => {
     if (!node) return;

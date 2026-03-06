@@ -19,6 +19,7 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
 } from '@src/types/keys';
+import type { PluginDisplayElementInternal } from '@src/types/api';
 
 type SelectedKey = { key: string; index: number } | null;
 
@@ -1139,9 +1140,7 @@ export function useKeyManager() {
           const currentElements = currentPluginElements;
 
           // 요소 복원 함수 맵 가져오기
-          const elementRestorers = (window as any).__dmn_element_restorers as
-            | Map<string, (el: any) => any>
-            | undefined;
+          const elementRestorers = window.__dmn_element_restorers;
 
           const restoredElements = previousState.pluginElements.map(
             (savedEl) => {
@@ -1159,7 +1158,7 @@ export function useKeyManager() {
                   measuredSize: savedEl.measuredSize,
                   resizeAnchor: savedEl.resizeAnchor,
                   zIndex: savedEl.zIndex,
-                  hidden: (savedEl as any).hidden,
+                  hidden: savedEl.hidden,
                 };
               }
 
@@ -1188,7 +1187,7 @@ export function useKeyManager() {
               currentElements.some((cur) => cur.fullId === el.fullId),
           );
 
-          setPluginElements(finalElements as any);
+          setPluginElements(finalElements as PluginDisplayElementInternal[]);
 
           // 오버레이로 동기화
           if (window.api?.bridge) {
@@ -1213,12 +1212,12 @@ export function useKeyManager() {
             });
 
           window.api.statItems
-            .updatePositions(previousState.statPositions as any)
+            .updatePositions(previousState.statPositions)
             .catch((error) => {
               console.error('Failed to apply undo stat positions', error);
             });
           window.api.graphItems
-            .updatePositions(previousState.graphPositions as any)
+            .updatePositions(previousState.graphPositions)
             .catch((error) => {
               console.error('Failed to apply undo graph positions', error);
             });
@@ -1294,9 +1293,7 @@ export function useKeyManager() {
           const currentElements = currentPluginElements;
 
           // 요소 복원 함수 맵 가져오기
-          const elementRestorers = (window as any).__dmn_element_restorers as
-            | Map<string, (el: any) => any>
-            | undefined;
+          const elementRestorers = window.__dmn_element_restorers;
 
           const restoredElements = nextState.pluginElements.map((savedEl) => {
             // 같은 fullId를 가진 현재 요소 찾기
@@ -1313,7 +1310,7 @@ export function useKeyManager() {
                 measuredSize: savedEl.measuredSize,
                 resizeAnchor: savedEl.resizeAnchor,
                 zIndex: savedEl.zIndex,
-                hidden: (savedEl as any).hidden,
+                hidden: savedEl.hidden,
               };
             }
 
@@ -1339,7 +1336,7 @@ export function useKeyManager() {
             savedFullIds.has(el.fullId),
           );
 
-          setPluginElements(finalElements as any);
+          setPluginElements(finalElements as PluginDisplayElementInternal[]);
 
           // 오버레이로 동기화
           if (window.api?.bridge) {
@@ -1359,12 +1356,12 @@ export function useKeyManager() {
             });
 
           window.api.statItems
-            .updatePositions(nextState.statPositions as any)
+            .updatePositions(nextState.statPositions)
             .catch((error) => {
               console.error('Failed to apply redo stat positions', error);
             });
           window.api.graphItems
-            .updatePositions(nextState.graphPositions as any)
+            .updatePositions(nextState.graphPositions)
             .catch((error) => {
               console.error('Failed to apply redo graph positions', error);
             });

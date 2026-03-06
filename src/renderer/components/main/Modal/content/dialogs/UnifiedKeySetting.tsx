@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
 import { useLenis } from '@hooks/useLenis';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import KeyTabContent, { type KeyTabContentRef } from '../settings/KeyTabContent';
 import NoteTabContent, { type NoteTabContentRef } from '../settings/NoteTabContent';
@@ -108,7 +108,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   const counterTabRef = React.useRef<CounterTabContentRef>(null);
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = React.useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el, contentRef.current);
     setScrollState((prev) =>
@@ -117,7 +117,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         ? prev
         : nextState,
     );
-  };
+  }, []);
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const {
@@ -369,14 +369,14 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
               ? toGradient(noteState.noteColor, noteState.gradientBottom)
               : noteState.noteColor
           }
-          onColorChange={(c: any) => noteTabRef.current?.handleColorChange(c)}
-          onColorChangeComplete={(c: any) =>
+          onColorChange={(c) => noteTabRef.current?.handleColorChange(c)}
+          onColorChangeComplete={(c) =>
             noteTabRef.current?.handleColorChangeComplete(c)
           }
           onClose={() =>
             setNoteState((prev) => ({ ...prev, showPicker: false }))
           }
-          position={"right" as any}
+          position={"right"}
         />
       )}
 
@@ -390,16 +390,16 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
               ? toGradient(noteState.glowColor, noteState.glowGradientBottom)
               : noteState.glowColor
           }
-          onColorChange={(c: any) =>
+          onColorChange={(c) =>
             noteTabRef.current?.handleGlowColorChange(c)
           }
-          onColorChangeComplete={(c: any) =>
+          onColorChangeComplete={(c) =>
             noteTabRef.current?.handleGlowColorChangeComplete(c)
           }
           onClose={() =>
             setNoteState((prev) => ({ ...prev, showGlowPicker: false }))
           }
-          position={"right" as any}
+          position={"right"}
         />
       )}
 
@@ -430,7 +430,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           }
           solidOnly={true}
           interactiveRefs={counterTabRef.current?.colorPickerInteractiveRefs}
-          position={"right" as any}
+          position={"right"}
         />
       )}
     </Modal>

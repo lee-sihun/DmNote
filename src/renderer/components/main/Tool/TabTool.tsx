@@ -1,6 +1,6 @@
 import { useKeyStore } from '@stores/useKeyStore';
 import GridIcon from '@assets/svgs/grid.svg';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useState, useRef } from 'react';
 import FloatingPopup from '../Modal/FloatingPopup';
 import TabList from '../Modal/content/settings/TabList';

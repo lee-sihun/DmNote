@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Modal from '../../Modal';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '../pickers/ColorPicker';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -62,7 +62,7 @@ export default function CounterSettingModal({
       const btn = alignDropdownWrapperRef.current.querySelector('button');
       if (btn) {
         const w = btn.offsetWidth;
-        if (w && w !== alignDropdownWidth) setAlignDropdownWidth(w);
+        if (w) setAlignDropdownWidth((prev) => (prev === w ? prev : w));
       }
     };
 
@@ -116,7 +116,7 @@ export default function CounterSettingModal({
       stroke: { idle: strokeIdle, active: strokeActive },
     };
     onPreview(payload);
-  }, [placement, align, alignMode, gap]);
+  }, [placement, align, alignMode, gap, fillIdle, fillActive, onPreview, strokeActive, strokeIdle]);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget | null>(null);
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
@@ -434,8 +434,8 @@ export default function CounterSettingModal({
             open={pickerOpen}
             referenceRef={referenceRefFor()}
             color={colorValueFor(pickerFor)}
-            onColorChange={(c: any) => setColorFor(pickerFor, c)}
-            onColorChangeComplete={(c: any) => handleColorComplete(pickerFor, c)}
+            onColorChange={(c: string) => setColorFor(pickerFor, c)}
+            onColorChangeComplete={(c: string) => handleColorComplete(pickerFor, c)}
             onClose={closePicker}
             solidOnly={true}
             interactiveRefs={colorPickerInteractiveRefs}

@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -9,7 +10,7 @@ declare global {
     __dmn_current_plugin_id?: string;
   }
 }
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/Key';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import UnifiedKeySetting from '../../Modal/content/dialogs/UnifiedKeySetting';
@@ -28,7 +29,8 @@ import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
 import MarqueeSelectionOverlay from '../overlays/MarqueeSelectionOverlay';
 import ResizeHandles from '../handles/ResizeHandles';
-import GroupResizeHandles, { isElementResizable } from '../handles/GroupResizeHandles';
+import GroupResizeHandles from '../handles/GroupResizeHandles';
+import { isElementResizable } from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
@@ -50,6 +52,21 @@ import {
   useSmartGuidesElements,
 } from '@hooks/Grid';
 import { createDefaultCounterSettings } from '@src/types/keys';
+import type {
+  KeyMappings,
+  KeyPositions,
+  KeyPosition,
+  NoteColor,
+  KeyCounterSettings,
+  CounterAnimationBezier,
+  ImageFit,
+} from '@src/types/keys';
+import type { StatItemPositions, StatItemPosition } from '@src/types/statItems';
+import type { GraphItemPositions, GraphItemPosition } from '@src/types/graphItems';
+import type {
+  SaveData,
+  PreviewData,
+} from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
   applyGroupIdToSelectedElements,
@@ -58,42 +75,87 @@ import {
   resolveSingleGroupIdFromSelection,
 } from '@utils/layerGroupUtils';
 
+type ToolbarAddRequest = { id: number; type: 'key' | 'stat' | 'graph' } | null;
+
+interface SelectedKeyInfo {
+  key: string;
+  index: number;
+}
+
+interface DuplicateState {
+  elementType: 'key' | 'stat' | 'graph';
+  sourceIndex: number;
+  keyName: string;
+  position: KeyPosition | StatItemPosition | GraphItemPosition;
+}
+
+interface OriginalKeyData {
+  key: KeyPosition;
+  counter: KeyCounterSettings;
+}
+
+type KeyPreviewUpdates = Partial<{
+  activeImage: string;
+  inactiveImage: string;
+  soundPath: string;
+  soundVolume: number;
+  activeTransparent: boolean;
+  idleTransparent: boolean;
+  width: number;
+  height: number;
+  className: string;
+  backgroundColor: string;
+  activeBackgroundColor: string;
+  borderColor: string;
+  activeBorderColor: string;
+  borderWidth: number;
+  borderRadius: number;
+  fontSize: number;
+  fontColor: string;
+  activeFontColor: string;
+  idleImageFit: ImageFit;
+  activeImageFit: ImageFit;
+  imageFit: ImageFit;
+  useInlineStyles: boolean;
+  displayText: string;
+}>;
+
 interface GridProps {
-  showConfirm: (...args: any[]) => void;
-  showAlert: (...args: any[]) => void;
-  selectedKey: any;
-  setSelectedKey: (key: any) => void;
-  keyMappings: any;
-  positions: any;
-  onPositionChange: (...args: any[]) => void;
-  onKeyUpdate: (...args: any[]) => void;
-  onKeyPreview: (...args: any[]) => void;
-  onNoteColorUpdate: (...args: any[]) => void;
-  onNoteColorPreview: (...args: any[]) => void;
-  onCounterUpdate: (...args: any[]) => void;
-  onCounterPreview: (...args: any[]) => void;
+  showConfirm: (message: string, onConfirm: () => void, onCancelOrConfirmText?: (() => void) | string, confirmText?: string) => void;
+  showAlert: (message: string, confirmText?: string) => void;
+  selectedKey: SelectedKeyInfo | null;
+  setSelectedKey: (key: SelectedKeyInfo | null) => void;
+  keyMappings: KeyMappings;
+  positions: KeyPositions;
+  onPositionChange: (index: number, dx: number, dy: number) => void;
+  onKeyUpdate: (data: Omit<SaveData, 'counter'>) => void;
+  onKeyPreview: (index: number, updates: KeyPreviewUpdates) => void;
+  onNoteColorUpdate: (index: number, noteColor: NoteColor, noteOpacity: number, noteGlowEnabled: boolean, noteGlowSize: number, noteGlowOpacity: number, noteGlowColor: NoteColor, noteAutoYCorrection: boolean, noteEffectEnabled: boolean) => void;
+  onNoteColorPreview: (index: number, noteColor: NoteColor, noteOpacity: number, noteGlowEnabled: boolean, noteGlowSize: number, noteGlowOpacity: number, noteGlowColor: NoteColor, noteAutoYCorrection: boolean, noteEffectEnabled: boolean) => void;
+  onCounterUpdate: (index: number, payload: KeyCounterSettings) => void;
+  onCounterPreview: (index: number, payload: KeyCounterSettings) => void;
   onKeyDelete: (index: number) => void;
-  onAddKeyAt: (...args: any[]) => void;
-  onKeyDuplicate: (...args: any[]) => void;
-  onMoveToFront: (...args: any[]) => void;
-  onMoveToBack: (...args: any[]) => void;
-  onMoveForward: (...args: any[]) => void;
-  onMoveBackward: (...args: any[]) => void;
+  onAddKeyAt: (dx: number, dy: number) => void;
+  onKeyDuplicate: (sourceIndex: number, dx: number, dy: number) => void;
+  onMoveToFront: (index: number) => void | Promise<void>;
+  onMoveToBack: (index: number) => void | Promise<void>;
+  onMoveForward: (index: number) => void | Promise<void>;
+  onMoveBackward: (index: number) => void | Promise<void>;
   color: string;
-  activeTool: any;
+  activeTool: string;
   shouldSkipModalAnimation: boolean;
   onModalAnimationConsumed: (() => void) | undefined;
-  onUndo: (...args: any[]) => void;
-  onRedo: (...args: any[]) => void;
+  onUndo: () => void;
+  onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  toolbarAddRequest: any;
+  toolbarAddRequest: ToolbarAddRequest;
   onToolbarAddConsumed: (() => void) | undefined;
   isNoteSettingOpen: boolean;
   setIsNoteSettingOpen: (open: boolean) => void;
 }
 
-function getStatTypeLabel(type: any): string {
+function getStatTypeLabel(type: string): string {
   if (type === 'kps') return 'KPS';
   if (type === 'kpsAvg') return 'AVG';
   if (type === 'kpsMax') return 'MAX';
@@ -470,13 +532,13 @@ export default function Grid({
   const [isContextOpen, setIsContextOpen] = useState<boolean>(false);
   const [contextIndex, setContextIndex] = useState<number | null>(null);
   const [contextType, setContextType] = useState<string>('key');
-  const contextRef = useRef<any>(null);
+  const contextRef = useRef<HTMLElement | null>(null);
   const [contextPosition, setContextPosition] = useState<{ x: number; y: number } | null>(null);
-  const keyRefs = useRef<any[]>([]);
-  const statRefs = useRef<any[]>([]);
-  const graphRefs = useRef<any[]>([]);
+  const keyRefs = useRef<(HTMLElement | null)[]>([]);
+  const statRefs = useRef<(HTMLElement | null)[]>([]);
+  const graphRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const [duplicateState, setDuplicateState] = useState<any>(null);
+  const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(null);
   const [duplicateCursor, setDuplicateCursor] = useState<{ x: number; y: number } | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const mixedSelectionMenuItems = (() => {
@@ -539,7 +601,7 @@ export default function Grid({
     return items;
   })();
 
-  const openMixedSelectionContextMenu = (x: number, y: number, referenceNode: any) => {
+  const openMixedSelectionContextMenu = (x: number, y: number, referenceNode: HTMLElement | null) => {
     setContextType('mixed');
     setContextIndex(null);
     contextRef.current = referenceNode || null;
@@ -563,8 +625,8 @@ export default function Grid({
     };
 
   // 원본 데이터 저장 (미리보기 롤백용)
-  const pushHistorySnapshot = 
-    (currentStatPositions: any, currentGraphPositions: any) => {
+  const pushHistorySnapshot = useCallback(
+    (currentStatPositions: StatItemPositions, currentGraphPositions: GraphItemPositions) => {
       const currentKeyPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -578,10 +640,10 @@ export default function Grid({
           currentGraphPositions,
           currentPluginElements,
         );
-    };
+    }, []);
 
-  const persistStatPositions = 
-    async (nextPositions: any, errorMessage?: string) => {
+  const persistStatPositions = useCallback(
+    async (nextPositions: StatItemPositions, errorMessage?: string) => {
       const store = useStatItemStore.getState();
       store.setLocalUpdateInProgress(true);
       store.setPositions(nextPositions);
@@ -600,10 +662,10 @@ export default function Grid({
       } catch {
         // ignore
       }
-    };
+    }, []);
 
-  const persistGraphPositions = 
-    async (nextPositions: any, errorMessage?: string) => {
+  const persistGraphPositions = useCallback(
+    async (nextPositions: GraphItemPositions, errorMessage?: string) => {
       const store = useGraphItemStore.getState();
       store.setLocalUpdateInProgress(true);
       store.setPositions(nextPositions);
@@ -622,9 +684,9 @@ export default function Grid({
       } catch {
         // ignore
       }
-    };
+    }, []);
 
-  const deleteStatAtIndex = 
+  const deleteStatAtIndex =
     (indexToDelete: number) => {
       const store = useStatItemStore.getState();
       const current = store.positions;
@@ -727,7 +789,7 @@ export default function Grid({
         position.noteColor !== null
           ? { ...position.noteColor }
           : position.noteColor;
-      const clonedCounter = position.counter
+      const clonedCounter: KeyCounterSettings | null = position.counter
         ? {
             ...position.counter,
             fill: { ...position.counter.fill },
@@ -736,7 +798,7 @@ export default function Grid({
               ? {
                   animation: {
                     ...position.counter.animation,
-                    bezier: [...position.counter.animation.bezier],
+                    bezier: [...position.counter.animation.bezier] as CounterAnimationBezier,
                   },
                 }
               : {}),
@@ -750,14 +812,14 @@ export default function Grid({
         position: {
           ...position,
           noteColor: clonedNoteColor,
-          counter: clonedCounter,
+          counter: clonedCounter ?? createDefaultCounterSettings(),
         },
       });
       setDuplicateCursor(null);
     };
 
-  const placeDuplicateStat = 
-    (templatePosition: any, dx: number, dy: number) => {
+  const placeDuplicateStat =
+    (templatePosition: StatItemPosition, dx: number, dy: number) => {
       if (!templatePosition) return;
       const store = useStatItemStore.getState();
       const current = store.positions;
@@ -914,8 +976,8 @@ export default function Grid({
       setDuplicateCursor(null);
     };
 
-  const placeDuplicateGraph = 
-    (templatePosition: any, dx: number, dy: number) => {
+  const placeDuplicateGraph =
+    (templatePosition: GraphItemPosition, dx: number, dy: number) => {
       if (!templatePosition) return;
       const store = useGraphItemStore.getState();
       const current = store.positions;
@@ -1004,14 +1066,14 @@ export default function Grid({
     syncSelectedElementsToOverlay();
   };
 
-  const addKeyAtPosition = 
+  const addKeyAtPosition = useCallback(
     (dx: number, dy: number) => {
       if (typeof onAddKeyAt === 'function') {
         onAddKeyAt(dx, dy);
       }
-    };
+    }, [onAddKeyAt]);
 
-  const addStatAtPosition = 
+  const addStatAtPosition = useCallback(
     (dx: number, dy: number) => {
       const current = useStatItemStore.getState().positions;
       pushHistorySnapshot(current, useGraphItemStore.getState().positions);
@@ -1048,9 +1110,9 @@ export default function Grid({
         [selectedKeyType]: list,
       };
       persistStatPositions(nextPositions, 'Failed to add stat item');
-    };
+    }, [selectedKeyType, pushHistorySnapshot, persistStatPositions]);
 
-  const addGraphAtPosition = 
+  const addGraphAtPosition = useCallback(
     (dx: number, dy: number) => {
       const current = useGraphItemStore.getState().positions;
       pushHistorySnapshot(useStatItemStore.getState().positions, current);
@@ -1101,28 +1163,28 @@ export default function Grid({
         [selectedKeyType]: list,
       };
       persistGraphPositions(nextPositions, 'Failed to add graph item');
-    };
-
-  const getViewportCenterSnappedPosition = 
-    (width: number, height: number) => {
-      const container = gridContainerRef.current;
-      if (!container) return null;
-      const rect = container.getBoundingClientRect();
-      const centerClientX = rect.left + rect.width / 2;
-      const centerClientY = rect.top + rect.height / 2;
-      const gridCoords = clientToGridCoords(centerClientX, centerClientY);
-      if (!gridCoords) return null;
-      const targetX = gridCoords.x - width / 2;
-      const targetY = gridCoords.y - height / 2;
-      const snapped = snapCursorToGrid(targetX, targetY);
-      return {
-        dx: snapped.x,
-        dy: snapped.y,
-      };
-    };
+    }, [selectedKeyType, pushHistorySnapshot, persistGraphPositions]);
 
   useEffect(() => {
     if (!toolbarAddRequest) return;
+
+    const getViewportCenterSnappedPosition =
+      (width: number, height: number) => {
+        const container = gridContainerRef.current;
+        if (!container) return null;
+        const rect = container.getBoundingClientRect();
+        const centerClientX = rect.left + rect.width / 2;
+        const centerClientY = rect.top + rect.height / 2;
+        const gridCoords = clientToGridCoords(centerClientX, centerClientY);
+        if (!gridCoords) return null;
+        const targetX = gridCoords.x - width / 2;
+        const targetY = gridCoords.y - height / 2;
+        const snapped = snapCursorToGrid(targetX, targetY);
+        return {
+          dx: snapped.x,
+          dy: snapped.y,
+        };
+      };
 
     const defaultSize =
       toolbarAddRequest.type === 'graph'
@@ -1145,14 +1207,14 @@ export default function Grid({
     onToolbarAddConsumed?.();
   }, [
     toolbarAddRequest,
-    getViewportCenterSnappedPosition,
+    clientToGridCoords,
     addKeyAtPosition,
     addStatAtPosition,
     addGraphAtPosition,
     onToolbarAddConsumed,
   ]);
 
-  const [originalKeyData, setOriginalKeyData] = useState<any>(null);
+  const [originalKeyData, setOriginalKeyData] = useState<OriginalKeyData | null>(null);
 
   // 탭 CSS 모달 상태
   const [isTabCssModalOpen, setIsTabCssModalOpen] = useState<boolean>(false);
@@ -1174,7 +1236,7 @@ export default function Grid({
   const _isExportImportPopupOpen = useUIStore(
     (state) => state.isExportImportPopupOpen,
   );
-  const previousSelectedKeyTypeRef = useRef<any>(selectedKeyType);
+  const previousSelectedKeyTypeRef = useRef<string>(selectedKeyType);
 
   // 탭 변경 시 선택 해제
   useEffect(() => {
@@ -1211,7 +1273,7 @@ export default function Grid({
   const renderKeys = () => {
     if (!positions[selectedKeyType]) return null;
 
-    return positions[selectedKeyType].map((position: any, index: number) => (
+    return positions[selectedKeyType].map((position: KeyPosition, index: number) => (
       <DraggableKey
         key={`${selectedKeyType}-${index}`}
         index={index}
@@ -1509,7 +1571,7 @@ export default function Grid({
       }
     };
 
-    return items.map((position: any, index: number) => (
+    return items.map((position: StatItemPosition, index: number) => (
       <DraggableKey
         key={`stat-${selectedKeyType}-${index}`}
         index={index}
@@ -1956,13 +2018,13 @@ export default function Grid({
             );
           } else if (type === 'stat') {
             placeDuplicateStat(
-              duplicateState.position,
+              duplicateState.position as StatItemPosition,
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
           } else if (type === 'graph') {
             placeDuplicateGraph(
-              duplicateState.position,
+              duplicateState.position as GraphItemPosition,
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
@@ -2241,7 +2303,7 @@ export default function Grid({
           panY={panY}
           previewGroupBounds={previewGroupBounds}
           onGroupResizeStart={handleResizeStart}
-          onGroupResize={handleGroupResize as any}
+          onGroupResize={(result) => handleGroupResize(result)}
           onGroupResizeEnd={handleGroupResizeComplete}
           getOtherElements={getOtherElements}
         />
@@ -2503,10 +2565,12 @@ export default function Grid({
               (item) => item.fullId === id,
             );
             if (pluginItem) {
+              const positionForContext = positions[selectedKeyType]?.[contextIndex];
+              if (!positionForContext) return;
               const context = {
                 keyCode: keyMappings[selectedKeyType]?.[contextIndex] || '',
                 index: contextIndex,
-                position: positions[selectedKeyType]?.[contextIndex] || {},
+                position: positionForContext,
                 mode: selectedKeyType,
               };
 
@@ -2555,7 +2619,7 @@ export default function Grid({
                   position.noteColor !== null
                     ? { ...position.noteColor }
                     : position.noteColor;
-                const clonedCounter = position.counter
+                const clonedCounter: KeyCounterSettings | null = position.counter
                   ? {
                       ...position.counter,
                       fill: { ...position.counter.fill },
@@ -2564,7 +2628,7 @@ export default function Grid({
                         ? {
                             animation: {
                               ...position.counter.animation,
-                              bezier: [...position.counter.animation.bezier],
+                              bezier: [...position.counter.animation.bezier] as CounterAnimationBezier,
                             },
                           }
                         : {}),
@@ -2584,7 +2648,7 @@ export default function Grid({
                   position: {
                     ...position,
                     noteColor: clonedNoteColor,
-                    counter: clonedCounter,
+                    counter: clonedCounter ?? createDefaultCounterSettings(),
                   },
                 });
                 setDuplicateCursor(initialCursor);
@@ -2793,7 +2857,7 @@ export default function Grid({
             setSelectedKey(null);
             setOriginalKeyData(null);
           }}
-          onSave={(data: any) => {
+          onSave={(data: SaveData) => {
             // 키, 노트, 카운터 데이터를 모두 포함하여 저장
             const { counter, ...keyAndNoteData } = data;
             // 키 및 노트 데이터 업데이트
@@ -2807,7 +2871,7 @@ export default function Grid({
             setOriginalKeyData(null);
             setSelectedKey(null);
           }}
-          onPreview={(previewData: any) => {
+          onPreview={(previewData: PreviewData) => {
             // 원본 데이터 저장 (최초 미리보기 시)
             if (!originalKeyData) {
               setOriginalKeyData({
@@ -2820,34 +2884,32 @@ export default function Grid({
               previewData.type === 'counter' &&
               typeof onCounterPreview === 'function'
             ) {
-              const currentCounter =
-                positions[selectedKeyType][selectedKey.index].counter || {};
+              const currentCounter: KeyCounterSettings =
+                positions[selectedKeyType][selectedKey.index].counter ?? createDefaultCounterSettings();
               // 현재 값과 미리보기 값을 병합
-              const mergedPayload = {
-                enabled: previewData.enabled ?? currentCounter.enabled ?? true,
+              const mergedPayload: KeyCounterSettings = {
+                ...currentCounter,
+                enabled: previewData.enabled ?? currentCounter.enabled,
                 placement:
-                  previewData.placement ?? currentCounter.placement ?? 'inside',
-                align: previewData.align ?? currentCounter.align ?? 'bottom',
-                gap: previewData.gap ?? currentCounter.gap ?? 6,
+                  (previewData.placement ?? currentCounter.placement) as KeyCounterSettings['placement'],
+                align: (previewData.align ?? currentCounter.align) as KeyCounterSettings['align'],
+                alignMode: (previewData.alignMode ?? currentCounter.alignMode) as KeyCounterSettings['alignMode'],
+                gap: previewData.gap ?? currentCounter.gap,
                 fill: {
                   idle:
                     previewData.fill?.idle ??
-                    currentCounter.fill?.idle ??
-                    'rgba(255,255,255,0.6)',
+                    currentCounter.fill.idle,
                   active:
                     previewData.fill?.active ??
-                    currentCounter.fill?.active ??
-                    'rgba(255,255,255,1)',
+                    currentCounter.fill.active,
                 },
                 stroke: {
                   idle:
                     previewData.stroke?.idle ??
-                    currentCounter.stroke?.idle ??
-                    'rgba(0,0,0,0)',
+                    currentCounter.stroke.idle,
                   active:
                     previewData.stroke?.active ??
-                    currentCounter.stroke?.active ??
-                    'rgba(0,0,0,0)',
+                    currentCounter.stroke.active,
                 },
               };
               onCounterPreview(selectedKey.index, mergedPayload);

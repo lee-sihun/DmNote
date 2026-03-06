@@ -16,12 +16,15 @@ import type {
   InputOptions,
   DropdownOptions,
   PanelOptions,
+  PluginMenuItem,
+  KeyMenuContext,
+  GridMenuContext,
 } from '@src/types/api';
 
 export const uiApi = {
   contextMenu: {
-    addKeyMenuItem: (item: any) => {
-      if ((window as any).__dmn_window_type !== 'main') {
+    addKeyMenuItem: (item: PluginMenuItem<KeyMenuContext>) => {
+      if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return '';
       }
@@ -29,8 +32,8 @@ export const uiApi = {
       return usePluginMenuStore.getState().addKeyMenuItem(item);
     },
 
-    addGridMenuItem: (item: any) => {
-      if ((window as any).__dmn_window_type !== 'main') {
+    addGridMenuItem: (item: PluginMenuItem<GridMenuContext>) => {
+      if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return '';
       }
@@ -38,8 +41,8 @@ export const uiApi = {
       return usePluginMenuStore.getState().addGridMenuItem(item);
     },
 
-    removeMenuItem: (fullId: any) => {
-      if ((window as any).__dmn_window_type !== 'main') {
+    removeMenuItem: (fullId: string) => {
+      if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return;
       }
@@ -47,8 +50,8 @@ export const uiApi = {
       usePluginMenuStore.getState().removeMenuItem(fullId);
     },
 
-    updateMenuItem: (fullId: any, updates: any) => {
-      if ((window as any).__dmn_window_type !== 'main') {
+    updateMenuItem: (fullId: string, updates: Partial<PluginMenuItem<unknown>>) => {
+      if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return;
       }
@@ -57,12 +60,12 @@ export const uiApi = {
     },
 
     clearMyMenuItems: () => {
-      if ((window as any).__dmn_window_type !== 'main') {
+      if (window.__dmn_window_type !== 'main') {
         console.warn('[UI API] contextMenu is only available in main window');
         return;
       }
 
-      const pluginId = (window as any).__dmn_current_plugin_id;
+      const pluginId = window.__dmn_current_plugin_id;
       if (!pluginId) {
         console.warn(
           '[UI API] clearMyMenuItems called outside plugin context',
@@ -78,7 +81,7 @@ export const uiApi = {
   dialog: {
     alert: (message: string, options?: { confirmText?: string }) => {
       return new Promise<void>((resolve) => {
-        const showAlert = (window as any).__dmn_showAlert;
+        const showAlert = window.__dmn_showAlert;
         if (typeof showAlert !== 'function') {
           console.warn('[Dialog API] showAlert function not available');
           resolve();
@@ -98,7 +101,7 @@ export const uiApi = {
       },
     ) => {
       return new Promise<boolean>((resolve) => {
-        const showConfirm = (window as any).__dmn_showConfirm;
+        const showConfirm = window.__dmn_showConfirm;
         if (typeof showConfirm !== 'function') {
           console.warn('[Dialog API] showConfirm function not available');
           resolve(false);
@@ -122,7 +125,7 @@ export const uiApi = {
       },
     ) => {
       return new Promise<boolean>((resolve) => {
-        const showCustomDialog = (window as any).__dmn_showCustomDialog;
+        const showCustomDialog = window.__dmn_showCustomDialog;
         if (typeof showCustomDialog !== 'function') {
           console.warn(
             '[Dialog API] showCustomDialog function not available',
@@ -131,7 +134,7 @@ export const uiApi = {
           return;
         }
 
-        const pluginId = (window as any).__dmn_current_plugin_id;
+        const pluginId = window.__dmn_current_plugin_id;
 
         const wrappedHtml = `<div data-plugin-dialog-content data-plugin-id="${
           pluginId || ''
@@ -245,9 +248,9 @@ export const uiApi = {
 
             if (!handlerName) return;
 
-            const handler = (window as any)[handlerName];
+            const handler = (window as unknown as Record<string, unknown>)[handlerName];
             if (typeof handler === 'function') {
-              handler(e);
+              (handler as (e: Event) => void)(e);
             }
           };
 
@@ -281,7 +284,7 @@ export const uiApi = {
     onClose?: () => void;
     onColorChangeComplete?: (color: string) => void;
   }) => {
-    const showColorPicker = (window as any).__dmn_showColorPicker;
+    const showColorPicker = window.__dmn_showColorPicker;
     if (typeof showColorPicker === 'function') {
       showColorPicker(options);
     } else {

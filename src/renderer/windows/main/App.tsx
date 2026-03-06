@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
 import { useCustomCssInjection } from '@hooks/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/useCustomJsInjection';
@@ -89,13 +89,13 @@ export default function App() {
   // 윈도우 타입
   useEffect(() => {
     try {
-      (window as any).__dmn_window_type = 'main';
+      window.__dmn_window_type = 'main';
     } catch {
       // 무시
     }
     return () => {
       try {
-        delete (window as any).__dmn_window_type;
+        delete window.__dmn_window_type;
       } catch {
         // 무시
       }
@@ -183,7 +183,7 @@ export default function App() {
     shortcuts,
   } = useSettingsStore();
 
-  const matchesShortcut = (event: KeyboardEvent, binding?: ShortcutBinding) => {
+  const matchesShortcut = useCallback((event: KeyboardEvent, binding?: ShortcutBinding) => {
     if (!binding?.key) return false;
     const ctrl = !!binding.ctrl;
     const shift = !!binding.shift;
@@ -196,7 +196,7 @@ export default function App() {
       event.altKey === alt &&
       event.metaKey === meta
     );
-  };
+  }, []);
 
   // 개발자 모드 비활성 시 DevTools 단축키 차단
   useEffect(() => {
@@ -282,7 +282,7 @@ export default function App() {
       if (hasModal) return;
 
       // 키 리스닝 중이면 탭 전환 차단
-      if ((window as any).__dmn_isKeyListening) return;
+      if (window.__dmn_isKeyListening) return;
 
       const defaults = ['4key', '5key', '6key', '8key'];
       if (!isBootstrapped || !defaults.includes(selectedKeyType)) return;
@@ -321,7 +321,7 @@ export default function App() {
       if (hasModal) return;
 
       // 키 리스닝 중이면 토글 차단
-      if ((window as any).__dmn_isKeyListening) return;
+      if (window.__dmn_isKeyListening) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -333,14 +333,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler, true);
   }, [matchesShortcut, shortcuts?.toggleSettingsPanel, isSettingsOpen]);
 
-  const showAlert = (message: string, confirmText?: string) => {
+  const showAlert = useCallback((message: string, confirmText?: string) => {
     setAlertState({
       isOpen: true,
       message,
       type: 'alert',
       confirmText: confirmText || t('common.confirm'),
     });
-  };
+  }, [t]);
 
   const handleUpdatePrimaryAction = async () => {
     if (!updateInfo) return;
@@ -375,7 +375,7 @@ export default function App() {
     dismissUpdate();
   };
 
-  const showConfirm = (
+  const showConfirm = useCallback((
     message: string,
     onConfirm: () => void,
     onCancel?: () => void,
@@ -386,7 +386,7 @@ export default function App() {
     cancelCallbackRef.current =
       typeof onCancel === 'function' ? onCancel : null;
     setAlertState({ isOpen: true, message, confirmText, type: 'confirm' });
-  };
+  }, [t]);
 
   const closeAlert = () => {
     setAlertState({
@@ -414,7 +414,7 @@ export default function App() {
   };
 
   // Custom Dialog 핸들러
-  const showCustomDialog = (
+  const showCustomDialog = useCallback((
     html: string,
     options?: {
       onConfirm?: () => void;
@@ -435,7 +435,7 @@ export default function App() {
       cancelText: options?.cancelText,
       showCancel: options?.showCancel ?? false,
     });
-  };
+  }, []);
 
   const closeCustomDialog = () => {
     setCustomDialogState({
@@ -463,7 +463,16 @@ export default function App() {
   };
 
   // Global Color Picker 핸들러
-  const showColorPicker = (options: {
+  const showColorPickerImpl = useRef<(options: {
+    initialColor: string;
+    onColorChange: (color: string) => void;
+    position?: { x: number; y: number };
+    id?: string;
+    referenceElement?: HTMLElement;
+    onClose?: () => void;
+    onColorChangeComplete?: (color: string) => void;
+  }) => void>(() => {});
+  const showColorPicker = useCallback((options: {
     initialColor: string;
     onColorChange: (color: string) => void;
     position?: { x: number; y: number };
@@ -472,28 +481,8 @@ export default function App() {
     onClose?: () => void;
     onColorChangeComplete?: (color: string) => void;
   }) => {
-    // Toggle logic - 이미 열려있으면 닫기만 하고 종료
-    if (
-      options.id &&
-      colorPickerState.isOpen &&
-      colorPickerState.id === options.id
-    ) {
-      closeColorPicker();
-      return;
-    }
-
-    // 다른 컬러 픽커가 열려있으면 먼저 닫기
-    if (colorPickerState.isOpen) {
-      closeColorPicker();
-      // 약간의 지연 후 새 컬러 픽커 열기 (상태 갱신을 위해)
-      setTimeout(() => {
-        openColorPickerWithOptions(options);
-      }, 0);
-      return;
-    }
-
-    openColorPickerWithOptions(options);
-  };
+    showColorPickerImpl.current(options);
+  }, []);
 
   const openColorPickerWithOptions = (options: {
     initialColor: string;
@@ -527,6 +516,40 @@ export default function App() {
     colorPickerCloseCallbackRef.current = null;
   };
 
+  useEffect(() => {
+    showColorPickerImpl.current = (options: {
+      initialColor: string;
+      onColorChange: (color: string) => void;
+      position?: { x: number; y: number };
+      id?: string;
+      referenceElement?: HTMLElement;
+      onClose?: () => void;
+      onColorChangeComplete?: (color: string) => void;
+    }) => {
+      // Toggle logic - 이미 열려있으면 닫기만 하고 종료
+      if (
+        options.id &&
+        colorPickerState.isOpen &&
+        colorPickerState.id === options.id
+      ) {
+        closeColorPicker();
+        return;
+      }
+
+      // 다른 컬러 픽커가 열려있으면 먼저 닫기
+      if (colorPickerState.isOpen) {
+        closeColorPicker();
+        // 약간의 지연 후 새 컬러 픽커 열기 (상태 갱신을 위해)
+        setTimeout(() => {
+          openColorPickerWithOptions(options);
+        }, 0);
+        return;
+      }
+
+      openColorPickerWithOptions(options);
+    };
+  });
+
   const handleGlobalColorChange = (newColor: string) => {
     setColorPickerState((prev) => ({ ...prev, color: newColor }));
     if (colorPickerCallbackRef.current) {
@@ -540,22 +563,24 @@ export default function App() {
     }
   };
 
-  const getColorPickerState = () => colorPickerState;
+  const colorPickerStateRef = useRef(colorPickerState);
+  useEffect(() => { colorPickerStateRef.current = colorPickerState; }, [colorPickerState]);
+  const getColorPickerState = useCallback(() => colorPickerStateRef.current, []);
 
   // Dialog API를 전역으로 노출
   useEffect(() => {
-    (window as any).__dmn_showAlert = showAlert;
-    (window as any).__dmn_showConfirm = showConfirm;
-    (window as any).__dmn_showCustomDialog = showCustomDialog;
-    (window as any).__dmn_showColorPicker = showColorPicker;
-    (window as any).__dmn_getColorPickerState = getColorPickerState;
+    window.__dmn_showAlert = showAlert;
+    window.__dmn_showConfirm = showConfirm;
+    window.__dmn_showCustomDialog = showCustomDialog;
+    window.__dmn_showColorPicker = showColorPicker;
+    window.__dmn_getColorPickerState = getColorPickerState;
 
     return () => {
-      delete (window as any).__dmn_showAlert;
-      delete (window as any).__dmn_showConfirm;
-      delete (window as any).__dmn_showCustomDialog;
-      delete (window as any).__dmn_showColorPicker;
-      delete (window as any).__dmn_getColorPickerState;
+      delete window.__dmn_showAlert;
+      delete window.__dmn_showConfirm;
+      delete window.__dmn_showCustomDialog;
+      delete window.__dmn_showColorPicker;
+      delete window.__dmn_getColorPickerState;
     };
   }, [
     showAlert,
@@ -571,7 +596,7 @@ export default function App() {
       <div className="flex-1 bg-[#2A2A31] overflow-hidden flex">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
-            <SettingTab showAlert={showAlert} showConfirm={showConfirm as any} />
+            <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
           </div>
         ) : (
           <div

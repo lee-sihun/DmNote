@@ -1,9 +1,10 @@
 import React, {
+  useCallback,
   useEffect,
   useState,
   useRef,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/useGridSelectionStore';
 import { useKeyStore } from '@stores/useKeyStore';
 import { useStatItemStore } from '@stores/useStatItemStore';
@@ -18,7 +19,7 @@ import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import type { KeyPosition } from '@src/types/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/statItems';
 import type { GraphItemPosition } from '@src/types/graphItems';
-import type { PluginSettingSchema, PluginMessages } from '@src/types/api';
+import type { PluginSettingSchema, PluginMessages, RawInputPayload } from '@src/types/api';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
@@ -227,12 +228,12 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       if (element.type === 'key' && typeof element.index === 'number') {
         currentGroupId = keyModePositions[element.index]?.groupId;
       } else if (element.type === 'stat' && typeof element.index === 'number') {
-        currentGroupId = (statModePositions[element.index] as any)?.groupId;
+        currentGroupId = statModePositions[element.index]?.groupId;
       } else if (
         element.type === 'graph' &&
         typeof element.index === 'number'
       ) {
-        currentGroupId = (graphModePositions[element.index] as any)?.groupId;
+        currentGroupId = graphModePositions[element.index]?.groupId;
       } else {
         return null;
       }
@@ -249,9 +250,9 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
 
     const totalMembers =
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
-      statModePositions.filter((pos) => (pos as any)?.groupId === groupId)
+      statModePositions.filter((pos) => pos?.groupId === groupId)
         .length +
-      graphModePositions.filter((pos) => (pos as any)?.groupId === groupId)
+      graphModePositions.filter((pos) => pos?.groupId === groupId)
         .length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
@@ -271,7 +272,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   const pluginSettingsHistoryRef = useRef<string | null>(null);
   const pluginTransformHistoryRef = useRef<string | null>(null);
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
-    Record<string, any>
+    Record<string, unknown>
   >({});
 
   // 레이어 이름 변경 상태
@@ -384,9 +385,9 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   const getCurrentLayerName = (): string => {
     if (selectedGroupInfo) return selectedGroupInfo.name || '';
     if (singleKeyPosition) return singleKeyPosition.layerName || '';
-    if (singleStatPosition) return (singleStatPosition as any).layerName || '';
+    if (singleStatPosition) return singleStatPosition.layerName || '';
     if (singleGraphPosition)
-      return (singleGraphPosition as any).layerName || '';
+      return singleGraphPosition.layerName || '';
     return '';
   };
 
@@ -397,10 +398,10 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       return singleKeyInfo?.displayName || singleKeyCode || 'Key';
     }
     if (singleStatPosition) {
-      return getStatTypeLabel((singleStatPosition as any).statType ?? null);
+      return getStatTypeLabel(singleStatPosition.statType ?? null);
     }
     if (singleGraphPosition) {
-      return `${getStatTypeLabel((singleGraphPosition as any).statType ?? null)} Graph`;
+      return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
     }
     return '';
   };
@@ -426,8 +427,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
         .pushState(
           km,
           pos,
-          statPos as any,
-          graphPos as any,
+          statPos,
+          graphPos,
           pluginEls,
           currentGroups,
         );
@@ -448,7 +449,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     };
 
   // 레이어 이름 변경 시작
-  const handleRenameStart = () => {
+  const handleRenameStartImpl = useRef<() => void>(() => {});
+  handleRenameStartImpl.current = () => {
     const current = getCurrentLayerName();
     setRenameValue(current || getCurrentDefaultTitle());
     setIsRenaming(true);
@@ -457,6 +459,9 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       renameInputRef.current?.select();
     });
   };
+  const handleRenameStart = useCallback(() => {
+    handleRenameStartImpl.current();
+  }, []);
 
   // 레이어 이름 변경 커밋
   const handleRenameCommit = async (value: string) => {
@@ -473,7 +478,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
         trimmed === defaultTitle || trimmed === '' ? undefined : trimmed;
 
       if (singleKeyIndex !== null && singleKeyPosition) {
-        onKeyUpdate({ index: singleKeyIndex, layerName: newLayerName } as any);
+        onKeyUpdate({ index: singleKeyIndex, layerName: newLayerName } as Partial<KeyPosition> & { index: number });
       } else if (singleStatIndex !== null && singleStatPosition) {
         const mode = selectedKeyType;
         const current = useStatItemStore.getState().positions;
@@ -575,13 +580,13 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     return { top, height, visible: true };
   };
 
-  const updatePluginThumbDOM = () => {
+  const updatePluginThumbDOM = useCallback(() => {
     if (!pluginThumbRef.current || !pluginScrollElementRef.current) return;
     const thumb = calculatePluginThumb(pluginScrollElementRef.current);
     pluginThumbRef.current.style.top = `${thumb.top}px`;
     pluginThumbRef.current.style.height = `${thumb.height}px`;
     pluginThumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
+  }, []);
 
   const { scrollContainerRef: pluginLenisRef } = useLenis({
     onScroll: updatePluginThumbDOM,
@@ -618,7 +623,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     });
     return () => cancelAnimationFrame(raf);
   }, [
-    pluginSettingsPanel?.pluginId,
+    pluginSettingsPanel,
     pluginSettingsSchemaCount,
     selectedPluginElement?.fullId,
     selectedPluginDefinition?.id,
@@ -640,8 +645,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   >('idle');
 
   const [batchLocalColors, setBatchLocalColors] = useState<{
-    noteColor: any;
-    glowColor: any;
+    noteColor: NoteColor;
+    glowColor: NoteColor;
     fillIdle: string;
     fillActive: string;
     strokeIdle: string;
@@ -677,14 +682,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       setLocalState({});
     }
   }, [
-    singleKeyPosition?.dx,
-    singleKeyPosition?.dy,
-    singleKeyPosition?.width,
-    singleKeyPosition?.height,
-    singleStatPosition?.dx,
-    singleStatPosition?.dy,
-    singleStatPosition?.width,
-    singleStatPosition?.height,
+    singleKeyPosition,
+    singleStatPosition,
   ]);
 
   useEffect(() => {
@@ -771,6 +770,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     selectedElements,
     isPanelVisible,
     pluginSettingsPanel,
+    setIsPanelVisible,
   ]);
 
   // 언마운트 시 키보드 플래그 오염 방지
@@ -790,7 +790,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [selectedBatchStyleElements.length, isPanelVisible]);
+  }, [selectedBatchStyleElements.length, isPanelVisible, setIsPanelVisible]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -798,7 +798,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [pluginSettingsPanel]);
+  }, [pluginSettingsPanel, setIsPanelVisible]);
 
   // 레이어 패널이 열려있고 선택이 없는 상태에서 그리드 빈 공간 클릭 시 패널 닫기
   useEffect(() => {
@@ -840,9 +840,11 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     };
   }, [
     isPanelVisible,
+    selectedKeyElements.length,
     selectedKeyLikeElements.length,
     selectedElements.length,
     panelMode,
+    setIsPanelVisible,
   ]);
 
   // 키 리스닝 상태를 전역으로 노출
@@ -853,10 +855,10 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
     }
 
     if (isListening) {
-      (window as any).__dmn_isKeyListening = true;
+      window.__dmn_isKeyListening = true;
     } else {
       listeningFlagTimerRef.current = setTimeout(() => {
-        (window as any).__dmn_isKeyListening = false;
+        window.__dmn_isKeyListening = false;
         listeningFlagTimerRef.current = null;
       }, 150);
     }
@@ -872,7 +874,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   // 컴포넌트 언마운트 시 반드시 플래그 해제
   useEffect(() => {
     return () => {
-      (window as any).__dmn_isKeyListening = false;
+      window.__dmn_isKeyListening = false;
       if (listeningFlagTimerRef.current !== null) {
         clearTimeout(listeningFlagTimerRef.current);
         listeningFlagTimerRef.current = null;
@@ -921,7 +923,7 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       return undefined;
     }
 
-    const unsubscribe = window.api.keys.onRawInput((payload: any) => {
+    const unsubscribe = window.api.keys.onRawInput((payload: RawInputPayload) => {
       if (!payload || payload.state !== 'DOWN') return;
       const targetLabel =
         payload.label ||
@@ -955,7 +957,8 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
   // 핸들러
   // ============================================================================
 
-  const handleTogglePanel = () => {
+  const handleTogglePanelImpl = useRef<() => void>(() => {});
+  handleTogglePanelImpl.current = () => {
     const willOpen = !isPanelVisible;
 
     if (willOpen) {
@@ -973,13 +976,16 @@ if (selectedElements.length < 2 || selectedPluginElements.length > 0) {
       setShowBatchImagePicker(false);
     }
   };
+  const handleTogglePanel = useCallback(() => {
+    handleTogglePanelImpl.current();
+  }, []);
 
   const handleToggleMode = () => {
     setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
   };
 
   const pluginDefaultSettings = (() => {
-const defaults: Record<string, any> = {};
+const defaults: Record<string, unknown> = {};
     if (selectedPluginDefinition?.settings) {
       Object.entries(selectedPluginDefinition.settings).forEach(
         ([key, schema]) => {
@@ -1079,7 +1085,7 @@ const defaults: Record<string, any> = {};
       });
     };
 
-  const handlePluginSettingChange = (key: string, value: any) => {
+  const handlePluginSettingChange = (key: string, value: unknown) => {
       if (!selectedPluginElement) return;
       ensurePluginSettingsHistory();
       updatePluginElement(selectedPluginElement.fullId, {
@@ -1090,7 +1096,7 @@ const defaults: Record<string, any> = {};
       });
     };
 
-  const handlePluginSettingsPanelChange = (key: string, value: any) => {
+  const handlePluginSettingsPanelChange = (key: string, value: unknown) => {
       if (!pluginSettingsPanel) return;
       setPluginPanelSettings((prev) => {
         const next = { ...prev, [key]: value };
@@ -1115,7 +1121,8 @@ const defaults: Record<string, any> = {};
     }
   };
 
-  const handlePluginSettingsPanelCancel = () => {
+  const handlePluginSettingsPanelCancelImpl = useRef<() => void>(() => {});
+  handlePluginSettingsPanelCancelImpl.current = () => {
     if (!pluginSettingsPanel) return;
     try {
       pluginSettingsPanel.onCancel(pluginSettingsPanel.originalSettings);
@@ -1126,6 +1133,9 @@ const defaults: Record<string, any> = {};
       closePluginSettingsPanel();
     }
   };
+  const handlePluginSettingsPanelCancel = useCallback(() => {
+    handlePluginSettingsPanelCancelImpl.current();
+  }, []);
 
   // 외부(단축키 등)에서 보낸 사이드 패널 토글 요청 처리
   const prevToggleSignalRef = useRef<number>(canvasPanelToggleSignal);
@@ -1436,7 +1446,7 @@ const defaults: Record<string, any> = {};
       if (singleKeyIndex !== null) {
         onKeyUpdate({ index: singleKeyIndex, ...updates });
       } else if (singleStatIndex !== null) {
-        handleStatUpdate({ index: singleStatIndex, ...(updates as any) });
+        handleStatUpdate({ index: singleStatIndex, ...(updates as Partial<StatItemPosition>) });
       }
     }
   };
@@ -1591,7 +1601,7 @@ const defaults: Record<string, any> = {};
     handleBatchGlowColorChange,
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
-    selectedKeyLikeElements: selectedBatchStyleElements as any,
+    selectedKeyLikeElements: selectedBatchStyleElements as { type: 'key' | 'stat' | 'graph'; id: string; index?: number }[],
     keyPositions: positions,
     statPositions: statItemPositions,
     graphPositions: graphItemPositions,
@@ -1664,7 +1674,7 @@ const defaults: Record<string, any> = {};
       updates.forEach((update) => onKeyUpdate(update));
     };
 
-  const handleBatchKeyOnlyStyleChangeComplete = (property: keyof KeyPosition, value: any) => {
+  const handleBatchKeyOnlyStyleChangeComplete = (property: keyof KeyPosition, value: KeyPosition[keyof KeyPosition]) => {
       const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
         index,
         [property]: value,
@@ -1715,10 +1725,10 @@ const defaults: Record<string, any> = {};
 
   const renderPluginSettingsForm = (
       schema: Record<string, PluginSettingSchema> | undefined,
-      values: Record<string, any>,
+      values: Record<string, unknown>,
       messages: PluginMessages | undefined,
       colorIdPrefix: string,
-      onChange: (key: string, value: any) => void,
+      onChange: (key: string, value: unknown) => void,
       options?: { wrap?: boolean },
     ) => {
       if (!schema || Object.keys(schema).length === 0) {
@@ -1741,7 +1751,7 @@ const defaults: Record<string, any> = {};
 
       const getPluginInputWidth = (
         type: 'string' | 'number',
-        value: any,
+        value: unknown,
       ): string => {
         if (type === 'number') {
           return '60px';
@@ -1954,7 +1964,7 @@ const defaults: Record<string, any> = {};
       setBatchPickerFor((prev) => (prev === target ? null : target));
     };
 
-  const getBatchPickerColor = (): any => {
+  const getBatchPickerColor = (): NoteColor | string => {
     switch (batchPickerFor) {
       case 'noteColor':
         return batchLocalColors.noteColor;
@@ -1988,7 +1998,7 @@ const defaults: Record<string, any> = {};
     }
   };
 
-  const handleBatchPickerColorChange = (newColor: any) => {
+  const handleBatchPickerColorChange = (newColor: NoteColor) => {
       if (!batchPickerFor) return;
 
       if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
@@ -1997,25 +2007,27 @@ const defaults: Record<string, any> = {};
           [batchPickerFor]: newColor,
         }));
       } else if (batchPickerFor === 'fill') {
+        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         const key =
           batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
-          [key]: newColor,
+          [key]: solidColor,
         }));
       } else if (batchPickerFor === 'stroke') {
+        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         const key =
           batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
-          [key]: newColor,
+          [key]: solidColor,
         }));
       }
 
       const isGradientNoteLikeColor =
         !!newColor &&
         typeof newColor === 'object' &&
-        (newColor as any).type === 'gradient';
+        newColor.type === 'gradient';
 
       if (
         isGradientNoteLikeColor &&
@@ -2039,7 +2051,7 @@ const defaults: Record<string, any> = {};
       }
     };
 
-  const handleBatchPickerColorChangeComplete = (newColor: any) => {
+  const handleBatchPickerColorChangeComplete = (newColor: NoteColor) => {
       if (!batchPickerFor) return;
 
       if (batchPickerFor === 'noteColor' || batchPickerFor === 'glowColor') {
@@ -2048,18 +2060,20 @@ const defaults: Record<string, any> = {};
           [batchPickerFor]: newColor,
         }));
       } else if (batchPickerFor === 'fill') {
+        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         const key =
           batchCounterColorState === 'active' ? 'fillActive' : 'fillIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
-          [key]: newColor,
+          [key]: solidColor,
         }));
       } else if (batchPickerFor === 'stroke') {
+        const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         const key =
           batchCounterColorState === 'active' ? 'strokeActive' : 'strokeIdle';
         setBatchLocalColors((prev) => ({
           ...prev,
-          [key]: newColor,
+          [key]: solidColor,
         }));
       }
 
@@ -2081,23 +2095,25 @@ const defaults: Record<string, any> = {};
           handleBatchGlowColorChangeComplete(newColor);
         }
       } else if (batchPickerFor === 'fill') {
+        const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         if (batchCounterColorState === 'active') {
           handleBatchCounterUpdate({
-            fill: { ...firstCounter.fill, active: newColor },
+            fill: { ...firstCounter.fill, active: fillColor },
           });
         } else {
           handleBatchCounterUpdate({
-            fill: { ...firstCounter.fill, idle: newColor },
+            fill: { ...firstCounter.fill, idle: fillColor },
           });
         }
       } else if (batchPickerFor === 'stroke') {
+        const strokeColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
         if (batchCounterColorState === 'active') {
           handleBatchCounterUpdate({
-            stroke: { ...firstCounter.stroke, active: newColor },
+            stroke: { ...firstCounter.stroke, active: strokeColor },
           });
         } else {
           handleBatchCounterUpdate({
-            stroke: { ...firstCounter.stroke, idle: newColor },
+            stroke: { ...firstCounter.stroke, idle: strokeColor },
           });
         }
       }

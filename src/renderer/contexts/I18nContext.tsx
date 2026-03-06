@@ -1,27 +1,19 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useState,
   } from 'react';
 import type { ReactNode } from 'react';
 import type { SettingsDiff, SettingsState } from '@src/types/settings';
+import { I18nContext } from './I18nContextDef';
+import type { SupportedLocale, I18nContextValue } from './I18nContextDef';
 
-export type SupportedLocale = 'ko' | 'en' | 'zh-cn' | 'zh-Hant' | 'ru';
+export type { SupportedLocale } from './I18nContextDef';
 
 type Messages = Record<string, unknown>;
-
-interface I18nContextValue {
-  locale: SupportedLocale;
-  setLocale: (locale: SupportedLocale) => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}
 
 const STORAGE_KEY = 'dmnote:locale';
 const LOCALE_INIT_KEY = 'dmnote:locale_initialized';
 const DEFAULT_LOCALE: SupportedLocale = 'ko';
-
-const I18nContext = createContext<I18nContextValue | null>(null);
 
 function isSupportedLocale(value: unknown): value is SupportedLocale {
   return (
@@ -258,17 +250,3 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
-export function useTranslation() {
-  const ctx = useContext(I18nContext);
-  if (!ctx) {
-    throw new Error('useTranslation must be used within I18nProvider');
-  }
-
-  return {
-    t: ctx.t,
-    i18n: {
-      language: ctx.locale,
-      changeLanguage: ctx.setLocale,
-    },
-  };
-}

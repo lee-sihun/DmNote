@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
 import { SectionDivider, PropertyRow, NumberInput } from './PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';

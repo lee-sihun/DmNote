@@ -73,7 +73,7 @@ export function useGridKeyboard({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         typeof window !== 'undefined' &&
-        (window as any).__dmn_isKeyListening
+        window.__dmn_isKeyListening
       ) {
         return;
       }
@@ -336,6 +336,7 @@ export function useGridKeyboard({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    macOS,
     selectedElements,
     moveSelectedElements,
     deleteSelectedElements,
@@ -352,7 +353,7 @@ export function useGridKeyboard({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         typeof window !== 'undefined' &&
-        (window as any).__dmn_isKeyListening
+        window.__dmn_isKeyListening
       ) {
         return;
       }

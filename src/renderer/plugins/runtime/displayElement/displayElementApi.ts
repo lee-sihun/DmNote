@@ -55,14 +55,14 @@ export const displayElementApi = {
    * 새로운 디스플레이 요소를 추가합니다.
    */
   add: (element: PluginDisplayElementConfig): DisplayElementInstance => {
-    if ((window as any).__dmn_window_type !== 'main') {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
         '[UI API] displayElement.add is only available in main window',
       );
       return createNoopDisplayElementInstance();
     }
 
-    const pluginId = (window as any).__dmn_current_plugin_id;
+    const pluginId = window.__dmn_current_plugin_id;
     if (!pluginId) {
       console.warn('[UI API] displayElement.add called outside plugin context');
       return createNoopDisplayElementInstance();
@@ -147,8 +147,8 @@ export const displayElementApi = {
 
     usePluginDisplayElementStore.getState().addElement(internalElement);
 
-    const currentLocale = (window as any).__dmn_current_locale || 'ko';
-    const pluginMessages = (window as any).__dmn_plugin_messages?.[pluginId];
+    const currentLocale = window.__dmn_current_locale || 'ko';
+    const pluginMessages = window.__dmn_plugin_messages?.[pluginId];
     const t = createPluginTranslator(pluginMessages, currentLocale);
 
     const instance = new DisplayElementInstance({
@@ -186,7 +186,7 @@ export const displayElementApi = {
   /**
    * 디스플레이 요소의 상태를 업데이트합니다.
    */
-  setState: (target: DisplayElementTarget, updates: Record<string, any>) => {
+  setState: (target: DisplayElementTarget, updates: Record<string, unknown>) => {
     const instance = resolveInstance(target);
     if (!instance) return;
     instance.setState(updates || {});
@@ -195,7 +195,7 @@ export const displayElementApi = {
   /**
    * 디스플레이 요소의 데이터를 업데이트합니다.
    */
-  setData: (target: DisplayElementTarget, updates: Record<string, any>) => {
+  setData: (target: DisplayElementTarget, updates: Record<string, unknown>) => {
     const instance = resolveInstance(target);
     if (!instance) return;
     instance.setData(updates || {});
@@ -291,7 +291,7 @@ export const displayElementApi = {
     target: DisplayElementTarget,
     updates: Partial<PluginDisplayElement>,
   ) => {
-    if ((window as any).__dmn_window_type !== 'main') {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
         '[UI API] displayElement.update is only available in main window',
       );
@@ -306,7 +306,7 @@ export const displayElementApi = {
    * 디스플레이 요소를 제거합니다.
    */
   remove: (target: DisplayElementTarget) => {
-    if ((window as any).__dmn_window_type !== 'main') {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
         '[UI API] displayElement.remove is only available in main window',
       );
@@ -325,14 +325,14 @@ export const displayElementApi = {
    * 현재 플러그인의 모든 디스플레이 요소를 제거합니다.
    */
   clearMyElements: () => {
-    if ((window as any).__dmn_window_type !== 'main') {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
         '[UI API] displayElement.clearMyElements is only available in main window',
       );
       return;
     }
 
-    const pluginId = (window as any).__dmn_current_plugin_id;
+    const pluginId = window.__dmn_current_plugin_id;
     if (!pluginId) {
       console.warn('[UI API] clearMyElements called outside plugin context');
       return;

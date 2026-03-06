@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { useUIStore } from '@stores/useUIStore';
 import FolderIcon from '@assets/svgs/folder.svg';
 import SettingIcon from '@assets/svgs/setting.svg';

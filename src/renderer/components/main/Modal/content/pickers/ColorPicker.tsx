@@ -5,7 +5,7 @@ import React, {
   useState,
   useLayoutEffect,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import { Saturation, Hue, Alpha, useColor, type IColor } from 'react-color-palette';
 import 'react-color-palette/css';
 import FloatingPopup from '../../FloatingPopup';
@@ -292,7 +292,7 @@ export default function ColorPickerWrapper({
     }
 
     prevColorRef.current = color;
-  }, [color, gradientSelected]);
+  }, [color, gradientSelected, setSelectedColor]);
 
   const [inputValue, setInputValue] = useState<string>(() =>
     selectedColor.hex

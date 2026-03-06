@@ -1,13 +1,13 @@
 import type { PluginMessages, PluginI18nParams } from '@src/types/api';
 
-function getNestedValue(source: Record<string, any>, path: string): unknown {
+function getNestedValue(source: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, part) => {
     if (
       acc &&
       typeof acc === 'object' &&
-      part in (acc as Record<string, any>)
+      part in (acc as Record<string, unknown>)
     ) {
-      return (acc as Record<string, any>)[part];
+      return (acc as Record<string, unknown>)[part];
     }
     return undefined;
   }, source);

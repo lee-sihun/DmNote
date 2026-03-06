@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useLenis } from '@hooks/useLenis';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
 
@@ -25,15 +25,7 @@ export default function Alert({
   onConfirm,
   onCancel,
 }: AlertProps) {
-  if (!isOpen) return null;
-
   const { t } = useTranslation();
-  const confirmLabel = confirmText || t('common.confirm');
-  const cancelLabel = cancelText || t('common.cancel');
-
-  const isConfirm = type === 'confirm';
-  const isCustom = type === 'custom';
-  const shouldShowCancel = isConfirm || (isCustom && showCancel);
 
   const [scrollState, setScrollState] = useState<{
     hasTopShadow: boolean;
@@ -44,7 +36,7 @@ export default function Alert({
   });
 
   // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
+  const updateScrollState = useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const nextState = getScrollShadowState(el);
     setScrollState((prev) =>
@@ -53,7 +45,7 @@ export default function Alert({
         ? prev
         : nextState,
     );
-  };
+  }, []);
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
   const {
@@ -64,6 +56,9 @@ export default function Alert({
     onScroll: () => updateScrollState(wrapperElement),
   });
 
+  const isConfirm = type === 'confirm';
+  const isCustom = type === 'custom';
+
   useEffect(() => {
     if (isCustom && wrapperElement) {
       // DOM이 렌더링된 후 스크롤 상태 확인
@@ -71,6 +66,12 @@ export default function Alert({
       return () => clearTimeout(timer);
     }
   }, [isCustom, message, wrapperElement, updateScrollState]);
+
+  if (!isOpen) return null;
+
+  const confirmLabel = confirmText || t('common.confirm');
+  const cancelLabel = cancelText || t('common.cancel');
+  const shouldShowCancel = isConfirm || (isCustom && showCancel);
 
   const hasOverflow =
     !!wrapperElement &&

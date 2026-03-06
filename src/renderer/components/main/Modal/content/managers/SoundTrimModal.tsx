@@ -1,9 +1,10 @@
 import React, {
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from 'react';
-import { useTranslation } from '@contexts/I18nContext';
+import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
 import {
   getCursor,
@@ -43,7 +44,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function createAudioContext(): AudioContext {
-  const ctor = window.AudioContext || (window as any).webkitAudioContext;
+  const ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   return new ctor();
 }
 
@@ -390,7 +391,7 @@ export default function SoundTrimModal({
     setIsPlaying(false);
   };
 
-  const redrawWaveformStatic = (pausedRatio?: number | null) => {
+  const redrawWaveformStatic = useCallback((pausedRatio?: number | null) => {
     const canvas = canvasRef.current;
     const currentPeaks = peaksRef.current;
     if (canvas && currentPeaks.length > 0) {
@@ -404,7 +405,7 @@ export default function SoundTrimModal({
         viewEndRef.current,
       );
     }
-  };
+  }, []);
 
   // 일시정지: 현재 위치 저장 및 일시정지 위치에 표시기 표시
   const pausePlayback = () => {
@@ -500,7 +501,8 @@ export default function SoundTrimModal({
     animFrameRef.current = requestAnimationFrame(animate);
   };
 
-  const resetState = () => {
+  const resetStateImpl = useRef<() => void>(() => {});
+  resetStateImpl.current = () => {
     pausedAtRatioRef.current = null;
     originalFileDataRef.current = null;
     stopPlayback();
@@ -523,6 +525,9 @@ export default function SoundTrimModal({
       fileInputRef.current.value = '';
     }
   };
+  const resetState = useCallback(() => {
+    resetStateImpl.current();
+  }, []);
 
   const closeModal = () => {
     resetState();
@@ -535,7 +540,8 @@ export default function SoundTrimModal({
     }
   }, [isOpen, resetState]);
 
-  const processFile = async (file: File, signal?: { cancelled: boolean }) => {
+  const processFileImpl = useRef<(file: File, signal?: { cancelled: boolean }) => Promise<void>>(async () => {});
+  processFileImpl.current = async (file: File, signal?: { cancelled: boolean }) => {
     stopPlayback();
     setErrorText('');
     setIsDecoding(true);
@@ -574,6 +580,9 @@ export default function SoundTrimModal({
       }
     }
   };
+  const processFile = useCallback(async (file: File, signal?: { cancelled: boolean }) => {
+    await processFileImpl.current(file, signal);
+  }, []);
 
   // 편집 모드: 백엔드에서 원본 오디오 로드
   useEffect(() => {
@@ -686,7 +695,7 @@ export default function SoundTrimModal({
   viewPanRatioRef.current = viewPanRatio;
   const isWheelProcessingRef = useRef(false);
 
-  const handleWheel = (e: WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     if (!audioBuffer) return;
     if (isWheelProcessingRef.current) return;
@@ -719,7 +728,7 @@ export default function SoundTrimModal({
 
     setViewZoom(newZoom);
     setViewPanRatio(newPan);
-  };
+  }, [audioBuffer]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -730,7 +739,7 @@ export default function SoundTrimModal({
   }, [isOpen, handleWheel]);
 
   // 중간 버튼 드래그: 줌 시 수평 패닝
-  const handleMiddleDown = (e: MouseEvent) => {
+  const handleMiddleDown = useCallback((e: MouseEvent) => {
     if (e.button !== 1) return;
     if (!audioBufferRef.current) return;
     e.preventDefault();
@@ -767,7 +776,7 @@ export default function SoundTrimModal({
     middleDragCleanupRef.current = cleanup;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', cleanup);
-  };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;

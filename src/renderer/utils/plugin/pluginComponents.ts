@@ -9,7 +9,7 @@ import { registerComponentHandler } from './pluginUtils';
  * 현재 실행 중인 플러그인 ID를 가져옵니다.
  */
 function getCurrentPluginId(): string {
-  return (window as any).__dmn_current_plugin_id || 'unknown';
+  return window.__dmn_current_plugin_id || 'unknown';
 }
 
 export interface ButtonOptions {
