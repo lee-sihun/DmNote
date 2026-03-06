@@ -10,7 +10,6 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
@@ -24,42 +23,16 @@ import {
   normalizeLayerGroupsForMode,
   resolveSingleGroupIdFromSelection,
 } from '@utils/layerGroupUtils';
-
-// ============================================================================
-// 레이어 아이템 타입
-// ============================================================================
-
-interface LayerItem {
-  type: 'key' | 'stat' | 'graph' | 'plugin';
-  id: string;
-  index?: number; // key/stat인 경우
-  name: string;
-  zIndex: number;
-  hidden: boolean;
-  groupId?: string;
-}
-
-// ============================================================================
-// 그룹 헤더 / 디스플레이 아이템 타입
-// ============================================================================
-
-interface GroupHeaderItem {
-  displayType: 'group-header';
-  groupId: string;
-  groupName: string;
-  isCollapsed: boolean;
-  childCount: number;
-  allHidden: boolean;
-}
-
-interface LayerDisplayItem {
-  displayType: 'layer';
-  item: LayerItem;
-  groupDepth: number; // 0 = ungrouped, 1 = in group
-  flatIndex: number; // index in the original layerItems array
-}
-
-type DisplayItem = GroupHeaderItem | LayerDisplayItem;
+import type { LayerItem, DisplayItem } from './types';
+import { buildLayerItems, buildDisplayItems } from './layerPanelModel';
+import {
+  FolderIcon,
+  ChevronIcon,
+  KeyIcon,
+  PluginIcon,
+  StatIcon,
+  GraphIcon,
+} from './LayerIcons';
 
 function layerItemToSelectedElement(item: LayerItem): SelectedElement {
   return {
@@ -70,55 +43,6 @@ function layerItemToSelectedElement(item: LayerItem): SelectedElement {
 }
 
 // ============================================================================
-// 그룹 폴더 아이콘
-// ============================================================================
-
-const FolderIcon: React.FC<{ open?: boolean }> = ({ open }) => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    {open ? (
-      <path
-        d="M1.5 3.5C1.5 2.95 1.95 2.5 2.5 2.5H5.5L7 4H11.5C12.05 4 12.5 4.45 12.5 5V10.5C12.5 11.05 12.05 11.5 11.5 11.5H2.5C1.95 11.5 1.5 11.05 1.5 10.5V3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    ) : (
-      <path
-        d="M1.5 3.5C1.5 2.95 1.95 2.5 2.5 2.5H5.5L7 4H11.5C12.05 4 12.5 4.45 12.5 5V10.5C12.5 11.05 12.05 11.5 11.5 11.5H2.5C1.95 11.5 1.5 11.05 1.5 10.5V3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="currentColor"
-        fillOpacity="0.15"
-      />
-    )}
-  </svg>
-);
-
-const ChevronIcon: React.FC<{ collapsed?: boolean }> = ({ collapsed }) => (
-  <svg
-    width="10"
-    height="10"
-    viewBox="0 0 10 10"
-    fill="none"
-    style={{
-      transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-      transition: 'transform 0.15s ease',
-    }}
-  >
-    <path
-      d="M3 4L5 6L7 4"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// ============================================================================
 // 레이어 탭 콘텐츠 Props
 // ============================================================================
 
@@ -126,79 +50,6 @@ interface LayerTabContentProps {
   onSwitchToProperty?: () => void;
   onSelectionFromPanel?: () => void;
 }
-
-// ============================================================================
-// 키 아이콘 컴포넌트 (키캡 + 문자)
-// ============================================================================
-
-const KeyIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <rect
-      x="2"
-      y="2"
-      width="10"
-      height="10"
-      rx="2.5"
-      stroke="currentColor"
-      strokeWidth="1.2"
-    />
-    <circle cx="7" cy="7" r="2" fill="currentColor" />
-  </svg>
-);
-
-// ============================================================================
-// 플러그인 아이콘 컴포넌트 (퍼즐 조각)
-// ============================================================================
-
-const PluginIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <rect
-      x="7"
-      y="0.05"
-      width="9.8"
-      height="9.8"
-      rx="2"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      transform="rotate(45 7 0.05)"
-    />
-    <circle cx="7" cy="7" r="2" fill="currentColor" />
-  </svg>
-);
-
-// ============================================================================
-// 통계 아이콘 컴포넌트 (σ)
-// ============================================================================
-
-const StatIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <path
-      d="M10.8 2H3.7c-.4 0-.7.3-.7.7 0 .2.1.4.2.5l3 3.8-3 3.8c-.1.1-.2.3-.2.5 0 .4.3.7.7.7h7.1"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const GraphIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <path
-      d="M2 10.5L5.2 7.3L7.4 8.8L12 4.2"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M12 4.2H9.8"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
 
 // ============================================================================
 // 레이어 탭 콘텐츠 컴포넌트
@@ -337,89 +188,14 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   });
 
   // 레이어 아이템 목록 생성 (z-index 순서로 정렬)
-  const layerItems = (() => {
-    const items: LayerItem[] = [];
-
-    // 키 아이템 추가
-    const currentPositions = positions[selectedKeyType] || [];
-    const currentKeyMappings = keyMappings[selectedKeyType] || [];
-
-    currentPositions.forEach((pos, index) => {
-      const keyCode = currentKeyMappings[index] || '';
-      const keyInfo = keyCode ? getKeyInfoByGlobalKey(keyCode) : null;
-      const defaultName = keyInfo?.displayName || keyCode || `Key ${index + 1}`;
-      items.push({
-        type: 'key',
-        id: `key-${index}`,
-        index,
-        name: pos.layerName || defaultName,
-        zIndex: pos.zIndex ?? index,
-        hidden: !!pos.hidden,
-        groupId: pos.groupId,
-      });
-    });
-
-    // 통계 아이템 추가
-    const currentStatPositions = statPositions[selectedKeyType] || [];
-    currentStatPositions.forEach((pos, index) => {
-      const defaultName =
-        pos.statType === 'kpsAvg'
-          ? 'AVG'
-          : pos.statType === 'kpsMax'
-          ? 'MAX'
-          : pos.statType === 'total'
-          ? 'Total'
-          : 'KPS';
-      items.push({
-        type: 'stat',
-        id: `stat-${index}`,
-        index,
-        name: pos.layerName || defaultName,
-        zIndex: pos.zIndex ?? index,
-        hidden: !!pos.hidden,
-        groupId: pos.groupId,
-      });
-    });
-
-    // 그래프 아이템 추가
-    const currentGraphPositions = graphPositions[selectedKeyType] || [];
-    currentGraphPositions.forEach((pos, index) => {
-      const defaultName =
-        pos.statType === 'kpsAvg'
-          ? 'AVG Graph'
-          : pos.statType === 'kpsMax'
-          ? 'MAX Graph'
-          : pos.statType === 'total'
-          ? 'Total Graph'
-          : 'KPS Graph';
-      items.push({
-        type: 'graph',
-        id: `graph-${index}`,
-        index,
-        name: pos.layerName || defaultName,
-        zIndex: pos.zIndex ?? index,
-        hidden: !!pos.hidden,
-        groupId: pos.groupId,
-      });
-    });
-
-    // 플러그인 아이템 추가
-    pluginElements.forEach((el) => {
-      items.push({
-        type: 'plugin',
-        id: el.fullId,
-        name: el.definitionId || 'Plugin',
-        zIndex: el.zIndex ?? 0,
-        hidden: !!el.hidden,
-        groupId: undefined,
-      });
-    });
-
-    // z-index 내림차순 정렬 (높은 것이 위에)
-    items.sort((a, b) => b.zIndex - a.zIndex);
-
-    return items;
-  })();
+  const layerItems = buildLayerItems({
+    selectedKeyType,
+    positions,
+    keyMappings,
+    statPositions,
+    graphPositions,
+    pluginElements,
+  });
 
   // 레이어 그룹 스토어 (안정적인 참조 유지: 셀렉터에서 새 객체를 생성하지 않음)
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
@@ -428,69 +204,12 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const toggleCollapsed = useLayerGroupStore((state) => state.toggleCollapsed);
 
   // 디스플레이 아이템: 그룹 헤더가 삽입된 목록
-  const displayItems = ((): DisplayItem[] => {
-    const result: DisplayItem[] = [];
-    const seenGroups = new Set<string>();
-    // 그룹별 자식 아이템 사전 수집
-    const groupChildren = new Map<string, LayerItem[]>();
-    layerItems.forEach((item) => {
-      if (item.groupId) {
-        const children = groupChildren.get(item.groupId) || [];
-        children.push(item);
-        groupChildren.set(item.groupId, children);
-      }
-    });
-
-    let flatIdx = 0;
-    layerItems.forEach((item) => {
-      if (item.groupId) {
-        if (!seenGroups.has(item.groupId)) {
-          seenGroups.add(item.groupId);
-          // 그룹 정의 찾기
-          const groupDef = layerGroupsForMode.find(
-            (g) => g.id === item.groupId,
-          );
-          const children = groupChildren.get(item.groupId) || [];
-          const isCollapsed = collapsedGroups.has(item.groupId);
-          const allHidden = children.every((c) => c.hidden);
-
-          result.push({
-            displayType: 'group-header',
-            groupId: item.groupId,
-            groupName: groupDef?.name || t('layerGroup.defaultName'),
-            isCollapsed,
-            childCount: children.length,
-            allHidden,
-          });
-
-          if (!isCollapsed) {
-            // 펼쳐진 상태: 자식 아이템 추가
-            children.forEach((child) => {
-              const childFlatIdx = layerItems.indexOf(child);
-              result.push({
-                displayType: 'layer',
-                item: child,
-                groupDepth: 1,
-                flatIndex: childFlatIdx,
-              });
-            });
-          }
-        }
-        // 이미 처리된 그룹 아이템은 건너뜀
-      } else {
-        // 그룹에 속하지 않는 아이템
-        result.push({
-          displayType: 'layer',
-          item,
-          groupDepth: 0,
-          flatIndex: flatIdx,
-        });
-      }
-      flatIdx++;
-    });
-
-    return result;
-  })();
+  const displayItems = buildDisplayItems({
+    layerItems,
+    layerGroupsForMode,
+    collapsedGroups,
+    defaultGroupName: t('layerGroup.defaultName'),
+  });
 
   // layerItems를 ref로도 저장 (이벤트 핸들러에서 최신 값 참조용)
   const layerItemsRef = useRef(layerItems);

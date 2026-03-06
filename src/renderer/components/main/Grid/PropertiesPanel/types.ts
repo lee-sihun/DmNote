@@ -224,3 +224,35 @@ export interface KeyData {
   keyCode: string | null;
   keyInfo: { globalKey: string; displayName: string } | null;
 }
+
+// ============================================================================
+// 레이어 패널 타입
+// ============================================================================
+
+export interface LayerItem {
+  type: 'key' | 'stat' | 'graph' | 'plugin';
+  id: string;
+  index?: number;
+  name: string;
+  zIndex: number;
+  hidden: boolean;
+  groupId?: string;
+}
+
+export interface GroupHeaderItem {
+  displayType: 'group-header';
+  groupId: string;
+  groupName: string;
+  isCollapsed: boolean;
+  childCount: number;
+  allHidden: boolean;
+}
+
+export interface LayerDisplayItem {
+  displayType: 'layer';
+  item: LayerItem;
+  groupDepth: number;
+  flatIndex: number;
+}
+
+export type DisplayItem = GroupHeaderItem | LayerDisplayItem;
