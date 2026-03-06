@@ -102,9 +102,8 @@ impl CssWatcher {
                 match res {
                     Ok(events) => {
                         for event in events {
-                            // 플랫폼/에디터에 따라 이벤트 kind가 Any가 아닐 수 있습니다.
-                            // (예: Write/Create/Rename 등) Any만 처리하면 macOS/Windows에서
-                            // 핫리로딩이 누락되는 케이스가 생길 수 있어 kind 필터를 두지 않습니다.
+                            // 이벤트 kind 필터 미적용 — 플랫폼/에디터별 kind 차이(Write/Create/Rename 등)로
+                            // Any만 필터 시 핫리로딩 누락 가능
                             log::debug!(
                                 "[CssWatcher] Debounced event: kind={:?}, path={:?}",
                                 event.kind,
@@ -310,7 +309,7 @@ fn paths_match(path1: &str, path2: &str) -> bool {
                 return true;
             }
 
-            // 문자열이 다르면 canonicalize로 최종 확인 (비용이 크므로 마지막에만)
+            // 문자열 불일치 시 canonicalize로 최종 확인 (고비용 — 마지막 단계에서만)
             if let (Ok(canonical1), Ok(canonical2)) = (p1.canonicalize(), p2.canonicalize()) {
                 return canonical1 == canonical2;
             }

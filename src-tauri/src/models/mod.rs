@@ -1352,8 +1352,7 @@ pub struct ShortcutBinding {
 }
 
 fn default_toggle_overlay_shortcut() -> ShortcutBinding {
-    // Windows/Linux: Ctrl+Shift+O
-    // macOS: Cmd+Shift+O
+    // 기본 단축키 — Windows/Linux: Ctrl+Shift+O, macOS: Cmd+Shift+O
     if cfg!(target_os = "macos") {
         ShortcutBinding {
             key: "KeyO".to_string(),

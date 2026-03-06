@@ -32,8 +32,7 @@ use state::{AppState, AppStore};
 fn main() {
     #[cfg(target_os = "windows")]
     {
-        // WebView2 투명 오버레이(레이어드/알파) 이슈가 특정 런타임 버전에서 발생할 수 있어,
-        // 고정(Fixed) 런타임을 번들/지정한 경우 우선 사용하도록 합니다.
+        // WebView2 투명 오버레이 이슈 방지 — 번들된 Fixed 런타임 우선 적용
         apply_embedded_webview2_fixed_runtime_override();
         apply_webview2_fixed_runtime_override();
 
@@ -59,8 +58,7 @@ fn main() {
         return;
     }
 
-    // macOS: 키보드/마우스 캡처를 위해 접근성 권한을 확인하고,
-    // 권한이 없으면 시스템 권한 요청 다이얼로그를 자동으로 표시합니다.
+    // macOS: 접근성 권한 확인 및 미부여 시 시스템 다이얼로그 표시
     #[cfg(target_os = "macos")]
     {
         request_accessibility_permission();
@@ -97,8 +95,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            // macOS: 편집 메뉴 추가 (Cmd+Z/X/C/V/A 등 네이티브 편집 단축키 활성화)
-            // WKWebView에서 단축키들이 동작하려면 네이티브 Edit 메뉴가 필요
+            // macOS: 네이티브 Edit 메뉴 추가 — WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
@@ -143,7 +140,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // app
+            // 앱 생명주기
             commands::app::bootstrap::app_bootstrap,
             commands::app::update::app_auto_update,
             commands::app::system::window_minimize,
@@ -154,7 +151,7 @@ fn main() {
             commands::app::system::app_quit,
             commands::app::system::window_open_devtools_all,
             commands::app::system::get_cursor_settings,
-            // editor
+            // 에디터 콘텐츠
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,
             commands::editor::css::css_toggle,
@@ -180,7 +177,7 @@ fn main() {
             commands::editor::note_tab::note_tab_get,
             commands::editor::note_tab::note_tab_set,
             commands::editor::note_tab::note_tab_clear,
-            // keys
+            // 키 입력/설정
             commands::keys::keys::keys_get,
             commands::keys::keys::positions_get,
             commands::keys::keys::keys_update,
@@ -213,7 +210,7 @@ fn main() {
             commands::keys::sound::sound_save_processed_wav,
             commands::keys::sound::sound_load_original,
             commands::keys::sound::sound_update_processed_wav,
-            // layout
+            // 레이아웃/오버레이
             commands::layout::settings::settings_get,
             commands::layout::settings::settings_update,
             commands::layout::stat_items::stat_positions_get,
@@ -226,18 +223,18 @@ fn main() {
             commands::layout::overlay::overlay_set_lock,
             commands::layout::overlay::overlay_set_anchor,
             commands::layout::overlay::overlay_resize,
-            // media
+            // 미디어
             commands::media::image::image_load,
             commands::media::counter_animation::counter_animation_list,
             commands::media::counter_animation::counter_animation_create,
             commands::media::counter_animation::counter_animation_update,
             commands::media::counter_animation::counter_animation_delete,
-            // preset
+            // 프리셋
             commands::preset::save::preset_save,
             commands::preset::save::preset_save_tab,
             commands::preset::load::preset_load,
             commands::preset::load::preset_load_tab,
-            // plugin
+            // 플러그인
             commands::plugin::bridge::plugin_bridge_send,
             commands::plugin::bridge::plugin_bridge_send_to,
             commands::plugin::storage::plugin_storage_get,
@@ -275,7 +272,7 @@ fn apply_webview2_additional_args(arg: &str) {
 /// store.json에서 렌더러 설정(angleMode)을 읽어 WebView2 플래그로 적용
 #[cfg(target_os = "windows")]
 fn apply_renderer_settings() {
-    // Tauri 초기화 전이므로 직접 경로를 찾아야 함
+    // Tauri 초기화 전 — 경로 직접 탐색
     let store_path = get_store_path();
 
     let angle_mode = if let Some(path) = store_path {
@@ -310,7 +307,7 @@ fn apply_renderer_settings() {
 /// 앱 데이터 디렉토리에서 store.json 경로 찾기
 #[cfg(target_os = "windows")]
 fn get_store_path() -> Option<PathBuf> {
-    // Windows: %APPDATA%/com.dmnote.desktop/store.json
+    // Windows 경로: %APPDATA%/com.dmnote.desktop/store.json
     dirs_next::config_dir().map(|config| config.join("com.dmnote.desktop").join("store.json"))
 }
 
@@ -619,7 +616,7 @@ fn apply_webview2_fixed_runtime_override() {
     }
 
     if cfg!(debug_assertions) {
-        // `tauri dev`에서는 바이너리 위치가 변하므로, 저장소 기준 경로도 함께 확인합니다.
+        // `tauri dev` — 바이너리 위치 가변, 저장소 기준 경로 추가 확인
         candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("webview2-fixed-runtime"));
         candidates.push(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))

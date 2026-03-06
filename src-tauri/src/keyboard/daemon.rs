@@ -678,7 +678,7 @@ fn run_raw_input() -> Result<()> {
                             scan_code
                         };
 
-                        // 가상 키 정규화 — 좌/우 수정자 키 등이 예상 레이블과 일치하도록 처리
+                        // 가상 키 정규화 — 좌/우 수정자 키를 예상 레이블에 맞춤
                         // 가짜 키는 스캔 코드 기반 복구 우선
                         let mut vk_norm = vkey;
                         if vk_norm == 0 || vk_norm == 0xFF {
@@ -752,7 +752,7 @@ fn run_raw_input() -> Result<()> {
                         }
 
                         // Raw Input 확장 플래그를 low-level hook 스타일 플래그로 매핑
-                        // keyboard_labels의 넘패드/확장 키 로직이 동일하게 동작하도록 처리
+                        // keyboard_labels 넘패드/확장 키 로직과 동일 동작 보장
                         let mut ll_flags = 0u32;
                         if is_e0 {
                             // keyboard_labels.rs에서 LLKHF_EXTENDED == 0x01
@@ -869,7 +869,7 @@ fn run_raw_input() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn run_macos() -> Result<()> {
-    // 접근성(Accessibility) 권한을 확인하고, 없으면 부여될 때까지 대기합니다.
+    // 접근성(Accessibility) 권한 확인 — 미부여 시 부여 대기
     if !check_accessibility_permission() {
         eprintln!("macOS 접근성 권한이 없습니다. 시스템 설정에서 허용해 주세요.");
         eprintln!("접근성 권한 대기 중...");
@@ -882,8 +882,8 @@ fn run_macos() -> Result<()> {
         }
     }
 
-    // rdev::listen은 접근성 + 입력 모니터링 권한이 모두 필요합니다.
-    // 권한 부여 직후 타이밍 이슈로 CGEventTap 생성이 실패할 수 있으므로 재시도합니다.
+    // rdev::listen — 접근성 + 입력 모니터링 권한 필수
+    // 권한 부여 직후 CGEventTap 생성 실패 가능 — 재시도 처리
     let max_retries = 5;
     for attempt in 0..max_retries {
         if attempt > 0 {

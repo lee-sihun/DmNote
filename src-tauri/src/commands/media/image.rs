@@ -133,7 +133,7 @@ fn replace_store_image_path_references(
     });
 
     if !has_reference {
-        // 아직 저장되지 않은(편집 중인) 참조일 수 있음
+        // 미저장(편집 중) 참조 가능성
         let _ = app.emit(
             "image:optimized",
             serde_json::json!({ "fromPath": from, "toPath": to }),
@@ -231,7 +231,7 @@ fn try_convert_gif_to_cached_webp(
 
 fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), String> {
     let mut gif_opts = gif::DecodeOptions::new();
-    // gif-dispose 사용 시 indexed 모드가 필요합니다.
+    // gif-dispose 사용 시 indexed 모드 필수
     gif_opts.set_color_output(gif::ColorOutput::Indexed);
 
     let cursor = Cursor::new(gif_bytes);

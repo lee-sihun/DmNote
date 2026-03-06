@@ -43,7 +43,7 @@ impl AppStore {
             let (state, migrated) = load_store_from_path(&default_path)?;
             (default_path.clone(), state, migrated)
         } else if let Some(legacy_path) = find_legacy_store_file() {
-            // 레거시 파일은 읽어와서 새 포맷으로 현재 앱 데이터 경로(default_path)에 저장
+            // 레거시 파일 로드 후 새 포맷으로 default_path에 저장
             let (legacy, _) = load_store_from_path(&legacy_path)?;
             (default_path.clone(), legacy, true)
         } else {
@@ -198,7 +198,7 @@ impl AppStore {
     }
 
     fn persist_locked(&self, state: &AppStoreData) -> Result<()> {
-        // JSON 출력 시 key 모드 순서를 4,5,6,8 순으로 고정하고 나머지는 사전순으로 정렬합니다.
+        // JSON 출력 시 key 모드 순서 4,5,6,8 고정, 나머지 사전순 정렬
         use serde_json::{to_value, Map, Value};
 
         let mut root = to_value(state)?;

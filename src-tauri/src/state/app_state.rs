@@ -255,7 +255,7 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등으로 용량이 클 수 있음)
+        // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
         let mut payload = diff.clone();
         payload.full = None;
         app.emit("settings:changed", payload)?;
@@ -278,7 +278,7 @@ impl AppState {
             apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
         } else {
             // 오버레이를 숨길 때: 창이 존재하는 경우에만 숨김
-            // 창이 없으면 아무 것도 하지 않음 (창을 생성하지 않음)
+            // 창 미존재 시 무시 (창 생성하지 않음)
             if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
                 hide_overlay_window(&window)?;
             }
@@ -307,7 +307,7 @@ impl AppState {
         }
 
         // 오버레이가 보이는 상태일 때만 설정 적용
-        // 숨겨져 있거나 닫혀있는 상태에서는 설정값만 저장하고, 나중에 오버레이를 열 때 적용됨
+        // 비표시 상태: 설정값만 저장, 오버레이 열 때 적용
         let is_visible = *self.overlay_visible.read();
         if is_visible {
             if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
@@ -363,7 +363,7 @@ impl AppState {
         fixed_position_delta_y: Option<f64>,
     ) -> Result<OverlayBounds> {
         // 오버레이가 이미 열려있을 때만 리사이즈 수행
-        // 창이 없으면 에러 반환 (창을 자동으로 생성하지 않음)
+        // 창 미존재 시 에러 반환 (자동 생성하지 않음)
         let window = app
             .get_webview_window(OVERLAY_LABEL)
             .ok_or_else(|| anyhow!("Overlay window is not open"))?;
@@ -949,7 +949,7 @@ impl AppState {
             log::warn!("failed to set overlay compensating zoom: {err}");
         }
 
-        // macOS에서 오버레이 창이 앱 포커스를 빼앗지 않도록 설정
+        // macOS 오버레이 창 포커스 탈취 방지
         #[cfg(target_os = "macos")]
         {
             if let Err(err) = window.set_focusable(false) {
@@ -957,7 +957,7 @@ impl AppState {
             }
         }
 
-        // Windows에서 오버레이 창이 포커스를 받지 않도록 설정
+        // Windows 오버레이 창 포커스 수신 방지
         #[cfg(target_os = "windows")]
         {
             if let Err(err) = set_window_no_activate(&window) {
@@ -989,8 +989,8 @@ impl AppState {
         // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
         // store의 overlay_visible 상태에 따라 조건부 표시
         if snapshot.overlay_visible {
-            // .visible(true)로 생성되었으므로 이미 보이는 상태
-            // SW_SHOWNOACTIVATE로 다시 표시하여 포커스를 빼앗지 않는 상태 보장
+            // .visible(true)로 이미 표시된 상태
+            // SW_SHOWNOACTIVATE 재표시로 포커스 미탈취 보장
             show_overlay_window(&window, snapshot.always_on_top)?;
             *self.overlay_visible.write() = true;
         } else {
@@ -1031,7 +1031,7 @@ impl AppState {
                 }
             }
             WindowEvent::Focused(true) => {
-                // WS_EX_NOACTIVATE 스타일 때문에 이 이벤트는 발생하지 않아야 함
+                // WS_EX_NOACTIVATE 적용 시 미발생 예상 이벤트
                 log::debug!("overlay received focus event (unexpected with WS_EX_NOACTIVATE)");
             }
             WindowEvent::Focused(false) => {
@@ -1127,7 +1127,7 @@ impl AppState {
 
         if let Some(value) = diff.changed.overlay_locked {
             // 오버레이가 보이는 상태일 때만 lock 설정 적용
-            // 숨겨져 있거나 닫혀있는 상태에서는 설정값은 이미 저장되었으므로, 나중에 오버레이를 열 때 적용됨
+            // 비표시 상태: 설정값 저장 완료, 오버레이 열 때 적용
             if is_visible {
                 if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
                     window.set_ignore_cursor_events(value)?;
@@ -1450,8 +1450,8 @@ fn attach_main_window_close_handler(
                 return;
             }
 
-            // 시각적으로 즉시 종료되도록 먼저 윈도우를 숨기고,
-            // 실제 정리/프로세스 종료는 백그라운드 스레드에서 수행합니다.
+            // 즉시 종료 효과를 위해 윈도우 먼저 숨김
+            // 실제 정리/프로세스 종료는 백그라운드 스레드에서 수행
             api.prevent_close();
             if let Err(err) = main_window.hide() {
                 log::warn!("failed to hide main window during shutdown: {err}");
@@ -1576,8 +1576,8 @@ fn apply_macos_overlay_fullscreen_behavior(window: &WebviewWindow, always_on_top
         Ok(ns_window) => unsafe {
             let ns_window = ns_window as *mut objc::runtime::Object;
 
-            // 전체화면 Space에서도 보이도록 레벨 및 컬렉션 동작 설정
-            // NSStatusWindowLevel (25) 수준으로 설정
+            // 전체화면 Space 표시를 위한 레벨 및 컬렉션 동작 설정
+            // NSStatusWindowLevel (25) 수준 적용
             let target_level: i64 = if always_on_top { 25 } else { 0 };
             let _: () = msg_send![ns_window, setLevel: target_level];
 
