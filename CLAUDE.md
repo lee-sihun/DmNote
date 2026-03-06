@@ -37,9 +37,13 @@ src/renderer/
 
 src-tauri/src/
 ├── commands/        # Tauri 커맨드 (snake_case.rs)
-├── services/        # 비즈니스 로직
-├── app_state.rs     # 앱 상태
+├── services/        # 비즈니스 로직 (css_watcher, settings)
+├── app_state.rs     # 앱 상태 관리
 ├── models.rs        # 데이터 모델
+├── store.rs         # 영속 스토리지
+├── key_sound.rs     # 키 사운드 엔진
+├── keyboard_daemon.rs # 키보드 후킹 데몬
+├── ipc.rs           # IPC 이벤트 정의
 └── main.rs          # 진입점
 ```
 
@@ -89,6 +93,12 @@ src-tauri/src/
 - 기본 export는 `export default` 사용 (컴포넌트)
 - 훅/유틸리티는 named export 사용
 
+### Tauri 커맨드
+
+- `#[tauri::command]` 사용 (permission 속성 생략 — build.rs가 자동 생성)
+- 동기 `fn` 기본, `async fn`은 실제 await가 필요한 경우만 사용
+- 에러 타입: `Result<T, String>` (향후 `CmdResult<T>` 전환 예정)
+
 ### 주석
 
 - 기술 용어(React, Tauri, KPS 등)를 제외하면 **한글**로 작성
@@ -122,3 +132,4 @@ src-tauri/src/
 1. **컴파일 체크**: `cd src-tauri && cargo check`
 2. **린트**: `cd src-tauri && cargo clippy`
 3. **포맷팅**: `cd src-tauri && cargo fmt`
+4. **permissions 확인**: 커맨드 추가/삭제 시 빌드 후 `permissions/dmnote-allow-all.json` 자동 갱신 확인

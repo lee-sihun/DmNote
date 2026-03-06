@@ -2,12 +2,12 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::{app_state::AppState, models::StatPositions};
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn stat_positions_get(state: State<'_, AppState>) -> Result<StatPositions, String> {
     Ok(state.store.snapshot().stat_positions)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn stat_positions_update(
     state: State<'_, AppState>,
     app: AppHandle,

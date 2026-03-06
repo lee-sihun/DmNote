@@ -29,7 +29,7 @@ pub struct ImageLoadResponse {
 ///
 /// GIF는 UX를 위해 즉시 원본 경로를 반환하고, 백그라운드에서 WebP 최적화를 수행한 뒤
 /// 스토어의 이미지 경로를 자동으로 치환합니다.
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn image_load(app: tauri::AppHandle) -> Result<ImageLoadResponse, String> {
     let picked = FileDialog::new()
         .add_filter(

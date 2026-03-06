@@ -53,7 +53,7 @@ pub struct CounterAnimationDeleteResponse {
     pub fallback_preset_id: String,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn counter_animation_list(
     state: State<'_, AppState>,
 ) -> Result<CounterAnimationListResponse, String> {
@@ -61,7 +61,7 @@ pub fn counter_animation_list(
     Ok(build_library_payload(&snapshot.counter_animation_presets))
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn counter_animation_create(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -98,7 +98,7 @@ pub fn counter_animation_create(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn counter_animation_update(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -167,7 +167,7 @@ pub fn counter_animation_update(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn counter_animation_delete(
     state: State<'_, AppState>,
     app: AppHandle,

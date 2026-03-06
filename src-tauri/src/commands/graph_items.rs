@@ -2,12 +2,12 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::{app_state::AppState, models::GraphPositions};
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn graph_positions_get(state: State<'_, AppState>) -> Result<GraphPositions, String> {
     Ok(state.store.snapshot().graph_positions)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn graph_positions_update(
     state: State<'_, AppState>,
     app: AppHandle,

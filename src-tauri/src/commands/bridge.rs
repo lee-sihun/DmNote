@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// 플러그인 간 윈도우 브릿지 메시지 전송
 /// 모든 윈도우에 브로드캐스트
 #[tauri::command]
-pub async fn plugin_bridge_send(
+pub fn plugin_bridge_send(
     app: AppHandle,
     message_type: String,
     data: Option<Value>,
@@ -28,7 +28,7 @@ pub async fn plugin_bridge_send(
 
 /// 특정 윈도우에만 메시지 전송
 #[tauri::command]
-pub async fn plugin_bridge_send_to(
+pub fn plugin_bridge_send_to(
     app: AppHandle,
     target: String,
     message_type: String,

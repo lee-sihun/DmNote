@@ -2,12 +2,12 @@ use tauri::State;
 
 use crate::{app_state::AppState, key_sound::KeySoundStatus};
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_get_status(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
     Ok(state.key_sound_status())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_set_enabled(
     state: State<'_, AppState>,
     enabled: bool,
@@ -15,7 +15,7 @@ pub fn key_sound_set_enabled(
     Ok(state.key_sound_set_enabled(enabled))
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_set_volume(
     state: State<'_, AppState>,
     volume: f32,
@@ -23,7 +23,7 @@ pub fn key_sound_set_volume(
     Ok(state.key_sound_set_volume(volume))
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_load_soundpack(
     state: State<'_, AppState>,
     soundpack_dir: String,
@@ -31,12 +31,12 @@ pub fn key_sound_load_soundpack(
     state.key_sound_load_soundpack(&soundpack_dir)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_unload_soundpack(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
     Ok(state.key_sound_unload_soundpack())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn key_sound_set_latency_logging(
     state: State<'_, AppState>,
     enabled: bool,

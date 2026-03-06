@@ -30,13 +30,13 @@ pub struct TabNoteSetResponse {
 }
 
 /// 모든 탭의 노트 설정 오버라이드 조회
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn note_tab_get_all(state: State<'_, AppState>) -> Result<TabNoteOverrides, String> {
     Ok(state.store.snapshot().tab_note_overrides)
 }
 
 /// 특정 탭의 노트 설정 조회
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabNoteResponse, String> {
     let overrides = state.store.snapshot().tab_note_overrides;
     let settings = overrides.get(&tab_id).cloned();
@@ -44,7 +44,7 @@ pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabNot
 }
 
 /// 특정 탭의 노트 설정 저장
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn note_tab_set(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -84,7 +84,7 @@ pub fn note_tab_set(
 }
 
 /// 특정 탭의 노트 설정 제거 (전역 설정으로 폴백)
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn note_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,

@@ -21,12 +21,12 @@ pub struct OverlayResizeArgs {
     pub fixed_position_delta_y: Option<f64>,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn overlay_get(state: State<'_, AppState>) -> Result<BootstrapOverlayState, String> {
     Ok(state.overlay_status())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn overlay_set_visible(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -37,7 +37,7 @@ pub fn overlay_set_visible(
         .map_err(|err| err.to_string())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn overlay_set_lock(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -48,7 +48,7 @@ pub fn overlay_set_lock(
         .map_err(|err| err.to_string())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn overlay_set_anchor(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -59,7 +59,7 @@ pub fn overlay_set_anchor(
         .map_err(|err| err.to_string())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn overlay_resize(
     state: State<'_, AppState>,
     app: AppHandle,

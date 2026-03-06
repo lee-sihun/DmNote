@@ -76,17 +76,17 @@ pub struct TabCssSetResponse {
     pub css: Option<TabCss>,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_get(state: State<'_, AppState>) -> Result<CustomCss, String> {
     Ok(state.store.snapshot().custom_css)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_get_use(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(state.store.snapshot().use_custom_css)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -121,7 +121,7 @@ pub fn css_toggle(
     Ok(CssToggleResponse { enabled })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     // CSS 핫리로딩: 전역 CSS 워칭 중지
     state.unwatch_global_css();
@@ -141,7 +141,7 @@ pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), Strin
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -166,7 +166,7 @@ pub fn css_set_content(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> Result<CssLoadResponse, String> {
     let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
 
@@ -225,13 +225,13 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> Result<CssLoadRes
 // ========== 탭별 CSS 커맨드 ==========
 
 /// 모든 탭의 CSS 오버라이드 조회
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_get_all(state: State<'_, AppState>) -> Result<TabCssOverrides, String> {
     Ok(state.store.snapshot().tab_css_overrides)
 }
 
 /// 특정 탭의 CSS 조회
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabCssResponse, String> {
     let overrides = state.store.snapshot().tab_css_overrides;
     let css = overrides.get(&tab_id).cloned();
@@ -239,7 +239,7 @@ pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabCssR
 }
 
 /// 특정 탭에 CSS 파일 로드
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_load(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -310,7 +310,7 @@ pub fn css_tab_load(
 }
 
 /// 특정 탭의 CSS 제거 (전역 CSS로 폴백)
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -340,7 +340,7 @@ pub fn css_tab_clear(
 }
 
 /// 특정 탭의 CSS 직접 설정 (복원용)
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_set(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -396,7 +396,7 @@ pub fn css_tab_set(
 }
 
 /// 특정 탭의 CSS 사용 여부 토글
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn css_tab_toggle(
     state: State<'_, AppState>,
     app: AppHandle,

@@ -87,7 +87,7 @@ struct EmbeddedLocalSound {
 const PRESET_LOCAL_IMAGE_PREFIX: &str = "dmnote-local-image://";
 const PRESET_LOCAL_SOUND_PREFIX: &str = "dmnote-local-sound://";
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
     let preset_path = FileDialog::new()
         .set_file_name("preset.json")
@@ -156,7 +156,7 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn preset_load(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -327,7 +327,7 @@ pub fn preset_load(
 
 const BUILTIN_TAB_IDS: &[&str] = &["4key", "5key", "6key", "8key"];
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
     let preset_path = FileDialog::new()
         .set_file_name("preset-tab.json")
@@ -440,7 +440,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn preset_load_tab(
     state: State<'_, AppState>,
     app: AppHandle,

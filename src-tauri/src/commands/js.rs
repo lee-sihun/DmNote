@@ -101,17 +101,17 @@ fn persist_script(state: &State<AppState>, script: &CustomJs) -> Result<CustomJs
         .map_err(|err| err.to_string())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_get(state: State<'_, AppState>) -> Result<CustomJs, String> {
     get_normalized_script(&state)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_get_use(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(state.store.snapshot().use_custom_js)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -135,7 +135,7 @@ pub fn js_toggle(
     Ok(JsToggleResponse { enabled })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     let default = CustomJs::default();
 
@@ -153,7 +153,7 @@ pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), String
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -194,7 +194,7 @@ fn make_plugin_from_path(path: &Path, content: String) -> JsPlugin {
     }
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> Result<JsLoadResponse, String> {
     let Some(paths) = FileDialog::new()
         .add_filter("JavaScript", &["js", "mjs"])
@@ -248,7 +248,7 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> Result<JsLoadRespo
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> Result<JsReloadResponse, String> {
     let mut script = get_normalized_script(&state)?;
     let mut updated_plugins = Vec::new();
@@ -277,7 +277,7 @@ pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> Result<JsReloadR
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_remove_plugin(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -316,7 +316,7 @@ pub fn js_remove_plugin(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn js_set_plugin_enabled(
     state: State<'_, AppState>,
     app: AppHandle,

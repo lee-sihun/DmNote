@@ -19,7 +19,7 @@ pub struct FontLoadResponse {
 
 /// 로컬 폰트 파일을 선택하고 폰트 이름/경로를 반환
 /// 파일 경로만 저장하고, 프론트에서 `convertFileSrc` 기반으로 `@font-face`를 생성
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
     let picked = FileDialog::new()
         .add_filter("Fonts", &["ttf", "otf", "woff", "woff2"])

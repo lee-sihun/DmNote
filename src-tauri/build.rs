@@ -1,11 +1,116 @@
 fn main() {
     let _ = std::env::set_current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")));
 
+    generate_permissions();
     #[cfg(target_os = "windows")]
     maybe_embed_webview2_fixed_runtime();
     #[cfg(target_os = "macos")]
     maybe_build_macos_dock_helper();
     build_tauri();
+}
+
+/// commands/ 디렉토리의 `#[tauri::command]` 함수명을 스캔하여
+/// permissions/dmnote-allow-all.json 자동 생성
+fn generate_permissions() {
+    use std::fs;
+    use std::path::Path;
+
+    let commands_dir = Path::new("src/commands");
+    println!("cargo:rerun-if-changed=src/commands");
+
+    let mut command_names: Vec<String> = Vec::new();
+
+    let entries = match fs::read_dir(commands_dir) {
+        Ok(e) => e,
+        Err(err) => {
+            println!("cargo:warning=commands 디렉토리 읽기 실패: {err}");
+            return;
+        }
+    };
+
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.extension().map(|e| e != "rs").unwrap_or(true) {
+            continue;
+        }
+        if path.file_name().map(|n| n == "mod.rs").unwrap_or(false) {
+            continue;
+        }
+
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // #[tauri::command] 또는 #[tauri::command(...)] 다음 줄의 pub fn / pub async fn 이름 추출
+        let lines: Vec<&str> = content.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("#[tauri::command") {
+                // 다음 줄에서 함수명 추출
+                for next_line in lines.iter().skip(i + 1) {
+                    let next = next_line.trim();
+                    if next.is_empty() || next.starts_with("//") || next.starts_with('#') {
+                        continue;
+                    }
+                    if let Some(name) = extract_fn_name(next) {
+                        command_names.push(name);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    command_names.sort();
+
+    let allow_json: Vec<String> = command_names
+        .iter()
+        .map(|n| format!("          \"{}\"", n))
+        .collect();
+
+    let json = format!(
+        r#"{{
+  "default": null,
+  "permission": [
+    {{
+      "identifier": "dmnote-allow-all",
+      "description": "Full DM Note command access for renderer",
+      "commands": {{
+        "allow": [
+{}
+        ],
+        "deny": []
+      }}
+    }}
+  ]
+}}"#,
+        allow_json.join(",\n")
+    );
+
+    let perm_path = Path::new("permissions/dmnote-allow-all.json");
+    // 기존 내용과 동일하면 스킵 (불필요한 재빌드 방지)
+    if let Ok(existing) = fs::read_to_string(perm_path) {
+        if existing == json {
+            return;
+        }
+    }
+
+    if let Err(err) = fs::write(perm_path, &json) {
+        println!("cargo:warning=permissions 파일 쓰기 실패: {err}");
+    }
+}
+
+/// `pub fn name(` 또는 `pub async fn name(` 에서 함수명 추출
+fn extract_fn_name(line: &str) -> Option<String> {
+    let rest = if let Some(r) = line.strip_prefix("pub async fn ") {
+        r
+    } else if let Some(r) = line.strip_prefix("pub fn ") {
+        r
+    } else {
+        return None;
+    };
+    rest.split('(').next().map(|s| s.trim().to_string())
 }
 
 /// 빌드 프로필에 따라 tauri-build를 실행합니다.

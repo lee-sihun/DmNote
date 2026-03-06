@@ -8,7 +8,7 @@ pub struct AutoUpdateResult {
     pub download_url: String,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn app_auto_update(app: AppHandle, tag: String) -> Result<AutoUpdateResult, String> {
     #[cfg(target_os = "windows")]
     {

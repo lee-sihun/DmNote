@@ -10,7 +10,7 @@ fn make_storage_key(key: &str) -> String {
 
 /// 플러그인 데이터 조회
 #[tauri::command]
-pub async fn plugin_storage_get(
+pub fn plugin_storage_get(
     state: State<'_, AppState>,
     key: String,
 ) -> Result<Option<Value>, String> {
@@ -23,7 +23,7 @@ pub async fn plugin_storage_get(
 
 /// 플러그인 데이터 저장
 #[tauri::command]
-pub async fn plugin_storage_set(
+pub fn plugin_storage_set(
     state: State<'_, AppState>,
     key: String,
     value: Value,
@@ -37,7 +37,7 @@ pub async fn plugin_storage_set(
 
 /// 플러그인 데이터 삭제
 #[tauri::command]
-pub async fn plugin_storage_remove(state: State<'_, AppState>, key: String) -> Result<(), String> {
+pub fn plugin_storage_remove(state: State<'_, AppState>, key: String) -> Result<(), String> {
     let storage_key = make_storage_key(&key);
     state
         .store
@@ -47,7 +47,7 @@ pub async fn plugin_storage_remove(state: State<'_, AppState>, key: String) -> R
 
 /// 모든 플러그인 데이터 삭제
 #[tauri::command]
-pub async fn plugin_storage_clear(state: State<'_, AppState>) -> Result<(), String> {
+pub fn plugin_storage_clear(state: State<'_, AppState>) -> Result<(), String> {
     state
         .store
         .clear_all_plugin_data()
@@ -56,7 +56,7 @@ pub async fn plugin_storage_clear(state: State<'_, AppState>) -> Result<(), Stri
 
 /// 플러그인 데이터 키 목록 조회
 #[tauri::command]
-pub async fn plugin_storage_keys(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub fn plugin_storage_keys(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let all_keys = state
         .store
         .get_all_plugin_keys()
@@ -75,10 +75,7 @@ pub async fn plugin_storage_keys(state: State<'_, AppState>) -> Result<Vec<Strin
 
 /// 특정 접두사로 시작하는 플러그인 데이터가 있는지 확인
 #[tauri::command]
-pub async fn plugin_storage_has_data(
-    state: State<'_, AppState>,
-    prefix: String,
-) -> Result<bool, String> {
+pub fn plugin_storage_has_data(state: State<'_, AppState>, prefix: String) -> Result<bool, String> {
     let all_keys = state
         .store
         .get_all_plugin_keys()
@@ -92,7 +89,7 @@ pub async fn plugin_storage_has_data(
 
 /// 특정 접두사로 시작하는 모든 플러그인 데이터 삭제
 #[tauri::command]
-pub async fn plugin_storage_clear_by_prefix(
+pub fn plugin_storage_clear_by_prefix(
     state: State<'_, AppState>,
     prefix: String,
 ) -> Result<usize, String> {

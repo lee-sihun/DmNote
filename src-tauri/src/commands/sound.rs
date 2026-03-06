@@ -82,7 +82,7 @@ pub struct SoundDeleteResponse {
 }
 
 /// 로컬 사운드 파일을 선택하고 appData/sounds 디렉토리로 복사한 뒤 경로 반환
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_load(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -131,7 +131,7 @@ pub fn sound_load(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_list(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -231,7 +231,7 @@ pub fn sound_list(
     Ok(items)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_set_enabled(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -259,7 +259,7 @@ pub fn sound_set_enabled(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_delete(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -341,7 +341,7 @@ pub fn sound_delete(
     Ok(SoundDeleteResponse { success: true })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_save_processed_wav(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -467,7 +467,7 @@ pub struct SoundLoadOriginalResponse {
 }
 
 /// 편집을 위해 원본 사운드 파일을 base64로 반환
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_load_original(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -529,7 +529,7 @@ pub struct SoundUpdateProcessedWavResponse {
 }
 
 /// 기존 트리밍 파일을 새 WAV로 덮어쓰고 메타데이터 갱신
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn sound_update_processed_wav(
     app: tauri::AppHandle,
     state: State<'_, AppState>,

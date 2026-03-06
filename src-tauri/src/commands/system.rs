@@ -5,7 +5,7 @@ use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 
 const TRAY_ICON_ID: &str = "background-tray";
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn window_minimize(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window.minimize().map_err(|err| err.to_string())?;
@@ -13,7 +13,7 @@ pub fn window_minimize(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn window_close(app: AppHandle) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         main.close().map_err(|err| err.to_string())?;
@@ -21,7 +21,7 @@ pub fn window_close(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn app_open_external(_app: AppHandle, url: String) -> Result<(), String> {
     if url.is_empty() {
         return Ok(());
@@ -29,13 +29,13 @@ pub fn app_open_external(_app: AppHandle, url: String) -> Result<(), String> {
     open::that(url).map_err(|err| err.to_string())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn app_restart(app: AppHandle) -> Result<(), String> {
     app.request_restart();
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.unminimize();
@@ -54,13 +54,13 @@ pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> Result<()
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     state.request_shutdown(app);
     Ok(())
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn window_open_devtools_all(app: AppHandle) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.open_devtools();
@@ -89,7 +89,7 @@ pub struct CursorSettingsResponse {
     pub is_macos: bool,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn get_cursor_settings() -> CursorSettingsResponse {
     let settings = get_macos_cursor_settings();
 

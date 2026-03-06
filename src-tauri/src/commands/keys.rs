@@ -57,17 +57,17 @@ pub struct CustomTabDeleteResult {
     pub error: Option<String>,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_get(state: State<'_, AppState>) -> Result<KeyMappings, String> {
     Ok(state.store.snapshot().keys)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn positions_get(state: State<'_, AppState>) -> Result<KeyPositions, String> {
     Ok(state.store.snapshot().key_positions)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_update(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -86,7 +86,7 @@ pub fn keys_update(
     Ok(updated)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn positions_update(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -101,7 +101,7 @@ pub fn positions_update(
     Ok(updated)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_set_mode(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -129,7 +129,7 @@ pub fn keys_set_mode(
         mode: effective,
     })
 }
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_reset_all(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -264,7 +264,7 @@ pub fn keys_reset_all(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_reset_mode(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -355,12 +355,12 @@ pub fn keys_reset_mode(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn custom_tabs_list(state: State<'_, AppState>) -> Result<Vec<CustomTab>, String> {
     Ok(state.store.snapshot().custom_tabs)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn custom_tabs_create(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -443,7 +443,7 @@ pub fn custom_tabs_create(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn custom_tabs_delete(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -541,7 +541,7 @@ pub struct CustomTabSelectResult {
     pub error: Option<String>,
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn custom_tabs_select(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -574,7 +574,7 @@ pub fn custom_tabs_select(
     })
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_reset_counters(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -588,7 +588,7 @@ pub fn keys_reset_counters(
     Ok(snapshot)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_reset_counters_mode(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -604,7 +604,7 @@ pub fn keys_reset_counters_mode(
     Ok(snapshot)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_reset_single_counter(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -621,7 +621,7 @@ pub fn keys_reset_single_counter(
     Ok(snapshot)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn keys_set_counters(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -636,12 +636,12 @@ pub fn keys_set_counters(
     Ok(updated)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn layer_groups_get(state: State<'_, AppState>) -> Result<LayerGroups, String> {
     Ok(state.store.snapshot().layer_groups)
 }
 
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn layer_groups_update(
     state: State<'_, AppState>,
     app: AppHandle,
@@ -670,7 +670,7 @@ pub struct RawInputSubscribeResponse {
 }
 
 /// Subscribe to raw input stream (increment subscriber count)
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn raw_input_subscribe(
     state: State<'_, AppState>,
 ) -> Result<RawInputSubscribeResponse, String> {
@@ -680,7 +680,7 @@ pub fn raw_input_subscribe(
 }
 
 /// Unsubscribe from raw input stream (decrement subscriber count)
-#[tauri::command(permission = "dmnote-allow-all")]
+#[tauri::command]
 pub fn raw_input_unsubscribe(
     state: State<'_, AppState>,
 ) -> Result<RawInputSubscribeResponse, String> {
