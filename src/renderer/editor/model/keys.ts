@@ -1,0 +1,343 @@
+/**
+ * 키 CRUD 및 스타일 변환 순수 함수
+ * Store/React 의존 없음 — 입력과 출력만으로 다음 상태를 결정
+ */
+
+import type {
+  KeyMappings,
+  KeyPositions,
+  KeyPosition,
+  NoteColor,
+  KeyCounterSettings,
+  CounterAnimationBezier,
+} from '@src/types/key/keys';
+import {
+  createDefaultCounterSettings,
+  normalizeCounterSettings,
+} from '@src/types/key/keys';
+
+// ----------------------------------------------------------------------------
+// 기본 키 포지션 생성
+// ----------------------------------------------------------------------------
+
+export function createDefaultKeyPosition(
+  dx = 0,
+  dy = 0,
+): KeyPosition {
+  return {
+    dx,
+    dy,
+    width: 60,
+    height: 60,
+    hidden: false,
+    activeImage: '',
+    inactiveImage: '',
+    soundPath: '',
+    soundVolume: 100,
+    activeTransparent: false,
+    idleTransparent: false,
+    count: 0,
+    noteColor: '#FFFFFF',
+    noteOpacity: 80,
+    noteEffectEnabled: true,
+    noteGlowEnabled: false,
+    noteGlowSize: 20,
+    noteGlowOpacity: 70,
+    noteGlowColor: '#FFFFFF',
+    noteAutoYCorrection: true,
+    className: '',
+    counter: createDefaultCounterSettings(),
+  } as KeyPosition;
+}
+
+// ----------------------------------------------------------------------------
+// 키 추가
+// ----------------------------------------------------------------------------
+
+export interface AddKeyResult {
+  mappings: KeyMappings;
+  positions: KeyPositions;
+}
+
+/** 키 추가 후 새 mappings/positions 반환 */
+export function addKey(
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  mode: string,
+  dx = 0,
+  dy = 0,
+): AddKeyResult {
+  const mapping = mappings[mode] || [];
+  const pos = positions[mode] || [];
+
+  return {
+    mappings: {
+      ...mappings,
+      [mode]: [...mapping, ''],
+    },
+    positions: {
+      ...positions,
+      [mode]: [...pos, createDefaultKeyPosition(dx, dy)],
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 키 삭제
+// ----------------------------------------------------------------------------
+
+/** 키 삭제 후 새 mappings/positions 반환 */
+export function removeKey(
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  mode: string,
+  index: number,
+): AddKeyResult {
+  const mapping = mappings[mode] || [];
+  const pos = positions[mode] || [];
+
+  return {
+    mappings: {
+      ...mappings,
+      [mode]: mapping.filter((_, i) => i !== index),
+    },
+    positions: {
+      ...positions,
+      [mode]: pos.filter((_, i) => i !== index),
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 키 복제
+// ----------------------------------------------------------------------------
+
+/** 키 복제 후 새 mappings/positions 반환 */
+export function duplicateKey(
+  mappings: KeyMappings,
+  positions: KeyPositions,
+  mode: string,
+  sourceIndex: number,
+  targetDx: number,
+  targetDy: number,
+): AddKeyResult | null {
+  const mapping = mappings[mode] || [];
+  const pos = positions[mode] || [];
+  const sourceKey = mapping[sourceIndex];
+  const sourcePosition = pos[sourceIndex];
+
+  if (typeof sourceKey === 'undefined' || !sourcePosition) {
+    return null;
+  }
+
+  const clonedNoteColor =
+    sourcePosition.noteColor &&
+    typeof sourcePosition.noteColor === 'object' &&
+    sourcePosition.noteColor !== null
+      ? { ...sourcePosition.noteColor }
+      : sourcePosition.noteColor;
+
+  const sourceCounter = sourcePosition.counter
+    ? normalizeCounterSettings(sourcePosition.counter)
+    : createDefaultCounterSettings();
+
+  const clonedCounter: KeyCounterSettings = {
+    ...sourceCounter,
+    fill: { ...sourceCounter.fill },
+    stroke: { ...sourceCounter.stroke },
+    animation: {
+      ...sourceCounter.animation,
+      presetId: sourceCounter.animation.presetId ?? null,
+      bezier: [
+        Number(sourceCounter.animation.bezier[0]),
+        Number(sourceCounter.animation.bezier[1]),
+        Number(sourceCounter.animation.bezier[2]),
+        Number(sourceCounter.animation.bezier[3]),
+      ] as CounterAnimationBezier,
+    },
+  };
+
+  const clonedPosition: KeyPosition = {
+    ...sourcePosition,
+    dx: Math.round(targetDx),
+    dy: Math.round(targetDy),
+    counter: clonedCounter,
+    noteColor: clonedNoteColor,
+    noteGlowEnabled: sourcePosition.noteGlowEnabled ?? true,
+    noteGlowSize: sourcePosition.noteGlowSize ?? 20,
+    noteGlowOpacity: sourcePosition.noteGlowOpacity ?? 70,
+    noteGlowColor: clonedNoteColor,
+    noteAutoYCorrection: sourcePosition.noteAutoYCorrection ?? true,
+  };
+
+  return {
+    mappings: {
+      ...mappings,
+      [mode]: [...mapping, sourceKey],
+    },
+    positions: {
+      ...positions,
+      [mode]: [...pos, clonedPosition],
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 위치 변경
+// ----------------------------------------------------------------------------
+
+/** 키 위치 변경 후 새 positions 반환 */
+export function updateKeyPosition(
+  positions: KeyPositions,
+  mode: string,
+  index: number,
+  dx: number,
+  dy: number,
+): KeyPositions {
+  const current = positions[mode] || [];
+  return {
+    ...positions,
+    [mode]: current.map((pos, i) =>
+      i === index ? { ...pos, dx, dy } : pos,
+    ),
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 스타일 업데이트
+// ----------------------------------------------------------------------------
+
+/** 단일 키 스타일 업데이트 후 새 positions 반환 */
+export function updateKeyStyle(
+  positions: KeyPositions,
+  mode: string,
+  index: number,
+  updates: Partial<KeyPosition>,
+): KeyPositions {
+  const current = positions[mode] || [];
+  if (!current[index]) return positions;
+
+  return {
+    ...positions,
+    [mode]: current.map((pos, i) =>
+      i === index ? { ...pos, ...updates } : pos,
+    ),
+  };
+}
+
+/** 배치 키 스타일 업데이트 후 새 positions 반환 */
+export function batchUpdateKeyStyle(
+  positions: KeyPositions,
+  mode: string,
+  updates: Array<{ index: number } & Partial<KeyPosition>>,
+): KeyPositions {
+  if (updates.length === 0) return positions;
+
+  const current = positions[mode] || [];
+  const updateMap = new Map<number, Partial<KeyPosition>>();
+  for (const { index, ...rest } of updates) {
+    if (current[index]) {
+      updateMap.set(index, rest);
+    }
+  }
+
+  if (updateMap.size === 0) return positions;
+
+  return {
+    ...positions,
+    [mode]: current.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? { ...pos, ...update } : pos;
+    }),
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 노트 색상 업데이트
+// ----------------------------------------------------------------------------
+
+export interface NoteColorUpdates {
+  noteColor: NoteColor;
+  noteOpacity: number;
+  noteGlowEnabled: boolean;
+  noteGlowSize: number;
+  noteGlowOpacity: number;
+  noteGlowColor?: NoteColor;
+  noteAutoYCorrection?: boolean;
+  noteEffectEnabled?: boolean;
+}
+
+/** 노트 색상 업데이트 후 새 positions 반환 */
+export function updateNoteColor(
+  positions: KeyPositions,
+  mode: string,
+  index: number,
+  updates: NoteColorUpdates,
+): KeyPositions {
+  const current = positions[mode] || [];
+  if (!current[index]) return positions;
+
+  return {
+    ...positions,
+    [mode]: current.map((pos, i) =>
+      i === index
+        ? {
+            ...pos,
+            noteColor: updates.noteColor,
+            noteOpacity: updates.noteOpacity,
+            noteGlowEnabled: updates.noteGlowEnabled,
+            noteGlowSize: updates.noteGlowSize,
+            noteGlowOpacity: updates.noteGlowOpacity,
+            noteGlowColor: updates.noteGlowColor ?? updates.noteColor,
+            ...(updates.noteAutoYCorrection !== undefined && {
+              noteAutoYCorrection: updates.noteAutoYCorrection,
+            }),
+            ...(updates.noteEffectEnabled !== undefined && {
+              noteEffectEnabled: updates.noteEffectEnabled,
+            }),
+          }
+        : pos,
+    ),
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 카운터 설정 업데이트
+// ----------------------------------------------------------------------------
+
+/** 카운터 설정 업데이트 후 새 positions 반환 */
+export function updateCounterSettings(
+  positions: KeyPositions,
+  mode: string,
+  index: number,
+  counter: KeyCounterSettings,
+): KeyPositions {
+  const current = positions[mode] || [];
+  if (!current[index]) return positions;
+
+  const normalized = normalizeCounterSettings(counter);
+  return {
+    ...positions,
+    [mode]: current.map((pos, i) =>
+      i === index ? { ...pos, counter: normalized } : pos,
+    ),
+  };
+}
+
+// ----------------------------------------------------------------------------
+// 키 매핑 변경
+// ----------------------------------------------------------------------------
+
+/** 키 매핑 변경 후 새 mappings 반환 */
+export function updateKeyMapping(
+  mappings: KeyMappings,
+  mode: string,
+  index: number,
+  newKey: string,
+): KeyMappings {
+  const mapping = mappings[mode] || [];
+  return {
+    ...mappings,
+    [mode]: mapping.map((key, i) => (i === index ? newKey : key)),
+  };
+}
