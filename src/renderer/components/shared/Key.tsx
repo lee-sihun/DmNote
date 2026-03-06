@@ -10,11 +10,11 @@ import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
   type KeyCounterSettings,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 import { useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import CountDisplay from '@components/overlay/counters/CountDisplay';

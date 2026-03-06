@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { SidebarToggleIcon, ModeToggleIcon } from './PropertyInputs';
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from './types';
 import LayerTabContent from './LayerTabContent';

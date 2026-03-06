@@ -2,8 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { Renderer, Camera, Transform, Program, Geometry, Mesh } from 'ogl';
 import type { OGLRenderingContext } from 'ogl';
 import { animationScheduler } from '@utils/animation/animationScheduler';
-import { resolvedFadeValues } from '@src/types/noteSettings';
-import type { NoteSettings } from '@src/types/noteSettings';
+import { resolvedFadeValues } from '@src/types/settings/noteSettings';
+import type { NoteSettings } from '@src/types/settings/noteSettings';
 import { MAX_NOTES } from '@stores/signals/noteBuffer';
 import { isMac } from '@utils/core/platform';
 

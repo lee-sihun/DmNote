@@ -2,8 +2,8 @@
 import React, { useEffect } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
-import type { StatItemType } from '@src/types/statItems';
-import { useCounterSettings } from '@hooks/shared/useCounterSettings';
+import type { StatItemType } from '@src/types/key/statItems';
+import { useCounterSettings } from '@hooks/overlay/useCounterSettings';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
 import CountDisplay from '@components/overlay/counters/CountDisplay';

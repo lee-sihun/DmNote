@@ -12,12 +12,12 @@ import Checkbox from '@components/main/common/Checkbox';
 import TrashIcon from '@assets/svgs/trash.svg';
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
-import type { CustomFont } from '@src/types/fonts';
+import type { CustomFont } from '@src/types/settings/fonts';
 import {
   extractFontFamilyFromCSS,
   generateFontId,
   normalizeFontFamilyName,
-} from '@src/types/fonts';
+} from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
 interface FontManagerModalProps {

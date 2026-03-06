@@ -4,13 +4,16 @@ import type {
   KeyPosition,
   NoteColor,
   KeyCounterSettings,
-} from '@src/types/keys';
-import type { GraphItemPosition, GraphItemType } from '@src/types/graphItems';
-import type { SelectedElement } from '@stores/useGridSelectionStore';
+} from '@src/types/key/keys';
+import type {
+  GraphItemPosition,
+  GraphItemType,
+} from '@src/types/key/graphItems';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,

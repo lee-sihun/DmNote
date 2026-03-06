@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { PresetOperationResult } from '@src/types/api';
+import type { PresetOperationResult } from '@src/types/plugin/api';
 
 export const presetsApi = {
   save: () => invoke<PresetOperationResult>('preset_save'),

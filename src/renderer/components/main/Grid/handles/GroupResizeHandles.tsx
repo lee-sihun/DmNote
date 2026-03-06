@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
@@ -16,10 +16,10 @@ import {
   setCustomCursorHover,
   unlockCustomCursor,
 } from '@utils/grid/cursorUtils';
-import type { KeyPositions } from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
-import type { PluginDisplayElementInternal } from '@src/types/api';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
   getElementBounds,

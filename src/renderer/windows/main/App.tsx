@@ -1,32 +1,32 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import TitleBar from '@components/main/TitleBar';
-import { useCustomCssInjection } from '@hooks/useCustomCssInjection';
-import { useCustomJsInjection } from '@hooks/useCustomJsInjection';
-import { useBlockBrowserShortcuts } from '@hooks/useBlockBrowserShortcuts';
+import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
+import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
+import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
 import ToolBar from '@components/main/Tool/ToolBar';
 import Grid from '@components/main/Grid';
 import SettingTab from '@components/main/Settings';
 import { useKeyManager } from '@hooks/useKeyManager';
-import { usePalette } from '@hooks/usePalette';
+import { usePalette } from '@hooks/Modal/usePalette';
 import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
 import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
 import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
 import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import type { ShortcutBinding } from '@src/types/shortcuts';
+import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 import FloatingPopup from '@components/main/Modal/FloatingPopup';
 import Palette from '@components/main/Modal/content/pickers/Palette';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useAppBootstrap } from '@hooks/useAppBootstrap';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import {
   useUpdateCheck,
   hasPendingPostUpdateReleaseNotice,
   clearPendingPostUpdateReleaseNotice,
-} from '@hooks/useUpdateCheck';
-import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+} from '@hooks/app/useUpdateCheck';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import { useUIStore } from '@stores/useUIStore';
 

@@ -1,8 +1,8 @@
 import React from 'react';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { calculateGuideLineExtent } from '@utils/grid/smartGuides';
-import { useKeyStore } from '@stores/useKeyStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
 
 interface SmartGuidesOverlayProps {

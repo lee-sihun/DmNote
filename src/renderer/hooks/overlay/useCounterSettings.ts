@@ -1,8 +1,8 @@
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from '@src/types/keys';
-import type { KeyCounterSettings } from '@src/types/keys';
+} from '@src/types/key/keys';
+import type { KeyCounterSettings } from '@src/types/key/keys';
 
 export {
   computeOutsideStyle,

@@ -1,21 +1,21 @@
 import { useRef, useState } from 'react';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateSizeSnap,
 } from '@utils/grid/smartGuides';
-import type { SelectedElement } from '@stores/useGridSelectionStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
-import type { KeyPositions } from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 
 interface ResizeHandle {

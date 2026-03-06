@@ -3,38 +3,43 @@ import { subscribe } from './shared';
 
 export const noteTabApi = {
   getAll: () =>
-    invoke<import('@src/types/noteSettings').TabNoteOverrides>(
+    invoke<import('@src/types/settings/noteSettings').TabNoteOverrides>(
       'note_tab_get_all',
     ),
   get: (tabId: string) =>
-    invoke<import('@src/types/api').TabNoteResponse>('note_tab_get', {
+    invoke<import('@src/types/plugin/api').TabNoteResponse>('note_tab_get', {
       tabId,
     }),
   set: (
     tabId: string,
-    settings: import('@src/types/noteSettings').TabNoteSettings | null,
+    settings: import('@src/types/settings/noteSettings').TabNoteSettings | null,
   ) =>
-    invoke<import('@src/types/api').TabNoteSetResult>('note_tab_set', {
+    invoke<import('@src/types/plugin/api').TabNoteSetResult>('note_tab_set', {
       tabId,
       settings,
     }),
   clear: (tabId: string) =>
-    invoke<import('@src/types/api').TabNoteClearResult>('note_tab_clear', {
-      tabId,
-    }),
+    invoke<import('@src/types/plugin/api').TabNoteClearResult>(
+      'note_tab_clear',
+      {
+        tabId,
+      },
+    ),
   onChanged: (
-    listener: (payload: import('@src/types/api').TabNoteResponse) => void,
+    listener: (
+      payload: import('@src/types/plugin/api').TabNoteResponse,
+    ) => void,
   ) =>
-    subscribe<import('@src/types/api').TabNoteResponse>(
+    subscribe<import('@src/types/plugin/api').TabNoteResponse>(
       'tabNote:changed',
       listener,
     ),
   onChangedAll: (
     listener: (
-      payload: import('@src/types/noteSettings').TabNoteOverrides,
+      payload: import('@src/types/settings/noteSettings').TabNoteOverrides,
     ) => void,
   ) =>
-    subscribe<import('@src/types/noteSettings').TabNoteOverrides>(
+    subscribe<import('@src/types/settings/noteSettings').TabNoteOverrides>(
       'tabNote:changed_all',
       listener,
     ),

@@ -54,12 +54,7 @@ export default function CountDisplay({
   );
   const easing = useMemo(
     () => createCubicBezierEasing(animationBezier),
-    [
-      animationBezier?.[0],
-      animationBezier?.[1],
-      animationBezier?.[2],
-      animationBezier?.[3],
-    ],
+    [animationBezier],
   );
 
   useEffect(() => {

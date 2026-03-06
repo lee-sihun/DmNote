@@ -1,9 +1,13 @@
 import { create } from 'zustand';
 import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
-import type { KeyCounters, KeyMappings, KeyPositions } from '@src/types/keys';
-import type { PluginDisplayElementInternal } from '@src/types/api';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+import type {
+  KeyCounters,
+  KeyMappings,
+  KeyPositions,
+} from '@src/types/key/keys';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)

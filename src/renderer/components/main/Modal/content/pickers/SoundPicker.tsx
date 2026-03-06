@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import type { SoundListItem } from '@src/types/api';
+import type { SoundListItem } from '@src/types/plugin/api';
 import PlusIcon from '@assets/svgs/plus2.svg';
 import CommonListPickerPopup from './CommonListPickerPopup';
 import SoundManagerModal from '../managers/SoundManagerModal';

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import type {
@@ -14,12 +14,12 @@ import type {
   NoteColor,
   KeyCounterSettings,
   ImageFit,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from '@src/types/keys';
-import type { PluginDisplayElementInternal } from '@src/types/api';
+} from '@src/types/key/keys';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 type SelectedKey = { key: string; index: number } | null;
 

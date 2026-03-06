@@ -51,25 +51,22 @@ export function usePanelScroll(
     [TABS.COUNTER]: null,
   });
 
-  const calculateThumb = useCallback(
-    (el: HTMLDivElement): ScrollThumbState => {
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const canScroll = scrollHeight > clientHeight + 1;
-      if (!canScroll) return { top: 0, height: 0, visible: false };
+  const calculateThumb = useCallback((el: HTMLDivElement): ScrollThumbState => {
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const canScroll = scrollHeight > clientHeight + 1;
+    if (!canScroll) return { top: 0, height: 0, visible: false };
 
-      const minThumbHeight = 16;
-      const height = Math.max(
-        minThumbHeight,
-        (clientHeight / scrollHeight) * clientHeight,
-      );
-      const maxTop = clientHeight - height;
-      const top =
-        maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
+    const minThumbHeight = 16;
+    const height = Math.max(
+      minThumbHeight,
+      (clientHeight / scrollHeight) * clientHeight,
+    );
+    const maxTop = clientHeight - height;
+    const top =
+      maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
 
-      return { top, height, visible: true };
-    },
-    [],
-  );
+    return { top, height, visible: true };
+  }, []);
 
   // thumb DOM 직접 업데이트 (리렌더링 없이 성능 최적화)
   const updateThumbDOM = useCallback(

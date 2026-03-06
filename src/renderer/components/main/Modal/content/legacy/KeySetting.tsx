@@ -5,7 +5,7 @@ import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import ImagePicker from '../pickers/ImagePicker';
 import Modal from '../../Modal';
-import type { RawInputPayload } from '@src/types/api';
+import type { RawInputPayload } from '@src/types/plugin/api';
 
 interface KeyData {
   key: string;

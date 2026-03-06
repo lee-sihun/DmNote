@@ -2,9 +2,12 @@
 import React, { useEffect, useState } from 'react';
 import NoteSetting from '../settings/NoteSetting';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { mergeNoteSettings } from '@src/types/noteSettings';
-import type { NoteSettings, TabNoteSettings } from '@src/types/noteSettings';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { mergeNoteSettings } from '@src/types/settings/noteSettings';
+import type {
+  NoteSettings,
+  TabNoteSettings,
+} from '@src/types/settings/noteSettings';
 import { useTranslation } from '@contexts/useTranslation';
 
 type Props = {

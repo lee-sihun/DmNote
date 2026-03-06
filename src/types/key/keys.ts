@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { NOTE_SETTINGS_CONSTRAINTS } from './noteSettingsConstraints';
+import { NOTE_SETTINGS_CONSTRAINTS } from '../settings/noteSettingsConstraints';
 import { getDefaultCounterSettings } from '@src/renderer/defaults';
 
 export const keyCounterPlacementSchema = z.union([

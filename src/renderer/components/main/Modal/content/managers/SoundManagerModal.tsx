@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
-import type { SoundListItem } from '@src/types/api';
+import type { SoundListItem } from '@src/types/plugin/api';
 import { useLenis } from '@hooks/useLenis';
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
 import SoundTrimModal from './SoundTrimModal';

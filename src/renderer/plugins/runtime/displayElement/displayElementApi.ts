@@ -3,8 +3,8 @@
  * 플러그인에서 디스플레이 요소를 생성, 조회, 수정, 삭제하는 API를 제공합니다.
  */
 
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/useKeyStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import { DisplayElementInstance } from '@utils/displayElementInstance';
 import { html } from '@utils/core/templateEngine';
 import { createPluginTranslator } from '@utils/plugin/pluginI18n';
@@ -25,7 +25,7 @@ import type {
   PluginDisplayElement,
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 /**
  * 내부용 디스플레이 요소 제거 함수

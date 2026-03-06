@@ -4,16 +4,16 @@
  * - 그리드 컨텍스트 메뉴 항목 생성
  */
 
-import { usePluginMenuStore } from '@stores/usePluginMenuStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
-import type { KeyPosition } from '@src/types/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 import type {
   PluginMenuItemInternal,
   KeyMenuContext,
   GridMenuContext,
   PluginMessages,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 interface MenuItem {
   id: string;

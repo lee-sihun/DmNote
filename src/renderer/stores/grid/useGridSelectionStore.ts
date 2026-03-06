@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { KeyPosition } from '@src/types/keys';
-import type { PluginDisplayElementInternal } from '@src/types/api';
-import type { StatItemPosition } from '@src/types/statItems';
-import type { GraphItemPosition } from '@src/types/graphItems';
+import type { KeyPosition } from '@src/types/key/keys';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 
 export type SelectableElementType = 'key' | 'stat' | 'graph' | 'plugin';
 

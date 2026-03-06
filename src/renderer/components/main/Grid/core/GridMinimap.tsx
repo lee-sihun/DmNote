@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useGridViewStore } from '@stores/useGridViewStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/useKeyStore';
+import { useGridViewStore } from '@stores/grid/useGridViewStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 
 interface Position {
   dx: number;

@@ -2,10 +2,10 @@
  * 스마트 가이드를 위한 모든 요소의 bounds를 제공하는 훅
  */
 
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
 
 /**

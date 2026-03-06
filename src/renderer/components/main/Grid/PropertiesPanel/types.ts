@@ -1,4 +1,4 @@
-import type { KeyPosition } from '@src/types/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 
 // ============================================================================
 // 탭 상수

@@ -2,7 +2,7 @@ import React from 'react';
 import {
   useGridSelectionStore,
   getMarqueeRect,
-} from '@stores/useGridSelectionStore';
+} from '@stores/grid/useGridSelectionStore';
 
 interface MarqueeSelectionOverlayProps {
   zoom?: number;

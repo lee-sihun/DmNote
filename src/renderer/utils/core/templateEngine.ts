@@ -5,9 +5,7 @@ import htm from 'htm';
  * CSS 문자열 style을 React CSSProperties 객체로 변환
  * htm 템플릿에서 style="color: red; font-size: 14px" 형태를 지원하기 위함
  */
-function parseStyleString(
-  styleStr: string,
-): Record<string, string> {
+function parseStyleString(styleStr: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const declaration of styleStr.split(';')) {
     const colonIndex = declaration.indexOf(':');

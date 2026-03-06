@@ -1,9 +1,9 @@
-import type { SelectedElement } from '@stores/useGridSelectionStore';
-import type { KeyPositions } from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
-import type { PluginDisplayElementInternal } from '@src/types/api';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 type Groupable = SelectedElement & {
   type: 'key' | 'stat' | 'graph';

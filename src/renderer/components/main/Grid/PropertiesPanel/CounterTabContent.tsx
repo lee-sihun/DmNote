@@ -4,8 +4,8 @@ import type { CounterTabContentProps } from './types';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
-} from '@src/types/keys';
-import { normalizeCounterSettings } from '@src/types/keys';
+} from '@src/types/key/keys';
+import { normalizeCounterSettings } from '@src/types/key/keys';
 import {
   PropertyRow,
   FontStyleToggle,

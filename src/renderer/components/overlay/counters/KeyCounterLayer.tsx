@@ -7,7 +7,7 @@ import { getKeySignal } from '@stores/signals/keySignals';
 import {
   useCounterSettings,
   computeOutsideStyle,
-} from '@hooks/shared/useCounterSettings';
+} from '@hooks/overlay/useCounterSettings';
 
 interface KeyPosition {
   dx?: number;

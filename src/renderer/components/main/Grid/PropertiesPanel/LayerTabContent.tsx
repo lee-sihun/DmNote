@@ -4,19 +4,19 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   useGridSelectionStore,
   type SelectedElement,
-} from '@stores/useGridSelectionStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
+} from '@stores/grid/useGridSelectionStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerGroups } from '@src/types/layerGroups';
 import {
   applyGroupIdToSelectedElements,

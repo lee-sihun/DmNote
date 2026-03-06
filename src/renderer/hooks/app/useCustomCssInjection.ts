@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useKeyStore } from '@stores/useKeyStore';
-import type { TabCssOverrides } from '@src/types/css';
-import type { CustomCss } from '@src/types/css';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import type { TabCssOverrides } from '@src/types/plugin/css';
+import type { CustomCss } from '@src/types/plugin/css';
 
 const STYLE_ELEMENT_ID = 'dmn-custom-css';
 

@@ -1,7 +1,7 @@
 import type {
   CounterAnimationBezier,
   KeyCounterAnimationSettings,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 
 export type CounterAnimationSource = 'builtin' | 'user';
 

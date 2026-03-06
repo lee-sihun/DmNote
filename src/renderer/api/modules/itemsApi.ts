@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
 
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 export const statItemsApi = {

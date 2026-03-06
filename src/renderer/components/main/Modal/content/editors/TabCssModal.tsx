@@ -3,8 +3,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import Checkbox from '@components/main/common/Checkbox';
 import { useTranslation } from '@contexts/useTranslation';
-import { useKeyStore } from '@stores/useKeyStore';
-import type { TabCss } from '@src/types/css';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import type { TabCss } from '@src/types/plugin/css';
 
 type Props = {
   isOpen: boolean;

@@ -3,10 +3,10 @@
  * 플러그인에서 커스텀 UI 요소를 정의하는 기능을 제공합니다.
  */
 
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
 import type { NamespacedStorage } from '../context';
@@ -16,8 +16,8 @@ import type {
   PluginDisplayElementInternal,
   PluginDisplayElementActionContext,
   PluginDisplayElementConfig,
-} from '@src/types/api';
-import type { SettingsState } from '@src/types/settings';
+} from '@src/types/plugin/api';
+import type { SettingsState } from '@src/types/settings/settings';
 
 interface SavedInstance {
   position: { x: number; y: number };
@@ -232,8 +232,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const statPositions = useStatItemStore.getState().positions;
       const graphPositions = useGraphItemStore.getState().positions;
       const pluginElements = usePluginDisplayElementStore.getState().elements;
-      const { pushState } = await import('@stores/useHistoryStore').then((m) =>
-        m.useHistoryStore.getState(),
+      const { pushState } = await import('@stores/data/useHistoryStore').then(
+        (m) => m.useHistoryStore.getState(),
       );
       pushState(
         keyMappings,

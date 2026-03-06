@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
   useSettingsStore,
   type SettingsStateSnapshot,
@@ -13,7 +13,10 @@ import {
   setKeyCounter,
 } from '@stores/signals/keyCounterSignals';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
-import type { SettingsDiff, OverlayResizeAnchor } from '@src/types/settings';
+import type {
+  SettingsDiff,
+  OverlayResizeAnchor,
+} from '@src/types/settings/settings';
 import {
   initDefaults,
   getDefaultGridSettings,
@@ -23,7 +26,7 @@ import {
   initializeCursorSystem,
   refreshCursorSettings,
 } from '@utils/grid/cursorUtils';
-import type { CustomJs, JsPlugin } from '@src/types/js';
+import type { CustomJs, JsPlugin } from '@src/types/plugin/js';
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   if (!source) return [];

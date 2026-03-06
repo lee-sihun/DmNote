@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
-import type { CustomFont } from '@src/types/fonts';
+import type { CustomFont } from '@src/types/settings/fonts';
 import PlusIcon from '@assets/svgs/plus2.svg';
 import CommonListPickerPopup from './CommonListPickerPopup';
 

@@ -1,8 +1,11 @@
 /* eslint-disable react-hooks/immutability */
 import { useState, useEffect, useRef } from 'react';
-import { MIN_GRID_POSITION, MAX_GRID_POSITION } from '@stores/useGridViewStore';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import {
+  MIN_GRID_POSITION,
+  MAX_GRID_POSITION,
+} from '@stores/grid/useGridViewStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
 import { DRAG_THRESHOLD } from './constants';

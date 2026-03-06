@@ -1,5 +1,5 @@
-import type { KeyPosition } from '@src/types/keys';
-import type { StatItemType } from '@src/types/statItems';
+import type { KeyPosition } from '@src/types/key/keys';
+import type { StatItemType } from '@src/types/key/statItems';
 
 export type GraphItemType = 'line' | 'bar';
 export type GraphMetricType = StatItemType;

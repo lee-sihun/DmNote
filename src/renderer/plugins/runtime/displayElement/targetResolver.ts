@@ -5,7 +5,7 @@
 
 import { DisplayElementInstance } from '@utils/displayElementInstance';
 import { getDisplayElementInstance } from './instanceRegistry';
-import type { DisplayElementInstance as DisplayElementInstanceType } from '@src/types/api';
+import type { DisplayElementInstance as DisplayElementInstanceType } from '@src/types/plugin/api';
 
 export type DisplayElementTarget =
   | string

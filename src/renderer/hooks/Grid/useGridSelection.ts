@@ -5,25 +5,32 @@
  * - 복사/붙여넣기
  */
 
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
 import {
   useGridSelectionStore,
   type SelectedElement,
   type ClipboardItem,
-} from '@stores/useGridSelectionStore';
+} from '@stores/grid/useGridSelectionStore';
 import { PASTE_OFFSET } from './constants';
-import type { KeyMappings, KeyPositions, KeyPosition } from '@src/types/keys';
-import type { StatItemPosition, StatItemPositions } from '@src/types/statItems';
+import type {
+  KeyMappings,
+  KeyPositions,
+  KeyPosition,
+} from '@src/types/key/keys';
+import type {
+  StatItemPosition,
+  StatItemPositions,
+} from '@src/types/key/statItems';
 import type {
   GraphItemPosition,
   GraphItemPositions,
-} from '@src/types/graphItems';
-import type { PluginDisplayElementInternal } from '@src/types/api';
+} from '@src/types/key/graphItems';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   normalizeLayerGroupsForMode,
   buildNextLayerGroupName,

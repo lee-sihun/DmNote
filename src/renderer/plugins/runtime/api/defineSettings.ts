@@ -3,8 +3,8 @@
  * 플러그인 전역 설정을 정의하는 기능을 제공합니다.
  */
 
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import { handlerRegistry } from '../handlers';
 import type { NamespacedStorage } from '../context';
@@ -12,7 +12,7 @@ import type {
   PluginSettingsDefinition,
   PluginSettingsInstance,
   Unsubscribe,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 interface DefineSettingsDependencies {
   pluginId: string;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
-import type { StatItemType } from '@src/types/statItems';
-import GraphPanel from '@components/graph/GraphPanel';
+import type { StatItemType } from '@src/types/key/statItems';
+import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
 
 const GRAPH_UPDATE_MS = 100;

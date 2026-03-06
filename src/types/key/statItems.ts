@@ -1,4 +1,4 @@
-import type { KeyPosition } from '@src/types/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 
 // Built-in statistics item types (plugin 없이 사용되는 통계 요소)
 export type StatItemType = 'kps' | 'kpsAvg' | 'kpsMax' | 'total';

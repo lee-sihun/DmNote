@@ -1,4 +1,4 @@
-import type { PluginMessages, PluginI18nParams } from '@src/types/api';
+import type { PluginMessages, PluginI18nParams } from '@src/types/plugin/api';
 
 function getNestedValue(
   source: Record<string, unknown>,

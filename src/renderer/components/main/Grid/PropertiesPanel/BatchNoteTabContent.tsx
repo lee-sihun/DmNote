@@ -1,5 +1,5 @@
 import React from 'react';
-import type { KeyPosition } from '@src/types/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,
@@ -7,7 +7,7 @@ import {
   SectionDivider,
 } from './index';
 import Checkbox from '@components/main/common/Checkbox';
-import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/noteSettingsConstraints';
+import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
 interface BatchNoteTabContentProps {

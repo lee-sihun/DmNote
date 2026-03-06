@@ -1,4 +1,7 @@
-import type { DMNoteAPI, PluginDisplayElementInternal } from '@src/types/api';
+import type {
+  DMNoteAPI,
+  PluginDisplayElementInternal,
+} from '@src/types/plugin/api';
 
 declare global {
   interface Window {

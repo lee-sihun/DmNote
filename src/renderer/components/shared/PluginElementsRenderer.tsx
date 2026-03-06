@@ -1,16 +1,16 @@
 import React, { useEffect } from 'react';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/useKeyStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import { PluginElement } from './PluginElement';
 import type {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 import { invokeExposedAction } from '@utils/displayElementActions';
 import {
   useGridSelectionStore,
   SelectedElement,
-} from '@stores/useGridSelectionStore';
+} from '@stores/grid/useGridSelectionStore';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];

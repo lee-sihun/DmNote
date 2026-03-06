@@ -5,7 +5,7 @@ import {
   type CustomFont,
   type FontType,
   generateFontId,
-} from '@src/types/fonts';
+} from '@src/types/settings/fonts';
 
 interface FontState {
   // 내장 폰트 (항상 존재)

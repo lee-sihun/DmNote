@@ -25,7 +25,7 @@ import {
   type PreviewData,
 } from '@hooks/Modal/useUnifiedKeySettingState';
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
-import type { KeyCounterSettings } from '@src/types/keys';
+import type { KeyCounterSettings } from '@src/types/key/keys';
 
 // ============================================================================
 // 타입 정의

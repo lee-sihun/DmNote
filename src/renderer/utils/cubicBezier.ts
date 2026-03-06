@@ -1,4 +1,4 @@
-import type { CounterAnimationBezier } from '@src/types/keys';
+import type { CounterAnimationBezier } from '@src/types/key/keys';
 
 export const COUNTER_DEFAULT_BEZIER: CounterAnimationBezier = [
   0.25, 0.46, 0.45, 0.94,

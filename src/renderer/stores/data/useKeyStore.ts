@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CustomTab, KeyMappings, KeyPositions } from '@src/types/keys';
+import type { CustomTab, KeyMappings, KeyPositions } from '@src/types/key/keys';
 
 interface KeyStoreState {
   selectedKeyType: string;

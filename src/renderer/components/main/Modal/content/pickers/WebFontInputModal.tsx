@@ -23,7 +23,7 @@ import {
 } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import Modal from '@components/main/Modal/Modal';
-import { validateWebFontFaceCss } from '@src/types/fonts';
+import { validateWebFontFaceCss } from '@src/types/settings/fonts';
 
 interface WebFontInputModalProps {
   isOpen: boolean;

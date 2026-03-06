@@ -4,7 +4,7 @@ import type {
   PluginMenuItemInternal,
   KeyMenuContext,
   GridMenuContext,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 interface PluginMenuState {
   keyMenuItems: PluginMenuItemInternal<KeyMenuContext>[];

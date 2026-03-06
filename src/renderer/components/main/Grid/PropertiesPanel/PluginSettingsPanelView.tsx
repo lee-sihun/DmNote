@@ -3,8 +3,8 @@ import type {
   PluginSettingSchema,
   PluginMessages,
   PluginSettingValue,
-} from '@src/types/api';
-import type { PluginSettingsPanelPayload } from '@stores/usePropertiesPanelStore';
+} from '@src/types/plugin/api';
+import type { PluginSettingsPanelPayload } from '@stores/grid/usePropertiesPanelStore';
 import { SidebarToggleIcon } from './PropertyInputs';
 
 interface PluginSettingsPanelViewProps {

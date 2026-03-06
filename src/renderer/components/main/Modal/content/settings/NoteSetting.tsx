@@ -5,8 +5,8 @@ import { useTranslation } from '@contexts/useTranslation';
 import {
   NOTE_SETTINGS_CONSTRAINTS,
   clampValue,
-} from '../../../../../../types/noteSettingsConstraints';
-import type { NoteSettings } from '../../../../../../types/noteSettings';
+} from '../../../../../../types/settings/noteSettingsConstraints';
+import type { NoteSettings } from '../../../../../../types/settings/noteSettings';
 
 type ConstraintKey = keyof typeof NOTE_SETTINGS_CONSTRAINTS;
 

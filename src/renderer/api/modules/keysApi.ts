@@ -13,13 +13,13 @@ import type {
   CustomTabResult,
   CustomTabDeleteResult,
   RawInputPayload,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 import type {
   CustomTab,
   KeyMappings,
   KeyPositions,
   KeyCounters,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 
 export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),

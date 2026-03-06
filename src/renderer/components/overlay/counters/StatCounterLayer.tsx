@@ -2,12 +2,12 @@
 import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
-import type { StatItemType } from '@src/types/statItems';
+import type { StatItemType } from '@src/types/key/statItems';
 import CountDisplay from '@components/overlay/counters/CountDisplay';
 import {
   useCounterSettings,
   computeOutsideStyle,
-} from '@hooks/shared/useCounterSettings';
+} from '@hooks/overlay/useCounterSettings';
 
 interface StatPosition {
   dx?: number;

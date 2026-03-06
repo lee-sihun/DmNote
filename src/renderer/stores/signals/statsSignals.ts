@@ -1,6 +1,6 @@
 import { signal, type Signal } from '@preact/signals-react';
-import type { KeyStatsPayload } from '@src/types/api';
-import type { StatItemType } from '@src/types/statItems';
+import type { KeyStatsPayload } from '@src/types/plugin/api';
+import type { StatItemType } from '@src/types/key/statItems';
 
 const statsSignals: Record<keyof KeyStatsPayload, Signal<number>> = {
   kps: signal(0),

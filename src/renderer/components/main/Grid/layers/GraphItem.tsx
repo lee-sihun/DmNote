@@ -1,15 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import {
   calculateBounds,
   calculateSnapPoints,
   calculateGroupBounds,
 } from '@utils/grid/smartGuides';
-import GraphPanel from '@components/graph/GraphPanel';
+import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
 
 interface GraphPosition {

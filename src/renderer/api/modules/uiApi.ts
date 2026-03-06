@@ -1,4 +1,4 @@
-import { usePluginMenuStore } from '@stores/usePluginMenuStore';
+import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import {
   createButton,
   createCheckbox,
@@ -19,7 +19,7 @@ import type {
   PluginMenuItem,
   KeyMenuContext,
   GridMenuContext,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 export const uiApi = {
   contextMenu: {

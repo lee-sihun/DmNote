@@ -1,21 +1,21 @@
 import { BootstrapPayload } from '@src/types/app';
-import { CustomCss } from '@src/types/css';
-import { CustomJs, JsPlugin } from '@src/types/js';
+import { CustomCss } from '@src/types/plugin/css';
+import { CustomJs, JsPlugin } from '@src/types/plugin/js';
 import {
   CustomTab,
   KeyMappings,
   KeyPositions,
   KeyCounters,
   KeyPosition,
-} from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+} from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { LayerGroups } from '@src/types/layerGroups';
 import {
   SettingsDiff,
   SettingsPatchInput,
   SettingsState,
-} from '@src/types/settings';
+} from '@src/types/settings/settings';
 
 /** Value type for plugin settings (boolean, string, or number) */
 export type PluginSettingValue = string | number | boolean;
@@ -175,13 +175,13 @@ export type CounterAnimationDeleteResponse = {
 // 탭별 CSS 타입
 export type TabCssResponse = {
   tabId: string;
-  css: import('@src/types/css').TabCss | null;
+  css: import('@src/types/plugin/css').TabCss | null;
 };
 export type TabCssLoadResult = {
   success: boolean;
   error?: string;
   tabId: string;
-  css?: import('@src/types/css').TabCss;
+  css?: import('@src/types/plugin/css').TabCss;
 };
 export type TabCssClearResult = {
   success: boolean;
@@ -195,13 +195,13 @@ export type TabCssToggleResult = {
 export type TabCssSetResult = {
   success: boolean;
   tabId: string;
-  css?: import('@src/types/css').TabCss;
+  css?: import('@src/types/plugin/css').TabCss;
 };
 
 // 탭별 노트 트랙 설정 타입
 export type TabNoteResponse = {
   tabId: string;
-  settings: import('@src/types/noteSettings').TabNoteSettings | null;
+  settings: import('@src/types/settings/noteSettings').TabNoteSettings | null;
 };
 export type TabNoteClearResult = {
   success: boolean;
@@ -210,7 +210,7 @@ export type TabNoteClearResult = {
 export type TabNoteSetResult = {
   success: boolean;
   tabId: string;
-  settings?: import('@src/types/noteSettings').TabNoteSettings;
+  settings?: import('@src/types/settings/noteSettings').TabNoteSettings;
 };
 
 export type JsTogglePayload = { enabled: boolean };
@@ -814,30 +814,34 @@ export interface DMNoteAPI {
     onContent(listener: (payload: CustomCss) => void): Unsubscribe;
     // 탭별 CSS API
     tab: {
-      getAll(): Promise<import('@src/types/css').TabCssOverrides>;
+      getAll(): Promise<import('@src/types/plugin/css').TabCssOverrides>;
       get(tabId: string): Promise<TabCssResponse>;
       load(tabId: string): Promise<TabCssLoadResult>;
       clear(tabId: string): Promise<TabCssClearResult>;
       set(
         tabId: string,
-        css: import('@src/types/css').TabCss | null,
+        css: import('@src/types/plugin/css').TabCss | null,
       ): Promise<TabCssSetResult>;
       toggle(tabId: string, enabled: boolean): Promise<TabCssToggleResult>;
       onChanged(listener: (payload: TabCssResponse) => void): Unsubscribe;
     };
   };
   noteTab: {
-    getAll(): Promise<import('@src/types/noteSettings').TabNoteOverrides>;
+    getAll(): Promise<
+      import('@src/types/settings/noteSettings').TabNoteOverrides
+    >;
     get(tabId: string): Promise<TabNoteResponse>;
     set(
       tabId: string,
-      settings: import('@src/types/noteSettings').TabNoteSettings | null,
+      settings:
+        | import('@src/types/settings/noteSettings').TabNoteSettings
+        | null,
     ): Promise<TabNoteSetResult>;
     clear(tabId: string): Promise<TabNoteClearResult>;
     onChanged(listener: (payload: TabNoteResponse) => void): Unsubscribe;
     onChangedAll(
       listener: (
-        payload: import('@src/types/noteSettings').TabNoteOverrides,
+        payload: import('@src/types/settings/noteSettings').TabNoteOverrides,
       ) => void,
     ): Unsubscribe;
   };

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useKeyStore } from '@stores/useKeyStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FlaskIcon from '@assets/svgs/flask.svg';
@@ -12,9 +12,9 @@ import ShortcutSettingsModal from '@components/main/Modal/content/settings/Short
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { isMac } from '@utils/core/platform';
-import { useUpdateCheck } from '@hooks/useUpdateCheck';
-import type { OverlayResizeAnchor } from '@src/types/settings';
-import type { ShortcutsState } from '@src/types/shortcuts';
+import { useUpdateCheck } from '@hooks/app/useUpdateCheck';
+import type { OverlayResizeAnchor } from '@src/types/settings/settings';
+import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { SupportedLocale } from '@contexts/I18nContextDef';
 import type {
   CssLoadResult,
@@ -23,9 +23,9 @@ import type {
   JsRemoveResult,
   JsPluginUpdateResult,
   KeysResetAllResponse,
-} from '@src/types/api';
-import type { JsPlugin } from '@src/types/js';
-import type { KeyCounters } from '@src/types/keys';
+} from '@src/types/plugin/api';
+import type { JsPlugin } from '@src/types/plugin/js';
+import type { KeyCounters } from '@src/types/key/keys';
 
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {

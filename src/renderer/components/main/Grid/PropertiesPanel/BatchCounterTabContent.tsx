@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import type { KeyCounterSettings } from '@src/types/keys';
+import type { KeyCounterSettings } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,

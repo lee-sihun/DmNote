@@ -1,4 +1,4 @@
-import { useKeyStore } from '@stores/useKeyStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import GridIcon from '@assets/svgs/grid.svg';
 import { useTranslation } from '@contexts/useTranslation';
 import { useState, useRef } from 'react';

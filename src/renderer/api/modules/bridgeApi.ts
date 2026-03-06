@@ -6,7 +6,7 @@ import type {
   BridgeMessageListener,
   BridgeAnyListener,
   WindowTarget,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 export const bridgeApi = (() => {
   const listeners = new Map<string, Set<BridgeMessageListener>>();

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { StatItemPositions } from '@src/types/statItems';
+import type { StatItemPositions } from '@src/types/key/statItems';
 
 interface StatItemStoreState {
   positions: StatItemPositions;

@@ -7,22 +7,22 @@ import {
 import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
 import { isMac } from '@utils/core/platform';
-import { Key } from '@components/Key';
+import { Key } from '@components/shared/Key';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   DEFAULT_NOTE_BORDER_RADIUS,
   DEFAULT_NOTE_SETTINGS,
 } from '@constants/overlayDefaults';
-import { mergeNoteSettings } from '@src/types/noteSettings';
-import { useCustomCssInjection } from '@hooks/useCustomCssInjection';
-import { useCustomJsInjection } from '@hooks/useCustomJsInjection';
-import { useBlockBrowserShortcuts } from '@hooks/useBlockBrowserShortcuts';
-import { useNoteSystem } from '@hooks/useNoteSystem';
-import { useAppBootstrap } from '@hooks/useAppBootstrap';
-import { useBuiltinStatsSubscription } from '@hooks/useBuiltinStatsSubscription';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { mergeNoteSettings } from '@src/types/settings/noteSettings';
+import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
+import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
+import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
+import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
+import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubscription';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
@@ -32,15 +32,15 @@ import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
   createDefaultCounterSettings,
   type KeyPosition,
-} from '@src/types/keys';
-import type { StatItemPosition } from '@src/types/statItems';
-import type { GraphItemPosition } from '@src/types/graphItems';
+} from '@src/types/key/keys';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
-import { PluginElementsRenderer } from '@components/PluginElementsRenderer';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
-import GraphItem from '@components/overlay/counters/GraphItem';
+import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
 
 const FALLBACK_POSITION: KeyPosition = {
   dx: 0,
@@ -97,11 +97,11 @@ const OverlayStatItem =
 const OverlayStatCounterLayer =
   StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
 const OverlayGraphItem =
-  GraphItem as React.ComponentType<OverlayGraphItemProps>;
+  OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
-  const mod = await import('@components/overlay/rendering/WebGLTracksOGL.jsx');
+  const mod = await import('@components/overlay/WebGLTracksOGL.jsx');
   return {
     default: mod.WebGLTracksOGL as unknown as React.ComponentType<
       Record<string, unknown>
@@ -462,32 +462,6 @@ export default function App() {
   // 키 딜레이 타이머 관리 (down/up 별도 관리)
   const keyDelayTimersRef = useRef<Map<string, KeyDelayTimerEntry>>(new Map());
 
-  // 키 딜레이 적용된 신호 업데이트
-  const updateKeySignalWithDelay = (key: string, isDown: boolean) => {
-    const delayMs = keyDisplayDelayMsRef.current;
-
-    let timerEntry = keyDelayTimersRef.current.get(key);
-    if (!timerEntry) {
-      timerEntry = { timers: new Set() };
-      keyDelayTimersRef.current.set(key, timerEntry);
-    }
-
-    if (delayMs <= 0) {
-      // 딜레이가 0일 경우 즉시 업데이트
-      // 기존 타이머 모두 취소
-      timerEntry.timers.forEach((timer) => clearTimeout(timer));
-      timerEntry.timers.clear();
-      setKeyActiveSignal(key, isDown);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setKeyActiveSignal(key, isDown);
-      timerEntry?.timers.delete(timer);
-    }, delayMs);
-    timerEntry.timers.add(timer);
-  };
-
   // 키 활성 상태는 signals로 관리하여 App 리렌더를 방지
   const [_layoutVersion, setLayoutVersion] = useState(0);
 
@@ -502,6 +476,30 @@ export default function App() {
   }, [trackHeight]);
 
   useEffect(() => {
+    // 키 딜레이 적용된 신호 업데이트
+    const updateKeySignalWithDelay = (key: string, isDown: boolean) => {
+      const delayMs = keyDisplayDelayMsRef.current;
+
+      let timerEntry = keyDelayTimersRef.current.get(key);
+      if (!timerEntry) {
+        timerEntry = { timers: new Set() };
+        keyDelayTimersRef.current.set(key, timerEntry);
+      }
+
+      if (delayMs <= 0) {
+        timerEntry.timers.forEach((timer) => clearTimeout(timer));
+        timerEntry.timers.clear();
+        setKeyActiveSignal(key, isDown);
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        setKeyActiveSignal(key, isDown);
+        timerEntry?.timers.delete(timer);
+      }, delayMs);
+      timerEntry.timers.add(timer);
+    };
+
     // 키 이벤트 버스 초기화 (백엔드에서 한 번만 구독)
     import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
       keyEventBus.initialize();
@@ -554,7 +552,14 @@ export default function App() {
       // 안전하게 모든 키 신호 초기화(선택적)
       resetAllKeySignals();
     };
-  }, [handleKeyDown, handleKeyUp, noteEffect, updateKeySignalWithDelay, keyMappings, positions, selectedKeyType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    handleKeyDown,
+    handleKeyUp,
+    noteEffect,
+    keyMappings,
+    positions,
+    selectedKeyType,
+  ]);
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
 

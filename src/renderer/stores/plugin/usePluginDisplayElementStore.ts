@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import {
   PluginDisplayElementInternal,
   PluginDefinitionInternal,
-} from '@src/types/api';
-import { useKeyStore } from './useKeyStore';
+} from '@src/types/plugin/api';
+import { useKeyStore } from '../data/useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수
 let syncScheduled = false;

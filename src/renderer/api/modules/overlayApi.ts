@@ -8,7 +8,7 @@ import type {
   OverlayResizePayload,
   OverlayState,
   OverlayVisibilityPayload,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 export const overlayApi = {
   get: () => invoke<OverlayState>('overlay_get'),

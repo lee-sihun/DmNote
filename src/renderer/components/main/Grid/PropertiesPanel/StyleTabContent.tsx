@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect } from 'react';
 import type { StyleTabContentProps } from './types';
-import type { ImageFit, KeyPosition } from '@src/types/keys';
+import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,

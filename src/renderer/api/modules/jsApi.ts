@@ -8,8 +8,8 @@ import type {
   JsReloadResult,
   JsRemoveResult,
   JsPluginUpdateResult,
-} from '@src/types/api';
-import type { CustomJs } from '@src/types/js';
+} from '@src/types/plugin/api';
+import type { CustomJs } from '@src/types/plugin/js';
 
 export const jsApi = {
   get: () => invoke<CustomJs>('js_get'),

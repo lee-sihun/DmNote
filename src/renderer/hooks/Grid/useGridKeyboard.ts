@@ -11,13 +11,13 @@ import { useEffect, useRef } from 'react';
 import {
   useGridSelectionStore,
   type SelectedElement,
-} from '@stores/useGridSelectionStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+} from '@stores/grid/useGridSelectionStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { ARROW_KEY_HISTORY_DELAY } from './constants';
 import { isMac } from '@utils/core/platform';
 import {

@@ -1,5 +1,5 @@
 import { signal, type Signal } from '@preact/signals-react';
-import type { KeyCounters } from '@src/types/keys';
+import type { KeyCounters } from '@src/types/key/keys';
 
 const keyCounterSignals = new Map<string, Signal<number>>();
 

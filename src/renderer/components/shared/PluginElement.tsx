@@ -5,14 +5,14 @@ import {
   PluginDisplayElementInternal,
   ElementResizeAnchor,
   DisplayElementTemplateHelpers,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 import { useDraggable } from '@hooks/Grid';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { useKeyStore as useKeyStoreForHistory } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { useKeyStore as useKeyStoreForHistory } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   calculateBounds,
@@ -23,11 +23,11 @@ import {
   useGridSelectionStore,
   SelectedElement,
   isElementInMarquee,
-} from '@stores/useGridSelectionStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useKeyStore } from '@stores/useKeyStore';
+} from '@stores/grid/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
-import ListPopup, { ListItem } from './main/Modal/ListPopup';
+import ListPopup, { ListItem } from '../main/Modal/ListPopup';
 import { html, styleMap, css } from '@utils/core/templateEngine';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {

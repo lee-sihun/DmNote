@@ -1,28 +1,28 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { usePropertiesPanelStore } from '@stores/usePropertiesPanelStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
-import type { KeyPosition } from '@src/types/keys';
-import type { StatItemPosition, StatItemType } from '@src/types/statItems';
-import type { GraphItemPosition } from '@src/types/graphItems';
+import type { KeyPosition } from '@src/types/key/keys';
+import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type {
   PluginSettingSchema,
   PluginMessages,
   RawInputPayload,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 import { useLenis } from '@hooks/useLenis';
 
 // 분리된 컴포넌트들 및 훅
@@ -47,7 +47,7 @@ import {
 } from './PropertiesPanel/index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
-import type { NoteColor } from '@src/types/keys';
+import type { NoteColor } from '@src/types/key/keys';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
   switch (statType) {

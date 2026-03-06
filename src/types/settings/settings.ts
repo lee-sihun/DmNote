@@ -1,11 +1,14 @@
 import {
   type NoteSettings,
   normalizeNoteSettings,
-} from '@src/types/noteSettings';
-import { type FontSettings, normalizeFontSettings } from '@src/types/fonts';
-import { type CustomCss } from '@src/types/css';
-import { type CustomJs } from '@src/types/js';
-import type { ShortcutsState } from '@src/types/shortcuts';
+} from '@src/types/settings/noteSettings';
+import {
+  type FontSettings,
+  normalizeFontSettings,
+} from '@src/types/settings/fonts';
+import { type CustomCss } from '@src/types/plugin/css';
+import { type CustomJs } from '@src/types/plugin/js';
+import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import {
   getDefaultSettingsState,
   getDefaultGridSettings,

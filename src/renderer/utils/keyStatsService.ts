@@ -7,8 +7,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { KeyStatsPayload, KeyStatePayload } from '@src/types/api';
-import type { KeyCounters } from '@src/types/keys';
+import type { KeyStatsPayload, KeyStatePayload } from '@src/types/plugin/api';
+import type { KeyCounters } from '@src/types/key/keys';
 
 export type KeyStatsListener = (stats: KeyStatsPayload) => void;
 

@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-import type { Unsubscribe } from '@src/types/api';
-import type { SettingsState, SettingsDiff } from '@src/types/settings';
+import type { Unsubscribe } from '@src/types/plugin/api';
+import type { SettingsState, SettingsDiff } from '@src/types/settings/settings';
 
 // ── subscribe helper ────────────────────────────────────────────────
 export function subscribe<T>(

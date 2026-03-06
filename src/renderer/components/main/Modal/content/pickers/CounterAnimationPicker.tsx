@@ -2,16 +2,16 @@ import React, { useEffect, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 import type {
   CounterAnimationListResponse,
   CounterAnimationPreset,
-} from '@src/types/counterAnimation';
+} from '@src/types/key/counterAnimation';
 import {
   applyPresetToAnimation,
   findMatchingPresetId,
   normalizeCounterAnimationLibrary,
-} from '@src/types/counterAnimation';
+} from '@src/types/key/counterAnimation';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';

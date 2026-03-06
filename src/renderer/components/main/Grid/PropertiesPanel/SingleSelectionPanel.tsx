@@ -1,14 +1,17 @@
 /* eslint-disable react-hooks/refs */
 import React from 'react';
-import type { ImageFit, KeyPosition } from '@src/types/keys';
-import type { StatItemPosition, StatItemType } from '@src/types/statItems';
-import type { GraphItemPosition, GraphItemType } from '@src/types/graphItems';
+import type { ImageFit, KeyPosition } from '@src/types/key/keys';
+import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
+import type {
+  GraphItemPosition,
+  GraphItemType,
+} from '@src/types/key/graphItems';
 import type {
   PluginSettingSchema,
   PluginMessages,
   PluginDefinitionInternal,
   PluginDisplayElementInternal,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 import type { KeyInfo } from '@utils/core/KeyMaps';
 import {
   PropertyRow,

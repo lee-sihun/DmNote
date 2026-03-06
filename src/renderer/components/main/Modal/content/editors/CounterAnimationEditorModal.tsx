@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
-} from '@src/types/keys';
-import type { CounterAnimationPreset } from '@src/types/counterAnimation';
+} from '@src/types/key/keys';
+import type { CounterAnimationPreset } from '@src/types/key/counterAnimation';
 import Modal from '@components/main/Modal/Modal';
 import Dropdown from '@components/main/common/Dropdown';
 import {
@@ -16,7 +16,7 @@ import {
   clampCounterBezier,
   findBezierPresetId,
 } from '@utils/cubicBezier';
-import { useKeyStore } from '@stores/useKeyStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 
 type EditorMode = 'create' | 'edit';
 

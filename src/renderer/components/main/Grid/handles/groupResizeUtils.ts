@@ -3,12 +3,12 @@
  * GroupResizeHandles 컴포넌트에서 분리된 순수 함수들
  */
 
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import type { KeyPositions } from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
-import type { PluginDisplayElementInternal } from '@src/types/api';
-import type { SelectableElementType } from '@stores/useGridSelectionStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { SelectableElementType } from '@stores/grid/useGridSelectionStore';
 
 // ===== 타입 정의 =====
 

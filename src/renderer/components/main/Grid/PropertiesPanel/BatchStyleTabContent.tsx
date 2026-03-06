@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { KeyPosition } from '@src/types/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,

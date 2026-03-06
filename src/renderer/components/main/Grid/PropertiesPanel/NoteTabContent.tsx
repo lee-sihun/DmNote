@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
 import type { NoteTabContentProps } from './types';
-import type { NoteColor, KeyPosition } from '@src/types/keys';
+import type { NoteColor, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
   NumberInput,
@@ -11,7 +11,7 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { isGradientColor } from '@utils/color/colorUtils';
-import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/noteSettingsConstraints';
+import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';

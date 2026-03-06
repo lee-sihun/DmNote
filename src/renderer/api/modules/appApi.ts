@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type { AppAutoUpdateResult } from '@src/types/api';
+import type { AppAutoUpdateResult } from '@src/types/plugin/api';
 import type { BootstrapPayload } from '@src/types/app';
 
 export const appApi = {

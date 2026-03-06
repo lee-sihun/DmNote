@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { applyStatsSnapshot } from '@stores/signals/statsSignals';
 
 export function useBuiltinStatsSubscription() {

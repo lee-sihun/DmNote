@@ -7,7 +7,10 @@ import { isMac } from '@utils/core/platform';
 // import { TooltipGroup } from "@components/main/Modal/TooltipGroup";
 // import FloatingTooltip from "@components/main/Modal/FloatingTooltip";
 import { getScrollShadowState } from '@utils/grid/scrollShadow';
-import type { ShortcutBinding, ShortcutsState } from '@src/types/shortcuts';
+import type {
+  ShortcutBinding,
+  ShortcutsState,
+} from '@src/types/settings/shortcuts';
 import { getDefaultShortcuts } from '@src/renderer/defaults';
 
 type ShortcutKey = keyof ShortcutsState;

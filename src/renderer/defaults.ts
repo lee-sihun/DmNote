@@ -1,11 +1,11 @@
 import type {
   KeyCounterSettings,
   CounterAnimationBezier,
-} from '@src/types/keys';
-import type { NoteSettings } from '@src/types/noteSettings';
-import type { GridSettings, SettingsState } from '@src/types/settings';
-import type { ShortcutsState } from '@src/types/shortcuts';
-import type { FontSettings } from '@src/types/fonts';
+} from '@src/types/key/keys';
+import type { NoteSettings } from '@src/types/settings/noteSettings';
+import type { GridSettings, SettingsState } from '@src/types/settings/settings';
+import type { ShortcutsState } from '@src/types/settings/shortcuts';
+import type { FontSettings } from '@src/types/settings/fonts';
 
 export interface DefaultsPayload {
   settings: SettingsState;

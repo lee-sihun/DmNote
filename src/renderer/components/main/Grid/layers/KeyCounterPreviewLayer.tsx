@@ -2,7 +2,7 @@ import React from 'react';
 import {
   useCounterSettings,
   computeOutsideStyle,
-} from '@hooks/shared/useCounterSettings';
+} from '@hooks/overlay/useCounterSettings';
 import { toCssRgba } from '@utils/color/colorUtils';
 
 interface CounterPosition {

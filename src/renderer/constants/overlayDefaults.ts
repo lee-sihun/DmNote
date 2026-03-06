@@ -1,4 +1,4 @@
-import { NOTE_SETTINGS_CONSTRAINTS } from '../../types/noteSettingsConstraints';
+import { NOTE_SETTINGS_CONSTRAINTS } from '../../types/settings/noteSettingsConstraints';
 
 export interface NoteSettings {
   frameLimit: number;
@@ -38,4 +38,4 @@ export const DEFAULT_NOTE_SETTINGS: NoteSettings = {
 export const TRACK_HEIGHT: number = DEFAULT_NOTE_SETTINGS.trackHeight;
 
 // 제약 값 export
-export { NOTE_SETTINGS_CONSTRAINTS } from '../../types/noteSettingsConstraints';
+export { NOTE_SETTINGS_CONSTRAINTS } from '../../types/settings/noteSettingsConstraints';

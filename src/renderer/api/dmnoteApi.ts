@@ -26,7 +26,7 @@ import { uiApi } from './modules/uiApi';
 // shared.ts is imported for its side-effects (locale init + settings listener)
 import './modules/shared';
 
-import type { DMNoteAPI } from '@src/types/api';
+import type { DMNoteAPI } from '@src/types/plugin/api';
 
 const api: DMNoteAPI = {
   app: appApi,

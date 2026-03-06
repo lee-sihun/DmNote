@@ -2,10 +2,10 @@ import type {
   KeyPosition,
   NoteColor,
   KeyCounterSettings,
-} from '@src/types/keys';
-import { normalizeCounterSettings } from '@src/types/keys';
-import type { StatItemPosition } from '@src/types/statItems';
-import type { GraphItemPosition } from '@src/types/graphItems';
+} from '@src/types/key/keys';
+import { normalizeCounterSettings } from '@src/types/key/keys';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
 const DEFAULT_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';

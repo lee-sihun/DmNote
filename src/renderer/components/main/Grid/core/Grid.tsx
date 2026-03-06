@@ -6,18 +6,18 @@ declare global {
   }
 }
 import { useTranslation } from '@contexts/useTranslation';
-import DraggableKey from '@components/Key';
+import DraggableKey from '@components/shared/Key';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import UnifiedKeySetting from '../../Modal/content/dialogs/UnifiedKeySetting';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
 import ListPopup from '../../Modal/ListPopup';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
-import { PluginElementsRenderer } from '@components/PluginElementsRenderer';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
@@ -32,10 +32,10 @@ import GraphItem from '../layers/GraphItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
-} from '@stores/useGridSelectionStore';
-import { useHistoryStore } from '@stores/useHistoryStore';
+} from '@stores/grid/useGridSelectionStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useUIStore } from '@stores/useUIStore';
-import { useSmartGuidesStore } from '@stores/useSmartGuidesStore';
+import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import {
   snapCursorToGrid,
@@ -46,7 +46,7 @@ import {
   useGridResize,
   useSmartGuidesElements,
 } from '@hooks/Grid';
-import { createDefaultCounterSettings } from '@src/types/keys';
+import { createDefaultCounterSettings } from '@src/types/key/keys';
 import type {
   KeyMappings,
   KeyPositions,
@@ -55,12 +55,15 @@ import type {
   KeyCounterSettings,
   CounterAnimationBezier,
   ImageFit,
-} from '@src/types/keys';
-import type { StatItemPositions, StatItemPosition } from '@src/types/statItems';
+} from '@src/types/key/keys';
+import type {
+  StatItemPositions,
+  StatItemPosition,
+} from '@src/types/key/statItems';
 import type {
   GraphItemPositions,
   GraphItemPosition,
-} from '@src/types/graphItems';
+} from '@src/types/key/graphItems';
 import type {
   SaveData,
   PreviewData,

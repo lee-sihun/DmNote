@@ -11,7 +11,7 @@ import {
   type KeyCounterPlacement,
   type KeyCounterAlign,
   type KeyCounterAlignMode,
-} from '@src/types/keys';
+} from '@src/types/key/keys';
 
 type PickerTarget = 'fillIdle' | 'fillActive' | 'strokeIdle' | 'strokeActive';
 

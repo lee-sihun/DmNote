@@ -5,7 +5,7 @@ import type {
   SettingsState,
   SettingsPatchInput,
   SettingsDiff,
-} from '@src/types/settings';
+} from '@src/types/settings/settings';
 
 export const settingsApi = {
   get: () => invoke<SettingsState>('settings_get'),

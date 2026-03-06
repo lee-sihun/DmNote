@@ -6,11 +6,11 @@ import {
   MAX_ZOOM,
   ZOOM_STEP,
   clampZoom,
-} from '@stores/useGridViewStore';
-import { useGridSelectionStore } from '@stores/useGridSelectionStore';
+} from '@stores/grid/useGridViewStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { isMac } from '@utils/core/platform';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import type { ShortcutBinding } from '@src/types/shortcuts';
+import type { ShortcutBinding } from '@src/types/settings/shortcuts';
 
 interface UseGridZoomPanOptions {
   mode: string;

@@ -5,8 +5,8 @@ import { isGradientColor, normalizeColorInput } from '@utils/color/colorUtils';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from '@src/types/keys';
-import type { NoteColor, KeyCounterSettings } from '@src/types/keys';
+} from '@src/types/key/keys';
+import type { NoteColor, KeyCounterSettings } from '@src/types/key/keys';
 
 // ============================================================================
 // 타입 정의

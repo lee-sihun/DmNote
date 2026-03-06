@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { SettingsDiff, SettingsState } from '@src/types/settings';
+import type { SettingsDiff, SettingsState } from '@src/types/settings/settings';
 import { I18nContext } from './I18nContextDef';
 import type { SupportedLocale, I18nContextValue } from './I18nContextDef';
 

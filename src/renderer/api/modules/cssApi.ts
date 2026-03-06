@@ -5,8 +5,8 @@ import type {
   CssLoadResult,
   CssSetContentResult,
   CssTogglePayload,
-} from '@src/types/api';
-import type { CustomCss } from '@src/types/css';
+} from '@src/types/plugin/api';
+import type { CustomCss } from '@src/types/plugin/css';
 
 export const cssApi = {
   get: () => invoke<CustomCss>('css_get'),
@@ -23,33 +23,43 @@ export const cssApi = {
     subscribe<CustomCss>('css:content', listener),
   tab: {
     getAll: () =>
-      invoke<import('@src/types/css').TabCssOverrides>('css_tab_get_all'),
+      invoke<import('@src/types/plugin/css').TabCssOverrides>(
+        'css_tab_get_all',
+      ),
     get: (tabId: string) =>
-      invoke<import('@src/types/api').TabCssResponse>('css_tab_get', {
+      invoke<import('@src/types/plugin/api').TabCssResponse>('css_tab_get', {
         tabId,
       }),
     load: (tabId: string) =>
-      invoke<import('@src/types/api').TabCssLoadResult>('css_tab_load', {
+      invoke<import('@src/types/plugin/api').TabCssLoadResult>('css_tab_load', {
         tabId,
       }),
     clear: (tabId: string) =>
-      invoke<import('@src/types/api').TabCssClearResult>('css_tab_clear', {
-        tabId,
-      }),
+      invoke<import('@src/types/plugin/api').TabCssClearResult>(
+        'css_tab_clear',
+        {
+          tabId,
+        },
+      ),
     toggle: (tabId: string, enabled: boolean) =>
-      invoke<import('@src/types/api').TabCssToggleResult>('css_tab_toggle', {
-        tabId,
-        enabled,
-      }),
-    set: (tabId: string, css: import('@src/types/css').TabCss | null) =>
-      invoke<import('@src/types/api').TabCssSetResult>('css_tab_set', {
+      invoke<import('@src/types/plugin/api').TabCssToggleResult>(
+        'css_tab_toggle',
+        {
+          tabId,
+          enabled,
+        },
+      ),
+    set: (tabId: string, css: import('@src/types/plugin/css').TabCss | null) =>
+      invoke<import('@src/types/plugin/api').TabCssSetResult>('css_tab_set', {
         tabId,
         css,
       }),
     onChanged: (
-      listener: (payload: import('@src/types/api').TabCssResponse) => void,
+      listener: (
+        payload: import('@src/types/plugin/api').TabCssResponse,
+      ) => void,
     ) =>
-      subscribe<import('@src/types/api').TabCssResponse>(
+      subscribe<import('@src/types/plugin/api').TabCssResponse>(
         'tabCss:changed',
         listener,
       ),

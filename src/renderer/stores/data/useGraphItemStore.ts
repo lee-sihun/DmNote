@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GraphItemPositions } from '@src/types/graphItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 
 interface GraphItemStoreState {
   positions: GraphItemPositions;

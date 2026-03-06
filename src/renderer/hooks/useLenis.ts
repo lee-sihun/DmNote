@@ -47,8 +47,10 @@ export function useLenis(options: UseLenisOptions = {}) {
   const lenisRef = useRef<Lenis | null>(null);
   const onScrollRef = useRef<(() => void) | undefined>(options.onScroll);
 
-  // onScroll 콜백 업데이트 (매 렌더마다)
-  onScrollRef.current = options.onScroll;
+  // onScroll 콜백 업데이트
+  useEffect(() => {
+    onScrollRef.current = options.onScroll;
+  }, [options.onScroll]);
 
   const {
     duration = LENIS_CONFIG.duration,

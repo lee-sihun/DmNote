@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PluginSettingsDefinition } from '@src/types/api';
+import type { PluginSettingsDefinition } from '@src/types/plugin/api';
 import {
   LAYER_PANEL_TABS,
   type LayerPanelTabType,

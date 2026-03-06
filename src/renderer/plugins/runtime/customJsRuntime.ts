@@ -12,8 +12,8 @@
  * - api/: defineElement, defineSettings 등 플러그인 API
  */
 
-import { usePluginMenuStore } from '@stores/usePluginMenuStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
 import {
@@ -21,7 +21,7 @@ import {
   setInitialLoading,
 } from './displayElement';
 import { createPluginApiProxy, createPluginWindowProxy } from './api';
-import type { JsPlugin } from '@src/types/js';
+import type { JsPlugin } from '@src/types/plugin/js';
 
 const SCRIPT_ID_PREFIX = 'dmn-custom-js-';
 

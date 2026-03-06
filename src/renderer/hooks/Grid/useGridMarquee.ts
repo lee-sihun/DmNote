@@ -8,11 +8,11 @@ import {
   isElementInMarquee,
   getMarqueeRect,
   type SelectedElement,
-} from '@stores/useGridSelectionStore';
-import type { PluginDisplayElementInternal } from '@src/types/api';
-import type { KeyPositions } from '@src/types/keys';
-import type { StatItemPositions } from '@src/types/statItems';
-import type { GraphItemPositions } from '@src/types/graphItems';
+} from '@stores/grid/useGridSelectionStore';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 
 interface UseGridMarqueeParams {
   positions: KeyPositions;

@@ -1,9 +1,12 @@
 import { create } from 'zustand';
-import type { NoteSettings, TabNoteOverrides } from '@src/types/noteSettings';
-import type { FontSettings } from '@src/types/fonts';
-import type { OverlayResizeAnchor } from '@src/types/settings';
-import type { JsPlugin } from '@src/types/js';
-import type { ShortcutsState } from '@src/types/shortcuts';
+import type {
+  NoteSettings,
+  TabNoteOverrides,
+} from '@src/types/settings/noteSettings';
+import type { FontSettings } from '@src/types/settings/fonts';
+import type { OverlayResizeAnchor } from '@src/types/settings/settings';
+import type { JsPlugin } from '@src/types/plugin/js';
+import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import {
   getDefaultNoteSettings,
   getDefaultFontSettings,

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import PlusIcon from '@assets/svgs/plus2.svg';
 import MinusIcon from '@assets/svgs/minus.svg';
-import { useKeyStore } from '@stores/useKeyStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import { useLenis } from '@hooks/useLenis';
 import Alert from '../dialogs/Alert.jsx';
 import TabNameModal from '../editors/TabNameModal';

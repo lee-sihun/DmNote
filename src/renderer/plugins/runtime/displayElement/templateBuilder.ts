@@ -9,7 +9,7 @@ import type {
   DisplayElementTemplateFactoryValue,
   DisplayElementTemplateHelpers,
   DisplayElementTemplateValueResolver,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 type CompiledTemplateChunk =
   | { type: 'fn'; fn: DisplayElementTemplateValueResolver }

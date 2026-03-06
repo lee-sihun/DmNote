@@ -10,12 +10,12 @@ import TurnIcon from '@assets/svgs/turn_arrow.svg';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import ListPopup from '../Modal/ListPopup';
 import { TooltipGroup } from '../Modal/TooltipGroup';
-import { useHistoryStore } from '@stores/useHistoryStore';
-import { useKeyStore } from '@stores/useKeyStore';
-import { useStatItemStore } from '@stores/useStatItemStore';
-import { useGraphItemStore } from '@stores/useGraphItemStore';
-import { useLayerGroupStore } from '@stores/useLayerGroupStore';
-import { usePluginDisplayElementStore } from '@stores/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
 
 type SettingToolProps = {

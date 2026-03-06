@@ -1,12 +1,12 @@
 import type React from 'react';
-import type { PluginDisplayElement } from '@src/types/api';
+import type { PluginDisplayElement } from '@src/types/plugin/api';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { html, styleMap, css } from '@utils/core/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateHelpers,
   PluginTranslateFn,
-} from '@src/types/api';
+} from '@src/types/plugin/api';
 
 /**
  * 두 값이 동일한지 깊은 비교
