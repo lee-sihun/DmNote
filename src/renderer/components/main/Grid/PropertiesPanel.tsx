@@ -268,6 +268,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   >({});
   const pluginSettingsHistoryRef = useRef<string | null>(null);
   const pluginTransformHistoryRef = useRef<string | null>(null);
+
+  // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
+  const statPreviewHistorySavedRef = useRef(false);
+  const graphPreviewHistorySavedRef = useRef(false);
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
@@ -1133,17 +1137,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    pushHistoryState(
-      km,
-      currentPositions,
-      current,
-      useGraphItemStore.getState().positions,
-      currentPluginElements,
-    );
+    if (!statPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        currentPositions,
+        current,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
+    }
+    statPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
@@ -1178,6 +1185,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
+    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
+    if (!statPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        useKeyStore.getState().positions,
+        current,
+        useGraphItemStore.getState().positions,
+        usePluginDisplayElementStore.getState().elements,
+      );
+      statPreviewHistorySavedRef.current = true;
+    }
+
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as StatItemPosition) : pos,
     );
@@ -1202,6 +1222,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
     if (updateMap.size === 0) return;
+
+    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
+    if (!statPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        useKeyStore.getState().positions,
+        current,
+        useGraphItemStore.getState().positions,
+        usePluginDisplayElementStore.getState().elements,
+      );
+      statPreviewHistorySavedRef.current = true;
+    }
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -1230,7 +1263,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     if (updateMap.size === 0) return;
 
-    if (!options?.skipHistory) {
+    if (!options?.skipHistory && !statPreviewHistorySavedRef.current) {
       const currentPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -1243,6 +1276,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         currentPluginElements,
       );
     }
+    statPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -1278,17 +1312,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    pushHistoryState(
-      km,
-      currentPositions,
-      useStatItemStore.getState().positions,
-      current,
-      currentPluginElements,
-    );
+    if (!graphPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        currentPositions,
+        useStatItemStore.getState().positions,
+        current,
+        currentPluginElements,
+      );
+    }
+    graphPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
@@ -1323,6 +1360,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
+    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
+    if (!graphPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        useKeyStore.getState().positions,
+        useStatItemStore.getState().positions,
+        current,
+        usePluginDisplayElementStore.getState().elements,
+      );
+      graphPreviewHistorySavedRef.current = true;
+    }
+
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as GraphItemPosition) : pos,
     );
@@ -1347,6 +1397,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       }
     }
     if (updateMap.size === 0) return;
+
+    // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
+    if (!graphPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState(
+        km,
+        useKeyStore.getState().positions,
+        useStatItemStore.getState().positions,
+        current,
+        usePluginDisplayElementStore.getState().elements,
+      );
+      graphPreviewHistorySavedRef.current = true;
+    }
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
@@ -1375,7 +1438,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
     if (updateMap.size === 0) return;
 
-    if (!options?.skipHistory) {
+    if (!options?.skipHistory && !graphPreviewHistorySavedRef.current) {
       const currentPositions = useKeyStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -1388,6 +1451,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         currentPluginElements,
       );
     }
+    graphPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) => {
       const update = updateMap.get(i);
