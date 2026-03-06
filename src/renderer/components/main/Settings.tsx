@@ -66,10 +66,10 @@ interface PluginToDelete {
   namespace: string;
 }
 
-export default function Settings({
+const Settings = ({
   showAlert,
   showConfirm,
-}: SettingsProps): React.ReactElement {
+}: SettingsProps): React.ReactElement => {
   const { t, i18n } = useTranslation();
   const isMacOS: boolean = isMac();
   const {
@@ -975,4 +975,6 @@ export default function Settings({
       )}
     </div>
   );
-}
+};
+
+export default Settings;

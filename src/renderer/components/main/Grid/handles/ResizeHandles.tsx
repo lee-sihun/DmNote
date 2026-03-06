@@ -164,7 +164,7 @@ const getHandleStyle = (
 };
 
 // 개별 핸들 컴포넌트 (호버 상태 관리)
-function Handle({ handle, centerX, centerY, onMouseDown }: HandleProps) {
+const Handle = ({ handle, centerX, centerY, onMouseDown }: HandleProps) => {
   const [isHovered, setIsHovered] = useState(false);
 
   const hitX = centerX - HANDLE_HIT_HALF;
@@ -202,9 +202,9 @@ function Handle({ handle, centerX, centerY, onMouseDown }: HandleProps) {
       <div style={getHandleStyle(handle.type, isHovered)} />
     </div>
   );
-}
+};
 
-export default function ResizeHandles({
+const ResizeHandles = ({
   bounds, // { x, y, width, height } - 그리드 좌표
   previewBounds, // { x, y, width, height } - 드래그 중 프리뷰용 bounds (선택적)
   zoom = 1,
@@ -215,7 +215,7 @@ export default function ResizeHandles({
   onResizeEnd,
   elementId: _elementId, // 스마트 가이드용 요소 ID
   getOtherElements: _getOtherElements, // 스마트 가이드용 다른 요소 가져오기 함수
-}: ResizeHandlesProps) {
+}: ResizeHandlesProps) => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
     handleId: null,
@@ -408,4 +408,6 @@ export default function ResizeHandles({
       })}
     </>
   );
-}
+};
+
+export default ResizeHandles;

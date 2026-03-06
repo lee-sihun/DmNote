@@ -9,7 +9,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
-type Props = {
+interface ToolBarProps {
   onAddItem: (type: 'key' | 'stat' | 'graph') => void;
   onTogglePalette: () => void;
   isPaletteOpen: boolean;
@@ -23,7 +23,7 @@ type Props = {
   showAlert?: (message: string) => void;
   onOpenNoteSetting?: () => void;
   primaryButtonRef?: React.RefObject<HTMLButtonElement>;
-};
+}
 
 const ToolBar = ({
   onAddItem,
@@ -39,7 +39,7 @@ const ToolBar = ({
   showAlert,
   onOpenNoteSetting,
   primaryButtonRef,
-}: Props) => {
+}: ToolBarProps) => {
   const { t } = useTranslation();
   const handleClick = (link: string) => {
     window.api.app.openExternal(link);

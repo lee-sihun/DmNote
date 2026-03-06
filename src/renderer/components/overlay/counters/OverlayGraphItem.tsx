@@ -57,10 +57,7 @@ function createInitialHistory(speed: number | undefined): number[] {
   return new Array(targetSize).fill(0);
 }
 
-export default function OverlayGraphItem({
-  position,
-  index = 0,
-}: OverlayGraphItemProps) {
+const OverlayGraphItem = ({ position, index = 0 }: OverlayGraphItemProps) => {
   const {
     statType = 'kps',
     graphType = 'line',
@@ -188,4 +185,6 @@ export default function OverlayGraphItem({
       interactive={false}
     />
   );
-}
+};
+
+export default OverlayGraphItem;

@@ -130,7 +130,7 @@ const toInitialState = (preset: CounterAnimationPreset | null | undefined) => {
   };
 };
 
-export default function CounterAnimationEditorModal({
+const CounterAnimationEditorModal = ({
   isOpen,
   mode,
   initialPreset,
@@ -139,7 +139,7 @@ export default function CounterAnimationEditorModal({
   onClose,
   onSaved,
   t,
-}: CounterAnimationEditorModalProps) {
+}: CounterAnimationEditorModalProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragTargetRef = useRef<DragTarget>(null);
   const localBezierRef = useRef<CounterAnimationBezier>([
@@ -1392,4 +1392,6 @@ export default function CounterAnimationEditorModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default CounterAnimationEditorModal;

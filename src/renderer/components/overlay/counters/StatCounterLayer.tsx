@@ -1,13 +1,8 @@
 'use no memo';
-import React from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';
 import type { StatItemType } from '@src/types/key/statItems';
-import CountDisplay from '@components/overlay/counters/CountDisplay';
-import {
-  useCounterSettings,
-  computeOutsideStyle,
-} from '@hooks/overlay/useCounterSettings';
+import OutsideCounter from './OutsideCounter';
 
 interface StatPosition {
   dx?: number;
@@ -28,60 +23,22 @@ interface StatCounterLayerProps {
   positions: StatPosition[];
 }
 
-function StatCounter({ position, statType }: StatCounterProps) {
+const StatCounter = ({ position, statType }: StatCounterProps) => {
   useSignals();
-
-  const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
-  const dy = Number.isFinite(position?.dy) ? position.dy! : 0;
-  const width = Number.isFinite(position?.width) ? position.width! : 0;
-  const height = Number.isFinite(position?.height) ? position.height! : 0;
-
-  const counterSettings = useCounterSettings(position?.counter);
-
-  if (!counterSettings.enabled || counterSettings.placement !== 'outside') {
-    return null;
-  }
-
   const count = (getStatValueSignal(statType as StatItemType).value ?? 0) | 0;
 
-  const style = computeOutsideStyle(
-    counterSettings.align,
-    dx,
-    dy,
-    width,
-    height,
-    counterSettings.gap,
-  );
-
-  const fillColor = counterSettings.fill.idle;
-  const strokeColor = counterSettings.stroke.idle;
   return (
-    <div className="pointer-events-none" style={style}>
-      <CountDisplay
-        count={count}
-        fillColor={fillColor}
-        strokeColor={strokeColor}
-        globalKey={`stat:${statType}`}
-        active={false}
-        fontSize={counterSettings.fontSize}
-        fontFamily={counterSettings.fontFamily}
-        fontWeight={counterSettings.fontWeight}
-        fontItalic={counterSettings.fontItalic}
-        fontUnderline={counterSettings.fontUnderline}
-        fontStrikethrough={counterSettings.fontStrikethrough}
-        animationEnabled={counterSettings.animation.enabled}
-        animationBezier={counterSettings.animation.bezier}
-        animationScale={counterSettings.animation.scale}
-        animationDurationMs={counterSettings.animation.durationMs}
-      />
-    </div>
+    <OutsideCounter
+      position={position}
+      count={count}
+      active={false}
+      globalKey={`stat:${statType}`}
+    />
   );
-}
+};
 
-export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
-  if (!positions?.length) {
-    return null;
-  }
+const StatCounterLayer = ({ positions }: StatCounterLayerProps) => {
+  if (!positions?.length) return null;
 
   return (
     <div
@@ -89,8 +46,7 @@ export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
       style={{ zIndex: 12 }}
     >
       {positions.map((position, index) => {
-        if (!position) return null;
-        if (position.hidden) return null;
+        if (!position || position.hidden) return null;
         return (
           <StatCounter
             key={`stat-counter-${index}`}
@@ -101,4 +57,6 @@ export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
       })}
     </div>
   );
-}
+};
+
+export default StatCounterLayer;

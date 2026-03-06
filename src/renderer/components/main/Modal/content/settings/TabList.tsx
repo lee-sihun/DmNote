@@ -8,9 +8,9 @@ import { useLenis } from '@hooks/useLenis';
 import Alert from '../dialogs/Alert.jsx';
 import TabNameModal from '../editors/TabNameModal';
 
-type TabListProps = {
+interface TabListProps {
   onClose?: () => void;
-};
+}
 
 const MAX_CUSTOM_TABS = 30;
 const VISIBLE_TAB_COUNT = 5;

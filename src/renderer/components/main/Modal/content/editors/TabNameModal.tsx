@@ -3,21 +3,21 @@ import React, { useEffect, useState } from 'react';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
 
-type Props = {
+interface TabNameModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
     name: string,
   ) => Promise<{ error?: string } | void> | { error?: string } | void;
   existingNames?: string[];
-};
+}
 
-export default function TabNameModal({
+const TabNameModal = ({
   isOpen,
   onClose,
   onSubmit,
   existingNames = [],
-}: Props) {
+}: TabNameModalProps) => {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -100,4 +100,6 @@ export default function TabNameModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default TabNameModal;

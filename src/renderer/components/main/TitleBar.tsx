@@ -4,7 +4,7 @@ import Minimize from '@assets/svgs/minimize.svg';
 import Logo from '@assets/svgs/logo.svg';
 import { isMac } from '@utils/core/platform';
 
-export default function TitleBar(): React.ReactElement {
+const TitleBar = (): React.ReactElement => {
   const isMacOS: boolean = isMac();
   const handleMinimize = (): void => {
     window.api.window.minimize();
@@ -48,4 +48,6 @@ export default function TitleBar(): React.ReactElement {
       )}
     </div>
   );
-}
+};
+
+export default TitleBar;

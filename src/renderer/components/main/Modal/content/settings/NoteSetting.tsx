@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
+import TabSwitch from '@components/main/common/TabSwitch';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
 import {
@@ -16,38 +17,6 @@ type TabId = typeof NOTE_TAB | typeof ADVANCED_TAB;
 
 const INPUT_CLASS =
   'text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]';
-
-interface TabSwitchProps {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
-}
-
-function TabSwitch({ activeTab, onTabChange }: TabSwitchProps) {
-  const { t } = useTranslation();
-
-  const tabs: { id: TabId; label: string }[] = [
-    { id: NOTE_TAB, label: t('keySetting.tabNote') },
-    { id: ADVANCED_TAB, label: t('propertiesPanel.advanced') },
-  ];
-
-  return (
-    <div className="flex w-full h-[30px] bg-[#26262C] mb-[19px] rounded-[7px] items-center p-[3px] gap-[5px]">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-            activeTab === tab.id
-              ? 'bg-[#3A3943] text-white'
-              : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function sanitizeNumericValue(
   value: string | number | undefined,
@@ -67,12 +36,12 @@ interface NoteSettingProps {
   title?: string | null;
 }
 
-export default function NoteSetting({
+const NoteSetting = ({
   onClose,
   settings,
   onSave,
   title = null,
-}: NoteSettingProps) {
+}: NoteSettingProps) => {
   const { t } = useTranslation();
   const initial: Partial<NoteSettings> = settings || {};
   const [activeTab, setActiveTab] = useState<TabId>(NOTE_TAB);
@@ -490,13 +459,18 @@ export default function NoteSetting({
       >
         {title && <p className="text-white text-style-2 mb-[10px]">{title}</p>}
         <TabSwitch
+          tabs={[
+            { id: NOTE_TAB, label: t('keySetting.tabNote') },
+            { id: ADVANCED_TAB, label: t('propertiesPanel.advanced') },
+          ]}
           activeTab={activeTab}
-          onTabChange={(tab: TabId) => {
+          onTabChange={(tab) => {
             if (tab !== activeTab) {
               setIsAnimating(true);
-              setActiveTab(tab);
+              setActiveTab(tab as TabId);
             }
           }}
+          className="mb-[19px]"
         />
 
         <div
@@ -537,4 +511,6 @@ export default function NoteSetting({
       </div>
     </Modal>
   );
-}
+};
+
+export default NoteSetting;

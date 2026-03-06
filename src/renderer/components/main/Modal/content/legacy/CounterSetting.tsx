@@ -23,13 +23,13 @@ interface CounterSettingModalProps {
   keyName?: string;
 }
 
-export default function CounterSettingModal({
+const CounterSettingModal = ({
   onClose,
   onSave,
   onPreview,
   initialSettings,
   keyName: _keyName,
-}: CounterSettingModalProps) {
+}: CounterSettingModalProps) => {
   const { t } = useTranslation();
 
   const resolvedSettings = normalizeCounterSettings(
@@ -464,4 +464,6 @@ export default function CounterSettingModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default CounterSettingModal;

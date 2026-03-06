@@ -7,11 +7,7 @@ interface ModalProps {
   animate?: boolean;
 }
 
-export default function Modal({
-  onClick,
-  children,
-  animate = true,
-}: ModalProps) {
+const Modal = ({ onClick, children, animate = true }: ModalProps) => {
   const backdropAnimClass = animate
     ? 'opacity-0 animate-modal-fade'
     : 'opacity-100';
@@ -60,4 +56,6 @@ export default function Modal({
     </div>,
     document.body,
   );
-}
+};
+
+export default Modal;

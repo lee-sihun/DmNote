@@ -76,7 +76,7 @@ const EMPTY_LIBRARY: CounterAnimationListResponse = {
   userPresets: [],
 };
 
-export default function CounterAnimationPicker({
+const CounterAnimationPicker = ({
   open,
   referenceRef,
   panelElement = null,
@@ -87,7 +87,7 @@ export default function CounterAnimationPicker({
   onClose,
   t,
   interactiveRefs = [],
-}: CounterAnimationPickerProps) {
+}: CounterAnimationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [library, setLibrary] =
@@ -382,4 +382,6 @@ export default function CounterAnimationPicker({
       />
     </>
   );
-}
+};
+
+export default CounterAnimationPicker;

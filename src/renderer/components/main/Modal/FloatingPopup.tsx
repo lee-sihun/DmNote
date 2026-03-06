@@ -58,7 +58,7 @@ const FloatingPopup = ({
   useEffect(() => {
     if (referenceRef && referenceRef.current)
       refs.setReference(referenceRef.current);
-  }, [referenceRef, refs]);
+  }, [referenceRef, refs.setReference]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open && autoClose) {

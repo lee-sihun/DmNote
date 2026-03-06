@@ -24,10 +24,10 @@ interface KeyCounterPreviewLayerProps {
   previewValue?: number;
 }
 
-function KeyCounterPreview({
+const KeyCounterPreview = ({
   position,
   previewValue = 0,
-}: KeyCounterPreviewProps) {
+}: KeyCounterPreviewProps) => {
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
   const dy = Number.isFinite(position?.dy) ? position.dy! : 0;
   const width = Number.isFinite(position?.width) ? position.width! : 60;
@@ -88,12 +88,12 @@ function KeyCounterPreview({
       </span>
     </div>
   );
-}
+};
 
-export default function KeyCounterPreviewLayer({
+const KeyCounterPreviewLayer = ({
   positions,
   previewValue = 0,
-}: KeyCounterPreviewLayerProps) {
+}: KeyCounterPreviewLayerProps) => {
   if (!positions?.length) {
     return null;
   }
@@ -116,4 +116,6 @@ export default function KeyCounterPreviewLayer({
       })}
     </div>
   );
-}
+};
+
+export default KeyCounterPreviewLayer;

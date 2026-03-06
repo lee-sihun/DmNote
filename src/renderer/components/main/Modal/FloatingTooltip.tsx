@@ -10,13 +10,13 @@ import {
 } from '@floating-ui/react';
 import { TooltipGroupContext } from './TooltipGroupContext';
 
-type FloatingTooltipProps = {
+interface FloatingTooltipProps {
   content: React.ReactNode;
   children: React.ReactElement;
   placement?: 'top' | 'bottom' | 'left' | 'right';
   delay?: number; // hover 시 툴팁 표시 전 대기 시간 (ms)
   disabled?: boolean; // true일 때 툴팁 미표시
-};
+}
 
 const FloatingTooltip = ({
   content,

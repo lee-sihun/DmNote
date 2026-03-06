@@ -5,7 +5,7 @@ interface ZoomIndicatorProps {
   zoom: number;
 }
 
-export default function ZoomIndicator({ zoom }: ZoomIndicatorProps) {
+const ZoomIndicator = ({ zoom }: ZoomIndicatorProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const [displayZoom, setDisplayZoom] = useState(zoom);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,4 +50,6 @@ export default function ZoomIndicator({ zoom }: ZoomIndicatorProps) {
       {Math.round(displayZoom * 100)}%
     </div>
   );
-}
+};
+
+export default ZoomIndicator;

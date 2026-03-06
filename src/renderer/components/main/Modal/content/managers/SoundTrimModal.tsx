@@ -294,7 +294,7 @@ function stripExtension(name: string): string {
   return lastDot > 0 ? name.slice(0, lastDot) : name;
 }
 
-export default function SoundTrimModal({
+const SoundTrimModal = ({
   isOpen,
   onClose,
   onSaved,
@@ -304,7 +304,7 @@ export default function SoundTrimModal({
   editingTrimEndRatio,
   editingDisplayName,
   initialFile,
-}: SoundTrimModalProps) {
+}: SoundTrimModalProps) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -1188,4 +1188,6 @@ export default function SoundTrimModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default SoundTrimModal;

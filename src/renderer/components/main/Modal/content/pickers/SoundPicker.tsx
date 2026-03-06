@@ -16,7 +16,7 @@ interface SoundPickerProps {
   previewVolume?: number;
 }
 
-export default function SoundPicker({
+const SoundPicker = ({
   open,
   referenceRef,
   panelElement = null,
@@ -25,7 +25,7 @@ export default function SoundPicker({
   onClose,
   interactiveRefs = [],
   previewVolume,
-}: SoundPickerProps) {
+}: SoundPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'local'>('all');
@@ -132,4 +132,6 @@ export default function SoundPicker({
       />
     </>
   );
-}
+};
+
+export default SoundPicker;

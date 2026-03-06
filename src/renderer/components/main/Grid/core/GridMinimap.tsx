@@ -37,7 +37,7 @@ const MINIMAP_WIDTH = 120;
 const MINIMAP_HEIGHT = 80;
 const MINIMAP_PADDING = 10;
 
-export default function GridMinimap({
+const GridMinimap = ({
   positions,
   statPositions = [],
   graphPositions = [],
@@ -50,7 +50,7 @@ export default function GridMinimap({
   onZoomIn,
   onZoomOut,
   onResetZoom,
-}: GridMinimapProps) {
+}: GridMinimapProps) => {
   const { setPan } = useGridViewStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -560,4 +560,6 @@ export default function GridMinimap({
       </div>
     </div>
   );
-}
+};
+
+export default GridMinimap;

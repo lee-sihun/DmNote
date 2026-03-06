@@ -32,7 +32,7 @@ const STATE_MODES = {
   active: 'active',
 } as const;
 
-export default function ImagePicker({
+const ImagePicker = ({
   open,
   referenceRef,
   panelElement = null,
@@ -52,7 +52,7 @@ export default function ImagePicker({
   onActiveImageReset,
   onClose,
   interactiveRefs = [],
-}: ImagePickerProps) {
+}: ImagePickerProps) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<string>(STATE_MODES.idle);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
@@ -304,4 +304,6 @@ export default function ImagePicker({
       </div>
     </FloatingPopup>
   );
-}
+};
+
+export default ImagePicker;

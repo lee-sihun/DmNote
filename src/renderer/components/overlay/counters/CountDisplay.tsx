@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toCssRgba } from '@utils/color/colorUtils';
 import {
@@ -24,7 +23,7 @@ interface CountDisplayProps {
   animationDurationMs?: number;
 }
 
-export default function CountDisplay({
+const CountDisplay = ({
   count,
   fillColor,
   strokeColor,
@@ -40,7 +39,7 @@ export default function CountDisplay({
   animationBezier = COUNTER_DEFAULT_BEZIER,
   animationScale = 1.1,
   animationDurationMs = 300,
-}: CountDisplayProps) {
+}: CountDisplayProps) => {
   const [scale, setScale] = useState<number>(1);
   const scaleRef = useRef<number>(1);
   const prevCount = useRef<number>(count);
@@ -52,9 +51,14 @@ export default function CountDisplay({
     Math.max(Math.round(Number(animationDurationMs) || 300), 1),
     5000,
   );
+  const b0 = animationBezier?.[0];
+  const b1 = animationBezier?.[1];
+  const b2 = animationBezier?.[2];
+  const b3 = animationBezier?.[3];
   const easing = useMemo(
     () => createCubicBezierEasing(animationBezier),
-    [animationBezier],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [b0, b1, b2, b3],
   );
 
   useEffect(() => {
@@ -153,4 +157,6 @@ export default function CountDisplay({
       {displayValue}
     </span>
   );
-}
+};
+
+export default CountDisplay;

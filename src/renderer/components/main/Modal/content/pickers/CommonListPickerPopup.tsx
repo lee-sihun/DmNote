@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import FloatingPopup from '../../FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
@@ -69,6 +75,11 @@ export default function CommonListPickerPopup<T>({
   addButtonContent,
 }: CommonListPickerPopupProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
+  const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    containerRef.current = node;
+    setContainerEl(node);
+  }, []);
   const [fixedPosition, setFixedPosition] = useState<{
     x: number;
     y: number;
@@ -122,21 +133,50 @@ export default function CommonListPickerPopup<T>({
 
     const rafId = requestAnimationFrame(calculatePosition);
 
-    // 팝업 크기가 변하면(로딩 텍스트 등) 위치 재계산
-    const el = containerRef.current;
-    let resizeObserver: ResizeObserver | undefined;
-    if (el) {
-      resizeObserver = new ResizeObserver(() => {
-        calculatePosition();
-      });
-      resizeObserver.observe(el);
-    }
-
     return () => {
       cancelAnimationFrame(rafId);
-      resizeObserver?.disconnect();
     };
   }, [estimatedHeight, estimatedWidth, open, panelElement]);
+
+  // 팝업 크기가 변하면(로딩 텍스트 등) 위치 재계산
+  // containerEl을 deps로 사용하여 portal 전환 후에도 ResizeObserver가 올바른 DOM에 연결됨
+  useEffect(() => {
+    if (!open || !panelElement || !containerEl) return;
+
+    const calculatePosition = () => {
+      const panelRect = panelElement.getBoundingClientRect();
+      const popupWidth = containerEl.offsetWidth || estimatedWidth;
+      const popupHeight = containerEl.offsetHeight || estimatedHeight;
+
+      const gap = 5;
+      const padding = 5;
+      const panelBottomPadding = 20;
+
+      let fixedX = panelRect.left - popupWidth - gap;
+      if (fixedX < padding) {
+        fixedX = padding;
+      }
+
+      let fixedY = panelRect.bottom - panelBottomPadding - popupHeight;
+      if (fixedY < padding) {
+        fixedY = padding;
+      }
+
+      setFixedPosition((prev) => {
+        if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
+        return { x: fixedX, y: fixedY };
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      calculatePosition();
+    });
+    resizeObserver.observe(containerEl);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [open, panelElement, containerEl, estimatedHeight, estimatedWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -199,7 +239,7 @@ export default function CommonListPickerPopup<T>({
       autoClose={false}
     >
       <div
-        ref={containerRef}
+        ref={containerCallbackRef}
         className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]`.trim()}
       >
         <input

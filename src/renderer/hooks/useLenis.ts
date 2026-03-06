@@ -40,7 +40,7 @@ const easeOutExpo = (t: number): number => {
  * @param options Lenis 옵션 (미지정 시 전역 설정 사용)
  * @returns scrollContainerRef - 스크롤 컨테이너에 연결할 ref (callback ref)
  */
-export function useLenis(options: UseLenisOptions = {}) {
+export const useLenis = (options: UseLenisOptions = {}) => {
   const [wrapper, setWrapper] = useState<HTMLElement | null>(null);
   const wrapperRef = useRef<HTMLElement | null>(null);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
@@ -143,4 +143,4 @@ export function useLenis(options: UseLenisOptions = {}) {
     /** wrapper의 실제 스크롤바 너비(px). overlay 스크롤바인 경우 0일 수 있음 */
     scrollbarWidth,
   };
-}
+};

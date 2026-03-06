@@ -48,12 +48,12 @@ interface KeySettingProps {
   skipAnimation?: boolean;
 }
 
-export default function KeySetting({
+const KeySetting = ({
   keyData,
   onClose,
   onSave,
   skipAnimation = false,
-}: KeySettingProps) {
+}: KeySettingProps) => {
   const { t } = useTranslation();
   const { useCustomCSS } = useSettingsStore();
   const [key, setKey] = useState<string>(keyData.key);
@@ -346,4 +346,6 @@ export default function KeySetting({
       </div>
     </Modal>
   );
-}
+};
+
+export default KeySetting;

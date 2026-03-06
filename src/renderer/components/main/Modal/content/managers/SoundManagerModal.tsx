@@ -24,13 +24,13 @@ interface SoundManagerModalProps {
 
 const MAX_SCROLL_HEIGHT = 195;
 
-export default function SoundManagerModal({
+const SoundManagerModal = ({
   isOpen,
   selectedSound,
   onSelectSound,
   onClose,
   previewVolume,
-}: SoundManagerModalProps) {
+}: SoundManagerModalProps) => {
   const { t } = useTranslation();
   const [sounds, setSounds] = useState<SoundListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -376,4 +376,6 @@ export default function SoundManagerModal({
       />
     </>
   );
-}
+};
+
+export default SoundManagerModal;

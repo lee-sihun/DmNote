@@ -23,7 +23,7 @@ interface StatCounterLayerProps {
   positions: CounterPosition[];
 }
 
-function StatCounter({ position, previewValue = 0 }: StatCounterProps) {
+const StatCounter = ({ position, previewValue = 0 }: StatCounterProps) => {
   const dx = Number.isFinite(position?.dx) ? position.dx! : 0;
   const dy = Number.isFinite(position?.dy) ? position.dy! : 0;
   const width = Number.isFinite(position?.width) ? position.width! : 60;
@@ -85,9 +85,9 @@ function StatCounter({ position, previewValue = 0 }: StatCounterProps) {
       </span>
     </div>
   );
-}
+};
 
-export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
+const StatCounterLayer = ({ positions }: StatCounterLayerProps) => {
   if (!positions?.length) {
     return null;
   }
@@ -110,4 +110,6 @@ export default function StatCounterLayer({ positions }: StatCounterLayerProps) {
       })}
     </div>
   );
-}
+};
+
+export default StatCounterLayer;

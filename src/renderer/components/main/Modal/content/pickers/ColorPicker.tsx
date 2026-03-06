@@ -79,7 +79,7 @@ const extractAlphaFromColor = (colorValue: ColorValue): number => {
   return 1;
 };
 
-export default function ColorPickerWrapper({
+const ColorPickerWrapper = ({
   open,
   referenceRef,
   panelElement = null,
@@ -99,7 +99,7 @@ export default function ColorPickerWrapper({
   position = undefined,
   offsetY = -80,
   placement = 'right-start',
-}: ColorPickerWrapperProps) {
+}: ColorPickerWrapperProps) => {
   const initialMode = solidOnly
     ? MODES.solid
     : isGradientColor(color)
@@ -956,7 +956,9 @@ export default function ColorPickerWrapper({
       </div>
     </FloatingPopup>
   );
-}
+};
+
+export default ColorPickerWrapper;
 
 // ============================================================================
 // 팔레트 컴포넌트

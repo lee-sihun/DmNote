@@ -3,6 +3,7 @@ import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
+import TabSwitch from '@components/main/common/TabSwitch';
 import KeyTabContent, {
   type KeyTabContentRef,
 } from '../settings/KeyTabContent';
@@ -39,43 +40,6 @@ interface UnifiedKeySettingProps {
   onPreview?: (data: PreviewData) => void;
   skipAnimation?: boolean;
 }
-
-interface TabSwitchProps {
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
-}
-
-// ============================================================================
-// 탭 스위치 컴포넌트
-// ============================================================================
-
-const TabSwitch: React.FC<TabSwitchProps> = ({ activeTab, onTabChange }) => {
-  const { t } = useTranslation();
-
-  const tabs = [
-    { id: TABS.KEY, label: t('keySetting.tabKey') },
-    { id: TABS.NOTE, label: t('keySetting.tabNote') },
-    { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
-  ] as const;
-
-  return (
-    <div className="flex w-full h-[30px] bg-[#26262C] mb-[19px] rounded-[7px] items-center p-[3px] gap-[5px]">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-            activeTab === tab.id
-              ? 'bg-[#3A3943] text-white'
-              : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-};
 
 // ============================================================================
 // 메인 컴포넌트
@@ -274,7 +238,16 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pr-[14px]">
-          <TabSwitch activeTab={activeTab} onTabChange={setActiveTab} />
+          <TabSwitch
+            tabs={[
+              { id: TABS.KEY, label: t('keySetting.tabKey') },
+              { id: TABS.NOTE, label: t('keySetting.tabNote') },
+              { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
+            ]}
+            activeTab={activeTab}
+            onTabChange={(tab) => setActiveTab(tab as TabType)}
+            className="mb-[19px]"
+          />
         </div>
 
         {/* 스크롤 영역 - 스크롤바가 모달 오른쪽 끝에 위치 */}

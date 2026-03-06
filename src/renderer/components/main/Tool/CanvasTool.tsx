@@ -13,7 +13,7 @@ import ListPopup from '../Modal/ListPopup';
 type SelectableTool = 'move' | 'eraser';
 type AddItemType = 'key' | 'stat' | 'graph';
 
-type CanvasToolProps = {
+interface CanvasToolProps {
   onAddItem: (type: AddItemType) => void;
   onTogglePalette: () => void;
   isPaletteOpen: boolean;
@@ -22,7 +22,7 @@ type CanvasToolProps = {
   activeTool?: string;
   setActiveTool?: (tool: string) => void;
   primaryButtonRef?: React.RefObject<HTMLButtonElement>;
-};
+}
 
 const CanvasTool = ({
   onAddItem,

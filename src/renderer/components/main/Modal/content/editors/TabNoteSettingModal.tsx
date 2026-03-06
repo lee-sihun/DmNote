@@ -10,12 +10,12 @@ import type {
 } from '@src/types/settings/noteSettings';
 import { useTranslation } from '@contexts/useTranslation';
 
-type Props = {
+interface TabNoteSettingModalProps {
   isOpen: boolean;
   onClose: () => void;
-};
+}
 
-export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
+const TabNoteSettingModal = ({ isOpen, onClose }: TabNoteSettingModalProps) => {
   const { t: _t } = useTranslation();
   const globalSettings = useSettingsStore((s) => s.noteSettings);
   const noteEffect = useSettingsStore((s) => s.noteEffect);
@@ -73,4 +73,6 @@ export default function TabNoteSettingModal({ isOpen, onClose }: Props) {
       onSave={handleSave}
     />
   );
-}
+};
+
+export default TabNoteSettingModal;

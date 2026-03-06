@@ -19,7 +19,7 @@ interface LaboratoryProps {
   onClose: () => void;
 }
 
-export default function LaboratoryModal({
+const LaboratoryModal = ({
   delayEnabled,
   thresholdMs,
   minLengthPx,
@@ -28,7 +28,7 @@ export default function LaboratoryModal({
   speed,
   onSave,
   onClose,
-}: LaboratoryProps) {
+}: LaboratoryProps) => {
   const { t } = useTranslation();
   const [enforceShort, setEnforceShort] = useState(!!delayEnabled);
   // store as strings so the user can clear the input while typing
@@ -188,4 +188,6 @@ export default function LaboratoryModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default LaboratoryModal;

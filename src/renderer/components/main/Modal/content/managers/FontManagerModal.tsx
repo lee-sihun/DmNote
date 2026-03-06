@@ -1,16 +1,9 @@
-import {
-  Suspense,
-  lazy,
-  useState,
-  useRef,
-  useEffect,
-  useLayoutEffect,
-} from 'react';
-import { useLenis } from '@hooks/useLenis';
+import { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import Modal from '@components/main/Modal/Modal';
+import ManagerModalLayout from '@components/main/Modal/ManagerModalLayout';
+import TabSwitch from '@components/main/common/TabSwitch';
 import Checkbox from '@components/main/common/Checkbox';
 import TrashIcon from '@assets/svgs/trash.svg';
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
 import {
@@ -27,7 +20,6 @@ interface FontManagerModalProps {
 }
 
 type TabType = 'local' | 'web';
-const MAX_SCROLL_HEIGHT = 195;
 
 let webFontInputModalPreloadPromise: Promise<
   typeof import('../pickers/WebFontInputModal')
@@ -42,21 +34,7 @@ const preloadWebFontInputModal = () => {
 
 const LazyWebFontInputModal = lazy(preloadWebFontInputModal);
 
-export default function FontManagerModal({
-  isOpen,
-  onClose,
-  t,
-}: FontManagerModalProps) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = useState({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
-  const [skipShadowTransition, setSkipShadowTransition] = useState(true);
-  const [containerHeight, setContainerHeight] = useState<number | null>(null);
-  const [isScrollable, setIsScrollable] = useState(false);
-  const isFirstRender = useRef(true);
-
+const FontManagerModal = ({ isOpen, onClose, t }: FontManagerModalProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('web');
   const [isAdding, setIsAdding] = useState(false);
   const [showWebFontModal, setShowWebFontModal] = useState(false);
@@ -174,67 +152,6 @@ export default function FontManagerModal({
 
     return () => window.clearTimeout(timer);
   }, [isOpen]);
-
-  // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const nextState = getScrollShadowState(el, contentRef.current);
-    setScrollState((prev) =>
-      prev.hasTopShadow === nextState.hasTopShadow &&
-      prev.hasBottomShadow === nextState.hasBottomShadow
-        ? prev
-        : nextState,
-    );
-  };
-
-  // Lenis smooth scroll 적용
-  const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
-
-  // 스크롤 상태 및 높이 업데이트
-  useLayoutEffect(() => {
-    if (!isOpen) return;
-
-    setSkipShadowTransition(true);
-    setScrollState({ hasTopShadow: false, hasBottomShadow: false });
-    setIsScrollable(false);
-
-    const el = wrapperElement;
-    const contentEl = contentRef.current;
-    if (!el) return;
-
-    const updateHeight = () => {
-      if (contentEl) {
-        const contentHeight = contentEl.scrollHeight;
-        setContainerHeight(Math.min(contentHeight, MAX_SCROLL_HEIGHT));
-        setIsScrollable(contentHeight > MAX_SCROLL_HEIGHT);
-      }
-    };
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateScrollState(el);
-      updateHeight();
-    });
-
-    if (contentEl) {
-      resizeObserver.observe(contentEl);
-    }
-    resizeObserver.observe(el);
-
-    updateScrollState(el);
-    updateHeight();
-
-    const rafId = requestAnimationFrame(() => {
-      setSkipShadowTransition(false);
-      isFirstRender.current = false;
-    });
-
-    return () => {
-      resizeObserver.disconnect();
-      cancelAnimationFrame(rafId);
-    };
-  }, [isOpen, activeTab, currentFonts, wrapperElement]);
 
   const persistFonts = (nextFonts: CustomFont[]) => {
     setAll(nextFonts);
@@ -398,144 +315,25 @@ export default function FontManagerModal({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
     <>
-      <Modal onClick={handleClose}>
-        <div
-          className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {/* 탭 전환 */}
-          <div className="pr-[14px]">
-            <div className="flex w-full h-[30px] bg-[#26262C] mb-[19px] rounded-[7px] items-center p-[3px] gap-[5px]">
-              <button
-                type="button"
-                className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-                  activeTab === 'web'
-                    ? 'bg-[#3A3943] text-white'
-                    : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
-                }`}
-                onClick={() => setActiveTab('web')}
-              >
-                {t('fontManager.webTab') || '웹폰트'}
-              </button>
-              <button
-                type="button"
-                className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
-                  activeTab === 'local'
-                    ? 'bg-[#3A3943] text-white'
-                    : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
-                }`}
-                onClick={() => setActiveTab('local')}
-              >
-                {t('fontManager.localTab') || '로컬 폰트'}
-              </button>
-            </div>
-          </div>
-
-          {/* 스크롤 영역 */}
-          <div className="relative">
-            {/* 상단 그림자 */}
-            <div
-              className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? '' : 'transition-opacity duration-150'
-              } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
-            />
-
-            <div
-              ref={scrollRef}
-              className="modal-content-scroll pr-[14px]"
-              style={{
-                height:
-                  containerHeight !== null ? `${containerHeight}px` : 'auto',
-                maxHeight: `${MAX_SCROLL_HEIGHT}px`,
-                overflowY: isScrollable ? 'auto' : 'hidden',
-                transition: isFirstRender.current
-                  ? 'none'
-                  : 'height 100ms ease-in-out',
-                willChange: 'scroll-position',
-              }}
-            >
-              <div
-                ref={contentRef}
-                className="flex flex-col gap-[19px] py-[5px]"
-              >
-                {currentFonts.length === 0 ? (
-                  <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
-                    {activeTab === 'local'
-                      ? t('fontManager.noLocalFonts') || '로컬 폰트가 없습니다'
-                      : t('fontManager.noWebFonts') || '웹폰트가 없습니다'}
-                  </div>
-                ) : (
-                  currentFonts.map((font) => (
-                    <div
-                      key={font.id}
-                      className="flex items-center justify-between"
-                      style={{ transform: 'translateZ(0)' }}
-                    >
-                      <div className="flex items-center gap-[10px] h-[23px]">
-                        <button
-                          className="flex items-center justify-center transition-colors hover:opacity-80"
-                          onClick={() => handleRemoveFont(font.id)}
-                          aria-label={
-                            t('fontManager.removeFont') || '폰트 삭제'
-                          }
-                          title={t('fontManager.removeFont') || '폰트 삭제'}
-                        >
-                          <TrashIcon className="w-[14px] h-[15px]" />
-                        </button>
-                        {font.type === 'web' ? (
-                          <button
-                            type="button"
-                            className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left leading-[23px] cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
-                            style={{
-                              fontFamily: `${font.name}__preview, ${font.name}`,
-                            }}
-                            onClick={() => handleEditWebFont(font.id)}
-                            title={t('webFontInput.update') || '수정'}
-                          >
-                            {font.displayName}
-                          </button>
-                        ) : (
-                          <span
-                            className="text-white text-style-2"
-                            style={{
-                              fontFamily: `${font.name}__preview, ${font.name}`,
-                            }}
-                          >
-                            {font.displayName}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-center w-[27px] h-[21px]">
-                        <Checkbox
-                          checked={font.enabled}
-                          onChange={() =>
-                            handleToggleFont(font.id, !font.enabled)
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* 하단 그림자 */}
-            <div
-              className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-                skipShadowTransition ? '' : 'transition-opacity duration-150'
-              } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
-            />
-          </div>
-
-          {/* 구분선 */}
-          <div className="h-px bg-[#2A2A30] my-[20px] -ml-[20px] -mr-[6px]" />
-
-          {/* 하단 버튼 */}
-          <div className="flex items-center gap-[10.5px] pr-[14px]">
+      <ManagerModalLayout
+        isOpen={isOpen}
+        onClose={handleClose}
+        contentDeps={[activeTab, currentFonts]}
+        tabs={
+          <TabSwitch
+            tabs={[
+              { id: 'web', label: t('fontManager.webTab') || '웹폰트' },
+              { id: 'local', label: t('fontManager.localTab') || '로컬 폰트' },
+            ]}
+            activeTab={activeTab}
+            onTabChange={(tab) => setActiveTab(tab as TabType)}
+            className="mb-[19px]"
+          />
+        }
+        footer={
+          <>
             <button
               className={`flex items-center justify-center w-[150px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
                 isAdding
@@ -557,9 +355,64 @@ export default function FontManagerModal({
             >
               {t('common.ok') || '확인'}
             </button>
+          </>
+        }
+      >
+        {currentFonts.length === 0 ? (
+          <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
+            {activeTab === 'local'
+              ? t('fontManager.noLocalFonts') || '로컬 폰트가 없습니다'
+              : t('fontManager.noWebFonts') || '웹폰트가 없습니다'}
           </div>
-        </div>
-      </Modal>
+        ) : (
+          currentFonts.map((font) => (
+            <div
+              key={font.id}
+              className="flex items-center justify-between"
+              style={{ transform: 'translateZ(0)' }}
+            >
+              <div className="flex items-center gap-[10px] h-[23px]">
+                <button
+                  className="flex items-center justify-center transition-colors hover:opacity-80"
+                  onClick={() => handleRemoveFont(font.id)}
+                  aria-label={t('fontManager.removeFont') || '폰트 삭제'}
+                  title={t('fontManager.removeFont') || '폰트 삭제'}
+                >
+                  <TrashIcon className="w-[14px] h-[15px]" />
+                </button>
+                {font.type === 'web' ? (
+                  <button
+                    type="button"
+                    className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left leading-[23px] cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
+                    style={{
+                      fontFamily: `${font.name}__preview, ${font.name}`,
+                    }}
+                    onClick={() => handleEditWebFont(font.id)}
+                    title={t('webFontInput.update') || '수정'}
+                  >
+                    {font.displayName}
+                  </button>
+                ) : (
+                  <span
+                    className="text-white text-style-2"
+                    style={{
+                      fontFamily: `${font.name}__preview, ${font.name}`,
+                    }}
+                  >
+                    {font.displayName}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-center w-[27px] h-[21px]">
+                <Checkbox
+                  checked={font.enabled}
+                  onChange={() => handleToggleFont(font.id, !font.enabled)}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </ManagerModalLayout>
 
       {/* 웹폰트 CSS 입력 모달 */}
       {showWebFontModal ? (
@@ -591,4 +444,6 @@ export default function FontManagerModal({
       ) : null}
     </>
   );
-}
+};
+
+export default FontManagerModal;

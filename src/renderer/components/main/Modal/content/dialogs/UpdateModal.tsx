@@ -22,7 +22,7 @@ interface UpdateModalProps {
   primaryActionDisabled?: boolean;
 }
 
-export default function UpdateModal({
+const UpdateModal = ({
   isOpen,
   updateInfo,
   onClose,
@@ -31,7 +31,7 @@ export default function UpdateModal({
   onPrimaryAction,
   primaryActionLabel,
   primaryActionDisabled = false,
-}: UpdateModalProps) {
+}: UpdateModalProps) => {
   const { t } = useTranslation();
   const [skipChecked, setSkipChecked] = useState(false);
 
@@ -239,4 +239,6 @@ export default function UpdateModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default UpdateModal;

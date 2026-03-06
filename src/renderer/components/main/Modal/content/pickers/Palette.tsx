@@ -17,7 +17,7 @@ interface ColorProps {
   onClick: () => void;
 }
 
-export default function Palette({ color, onColorChange }: PaletteProps) {
+const Palette = ({ color, onColorChange }: PaletteProps) => {
   const colors = [
     '#D9E3F0',
     '#F47373',
@@ -73,7 +73,9 @@ export default function Palette({ color, onColorChange }: PaletteProps) {
       />
     </div>
   );
-}
+};
+
+export default Palette;
 
 function Color({ color, onClick }: ColorProps) {
   return (

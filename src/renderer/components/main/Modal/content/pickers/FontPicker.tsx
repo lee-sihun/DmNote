@@ -18,7 +18,7 @@ interface FontPickerProps {
 
 type FilterType = 'all' | 'builtin' | 'local' | 'web';
 
-export default function FontPicker({
+const FontPicker = ({
   open,
   referenceRef,
   panelElement = null,
@@ -27,7 +27,7 @@ export default function FontPicker({
   onClose,
   onOpenManager,
   interactiveRefs = [],
-}: FontPickerProps) {
+}: FontPickerProps) => {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -123,4 +123,6 @@ export default function FontPicker({
       addButtonContent={<PlusIcon />}
     />
   );
-}
+};
+
+export default FontPicker;

@@ -171,12 +171,12 @@ const getHandleStyle = (
 };
 
 // 개별 핸들 컴포넌트
-function Handle({
+const Handle = ({
   handle,
   centerX,
   centerY,
   onMouseDown,
-}: HandleProps): React.ReactElement {
+}: HandleProps): React.ReactElement => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
 
   const hitX = centerX - HANDLE_HIT_HALF;
@@ -213,9 +213,9 @@ function Handle({
       <div style={getHandleStyle(handle.type, isHovered)} />
     </div>
   );
-}
+};
 
-export default function GroupResizeHandles({
+const GroupResizeHandles = ({
   selectedElements,
   positions,
   statPositions,
@@ -230,7 +230,7 @@ export default function GroupResizeHandles({
   onGroupResize,
   onGroupResizeEnd,
   getOtherElements,
-}: GroupResizeHandlesProps): React.ReactElement | null {
+}: GroupResizeHandlesProps): React.ReactElement | null => {
   const resizeRef = useRef<ResizeState>({
     isResizing: false,
     handleId: null,
@@ -816,4 +816,6 @@ export default function GroupResizeHandles({
         })}
     </>
   );
-}
+};
+
+export default GroupResizeHandles;

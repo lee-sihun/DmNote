@@ -18,13 +18,13 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
 
-type SettingToolProps = {
+interface SettingToolProps {
   isSettingsOpen?: boolean;
   onOpenSettings?: () => void;
   onCloseSettings?: () => void;
   showAlert?: (message: string) => void;
   // onOpenNoteSetting?: () => void;
-};
+}
 
 const SettingTool = ({
   isSettingsOpen = false,

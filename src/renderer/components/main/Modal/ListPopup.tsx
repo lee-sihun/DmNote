@@ -16,7 +16,7 @@ export type ListItem = {
   maxVisibleChildren?: number;
 };
 
-type ListPopupProps = {
+interface ListPopupProps {
   open: boolean;
   referenceRef?: React.RefObject<HTMLElement>;
   position?: { x: number; y: number };
@@ -30,7 +30,7 @@ type ListPopupProps = {
   textAlign?: 'left' | 'center';
   /** 최대 표시 항목 수 (초과 시 스크롤) */
   maxVisibleItems?: number;
-};
+}
 
 /** 서브메뉴 컴포넌트 (호버 시 표시) */
 const SubMenu = ({

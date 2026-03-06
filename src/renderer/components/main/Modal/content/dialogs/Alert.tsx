@@ -15,7 +15,7 @@ interface AlertProps {
   onCancel?: () => void;
 }
 
-export default function Alert({
+const Alert = ({
   isOpen,
   message,
   type = 'alert', // "alert", "confirm", or "custom"
@@ -24,7 +24,7 @@ export default function Alert({
   showCancel,
   onConfirm,
   onCancel,
-}: AlertProps) {
+}: AlertProps) => {
   const { t } = useTranslation();
 
   const [scrollState, setScrollState] = useState<{
@@ -152,4 +152,6 @@ export default function Alert({
       </div>
     </Modal>
   );
-}
+};
+
+export default Alert;

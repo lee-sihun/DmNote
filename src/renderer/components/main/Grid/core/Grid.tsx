@@ -189,7 +189,7 @@ function getStatTypeLabel(type: string): string {
   return String(type || '');
 }
 
-export default function Grid({
+const Grid = ({
   showConfirm,
   showAlert,
   selectedKey,
@@ -222,7 +222,7 @@ export default function Grid({
   onToolbarAddConsumed,
   isNoteSettingOpen,
   setIsNoteSettingOpen,
-}: GridProps) {
+}: GridProps) => {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled,
@@ -3049,4 +3049,6 @@ export default function Grid({
       />
     </div>
   );
-}
+};
+
+export default Grid;

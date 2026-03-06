@@ -1,0 +1,124 @@
+# CLAUDE.md — DmNote 프로젝트 규칙
+
+## 프로젝트 개요
+
+- **Tauri 기반** 데스크톱 앱: Rust 백엔드 + React 프론트엔드
+- 듀얼 윈도우 구조: 메인 윈도우(설정 UI) + 오버레이 윈도우(키 시각화)
+- 상태 관리: Zustand (메인), Preact Signals (오버레이 실시간 업데이트)
+- 스타일링: Tailwind CSS (인라인 className 유틸리티)
+- 빌드: Vite + React Compiler (`babel-plugin-react-compiler`)
+
+## 개발 환경
+
+```bash
+# 개발 서버 실행
+npm run tauri:dev
+
+# 프로덕션 빌드
+npm run tauri:build
+```
+
+## 프로젝트 구조
+
+```
+src/renderer/
+├── components/       # React 컴포넌트 (PascalCase 파일명)
+│   ├── main/        # 메인 윈도우 전용
+│   ├── overlay/     # 오버레이 윈도우 전용
+│   └── shared/      # 공유 컴포넌트
+├── hooks/           # 커스텀 훅 (useXxx.ts)
+├── stores/          # Zustand 스토어 (useXxxStore.ts)
+│   └── signals/     # Preact Signals (xxxSignals.ts)
+├── utils/           # 유틸리티 함수 (camelCase.ts)
+├── types/           # 공유 타입 정의
+├── contexts/        # React Context
+├── plugins/         # 플러그인 시스템
+└── styles/          # 전역 스타일 (Tailwind)
+
+src-tauri/src/
+├── commands/        # Tauri 커맨드 (snake_case.rs)
+├── services/        # 비즈니스 로직
+├── app_state.rs     # 앱 상태
+├── models.rs        # 데이터 모델
+└── main.rs          # 진입점
+```
+
+## 네이밍 컨벤션
+
+### TypeScript / React
+
+| 대상 | 규칙 | 예시 |
+|------|------|------|
+| 컴포넌트 파일 | PascalCase | `GridBackground.tsx`, `StatItem.tsx` |
+| 훅 파일 | camelCase + `use` 접두사 | `useKeyManager.ts`, `useLenis.ts` |
+| 스토어 파일 | camelCase + `use` 접두사 | `useFontStore.ts`, `useKeyStore.ts` |
+| 유틸리티 파일 | camelCase | `cubicBezier.ts`, `keyStatsService.ts` |
+| 컴포넌트명 | PascalCase | `const GridBackground = () => {}` |
+| Props 타입 | PascalCase + `Props` 접미사 | `interface GridBackgroundProps` |
+| 타입/인터페이스 | PascalCase | `type SelectedKey`, `interface FontState` |
+| 변수/함수 | camelCase | `isChecked`, `handleClick()` |
+| Zustand 스토어 | `use` + PascalCase + `Store` | `useFontStore`, `useUIStore` |
+
+### Rust
+
+| 대상 | 규칙 | 예시 |
+|------|------|------|
+| 파일명 | snake_case | `app_state.rs`, `key_sound.rs` |
+| 구조체/열거형 | PascalCase | `struct AppState`, `enum FontType` |
+| 함수/메서드 | snake_case | `sync_counters()`, `initialize_runtime()` |
+| 상수 | UPPER_SNAKE_CASE | `OVERLAY_LABEL`, `DEFAULT_OVERLAY_WIDTH` |
+
+## 코딩 컨벤션
+
+### 언어 및 파일
+
+- 새로 추가하는 파일은 반드시 **TypeScript** (`.ts` / `.tsx`)
+- Rust 코드는 `src-tauri/` 하위에 위치
+
+### React 컴포넌트
+
+- **화살표 함수** + **Props 인라인 구조분해** 패턴 사용:
+  ```tsx
+  const UserProfile = ({ name, age }: UserProfileProps) => {
+    return <div>{name}</div>;
+  };
+
+  export default UserProfile;
+  ```
+- Props 타입은 `interface`로 정의, 컴포넌트 바로 위에 선언
+- 기본 export는 `export default` 사용 (컴포넌트)
+- 훅/유틸리티는 named export 사용
+
+### 주석
+
+- 기술 용어(React, Tauri, KPS 등)를 제외하면 **한글**로 작성
+- **키워드/명사형** 스타일 사용 (예: `// 카운터 초기화`, `// 모드 변경 시 total 재계산`)
+- 불필요한 주석 지양 — 코드로 의도가 명확하면 주석 생략
+
+### 컴포넌트 설계
+
+- 컴포넌트 분리와 훅 모듈화를 철저히 유지
+- 오버엔지니어링 지양, 장기 유지보수 가능한 단순한 코드 작성
+- 한 파일이 과도하게 커지면 분리 검토
+
+### React Compiler 주의사항
+
+- `@preact/signals-react`의 `useSignals()` 사용 컴포넌트는 `'use no memo'` 필수
+- `'use no memo'` 파일에서 성능이 필요하면 수동 `React.memo` 사용 가능
+- `useMemo` / `useCallback` 의존성 배열에서 배열/객체는 개별 요소 비교 고려
+- 린트 자동 수정이 의도적 패턴을 덮어쓸 수 있으므로 필요시 `eslint-disable` 주석 사용
+
+## 작업 마무리 체크리스트
+
+### 프론트엔드 (TypeScript/React) 변경 시
+
+1. **타입 체크**: `npx tsc --noEmit`
+2. **린트**: `npm run lint`
+3. **포맷팅**: `npm run format`
+4. 린트/포맷팅 자동 수정이 기존 의도적 코드(`eslint-disable` 등)를 변경하지 않았는지 확인
+
+### 백엔드 (Rust) 변경 시
+
+1. **컴파일 체크**: `cd src-tauri && cargo check`
+2. **린트**: `cd src-tauri && cargo clippy`
+3. **포맷팅**: `cd src-tauri && cargo fmt`

@@ -66,14 +66,14 @@ const WEBFONT_EDITOR_BASE_EXTENSIONS = [
   }),
 ] as const;
 
-export default function WebFontInputModal({
+const WebFontInputModal = ({
   isOpen,
   onClose,
   onSubmit,
   initialCss = '',
   isDuplicateFontFamily,
   t,
-}: WebFontInputModalProps) {
+}: WebFontInputModalProps) => {
   const [cssInput, setCssInput] = useState('');
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
@@ -321,4 +321,6 @@ export default function WebFontInputModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default WebFontInputModal;

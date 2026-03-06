@@ -17,6 +17,11 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { resolveImageSource } from '@utils/core/imageSource';
 import { warmupImageSource } from '@utils/core/imageWarmup';
+import {
+  computeKeyElementStyles,
+  type KeyElementPosition,
+} from '@hooks/overlay/useKeyElementStyles';
+import InsideCounterLayout from '@components/overlay/counters/InsideCounterLayout';
 import CountDisplay from '@components/overlay/counters/CountDisplay';
 import {
   calculateBounds,
@@ -25,38 +30,9 @@ import {
   type ElementBounds,
 } from '@utils/grid/smartGuides';
 
-interface KeyPosition {
-  hidden?: boolean;
-  dx: number;
-  dy: number;
-  width: number;
-  height?: number;
-  activeImage?: string;
-  inactiveImage?: string;
-  activeTransparent?: boolean;
-  idleTransparent?: boolean;
-  className?: string;
-  backgroundColor?: string;
-  activeBackgroundColor?: string;
-  borderColor?: string;
-  activeBorderColor?: string;
-  borderWidth?: number;
-  borderRadius?: number;
-  fontSize?: number;
-  fontColor?: string;
-  activeFontColor?: string;
-  fontFamily?: string;
-  idleImageFit?: string;
-  activeImageFit?: string;
-  imageFit?: string;
-  useInlineStyles?: boolean;
-  displayText?: string;
-  fontWeight?: number;
-  fontItalic?: boolean;
-  fontUnderline?: boolean;
-  fontStrikethrough?: boolean;
+// DraggableKey에서 counter가 KeyCounterSettings 타입인 확장 position
+interface KeyPosition extends KeyElementPosition {
   counter?: KeyCounterSettings;
-  zIndex?: number;
 }
 
 interface SelectedElement {
@@ -96,12 +72,12 @@ interface DraggableKeyProps {
 interface KeyProps {
   keyName: string;
   globalKey: string;
-  position: KeyPosition;
+  position: KeyElementPosition;
   mode?: string;
   counterEnabled?: boolean;
 }
 
-export default function DraggableKey({
+const DraggableKey = ({
   index,
   elementId,
   position,
@@ -127,7 +103,7 @@ export default function DraggableKey({
   counterEnabled = false,
   counterPreviewValue = 0,
   counterValueSignal,
-}: DraggableKeyProps) {
+}: DraggableKeyProps) => {
   useSignals();
 
   const macOS = isMac();
@@ -669,7 +645,9 @@ export default function DraggableKey({
       )}
     </div>
   );
-}
+};
+
+export default DraggableKey;
 
 export const Key = React.memo(function Key({
   keyName,
@@ -681,151 +659,25 @@ export const Key = React.memo(function Key({
   useSignals();
   const selectorKey = globalKey || keyName;
   const active = getKeySignal(selectorKey).value;
+
   const {
-    dx,
-    dy,
-    width,
-    height = 60,
-    activeImage,
-    inactiveImage,
-    activeTransparent = false,
-    idleTransparent = false,
-    className,
-    backgroundColor,
-    activeBackgroundColor,
-    borderColor,
-    activeBorderColor,
-    borderWidth,
-    borderRadius,
-    fontSize,
-    fontColor,
-    fontFamily,
-    activeFontColor,
-    idleImageFit,
-    activeImageFit,
-    imageFit,
-    useInlineStyles,
-    displayText,
-    fontWeight,
-    fontItalic,
-    fontUnderline,
-    fontStrikethrough,
-  } = position;
-
-  const labelText = displayText || keyName;
-
-  const useInline = useInlineStyles === true;
-
-  const stateBackgroundColor = active
-    ? activeBackgroundColor ?? backgroundColor
-    : backgroundColor;
-  const stateBorderColor = active
-    ? activeBorderColor ?? borderColor
-    : borderColor;
-  const stateFontColor = active ? activeFontColor ?? fontColor : fontColor;
-
-  const inactiveImageSrc = resolveImageSource(inactiveImage);
-  const activeImageSrc = resolveImageSource(activeImage);
+    keyStyle,
+    imageStyle,
+    textStyle,
+    inactiveImageSrc,
+    activeImageSrc,
+    currentImageSrc,
+    hasCurrentImage,
+    isTransparent,
+    labelText,
+  } = computeKeyElementStyles({ position, active, label: keyName });
 
   useEffect(() => {
     warmupImageSource(inactiveImageSrc);
     warmupImageSource(activeImageSrc);
   }, [inactiveImageSrc, activeImageSrc]);
 
-  const isTransparent = active ? activeTransparent : idleTransparent;
-
-  const currentImageSrc =
-    (active && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
-  const hasCurrentImage = !!currentImageSrc;
-  const isUsingActiveImage = active && !!activeImageSrc;
-  const effectiveImageFit = isUsingActiveImage
-    ? activeImageFit || imageFit || 'cover'
-    : idleImageFit || imageFit || 'cover';
-
-  const defaultBgColor = hasCurrentImage
-    ? 'transparent'
-    : active
-    ? 'rgba(121, 121, 121, 0.9)'
-    : 'rgba(46, 46, 47, 0.9)';
-
-  const defaultBorderColor = active
-    ? 'rgba(255, 255, 255, 0.9)'
-    : 'rgba(113, 113, 113, 0.9)';
-
-  const defaultTextColor =
-    active && !activeImageSrc ? '#FFFFFF' : 'rgba(121, 121, 121, 0.9)';
-
-  const keyStyle = {
-    width: `${width}px`,
-    height: `${height}px`,
-    transform: `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`,
-    backgroundColor:
-      useInline && stateBackgroundColor
-        ? stateBackgroundColor
-        : `var(--key-bg, ${stateBackgroundColor || defaultBgColor})`,
-    borderRadius:
-      useInline && borderRadius != null
-        ? `${borderRadius}px`
-        : `var(--key-radius, ${
-            borderRadius != null ? `${borderRadius}px` : '10px'
-          })`,
-    border:
-      useInline && (stateBorderColor || borderWidth != null)
-        ? `${borderWidth ?? 3}px solid ${
-            stateBorderColor || defaultBorderColor
-          }`
-        : `var(--key-border, ${borderWidth ?? 3}px solid ${
-            stateBorderColor || defaultBorderColor
-          })`,
-    color:
-      useInline && stateFontColor
-        ? stateFontColor
-        : `var(--key-text-color, ${stateFontColor || defaultTextColor})`,
-    fontSize: fontSize ? `${fontSize}px` : undefined,
-    overflow: 'hidden' as const,
-    willChange: active ? 'transform, background-color' : 'transform',
-    backfaceVisibility: 'hidden' as const,
-    transformStyle: 'preserve-3d' as const,
-    contain: 'layout style paint',
-    imageRendering: 'auto' as const,
-    isolation: 'isolate' as const,
-    boxSizing: 'border-box' as const,
-    zIndex: position.zIndex,
-  };
-
-  const fallbackImageDimmed = active && !activeImageSrc && !!inactiveImageSrc;
-  const imageStyle = {
-    width: '100%',
-    height: '100%',
-    objectFit: effectiveImageFit as React.CSSProperties['objectFit'],
-    display: 'block' as const,
-    pointerEvents: 'none' as const,
-    userSelect: 'none' as const,
-    position: 'relative' as const,
-    zIndex: 0,
-    filter: fallbackImageDimmed ? 'brightness(0.62)' : 'none',
-  };
-
-  const textDecorations: string[] = [];
-  if (fontUnderline) textDecorations.push('underline');
-  if (fontStrikethrough) textDecorations.push('line-through');
-
-  const textStyle = {
-    willChange: 'auto',
-    contain: 'layout style paint',
-    fontSize: fontSize ? `${fontSize}px` : undefined,
-    fontFamily: fontFamily
-      ? `"${fontFamily}", "SUIT-Regular", sans-serif`
-      : undefined,
-    fontWeight: fontWeight ?? 700,
-    fontStyle: fontItalic ? 'italic' : 'normal',
-    textDecoration:
-      textDecorations.length > 0 ? textDecorations.join(' ') : 'none',
-  };
-
-  if (isTransparent) {
-    return null;
-  }
+  if (isTransparent) return null;
 
   const counterSettings = normalizeCounterSettings(
     position?.counter ?? createDefaultCounterSettings(),
@@ -838,97 +690,11 @@ export const Key = React.memo(function Key({
   const counterSignal = showInsideCounter
     ? getKeyCounterSignal(mode ?? '', globalKey)
     : undefined;
-
   const counterValue = counterSignal?.value ?? 0;
-
-  const showText = !hasCurrentImage;
-
-  const counterFillColor = active
-    ? counterSettings.fill.active
-    : counterSettings.fill.idle;
-  const counterStrokeColor = active
-    ? counterSettings.stroke.active
-    : counterSettings.stroke.idle;
-
-  const contentGap = Number.isFinite(counterSettings.gap)
-    ? counterSettings.gap
-    : 6;
-
-  const renderInsideLayout = () => {
-    if (!showInsideCounter) {
-      return null;
-    }
-
-    const displayValue = counterValue || 0;
-
-    const counterElement = (
-      <CountDisplay
-        key="counter"
-        count={displayValue}
-        fillColor={counterFillColor}
-        strokeColor={counterStrokeColor}
-        active={active}
-        fontSize={counterSettings.fontSize}
-        fontFamily={counterSettings.fontFamily}
-        fontWeight={counterSettings.fontWeight}
-        fontItalic={counterSettings.fontItalic}
-        fontUnderline={counterSettings.fontUnderline}
-        fontStrikethrough={counterSettings.fontStrikethrough}
-        animationEnabled={counterSettings.animation.enabled}
-        animationBezier={counterSettings.animation.bezier}
-        animationScale={counterSettings.animation.scale}
-        animationDurationMs={counterSettings.animation.durationMs}
-      />
-    );
-
-    const nameElement = (
-      <span
-        key="label"
-        className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
-        style={textStyle}
-      >
-        {labelText}
-      </span>
-    );
-
-    const isHorizontal =
-      counterSettings.align === 'left' || counterSettings.align === 'right';
-
-    const elements = isHorizontal
-      ? counterSettings.align === 'left'
-        ? [counterElement, nameElement]
-        : [nameElement, counterElement]
-      : counterSettings.align === 'top'
-      ? [counterElement, nameElement]
-      : [nameElement, counterElement];
-
-    const alignMode = counterSettings.alignMode || 'center';
-    const isBetween = alignMode === 'between';
-    const containerClass = `flex ${
-      isHorizontal ? '' : 'flex-col'
-    } w-full h-full items-center pointer-events-none select-none`;
-
-    return (
-      <div
-        className={containerClass}
-        style={{
-          justifyContent: isBetween ? 'space-between' : 'center',
-          padding: isBetween
-            ? isHorizontal
-              ? `0 ${contentGap}px`
-              : `${contentGap}px 0`
-            : '0px',
-          gap: isBetween ? '0px' : `${contentGap}px`,
-        }}
-      >
-        {elements}
-      </div>
-    );
-  };
 
   return (
     <div
-      className={`absolute ${className || ''}`}
+      className={`absolute ${position.className || ''}`}
       style={keyStyle}
       data-state={active ? 'active' : 'inactive'}
     >
@@ -939,18 +705,22 @@ export const Key = React.memo(function Key({
           style={imageStyle}
           draggable={false}
         />
-      ) : showText ? (
-        showInsideCounter ? (
-          renderInsideLayout()
-        ) : (
-          <div
-            className="flex items-center justify-center h-full font-bold text-safe-inline"
-            style={textStyle}
-          >
-            {labelText}
-          </div>
-        )
-      ) : null}
+      ) : showInsideCounter ? (
+        <InsideCounterLayout
+          count={counterValue}
+          labelText={labelText}
+          textStyle={textStyle}
+          active={active}
+          counterSettings={counterSettings}
+        />
+      ) : (
+        <div
+          className="flex items-center justify-center h-full font-bold text-safe-inline"
+          style={textStyle}
+        >
+          {labelText}
+        </div>
+      )}
     </div>
   );
 });

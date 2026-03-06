@@ -6,13 +6,13 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import type { TabCss } from '@src/types/plugin/css';
 
-type Props = {
+interface TabCssModalProps {
   isOpen: boolean;
   onClose: () => void;
   showAlert?: (message: string, confirmText?: string) => void;
-};
+}
 
-export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
+const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const { t } = useTranslation();
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
 
@@ -191,4 +191,6 @@ export default function TabCssModal({ isOpen, onClose, showAlert }: Props) {
       </div>
     </Modal>
   );
-}
+};
+
+export default TabCssModal;

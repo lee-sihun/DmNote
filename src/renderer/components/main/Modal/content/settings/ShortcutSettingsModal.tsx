@@ -99,12 +99,12 @@ function getPlatformDefaults(macOS: boolean): ShortcutsState {
   };
 }
 
-export default function ShortcutSettingsModal({
+const ShortcutSettingsModal = ({
   isOpen,
   shortcuts,
   onClose,
   onSave,
-}: ShortcutSettingsModalProps) {
+}: ShortcutSettingsModalProps) => {
   const { t } = useTranslation();
   const macOS = isMac();
   const defaults = getPlatformDefaults(macOS);
@@ -583,4 +583,6 @@ export default function ShortcutSettingsModal({
       </div>
     </Modal>
   );
-}
+};
+
+export default ShortcutSettingsModal;

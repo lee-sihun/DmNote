@@ -71,7 +71,7 @@ const PREVIEW_HISTORY_BASE: number[] = [
 const PREVIEW_AVG = 12;
 const PREVIEW_MAX = 18;
 
-export default function GraphItem({
+const GraphItem = ({
   index,
   elementId,
   position,
@@ -93,7 +93,7 @@ export default function GraphItem({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: GraphItemProps) {
+}: GraphItemProps) => {
   const macOS = isMac();
   const {
     dx = 0,
@@ -464,4 +464,6 @@ export default function GraphItem({
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     />
   );
-}
+};
+
+export default GraphItem;
