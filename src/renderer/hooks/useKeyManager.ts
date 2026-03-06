@@ -202,11 +202,7 @@ export function useKeyManager() {
     persistMappingsAndPositions(result.mappings, result.positions);
   };
 
-  const handleDuplicateKey = (
-    sourceIndex: number,
-    dx: number,
-    dy: number,
-  ) => {
+  const handleDuplicateKey = (sourceIndex: number, dx: number, dy: number) => {
     const result = duplicateKey(
       keyMappings,
       positions,
@@ -655,11 +651,7 @@ export function useKeyManager() {
   const handleMoveForward = async (index: number) => {
     pushCurrentStateToHistory();
     const pos = positions[selectedKeyType] || [];
-    const updated = computeMoveForward(
-      pos,
-      index,
-      getPluginExternalElements(),
-    );
+    const updated = computeMoveForward(pos, index, getPluginExternalElements());
     const updatedPositions: KeyPositions = {
       ...positions,
       [selectedKeyType]: updated,

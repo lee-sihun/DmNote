@@ -70,10 +70,7 @@ export function restorePluginElements(
     }
 
     // 현재 없는 요소 (삭제된 요소 복구)
-    if (
-      savedEl.definitionId &&
-      elementRestorers?.has(savedEl.definitionId)
-    ) {
+    if (savedEl.definitionId && elementRestorers?.has(savedEl.definitionId)) {
       const restorer = elementRestorers.get(savedEl.definitionId)!;
       return restorer(savedEl);
     }
@@ -189,10 +186,14 @@ export async function persistRestoredState(
     window.api.bridge.sendTo('overlay', 'statPositions:sync', {
       positions: state.statPositions,
     });
-  } catch { /* 무시 */ }
+  } catch {
+    /* 무시 */
+  }
   try {
     window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
       positions: state.graphPositions,
     });
-  } catch { /* 무시 */ }
+  } catch {
+    /* 무시 */
+  }
 }

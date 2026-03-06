@@ -24,9 +24,7 @@ export function toggleItemVisibility<T extends { hidden?: boolean }>(
 }
 
 /** zIndex 기준 정렬 순서 재정렬 (0부터 연속 번호 부여) */
-export function reindexZOrder<T extends { zIndex?: number }>(
-  items: T[],
-): T[] {
+export function reindexZOrder<T extends { zIndex?: number }>(items: T[]): T[] {
   const indexed = items
     .map((item, i) => ({ item, originalIndex: i, z: item.zIndex ?? i }))
     .sort((a, b) => a.z - b.z);

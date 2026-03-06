@@ -102,7 +102,12 @@ export function computeMoveForward<T extends ZOrderableWithBounds>(
     if (i === index) return;
     const z = p.zIndex ?? i;
     if (z <= currentZIndex) return;
-    const box: BoundingBox = { x: p.dx, y: p.dy, width: p.width, height: p.height };
+    const box: BoundingBox = {
+      x: p.dx,
+      y: p.dy,
+      width: p.width,
+      height: p.height,
+    };
     if (boxesOverlap(targetBox, box)) {
       overlappingAbove.push(z);
     }
@@ -120,9 +125,7 @@ export function computeMoveForward<T extends ZOrderableWithBounds>(
       ? currentZIndex + 1
       : Math.min(...overlappingAbove) + 1;
 
-  return items.map((p, i) =>
-    i === index ? { ...p, zIndex: newZIndex } : p,
-  );
+  return items.map((p, i) => (i === index ? { ...p, zIndex: newZIndex } : p));
 }
 
 /**
@@ -151,7 +154,12 @@ export function computeMoveBackward<T extends ZOrderableWithBounds>(
     if (i === index) return;
     const z = p.zIndex ?? i;
     if (z >= currentZIndex) return;
-    const box: BoundingBox = { x: p.dx, y: p.dy, width: p.width, height: p.height };
+    const box: BoundingBox = {
+      x: p.dx,
+      y: p.dy,
+      width: p.width,
+      height: p.height,
+    };
     if (boxesOverlap(targetBox, box)) {
       overlappingBelow.push(z);
     }
@@ -169,7 +177,5 @@ export function computeMoveBackward<T extends ZOrderableWithBounds>(
       ? currentZIndex - 1
       : Math.max(...overlappingBelow) - 1;
 
-  return items.map((p, i) =>
-    i === index ? { ...p, zIndex: newZIndex } : p,
-  );
+  return items.map((p, i) => (i === index ? { ...p, zIndex: newZIndex } : p));
 }

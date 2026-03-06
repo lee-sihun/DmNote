@@ -20,10 +20,7 @@ import {
 // 기본 키 포지션 생성
 // ----------------------------------------------------------------------------
 
-export function createDefaultKeyPosition(
-  dx = 0,
-  dy = 0,
-): KeyPosition {
+export function createDefaultKeyPosition(dx = 0, dy = 0): KeyPosition {
   return {
     dx,
     dy,
@@ -197,9 +194,7 @@ export function updateKeyPosition(
   const current = positions[mode] || [];
   return {
     ...positions,
-    [mode]: current.map((pos, i) =>
-      i === index ? { ...pos, dx, dy } : pos,
-    ),
+    [mode]: current.map((pos, i) => (i === index ? { ...pos, dx, dy } : pos)),
   };
 }
 

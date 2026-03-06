@@ -291,37 +291,50 @@ export function useGridZoomPan({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  // 핸들러를 ref에 저장하여 이벤트 리스너 안정화
+  const handleWheelRef = useRef(handleWheel);
+  const handleMiddleMouseDownRef = useRef(handleMiddleMouseDown);
+  const handleKeyDownRef = useRef(handleKeyDown);
+  useEffect(() => {
+    handleWheelRef.current = handleWheel;
+    handleMiddleMouseDownRef.current = handleMiddleMouseDown;
+    handleKeyDownRef.current = handleKeyDown;
+  });
+
   // 휠 이벤트 등록
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
+    const handler = (e: WheelEvent) => handleWheelRef.current(e);
+    container.addEventListener('wheel', handler, { passive: false });
 
     return () => {
-      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('wheel', handler);
     };
-  });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 미들 버튼 드래그 이벤트 등록 (캡처 단계에서 처리하여 요소 이벤트보다 먼저 잡음)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    container.addEventListener('mousedown', handleMiddleMouseDown, true);
+    const handler = (e: MouseEvent) => handleMiddleMouseDownRef.current(e);
+    container.addEventListener('mousedown', handler, true);
 
     return () => {
-      container.removeEventListener('mousedown', handleMiddleMouseDown, true);
+      container.removeEventListener('mousedown', handler, true);
     };
-  });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 키보드 이벤트 등록
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
+    const handler = (e: KeyboardEvent) => handleKeyDownRef.current(e);
+    window.addEventListener('keydown', handler);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handler);
     };
-  });
+  }, []);
 
   useEffect(() => {
     return () => {
