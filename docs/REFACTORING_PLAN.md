@@ -4,6 +4,17 @@
 > **작성**: Claude (Opus 4.6) + Codex (GPT 5.4) 협업
 > **브랜치**: `refactor/code-quality`
 > **현황**: 총 61,796줄 / 130+ TypeScript 파일 / 코드 품질 점수 7.5~7.8/10
+> **최종 업데이트**: 2026-03-06
+>
+> ### 진행 상태 요약
+> | Phase | 상태 | 비고 |
+> |-------|------|------|
+> | Phase 1 | ✅ 완료 | editor/model 순수 함수 추출 |
+> | Phase 2 | ✅ 완료 | editor/runtime 트랜잭션 실행기 도입 |
+> | Phase 3 | ✅ 완료 | useKeyManager 분해 |
+> | Phase 4 | ✅ 1차 완료 / 🔄 추가 분해 진행 중 | Grid.tsx 3,054→2,440줄 (useGridCanvasActions 추출) |
+> | Phase 5 | 🔲 대기 | LayerTabContent / PropertiesPanel 정리 |
+> | Phase 6 | ✅ 완료 | 코드 위생 및 훅 안정화 |
 
 ---
 
@@ -293,11 +304,11 @@ export {
 
 ### Phase 1 체크리스트
 
-- [ ] `editor/model/zOrder.ts` 생성 + 테스트
-- [ ] `editor/model/keys.ts` 생성 + 테스트
-- [ ] `editor/model/canvasItems.ts` 생성 + 테스트
-- [ ] `editor/model/groups.ts` 생성 (재export)
-- [ ] 기존 코드에서 import 경로만 변경하여 동작 확인
+- [x] `editor/model/zOrder.ts` 생성 + 테스트
+- [x] `editor/model/keys.ts` 생성 + 테스트
+- [x] `editor/model/canvasItems.ts` 생성 + 테스트
+- [x] `editor/model/groups.ts` 생성 (재export)
+- [x] 기존 코드에서 import 경로만 변경하여 동작 확인
 
 ---
 
@@ -431,13 +442,13 @@ export async function runEditorTransaction<T>(
 
 ### Phase 2 체크리스트
 
-- [ ] `EditorSnapshot` 타입 정의
-- [ ] `captureSnapshot.ts` 구현
-- [ ] `applySnapshot.ts` 구현 (undo/redo 복원 로직 이동)
-- [ ] `persistState.ts` 구현
-- [ ] `editorTransaction.ts` 구현
-- [ ] `restorePluginElements.ts` 구현 (useKeyManager의 플러그인 복원 로직 이동)
-- [ ] useKeyManager의 `handleUndo/handleRedo`를 runtime 함수로 교체하여 동작 확인
+- [x] `EditorSnapshot` 타입 정의
+- [x] `captureSnapshot.ts` 구현
+- [x] `applySnapshot.ts` 구현 (undo/redo 복원 로직 이동)
+- [x] `persistState.ts` 구현
+- [x] `editorTransaction.ts` 구현
+- [x] `restorePluginElements.ts` 구현 (useKeyManager의 플러그인 복원 로직 이동)
+- [x] useKeyManager의 `handleUndo/handleRedo`를 runtime 함수로 교체하여 동작 확인
 
 ---
 
@@ -522,11 +533,11 @@ export function useKeyManager() {
 
 ### Phase 3 체크리스트
 
-- [ ] useKeyManager의 각 handler에서 "상태 계산부"를 editor/model 함수로 교체
-- [ ] 히스토리/API 동기화를 runEditorTransaction으로 교체
-- [ ] undo/redo 로직을 editor/runtime으로 이동
-- [ ] useKeyManager가 ~200줄 이하인지 확인
-- [ ] 기존 동작 회귀 테스트
+- [x] useKeyManager의 각 handler에서 "상태 계산부"를 editor/model 함수로 교체
+- [x] 히스토리/API 동기화를 runEditorTransaction으로 교체
+- [x] undo/redo 로직을 editor/runtime으로 이동
+- [x] useKeyManager가 ~200줄 이하인지 확인
+- [x] 기존 동작 회귀 테스트
 
 ---
 
@@ -584,17 +595,37 @@ interface GridProps {
 // useGridModalState → 로컬 상태로 관리
 ```
 
-### Phase 4 체크리스트
+### Phase 4 체크리스트 — 1차 (완료)
 
-- [ ] `useGridCanvasActions` 훅 추출
-- [ ] `useGridContextActions` 훅 추출
-- [ ] `useGridModalState` 훅 추출
-- [ ] `useGridSceneData` 훅 추출
-- [ ] `GridScene.tsx` 컴포넌트 분리
-- [ ] `GridOverlays.tsx` 컴포넌트 분리
-- [ ] `GridModalHost.tsx` 컴포넌트 분리
-- [ ] Grid.tsx가 ~300줄 이하인지 확인
-- [ ] GridProps가 10개 이하인지 확인
+- [x] `useGridCanvasActions` 훅 추출 (stat/graph CRUD, z-order, add, forward/backward)
+- [x] Grid.tsx 3,054→2,440줄 달성 (-20%)
+
+### Phase 4 체크리스트 — 2차 추가 분해 (진행 중)
+
+> Codex(GPT 5.4) 협업으로 수립. 순서: C→D→B→A
+
+**Step 4-3: UnifiedKeySetting 모달 래퍼 추출** (~230줄 절감)
+- [ ] `GridKeySettingModal.tsx` 생성 — onClose/onSave/onPreview 핸들러 + UnifiedKeySetting JSX
+- [ ] `originalKeyData` 상태와 미리보기 롤백 로직 이동
+
+**Step 4-4: 하단 모달/미니맵 추출** (~50줄 절감)
+- [ ] 미니맵, TabCssModal, TabNoteSettingModal 블록을 `GridFooterModals.tsx`로 이동
+
+**Step 4-5: 그룹/언그룹 공용 액션 추출** (~460줄 절감)
+- [ ] `utils/grid/groupActions.ts` 또는 `hooks/Grid/useGridGroupingActions.ts` 생성
+- [ ] `groupSelectedElements()` / `ungroupSelectedElements()` 순수 액션 함수
+- [ ] Grid.tsx 컨텍스트 메뉴 onSelect와 useGridKeyboard 양쪽의 중복 제거
+- [ ] `useGridContextMenuActions` 훅으로 컨텍스트 메뉴 아이템 + onSelect 핸들러 통합
+
+**Step 4-6: 요소 선택 헬퍼 + 레이어 컴포넌트 추출** (~570줄 절감)
+- [ ] `selectElementWithGroup(type, index)` 공통 헬퍼 (그룹 전체 선택 중복 제거)
+- [ ] `toggleElementSelection(type, index)` 공통 헬퍼
+- [ ] `openElementContextMenu(type, index, clientX, clientY, ref)` 공통 헬퍼
+- [ ] `GridKeyLayer.tsx` — renderKeys() + 클릭 핸들러
+- [ ] `GridStatLayer.tsx` — renderStatItems() + 핸들러
+- [ ] `GridGraphLayer.tsx` — renderGraphItems() + 핸들러
+
+**목표**: Grid.tsx 2,440줄 → ~800줄 이하
 
 ---
 
@@ -646,15 +677,45 @@ PropertiesPanel.tsx (현재 2,450줄)
       선택 해석 결과에 따라 적절한 패널 렌더
 ```
 
-### Phase 5 체크리스트
+### Phase 5 체크리스트 — LayerTabContent (2,971줄)
 
-- [ ] `useLayerTreeModel` 훅 추출
-- [ ] `useLayerDnD` 훅 추출
-- [ ] `useLayerCommands` 훅 추출
-- [ ] `LayerGroupHeader`, `LayerItemRow` 컴포넌트 분리
-- [ ] `useSelectionInterpreter` 훅 추출
-- [ ] LayerTabContent가 ~400줄 이하인지 확인
-- [ ] PropertiesPanel이 ~400줄 이하인지 확인
+> Codex(GPT 5.4) 피드백 반영: 모델 빌더 → 선택/컨텍스트 → DnD → 렌더 컴포넌트 → 아이콘
+
+**Step 5-1: 타입 및 모델 빌더 분리**
+- [ ] `layerPanelModel.ts` — `layerItems` 구성, `displayItems` 트리 빌딩 순수 함수
+- [ ] LayerItem/DisplayItem 타입을 별도 타입 파일로 이동
+
+**Step 5-2: 선택/컨텍스트/이름변경 핸들러 분리**
+- [ ] `useLayerInteractions.ts` — handleItemClick, handleContextMenu, rename, visibility/lock 토글
+
+**Step 5-3: DnD 훅 분리**
+- [ ] `useLayerDnD.ts` — onDragStart, onDragOver, onDrop, 관련 ref/state
+- [ ] (모델 빌더가 안정된 후 DnD 입력이 명확해짐)
+
+**Step 5-4: 렌더링 서브컴포넌트 분리**
+- [ ] `LayerItemRow.tsx` — 개별 레이어 아이템 렌더링
+- [ ] `LayerGroupHeader.tsx` — 그룹 헤더 렌더링, 접기/펼치기
+
+**Step 5-5: 아이콘 파일 정리**
+- [ ] `LayerIcons.tsx` — ArrowIcon, EyeIcon, LockIcon 등 (~120줄)
+
+**목표**: LayerTabContent.tsx 2,971줄 → ~400줄
+
+### Phase 5 체크리스트 — PropertiesPanel (2,450줄)
+
+> Codex(GPT 5.4) 피드백: 도메인별 훅 여러 개로 분리 (한 거대 훅 대신)
+
+**Step 5-6: 도메인별 핸들러 훅 분리**
+- [ ] `usePropertiesPanelSelectionState.ts` — 선택 상태 해석, 단일/배치 분기
+- [ ] `usePropertiesPanelRename.ts` — 이름 변경 로직
+- [ ] `usePluginPanelHandlers.ts` — 플러그인 관련 핸들러
+- [ ] `useStatPanelHandlers.ts` — stat 도메인 핸들러
+- [ ] `useGraphPanelHandlers.ts` — graph 도메인 핸들러
+
+**Step 5-7: 조건부 렌더링 서브컴포넌트화**
+- [ ] 이미 분리된 Single/Batch 패널 활용, 남은 조건부 JSX 정리
+
+**목표**: PropertiesPanel.tsx 2,450줄 → ~500줄
 
 ---
 
@@ -750,14 +811,14 @@ setSetting: <K extends keyof SettingsStateSnapshot>(
 
 ### Phase 6 체크리스트
 
-- [ ] `utils/logger.ts` 생성
-- [ ] console.* → logger 일괄 교체
-- [ ] ESLint `no-console` 규칙 추가
-- [ ] eslint-disable 파일별 원인 분류 및 해소/주석 추가
-- [ ] useGridZoomPan useEffect 의존성 안정화
-- [ ] useSettingsStore generic setter 도입 (선택)
-- [ ] `npx tsc --noEmit` 통과 확인
-- [ ] `npm run lint` 통과 확인
+- [x] `utils/logger.ts` 생성
+- [x] console.* → logger 일괄 교체
+- [x] ESLint `no-console` 규칙 추가
+- [x] eslint-disable 파일별 원인 분류 및 해소/주석 추가
+- [x] useGridZoomPan useEffect 의존성 안정화 (ref 패턴 + React Compiler 호환)
+- [ ] useSettingsStore generic setter 도입 (후순위, 선택)
+- [x] `npx tsc --noEmit` 통과 확인
+- [x] `npm run lint` 통과 확인
 
 ---
 
@@ -816,14 +877,27 @@ Phase 1 → 2 → 3 → 4 → 5 → 6
 ### 커밋 전략
 
 ```
-refactor: editor/model 순수 함수 추출 (Phase 1)
-refactor: editor/runtime 트랜잭션 실행기 도입 (Phase 2)
-refactor: useKeyManager CRUD 로직을 editor/model로 이동 (Phase 3-1)
-refactor: useKeyManager undo/redo를 editor/runtime으로 이동 (Phase 3-2)
-refactor: useKeyManager z-order를 editor/model로 이동 (Phase 3-3)
-refactor: Grid.tsx 훅 분리 (Phase 4-1)
-refactor: Grid.tsx 컴포넌트 분리 (Phase 4-2)
-...
+✅ refactor: editor/model 순수 함수 추출 (Phase 1)
+✅ refactor: editor/runtime 트랜잭션 실행기 도입 (Phase 2)
+✅ refactor: useKeyManager 분해 (Phase 3)
+✅ refactor: Grid.tsx useGridCanvasActions 훅 추출 (Phase 4-1)
+✅ refactor: Grid.tsx forward/backward/add 추출 (Phase 4-2)
+✅ refactor: 코드 위생 및 훅 안정화 (Phase 6)
+
+🔄 남은 커밋 계획:
+refactor(grid): extract key setting modal wrapper (Phase 4-3)
+refactor(grid): extract footer modals and minimap (Phase 4-4)
+refactor(grid): extract shared group/ungroup actions (Phase 4-5a)
+refactor(grid): extract context menu actions hook (Phase 4-5b)
+refactor(grid): extract element selection helpers (Phase 4-6a)
+refactor(grid): extract key/stat/graph layer components (Phase 4-6b)
+refactor(layer-panel): extract layer model builders (Phase 5-1)
+refactor(layer-panel): extract interaction handlers (Phase 5-2)
+refactor(layer-panel): extract drag and drop hook (Phase 5-3)
+refactor(layer-panel): extract layer row and group header (Phase 5-4)
+refactor(layer-panel): extract layer icons (Phase 5-5)
+refactor(properties-panel): extract domain handler hooks (Phase 5-6)
+refactor(properties-panel): clean up conditional rendering (Phase 5-7)
 ```
 
 - Phase당 여러 커밋으로 분리

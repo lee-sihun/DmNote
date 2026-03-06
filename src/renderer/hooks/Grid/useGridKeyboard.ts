@@ -12,20 +12,13 @@ import {
   useGridSelectionStore,
   type SelectedElement,
 } from '@stores/grid/useGridSelectionStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
-import { useStatItemStore } from '@stores/data/useStatItemStore';
-import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
-import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { ARROW_KEY_HISTORY_DELAY } from './constants';
 import { isMac } from '@utils/core/platform';
 import {
-  applyGroupIdToSelectedElements,
-  buildNextLayerGroupName,
-  normalizeLayerGroupsForMode,
-  resolveSingleGroupIdFromSelection,
-} from '@utils/layerGroupUtils';
+  groupSelectedElements,
+  ungroupSelectedElements,
+} from '@utils/grid/groupActions';
 
 interface UseGridKeyboardParams {
   selectedElements: SelectedElement[];
@@ -92,94 +85,7 @@ export function useGridKeyboard({
         if (selectedElements.length < 2) return;
 
         const selectedKeyType = useKeyStore.getState().selectedKeyType;
-        const { keyMappings, positions } = useKeyStore.getState();
-        const statPos = useStatItemStore.getState().positions;
-        const graphPos = useGraphItemStore.getState().positions;
-        const pluginElements = usePluginDisplayElementStore.getState().elements;
-        const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-        const modeGroups = currentLayerGroups[selectedKeyType] || [];
-
-        const singleGroupId = resolveSingleGroupIdFromSelection(
-          selectedKeyType,
-          selectedElements,
-          positions,
-          statPos,
-          graphPos,
-        );
-
-        let targetGroupId = singleGroupId;
-        let nextLayerGroups = currentLayerGroups;
-        let createdGroup = false;
-
-        if (!targetGroupId) {
-          targetGroupId = crypto.randomUUID();
-          const groupName = buildNextLayerGroupName(newGroupLabel, modeGroups);
-          nextLayerGroups = {
-            ...currentLayerGroups,
-            [selectedKeyType]: [
-              ...modeGroups,
-              {
-                id: targetGroupId,
-                name: groupName,
-              },
-            ],
-          };
-          createdGroup = true;
-        }
-
-        const grouped = applyGroupIdToSelectedElements({
-          mode: selectedKeyType,
-          selectedElements,
-          keyPositions: positions,
-          statPositions: statPos,
-          graphPositions: graphPos,
-          targetGroupId,
-        });
-
-        const normalized = normalizeLayerGroupsForMode({
-          mode: selectedKeyType,
-          keyPositions: grouped.keyPositions,
-          statPositions: grouped.statPositions,
-          graphPositions: grouped.graphPositions,
-          layerGroups: nextLayerGroups,
-        });
-
-        const hasChange =
-          grouped.changed ||
-          normalized.positionsChanged ||
-          createdGroup ||
-          normalized.groupsChanged;
-        if (!hasChange) return;
-
-        useHistoryStore
-          .getState()
-          .pushState(
-            keyMappings,
-            positions,
-            statPos,
-            graphPos,
-            pluginElements,
-            currentLayerGroups,
-          );
-
-        useKeyStore.getState().setPositions(normalized.keyPositions);
-        useStatItemStore.getState().setPositions(normalized.statPositions);
-        useGraphItemStore.getState().setPositions(normalized.graphPositions);
-
-        window.api.keys
-          .updatePositions(normalized.keyPositions)
-          .catch(() => {});
-        window.api.statItems
-          .updatePositions(normalized.statPositions)
-          .catch(() => {});
-        window.api.graphItems
-          .updatePositions(normalized.graphPositions)
-          .catch(() => {});
-
-        if (createdGroup || normalized.groupsChanged) {
-          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-          window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
-        }
+        groupSelectedElements(selectedKeyType, selectedElements, newGroupLabel);
         return;
       }
 
@@ -189,61 +95,7 @@ export function useGridKeyboard({
         if (selectedElements.length === 0) return;
 
         const selectedKeyType = useKeyStore.getState().selectedKeyType;
-        const { keyMappings, positions } = useKeyStore.getState();
-        const statPos = useStatItemStore.getState().positions;
-        const graphPos = useGraphItemStore.getState().positions;
-        const pluginElements = usePluginDisplayElementStore.getState().elements;
-        const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-
-        const ungrouped = applyGroupIdToSelectedElements({
-          mode: selectedKeyType,
-          selectedElements,
-          keyPositions: positions,
-          statPositions: statPos,
-          graphPositions: graphPos,
-          targetGroupId: undefined,
-        });
-
-        const normalized = normalizeLayerGroupsForMode({
-          mode: selectedKeyType,
-          keyPositions: ungrouped.keyPositions,
-          statPositions: ungrouped.statPositions,
-          graphPositions: ungrouped.graphPositions,
-          layerGroups: currentLayerGroups,
-        });
-
-        const hasChange = ungrouped.changed || normalized.groupsChanged;
-        if (!hasChange) return;
-
-        useHistoryStore
-          .getState()
-          .pushState(
-            keyMappings,
-            positions,
-            statPos,
-            graphPos,
-            pluginElements,
-            currentLayerGroups,
-          );
-
-        useKeyStore.getState().setPositions(normalized.keyPositions);
-        useStatItemStore.getState().setPositions(normalized.statPositions);
-        useGraphItemStore.getState().setPositions(normalized.graphPositions);
-
-        window.api.keys
-          .updatePositions(normalized.keyPositions)
-          .catch(() => {});
-        window.api.statItems
-          .updatePositions(normalized.statPositions)
-          .catch(() => {});
-        window.api.graphItems
-          .updatePositions(normalized.graphPositions)
-          .catch(() => {});
-
-        if (normalized.groupsChanged) {
-          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-          window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
-        }
+        ungroupSelectedElements(selectedKeyType, selectedElements);
         return;
       }
 

@@ -8,7 +8,7 @@ declare global {
 import { useTranslation } from '@contexts/useTranslation';
 import DraggableKey from '@components/shared/Key';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import UnifiedKeySetting from '../../Modal/content/dialogs/UnifiedKeySetting';
+import GridKeySettingModal from './GridKeySettingModal';
 import TabCssModal from '../../Modal/content/editors/TabCssModal';
 import TabNoteSettingModal from '../../Modal/content/editors/TabNoteSettingModal';
 import ListPopup from '../../Modal/ListPopup';
@@ -16,7 +16,6 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
 import { useGridCanvasActions } from '@hooks/Grid/useGridCanvasActions';
@@ -60,28 +59,18 @@ import type {
 } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type {
-  SaveData,
-  PreviewData,
-} from '@hooks/Modal/useUnifiedKeySettingState';
+import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
-  applyGroupIdToSelectedElements,
-  buildNextLayerGroupName,
-  normalizeLayerGroupsForMode,
-  resolveSingleGroupIdFromSelection,
-} from '@utils/layerGroupUtils';
+  groupSelectedElements,
+  ungroupSelectedElements,
+} from '@utils/grid/groupActions';
 
 type ToolbarAddRequest = { id: number; type: 'key' | 'stat' | 'graph' } | null;
 
 interface SelectedKeyInfo {
   key: string;
   index: number;
-}
-
-interface OriginalKeyData {
-  key: KeyPosition;
-  counter: KeyCounterSettings;
 }
 
 type KeyPreviewUpdates = Partial<{
@@ -628,9 +617,6 @@ const Grid = ({
     onToolbarAddConsumed?.();
   });
 
-  const [originalKeyData, setOriginalKeyData] =
-    useState<OriginalKeyData | null>(null);
-
   // 탭 CSS 모달 상태
   const [isTabCssModalOpen, setIsTabCssModalOpen] = useState<boolean>(false);
   // 탭 노트 트랙 설정 모달 상태
@@ -681,15 +667,96 @@ const Grid = ({
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  useEffect(() => {
-    if (
-      shouldSkipModalAnimation &&
-      selectedKey &&
-      typeof onModalAnimationConsumed === 'function'
-    ) {
-      onModalAnimationConsumed();
+  // 요소 클릭 시 그룹 멤버 자동 선택
+  const selectElementWithGroup = (
+    type: 'key' | 'stat' | 'graph',
+    index: number,
+  ) => {
+    if (isContextOpen) {
+      setIsContextOpen(false);
+      setContextPosition(null);
     }
-  }, [shouldSkipModalAnimation, selectedKey, onModalAnimationConsumed]);
+    clearSelection();
+    toggleSelection({ type, id: `${type}-${index}`, index });
+
+    // 그룹 ID 조회
+    let groupId: string | undefined;
+    if (type === 'key') {
+      groupId = positions[selectedKeyType]?.[index]?.groupId;
+    } else if (type === 'stat') {
+      groupId =
+        useStatItemStore.getState().positions[selectedKeyType]?.[index]
+          ?.groupId;
+    } else {
+      groupId =
+        useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+          ?.groupId;
+    }
+
+    if (groupId) {
+      // 같은 그룹의 모든 요소 선택
+      (positions[selectedKeyType] || []).forEach((p, i) => {
+        if (p?.groupId === groupId && !(type === 'key' && i === index)) {
+          toggleSelection({ type: 'key', id: `key-${i}`, index: i });
+        }
+      });
+      const statPos =
+        useStatItemStore.getState().positions[selectedKeyType] || [];
+      statPos.forEach((p, i) => {
+        if (p?.groupId === groupId && !(type === 'stat' && i === index)) {
+          toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
+        }
+      });
+      const graphPos =
+        useGraphItemStore.getState().positions[selectedKeyType] || [];
+      graphPos.forEach((p, i) => {
+        if (p?.groupId === groupId && !(type === 'graph' && i === index)) {
+          toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
+        }
+      });
+    }
+  };
+
+  // 드래그 시작 시 히스토리 저장
+  const pushDragHistory = () => {
+    const currentPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km } = useKeyStore.getState();
+    useHistoryStore
+      .getState()
+      .pushState(
+        km,
+        currentPositions,
+        useStatItemStore.getState().positions,
+        useGraphItemStore.getState().positions,
+        currentPluginElements,
+      );
+  };
+
+  // 요소 컨텍스트 메뉴 열기
+  const openElementContextMenu = (
+    type: 'key' | 'stat' | 'graph',
+    index: number,
+    clientX: number,
+    clientY: number,
+    ref: HTMLElement | null,
+  ) => {
+    if (duplicateState) {
+      setDuplicateState(null);
+      setDuplicateCursor(null);
+    }
+    const clickedId = `${type}-${index}`;
+    if (shouldOpenMixedSelectionMenu(clickedId)) {
+      openMixedSelectionContextMenu(clientX, clientY, ref);
+      return;
+    }
+    setContextType(type);
+    setContextIndex(index);
+    contextRef.current = ref;
+    setContextPosition({ x: clientX, y: clientY });
+    setIsContextOpen(true);
+  };
 
   const renderKeys = () => {
     if (!positions[selectedKeyType]) return null;
@@ -704,39 +771,7 @@ const Grid = ({
           onPositionChange={onPositionChange}
           zIndex={position.zIndex ?? index}
           onClick={() => {
-            if (isContextOpen) {
-              setIsContextOpen(false);
-              setContextPosition(null);
-            }
-            // 단일 선택: 기존 선택을 해제하고 이 키만 선택
-            clearSelection();
-            toggleSelection({ type: 'key', id: `key-${index}`, index });
-            if (position?.groupId) {
-              const groupId = position.groupId;
-              (positions[selectedKeyType] || []).forEach((p, i) => {
-                if (p?.groupId === groupId && i !== index) {
-                  toggleSelection({ type: 'key', id: `key-${i}`, index: i });
-                }
-              });
-              const statPos =
-                useStatItemStore.getState().positions[selectedKeyType] || [];
-              statPos.forEach((p, i) => {
-                if (p?.groupId === groupId) {
-                  toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
-                }
-              });
-              const graphPos =
-                useGraphItemStore.getState().positions[selectedKeyType] || [];
-              graphPos.forEach((p, i) => {
-                if (p?.groupId === groupId) {
-                  toggleSelection({
-                    type: 'graph',
-                    id: `graph-${i}`,
-                    index: i,
-                  });
-                }
-              });
-            }
+            selectElementWithGroup('key', index);
             // 마지막 선택 키 좌표 저장 (Shift+클릭 범위 선택용)
             const pos = positions[selectedKeyType]?.[index];
             if (pos) {
@@ -893,22 +928,7 @@ const Grid = ({
             moveSelectedElements(deltaX, deltaY, false, false)
           }
           onMultiDragEnd={syncSelectedElementsToOverlay}
-          onMultiDragStart={() => {
-            // 드래그 시작 시 히스토리 저장
-            const currentPositions = useKeyStore.getState().positions;
-            const currentPluginElements =
-              usePluginDisplayElementStore.getState().elements;
-            const { keyMappings: km } = useKeyStore.getState();
-            useHistoryStore
-              .getState()
-              .pushState(
-                km,
-                currentPositions,
-                useStatItemStore.getState().positions,
-                useGraphItemStore.getState().positions,
-                currentPluginElements,
-              );
-          }}
+          onMultiDragStart={pushDragHistory}
           activeTool={activeTool}
           onEraserClick={() => {
             const globalKey = keyMappings[selectedKeyType]?.[index] || '';
@@ -921,24 +941,13 @@ const Grid = ({
             );
           }}
           onContextMenu={(e) => {
-            if (duplicateState) {
-              setDuplicateState(null);
-              setDuplicateCursor(null);
-            }
-            const clickedId = `key-${index}`;
-            if (shouldOpenMixedSelectionMenu(clickedId)) {
-              openMixedSelectionContextMenu(
-                e.clientX,
-                e.clientY,
-                keyRefs.current[index] || null,
-              );
-              return;
-            }
-            setContextType('key');
-            setContextIndex(index);
-            contextRef.current = keyRefs.current[index] || null;
-            setContextPosition({ x: e.clientX, y: e.clientY });
-            setIsContextOpen(true);
+            openElementContextMenu(
+              'key',
+              index,
+              e.clientX,
+              e.clientY,
+              keyRefs.current[index] || null,
+            );
           }}
           setReferenceRef={(node) => {
             keyRefs.current[index] = node;
@@ -1012,35 +1021,7 @@ const Grid = ({
         onPositionChange={handleStatPositionChange}
         zIndex={position.zIndex ?? index}
         onClick={() => {
-          if (isContextOpen) {
-            setIsContextOpen(false);
-            setContextPosition(null);
-          }
-          clearSelection();
-          toggleSelection({ type: 'stat', id: `stat-${index}`, index });
-          const statTabPositions =
-            useStatItemStore.getState().positions[selectedKeyType] || [];
-          const pos = statTabPositions[index];
-          if (pos?.groupId) {
-            const groupId = pos.groupId;
-            (positions[selectedKeyType] || []).forEach((p, i) => {
-              if (p?.groupId === groupId) {
-                toggleSelection({ type: 'key', id: `key-${i}`, index: i });
-              }
-            });
-            statTabPositions.forEach((p, i) => {
-              if (p?.groupId === groupId && i !== index) {
-                toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
-              }
-            });
-            const graphPos =
-              useGraphItemStore.getState().positions[selectedKeyType] || [];
-            graphPos.forEach((p, i) => {
-              if (p?.groupId === groupId) {
-                toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
-              }
-            });
-          }
+          selectElementWithGroup('stat', index);
         }}
         onCtrlClick={() => {
           toggleSelection({ type: 'stat', id: `stat-${index}`, index });
@@ -1057,21 +1038,7 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, false, false)
         }
         onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={() => {
-          const currentPositions = useKeyStore.getState().positions;
-          const currentPluginElements =
-            usePluginDisplayElementStore.getState().elements;
-          const { keyMappings: km } = useKeyStore.getState();
-          useHistoryStore
-            .getState()
-            .pushState(
-              km,
-              currentPositions,
-              useStatItemStore.getState().positions,
-              useGraphItemStore.getState().positions,
-              currentPluginElements,
-            );
-        }}
+        onMultiDragStart={pushDragHistory}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1082,24 +1049,13 @@ const Grid = ({
           );
         }}
         onContextMenu={(e) => {
-          if (duplicateState) {
-            setDuplicateState(null);
-            setDuplicateCursor(null);
-          }
-          const clickedId = `stat-${index}`;
-          if (shouldOpenMixedSelectionMenu(clickedId)) {
-            openMixedSelectionContextMenu(
-              e.clientX,
-              e.clientY,
-              statRefs.current[index] || null,
-            );
-            return;
-          }
-          setContextType('stat');
-          setContextIndex(index);
-          contextRef.current = statRefs.current[index] || null;
-          setContextPosition({ x: e.clientX, y: e.clientY });
-          setIsContextOpen(true);
+          openElementContextMenu(
+            'stat',
+            index,
+            e.clientX,
+            e.clientY,
+            statRefs.current[index] || null,
+          );
         }}
         zoom={zoom}
         panX={panX}
@@ -1170,35 +1126,7 @@ const Grid = ({
         onPositionChange={handleGraphPositionChange}
         zIndex={position.zIndex ?? index}
         onClick={() => {
-          if (isContextOpen) {
-            setIsContextOpen(false);
-            setContextPosition(null);
-          }
-          clearSelection();
-          toggleSelection({ type: 'graph', id: `graph-${index}`, index });
-          const graphTabPositions =
-            useGraphItemStore.getState().positions[selectedKeyType] || [];
-          const pos = graphTabPositions[index];
-          if (pos?.groupId) {
-            const groupId = pos.groupId;
-            (positions[selectedKeyType] || []).forEach((p, i) => {
-              if (p?.groupId === groupId) {
-                toggleSelection({ type: 'key', id: `key-${i}`, index: i });
-              }
-            });
-            const statPos =
-              useStatItemStore.getState().positions[selectedKeyType] || [];
-            statPos.forEach((p, i) => {
-              if (p?.groupId === groupId) {
-                toggleSelection({ type: 'stat', id: `stat-${i}`, index: i });
-              }
-            });
-            graphTabPositions.forEach((p, i) => {
-              if (p?.groupId === groupId && i !== index) {
-                toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
-              }
-            });
-          }
+          selectElementWithGroup('graph', index);
         }}
         onCtrlClick={() => {
           toggleSelection({ type: 'graph', id: `graph-${index}`, index });
@@ -1214,21 +1142,7 @@ const Grid = ({
           moveSelectedElements(deltaX, deltaY, false, false)
         }
         onMultiDragEnd={syncSelectedElementsToOverlay}
-        onMultiDragStart={() => {
-          const currentPositions = useKeyStore.getState().positions;
-          const currentPluginElements =
-            usePluginDisplayElementStore.getState().elements;
-          const { keyMappings: km } = useKeyStore.getState();
-          useHistoryStore
-            .getState()
-            .pushState(
-              km,
-              currentPositions,
-              useStatItemStore.getState().positions,
-              useGraphItemStore.getState().positions,
-              currentPluginElements,
-            );
-        }}
+        onMultiDragStart={pushDragHistory}
         activeTool={activeTool}
         onEraserClick={() => {
           const displayName = getStatTypeLabel(position.statType);
@@ -1239,24 +1153,13 @@ const Grid = ({
           );
         }}
         onContextMenu={(e) => {
-          if (duplicateState) {
-            setDuplicateState(null);
-            setDuplicateCursor(null);
-          }
-          const clickedId = `graph-${index}`;
-          if (shouldOpenMixedSelectionMenu(clickedId)) {
-            openMixedSelectionContextMenu(
-              e.clientX,
-              e.clientY,
-              graphRefs.current[index] || null,
-            );
-            return;
-          }
-          setContextType('graph');
-          setContextIndex(index);
-          contextRef.current = graphRefs.current[index] || null;
-          setContextPosition({ x: e.clientX, y: e.clientY });
-          setIsContextOpen(true);
+          openElementContextMenu(
+            'graph',
+            index,
+            e.clientX,
+            e.clientY,
+            graphRefs.current[index] || null,
+          );
         }}
         zoom={zoom}
         panX={panX}
@@ -1772,167 +1675,16 @@ const Grid = ({
               } else if (id === 'sendToBack') {
                 await moveSelectedToBack();
               } else if (id === 'groupSelected') {
-                const { keyMappings: km, positions: keyPos } =
-                  useKeyStore.getState();
-                const statPos = useStatItemStore.getState().positions;
-                const graphPos = useGraphItemStore.getState().positions;
-                const pluginEls =
-                  usePluginDisplayElementStore.getState().elements;
-                const currentLayerGroups =
-                  useLayerGroupStore.getState().layerGroups;
-                const modeGroups = currentLayerGroups[selectedKeyType] || [];
-
-                const singleGroupId = resolveSingleGroupIdFromSelection(
+                await groupSelectedElements(
                   selectedKeyType,
                   selectedElements,
-                  keyPos,
-                  statPos,
-                  graphPos,
+                  t('layerGroup.newGroup') || 'New Group',
                 );
-
-                let targetGroupId = singleGroupId;
-                let nextLayerGroups = currentLayerGroups;
-                let createdGroup = false;
-                if (!targetGroupId) {
-                  targetGroupId = crypto.randomUUID();
-                  const groupName = buildNextLayerGroupName(
-                    t('layerGroup.newGroup') || 'New Group',
-                    modeGroups,
-                  );
-                  nextLayerGroups = {
-                    ...currentLayerGroups,
-                    [selectedKeyType]: [
-                      ...modeGroups,
-                      { id: targetGroupId, name: groupName },
-                    ],
-                  };
-                  createdGroup = true;
-                }
-
-                const grouped = applyGroupIdToSelectedElements({
-                  mode: selectedKeyType,
-                  selectedElements,
-                  keyPositions: keyPos,
-                  statPositions: statPos,
-                  graphPositions: graphPos,
-                  targetGroupId,
-                });
-
-                const normalized = normalizeLayerGroupsForMode({
-                  mode: selectedKeyType,
-                  keyPositions: grouped.keyPositions,
-                  statPositions: grouped.statPositions,
-                  graphPositions: grouped.graphPositions,
-                  layerGroups: nextLayerGroups,
-                });
-
-                const hasChange =
-                  grouped.changed ||
-                  normalized.positionsChanged ||
-                  createdGroup ||
-                  normalized.groupsChanged;
-                if (hasChange) {
-                  useHistoryStore
-                    .getState()
-                    .pushState(
-                      km,
-                      keyPos,
-                      statPos,
-                      graphPos,
-                      pluginEls,
-                      currentLayerGroups,
-                    );
-
-                  useKeyStore.getState().setPositions(normalized.keyPositions);
-                  useStatItemStore
-                    .getState()
-                    .setPositions(normalized.statPositions);
-                  useGraphItemStore
-                    .getState()
-                    .setPositions(normalized.graphPositions);
-
-                  await window.api.keys.updatePositions(
-                    normalized.keyPositions,
-                  );
-                  await window.api.statItems.updatePositions(
-                    normalized.statPositions,
-                  );
-                  await window.api.graphItems.updatePositions(
-                    normalized.graphPositions,
-                  );
-
-                  if (createdGroup || normalized.groupsChanged) {
-                    useLayerGroupStore
-                      .getState()
-                      .setLayerGroups(normalized.layerGroups);
-                    await window.api.layerGroups.update(normalized.layerGroups);
-                  }
-                }
               } else if (id === 'ungroupSelected') {
-                const { keyMappings: km, positions: keyPos } =
-                  useKeyStore.getState();
-                const statPos = useStatItemStore.getState().positions;
-                const graphPos = useGraphItemStore.getState().positions;
-                const pluginEls =
-                  usePluginDisplayElementStore.getState().elements;
-                const currentLayerGroups =
-                  useLayerGroupStore.getState().layerGroups;
-
-                const ungrouped = applyGroupIdToSelectedElements({
-                  mode: selectedKeyType,
+                await ungroupSelectedElements(
+                  selectedKeyType,
                   selectedElements,
-                  keyPositions: keyPos,
-                  statPositions: statPos,
-                  graphPositions: graphPos,
-                  targetGroupId: undefined,
-                });
-
-                const normalized = normalizeLayerGroupsForMode({
-                  mode: selectedKeyType,
-                  keyPositions: ungrouped.keyPositions,
-                  statPositions: ungrouped.statPositions,
-                  graphPositions: ungrouped.graphPositions,
-                  layerGroups: currentLayerGroups,
-                });
-
-                const hasChange = ungrouped.changed || normalized.groupsChanged;
-                if (hasChange) {
-                  useHistoryStore
-                    .getState()
-                    .pushState(
-                      km,
-                      keyPos,
-                      statPos,
-                      graphPos,
-                      pluginEls,
-                      currentLayerGroups,
-                    );
-
-                  useKeyStore.getState().setPositions(normalized.keyPositions);
-                  useStatItemStore
-                    .getState()
-                    .setPositions(normalized.statPositions);
-                  useGraphItemStore
-                    .getState()
-                    .setPositions(normalized.graphPositions);
-
-                  await window.api.keys.updatePositions(
-                    normalized.keyPositions,
-                  );
-                  await window.api.statItems.updatePositions(
-                    normalized.statPositions,
-                  );
-                  await window.api.graphItems.updatePositions(
-                    normalized.graphPositions,
-                  );
-
-                  if (normalized.groupsChanged) {
-                    useLayerGroupStore
-                      .getState()
-                      .setLayerGroups(normalized.layerGroups);
-                    await window.api.layerGroups.update(normalized.layerGroups);
-                  }
-                }
+                );
               }
 
               setIsContextOpen(false);
@@ -2210,194 +1962,22 @@ const Grid = ({
           }}
         />
       </div>
-      {selectedKey && (
-        <UnifiedKeySetting
-          keyData={{
-            key: selectedKey.key,
-            activeImage:
-              positions[selectedKeyType][selectedKey.index].activeImage,
-            inactiveImage:
-              positions[selectedKeyType][selectedKey.index].inactiveImage,
-            activeTransparent:
-              positions[selectedKeyType][selectedKey.index].activeTransparent ||
-              false,
-            idleTransparent:
-              positions[selectedKeyType][selectedKey.index].idleTransparent ||
-              false,
-            width: positions[selectedKeyType][selectedKey.index].width,
-            height: positions[selectedKeyType][selectedKey.index].height,
-            noteColor:
-              positions[selectedKeyType][selectedKey.index].noteColor ||
-              '#FFFFFF',
-            noteOpacity:
-              positions[selectedKeyType][selectedKey.index].noteOpacity || 80,
-            noteEffectEnabled:
-              positions[selectedKeyType][selectedKey.index].noteEffectEnabled,
-            noteGlowEnabled:
-              positions[selectedKeyType][selectedKey.index].noteGlowEnabled ??
-              true,
-            noteGlowSize:
-              positions[selectedKeyType][selectedKey.index].noteGlowSize ?? 20,
-            noteGlowOpacity:
-              positions[selectedKeyType][selectedKey.index].noteGlowOpacity ??
-              70,
-            noteGlowColor:
-              positions[selectedKeyType][selectedKey.index].noteGlowColor ||
-              positions[selectedKeyType][selectedKey.index].noteColor ||
-              '#FFFFFF',
-            noteAutoYCorrection:
-              positions[selectedKeyType][selectedKey.index].noteAutoYCorrection,
-            className:
-              positions[selectedKeyType][selectedKey.index].className || '',
-          }}
-          initialCounterSettings={
-            positions[selectedKeyType][selectedKey.index].counter || null
-          }
-          onClose={() => {
-            // 미리보기 롤백
-            if (originalKeyData) {
-              // 키 롤백
-              if (typeof onKeyPreview === 'function' && originalKeyData.key) {
-                const origKey = originalKeyData.key;
-                onKeyPreview(selectedKey.index, {
-                  activeImage: origKey.activeImage,
-                  inactiveImage: origKey.inactiveImage,
-                  activeTransparent: origKey.activeTransparent,
-                  idleTransparent: origKey.idleTransparent,
-                  width: origKey.width,
-                  height: origKey.height,
-                  className: origKey.className,
-                });
-              }
-              // 카운터 롤백
-              if (typeof onCounterPreview === 'function') {
-                onCounterPreview(selectedKey.index, originalKeyData.counter);
-              }
-              // 노트 롤백
-              if (
-                typeof onNoteColorPreview === 'function' &&
-                originalKeyData.key
-              ) {
-                const origKey = originalKeyData.key;
-                onNoteColorPreview(
-                  selectedKey.index,
-                  origKey.noteColor,
-                  origKey.noteOpacity,
-                  origKey.noteGlowEnabled,
-                  origKey.noteGlowSize,
-                  origKey.noteGlowOpacity,
-                  origKey.noteGlowColor,
-                  origKey.noteAutoYCorrection,
-                  origKey.noteEffectEnabled,
-                );
-              }
-            }
-            setSelectedKey(null);
-            setOriginalKeyData(null);
-          }}
-          onSave={(data: SaveData) => {
-            // 키, 노트, 카운터 데이터를 모두 포함하여 저장
-            const { counter, ...keyAndNoteData } = data;
-            // 키 및 노트 데이터 업데이트
-            if (typeof onKeyUpdate === 'function') {
-              onKeyUpdate(keyAndNoteData);
-            }
-            // 카운터 데이터 업데이트
-            if (counter && typeof onCounterUpdate === 'function') {
-              onCounterUpdate(selectedKey.index, counter);
-            }
-            setOriginalKeyData(null);
-            setSelectedKey(null);
-          }}
-          onPreview={(previewData: PreviewData) => {
-            // 원본 데이터 저장 (최초 미리보기 시)
-            if (!originalKeyData) {
-              setOriginalKeyData({
-                key: positions[selectedKeyType][selectedKey.index],
-                counter: positions[selectedKeyType][selectedKey.index].counter,
-              });
-            }
-
-            if (
-              previewData.type === 'counter' &&
-              typeof onCounterPreview === 'function'
-            ) {
-              const currentCounter: KeyCounterSettings =
-                positions[selectedKeyType][selectedKey.index].counter ??
-                createDefaultCounterSettings();
-              // 현재 값과 미리보기 값을 병합
-              const mergedPayload: KeyCounterSettings = {
-                ...currentCounter,
-                enabled: previewData.enabled ?? currentCounter.enabled,
-                placement: (previewData.placement ??
-                  currentCounter.placement) as KeyCounterSettings['placement'],
-                align: (previewData.align ??
-                  currentCounter.align) as KeyCounterSettings['align'],
-                alignMode: (previewData.alignMode ??
-                  currentCounter.alignMode) as KeyCounterSettings['alignMode'],
-                gap: previewData.gap ?? currentCounter.gap,
-                fill: {
-                  idle: previewData.fill?.idle ?? currentCounter.fill.idle,
-                  active:
-                    previewData.fill?.active ?? currentCounter.fill.active,
-                },
-                stroke: {
-                  idle: previewData.stroke?.idle ?? currentCounter.stroke.idle,
-                  active:
-                    previewData.stroke?.active ?? currentCounter.stroke.active,
-                },
-              };
-              onCounterPreview(selectedKey.index, mergedPayload);
-            }
-
-            if (
-              previewData.type === 'key' &&
-              typeof onKeyPreview === 'function'
-            ) {
-              const { type: _type, ...rest } = previewData;
-              onKeyPreview(selectedKey.index, rest);
-            }
-
-            // 노트 미리보기 처리
-            if (
-              previewData.type === 'note' &&
-              typeof onNoteColorPreview === 'function'
-            ) {
-              const currentKey = positions[selectedKeyType][selectedKey.index];
-              // 현재 값과 미리보기 값을 병합
-              const noteColor = previewData.noteColor ?? currentKey.noteColor;
-              const noteOpacity =
-                previewData.noteOpacity ?? currentKey.noteOpacity;
-              const noteGlowEnabled =
-                previewData.noteGlowEnabled ?? currentKey.noteGlowEnabled;
-              const noteGlowSize =
-                previewData.noteGlowSize ?? currentKey.noteGlowSize;
-              const noteGlowOpacity =
-                previewData.noteGlowOpacity ?? currentKey.noteGlowOpacity;
-              const noteGlowColor =
-                previewData.noteGlowColor ?? currentKey.noteGlowColor;
-              const noteAutoYCorrection =
-                previewData.noteAutoYCorrection ??
-                currentKey.noteAutoYCorrection;
-              const noteEffectEnabled =
-                previewData.noteEffectEnabled ?? currentKey.noteEffectEnabled;
-
-              onNoteColorPreview(
-                selectedKey.index,
-                noteColor,
-                noteOpacity,
-                noteGlowEnabled,
-                noteGlowSize,
-                noteGlowOpacity,
-                noteGlowColor,
-                noteAutoYCorrection,
-                noteEffectEnabled,
-              );
-            }
-          }}
-          skipAnimation={shouldSkipModalAnimation}
-        />
-      )}
+      <GridKeySettingModal
+        selectedKey={selectedKey}
+        setSelectedKey={setSelectedKey}
+        currentKeyPosition={
+          selectedKey
+            ? positions[selectedKeyType]?.[selectedKey.index]
+            : undefined
+        }
+        onKeyUpdate={onKeyUpdate}
+        onKeyPreview={onKeyPreview}
+        onNoteColorPreview={onNoteColorPreview}
+        onCounterUpdate={onCounterUpdate}
+        onCounterPreview={onCounterPreview}
+        shouldSkipModalAnimation={shouldSkipModalAnimation}
+        onModalAnimationConsumed={onModalAnimationConsumed}
+      />
       {/* 미니맵 */}
       {minimapEnabled && (
         <GridMinimap
