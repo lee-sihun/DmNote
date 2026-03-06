@@ -12,7 +12,7 @@ use webp_animation::{
     AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
 };
 
-use crate::app_state::AppState;
+use crate::state::AppState;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

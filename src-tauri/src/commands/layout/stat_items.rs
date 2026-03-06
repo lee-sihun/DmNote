@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{app_state::AppState, models::StatPositions};
+use crate::{models::StatPositions, state::AppState};
 
 #[tauri::command]
 pub fn stat_positions_get(state: State<'_, AppState>) -> Result<StatPositions, String> {

@@ -6,7 +6,7 @@ use crate::models::{
     CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, FontType, NoteSettings, NoteSettingsPatch,
     SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
 };
-use crate::store::AppStore;
+use crate::state::AppStore;
 
 #[derive(Clone)]
 pub struct SettingsService {

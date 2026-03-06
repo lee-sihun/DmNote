@@ -2,8 +2,8 @@ use serde::Deserialize;
 use tauri::{AppHandle, State};
 
 use crate::{
-    app_state::AppState,
     models::{BootstrapOverlayState, OverlayBounds},
+    state::AppState,
 };
 
 #[derive(Debug, Deserialize)]

@@ -24,10 +24,11 @@ use tauri::{
 };
 use tauri_runtime_wry::wry::dpi::{LogicalPosition, LogicalSize};
 
+use super::store::AppStore;
 #[cfg(debug_assertions)]
-use crate::key_sound::KeySoundDispatchTrace;
+use crate::audio::KeySoundDispatchTrace;
 use crate::{
-    key_sound::{KeySoundEngine, KeySoundStatus},
+    audio::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
@@ -35,7 +36,6 @@ use crate::{
         SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, settings::SettingsService},
-    store::AppStore,
 };
 
 const OVERLAY_LABEL: &str = "overlay";

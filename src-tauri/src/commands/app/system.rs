@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, State};
 
-use crate::app_state::AppState;
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
+use crate::state::AppState;
 
 const TRAY_ICON_ID: &str = "background-tray";
 

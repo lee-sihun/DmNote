@@ -10,8 +10,8 @@ use std::{
 use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
 
-use crate::app_state::AppState;
 use crate::models::{SoundLibraryEntry, SoundSource};
+use crate::state::AppState;
 
 const SUPPORTED_SOUND_EXTENSIONS: [&str; 8] =
     ["wav", "mp3", "ogg", "flac", "m4a", "aac", "aif", "aiff"];

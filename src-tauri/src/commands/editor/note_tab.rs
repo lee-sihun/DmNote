@@ -2,8 +2,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
-    app_state::AppState,
     models::{TabNoteOverrides, TabNoteSettings},
+    state::AppState,
 };
 
 #[derive(Serialize, Clone)]

@@ -5,8 +5,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
-    app_state::AppState,
     models::{CustomCss, TabCss, TabCssOverrides},
+    state::AppState,
 };
 
 #[derive(Serialize)]

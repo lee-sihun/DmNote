@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{app_state::AppState, models::GraphPositions};
+use crate::{models::GraphPositions, state::AppState};
 
 #[tauri::command]
 pub fn graph_positions_get(state: State<'_, AppState>) -> Result<GraphPositions, String> {

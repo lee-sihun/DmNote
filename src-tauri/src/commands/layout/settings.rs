@@ -1,8 +1,8 @@
 use tauri::{AppHandle, State};
 
 use crate::{
-    app_state::AppState,
     models::{SettingsPatchInput, SettingsState},
+    state::AppState,
 };
 
 #[tauri::command]

@@ -4,12 +4,12 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
-    app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
         CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
         NoteSettings, NoteSettingsPatch, SettingsPatchInput,
     },
+    state::AppState,
 };
 
 const MAX_CUSTOM_TABS: usize = 30;
@@ -249,7 +249,7 @@ pub fn keys_reset_all(
     for tab_id in cleared_tab_css_ids {
         app.emit(
             "tabCss:changed",
-            &crate::commands::css::TabCssResponse { tab_id, css: None },
+            &crate::commands::editor::css::TabCssResponse { tab_id, css: None },
         )
         .map_err(|err| err.to_string())?;
     }
@@ -339,7 +339,7 @@ pub fn keys_reset_mode(
     if cleared_tab_css {
         app.emit(
             "tabCss:changed",
-            &crate::commands::css::TabCssResponse {
+            &crate::commands::editor::css::TabCssResponse {
                 tab_id: mode.clone(),
                 css: None,
             },

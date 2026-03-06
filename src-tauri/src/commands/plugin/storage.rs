@@ -1,7 +1,7 @@
 use serde_json::Value;
 use tauri::State;
 
-use crate::app_state::AppState;
+use crate::state::AppState;
 
 /// 플러그인 스토리지 키 생성 (네임스페이스 자동 적용)
 fn make_storage_key(key: &str) -> String {

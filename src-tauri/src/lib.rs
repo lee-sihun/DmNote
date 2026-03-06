@@ -1,16 +1,12 @@
-pub mod app_state;
+pub mod audio;
 pub mod commands;
 pub mod cursor;
 pub mod defaults;
 pub mod ipc;
-pub mod key_sound;
 pub mod keyboard;
-pub mod keyboard_daemon;
-#[cfg(target_os = "windows")]
-pub mod keyboard_labels;
 pub mod models;
 pub mod services;
-pub mod store;
+pub mod state;
 
 /// Windows 접근성 "텍스트 크기" 설정에 의한 WebView2 스케일링을 보상하는 줌 레벨을 계산
 ///

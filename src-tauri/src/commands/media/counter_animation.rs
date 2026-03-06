@@ -3,12 +3,12 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
-    app_state::AppState,
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
         find_builtin_counter_animation_preset_by_id, CounterAnimationPreset,
         CounterAnimationSource,
     },
+    state::AppState,
 };
 
 #[derive(Debug, Clone, Serialize)]

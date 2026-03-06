@@ -11,13 +11,13 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 use crate::{
-    app_state::AppState,
     defaults::{default_keys, default_positions},
     models::{
         CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, CustomTab, FontSettings, FontType,
         GraphPositions, KeyMappings, KeyPositions, NoteSettings, NoteSettingsPatch,
         SettingsPatchInput, StatPositions, TabNoteOverrides,
     },
+    state::AppState,
 };
 
 #[derive(Serialize)]

@@ -20,43 +20,50 @@ fn generate_permissions() {
 
     let mut command_names: Vec<String> = Vec::new();
 
-    let entries = match fs::read_dir(commands_dir) {
-        Ok(e) => e,
-        Err(err) => {
-            println!("cargo:warning=commands 디렉토리 읽기 실패: {err}");
-            return;
-        }
-    };
+    scan_commands_dir(commands_dir, &mut command_names);
 
-    for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
-        if path.extension().map(|e| e != "rs").unwrap_or(true) {
-            continue;
-        }
-        if path.file_name().map(|n| n == "mod.rs").unwrap_or(false) {
-            continue;
-        }
-
-        let content = match fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
+    fn scan_commands_dir(dir: &Path, names: &mut Vec<String>) {
+        let entries = match fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(err) => {
+                println!("cargo:warning=commands 디렉토리 읽기 실패: {err}");
+                return;
+            }
         };
 
-        // #[tauri::command] 또는 #[tauri::command(...)] 다음 줄의 pub fn / pub async fn 이름 추출
-        let lines: Vec<&str> = content.lines().collect();
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("#[tauri::command") {
-                // 다음 줄에서 함수명 추출
-                for next_line in lines.iter().skip(i + 1) {
-                    let next = next_line.trim();
-                    if next.is_empty() || next.starts_with("//") || next.starts_with('#') {
-                        continue;
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_dir() {
+                scan_commands_dir(&path, names);
+                continue;
+            }
+            if path.extension().map(|e| e != "rs").unwrap_or(true) {
+                continue;
+            }
+            if path.file_name().map(|n| n == "mod.rs").unwrap_or(false) {
+                continue;
+            }
+
+            let content = match fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            // #[tauri::command] 또는 #[tauri::command(...)] 다음 줄의 pub fn / pub async fn 이름 추출
+            let lines: Vec<&str> = content.lines().collect();
+            for (i, line) in lines.iter().enumerate() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("#[tauri::command") {
+                    for next_line in lines.iter().skip(i + 1) {
+                        let next = next_line.trim();
+                        if next.is_empty() || next.starts_with("//") || next.starts_with('#') {
+                            continue;
+                        }
+                        if let Some(name) = extract_fn_name(next) {
+                            names.push(name);
+                        }
+                        break;
                     }
-                    if let Some(name) = extract_fn_name(next) {
-                        command_names.push(name);
-                    }
-                    break;
                 }
             }
         }

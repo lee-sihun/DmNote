@@ -17,7 +17,7 @@ use parking_lot::RwLock;
 use tauri::{AppHandle, Emitter};
 
 use crate::models::{CustomCss, TabCss};
-use crate::store::AppStore;
+use crate::state::AppStore;
 
 /// CSS 워칭 타입
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

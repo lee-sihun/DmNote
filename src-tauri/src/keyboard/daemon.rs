@@ -14,13 +14,12 @@ fn load_hotkeys_from_env() -> ShortcutsState {
 }
 
 #[cfg(target_os = "windows")]
-use crate::{
-    ipc::pipe_client_connect,
-    keyboard_labels::{
-        build_key_labels, should_skip_keyboard_event, IsKeyboardEventInjected, KeyPress,
-        KeyboardEvent, KeyboardKey,
-    },
+use super::labels::{
+    build_key_labels, should_skip_keyboard_event, IsKeyboardEventInjected, KeyPress, KeyboardEvent,
+    KeyboardKey,
 };
+#[cfg(target_os = "windows")]
+use crate::ipc::pipe_client_connect;
 
 /// Global hotkey state tracker
 #[cfg(target_os = "windows")]

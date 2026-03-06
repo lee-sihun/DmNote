@@ -7,8 +7,8 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
-    app_state::AppState,
     models::{CustomJs, JsPlugin},
+    state::AppState,
 };
 
 #[derive(Serialize)]

@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::{app_state::AppState, key_sound::KeySoundStatus};
+use crate::{audio::KeySoundStatus, state::AppState};
 
 #[tauri::command]
 pub fn key_sound_get_status(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
