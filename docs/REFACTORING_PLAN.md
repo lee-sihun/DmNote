@@ -12,8 +12,8 @@
 > | Phase 1 | ✅ 완료 | editor/model 순수 함수 추출 |
 > | Phase 2 | ✅ 완료 | editor/runtime 트랜잭션 실행기 도입 |
 > | Phase 3 | ✅ 완료 | useKeyManager 분해 |
-> | Phase 4 | ✅ 1차 완료 / 🔄 추가 분해 진행 중 | Grid.tsx 3,054→2,440줄 (useGridCanvasActions 추출) |
-> | Phase 5 | 🔲 대기 | LayerTabContent / PropertiesPanel 정리 |
+> | Phase 4 | ✅ 완료 | Grid.tsx 3,054→2,020줄 (모달/그룹액션/요소핸들러 추출) |
+> | Phase 5 | ✅ LayerTabContent 완료 / 🔲 PropertiesPanel 미착수 | LayerTabContent 2,971→841줄 |
 > | Phase 6 | ✅ 완료 | 코드 위생 및 훅 안정화 |
 
 ---
@@ -600,32 +600,28 @@ interface GridProps {
 - [x] `useGridCanvasActions` 훅 추출 (stat/graph CRUD, z-order, add, forward/backward)
 - [x] Grid.tsx 3,054→2,440줄 달성 (-20%)
 
-### Phase 4 체크리스트 — 2차 추가 분해 (진행 중)
+### Phase 4 체크리스트 — 2차 추가 분해 (완료)
 
 > Codex(GPT 5.4) 협업으로 수립. 순서: C→D→B→A
 
-**Step 4-3: UnifiedKeySetting 모달 래퍼 추출** (~230줄 절감)
-- [ ] `GridKeySettingModal.tsx` 생성 — onClose/onSave/onPreview 핸들러 + UnifiedKeySetting JSX
-- [ ] `originalKeyData` 상태와 미리보기 롤백 로직 이동
+**Step 4-3: UnifiedKeySetting 모달 래퍼 추출** ✅
+- [x] `GridKeySettingModal.tsx` 생성 — onClose/onSave/onPreview 핸들러 + UnifiedKeySetting JSX
+- [x] `originalKeyData` 상태와 미리보기 롤백 로직 이동
 
-**Step 4-4: 하단 모달/미니맵 추출** (~50줄 절감)
-- [ ] 미니맵, TabCssModal, TabNoteSettingModal 블록을 `GridFooterModals.tsx`로 이동
+**Step 4-4: 하단 모달/미니맵 추출** (스킵 — 절감 대비 복잡도 낮음)
 
-**Step 4-5: 그룹/언그룹 공용 액션 추출** (~460줄 절감)
-- [ ] `utils/grid/groupActions.ts` 또는 `hooks/Grid/useGridGroupingActions.ts` 생성
-- [ ] `groupSelectedElements()` / `ungroupSelectedElements()` 순수 액션 함수
-- [ ] Grid.tsx 컨텍스트 메뉴 onSelect와 useGridKeyboard 양쪽의 중복 제거
-- [ ] `useGridContextMenuActions` 훅으로 컨텍스트 메뉴 아이템 + onSelect 핸들러 통합
+**Step 4-5: 그룹/언그룹 공용 액션 추출** ✅
+- [x] `utils/grid/groupActions.ts` 생성
+- [x] `groupSelectedElements()` / `ungroupSelectedElements()` 순수 액션 함수
+- [x] Grid.tsx 컨텍스트 메뉴 onSelect와 useGridKeyboard 양쪽의 중복 제거
 
-**Step 4-6: 요소 선택 헬퍼 + 레이어 컴포넌트 추출** (~570줄 절감)
-- [ ] `selectElementWithGroup(type, index)` 공통 헬퍼 (그룹 전체 선택 중복 제거)
-- [ ] `toggleElementSelection(type, index)` 공통 헬퍼
-- [ ] `openElementContextMenu(type, index, clientX, clientY, ref)` 공통 헬퍼
-- [ ] `GridKeyLayer.tsx` — renderKeys() + 클릭 핸들러
-- [ ] `GridStatLayer.tsx` — renderStatItems() + 핸들러
-- [ ] `GridGraphLayer.tsx` — renderGraphItems() + 핸들러
+**Step 4-6: 요소 선택 헬퍼 추출** ✅ (부분)
+- [x] `selectElementWithGroup(type, index)` 공통 헬퍼
+- [x] `pushDragHistory()` 공통 헬퍼
+- [x] `openElementContextMenu(type, index, clientX, clientY, ref)` 공통 헬퍼
+- [ ] `GridKeyLayer.tsx` 등 레이어 컴포넌트 분리 (스킵 — JSX 의존성 많아 prop drilling 과다)
 
-**목표**: Grid.tsx 2,440줄 → ~800줄 이하
+**결과**: Grid.tsx 3,054줄 → 2,020줄 (-34%)
 
 ---
 
@@ -677,33 +673,35 @@ PropertiesPanel.tsx (현재 2,450줄)
       선택 해석 결과에 따라 적절한 패널 렌더
 ```
 
-### Phase 5 체크리스트 — LayerTabContent (2,971줄)
+### Phase 5 체크리스트 — LayerTabContent (2,971줄) ✅ 완료
 
 > Codex(GPT 5.4) 피드백 반영: 모델 빌더 → 선택/컨텍스트 → DnD → 렌더 컴포넌트 → 아이콘
 
-**Step 5-1: 타입 및 모델 빌더 분리**
-- [ ] `layerPanelModel.ts` — `layerItems` 구성, `displayItems` 트리 빌딩 순수 함수
-- [ ] LayerItem/DisplayItem 타입을 별도 타입 파일로 이동
+**Step 5-1: 타입 및 모델 빌더 분리** ✅
+- [x] `layerPanelModel.ts` — `buildLayerItems()`, `buildDisplayItems()` 순수 함수
+- [x] `types.ts` — LayerItem/DisplayItem 타입을 별도 파일로 이동
 
-**Step 5-2: 선택/컨텍스트/이름변경 핸들러 분리**
-- [ ] `useLayerInteractions.ts` — handleItemClick, handleContextMenu, rename, visibility/lock 토글
+**Step 5-2: 액션 핸들러 분리** ✅
+- [x] `useLayerActions.ts` (~955줄) — visibility 토글, rename, context menu, delete, group 조작 핸들러
+- [x] React Compiler 호환: `SelectedElement[]` 타입 정합, `eslint-disable` 최소화
 
-**Step 5-3: DnD 훅 분리**
-- [ ] `useLayerDnD.ts` — onDragStart, onDragOver, onDrop, 관련 ref/state
-- [ ] (모델 빌더가 안정된 후 DnD 입력이 명확해짐)
+**Step 5-3: DnD 훅 분리** ✅
+- [x] `useLayerDnD.ts` (~1,007줄) — drag state, drop target 계산, multi/group drop, mouse handlers
+- [x] React Compiler 호환: ref accessor 패턴 (`getDidDrag()`, `resetDidDrag()`, `getIsDraggingRef()`)
 
-**Step 5-4: 렌더링 서브컴포넌트 분리**
-- [ ] `LayerItemRow.tsx` — 개별 레이어 아이템 렌더링
-- [ ] `LayerGroupHeader.tsx` — 그룹 헤더 렌더링, 접기/펼치기
+**Step 5-4: 렌더링 서브컴포넌트 분리** ⏭️ 스킵
+- [ ] `LayerItemRow.tsx` / `LayerGroupHeader.tsx` — JSX가 DnD/selection 로직과 밀결합, prop drilling 과다로 ROI 낮음
 
-**Step 5-5: 아이콘 파일 정리**
-- [ ] `LayerIcons.tsx` — ArrowIcon, EyeIcon, LockIcon 등 (~120줄)
+**Step 5-5: 아이콘 파일 정리** ✅
+- [x] `LayerIcons.tsx` (~110줄) — ArrowIcon, EyeIcon, LockIcon 등
 
-**목표**: LayerTabContent.tsx 2,971줄 → ~400줄
+**결과**: LayerTabContent.tsx 2,971줄 → 841줄 (-72%)
 
-### Phase 5 체크리스트 — PropertiesPanel (2,450줄)
+### Phase 5 체크리스트 — PropertiesPanel (2,450줄) 🔲 미착수
 
 > Codex(GPT 5.4) 피드백: 도메인별 훅 여러 개로 분리 (한 거대 훅 대신)
+> 이미 SingleSelectionPanel(1,131줄), BatchSelectionPanel(1,331줄)로 부분 분리됨.
+> 추가 분해는 별도 Phase로 검토 가능.
 
 **Step 5-6: 도메인별 핸들러 훅 분리**
 - [ ] `usePropertiesPanelSelectionState.ts` — 선택 상태 해석, 단일/배치 분기
@@ -884,18 +882,14 @@ Phase 1 → 2 → 3 → 4 → 5 → 6
 ✅ refactor: Grid.tsx forward/backward/add 추출 (Phase 4-2)
 ✅ refactor: 코드 위생 및 훅 안정화 (Phase 6)
 
-🔄 남은 커밋 계획:
-refactor(grid): extract key setting modal wrapper (Phase 4-3)
-refactor(grid): extract footer modals and minimap (Phase 4-4)
-refactor(grid): extract shared group/ungroup actions (Phase 4-5a)
-refactor(grid): extract context menu actions hook (Phase 4-5b)
-refactor(grid): extract element selection helpers (Phase 4-6a)
-refactor(grid): extract key/stat/graph layer components (Phase 4-6b)
-refactor(layer-panel): extract layer model builders (Phase 5-1)
-refactor(layer-panel): extract interaction handlers (Phase 5-2)
-refactor(layer-panel): extract drag and drop hook (Phase 5-3)
-refactor(layer-panel): extract layer row and group header (Phase 5-4)
-refactor(layer-panel): extract layer icons (Phase 5-5)
+✅ 추가 완료된 커밋:
+refactor(grid): GridKeySettingModal 모달 래퍼 추출 (Phase 4-3)
+refactor(grid): 그룹/언그룹 공용 액션 추출 (Phase 4-5)
+refactor(grid): 요소 선택 헬퍼 추출 (Phase 4-6)
+refactor: 컴포넌트 리펙토링 (Phase 4 마무리)
+refactor(layer-panel): LayerTabContent 액션/DnD 훅 분리 (Phase 5)
+
+🔲 미착수 (별도 Phase로 검토):
 refactor(properties-panel): extract domain handler hooks (Phase 5-6)
 refactor(properties-panel): clean up conditional rendering (Phase 5-7)
 ```
