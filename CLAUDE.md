@@ -45,10 +45,11 @@ src-tauri/src/
 │   ├── preset/     # 프리셋 저장/로드 (save, load)
 │   └── plugin/     # 플러그인 시스템 (bridge, storage)
 ├── services/        # 비즈니스 로직 (css_watcher, settings)
-├── state/           # 상태 관리 (app_state, store)
-├── keyboard/        # 키보드 입력 (daemon, manager, labels)
+├── state/           # 상태 관리 (app_state, store, migration)
+├── keyboard/        # 키보드 입력 (daemon/{mod,win,mac}, manager, labels)
 ├── audio/           # 사운드 엔진 (engine)
 ├── models/          # 데이터 모델
+├── errors.rs        # CommandError / CmdResult
 └── main.rs          # 진입점
 ```
 

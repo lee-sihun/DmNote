@@ -5,11 +5,11 @@
 | Phase | 작업 | 상태 |
 |-------|------|------|
 | **1-A** | 커맨드 선언 통일 + async 정리 + permissions 자동 생성 | ✅ 완료 |
-| **1-B** | CommandError 뼈대 도입 | ⏳ 미착수 |
+| **1-B** | CommandError/CmdResult 도입 | ✅ 완료 |
 | **2** | 루트 파일 모듈 재편 (keyboard/, audio/, state/, models/) | ✅ 완료 |
 | **3** | commands/ 하위 분류 (7개 도메인 폴더) + build.rs 재귀 스캔 | ✅ 완료 |
-| **4** | 대형 파일 분리 (preset.rs → save/load) | ✅ 부분 완료 |
-| **5** | 에러 핸들링 전면 적용 | ⏳ 미착수 |
+| **4** | 대형 파일 분리 | ✅ 부분 완료 |
+| **5** | 에러 핸들링 전면 적용 | ✅ 완료 |
 
 ---
 
@@ -26,10 +26,11 @@ src-tauri/src/
 │   ├── preset/            # 프리셋 (save, load, mod=공유 타입)
 │   └── plugin/            # 플러그인 (bridge, storage)
 ├── services/              # 비즈니스 로직 (css_watcher, settings)
-├── state/                 # 상태 관리 (app_state, store)
-├── keyboard/              # 키보드 입력 (daemon, manager, labels)
+├── state/                 # 상태 관리 (app_state, store, migration)
+├── keyboard/              # 키보드 입력 (daemon/{mod,windows,macos}, manager, labels)
 ├── audio/                 # 사운드 (engine)
 ├── models/                # 데이터 모델 (mod.rs에 통합)
+├── errors.rs              # CommandError / CmdResult 정의
 ├── cursor.rs              # 커서 설정 (macOS)
 ├── defaults.rs            # 기본값 상수
 ├── ipc.rs                 # IPC 이벤트 정의
@@ -45,10 +46,11 @@ src-tauri/src/
 - [x] 모든 커맨드에서 `#[tauri::command(permission = "dmnote-allow-all")]` → `#[tauri::command]`로 통일
 - [x] 불필요한 `async` 제거 (plugin_storage.rs, bridge.rs)
 
-## Phase 1-B: CommandError 뼈대 도입 ⏳
+## Phase 1-B: CommandError 뼈대 도입 ✅
 
-- [ ] `errors.rs` 생성 + `CommandError` 정의
-- [ ] 신규/수정 커맨드부터 점진적으로 `CmdResult<T>` 적용
+- [x] `errors.rs` 생성 — `CommandError` enum (thiserror) + `CmdResult<T>` 타입 별칭
+- [x] variant: `Message(String)`, `Anyhow(#[from])`, `Io(#[from])`, `Json(#[from])`, `Tauri(#[from])`
+- [x] `Serialize` 구현 — 문자열 직렬화 (프론트 호환 유지)
 
 ---
 
@@ -70,28 +72,29 @@ src-tauri/src/
 
 ---
 
-## Phase 4: 대형 파일 분리 (부분 완료)
+## Phase 4: 대형 파일 분리
 
 ### 완료
 | 파일 | 줄 수 | 분리 결과 |
 |------|-------|-----------|
 | `preset.rs` | 1,541 | `save.rs` + `load.rs` + `mod.rs`(공유 타입/헬퍼) |
+| `store.rs` | 1,079 | `store.rs`(core) + `migration.rs`(load/repair/migrate/normalize) |
+| `daemon.rs` | 1,013 | `daemon/mod.rs`(공유) + `windows.rs` + `macos.rs` |
 
-### 미착수 (추후 진행)
-| 파일 | 줄 수 | 분리 방안 | 비고 |
-|------|-------|-----------|------|
-| `app_state.rs` | 1,879 | init / runtime 분리 | 메서드간 상태 공유가 깊어 신중한 설계 필요 |
-| `models/mod.rs` | 1,814 | 도메인별 submodule | 타입 간 참조가 복잡, re-export 필요 |
-| `store.rs` | 1,079 | core / migration 분리 | 마이그레이션 함수를 별도 파일로 추출 가능 |
-| `keyboard/daemon.rs` | 1,013 | win / mac 분리 | 이미 `#[cfg]`로 분기됨 |
-| `audio/engine.rs` | 946 | engine / soundpack | 1000줄 미만, 우선순위 낮음 |
+### 보류 (기능 변경 시점에 자연스럽게 분리)
+| 파일 | 줄 수 | 비고 |
+|------|-------|------|
+| `app_state.rs` | 1,879 | 메서드간 상태 공유가 깊어 분리 시 regression 위험 |
+| `models/mod.rs` | 1,814 | 타입 정의 파일, 로직 복잡도 낮음 |
+| `audio/engine.rs` | 946 | 1000줄 미만, 우선순위 낮음 |
 
 ---
 
-## Phase 5: 에러 핸들링 전면 적용 ⏳
+## Phase 5: 에러 핸들링 전면 적용 ✅
 
-- [ ] 모든 커맨드의 `Result<T, String>` → `CmdResult<T>` 변환
-- [ ] `.map_err(|e| e.to_string())` 패턴 제거, `?` 연산자로 대체
+- [x] 20개 커맨드 파일의 `Result<T, String>` → `CmdResult<T>` 전환
+- [x] `.map_err(|e| e.to_string())` 패턴 제거, `?` 연산자로 대체
+- [x] 도메인 코드 문자열(`"invalid-preset"` 등)은 `CommandError::msg()` 사용
 
 ---
 
