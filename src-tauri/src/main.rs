@@ -233,10 +233,10 @@ fn main() {
             commands::media::counter_animation::counter_animation_update,
             commands::media::counter_animation::counter_animation_delete,
             // preset
-            commands::preset::preset::preset_save,
-            commands::preset::preset::preset_load,
-            commands::preset::preset::preset_save_tab,
-            commands::preset::preset::preset_load_tab,
+            commands::preset::save::preset_save,
+            commands::preset::save::preset_save_tab,
+            commands::preset::load::preset_load,
+            commands::preset::load::preset_load_tab,
             // plugin
             commands::plugin::bridge::plugin_bridge_send,
             commands::plugin::bridge::plugin_bridge_send_to,
