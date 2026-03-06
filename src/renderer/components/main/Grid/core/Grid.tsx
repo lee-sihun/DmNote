@@ -19,6 +19,8 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
+import { useGridCanvasActions } from '@hooks/Grid/useGridCanvasActions';
+import type { DuplicateState } from '@hooks/Grid/useGridCanvasActions';
 import GridMinimap from './GridMinimap';
 import GridBackground from './GridBackground';
 import SmartGuidesOverlay from '../overlays/SmartGuidesOverlay';
@@ -56,14 +58,8 @@ import type {
   CounterAnimationBezier,
   ImageFit,
 } from '@src/types/key/keys';
-import type {
-  StatItemPositions,
-  StatItemPosition,
-} from '@src/types/key/statItems';
-import type {
-  GraphItemPositions,
-  GraphItemPosition,
-} from '@src/types/key/graphItems';
+import type { StatItemPosition } from '@src/types/key/statItems';
+import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type {
   SaveData,
   PreviewData,
@@ -81,13 +77,6 @@ type ToolbarAddRequest = { id: number; type: 'key' | 'stat' | 'graph' } | null;
 interface SelectedKeyInfo {
   key: string;
   index: number;
-}
-
-interface DuplicateState {
-  elementType: 'key' | 'stat' | 'graph';
-  sourceIndex: number;
-  keyName: string;
-  position: KeyPosition | StatItemPosition | GraphItemPosition;
 }
 
 interface OriginalKeyData {
@@ -224,6 +213,10 @@ const Grid = ({
   setIsNoteSettingOpen,
 }: GridProps) => {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
+
+  // 캔버스 요소(stat/graph) CRUD 액션 훅
+  const canvasActions = useGridCanvasActions(selectedKeyType);
+
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled,
   );
@@ -661,400 +654,34 @@ const Grid = ({
     return snapCursorToGrid(gridCoords.x, gridCoords.y);
   };
 
-  // 원본 데이터 저장 (미리보기 롤백용)
-  const pushHistorySnapshot = (
-    currentStatPositions: StatItemPositions,
-    currentGraphPositions: GraphItemPositions,
-  ) => {
-    const currentKeyPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        km,
-        currentKeyPositions,
-        currentStatPositions,
-        currentGraphPositions,
-        currentPluginElements,
-      );
-  };
+  // 캔버스 요소 액션 (useGridCanvasActions에서 위임)
+  const {
+    deleteStatAtIndex,
+    moveStatToFront,
+    moveStatToBack,
+    placeDuplicateStat,
+    deleteGraphAtIndex,
+    moveGraphToFront,
+    moveGraphToBack,
+    placeDuplicateGraph,
+    persistStatPositions,
+    persistGraphPositions,
+    pushHistorySnapshot,
+  } = canvasActions;
 
-  const persistStatPositions = async (
-    nextPositions: StatItemPositions,
-    errorMessage?: string,
-  ) => {
-    const store = useStatItemStore.getState();
-    store.setLocalUpdateInProgress(true);
-    store.setPositions(nextPositions);
-    try {
-      await window.api.statItems.updatePositions(nextPositions);
-    } catch (error) {
-      console.error(errorMessage || 'Failed to update stat items', error);
-    } finally {
-      store.setLocalUpdateInProgress(false);
-    }
-
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
-  };
-
-  const persistGraphPositions = async (
-    nextPositions: GraphItemPositions,
-    errorMessage?: string,
-  ) => {
-    const store = useGraphItemStore.getState();
-    store.setLocalUpdateInProgress(true);
-    store.setPositions(nextPositions);
-    try {
-      await window.api.graphItems.updatePositions(nextPositions);
-    } catch (error) {
-      console.error(errorMessage || 'Failed to update graph items', error);
-    } finally {
-      store.setLocalUpdateInProgress(false);
-    }
-
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
-  };
-
-  const deleteStatAtIndex = (indexToDelete: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[indexToDelete]) return;
-
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
-    };
-
-    persistStatPositions(nextPositions, 'Failed to delete stat item');
-  };
-
-  const moveStatToFront = (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const maxZIndex = Math.max(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
-      ),
-    };
-
-    persistStatPositions(nextPositions, 'Failed to move stat item to front');
-  };
-
-  const moveStatToBack = (index: number) => {
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const minZIndex = Math.min(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: minZIndex - 1 } : p,
-      ),
-    };
-
-    persistStatPositions(nextPositions, 'Failed to move stat item to back');
-  };
-
+  // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
   const beginDuplicateStat = (sourceIndex: number) => {
-    const current = useStatItemStore.getState().positions;
-    const position = current?.[selectedKeyType]?.[sourceIndex] || null;
-    if (!position) return;
-
-    const clonedNoteColor =
-      position.noteColor &&
-      typeof position.noteColor === 'object' &&
-      position.noteColor !== null
-        ? { ...position.noteColor }
-        : position.noteColor;
-    const clonedCounter: KeyCounterSettings | null = position.counter
-      ? {
-          ...position.counter,
-          fill: { ...position.counter.fill },
-          stroke: { ...position.counter.stroke },
-          ...(position.counter.animation
-            ? {
-                animation: {
-                  ...position.counter.animation,
-                  bezier: [
-                    ...position.counter.animation.bezier,
-                  ] as CounterAnimationBezier,
-                },
-              }
-            : {}),
-        }
-      : null;
-
-    setDuplicateState({
-      elementType: 'stat',
-      sourceIndex,
-      keyName: getStatTypeLabel(position.statType),
-      position: {
-        ...position,
-        noteColor: clonedNoteColor,
-        counter: clonedCounter ?? createDefaultCounterSettings(),
-      },
-    });
+    const result = canvasActions.beginDuplicateStat(sourceIndex);
+    if (!result) return;
+    setDuplicateState(result);
     setDuplicateCursor(null);
-  };
-
-  const placeDuplicateStat = (
-    templatePosition: StatItemPosition,
-    dx: number,
-    dy: number,
-  ) => {
-    if (!templatePosition) return;
-    const store = useStatItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-
-    pushHistorySnapshot(current, useGraphItemStore.getState().positions);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const maxZIndex = Math.max(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: [
-        ...tabPositions,
-        {
-          ...templatePosition,
-          dx,
-          dy,
-          zIndex: maxZIndex + 1,
-        },
-      ],
-    };
-
-    persistStatPositions(nextPositions, 'Failed to duplicate stat item');
-  };
-
-  const deleteGraphAtIndex = (indexToDelete: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    if (!tabPositions[indexToDelete]) return;
-
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
-    };
-
-    persistGraphPositions(nextPositions, 'Failed to delete graph item');
-  };
-
-  const moveGraphToFront = (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statPos =
-      useStatItemStore.getState().positions[selectedKeyType] || [];
-    const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
-    const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const maxZIndex = Math.max(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...graphZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
-      ),
-    };
-
-    persistGraphPositions(nextPositions, 'Failed to move graph item to front');
-  };
-
-  const moveGraphToBack = (index: number) => {
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-    const target = tabPositions[index];
-    if (!target) return;
-
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statPos =
-      useStatItemStore.getState().positions[selectedKeyType] || [];
-    const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
-    const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const minZIndex = Math.min(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...graphZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: tabPositions.map((p, i) =>
-        i === index ? { ...p, zIndex: minZIndex - 1 } : p,
-      ),
-    };
-
-    persistGraphPositions(nextPositions, 'Failed to move graph item to back');
   };
 
   const beginDuplicateGraph = (sourceIndex: number) => {
-    const current = useGraphItemStore.getState().positions;
-    const position = current?.[selectedKeyType]?.[sourceIndex] || null;
-    if (!position) return;
-
-    setDuplicateState({
-      elementType: 'graph',
-      sourceIndex,
-      keyName: getStatTypeLabel(position.statType),
-      position: { ...position },
-    });
+    const result = canvasActions.beginDuplicateGraph(sourceIndex);
+    if (!result) return;
+    setDuplicateState(result);
     setDuplicateCursor(null);
-  };
-
-  const placeDuplicateGraph = (
-    templatePosition: GraphItemPosition,
-    dx: number,
-    dy: number,
-  ) => {
-    if (!templatePosition) return;
-    const store = useGraphItemStore.getState();
-    const current = store.positions;
-    const tabPositions = current[selectedKeyType] || [];
-
-    pushHistorySnapshot(useStatItemStore.getState().positions, current);
-
-    const keyPos = useKeyStore.getState().positions[selectedKeyType] || [];
-    const keyZIndexes = keyPos.map((p, i) => p.zIndex ?? i);
-    const statPos =
-      useStatItemStore.getState().positions[selectedKeyType] || [];
-    const statZIndexes = statPos.map((p, i) => p.zIndex ?? i);
-    const graphZIndexes = tabPositions.map((p, i) => p.zIndex ?? i);
-
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    const pluginZIndexes = pluginEls
-      .filter((el) => !el.tabId || el.tabId === selectedKeyType)
-      .map((el) => el.zIndex ?? 0);
-
-    const maxZIndex = Math.max(
-      0,
-      ...keyZIndexes,
-      ...statZIndexes,
-      ...graphZIndexes,
-      ...pluginZIndexes,
-    );
-
-    const nextPositions = {
-      ...current,
-      [selectedKeyType]: [
-        ...tabPositions,
-        {
-          ...templatePosition,
-          dx,
-          dy,
-          zIndex: maxZIndex + 1,
-        },
-      ],
-    };
-
-    persistGraphPositions(nextPositions, 'Failed to duplicate graph item');
   };
 
   const duplicateSelectedFromContextMenu = async () => {
