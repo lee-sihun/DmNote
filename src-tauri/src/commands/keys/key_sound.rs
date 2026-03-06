@@ -1,9 +1,13 @@
 use tauri::State;
 
-use crate::{audio::KeySoundStatus, state::AppState};
+use crate::{
+    audio::KeySoundStatus,
+    errors::{CmdResult, CommandError},
+    state::AppState,
+};
 
 #[tauri::command]
-pub fn key_sound_get_status(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
+pub fn key_sound_get_status(state: State<'_, AppState>) -> CmdResult<KeySoundStatus> {
     Ok(state.key_sound_status())
 }
 
@@ -11,15 +15,12 @@ pub fn key_sound_get_status(state: State<'_, AppState>) -> Result<KeySoundStatus
 pub fn key_sound_set_enabled(
     state: State<'_, AppState>,
     enabled: bool,
-) -> Result<KeySoundStatus, String> {
+) -> CmdResult<KeySoundStatus> {
     Ok(state.key_sound_set_enabled(enabled))
 }
 
 #[tauri::command]
-pub fn key_sound_set_volume(
-    state: State<'_, AppState>,
-    volume: f32,
-) -> Result<KeySoundStatus, String> {
+pub fn key_sound_set_volume(state: State<'_, AppState>, volume: f32) -> CmdResult<KeySoundStatus> {
     Ok(state.key_sound_set_volume(volume))
 }
 
@@ -27,12 +28,14 @@ pub fn key_sound_set_volume(
 pub fn key_sound_load_soundpack(
     state: State<'_, AppState>,
     soundpack_dir: String,
-) -> Result<KeySoundStatus, String> {
-    state.key_sound_load_soundpack(&soundpack_dir)
+) -> CmdResult<KeySoundStatus> {
+    state
+        .key_sound_load_soundpack(&soundpack_dir)
+        .map_err(CommandError::msg)
 }
 
 #[tauri::command]
-pub fn key_sound_unload_soundpack(state: State<'_, AppState>) -> Result<KeySoundStatus, String> {
+pub fn key_sound_unload_soundpack(state: State<'_, AppState>) -> CmdResult<KeySoundStatus> {
     Ok(state.key_sound_unload_soundpack())
 }
 
@@ -40,9 +43,11 @@ pub fn key_sound_unload_soundpack(state: State<'_, AppState>) -> Result<KeySound
 pub fn key_sound_set_latency_logging(
     state: State<'_, AppState>,
     enabled: bool,
-) -> Result<KeySoundStatus, String> {
+) -> CmdResult<KeySoundStatus> {
     if enabled && !state.key_sound_latency_logging_available() {
-        return Err("Latency measurement is only available in tauri dev/debug builds".to_string());
+        return Err(CommandError::msg(
+            "Latency measurement is only available in tauri dev/debug builds",
+        ));
     }
     Ok(state.key_sound_set_latency_logging(enabled))
 }

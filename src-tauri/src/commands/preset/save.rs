@@ -9,6 +9,7 @@ use rfd::FileDialog;
 use tauri::State;
 
 use crate::{
+    errors::CmdResult,
     models::{
         FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, StatPositions,
         TabNoteOverrides,
@@ -24,7 +25,7 @@ use super::{
 };
 
 #[tauri::command]
-pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
+pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResult> {
     let preset_path = FileDialog::new()
         .set_file_name("preset.json")
         .add_filter("DM NOTE Preset", &["json"])
@@ -83,8 +84,8 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
         embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
     };
 
-    let json = serde_json::to_string_pretty(&preset).map_err(|err| err.to_string())?;
-    fs::write(&path, json).map_err(|err| err.to_string())?;
+    let json = serde_json::to_string_pretty(&preset)?;
+    fs::write(&path, json)?;
 
     Ok(PresetOperationResult {
         success: true,
@@ -93,7 +94,7 @@ pub fn preset_save(state: State<'_, AppState>) -> Result<PresetOperationResult, 
 }
 
 #[tauri::command]
-pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResult, String> {
+pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationResult> {
     let preset_path = FileDialog::new()
         .set_file_name("preset-tab.json")
         .add_filter("DM NOTE Preset", &["json"])
@@ -196,8 +197,8 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> Result<PresetOperationResu
         embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
     };
 
-    let json = serde_json::to_string_pretty(&preset).map_err(|err| err.to_string())?;
-    fs::write(&path, json).map_err(|err| err.to_string())?;
+    let json = serde_json::to_string_pretty(&preset)?;
+    fs::write(&path, json)?;
 
     Ok(PresetOperationResult {
         success: true,
@@ -254,7 +255,7 @@ fn maybe_insert_font_family(value: Option<&String>, target: &mut HashSet<String>
 fn build_preset_font_payload(
     font_settings: &FontSettings,
     used_font_families: &HashSet<String>,
-) -> Result<(FontSettings, Vec<EmbeddedLocalFont>), String> {
+) -> CmdResult<(FontSettings, Vec<EmbeddedLocalFont>)> {
     let mut exported_fonts = Vec::new();
     let mut embedded_local_fonts = Vec::new();
 
@@ -326,15 +327,12 @@ fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
-) -> Result<
-    (
-        KeyPositions,
-        StatPositions,
-        GraphPositions,
-        Vec<EmbeddedLocalImage>,
-    ),
-    String,
-> {
+) -> CmdResult<(
+    KeyPositions,
+    StatPositions,
+    GraphPositions,
+    Vec<EmbeddedLocalImage>,
+)> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
@@ -398,7 +396,7 @@ fn rewrite_position_image_reference(
     image_ref: &mut Option<String>,
     embedded_local_images: &mut Vec<EmbeddedLocalImage>,
     path_to_image_id: &mut HashMap<String, String>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let Some(current_value) = image_ref.clone() else {
         return Ok(());
     };
@@ -463,15 +461,12 @@ fn build_preset_sound_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
-) -> Result<
-    (
-        KeyPositions,
-        StatPositions,
-        GraphPositions,
-        Vec<EmbeddedLocalSound>,
-    ),
-    String,
-> {
+) -> CmdResult<(
+    KeyPositions,
+    StatPositions,
+    GraphPositions,
+    Vec<EmbeddedLocalSound>,
+)> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
@@ -520,7 +515,7 @@ fn rewrite_position_sound_reference(
     sound_ref: &mut Option<String>,
     embedded_local_sounds: &mut Vec<EmbeddedLocalSound>,
     path_to_sound_id: &mut HashMap<String, String>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let Some(current_value) = sound_ref.clone() else {
         return Ok(());
     };

@@ -1,45 +1,46 @@
 use tauri::{AppHandle, Manager, State};
 
 use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
+use crate::errors::CmdResult;
 use crate::state::AppState;
 
 const TRAY_ICON_ID: &str = "background-tray";
 
 #[tauri::command]
-pub fn window_minimize(app: AppHandle) -> Result<(), String> {
+pub fn window_minimize(app: AppHandle) -> CmdResult<()> {
     if let Some(window) = app.get_webview_window("main") {
-        window.minimize().map_err(|err| err.to_string())?;
+        window.minimize()?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn window_close(app: AppHandle) -> Result<(), String> {
+pub fn window_close(app: AppHandle) -> CmdResult<()> {
     if let Some(main) = app.get_webview_window("main") {
-        main.close().map_err(|err| err.to_string())?;
+        main.close()?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn app_open_external(_app: AppHandle, url: String) -> Result<(), String> {
+pub fn app_open_external(_app: AppHandle, url: String) -> CmdResult<()> {
     if url.is_empty() {
         return Ok(());
     }
-    open::that(url).map_err(|err| err.to_string())
+    Ok(open::that(url)?)
 }
 
 #[tauri::command]
-pub fn app_restart(app: AppHandle) -> Result<(), String> {
+pub fn app_restart(app: AppHandle) -> CmdResult<()> {
     app.request_restart();
     Ok(())
 }
 
 #[tauri::command]
-pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.unminimize();
-        main.show().map_err(|err| err.to_string())?;
+        main.show()?;
         let _ = main.set_focus();
     }
 
@@ -47,21 +48,19 @@ pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> Result<()
         let _ = app.remove_tray_by_id(TRAY_ICON_ID);
     }
 
-    state
-        .set_main_window_hidden(false)
-        .map_err(|err| err.to_string())?;
+    state.set_main_window_hidden(false)?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     state.request_shutdown(app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn window_open_devtools_all(app: AppHandle) -> Result<(), String> {
+pub fn window_open_devtools_all(app: AppHandle) -> CmdResult<()> {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.open_devtools();
         let _ = main.show();

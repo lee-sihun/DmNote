@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     defaults::{default_keys, default_positions},
+    errors::{CmdResult, CommandError},
     models::{
         CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
         NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
@@ -22,10 +23,7 @@ use super::{
 };
 
 #[tauri::command]
-pub fn preset_load(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<PresetOperationResult, String> {
+pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
         .pick_file();
@@ -37,9 +35,9 @@ pub fn preset_load(
         });
     };
 
-    let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let content = fs::read_to_string(&path)?;
     let preset: PresetFile =
-        serde_json::from_str(&content).map_err(|_| "invalid-preset".to_string())?;
+        serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
 
     let keys = preset.keys.unwrap_or_else(|| default_keys().clone());
     let mut positions = preset
@@ -105,84 +103,65 @@ pub fn preset_load(
         tab.migrate_fade_position();
     }
 
-    state
-        .store
-        .update(|store| {
-            store.keys = keys.clone();
-            store.key_positions = positions.clone();
-            store.stat_positions = stat_positions.clone();
-            store.graph_positions = graph_positions.clone();
-            store.custom_tabs = custom_tabs.clone();
-            store.selected_key_type = selected_key_type.clone();
-            store.tab_note_overrides = tab_note_overrides.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.stat_positions = stat_positions.clone();
+        store.graph_positions = graph_positions.clone();
+        store.custom_tabs = custom_tabs.clone();
+        store.selected_key_type = selected_key_type.clone();
+        store.tab_note_overrides = tab_note_overrides.clone();
+    })?;
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(selected_key_type.clone());
 
-    let diff = state
-        .settings
-        .apply_patch(SettingsPatchInput {
-            background_color: Some(
-                preset
-                    .background_color
-                    .unwrap_or_else(|| "transparent".to_string()),
-            ),
-            note_settings: Some(note_patch),
-            note_effect: Some(preset.note_effect.unwrap_or(false)),
-            laboratory_enabled: Some(preset.laboratory_enabled.unwrap_or(false)),
-            use_custom_css: Some(css_use),
-            custom_css: Some(CustomCssPatch {
-                path: Some(custom_css.path.clone()),
-                content: Some(custom_css.content.clone()),
-            }),
-            font_settings: has_font_settings.then_some(preset_font_settings),
-            use_custom_js: Some(js_use),
-            custom_js: Some(CustomJsPatch {
-                path: Some(custom_js.path.clone()),
-                content: Some(custom_js.content.clone()),
-                plugins: Some(custom_js.plugins.clone()),
-            }),
-            ..SettingsPatchInput::default()
-        })
-        .map_err(|err| err.to_string())?;
+    let diff = state.settings.apply_patch(SettingsPatchInput {
+        background_color: Some(
+            preset
+                .background_color
+                .unwrap_or_else(|| "transparent".to_string()),
+        ),
+        note_settings: Some(note_patch),
+        note_effect: Some(preset.note_effect.unwrap_or(false)),
+        laboratory_enabled: Some(preset.laboratory_enabled.unwrap_or(false)),
+        use_custom_css: Some(css_use),
+        custom_css: Some(CustomCssPatch {
+            path: Some(custom_css.path.clone()),
+            content: Some(custom_css.content.clone()),
+        }),
+        font_settings: has_font_settings.then_some(preset_font_settings),
+        use_custom_js: Some(js_use),
+        custom_js: Some(CustomJsPatch {
+            path: Some(custom_js.path.clone()),
+            content: Some(custom_js.content.clone()),
+            plugins: Some(custom_js.plugins.clone()),
+        }),
+        ..SettingsPatchInput::default()
+    })?;
 
-    state
-        .emit_settings_changed(&diff, &app)
-        .map_err(|err| err.to_string())?;
+    state.emit_settings_changed(&diff, &app)?;
 
-    app.emit("keys:changed", &keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("statPositions:changed", &stat_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", &graph_positions)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
+    app.emit("statPositions:changed", &stat_positions)?;
+    app.emit("graphPositions:changed", &graph_positions)?;
     app.emit(
         "customTabs:changed",
         &crate::commands::keys::CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
             selected_key_type: selected_key_type.clone(),
         },
-    )
-    .map_err(|err| err.to_string())?;
+    )?;
     app.emit(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("css:use", &serde_json::json!({ "enabled": css_use }))
-        .map_err(|err| err.to_string())?;
-    app.emit("css:content", &custom_css)
-        .map_err(|err| err.to_string())?;
-    app.emit("js:use", &serde_json::json!({ "enabled": js_use }))
-        .map_err(|err| err.to_string())?;
-    app.emit("js:content", &custom_js)
-        .map_err(|err| err.to_string())?;
-    app.emit("tabNote:changed_all", &tab_note_overrides)
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("css:use", &serde_json::json!({ "enabled": css_use }))?;
+    app.emit("css:content", &custom_css)?;
+    app.emit("js:use", &serde_json::json!({ "enabled": js_use }))?;
+    app.emit("js:content", &custom_js)?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)?;
 
     Ok(PresetOperationResult {
         success: true,
@@ -194,7 +173,7 @@ pub fn preset_load(
 pub fn preset_load_tab(
     state: State<'_, AppState>,
     app: AppHandle,
-) -> Result<PresetOperationResult, String> {
+) -> CmdResult<PresetOperationResult> {
     let picked = FileDialog::new()
         .add_filter("DM NOTE Preset", &["json"])
         .pick_file();
@@ -206,9 +185,9 @@ pub fn preset_load_tab(
         });
     };
 
-    let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    let content = fs::read_to_string(&path)?;
     let preset: PresetFile =
-        serde_json::from_str(&content).map_err(|_| "invalid-preset".to_string())?;
+        serde_json::from_str(&content).map_err(|_| CommandError::msg("invalid-preset"))?;
 
     let PresetFile {
         keys,
@@ -234,7 +213,7 @@ pub fn preset_load_tab(
     let src_keys = imported_keys
         .get(&source_tab_id)
         .cloned()
-        .ok_or_else(|| "invalid-tab-preset".to_string())?;
+        .ok_or_else(|| CommandError::msg("invalid-tab-preset"))?;
 
     let imported_key_positions = key_positions.unwrap_or_default();
     let mut src_key_positions: KeyPositions = HashMap::new();
@@ -303,29 +282,21 @@ pub fn preset_load_tab(
     let full_graph_positions = snapshot.graph_positions.clone();
     let full_tab_note_overrides = snapshot.tab_note_overrides.clone();
 
-    state
-        .store
-        .update(|store| {
-            store.keys = full_keys.clone();
-            store.key_positions = full_positions.clone();
-            store.stat_positions = full_stat_positions.clone();
-            store.graph_positions = full_graph_positions.clone();
-            store.tab_note_overrides = full_tab_note_overrides.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.keys = full_keys.clone();
+        store.key_positions = full_positions.clone();
+        store.stat_positions = full_stat_positions.clone();
+        store.graph_positions = full_graph_positions.clone();
+        store.tab_note_overrides = full_tab_note_overrides.clone();
+    })?;
 
     state.keyboard.update_mappings(full_keys.clone());
 
-    app.emit("keys:changed", &full_keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &full_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("statPositions:changed", &full_stat_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", &full_graph_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("tabNote:changed_all", &full_tab_note_overrides)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:changed", &full_keys)?;
+    app.emit("positions:changed", &full_positions)?;
+    app.emit("statPositions:changed", &full_stat_positions)?;
+    app.emit("graphPositions:changed", &full_graph_positions)?;
+    app.emit("tabNote:changed_all", &full_tab_note_overrides)?;
 
     Ok(PresetOperationResult {
         success: true,
@@ -337,9 +308,9 @@ fn choose_tab_preset_source_tab(
     keys: &KeyMappings,
     selected_key_type: Option<&str>,
     current_tab_id: &str,
-) -> Result<String, String> {
+) -> CmdResult<String> {
     if keys.is_empty() {
-        return Err("invalid-tab-preset".to_string());
+        return Err(CommandError::msg("invalid-tab-preset"));
     }
 
     if keys.contains_key(current_tab_id) {
@@ -358,14 +329,14 @@ fn choose_tab_preset_source_tab(
         }
     }
 
-    Err("tab-preset-ambiguous-source".to_string())
+    Err(CommandError::msg("tab-preset-ambiguous-source"))
 }
 
 fn restore_preset_local_fonts(
     app: &AppHandle,
     font_settings: &mut crate::models::FontSettings,
     embedded_local_fonts: Option<&[EmbeddedLocalFont]>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let has_local_fonts = font_settings
         .custom_fonts
         .iter()
@@ -380,13 +351,9 @@ fn restore_preset_local_fonts(
         .map(|font| (font.font_id.as_str(), font))
         .collect();
 
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    let app_data_dir = app.path().app_data_dir()?;
     let fonts_dir = app_data_dir.join("fonts");
-    fs::create_dir_all(&fonts_dir)
-        .map_err(|err| format!("failed to create fonts directory: {err}"))?;
+    fs::create_dir_all(&fonts_dir)?;
 
     for font in font_settings.custom_fonts.iter_mut() {
         if font.font_type != FontType::Local {
@@ -447,7 +414,7 @@ fn restore_preset_local_images(
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
     embedded_local_images: Option<&[EmbeddedLocalImage]>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let has_any_images = key_positions.values().any(|positions| {
         positions.iter().any(|position| {
             option_has_non_empty_text(&position.active_image)
@@ -476,13 +443,9 @@ fn restore_preset_local_images(
         .collect();
     let mut restored_path_cache: HashMap<String, String> = HashMap::new();
 
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    let app_data_dir = app.path().app_data_dir()?;
     let images_dir = app_data_dir.join("images");
-    fs::create_dir_all(&images_dir)
-        .map_err(|err| format!("failed to create images directory: {err}"))?;
+    fs::create_dir_all(&images_dir)?;
 
     for positions in key_positions.values_mut() {
         for position in positions.iter_mut() {
@@ -543,7 +506,7 @@ fn restore_position_image_reference(
     embedded_map: &HashMap<&str, &EmbeddedLocalImage>,
     restored_path_cache: &mut HashMap<String, String>,
     image_ref: &mut Option<String>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let Some(current_value) = image_ref.clone() else {
         return Ok(());
     };
@@ -596,8 +559,7 @@ fn restore_position_image_reference(
     // 레거시 Preset 호환: data URL 이미지를 appdata 파일 경로로 변환
     if let Some((bytes, extension)) = decode_image_data_url(trimmed) {
         let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-        fs::write(&dest_path, bytes)
-            .map_err(|err| format!("failed to restore data URL image: {err}"))?;
+        fs::write(&dest_path, bytes)?;
         *image_ref = Some(dest_path.to_string_lossy().to_string());
         return Ok(());
     }
@@ -638,7 +600,7 @@ fn restore_preset_local_sounds(
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
     embedded_local_sounds: Option<&[EmbeddedLocalSound]>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let has_any_sounds = key_positions.values().any(|positions| {
         positions
             .iter()
@@ -663,13 +625,9 @@ fn restore_preset_local_sounds(
         .map(|sound| (sound.sound_id.as_str(), sound))
         .collect();
 
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|err| format!("failed to resolve app data directory: {err}"))?;
+    let app_data_dir = app.path().app_data_dir()?;
     let sounds_dir = app_data_dir.join("sounds");
-    fs::create_dir_all(&sounds_dir)
-        .map_err(|err| format!("failed to create sounds directory: {err}"))?;
+    fs::create_dir_all(&sounds_dir)?;
 
     let mut restored_path_cache: HashMap<String, String> = HashMap::new();
 
@@ -714,7 +672,7 @@ fn restore_position_sound_reference(
     embedded_map: &HashMap<&str, &EmbeddedLocalSound>,
     restored_path_cache: &mut HashMap<String, String>,
     sound_ref: &mut Option<String>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let Some(current_value) = sound_ref.clone() else {
         return Ok(());
     };

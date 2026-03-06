@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
+    errors::CmdResult,
     models::{TabNoteOverrides, TabNoteSettings},
     state::AppState,
 };
@@ -31,13 +32,13 @@ pub struct TabNoteSetResponse {
 
 /// 모든 탭의 노트 설정 오버라이드 조회
 #[tauri::command]
-pub fn note_tab_get_all(state: State<'_, AppState>) -> Result<TabNoteOverrides, String> {
+pub fn note_tab_get_all(state: State<'_, AppState>) -> CmdResult<TabNoteOverrides> {
     Ok(state.store.snapshot().tab_note_overrides)
 }
 
 /// 특정 탭의 노트 설정 조회
 #[tauri::command]
-pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabNoteResponse, String> {
+pub fn note_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<TabNoteResponse> {
     let overrides = state.store.snapshot().tab_note_overrides;
     let settings = overrides.get(&tab_id).cloned();
     Ok(TabNoteResponse { tab_id, settings })
@@ -50,31 +51,24 @@ pub fn note_tab_set(
     app: AppHandle,
     tab_id: String,
     settings: Option<TabNoteSettings>,
-) -> Result<TabNoteSetResponse, String> {
+) -> CmdResult<TabNoteSetResponse> {
     if let Some(ref note_settings) = settings {
-        state
-            .store
-            .update(|store| {
-                store
-                    .tab_note_overrides
-                    .insert(tab_id.clone(), note_settings.clone());
-            })
-            .map_err(|err| err.to_string())?;
+        state.store.update(|store| {
+            store
+                .tab_note_overrides
+                .insert(tab_id.clone(), note_settings.clone());
+        })?;
     } else {
-        state
-            .store
-            .update(|store| {
-                store.tab_note_overrides.remove(&tab_id);
-            })
-            .map_err(|err| err.to_string())?;
+        state.store.update(|store| {
+            store.tab_note_overrides.remove(&tab_id);
+        })?;
     }
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: settings.clone(),
     };
-    app.emit("tabNote:changed", &response)
-        .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed", &response)?;
 
     Ok(TabNoteSetResponse {
         success: true,
@@ -89,20 +83,16 @@ pub fn note_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
     tab_id: String,
-) -> Result<TabNoteClearResponse, String> {
-    state
-        .store
-        .update(|store| {
-            store.tab_note_overrides.remove(&tab_id);
-        })
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<TabNoteClearResponse> {
+    state.store.update(|store| {
+        store.tab_note_overrides.remove(&tab_id);
+    })?;
 
     let response = TabNoteResponse {
         tab_id: tab_id.clone(),
         settings: None,
     };
-    app.emit("tabNote:changed", &response)
-        .map_err(|err| err.to_string())?;
+    app.emit("tabNote:changed", &response)?;
 
     Ok(TabNoteClearResponse {
         success: true,

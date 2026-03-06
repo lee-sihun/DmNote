@@ -1,5 +1,7 @@
 use tauri::AppHandle;
 
+use crate::errors::{CmdResult, CommandError};
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoUpdateResult {
@@ -9,7 +11,7 @@ pub struct AutoUpdateResult {
 }
 
 #[tauri::command]
-pub fn app_auto_update(app: AppHandle, tag: String) -> Result<AutoUpdateResult, String> {
+pub fn app_auto_update(app: AppHandle, tag: String) -> CmdResult<AutoUpdateResult> {
     #[cfg(target_os = "windows")]
     {
         return app_auto_update_windows(app, &tag);
@@ -19,12 +21,14 @@ pub fn app_auto_update(app: AppHandle, tag: String) -> Result<AutoUpdateResult, 
     {
         let _ = app;
         let _ = tag;
-        Err("auto update is only supported on Windows".to_string())
+        Err(CommandError::msg(
+            "auto update is only supported on Windows",
+        ))
     }
 }
 
 #[cfg(target_os = "windows")]
-fn app_auto_update_windows(app: AppHandle, tag: &str) -> Result<AutoUpdateResult, String> {
+fn app_auto_update_windows(app: AppHandle, tag: &str) -> CmdResult<AutoUpdateResult> {
     use std::time::Duration;
 
     const REPO_OWNER: &str = "lee-sihun";
@@ -33,19 +37,21 @@ fn app_auto_update_windows(app: AppHandle, tag: &str) -> Result<AutoUpdateResult
 
     let trimmed_tag = tag.trim();
     if trimmed_tag.is_empty() {
-        return Err("update tag is empty".to_string());
+        return Err(CommandError::msg("update tag is empty"));
     }
     if !is_safe_tag(trimmed_tag) {
-        return Err("update tag contains unsupported characters".to_string());
+        return Err(CommandError::msg(
+            "update tag contains unsupported characters",
+        ));
     }
 
     let previous_version = app.package_info().version.to_string();
     let current_version = parse_semver_version(&previous_version)?;
     let target_version = parse_semver_version(trimmed_tag)?;
     if target_version <= current_version {
-        return Err(format!(
+        return Err(CommandError::msg(format!(
             "target version ({target_version}) must be newer than current version ({current_version})"
-        ));
+        )));
     }
 
     let download_url = format!(
@@ -56,32 +62,29 @@ fn app_auto_update_windows(app: AppHandle, tag: &str) -> Result<AutoUpdateResult
         .user_agent("dm-note-auto-updater")
         .timeout(Duration::from_secs(180))
         .build()
-        .map_err(|err| format!("failed to initialize downloader: {err}"))?;
+        .map_err(|err| CommandError::msg(format!("failed to initialize downloader: {err}")))?;
 
     let response = client
         .get(&download_url)
         .send()
-        .map_err(|err| format!("failed to download update asset: {err}"))?;
+        .map_err(|err| CommandError::msg(format!("failed to download update asset: {err}")))?;
     let response = response
         .error_for_status()
-        .map_err(|err| format!("failed to download update asset: {err}"))?;
+        .map_err(|err| CommandError::msg(format!("failed to download update asset: {err}")))?;
     let bytes = response
         .bytes()
-        .map_err(|err| format!("failed to read downloaded update: {err}"))?;
+        .map_err(|err| CommandError::msg(format!("failed to read downloaded update: {err}")))?;
     if bytes.is_empty() {
-        return Err("downloaded update file is empty".to_string());
+        return Err(CommandError::msg("downloaded update file is empty"));
     }
 
     let temp_dir = tempfile::Builder::new()
         .prefix("dmnote-update-")
-        .tempdir()
-        .map_err(|err| format!("failed to create temporary directory: {err}"))?;
+        .tempdir()?;
     let temp_exe = temp_dir.path().join(ASSET_NAME);
-    std::fs::write(&temp_exe, &bytes)
-        .map_err(|err| format!("failed to write update file: {err}"))?;
+    std::fs::write(&temp_exe, &bytes)?;
 
-    self_replace::self_replace(&temp_exe)
-        .map_err(|err| format!("failed to replace executable: {err}"))?;
+    self_replace::self_replace(&temp_exe)?;
 
     app.request_restart();
 
@@ -93,10 +96,10 @@ fn app_auto_update_windows(app: AppHandle, tag: &str) -> Result<AutoUpdateResult
 }
 
 #[cfg(target_os = "windows")]
-fn parse_semver_version(raw: &str) -> Result<semver::Version, String> {
+fn parse_semver_version(raw: &str) -> CmdResult<semver::Version> {
     let normalized = raw.trim().trim_start_matches(['v', 'V']);
     semver::Version::parse(normalized)
-        .map_err(|err| format!("invalid version string '{raw}': {err}"))
+        .map_err(|err| CommandError::msg(format!("invalid version string '{raw}': {err}")))
 }
 
 #[cfg(target_os = "windows")]

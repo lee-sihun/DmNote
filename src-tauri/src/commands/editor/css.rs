@@ -5,6 +5,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
+    errors::CmdResult,
     models::{CustomCss, TabCss, TabCssOverrides},
     state::AppState,
 };
@@ -77,12 +78,12 @@ pub struct TabCssSetResponse {
 }
 
 #[tauri::command]
-pub fn css_get(state: State<'_, AppState>) -> Result<CustomCss, String> {
+pub fn css_get(state: State<'_, AppState>) -> CmdResult<CustomCss> {
     Ok(state.store.snapshot().custom_css)
 }
 
 #[tauri::command]
-pub fn css_get_use(state: State<'_, AppState>) -> Result<bool, String> {
+pub fn css_get_use(state: State<'_, AppState>) -> CmdResult<bool> {
     Ok(state.store.snapshot().use_custom_css)
 }
 
@@ -91,21 +92,16 @@ pub fn css_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
     enabled: bool,
-) -> Result<CssToggleResponse, String> {
-    state
-        .store
-        .update(|store| {
-            store.use_custom_css = enabled;
-        })
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<CssToggleResponse> {
+    state.store.update(|store| {
+        store.use_custom_css = enabled;
+    })?;
 
-    app.emit("css:use", &CssToggleResponse { enabled })
-        .map_err(|err| err.to_string())?;
+    app.emit("css:use", &CssToggleResponse { enabled })?;
 
     if enabled {
         let css = state.store.snapshot().custom_css;
-        app.emit("css:content", &css)
-            .map_err(|err| err.to_string())?;
+        app.emit("css:content", &css)?;
 
         // CSS 핫리로딩: 활성화 시 파일 워칭 시작
         if let Some(path) = &css.path {
@@ -122,22 +118,17 @@ pub fn css_toggle(
 }
 
 #[tauri::command]
-pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
     // CSS 핫리로딩: 전역 CSS 워칭 중지
     state.unwatch_global_css();
 
-    state
-        .store
-        .update(|store| {
-            store.use_custom_css = false;
-            store.custom_css = CustomCss::default();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.use_custom_css = false;
+        store.custom_css = CustomCss::default();
+    })?;
 
-    app.emit("css:use", &CssToggleResponse { enabled: false })
-        .map_err(|err| err.to_string())?;
-    app.emit("css:content", &CustomCss::default())
-        .map_err(|err| err.to_string())?;
+    app.emit("css:use", &CssToggleResponse { enabled: false })?;
+    app.emit("css:content", &CustomCss::default())?;
     Ok(())
 }
 
@@ -146,19 +137,15 @@ pub fn css_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
     content: String,
-) -> Result<CssSetContentResponse, String> {
+) -> CmdResult<CssSetContentResponse> {
     let mut current = state.store.snapshot().custom_css;
     current.content = content.clone();
 
-    state
-        .store
-        .update(|store| {
-            store.custom_css = current.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.custom_css = current.clone();
+    })?;
 
-    app.emit("css:content", &current)
-        .map_err(|err| err.to_string())?;
+    app.emit("css:content", &current)?;
 
     Ok(CssSetContentResponse {
         success: true,
@@ -167,7 +154,7 @@ pub fn css_set_content(
 }
 
 #[tauri::command]
-pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> Result<CssLoadResponse, String> {
+pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<CssLoadResponse> {
     let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
 
     let Some(path) = picked else {
@@ -189,15 +176,11 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> Result<CssLoadRes
                 path: Some(path_string.clone()),
                 content: content.clone(),
             };
-            state
-                .store
-                .update(|store| {
-                    store.custom_css = css.clone();
-                })
-                .map_err(|err| err.to_string())?;
+            state.store.update(|store| {
+                store.custom_css = css.clone();
+            })?;
 
-            app.emit("css:content", &css)
-                .map_err(|err| err.to_string())?;
+            app.emit("css:content", &css)?;
 
             // CSS 핫리로딩: 새 파일 워칭 시작 (use_custom_css가 활성화된 경우에만)
             if state.store.snapshot().use_custom_css {
@@ -226,13 +209,13 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> Result<CssLoadRes
 
 /// 모든 탭의 CSS 오버라이드 조회
 #[tauri::command]
-pub fn css_tab_get_all(state: State<'_, AppState>) -> Result<TabCssOverrides, String> {
+pub fn css_tab_get_all(state: State<'_, AppState>) -> CmdResult<TabCssOverrides> {
     Ok(state.store.snapshot().tab_css_overrides)
 }
 
 /// 특정 탭의 CSS 조회
 #[tauri::command]
-pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> Result<TabCssResponse, String> {
+pub fn css_tab_get(state: State<'_, AppState>, tab_id: String) -> CmdResult<TabCssResponse> {
     let overrides = state.store.snapshot().tab_css_overrides;
     let css = overrides.get(&tab_id).cloned();
     Ok(TabCssResponse { tab_id, css })
@@ -244,7 +227,7 @@ pub fn css_tab_load(
     state: State<'_, AppState>,
     app: AppHandle,
     tab_id: String,
-) -> Result<TabCssLoadResponse, String> {
+) -> CmdResult<TabCssLoadResponse> {
     let picked = FileDialog::new().add_filter("CSS", &["css"]).pick_file();
 
     let Some(path) = picked else {
@@ -268,21 +251,17 @@ pub fn css_tab_load(
                 enabled: true,
             };
 
-            state
-                .store
-                .update(|store| {
-                    store
-                        .tab_css_overrides
-                        .insert(tab_id.clone(), tab_css.clone());
-                })
-                .map_err(|err| err.to_string())?;
+            state.store.update(|store| {
+                store
+                    .tab_css_overrides
+                    .insert(tab_id.clone(), tab_css.clone());
+            })?;
 
             let response = TabCssResponse {
                 tab_id: tab_id.clone(),
                 css: Some(tab_css.clone()),
             };
-            app.emit("tabCss:changed", &response)
-                .map_err(|err| err.to_string())?;
+            app.emit("tabCss:changed", &response)?;
 
             // CSS 핫리로딩: 새 탭 CSS 파일 워칭 시작
             if let Err(err) = state.watch_tab_css(&path_string, &tab_id) {
@@ -315,23 +294,19 @@ pub fn css_tab_clear(
     state: State<'_, AppState>,
     app: AppHandle,
     tab_id: String,
-) -> Result<TabCssClearResponse, String> {
+) -> CmdResult<TabCssClearResponse> {
     // CSS 핫리로딩: 탭 CSS 워칭 중지
     state.unwatch_tab_css(&tab_id);
 
-    state
-        .store
-        .update(|store| {
-            store.tab_css_overrides.remove(&tab_id);
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.tab_css_overrides.remove(&tab_id);
+    })?;
 
     let response = TabCssResponse {
         tab_id: tab_id.clone(),
         css: None,
     };
-    app.emit("tabCss:changed", &response)
-        .map_err(|err| err.to_string())?;
+    app.emit("tabCss:changed", &response)?;
 
     Ok(TabCssClearResponse {
         success: true,
@@ -346,19 +321,16 @@ pub fn css_tab_set(
     app: AppHandle,
     tab_id: String,
     css: Option<TabCss>,
-) -> Result<TabCssSetResponse, String> {
+) -> CmdResult<TabCssSetResponse> {
     // 이전 탭 CSS 워칭 중지
     state.unwatch_tab_css(&tab_id);
 
     if let Some(ref tab_css) = css {
-        state
-            .store
-            .update(|store| {
-                store
-                    .tab_css_overrides
-                    .insert(tab_id.clone(), tab_css.clone());
-            })
-            .map_err(|err| err.to_string())?;
+        state.store.update(|store| {
+            store
+                .tab_css_overrides
+                .insert(tab_id.clone(), tab_css.clone());
+        })?;
 
         // CSS 핫리로딩: 파일이 있고 enabled인 경우 워칭 시작
         if tab_css.enabled {
@@ -373,20 +345,16 @@ pub fn css_tab_set(
             }
         }
     } else {
-        state
-            .store
-            .update(|store| {
-                store.tab_css_overrides.remove(&tab_id);
-            })
-            .map_err(|err| err.to_string())?;
+        state.store.update(|store| {
+            store.tab_css_overrides.remove(&tab_id);
+        })?;
     }
 
     let response = TabCssResponse {
         tab_id: tab_id.clone(),
         css: css.clone(),
     };
-    app.emit("tabCss:changed", &response)
-        .map_err(|err| err.to_string())?;
+    app.emit("tabCss:changed", &response)?;
 
     Ok(TabCssSetResponse {
         success: true,
@@ -402,29 +370,26 @@ pub fn css_tab_toggle(
     app: AppHandle,
     tab_id: String,
     enabled: bool,
-) -> Result<TabCssToggleResponse, String> {
+) -> CmdResult<TabCssToggleResponse> {
     let mut updated_css: Option<TabCss> = None;
 
-    state
-        .store
-        .update(|store| {
-            if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
-                tab_css.enabled = enabled;
-                updated_css = Some(tab_css.clone());
-            } else {
-                // 탭 CSS가 없으면 기본 설정으로 생성
-                let new_css = TabCss {
-                    path: None,
-                    content: String::new(),
-                    enabled,
-                };
-                store
-                    .tab_css_overrides
-                    .insert(tab_id.clone(), new_css.clone());
-                updated_css = Some(new_css);
-            }
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        if let Some(tab_css) = store.tab_css_overrides.get_mut(&tab_id) {
+            tab_css.enabled = enabled;
+            updated_css = Some(tab_css.clone());
+        } else {
+            // 탭 CSS가 없으면 기본 설정으로 생성
+            let new_css = TabCss {
+                path: None,
+                content: String::new(),
+                enabled,
+            };
+            store
+                .tab_css_overrides
+                .insert(tab_id.clone(), new_css.clone());
+            updated_css = Some(new_css);
+        }
+    })?;
 
     // CSS 핫리로딩: 활성화/비활성화에 따른 워칭 관리
     if let Some(ref css) = updated_css {
@@ -447,8 +412,7 @@ pub fn css_tab_toggle(
         tab_id: tab_id.clone(),
         css: updated_css,
     };
-    app.emit("tabCss:changed", &response)
-        .map_err(|err| err.to_string())?;
+    app.emit("tabCss:changed", &response)?;
 
     Ok(TabCssToggleResponse {
         success: true,

@@ -1,6 +1,8 @@
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::errors::{CmdResult, CommandError};
+
 /// 플러그인 간 윈도우 브릿지 메시지 전송
 /// 모든 윈도우에 브로드캐스트
 #[tauri::command]
@@ -8,7 +10,7 @@ pub fn plugin_bridge_send(
     app: AppHandle,
     message_type: String,
     data: Option<Value>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     log::debug!(
         "[IPC] plugin_bridge_send: type={}, data_size={}",
         message_type,
@@ -20,8 +22,7 @@ pub fn plugin_bridge_send(
         "data": data,
     });
 
-    app.emit("plugin-bridge:message", payload)
-        .map_err(|e| e.to_string())?;
+    app.emit("plugin-bridge:message", payload)?;
 
     Ok(())
 }
@@ -33,7 +34,7 @@ pub fn plugin_bridge_send_to(
     target: String,
     message_type: String,
     data: Option<Value>,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     log::debug!(
         "[IPC] plugin_bridge_send_to: target={}, type={}, data_size={}",
         target,
@@ -50,16 +51,22 @@ pub fn plugin_bridge_send_to(
     let window_label = match target.as_str() {
         "main" => "main",
         "overlay" => "overlay",
-        _ => return Err(format!("Unknown target window: {}", target)),
+        _ => {
+            return Err(CommandError::msg(format!(
+                "Unknown target window: {}",
+                target
+            )))
+        }
     };
 
     // 특정 윈도우에만 이벤트 전송
     if let Some(window) = app.get_webview_window(window_label) {
-        window
-            .emit("plugin-bridge:message", payload)
-            .map_err(|e| e.to_string())?;
+        window.emit("plugin-bridge:message", payload)?;
         Ok(())
     } else {
-        Err(format!("Window '{}' not found", window_label))
+        Err(CommandError::msg(format!(
+            "Window '{}' not found",
+            window_label
+        )))
     }
 }

@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::{
     defaults::{default_keys, default_positions},
+    errors::CmdResult,
     models::{
         CustomCssPatch, CustomTab, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
         NoteSettings, NoteSettingsPatch, SettingsPatchInput,
@@ -58,12 +59,12 @@ pub struct CustomTabDeleteResult {
 }
 
 #[tauri::command]
-pub fn keys_get(state: State<'_, AppState>) -> Result<KeyMappings, String> {
+pub fn keys_get(state: State<'_, AppState>) -> CmdResult<KeyMappings> {
     Ok(state.store.snapshot().keys)
 }
 
 #[tauri::command]
-pub fn positions_get(state: State<'_, AppState>) -> Result<KeyPositions, String> {
+pub fn positions_get(state: State<'_, AppState>) -> CmdResult<KeyPositions> {
     Ok(state.store.snapshot().key_positions)
 }
 
@@ -72,17 +73,12 @@ pub fn keys_update(
     state: State<'_, AppState>,
     app: AppHandle,
     mappings: KeyMappings,
-) -> Result<KeyMappings, String> {
-    let updated = state
-        .store
-        .update_keys(mappings)
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<KeyMappings> {
+    let updated = state.store.update_keys(mappings)?;
     state.keyboard.update_mappings(updated.clone());
-    app.emit("keys:changed", &updated)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:changed", &updated)?;
     state.sync_counters_with_keys(&updated);
-    app.emit("keys:counters", &state.snapshot_key_counters())
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:counters", &state.snapshot_key_counters())?;
     Ok(updated)
 }
 
@@ -91,13 +87,9 @@ pub fn positions_update(
     state: State<'_, AppState>,
     app: AppHandle,
     positions: KeyPositions,
-) -> Result<KeyPositions, String> {
-    let updated = state
-        .store
-        .update_positions(positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &updated)
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<KeyPositions> {
+    let updated = state.store.update_positions(positions)?;
+    app.emit("positions:changed", &updated)?;
     Ok(updated)
 }
 
@@ -106,7 +98,7 @@ pub fn keys_set_mode(
     state: State<'_, AppState>,
     app: AppHandle,
     mode: String,
-) -> Result<ModeResponse, String> {
+) -> CmdResult<ModeResponse> {
     let success = state.keyboard.set_mode(mode.clone());
     let effective = if success {
         mode
@@ -114,26 +106,20 @@ pub fn keys_set_mode(
         state.keyboard.current_mode()
     };
 
-    state
-        .store
-        .set_selected_key_type(effective.clone())
-        .map_err(|err| err.to_string())?;
+    state.store.set_selected_key_type(effective.clone())?;
 
     app.emit(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &effective }),
-    )
-    .map_err(|err| err.to_string())?;
+    )?;
     Ok(ModeResponse {
         success,
         mode: effective,
     })
 }
+
 #[tauri::command]
-pub fn keys_reset_all(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<ResetAllResponse, String> {
+pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<ResetAllResponse> {
     let keys = default_keys().clone();
     let positions = default_positions().clone();
     let stat_positions = crate::models::StatPositions::new();
@@ -150,20 +136,17 @@ pub fn keys_reset_all(
         .cloned()
         .collect();
 
-    state
-        .store
-        .update(|store| {
-            store.keys = keys.clone();
-            store.key_positions = positions.clone();
-            store.stat_positions = stat_positions.clone();
-            store.graph_positions = graph_positions.clone();
-            store.layer_groups = layer_groups.clone();
-            store.custom_tabs = custom_tabs.clone();
-            store.selected_key_type = selected_key_type.clone();
-            store.tab_note_overrides = tab_note_overrides.clone();
-            store.tab_css_overrides.clear();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.stat_positions = stat_positions.clone();
+        store.graph_positions = graph_positions.clone();
+        store.layer_groups = layer_groups.clone();
+        store.custom_tabs = custom_tabs.clone();
+        store.selected_key_type = selected_key_type.clone();
+        store.tab_note_overrides = tab_note_overrides.clone();
+        store.tab_css_overrides.clear();
+    })?;
 
     for tab_id in &cleared_tab_css_ids {
         state.unwatch_tab_css(tab_id);
@@ -173,9 +156,7 @@ pub fn keys_reset_all(
     state.keyboard.set_mode(selected_key_type.clone());
     state.sync_counters_with_keys(&keys);
     let counters_snapshot = state.reset_key_counters();
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
 
     let mut note_patch = NoteSettingsPatch::default();
     let defaults = NoteSettings::default();
@@ -193,68 +174,51 @@ pub fn keys_reset_all(
     note_patch.short_note_min_length_px = Some(defaults.short_note_min_length_px);
     note_patch.key_display_delay_ms = Some(defaults.key_display_delay_ms);
 
-    let settings_diff = state
-        .settings
-        .apply_patch(SettingsPatchInput {
-            background_color: Some("transparent".to_string()),
-            note_settings: Some(note_patch),
-            laboratory_enabled: Some(false),
-            use_custom_css: Some(false),
-            custom_css: Some(CustomCssPatch {
-                path: Some(None),
-                content: Some(String::new()),
-            }),
-            note_effect: Some(false),
-            overlay_locked: Some(false),
-            ..SettingsPatchInput::default()
-        })
-        .map_err(|err| err.to_string())?;
+    let settings_diff = state.settings.apply_patch(SettingsPatchInput {
+        background_color: Some("transparent".to_string()),
+        note_settings: Some(note_patch),
+        laboratory_enabled: Some(false),
+        use_custom_css: Some(false),
+        custom_css: Some(CustomCssPatch {
+            path: Some(None),
+            content: Some(String::new()),
+        }),
+        note_effect: Some(false),
+        overlay_locked: Some(false),
+        ..SettingsPatchInput::default()
+    })?;
 
-    state
-        .emit_settings_changed(&settings_diff, &app)
-        .map_err(|err| err.to_string())?;
+    state.emit_settings_changed(&settings_diff, &app)?;
 
-    app.emit("keys:changed", &keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("statPositions:changed", &stat_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", &graph_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("layerGroups:changed", &layer_groups)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
+    app.emit("statPositions:changed", &stat_positions)?;
+    app.emit("graphPositions:changed", &graph_positions)?;
+    app.emit("layerGroups:changed", &layer_groups)?;
     app.emit(
         "customTabs:changed",
         &CustomTabChangePayload {
             custom_tabs: custom_tabs.clone(),
             selected_key_type: selected_key_type.clone(),
         },
-    )
-    .map_err(|err| err.to_string())?;
+    )?;
     app.emit(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("css:use", &serde_json::json!({ "enabled": false }))
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("css:use", &serde_json::json!({ "enabled": false }))?;
     app.emit(
         "css:content",
         &serde_json::json!({ "path": serde_json::Value::Null, "content": "" }),
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("tabNote:changed_all", &tab_note_overrides)
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)?;
     for tab_id in cleared_tab_css_ids {
         app.emit(
             "tabCss:changed",
             &crate::commands::editor::css::TabCssResponse { tab_id, css: None },
-        )
-        .map_err(|err| err.to_string())?;
+        )?;
     }
-    app.emit("keys:counters", &counters_snapshot)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:counters", &counters_snapshot)?;
 
     Ok(ResetAllResponse {
         keys,
@@ -269,7 +233,7 @@ pub fn keys_reset_mode(
     state: State<'_, AppState>,
     app: AppHandle,
     mode: String,
-) -> Result<ResetModeResponse, String> {
+) -> CmdResult<ResetModeResponse> {
     let defaults = default_keys();
     if !defaults.contains_key(&mode) {
         return Ok(ResetModeResponse {
@@ -300,18 +264,15 @@ pub fn keys_reset_mode(
     let mut tab_css_overrides = snapshot.tab_css_overrides;
     let cleared_tab_css = tab_css_overrides.remove(&mode).is_some();
 
-    state
-        .store
-        .update(|store| {
-            store.keys = keys.clone();
-            store.key_positions = positions.clone();
-            store.stat_positions = stat_positions.clone();
-            store.graph_positions = graph_positions.clone();
-            store.layer_groups = layer_groups.clone();
-            store.tab_note_overrides = tab_note_overrides.clone();
-            store.tab_css_overrides = tab_css_overrides.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.stat_positions = stat_positions.clone();
+        store.graph_positions = graph_positions.clone();
+        store.layer_groups = layer_groups.clone();
+        store.tab_note_overrides = tab_note_overrides.clone();
+        store.tab_css_overrides = tab_css_overrides.clone();
+    })?;
 
     if cleared_tab_css {
         state.unwatch_tab_css(&mode);
@@ -320,22 +281,14 @@ pub fn keys_reset_mode(
     state.keyboard.update_mappings(keys.clone());
     state.sync_counters_with_keys(&keys);
     state.reset_mode_counters(&mode);
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
 
-    app.emit("keys:changed", &keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("statPositions:changed", &stat_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", &graph_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("layerGroups:changed", &layer_groups)
-        .map_err(|err| err.to_string())?;
-    app.emit("tabNote:changed_all", &tab_note_overrides)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
+    app.emit("statPositions:changed", &stat_positions)?;
+    app.emit("graphPositions:changed", &graph_positions)?;
+    app.emit("layerGroups:changed", &layer_groups)?;
+    app.emit("tabNote:changed_all", &tab_note_overrides)?;
     if cleared_tab_css {
         app.emit(
             "tabCss:changed",
@@ -343,11 +296,9 @@ pub fn keys_reset_mode(
                 tab_id: mode.clone(),
                 css: None,
             },
-        )
-        .map_err(|err| err.to_string())?;
+        )?;
     }
-    app.emit("keys:counters", &state.snapshot_key_counters())
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:counters", &state.snapshot_key_counters())?;
 
     Ok(ResetModeResponse {
         success: true,
@@ -356,7 +307,7 @@ pub fn keys_reset_mode(
 }
 
 #[tauri::command]
-pub fn custom_tabs_list(state: State<'_, AppState>) -> Result<Vec<CustomTab>, String> {
+pub fn custom_tabs_list(state: State<'_, AppState>) -> CmdResult<Vec<CustomTab>> {
     Ok(state.store.snapshot().custom_tabs)
 }
 
@@ -365,7 +316,7 @@ pub fn custom_tabs_create(
     state: State<'_, AppState>,
     app: AppHandle,
     name: String,
-) -> Result<CustomTabCreateResult, String> {
+) -> CmdResult<CustomTabCreateResult> {
     if name.trim().is_empty() {
         return Ok(CustomTabCreateResult {
             result: None,
@@ -402,23 +353,18 @@ pub fn custom_tabs_create(
     let mut positions = snapshot.key_positions.clone();
     positions.insert(id.clone(), Vec::new());
 
-    state
-        .store
-        .update(|store| {
-            store.custom_tabs = custom_tabs.clone();
-            store.keys = keys.clone();
-            store.key_positions = positions.clone();
-            store.selected_key_type = id.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.custom_tabs = custom_tabs.clone();
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.selected_key_type = id.clone();
+    })?;
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(id.clone());
     state.sync_counters_with_keys(&keys);
     state.reset_mode_counters(&id);
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
 
     app.emit(
         "customTabs:changed",
@@ -426,16 +372,11 @@ pub fn custom_tabs_create(
             custom_tabs: custom_tabs.clone(),
             selected_key_type: id.clone(),
         },
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("keys:changed", &keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))
-        .map_err(|err| err.to_string())?;
-    app.emit("keys:counters", &state.snapshot_key_counters())
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
+    app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
+    app.emit("keys:counters", &state.snapshot_key_counters())?;
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -448,7 +389,7 @@ pub fn custom_tabs_delete(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
-) -> Result<CustomTabDeleteResult, String> {
+) -> CmdResult<CustomTabDeleteResult> {
     let snapshot = state.store.snapshot();
     if !snapshot.custom_tabs.iter().any(|tab| tab.id == id) {
         return Ok(CustomTabDeleteResult {
@@ -489,22 +430,17 @@ pub fn custom_tabs_delete(
         snapshot.selected_key_type.clone()
     };
 
-    state
-        .store
-        .update(|store| {
-            store.custom_tabs = custom_tabs.clone();
-            store.keys = keys.clone();
-            store.key_positions = positions.clone();
-            store.selected_key_type = next_selected.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.custom_tabs = custom_tabs.clone();
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.selected_key_type = next_selected.clone();
+    })?;
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(next_selected.clone());
     state.sync_counters_with_keys(&keys);
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
 
     app.emit(
         "customTabs:changed",
@@ -512,19 +448,14 @@ pub fn custom_tabs_delete(
             custom_tabs: custom_tabs.clone(),
             selected_key_type: next_selected.clone(),
         },
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("keys:changed", &keys)
-        .map_err(|err| err.to_string())?;
-    app.emit("positions:changed", &positions)
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
     app.emit(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &next_selected }),
-    )
-    .map_err(|err| err.to_string())?;
-    app.emit("keys:counters", &state.snapshot_key_counters())
-        .map_err(|err| err.to_string())?;
+    )?;
+    app.emit("keys:counters", &state.snapshot_key_counters())?;
 
     Ok(CustomTabDeleteResult {
         success: true,
@@ -546,7 +477,7 @@ pub fn custom_tabs_select(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
-) -> Result<CustomTabSelectResult, String> {
+) -> CmdResult<CustomTabSelectResult> {
     let snapshot = state.store.snapshot();
     let defaults = default_keys();
     let exists = defaults.contains_key(&id) || snapshot.custom_tabs.iter().any(|tab| tab.id == id);
@@ -558,14 +489,10 @@ pub fn custom_tabs_select(
         });
     }
 
-    state
-        .store
-        .set_selected_key_type(id.clone())
-        .map_err(|err| err.to_string())?;
+    state.store.set_selected_key_type(id.clone())?;
     state.keyboard.set_mode(id.clone());
 
-    app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
 
     Ok(CustomTabSelectResult {
         success: true,
@@ -575,16 +502,10 @@ pub fn custom_tabs_select(
 }
 
 #[tauri::command]
-pub fn keys_reset_counters(
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<KeyCounters, String> {
+pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> CmdResult<KeyCounters> {
     let snapshot = state.reset_key_counters();
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
-    app.emit("keys:counters", &snapshot)
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
+    app.emit("keys:counters", &snapshot)?;
     Ok(snapshot)
 }
 
@@ -593,14 +514,11 @@ pub fn keys_reset_counters_mode(
     state: State<'_, AppState>,
     app: AppHandle,
     mode: String,
-) -> Result<KeyCounters, String> {
+) -> CmdResult<KeyCounters> {
     state.reset_mode_counters(&mode);
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
     let snapshot = state.snapshot_key_counters();
-    app.emit("keys:counters", &snapshot)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:counters", &snapshot)?;
     Ok(snapshot)
 }
 
@@ -610,14 +528,11 @@ pub fn keys_reset_single_counter(
     app: AppHandle,
     mode: String,
     key: String,
-) -> Result<KeyCounters, String> {
+) -> CmdResult<KeyCounters> {
     state.reset_single_key_counter(&mode, &key);
-    state
-        .persist_key_counters()
-        .map_err(|err| err.to_string())?;
+    state.persist_key_counters()?;
     let snapshot = state.snapshot_key_counters();
-    app.emit("keys:counters", &snapshot)
-        .map_err(|err| err.to_string())?;
+    app.emit("keys:counters", &snapshot)?;
     Ok(snapshot)
 }
 
@@ -626,18 +541,15 @@ pub fn keys_set_counters(
     state: State<'_, AppState>,
     app: AppHandle,
     counters: KeyCounters,
-) -> Result<KeyCounters, String> {
+) -> CmdResult<KeyCounters> {
     let keys_snapshot = state.store.snapshot().keys;
-    let updated = state
-        .replace_key_counters(counters, &keys_snapshot)
-        .map_err(|err| err.to_string())?;
-    app.emit("keys:counters", &updated)
-        .map_err(|err| err.to_string())?;
+    let updated = state.replace_key_counters(counters, &keys_snapshot)?;
+    app.emit("keys:counters", &updated)?;
     Ok(updated)
 }
 
 #[tauri::command]
-pub fn layer_groups_get(state: State<'_, AppState>) -> Result<LayerGroups, String> {
+pub fn layer_groups_get(state: State<'_, AppState>) -> CmdResult<LayerGroups> {
     Ok(state.store.snapshot().layer_groups)
 }
 
@@ -646,13 +558,9 @@ pub fn layer_groups_update(
     state: State<'_, AppState>,
     app: AppHandle,
     groups: LayerGroups,
-) -> Result<LayerGroups, String> {
-    let updated = state
-        .store
-        .update_layer_groups(groups)
-        .map_err(|err| err.to_string())?;
-    app.emit("layerGroups:changed", &updated)
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<LayerGroups> {
+    let updated = state.store.update_layer_groups(groups)?;
+    app.emit("layerGroups:changed", &updated)?;
     Ok(updated)
 }
 
@@ -671,9 +579,7 @@ pub struct RawInputSubscribeResponse {
 
 /// Subscribe to raw input stream (increment subscriber count)
 #[tauri::command]
-pub fn raw_input_subscribe(
-    state: State<'_, AppState>,
-) -> Result<RawInputSubscribeResponse, String> {
+pub fn raw_input_subscribe(state: State<'_, AppState>) -> CmdResult<RawInputSubscribeResponse> {
     let count = state.subscribe_raw_input();
     log::debug!("[RawInput] Subscribe: count = {}", count);
     Ok(RawInputSubscribeResponse { count })
@@ -681,9 +587,7 @@ pub fn raw_input_subscribe(
 
 /// Unsubscribe from raw input stream (decrement subscriber count)
 #[tauri::command]
-pub fn raw_input_unsubscribe(
-    state: State<'_, AppState>,
-) -> Result<RawInputSubscribeResponse, String> {
+pub fn raw_input_unsubscribe(state: State<'_, AppState>) -> CmdResult<RawInputSubscribeResponse> {
     let count = state.unsubscribe_raw_input();
     log::debug!("[RawInput] Unsubscribe: count = {}", count);
     Ok(RawInputSubscribeResponse { count })

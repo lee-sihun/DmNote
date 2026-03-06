@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
+    errors::CmdResult,
     models::{CustomJs, JsPlugin},
     state::AppState,
 };
@@ -73,41 +74,35 @@ pub struct JsPluginUpdateResponse {
     pub error: Option<String>,
 }
 
-fn emit_js_state(app: &AppHandle, script: &CustomJs) -> Result<(), String> {
-    app.emit("js:content", script)
-        .map_err(|err| err.to_string())
+fn emit_js_state(app: &AppHandle, script: &CustomJs) -> CmdResult<()> {
+    app.emit("js:content", script)?;
+    Ok(())
 }
 
-fn get_normalized_script(state: &State<AppState>) -> Result<CustomJs, String> {
+fn get_normalized_script(state: &State<AppState>) -> CmdResult<CustomJs> {
     let mut script = state.store.snapshot().custom_js;
     if script.normalize() {
-        state
-            .store
-            .update(|store| {
-                store.custom_js = script.clone();
-            })
-            .map_err(|err| err.to_string())?;
+        state.store.update(|store| {
+            store.custom_js = script.clone();
+        })?;
     }
     Ok(script)
 }
 
-fn persist_script(state: &State<AppState>, script: &CustomJs) -> Result<CustomJs, String> {
-    state
-        .store
-        .update(|store| {
-            store.custom_js = script.clone();
-        })
-        .map(|data| data.custom_js.clone())
-        .map_err(|err| err.to_string())
+fn persist_script(state: &State<AppState>, script: &CustomJs) -> CmdResult<CustomJs> {
+    let data = state.store.update(|store| {
+        store.custom_js = script.clone();
+    })?;
+    Ok(data.custom_js.clone())
 }
 
 #[tauri::command]
-pub fn js_get(state: State<'_, AppState>) -> Result<CustomJs, String> {
+pub fn js_get(state: State<'_, AppState>) -> CmdResult<CustomJs> {
     get_normalized_script(&state)
 }
 
 #[tauri::command]
-pub fn js_get_use(state: State<'_, AppState>) -> Result<bool, String> {
+pub fn js_get_use(state: State<'_, AppState>) -> CmdResult<bool> {
     Ok(state.store.snapshot().use_custom_js)
 }
 
@@ -116,16 +111,12 @@ pub fn js_toggle(
     state: State<'_, AppState>,
     app: AppHandle,
     enabled: bool,
-) -> Result<JsToggleResponse, String> {
-    state
-        .store
-        .update(|store| {
-            store.use_custom_js = enabled;
-        })
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<JsToggleResponse> {
+    state.store.update(|store| {
+        store.use_custom_js = enabled;
+    })?;
 
-    app.emit("js:use", &JsToggleResponse { enabled })
-        .map_err(|err| err.to_string())?;
+    app.emit("js:use", &JsToggleResponse { enabled })?;
 
     if enabled {
         let script = get_normalized_script(&state)?;
@@ -136,19 +127,15 @@ pub fn js_toggle(
 }
 
 #[tauri::command]
-pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+pub fn js_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
     let default = CustomJs::default();
 
-    state
-        .store
-        .update(|store| {
-            store.use_custom_js = false;
-            store.custom_js = default.clone();
-        })
-        .map_err(|err| err.to_string())?;
+    state.store.update(|store| {
+        store.use_custom_js = false;
+        store.custom_js = default.clone();
+    })?;
 
-    app.emit("js:use", &JsToggleResponse { enabled: false })
-        .map_err(|err| err.to_string())?;
+    app.emit("js:use", &JsToggleResponse { enabled: false })?;
     emit_js_state(&app, &default)?;
     Ok(())
 }
@@ -158,7 +145,7 @@ pub fn js_set_content(
     state: State<'_, AppState>,
     app: AppHandle,
     content: String,
-) -> Result<JsSetContentResponse, String> {
+) -> CmdResult<JsSetContentResponse> {
     let mut script = get_normalized_script(&state)?;
     if script.plugins.is_empty() {
         script.content = content.clone();
@@ -195,7 +182,7 @@ fn make_plugin_from_path(path: &Path, content: String) -> JsPlugin {
 }
 
 #[tauri::command]
-pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> Result<JsLoadResponse, String> {
+pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsLoadResponse> {
     let Some(paths) = FileDialog::new()
         .add_filter("JavaScript", &["js", "mjs"])
         .pick_files()
@@ -249,7 +236,7 @@ pub fn js_load(state: State<'_, AppState>, app: AppHandle) -> Result<JsLoadRespo
 }
 
 #[tauri::command]
-pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> Result<JsReloadResponse, String> {
+pub fn js_reload(state: State<'_, AppState>, app: AppHandle) -> CmdResult<JsReloadResponse> {
     let mut script = get_normalized_script(&state)?;
     let mut updated_plugins = Vec::new();
     let mut errors = Vec::new();
@@ -282,7 +269,7 @@ pub fn js_remove_plugin(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
-) -> Result<JsRemoveResponse, String> {
+) -> CmdResult<JsRemoveResponse> {
     let mut script = get_normalized_script(&state)?;
     info!("js_remove_plugin: requested id={}", id);
     info!(
@@ -322,7 +309,7 @@ pub fn js_set_plugin_enabled(
     app: AppHandle,
     id: String,
     enabled: bool,
-) -> Result<JsPluginUpdateResponse, String> {
+) -> CmdResult<JsPluginUpdateResponse> {
     let mut script = get_normalized_script(&state)?;
     info!(
         "js_set_plugin_enabled: id={} enabled={} (existing ids={})",

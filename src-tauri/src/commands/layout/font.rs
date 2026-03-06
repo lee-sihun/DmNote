@@ -4,6 +4,8 @@ use std::fs;
 use tauri::Manager;
 use uuid::Uuid;
 
+use crate::errors::CmdResult;
+
 /// 폰트 로드 결과 응답 타입
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +22,7 @@ pub struct FontLoadResponse {
 /// 로컬 폰트 파일을 선택하고 폰트 이름/경로를 반환
 /// 파일 경로만 저장하고, 프론트에서 `convertFileSrc` 기반으로 `@font-face`를 생성
 #[tauri::command]
-pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
+pub fn font_load(app: tauri::AppHandle) -> CmdResult<FontLoadResponse> {
     let picked = FileDialog::new()
         .add_filter("Fonts", &["ttf", "otf", "woff", "woff2"])
         .pick_file();
@@ -49,15 +51,12 @@ pub fn font_load(app: tauri::AppHandle) -> Result<FontLoadResponse, String> {
         .unwrap_or("ttf")
         .to_lowercase();
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("앱 데이터 디렉토리 확인 실패: {e}"))?;
+    let data_dir = app.path().app_data_dir()?;
     let fonts_dir = data_dir.join("fonts");
-    fs::create_dir_all(&fonts_dir).map_err(|e| format!("폰트 디렉토리 생성 실패: {e}"))?;
+    fs::create_dir_all(&fonts_dir)?;
 
     let dest_path = fonts_dir.join(format!("{}.{}", Uuid::new_v4(), ext));
-    fs::copy(&path, &dest_path).map_err(|e| format!("폰트 파일 복사 실패: {e}"))?;
+    fs::copy(&path, &dest_path)?;
     let dest_string = dest_path.to_string_lossy().to_string();
 
     Ok(FontLoadResponse {

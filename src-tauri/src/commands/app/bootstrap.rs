@@ -1,8 +1,8 @@
 use tauri::State;
 
-use crate::{models::BootstrapPayload, state::AppState};
+use crate::{errors::CmdResult, models::BootstrapPayload, state::AppState};
 
 #[tauri::command]
-pub fn app_bootstrap(state: State<'_, AppState>) -> Result<BootstrapPayload, String> {
+pub fn app_bootstrap(state: State<'_, AppState>) -> CmdResult<BootstrapPayload> {
     Ok(state.bootstrap_payload())
 }

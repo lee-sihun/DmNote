@@ -3,6 +3,7 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::{
+    errors::{CmdResult, CommandError},
     models::{
         default_counter_animation_builtin_presets, default_counter_animation_preset_id,
         find_builtin_counter_animation_preset_by_id, CounterAnimationPreset,
@@ -56,7 +57,7 @@ pub struct CounterAnimationDeleteResponse {
 #[tauri::command]
 pub fn counter_animation_list(
     state: State<'_, AppState>,
-) -> Result<CounterAnimationListResponse, String> {
+) -> CmdResult<CounterAnimationListResponse> {
     let snapshot = state.store.snapshot();
     Ok(build_library_payload(&snapshot.counter_animation_presets))
 }
@@ -66,7 +67,7 @@ pub fn counter_animation_create(
     state: State<'_, AppState>,
     app: AppHandle,
     request: CounterAnimationCreateRequest,
-) -> Result<CounterAnimationUpsertResponse, String> {
+) -> CmdResult<CounterAnimationUpsertResponse> {
     let mut preset = CounterAnimationPreset {
         id: format!("user-{}", Uuid::new_v4().simple()),
         name: request.name,
@@ -79,16 +80,13 @@ pub fn counter_animation_create(
     preset.normalize();
 
     if preset.name.is_empty() {
-        return Err("counter animation name cannot be empty".to_string());
+        return Err(CommandError::msg("counter animation name cannot be empty"));
     }
 
     let next_preset = preset.clone();
-    let updated = state
-        .store
-        .update(|store| {
-            store.counter_animation_presets.push(next_preset.clone());
-        })
-        .map_err(|err| err.to_string())?;
+    let updated = state.store.update(|store| {
+        store.counter_animation_presets.push(next_preset.clone());
+    })?;
 
     emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
 
@@ -103,10 +101,10 @@ pub fn counter_animation_update(
     state: State<'_, AppState>,
     app: AppHandle,
     request: CounterAnimationUpdateRequest,
-) -> Result<CounterAnimationUpsertResponse, String> {
+) -> CmdResult<CounterAnimationUpsertResponse> {
     let target_id = request.id.trim().to_string();
     if target_id.is_empty() {
-        return Err("counter animation id is required".to_string());
+        return Err(CommandError::msg("counter animation id is required"));
     }
 
     let current = state.store.snapshot();
@@ -115,7 +113,9 @@ pub fn counter_animation_update(
         .iter()
         .any(|preset| preset.id == target_id)
     {
-        return Err(format!("counter animation preset not found: {target_id}"));
+        return Err(CommandError::msg(format!(
+            "counter animation preset not found: {target_id}"
+        )));
     }
 
     let mut preset = CounterAnimationPreset {
@@ -130,26 +130,23 @@ pub fn counter_animation_update(
     preset.normalize();
 
     if preset.name.is_empty() {
-        return Err("counter animation name cannot be empty".to_string());
+        return Err(CommandError::msg("counter animation name cannot be empty"));
     }
 
     let next_preset = preset.clone();
     let mut affected_usage_count = 0u32;
 
-    let updated = state
-        .store
-        .update(|store| {
-            if let Some(item) = store
-                .counter_animation_presets
-                .iter_mut()
-                .find(|item| item.id == target_id)
-            {
-                *item = next_preset.clone();
-            }
+    let updated = state.store.update(|store| {
+        if let Some(item) = store
+            .counter_animation_presets
+            .iter_mut()
+            .find(|item| item.id == target_id)
+        {
+            *item = next_preset.clone();
+        }
 
-            affected_usage_count = apply_preset_to_bound_counters(store, &target_id, &next_preset);
-        })
-        .map_err(|err| err.to_string())?;
+        affected_usage_count = apply_preset_to_bound_counters(store, &target_id, &next_preset);
+    })?;
 
     emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
     if affected_usage_count > 0 {
@@ -172,10 +169,10 @@ pub fn counter_animation_delete(
     state: State<'_, AppState>,
     app: AppHandle,
     id: String,
-) -> Result<CounterAnimationDeleteResponse, String> {
+) -> CmdResult<CounterAnimationDeleteResponse> {
     let target_id = id.trim().to_string();
     if target_id.is_empty() {
-        return Err("counter animation id is required".to_string());
+        return Err(CommandError::msg("counter animation id is required"));
     }
 
     let current = state.store.snapshot();
@@ -184,28 +181,27 @@ pub fn counter_animation_delete(
         .iter()
         .any(|preset| preset.id == target_id)
     {
-        return Err(format!("counter animation preset not found: {target_id}"));
+        return Err(CommandError::msg(format!(
+            "counter animation preset not found: {target_id}"
+        )));
     }
 
     let fallback_preset =
         find_builtin_counter_animation_preset_by_id(default_counter_animation_preset_id())
-            .ok_or_else(|| "default builtin counter animation preset missing".to_string())?;
+            .ok_or_else(|| CommandError::msg("default builtin counter animation preset missing"))?;
     let fallback_preset_id = fallback_preset.id.clone();
 
     let mut affected_usage_count = 0u32;
     let fallback_target = fallback_preset.clone();
 
-    let updated = state
-        .store
-        .update(|store| {
-            store
-                .counter_animation_presets
-                .retain(|preset| preset.id != target_id);
+    let updated = state.store.update(|store| {
+        store
+            .counter_animation_presets
+            .retain(|preset| preset.id != target_id);
 
-            affected_usage_count =
-                apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
-        })
-        .map_err(|err| err.to_string())?;
+        affected_usage_count =
+            apply_fallback_to_bound_counters(store, &target_id, &fallback_target);
+    })?;
 
     emit_counter_animation_changed(&app, &updated.counter_animation_presets)?;
     if affected_usage_count > 0 {
@@ -235,12 +231,12 @@ fn build_library_payload(user_presets: &[CounterAnimationPreset]) -> CounterAnim
 fn emit_counter_animation_changed(
     app: &AppHandle,
     user_presets: &[CounterAnimationPreset],
-) -> Result<(), String> {
+) -> CmdResult<()> {
     app.emit(
         "counterAnimation:changed",
         &build_library_payload(user_presets),
-    )
-    .map_err(|err| err.to_string())
+    )?;
+    Ok(())
 }
 
 fn emit_positions_changed(
@@ -248,13 +244,10 @@ fn emit_positions_changed(
     key_positions: &crate::models::KeyPositions,
     stat_positions: &crate::models::StatPositions,
     graph_positions: &crate::models::GraphPositions,
-) -> Result<(), String> {
-    app.emit("positions:changed", key_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("statPositions:changed", stat_positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", graph_positions)
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<()> {
+    app.emit("positions:changed", key_positions)?;
+    app.emit("statPositions:changed", stat_positions)?;
+    app.emit("graphPositions:changed", graph_positions)?;
     Ok(())
 }
 

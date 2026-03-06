@@ -2,6 +2,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, State};
 
 use crate::{
+    errors::CmdResult,
     models::{BootstrapOverlayState, OverlayBounds},
     state::AppState,
 };
@@ -22,7 +23,7 @@ pub struct OverlayResizeArgs {
 }
 
 #[tauri::command]
-pub fn overlay_get(state: State<'_, AppState>) -> Result<BootstrapOverlayState, String> {
+pub fn overlay_get(state: State<'_, AppState>) -> CmdResult<BootstrapOverlayState> {
     Ok(state.overlay_status())
 }
 
@@ -31,21 +32,13 @@ pub fn overlay_set_visible(
     state: State<'_, AppState>,
     app: AppHandle,
     visible: bool,
-) -> Result<(), String> {
-    state
-        .set_overlay_visibility(&app, visible)
-        .map_err(|err| err.to_string())
+) -> CmdResult<()> {
+    Ok(state.set_overlay_visibility(&app, visible)?)
 }
 
 #[tauri::command]
-pub fn overlay_set_lock(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    locked: bool,
-) -> Result<(), String> {
-    state
-        .set_overlay_lock(&app, locked, true)
-        .map_err(|err| err.to_string())
+pub fn overlay_set_lock(state: State<'_, AppState>, app: AppHandle, locked: bool) -> CmdResult<()> {
+    Ok(state.set_overlay_lock(&app, locked, true)?)
 }
 
 #[tauri::command]
@@ -53,10 +46,8 @@ pub fn overlay_set_anchor(
     state: State<'_, AppState>,
     app: AppHandle,
     anchor: String,
-) -> Result<String, String> {
-    state
-        .set_overlay_anchor(&app, &anchor)
-        .map_err(|err| err.to_string())
+) -> CmdResult<String> {
+    Ok(state.set_overlay_anchor(&app, &anchor)?)
 }
 
 #[tauri::command]
@@ -64,16 +55,14 @@ pub fn overlay_resize(
     state: State<'_, AppState>,
     app: AppHandle,
     payload: OverlayResizeArgs,
-) -> Result<OverlayBounds, String> {
-    state
-        .resize_overlay(
-            &app,
-            payload.width,
-            payload.height,
-            payload.anchor,
-            payload.content_top_offset,
-            payload.fixed_position_delta_x,
-            payload.fixed_position_delta_y,
-        )
-        .map_err(|err| err.to_string())
+) -> CmdResult<OverlayBounds> {
+    Ok(state.resize_overlay(
+        &app,
+        payload.width,
+        payload.height,
+        payload.anchor,
+        payload.content_top_offset,
+        payload.fixed_position_delta_x,
+        payload.fixed_position_delta_y,
+    )?)
 }

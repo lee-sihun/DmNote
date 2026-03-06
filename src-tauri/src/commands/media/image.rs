@@ -12,7 +12,10 @@ use webp_animation::{
     AnimParams, Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig,
 };
 
-use crate::state::AppState;
+use crate::{
+    errors::{CmdResult, CommandError},
+    state::AppState,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +33,7 @@ pub struct ImageLoadResponse {
 /// GIF는 UX를 위해 즉시 원본 경로를 반환하고, 백그라운드에서 WebP 최적화를 수행한 뒤
 /// 스토어의 이미지 경로를 자동으로 치환합니다.
 #[tauri::command]
-pub fn image_load(app: tauri::AppHandle) -> Result<ImageLoadResponse, String> {
+pub fn image_load(app: tauri::AppHandle) -> CmdResult<ImageLoadResponse> {
     let picked = FileDialog::new()
         .add_filter(
             "Images",
@@ -50,12 +53,9 @@ pub fn image_load(app: tauri::AppHandle) -> Result<ImageLoadResponse, String> {
 
     let ext = normalize_image_extension(path.extension().and_then(|e| e.to_str()));
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("앱 데이터 디렉토리 확인 실패: {e}"))?;
+    let data_dir = app.path().app_data_dir()?;
     let images_dir = data_dir.join("images");
-    fs::create_dir_all(&images_dir).map_err(|e| format!("이미지 디렉토리 생성 실패: {e}"))?;
+    fs::create_dir_all(&images_dir)?;
 
     let dest_path = copy_image_to_app_data(&path, &images_dir, &ext)?;
 
@@ -96,9 +96,9 @@ fn copy_image_to_app_data(
     source_path: &Path,
     images_dir: &Path,
     extension: &str,
-) -> Result<PathBuf, String> {
+) -> CmdResult<PathBuf> {
     let dest_path = images_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
-    fs::copy(source_path, &dest_path).map_err(|e| format!("이미지 파일 복사 실패: {e}"))?;
+    fs::copy(source_path, &dest_path)?;
     Ok(dest_path)
 }
 
@@ -106,7 +106,7 @@ fn replace_store_image_path_references(
     app: &tauri::AppHandle,
     from_path: &Path,
     to_path: &Path,
-) -> Result<(), String> {
+) -> CmdResult<()> {
     let from = from_path.to_string_lossy().to_string();
     let to = to_path.to_string_lossy().to_string();
     if from == to {
@@ -143,49 +143,46 @@ fn replace_store_image_path_references(
 
     let mut changed = false;
 
-    let updated = state
-        .store
-        .update(|store| {
-            for positions in store.key_positions.values_mut() {
-                for position in positions.iter_mut() {
-                    if position.active_image.as_deref() == Some(from.as_str()) {
-                        position.active_image = Some(to.clone());
-                        changed = true;
-                    }
-                    if position.inactive_image.as_deref() == Some(from.as_str()) {
-                        position.inactive_image = Some(to.clone());
-                        changed = true;
-                    }
+    let updated = state.store.update(|store| {
+        for positions in store.key_positions.values_mut() {
+            for position in positions.iter_mut() {
+                if position.active_image.as_deref() == Some(from.as_str()) {
+                    position.active_image = Some(to.clone());
+                    changed = true;
+                }
+                if position.inactive_image.as_deref() == Some(from.as_str()) {
+                    position.inactive_image = Some(to.clone());
+                    changed = true;
                 }
             }
+        }
 
-            for positions in store.stat_positions.values_mut() {
-                for stat_position in positions.iter_mut() {
-                    if stat_position.position.active_image.as_deref() == Some(from.as_str()) {
-                        stat_position.position.active_image = Some(to.clone());
-                        changed = true;
-                    }
-                    if stat_position.position.inactive_image.as_deref() == Some(from.as_str()) {
-                        stat_position.position.inactive_image = Some(to.clone());
-                        changed = true;
-                    }
+        for positions in store.stat_positions.values_mut() {
+            for stat_position in positions.iter_mut() {
+                if stat_position.position.active_image.as_deref() == Some(from.as_str()) {
+                    stat_position.position.active_image = Some(to.clone());
+                    changed = true;
+                }
+                if stat_position.position.inactive_image.as_deref() == Some(from.as_str()) {
+                    stat_position.position.inactive_image = Some(to.clone());
+                    changed = true;
                 }
             }
+        }
 
-            for positions in store.graph_positions.values_mut() {
-                for graph_position in positions.iter_mut() {
-                    if graph_position.position.active_image.as_deref() == Some(from.as_str()) {
-                        graph_position.position.active_image = Some(to.clone());
-                        changed = true;
-                    }
-                    if graph_position.position.inactive_image.as_deref() == Some(from.as_str()) {
-                        graph_position.position.inactive_image = Some(to.clone());
-                        changed = true;
-                    }
+        for positions in store.graph_positions.values_mut() {
+            for graph_position in positions.iter_mut() {
+                if graph_position.position.active_image.as_deref() == Some(from.as_str()) {
+                    graph_position.position.active_image = Some(to.clone());
+                    changed = true;
+                }
+                if graph_position.position.inactive_image.as_deref() == Some(from.as_str()) {
+                    graph_position.position.inactive_image = Some(to.clone());
+                    changed = true;
                 }
             }
-        })
-        .map_err(|error| format!("스토어 업데이트 실패: {error}"))?;
+        }
+    })?;
 
     if !changed {
         // snapshot 이후 참조가 사라진 레이스 케이스
@@ -196,12 +193,9 @@ fn replace_store_image_path_references(
         return Ok(());
     }
 
-    app.emit("positions:changed", &updated.key_positions)
-        .map_err(|error| format!("positions:changed emit 실패: {error}"))?;
-    app.emit("statPositions:changed", &updated.stat_positions)
-        .map_err(|error| format!("statPositions:changed emit 실패: {error}"))?;
-    app.emit("graphPositions:changed", &updated.graph_positions)
-        .map_err(|error| format!("graphPositions:changed emit 실패: {error}"))?;
+    app.emit("positions:changed", &updated.key_positions)?;
+    app.emit("statPositions:changed", &updated.stat_positions)?;
+    app.emit("graphPositions:changed", &updated.graph_positions)?;
     let _ = app.emit(
         "image:optimized",
         serde_json::json!({ "fromPath": from, "toPath": to }),
@@ -213,8 +207,8 @@ fn replace_store_image_path_references(
 fn try_convert_gif_to_cached_webp(
     source_path: &Path,
     images_dir: &Path,
-) -> Result<Option<PathBuf>, String> {
-    let gif_bytes = fs::read(source_path).map_err(|e| format!("GIF 파일 읽기 실패: {e}"))?;
+) -> CmdResult<Option<PathBuf>> {
+    let gif_bytes = fs::read(source_path)?;
     if gif_bytes.is_empty() {
         return Ok(None);
     }
@@ -229,7 +223,7 @@ fn try_convert_gif_to_cached_webp(
     Ok(Some(cached_webp_path))
 }
 
-fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), String> {
+fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> CmdResult<()> {
     let mut gif_opts = gif::DecodeOptions::new();
     // gif-dispose 사용 시 indexed 모드 필수
     gif_opts.set_color_output(gif::ColorOutput::Indexed);
@@ -237,12 +231,12 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), Strin
     let cursor = Cursor::new(gif_bytes);
     let mut decoder = gif_opts
         .read_info(cursor)
-        .map_err(|e| format!("GIF 디코더 초기화 실패: {e}"))?;
+        .map_err(|e| CommandError::msg(format!("GIF 디코더 초기화 실패: {e}")))?;
 
     let width = decoder.width() as u32;
     let height = decoder.height() as u32;
     if width == 0 || height == 0 {
-        return Err("유효하지 않은 GIF 크기입니다.".to_string());
+        return Err(CommandError::msg("유효하지 않은 GIF 크기입니다."));
     }
 
     let repeat = decoder.repeat();
@@ -264,7 +258,7 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), Strin
     });
 
     let mut encoder = Encoder::new_with_options((width, height), encoder_options)
-        .map_err(|e| format!("WebP 인코더 초기화 실패: {e}"))?;
+        .map_err(|e| CommandError::msg(format!("WebP 인코더 초기화 실패: {e}")))?;
 
     let mut frame_count = 0usize;
     let mut timestamp_ms = 0i32;
@@ -272,14 +266,14 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), Strin
     loop {
         let frame_opt = decoder
             .read_next_frame()
-            .map_err(|e| format!("GIF 프레임 읽기 실패: {e}"))?;
+            .map_err(|e| CommandError::msg(format!("GIF 프레임 읽기 실패: {e}")))?;
         let Some(frame) = frame_opt else {
             break;
         };
 
         screen
             .blit_frame(frame)
-            .map_err(|e| format!("GIF 프레임 합성 실패: {e}"))?;
+            .map_err(|e| CommandError::msg(format!("GIF 프레임 합성 실패: {e}")))?;
 
         let (rgba_pixels, _, _) = screen.pixels_rgba().to_contiguous_buf();
         let mut rgba_bytes = Vec::with_capacity(rgba_pixels.len() * 4);
@@ -289,7 +283,7 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), Strin
 
         encoder
             .add_frame(&rgba_bytes, timestamp_ms)
-            .map_err(|e| format!("WebP 프레임 추가 실패: {e}"))?;
+            .map_err(|e| CommandError::msg(format!("WebP 프레임 추가 실패: {e}")))?;
 
         let frame_delay_ms = i32::from(frame.delay.max(1)).saturating_mul(10);
         timestamp_ms = timestamp_ms.saturating_add(frame_delay_ms);
@@ -297,16 +291,15 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> Result<(), Strin
     }
 
     if frame_count == 0 {
-        return Err("GIF 프레임이 없습니다.".to_string());
+        return Err(CommandError::msg("GIF 프레임이 없습니다."));
     }
 
     let final_timestamp_ms = timestamp_ms.max(10);
     let webp_data = encoder
         .finalize(final_timestamp_ms)
-        .map_err(|e| format!("WebP 인코딩 마무리 실패: {e}"))?;
+        .map_err(|e| CommandError::msg(format!("WebP 인코딩 마무리 실패: {e}")))?;
 
-    fs::write(output_path, &webp_data[..])
-        .map_err(|e| format!("변환된 WebP 파일 저장 실패: {e}"))?;
+    fs::write(output_path, &webp_data[..])?;
 
     Ok(())
 }

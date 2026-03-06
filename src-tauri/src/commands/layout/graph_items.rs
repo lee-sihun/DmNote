@@ -1,9 +1,9 @@
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{models::GraphPositions, state::AppState};
+use crate::{errors::CmdResult, models::GraphPositions, state::AppState};
 
 #[tauri::command]
-pub fn graph_positions_get(state: State<'_, AppState>) -> Result<GraphPositions, String> {
+pub fn graph_positions_get(state: State<'_, AppState>) -> CmdResult<GraphPositions> {
     Ok(state.store.snapshot().graph_positions)
 }
 
@@ -12,12 +12,8 @@ pub fn graph_positions_update(
     state: State<'_, AppState>,
     app: AppHandle,
     positions: GraphPositions,
-) -> Result<GraphPositions, String> {
-    let updated = state
-        .store
-        .update_graph_positions(positions)
-        .map_err(|err| err.to_string())?;
-    app.emit("graphPositions:changed", &updated)
-        .map_err(|err| err.to_string())?;
+) -> CmdResult<GraphPositions> {
+    let updated = state.store.update_graph_positions(positions)?;
+    app.emit("graphPositions:changed", &updated)?;
     Ok(updated)
 }

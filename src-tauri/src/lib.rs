@@ -2,6 +2,7 @@ pub mod audio;
 pub mod commands;
 pub mod cursor;
 pub mod defaults;
+pub mod errors;
 pub mod ipc;
 pub mod keyboard;
 pub mod models;

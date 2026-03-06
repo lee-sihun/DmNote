@@ -4,6 +4,7 @@ mod audio;
 mod commands;
 mod cursor;
 mod defaults;
+mod errors;
 mod ipc;
 mod keyboard;
 mod models;
