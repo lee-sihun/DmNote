@@ -36,6 +36,9 @@ import {
 } from '@utils/displayElementActions';
 import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
 
+const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
+const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
+
 /**
  * 리사이즈 앵커에 따라 크기 변경 시 위치 보정값 계산
  */
@@ -103,7 +106,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   element,
   windowType,
   activeTool,
-  positionOffset = { x: 0, y: 0 },
+  positionOffset = DEFAULT_POSITION_OFFSET,
   zoom = 1,
   panX = 0,
   panY = 0,
@@ -111,7 +114,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   arrayIndex = 0,
   keyCount = 0,
   isSelected = false,
-  selectedElements = [],
+  selectedElements = EMPTY_SELECTED_ELEMENTS,
   onSelectionContextMenu,
   onMultiDrag,
   onMultiDragStart,
@@ -1210,7 +1213,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       exposedActionsRef.current = {};
       cleanups.forEach((fn) => fn());
     };
-  });
+  }, [windowType, definition?.id, element.fullId, updateElementBatched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const elementStyle: React.CSSProperties = (() => {
     const shouldPromoteTransformLayer =

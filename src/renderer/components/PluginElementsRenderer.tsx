@@ -12,6 +12,9 @@ import {
   SelectedElement,
 } from '@stores/useGridSelectionStore';
 
+const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
+const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
+
 /**
  * Main에서 온 elements와 Overlay의 기존 elements를 병합
  * - Main에서 온 데이터: position, settings 등 동기화 필요한 필드
@@ -61,7 +64,7 @@ interface PluginElementsRendererProps {
 export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
   windowType,
   activeTool,
-  positionOffset = { x: 0, y: 0 },
+  positionOffset = DEFAULT_POSITION_OFFSET,
   zoom = 1,
   panX = 0,
   panY = 0,
@@ -88,7 +91,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
     (state) => state.selectedElements,
   );
   const selectedElements: SelectedElement[] =
-    windowType === 'main' ? selectedElementsRaw : [];
+    windowType === 'main' ? selectedElementsRaw : EMPTY_SELECTED_ELEMENTS;
 
   // 현재 탭에 해당하는 요소만 필터링
   const filteredElements = elements.filter((el) => {

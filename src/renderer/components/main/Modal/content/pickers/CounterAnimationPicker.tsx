@@ -123,7 +123,7 @@ export default function CounterAnimationPicker({
   useEffect(() => {
     if (!open) return;
     void loadLibrary();
-  });
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) return;

@@ -1,7 +1,39 @@
 import { createElement } from 'react';
 import htm from 'htm';
 
-export const html = htm.bind(createElement);
+/**
+ * CSS 문자열 style을 React CSSProperties 객체로 변환
+ * htm 템플릿에서 style="color: red; font-size: 14px" 형태를 지원하기 위함
+ */
+function parseStyleString(
+  styleStr: string,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const declaration of styleStr.split(';')) {
+    const colonIndex = declaration.indexOf(':');
+    if (colonIndex === -1) continue;
+    const prop = declaration.slice(0, colonIndex).trim();
+    const value = declaration.slice(colonIndex + 1).trim();
+    if (!prop || !value) continue;
+    // kebab-case → camelCase (e.g. font-size → fontSize)
+    const camelProp = prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    result[camelProp] = value;
+  }
+  return result;
+}
+
+function wrappedCreateElement(
+  type: string,
+  props: Record<string, unknown> | null,
+  ...children: React.ReactNode[]
+) {
+  if (props && typeof props.style === 'string') {
+    props = { ...props, style: parseStyleString(props.style) };
+  }
+  return createElement(type, props, ...children);
+}
+
+export const html = htm.bind(wrappedCreateElement);
 
 export function styleMap(
   styles: Record<string, string | number | undefined | null>,

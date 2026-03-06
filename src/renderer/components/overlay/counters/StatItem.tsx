@@ -1,3 +1,4 @@
+'use no memo';
 import React, { useEffect } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getStatValueSignal } from '@stores/signals/statsSignals';

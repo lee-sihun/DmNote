@@ -58,7 +58,7 @@ const FloatingPopup = ({
   useEffect(() => {
     if (referenceRef && referenceRef.current)
       refs.setReference(referenceRef.current);
-  }, [referenceRef, refs]);
+  }, [referenceRef, refs.setReference]);
 
   useEffect(() => {
     if (open && autoClose) {

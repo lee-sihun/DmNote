@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/refs */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Lenis from 'lenis';
 import { LENIS_CONFIG } from '@config/lenis';
 
@@ -58,11 +57,11 @@ export function useLenis(options: UseLenisOptions = {}) {
   } = options;
 
   // callback ref - DOM 요소가 마운트/언마운트될 때 호출됨
-  const scrollContainerRef = (node: HTMLElement | null) => {
+  const scrollContainerRef = useCallback((node: HTMLElement | null) => {
     if (wrapperRef.current === node) return;
     wrapperRef.current = node;
     setWrapper(node);
-  };
+  }, []);
 
   useEffect(() => {
     if (!wrapper) return;

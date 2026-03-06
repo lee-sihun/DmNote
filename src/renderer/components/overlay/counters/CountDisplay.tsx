@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toCssRgba } from '@utils/color/colorUtils';
 import {
   COUNTER_DEFAULT_BEZIER,
@@ -52,7 +52,15 @@ export default function CountDisplay({
     Math.max(Math.round(Number(animationDurationMs) || 300), 1),
     5000,
   );
-  const easing = createCubicBezierEasing(animationBezier);
+  const easing = useMemo(
+    () => createCubicBezierEasing(animationBezier),
+    [
+      animationBezier?.[0],
+      animationBezier?.[1],
+      animationBezier?.[2],
+      animationBezier?.[3],
+    ],
+  );
 
   useEffect(() => {
     if (!animationEnabled) {

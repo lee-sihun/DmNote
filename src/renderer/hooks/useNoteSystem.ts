@@ -1,3 +1,4 @@
+'use no memo';
 /* eslint-disable react-hooks/purity */
 import { useRef, useEffect } from 'react';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';

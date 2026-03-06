@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import FloatingPopup from '../../FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
@@ -94,7 +94,7 @@ export default function CommonListPickerPopup<T>({
       return;
     }
 
-    requestAnimationFrame(() => {
+    const calculatePosition = () => {
       const panelRect = panelElement.getBoundingClientRect();
       const popupEl = containerRef.current;
       const popupWidth = popupEl ? popupEl.offsetWidth : estimatedWidth;
@@ -114,8 +114,28 @@ export default function CommonListPickerPopup<T>({
         fixedY = padding;
       }
 
-      setFixedPosition({ x: fixedX, y: fixedY });
-    });
+      setFixedPosition((prev) => {
+        if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
+        return { x: fixedX, y: fixedY };
+      });
+    };
+
+    const rafId = requestAnimationFrame(calculatePosition);
+
+    // 팝업 크기가 변하면(로딩 텍스트 등) 위치 재계산
+    const el = containerRef.current;
+    let resizeObserver: ResizeObserver | undefined;
+    if (el) {
+      resizeObserver = new ResizeObserver(() => {
+        calculatePosition();
+      });
+      resizeObserver.observe(el);
+    }
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver?.disconnect();
+    };
   }, [estimatedHeight, estimatedWidth, open, panelElement]);
 
   useEffect(() => {
@@ -157,9 +177,10 @@ export default function CommonListPickerPopup<T>({
     };
   }, [open, wrapperElement, items.length]);
 
-  const scrollbarCompensation = hasOverflow
-    ? scrollbarWidth + SCROLL_CONTENT_GUTTER
-    : 0;
+  const scrollbarCompensation = useMemo(
+    () => (hasOverflow ? scrollbarWidth + SCROLL_CONTENT_GUTTER : 0),
+    [hasOverflow, scrollbarWidth],
+  );
 
   const effectiveOffsetY = fixedPosition ? 0 : -93;
 

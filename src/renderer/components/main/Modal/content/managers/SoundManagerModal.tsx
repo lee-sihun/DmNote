@@ -77,7 +77,7 @@ export default function SoundManagerModal({
   useEffect(() => {
     if (!isOpen) return;
     void loadSounds();
-  });
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateScrollState = (el: HTMLElement | null) => {
     if (!el) return;

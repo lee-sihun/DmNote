@@ -1,3 +1,4 @@
+'use no memo';
 import React, { useRef, useEffect } from 'react';
 import { getKeySignal } from '@stores/signals/keySignals';
 import { getKeyCounterSignal } from '@stores/signals/keyCounterSignals';
@@ -670,7 +671,7 @@ export default function DraggableKey({
   );
 }
 
-export function Key({
+export const Key = React.memo(function Key({
   keyName,
   globalKey,
   position,
@@ -952,4 +953,4 @@ export function Key({
       ) : null}
     </div>
   );
-}
+});

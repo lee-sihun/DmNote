@@ -554,7 +554,7 @@ export default function App() {
       // 안전하게 모든 키 신호 초기화(선택적)
       resetAllKeySignals();
     };
-  });
+  }, [handleKeyDown, handleKeyUp, noteEffect, updateKeySignalWithDelay, keyMappings, positions, selectedKeyType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
 

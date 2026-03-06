@@ -1,3 +1,4 @@
+'use no memo';
 import { useEffect, useRef, useState } from 'react';
 import {
   useGridViewStore,
@@ -33,16 +34,6 @@ export function useGridZoomPan({
 
   const macOS = isMac();
 
-  // 최신 zoom/pan 값을 이벤트 핸들러에서 참조하기 위한 ref
-  const zoomRef = useRef(zoom);
-  const panXRef = useRef(panX);
-  const panYRef = useRef(panY);
-  useEffect(() => {
-    zoomRef.current = zoom;
-    panXRef.current = panX;
-    panYRef.current = panY;
-  }, [zoom, panX, panY]);
-
   // 휠 이벤트 누적 방지용 ref
   const isWheelProcessingRef = useRef(false);
   const [isTransforming, setIsTransforming] = useState(false);
@@ -76,11 +67,8 @@ export function useGridZoomPan({
   ): GridCoords | null => {
     if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
-    const z = zoomRef.current;
-    const px = panXRef.current;
-    const py = panYRef.current;
-    const localX = (clientX - rect.left - px) / z;
-    const localY = (clientY - rect.top - py) / z;
+    const localX = (clientX - rect.left - panX) / zoom;
+    const localY = (clientY - rect.top - panY) / zoom;
     return { x: localX, y: localY };
   };
 
@@ -93,11 +81,8 @@ export function useGridZoomPan({
   ): GridCoords | null => {
     if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
-    const z = zoomRef.current;
-    const px = panXRef.current;
-    const py = panYRef.current;
-    const clientX = gridX * z + px + rect.left;
-    const clientY = gridY * z + py + rect.top;
+    const clientX = gridX * zoom + panX + rect.left;
+    const clientY = gridY * zoom + panY + rect.top;
     return { x: clientX, y: clientY };
   };
 
@@ -108,16 +93,13 @@ export function useGridZoomPan({
     if (!containerRef.current) return;
 
     const clampedZoom = clampZoom(newZoom);
-    const currentZoom = zoomRef.current;
-    if (clampedZoom === currentZoom) return;
+    if (clampedZoom === zoom) return;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const px = panXRef.current;
-    const py = panYRef.current;
 
     // 마우스 위치의 현재 그리드 좌표
-    const mouseGridX = (clientX - rect.left - px) / currentZoom;
-    const mouseGridY = (clientY - rect.top - py) / currentZoom;
+    const mouseGridX = (clientX - rect.left - panX) / zoom;
+    const mouseGridY = (clientY - rect.top - panY) / zoom;
 
     // 새 줌 레벨에서 같은 그리드 좌표가 같은 화면 위치에 오도록 팬 조정
     const newPanX = clientX - rect.left - mouseGridX * clampedZoom;
@@ -136,7 +118,7 @@ export function useGridZoomPan({
     const rect = containerRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    zoomAtPoint(centerX, centerY, zoomRef.current + ZOOM_STEP);
+    zoomAtPoint(centerX, centerY, zoom + ZOOM_STEP);
   };
 
   /**
@@ -147,7 +129,7 @@ export function useGridZoomPan({
     const rect = containerRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    zoomAtPoint(centerX, centerY, zoomRef.current - ZOOM_STEP);
+    zoomAtPoint(centerX, centerY, zoom - ZOOM_STEP);
   };
 
   /**
@@ -162,7 +144,7 @@ export function useGridZoomPan({
    */
   const pan = (deltaX: number, deltaY: number) => {
     touchTransforming();
-    setPan(mode, panXRef.current + deltaX, panYRef.current + deltaY);
+    setPan(mode, panX + deltaX, panY + deltaY);
   };
 
   /**
@@ -186,7 +168,7 @@ export function useGridZoomPan({
     if (isWheelZoomModifierPressed) {
       // (Ctrl/Cmd) + 휠: 줌
       const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      zoomAtPoint(e.clientX, e.clientY, zoomRef.current + delta);
+      zoomAtPoint(e.clientX, e.clientY, zoom + delta);
     } else {
       // 휠/트랙패드 2손가락: 패닝
       // - 트랙패드는 deltaX/deltaY가 같이 들어오므로 수평/대각 이동 지원
@@ -278,8 +260,8 @@ export function useGridZoomPan({
 
     const startX = e.clientX;
     const startY = e.clientY;
-    const startPanX = panXRef.current;
-    const startPanY = panYRef.current;
+    const startPanX = panX;
+    const startPanY = panY;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
