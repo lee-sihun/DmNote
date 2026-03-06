@@ -36,14 +36,19 @@ src/renderer/
 └── styles/          # 전역 스타일 (Tailwind)
 
 src-tauri/src/
-├── commands/        # Tauri 커맨드 (snake_case.rs)
+├── commands/        # Tauri 커맨드 (도메인별 하위 폴더)
+│   ├── app/        # 앱 생명주기 (bootstrap, system, update)
+│   ├── editor/     # 에디터 콘텐츠 (css, js, note_tab)
+│   ├── keys/       # 키 입력/설정 (keys, key_sound, sound)
+│   ├── layout/     # UI 레이아웃 (overlay, settings, font, items)
+│   ├── media/      # 미디어 리소스 (image, counter_animation)
+│   ├── preset/     # 프리셋 저장/로드 (save, load)
+│   └── plugin/     # 플러그인 시스템 (bridge, storage)
 ├── services/        # 비즈니스 로직 (css_watcher, settings)
-├── app_state.rs     # 앱 상태 관리
-├── models.rs        # 데이터 모델
-├── store.rs         # 영속 스토리지
-├── key_sound.rs     # 키 사운드 엔진
-├── keyboard_daemon.rs # 키보드 후킹 데몬
-├── ipc.rs           # IPC 이벤트 정의
+├── state/           # 상태 관리 (app_state, store)
+├── keyboard/        # 키보드 입력 (daemon, manager, labels)
+├── audio/           # 사운드 엔진 (engine)
+├── models/          # 데이터 모델
 └── main.rs          # 진입점
 ```
 
