@@ -145,6 +145,58 @@ settings: {
 
 `type: "divider"`는 설정 UI에 구분선만 추가하며 `default`나 `label`이 필요하지 않습니다.
 
+### 조건부 표시 (visible)
+
+설정 항목에 `visible` 속성을 추가하면 다른 설정값에 따라 동적으로 표시/숨김할 수 있습니다.
+`visible`이 없는 설정은 항상 표시됩니다 (기존 동작과 동일).
+
+```javascript
+settings: {
+  // 모드 선택
+  showGraph: {
+    type: "boolean",
+    default: true,
+    label: "그래프 표시",
+  },
+
+  // 정적 boolean — 항상 숨김
+  hiddenOption: {
+    type: "number",
+    default: 5,
+    label: "숨겨진 옵션",
+    visible: false,
+  },
+
+  // 함수 — 다른 설정값에 따라 동적으로 표시/숨김
+  graphDivider: {
+    type: "divider",
+    visible: (settings) => settings.showGraph,
+  },
+  graphColor: {
+    type: "color",
+    default: "#86EFAC",
+    label: "그래프 색상",
+    visible: (settings) => settings.showGraph,
+  },
+  graphSpeed: {
+    type: "number",
+    default: 1000,
+    label: "그래프 속도 (ms)",
+    visible: (settings) => settings.showGraph,
+  },
+},
+```
+
+<Callout type="info">
+  숨겨진 설정의 저장값은 유지됩니다 — 표시만 제어하며 데이터 손실은 없습니다.
+</Callout>
+
+`visible` 시그니처는 컨텍스트 메뉴의 `PluginMenuItem.visible`과 동일한 패턴입니다:
+
+```typescript
+visible?: boolean | ((settings: Record<string, any>) => boolean);
+```
+
 ### 설정 접근
 
 ```javascript
@@ -522,7 +574,13 @@ dmn.plugin.defineElement({
   settings: {
     showGraph: { type: "boolean", default: true, label: "그래프 표시" },
     textColor: { type: "color", default: "#FFFFFF", label: "텍스트 색상" },
-    graphColor: { type: "color", default: "#86EFAC", label: "그래프 색상" },
+    graphDivider: { type: "divider", visible: (s) => s.showGraph },
+    graphColor: {
+      type: "color",
+      default: "#86EFAC",
+      label: "그래프 색상",
+      visible: (s) => s.showGraph,
+    },
   },
 
   previewState: {

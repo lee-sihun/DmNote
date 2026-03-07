@@ -49,6 +49,15 @@ const pluginSettings = dmn.plugin.defineSettings({
 
 // `type: "divider"` adds only a divider in settings panel/modal.
 
+// Conditional visibility — use visible property to dynamically show/hide items
+// Supports both static boolean and function
+advancedOption: {
+  type: "number",
+  default: 5,
+  label: "Advanced Option",
+  visible: (settings) => settings.enabled,  // Only shown when enabled is true
+},
+
 // Get settings values
 const current = pluginSettings.get();
 console.log("API Key:", current.apiKey);

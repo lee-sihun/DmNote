@@ -49,6 +49,15 @@ const pluginSettings = dmn.plugin.defineSettings({
 
 `type: "divider"`는 설정 패널/모달에 구분선만 추가합니다.
 
+// 조건부 표시 — visible 속성으로 다른 설정값에 따라 동적으로 항목 표시/숨김
+// 정적 boolean 또는 함수 모두 지원
+advancedOption: {
+  type: "number",
+  default: 5,
+  label: "고급 옵션",
+  visible: (settings) => settings.enabled,  // enabled가 true일 때만 표시
+},
+
 // 설정값 조회
 const current = pluginSettings.get();
 console.log("API Key:", current.apiKey);
@@ -196,6 +205,13 @@ dmn.plugin.defineElement({
   // 인스턴스별 설정
   settings: {
     showGraph: { type: "boolean", default: true, label: "그래프 표시" },
+    graphDivider: { type: "divider", visible: (s) => s.showGraph },
+    graphColor: {
+      type: "color",
+      default: "#86EFAC",
+      label: "그래프 색상",
+      visible: (s) => s.showGraph,
+    },
   },
 
   template: (state, instanceSettings, { html }) => {

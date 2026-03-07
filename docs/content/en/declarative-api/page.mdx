@@ -145,6 +145,58 @@ settings: {
 
 `type: "divider"` adds only a divider in the settings UI without needing `default` or `label`.
 
+### Conditional Visibility (visible)
+
+Add a `visible` property to setting items to dynamically show/hide them based on other setting values.
+Settings without `visible` are always shown (same as existing behavior).
+
+```javascript
+settings: {
+  // Mode selection
+  showGraph: {
+    type: "boolean",
+    default: true,
+    label: "Show Graph",
+  },
+
+  // Static boolean — always hidden
+  hiddenOption: {
+    type: "number",
+    default: 5,
+    label: "Hidden Option",
+    visible: false,
+  },
+
+  // Function — dynamically show/hide based on other settings
+  graphDivider: {
+    type: "divider",
+    visible: (settings) => settings.showGraph,
+  },
+  graphColor: {
+    type: "color",
+    default: "#86EFAC",
+    label: "Graph Color",
+    visible: (settings) => settings.showGraph,
+  },
+  graphSpeed: {
+    type: "number",
+    default: 1000,
+    label: "Graph Speed (ms)",
+    visible: (settings) => settings.showGraph,
+  },
+},
+```
+
+<Callout type="info">
+  Hidden settings retain their stored values — only display is controlled, no data loss.
+</Callout>
+
+The `visible` signature follows the same pattern as `PluginMenuItem.visible` in context menus:
+
+```typescript
+visible?: boolean | ((settings: Record<string, any>) => boolean);
+```
+
 ### Accessing Settings
 
 ```javascript
