@@ -908,9 +908,13 @@ impl AppState {
             )
         };
 
+        let original_x = bounds.x;
+        let original_y = bounds.y;
         let position = self.compute_overlay_position(&bounds, had_bounds, &monitor_data);
         bounds.x = position.x;
         bounds.y = position.y;
+        let position_was_adjusted =
+            (bounds.x - original_x).abs() > 0.5 || (bounds.y - original_y).abs() > 0.5;
         if !monitor_data.is_empty() {
             bounds_are_logical = true;
         }
@@ -979,11 +983,15 @@ impl AppState {
 
         self.configure_overlay_window(&window, app);
 
-        if let Err(err) = self.store.update(|state| {
-            state.overlay_bounds = Some(bounds.clone());
-            state.overlay_bounds_are_logical = bounds_are_logical;
-        }) {
-            log::warn!("failed to persist initial overlay bounds: {err}");
+        // 위치가 보정되었거나 logical 플래그 동기화가 필요한 경우에만 store 갱신
+        let needs_logical_sync = bounds_are_logical && !snapshot.overlay_bounds_are_logical;
+        if position_was_adjusted || !had_bounds || needs_logical_sync {
+            if let Err(err) = self.store.update(|state| {
+                state.overlay_bounds = Some(bounds.clone());
+                state.overlay_bounds_are_logical = bounds_are_logical;
+            }) {
+                log::warn!("failed to persist initial overlay bounds: {err}");
+            }
         }
 
         // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
@@ -1057,6 +1065,9 @@ impl AppState {
         had_stored_bounds: bool,
         monitors: &MonitorData,
     ) -> OverlayPosition {
+        // 최소 가시 면적 — 오버레이 전체 면적의 25% 또는 100×100 중 작은 값
+        let min_visible_area = (bounds.width * bounds.height * 0.25).min(100.0 * 100.0);
+
         if monitors.is_empty() {
             return if had_stored_bounds {
                 OverlayPosition {
@@ -1083,32 +1094,36 @@ impl AppState {
             };
         };
 
-        let target_spec = if had_stored_bounds {
-            let center_x = bounds.x + bounds.width / 2.0;
-            let center_y = bounds.y + bounds.height / 2.0;
-            monitors
-                .find_by_logical(center_x, center_y)
-                .cloned()
-                .unwrap_or(fallback_spec.clone())
-        } else {
-            fallback_spec.clone()
-        };
-
-        let base_x = if had_stored_bounds {
-            bounds.x
-        } else {
-            target_spec.logical_origin_x + target_spec.logical_width - bounds.width - OVERLAY_MARGIN
-        };
-
-        let base_y = if had_stored_bounds {
-            bounds.y
-        } else {
-            target_spec.logical_origin_y + target_spec.logical_height
+        // 저장된 위치가 없으면 기본 위치로 배치 (clamp 적용)
+        if !had_stored_bounds {
+            let base_x = fallback_spec.logical_origin_x + fallback_spec.logical_width
+                - bounds.width
+                - OVERLAY_MARGIN;
+            let base_y = fallback_spec.logical_origin_y + fallback_spec.logical_height
                 - bounds.height
-                - OVERLAY_MARGIN
-        };
+                - OVERLAY_MARGIN;
+            return fallback_spec.clamp(base_x, base_y, bounds.width, bounds.height);
+        }
 
-        target_spec.clamp(base_x, base_y, bounds.width, bounds.height)
+        // 저장된 bounds와 가장 많이 겹치는 모니터 탐색
+        if let Some(best) =
+            monitors.find_best_overlap(bounds.x, bounds.y, bounds.width, bounds.height)
+        {
+            let area =
+                best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
+            if area >= min_visible_area {
+                // 충분히 보이므로 저장 좌표 그대로 복원
+                return OverlayPosition {
+                    x: bounds.x,
+                    y: bounds.y,
+                };
+            }
+            // 겹침이 부족하면 해당 모니터에 clamp
+            return best.clamp(bounds.x, bounds.y, bounds.width, bounds.height);
+        }
+
+        // 어떤 모니터와도 겹치지 않음 — fallback 모니터에 clamp
+        fallback_spec.clamp(bounds.x, bounds.y, bounds.width, bounds.height)
     }
 
     fn apply_settings_effects(&self, diff: &SettingsDiff, app: &AppHandle) -> Result<()> {
@@ -1750,18 +1765,20 @@ impl MonitorSpec {
             && (self.scale_factor - other.scale_factor).abs() < f64::EPSILON
     }
 
-    fn contains_logical(&self, x: f64, y: f64) -> bool {
-        x >= self.logical_origin_x
-            && x <= self.logical_origin_x + self.logical_width
-            && y >= self.logical_origin_y
-            && y <= self.logical_origin_y + self.logical_height
-    }
-
     fn contains_physical(&self, x: f64, y: f64) -> bool {
         x >= self.physical_origin_x
             && x <= self.physical_origin_x + self.physical_width
             && y >= self.physical_origin_y
             && y <= self.physical_origin_y + self.physical_height
+    }
+
+    /// 주어진 사각형과 이 모니터 work_area의 교차 영역 넓이 (logical px²)
+    fn intersection_area(&self, x: f64, y: f64, width: f64, height: f64) -> f64 {
+        let left = x.max(self.logical_origin_x);
+        let top = y.max(self.logical_origin_y);
+        let right = (x + width).min(self.logical_origin_x + self.logical_width);
+        let bottom = (y + height).min(self.logical_origin_y + self.logical_height);
+        (right - left).max(0.0) * (bottom - top).max(0.0)
     }
 
     fn clamp(&self, x: f64, y: f64, width: f64, height: f64) -> OverlayPosition {
@@ -1828,8 +1845,22 @@ impl MonitorData {
         self.specs.iter().find(|spec| spec.contains_physical(x, y))
     }
 
-    fn find_by_logical(&self, x: f64, y: f64) -> Option<&MonitorSpec> {
-        self.specs.iter().find(|spec| spec.contains_logical(x, y))
+    /// 주어진 사각형과 가장 많이 겹치는 모니터를 반환
+    fn find_best_overlap(
+        &self,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> Option<&MonitorSpec> {
+        self.specs
+            .iter()
+            .max_by(|a, b| {
+                a.intersection_area(x, y, width, height)
+                    .partial_cmp(&b.intersection_area(x, y, width, height))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .filter(|spec| spec.intersection_area(x, y, width, height) > 0.0)
     }
 
     fn first(&self) -> Option<&MonitorSpec> {
