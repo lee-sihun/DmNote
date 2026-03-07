@@ -116,6 +116,10 @@ impl AppState {
         self.start_keyboard_hook(app.clone())?;
         // CSS 핫리로딩 워처 초기화
         self.initialize_css_watcher(app);
+        // OBS 모드 자동 복원
+        if snapshot.obs_mode_enabled {
+            self.auto_start_obs(app);
+        }
         Ok(())
     }
 
@@ -280,6 +284,36 @@ impl AppState {
         payload.full = None;
         app.emit("settings:changed", payload)?;
         Ok(())
+    }
+
+    /// 부팅 시 OBS 모드 자동 시작 (obs_mode_enabled=true일 때)
+    fn auto_start_obs(&self, app: &AppHandle) {
+        let bridge = self.obs_bridge.clone();
+        let store = self.store.clone();
+        let port = store.with_state(|s| s.obs_port);
+        let app_handle = app.clone();
+
+        // 정적 파일 경로 설정
+        if let Some(dir) = crate::commands::app::obs::resolve_obs_static_dir(&app_handle) {
+            log::info!("[ObsBridge] auto-start static_dir: {}", dir.display());
+            bridge.set_static_dir(dir);
+        }
+
+        // async start를 tokio 런타임에서 실행
+        tauri::async_runtime::spawn(async move {
+            match bridge.start(port).await {
+                Ok(()) => {
+                    log::info!("[ObsBridge] auto-start 성공 (port={})", port);
+                }
+                Err(e) => {
+                    log::error!("[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구", e);
+                    // 실패 시 obs_mode_enabled를 false로 복구
+                    let _ = store.update(|state| {
+                        state.obs_mode_enabled = false;
+                    });
+                }
+            }
+        });
     }
 
     /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신 + 연결된 클라이언트에 broadcast

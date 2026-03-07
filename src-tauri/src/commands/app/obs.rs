@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
 
 /// OBS 빌드 정적 파일 경로 탐색
-fn resolve_obs_static_dir(app: &AppHandle) -> Option<PathBuf> {
+pub fn resolve_obs_static_dir(app: &AppHandle) -> Option<PathBuf> {
     // 1. Tauri resource_dir/obs/ (프로덕션 번들)
     if let Ok(res) = app.path().resource_dir() {
         let obs = res.join("obs");

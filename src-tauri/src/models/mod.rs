@@ -1719,6 +1719,8 @@ pub struct SettingsPatchInput {
     pub key_counter_enabled: Option<bool>,
     pub grid_settings: Option<GridSettings>,
     pub shortcuts: Option<ShortcutsPatchInput>,
+    pub obs_mode_enabled: Option<bool>,
+    pub obs_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1774,6 +1776,8 @@ impl SettingsDiff {
             p.key_counter_enabled.is_some(),
             p.grid_settings.is_some(),
             p.shortcuts.is_some(),
+            p.obs_mode_enabled.is_some(),
+            p.obs_port.is_some(),
         ]
         .iter()
         .filter(|&&x| x)
@@ -1830,4 +1834,8 @@ pub struct SettingsPatch {
     pub grid_settings: Option<GridSettings>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shortcuts: Option<ShortcutsState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obs_mode_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obs_port: Option<u16>,
 }
