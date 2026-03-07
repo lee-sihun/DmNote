@@ -152,15 +152,13 @@ export function useGridSelection({
       const { keyMappings: km } = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentPositions,
-          currentStatPositions,
-          currentGraphPositions,
-          currentPluginElements,
-        );
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
+        pluginElements: currentPluginElements,
+      });
     }
 
     // 키 위치 배치 업데이트
@@ -318,16 +316,14 @@ export function useGridSelection({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          pos,
-          currentStatPositions,
-          currentGraphPositions,
-          currentPluginElements,
-          currentLayerGroups,
-        );
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: pos,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
+        pluginElements: currentPluginElements,
+        layerGroups: currentLayerGroups,
+      });
     }
 
     // 먼저 선택 해제 (삭제된 인덱스 참조 방지)
@@ -589,14 +585,14 @@ export function useGridSelection({
 
     // 히스토리 저장 (layerGroups 포함)
     const historyStore = useHistoryStore.getState();
-    historyStore.pushState(
-      { ...km },
-      { ...pos },
-      { ...useStatItemStore.getState().positions },
-      { ...currentGraphPositions },
-      [...currentPluginElements],
-      { ...currentLayerGroups },
-    );
+    historyStore.pushState({
+      keyMappings: { ...km },
+      positions: { ...pos },
+      statPositions: { ...useStatItemStore.getState().positions },
+      graphPositions: { ...currentGraphPositions },
+      pluginElements: [...currentPluginElements],
+      layerGroups: { ...currentLayerGroups },
+    });
 
     // 그룹 복사인 경우: 새 그룹 생성 + groupId 매핑
     const groupIdMap = new Map<string, string>();

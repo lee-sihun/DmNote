@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
+import { useKeyStore } from '@stores/data/useKeyStore';
 import type {
+  CustomTab,
   KeyCounters,
   KeyMappings,
   KeyPositions,
@@ -16,7 +18,7 @@ type SerializablePluginElement = Omit<
   'onClick' | 'onPositionChange' | 'onDelete' | 'contextMenu'
 >;
 
-interface HistoryState {
+export interface HistoryState {
   keyMappings: KeyMappings;
   positions: KeyPositions;
   statPositions: StatItemPositions;
@@ -24,6 +26,29 @@ interface HistoryState {
   pluginElements?: SerializablePluginElement[];
   layerGroups?: LayerGroups;
   keyCounters: KeyCounters;
+  customTabs: CustomTab[];
+  selectedKeyType: string;
+}
+
+export interface PushHistoryInput {
+  keyMappings: KeyMappings;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  pluginElements?: PluginDisplayElementInternal[];
+  layerGroups?: LayerGroups;
+  keyCounters?: KeyCounters;
+  customTabs?: CustomTab[];
+  selectedKeyType?: string;
+}
+
+interface CurrentStateInput {
+  keyMappings: KeyMappings;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  pluginElements?: PluginDisplayElementInternal[];
+  layerGroups?: LayerGroups;
 }
 
 interface HistoryStore {
@@ -31,31 +56,9 @@ interface HistoryStore {
   future: HistoryState[];
   canUndo: () => boolean;
   canRedo: () => boolean;
-  pushState: (
-    keyMappings: KeyMappings,
-    positions: KeyPositions,
-    statPositions: StatItemPositions,
-    graphPositions: GraphItemPositions,
-    pluginElements?: PluginDisplayElementInternal[],
-    layerGroups?: LayerGroups,
-    keyCounters?: KeyCounters,
-  ) => void;
-  undo: (
-    currentKeyMappings: KeyMappings,
-    currentPositions: KeyPositions,
-    currentStatPositions: StatItemPositions,
-    currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups,
-  ) => HistoryState | null;
-  redo: (
-    currentKeyMappings: KeyMappings,
-    currentPositions: KeyPositions,
-    currentStatPositions: StatItemPositions,
-    currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups,
-  ) => HistoryState | null;
+  pushState: (input: PushHistoryInput) => void;
+  undo: (current: CurrentStateInput) => HistoryState | null;
+  redo: (current: CurrentStateInput) => HistoryState | null;
   clear: () => void;
   clearFuture: () => void;
 }
@@ -82,6 +85,38 @@ function serializePluginElements(
   });
 }
 
+function buildHistoryState(
+  input: PushHistoryInput | CurrentStateInput,
+  includeCounters: boolean,
+): HistoryState {
+  // customTabs/selectedKeyType: 명시적 제공 시 사용, 없으면 현재 store에서 자동 캡처
+  const keyState = useKeyStore.getState();
+  const tabs =
+    ('customTabs' in input && input.customTabs) || keyState.customTabs;
+  const selectedKeyType =
+    ('selectedKeyType' in input && input.selectedKeyType) ||
+    keyState.selectedKeyType;
+
+  return {
+    keyMappings: JSON.parse(JSON.stringify(input.keyMappings)),
+    positions: JSON.parse(JSON.stringify(input.positions)),
+    statPositions: JSON.parse(JSON.stringify(input.statPositions)),
+    graphPositions: JSON.parse(JSON.stringify(input.graphPositions)),
+    pluginElements: input.pluginElements
+      ? serializePluginElements(input.pluginElements)
+      : undefined,
+    layerGroups: input.layerGroups
+      ? JSON.parse(JSON.stringify(input.layerGroups))
+      : undefined,
+    keyCounters:
+      includeCounters && 'keyCounters' in input && input.keyCounters
+        ? JSON.parse(JSON.stringify(input.keyCounters))
+        : getCounterSnapshot(),
+    customTabs: JSON.parse(JSON.stringify(tabs)),
+    selectedKeyType,
+  };
+}
+
 export const useHistoryStore = create<HistoryStore>((set, get) => ({
   past: [],
   future: [],
@@ -89,31 +124,9 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
 
-  pushState: (
-    keyMappings: KeyMappings,
-    positions: KeyPositions,
-    statPositions: StatItemPositions,
-    graphPositions: GraphItemPositions,
-    pluginElements?: PluginDisplayElementInternal[],
-    layerGroups?: LayerGroups,
-    keyCounters?: KeyCounters,
-  ) => {
+  pushState: (input: PushHistoryInput) => {
     set((state) => {
-      const newState: HistoryState = {
-        keyMappings: JSON.parse(JSON.stringify(keyMappings)),
-        positions: JSON.parse(JSON.stringify(positions)),
-        statPositions: JSON.parse(JSON.stringify(statPositions)),
-        graphPositions: JSON.parse(JSON.stringify(graphPositions)),
-        pluginElements: pluginElements
-          ? serializePluginElements(pluginElements)
-          : undefined,
-        layerGroups: layerGroups
-          ? JSON.parse(JSON.stringify(layerGroups))
-          : undefined,
-        keyCounters: keyCounters
-          ? JSON.parse(JSON.stringify(keyCounters))
-          : getCounterSnapshot(),
-      };
+      const newState = buildHistoryState(input, true);
 
       const newPast = [...state.past, newState];
       // 최대 히스토리 크기 유지
@@ -128,34 +141,14 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     });
   },
 
-  undo: (
-    currentKeyMappings: KeyMappings,
-    currentPositions: KeyPositions,
-    currentStatPositions: StatItemPositions,
-    currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups,
-  ) => {
+  undo: (current: CurrentStateInput) => {
     const state = get();
     if (state.past.length === 0) return null;
 
     const previous = state.past[state.past.length - 1];
     const newPast = state.past.slice(0, -1);
 
-    // 현재 상태를 future에 저장
-    const currentState: HistoryState = {
-      keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
-      positions: JSON.parse(JSON.stringify(currentPositions)),
-      statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
-      graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
-      pluginElements: currentPluginElements
-        ? serializePluginElements(currentPluginElements)
-        : undefined,
-      layerGroups: currentLayerGroups
-        ? JSON.parse(JSON.stringify(currentLayerGroups))
-        : undefined,
-      keyCounters: getCounterSnapshot(),
-    };
+    const currentState = buildHistoryState(current, false);
 
     set({
       past: newPast,
@@ -165,34 +158,14 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     return previous;
   },
 
-  redo: (
-    currentKeyMappings: KeyMappings,
-    currentPositions: KeyPositions,
-    currentStatPositions: StatItemPositions,
-    currentGraphPositions: GraphItemPositions,
-    currentPluginElements?: PluginDisplayElementInternal[],
-    currentLayerGroups?: LayerGroups,
-  ) => {
+  redo: (current: CurrentStateInput) => {
     const state = get();
     if (state.future.length === 0) return null;
 
     const next = state.future[state.future.length - 1];
     const newFuture = state.future.slice(0, -1);
 
-    // 현재 상태를 past에 저장
-    const currentState: HistoryState = {
-      keyMappings: JSON.parse(JSON.stringify(currentKeyMappings)),
-      positions: JSON.parse(JSON.stringify(currentPositions)),
-      statPositions: JSON.parse(JSON.stringify(currentStatPositions)),
-      graphPositions: JSON.parse(JSON.stringify(currentGraphPositions)),
-      pluginElements: currentPluginElements
-        ? serializePluginElements(currentPluginElements)
-        : undefined,
-      layerGroups: currentLayerGroups
-        ? JSON.parse(JSON.stringify(currentLayerGroups))
-        : undefined,
-      keyCounters: getCounterSnapshot(),
-    };
+    const currentState = buildHistoryState(current, false);
 
     set({
       past: [...state.past, currentState],

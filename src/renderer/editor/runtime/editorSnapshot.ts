@@ -17,23 +17,22 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 /** 현재 편집 상태를 히스토리 past 스택에 push */
 export function pushCurrentStateToHistory(): void {
-  const keyMappings = useKeyStore.getState().keyMappings;
-  const positions = useKeyStore.getState().positions;
+  const keyState = useKeyStore.getState();
   const statPositions = useStatItemStore.getState().positions;
   const graphPositions = useGraphItemStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
   const layerGroups = useLayerGroupStore.getState().layerGroups;
 
-  useHistoryStore
-    .getState()
-    .pushState(
-      keyMappings,
-      positions,
-      statPositions,
-      graphPositions,
-      pluginElements,
-      layerGroups,
-    );
+  useHistoryStore.getState().pushState({
+    keyMappings: keyState.keyMappings,
+    positions: keyState.positions,
+    statPositions,
+    graphPositions,
+    pluginElements,
+    layerGroups,
+    customTabs: keyState.customTabs,
+    selectedKeyType: keyState.selectedKeyType,
+  });
 }
 
 // ----------------------------------------------------------------------------
@@ -94,6 +93,8 @@ interface RestoredState {
   pluginElements?: PluginDisplayElementInternal[];
   layerGroups?: import('@src/types/layerGroups').LayerGroups;
   keyCounters?: import('@src/types/key/keys').KeyCounters;
+  customTabs: import('@src/types/key/keys').CustomTab[];
+  selectedKeyType: string;
 }
 
 /** 복원된 상태를 로컬 store에 반영 */
@@ -110,6 +111,8 @@ export function applyRestoredStateToStores(state: RestoredState): void {
   if (state.keyCounters) {
     applyCounterSnapshot(state.keyCounters);
   }
+  useKeyStore.getState().setCustomTabs(state.customTabs);
+  useKeyStore.setState({ selectedKeyType: state.selectedKeyType });
 }
 
 /** 복원된 플러그인 요소를 store에 반영하고 오버레이에 동기화 */
@@ -178,6 +181,13 @@ export async function persistRestoredState(
   if (state.keyCounters) {
     promises.push(window.api.keys.setCounters(state.keyCounters));
   }
+  promises.push(
+    window.api.keys.customTabs
+      .restore(state.customTabs, state.selectedKeyType)
+      .catch((error) => {
+        console.error('Failed to restore custom tabs', error);
+      }),
+  );
 
   await Promise.all(promises);
 

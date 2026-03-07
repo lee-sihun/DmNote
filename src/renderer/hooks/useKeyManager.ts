@@ -782,38 +782,41 @@ export function useKeyManager() {
     }
   };
 
-  const handleUndo = async () => {
+  const executeHistoryAction = async (
+    action: typeof undo | typeof redo,
+    label: string,
+  ) => {
     setUndoRedoInProgress(true);
     try {
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const previousState = undo(
+      const targetState = action({
         keyMappings,
         positions,
         statPositions,
         graphPositions,
-        currentPluginElements,
-        currentLayerGroups,
-      );
+        pluginElements: currentPluginElements,
+        layerGroups: currentLayerGroups,
+      });
 
-      if (previousState) {
-        applyRestoredStateToStores(previousState);
+      if (targetState) {
+        applyRestoredStateToStores(targetState);
 
         applyRestoredPluginElements(
-          previousState.pluginElements as
+          targetState.pluginElements as
             | PluginDisplayElementInternal[]
             | undefined,
           currentPluginElements,
-          previousState.pluginElements
-            ? new Set(previousState.pluginElements.map((el) => el.fullId))
+          targetState.pluginElements
+            ? new Set(targetState.pluginElements.map((el) => el.fullId))
             : undefined,
         );
 
         try {
-          await persistRestoredState(previousState);
+          await persistRestoredState(targetState);
         } catch (error) {
-          console.error('Failed to apply undo', error);
+          console.error(`Failed to apply ${label}`, error);
         }
       }
     } finally {
@@ -821,44 +824,8 @@ export function useKeyManager() {
     }
   };
 
-  const handleRedo = async () => {
-    setUndoRedoInProgress(true);
-    try {
-      const currentPluginElements =
-        usePluginDisplayElementStore.getState().elements;
-      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const nextState = redo(
-        keyMappings,
-        positions,
-        statPositions,
-        graphPositions,
-        currentPluginElements,
-        currentLayerGroups,
-      );
-
-      if (nextState) {
-        applyRestoredStateToStores(nextState);
-
-        applyRestoredPluginElements(
-          nextState.pluginElements as
-            | PluginDisplayElementInternal[]
-            | undefined,
-          currentPluginElements,
-          nextState.pluginElements
-            ? new Set(nextState.pluginElements.map((el) => el.fullId))
-            : undefined,
-        );
-
-        try {
-          await persistRestoredState(nextState);
-        } catch (error) {
-          console.error('Failed to apply redo', error);
-        }
-      }
-    } finally {
-      setUndoRedoInProgress(false);
-    }
-  };
+  const handleUndo = () => executeHistoryAction(undo, 'undo');
+  const handleRedo = () => executeHistoryAction(redo, 'redo');
 
   return {
     selectedKey,

@@ -406,15 +406,13 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     const statPositions = useStatItemStore.getState().positions;
     const graphPositions = useGraphItemStore.getState().positions;
     const pluginElements = usePluginDisplayElementStore.getState().elements;
-    useHistoryStore
-      .getState()
-      .pushState(
-        keyMappings,
-        positions,
-        statPositions,
-        graphPositions,
-        pluginElements,
-      );
+    useHistoryStore.getState().pushState({
+      keyMappings,
+      positions,
+      statPositions,
+      graphPositions,
+      pluginElements,
+    });
   };
 
   // 스마트 가이드를 위한 다른 요소들의 bounds 가져오기

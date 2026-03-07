@@ -723,15 +723,13 @@ const Grid = ({
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
     const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        km,
-        currentPositions,
-        useStatItemStore.getState().positions,
-        useGraphItemStore.getState().positions,
-        currentPluginElements,
-      );
+    useHistoryStore.getState().pushState({
+      keyMappings: km,
+      positions: currentPositions,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      pluginElements: currentPluginElements,
+    });
   };
 
   // 요소 컨텍스트 메뉴 열기
@@ -983,15 +981,13 @@ const Grid = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentKeyPositions,
-          current,
-          useGraphItemStore.getState().positions,
-          currentPluginElements,
-        );
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: currentKeyPositions,
+        statPositions: current,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
 
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
@@ -1089,15 +1085,13 @@ const Grid = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          currentKeyPositions,
-          useStatItemStore.getState().positions,
-          current,
-          currentPluginElements,
-        );
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: currentKeyPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: current,
+        pluginElements: currentPluginElements,
+      });
 
       const nextTabPositions = tabPositions.map((pos, i) =>
         i === index ? { ...pos, dx, dy } : pos,
@@ -1437,15 +1431,13 @@ const Grid = ({
             const currentPluginElements =
               usePluginDisplayElementStore.getState().elements;
             const { keyMappings: km } = useKeyStore.getState();
-            useHistoryStore
-              .getState()
-              .pushState(
-                km,
-                currentPositions,
-                useStatItemStore.getState().positions,
-                useGraphItemStore.getState().positions,
-                currentPluginElements,
-              );
+            useHistoryStore.getState().pushState({
+              keyMappings: km,
+              positions: currentPositions,
+              statPositions: useStatItemStore.getState().positions,
+              graphPositions: useGraphItemStore.getState().positions,
+              pluginElements: currentPluginElements,
+            });
           }}
         />
       </div>

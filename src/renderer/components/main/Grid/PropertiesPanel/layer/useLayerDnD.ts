@@ -451,16 +451,14 @@ export function useLayerDnD({
       usePluginDisplayElementStore.getState().elements;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
     const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        km,
-        currentPositions,
-        currentStatPositions,
-        currentGraphPositions,
-        currentPluginElements,
-        currentLayerGroups,
-      );
+    useHistoryStore.getState().pushState({
+      keyMappings: km,
+      positions: currentPositions,
+      statPositions: currentStatPositions,
+      graphPositions: currentGraphPositions,
+      pluginElements: currentPluginElements,
+      layerGroups: currentLayerGroups,
+    });
 
     // z-index 재계산 및 적용
     const maxZIndex = newItems.length - 1;
@@ -632,16 +630,14 @@ export function useLayerDnD({
       usePluginDisplayElementStore.getState().elements;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
     const { keyMappings: km } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        km,
-        currentPositions,
-        currentStatPositions,
-        currentGraphPositions,
-        currentPluginElements,
-        currentLayerGroups,
-      );
+    useHistoryStore.getState().pushState({
+      keyMappings: km,
+      positions: currentPositions,
+      statPositions: currentStatPositions,
+      graphPositions: currentGraphPositions,
+      pluginElements: currentPluginElements,
+      layerGroups: currentLayerGroups,
+    });
 
     // z-index 재계산
     const maxZIndex = newItems.length - 1;

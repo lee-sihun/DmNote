@@ -30,15 +30,13 @@ export const saveToHistory = (): void => {
   const statPositions = useStatItemStore.getState().positions;
   const graphPositions = useGraphItemStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
-  useHistoryStore
-    .getState()
-    .pushState(
-      keyMappings,
-      positions,
-      statPositions,
-      graphPositions,
-      pluginElements,
-    );
+  useHistoryStore.getState().pushState({
+    keyMappings,
+    positions,
+    statPositions,
+    graphPositions,
+    pluginElements,
+  });
 };
 
 /**

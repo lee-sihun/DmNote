@@ -78,6 +78,11 @@ export const keysApi = {
       invoke<CustomTabDeleteResult>('custom_tabs_delete', { id }),
     select: (id: string) =>
       invoke<CustomTabDeleteResult>('custom_tabs_select', { id }),
+    restore: (customTabs: CustomTab[], selectedKeyType: string) =>
+      invoke<void>('custom_tabs_restore', {
+        customTabs,
+        selectedKeyType,
+      }),
     onChanged: (listener: (payload: CustomTabsChangePayload) => void) =>
       subscribe<CustomTabsChangePayload>('customTabs:changed', listener),
   },

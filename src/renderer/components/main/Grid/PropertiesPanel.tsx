@@ -422,9 +422,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const graphPos = useGraphItemStore.getState().positions;
     const pluginEls = usePluginDisplayElementStore.getState().elements;
 
-    useHistoryStore
-      .getState()
-      .pushState(km, pos, statPos, graphPos, pluginEls, currentGroups);
+    useHistoryStore.getState().pushState({
+      keyMappings: km,
+      positions: pos,
+      statPositions: statPos,
+      graphPositions: graphPos,
+      pluginElements: pluginEls,
+      layerGroups: currentGroups,
+    });
 
     const updated = {
       ...currentGroups,
@@ -981,13 +986,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginSettingsHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(
+    pushHistoryState({
       keyMappings,
       positions,
-      statItemPositions,
-      graphItemPositions,
+      statPositions: statItemPositions,
+      graphPositions: graphItemPositions,
       pluginElements,
-    );
+    });
     pluginSettingsHistoryRef.current = selectedPluginElement.fullId;
   };
 
@@ -996,13 +1001,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (pluginTransformHistoryRef.current === selectedPluginElement.fullId) {
       return;
     }
-    pushHistoryState(
+    pushHistoryState({
       keyMappings,
       positions,
-      statItemPositions,
-      graphItemPositions,
+      statPositions: statItemPositions,
+      graphPositions: graphItemPositions,
       pluginElements,
-    );
+    });
     pluginTransformHistoryRef.current = selectedPluginElement.fullId;
   };
 
@@ -1142,13 +1147,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        current,
-        useGraphItemStore.getState().positions,
-        currentPluginElements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: current,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
     }
     statPreviewHistorySavedRef.current = false;
 
@@ -1188,13 +1193,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
     if (!statPreviewHistorySavedRef.current) {
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        useKeyStore.getState().positions,
-        current,
-        useGraphItemStore.getState().positions,
-        usePluginDisplayElementStore.getState().elements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: current,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
       statPreviewHistorySavedRef.current = true;
     }
 
@@ -1226,13 +1231,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
     if (!statPreviewHistorySavedRef.current) {
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        useKeyStore.getState().positions,
-        current,
-        useGraphItemStore.getState().positions,
-        usePluginDisplayElementStore.getState().elements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: current,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
       statPreviewHistorySavedRef.current = true;
     }
 
@@ -1268,13 +1273,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        current,
-        useGraphItemStore.getState().positions,
-        currentPluginElements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: current,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
     }
     statPreviewHistorySavedRef.current = false;
 
@@ -1317,13 +1322,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        useStatItemStore.getState().positions,
-        current,
-        currentPluginElements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: current,
+        pluginElements: currentPluginElements,
+      });
     }
     graphPreviewHistorySavedRef.current = false;
 
@@ -1363,13 +1368,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
     if (!graphPreviewHistorySavedRef.current) {
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        useKeyStore.getState().positions,
-        useStatItemStore.getState().positions,
-        current,
-        usePluginDisplayElementStore.getState().elements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: current,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
       graphPreviewHistorySavedRef.current = true;
     }
 
@@ -1401,13 +1406,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     // preview가 store를 변경하므로, 첫 preview 시 히스토리 저장
     if (!graphPreviewHistorySavedRef.current) {
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        useKeyStore.getState().positions,
-        useStatItemStore.getState().positions,
-        current,
-        usePluginDisplayElementStore.getState().elements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: current,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
       graphPreviewHistorySavedRef.current = true;
     }
 
@@ -1443,13 +1448,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const { keyMappings: km } = useKeyStore.getState();
-      pushHistoryState(
-        km,
-        currentPositions,
-        useStatItemStore.getState().positions,
-        current,
-        currentPluginElements,
-      );
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: current,
+        pluginElements: currentPluginElements,
+      });
     }
     graphPreviewHistorySavedRef.current = false;
 

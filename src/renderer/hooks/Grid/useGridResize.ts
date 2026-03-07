@@ -96,15 +96,13 @@ export function useGridResize({
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
     const { keyMappings } = useKeyStore.getState();
-    useHistoryStore
-      .getState()
-      .pushState(
-        keyMappings,
-        currentPositions,
-        currentStatPositions,
-        currentGraphPositions,
-        currentPluginElements,
-      );
+    useHistoryStore.getState().pushState({
+      keyMappings,
+      positions: currentPositions,
+      statPositions: currentStatPositions,
+      graphPositions: currentGraphPositions,
+      pluginElements: currentPluginElements,
+    });
   };
 
   // 공용 리사이즈 프리뷰 처리 (스마트 가이드 포함)

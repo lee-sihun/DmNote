@@ -30,6 +30,7 @@
           "custom_tabs_create",
           "custom_tabs_delete",
           "custom_tabs_list",
+          "custom_tabs_restore",
           "custom_tabs_select",
           "font_load",
           "get_cursor_settings",

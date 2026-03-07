@@ -503,6 +503,36 @@ pub fn custom_tabs_select(
     })
 }
 
+/// undo/redo 시 커스텀 탭 목록 + 모드를 원자적으로 복원
+#[tauri::command]
+pub fn custom_tabs_restore(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    custom_tabs: Vec<CustomTab>,
+    selected_key_type: String,
+) -> CmdResult<()> {
+    state.store.update(|store| {
+        store.custom_tabs = custom_tabs.clone();
+        store.selected_key_type = selected_key_type.clone();
+    })?;
+
+    state.keyboard.set_mode(selected_key_type.clone());
+    state.transfer_active_keys(&selected_key_type);
+
+    app.emit(
+        "customTabs:changed",
+        &CustomTabChangePayload {
+            custom_tabs,
+            selected_key_type: selected_key_type.clone(),
+        },
+    )?;
+    app.emit(
+        "keys:mode-changed",
+        &serde_json::json!({ "mode": &selected_key_type }),
+    )?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> CmdResult<KeyCounters> {
     let snapshot = state.reset_key_counters();

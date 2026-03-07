@@ -48,9 +48,14 @@ function pushCurrentStateToHistory(layerGroups?: LayerGroups) {
   const statPos = useStatItemStore.getState().positions;
   const graphPos = useGraphItemStore.getState().positions;
   const pluginEls = usePluginDisplayElementStore.getState().elements;
-  useHistoryStore
-    .getState()
-    .pushState(km, pos, statPos, graphPos, pluginEls, layerGroups);
+  useHistoryStore.getState().pushState({
+    keyMappings: km,
+    positions: pos,
+    statPositions: statPos,
+    graphPositions: graphPos,
+    pluginElements: pluginEls,
+    layerGroups,
+  });
 }
 
 // ============================================================================
@@ -411,9 +416,14 @@ export function useLayerActions({
     );
     if (!currentGroup || currentGroup.name === trimmed) return;
 
-    useHistoryStore
-      .getState()
-      .pushState(km, pos, statPos, graphPos, pluginEls, currentGroups);
+    useHistoryStore.getState().pushState({
+      keyMappings: km,
+      positions: pos,
+      statPositions: statPos,
+      graphPositions: graphPos,
+      pluginElements: pluginEls,
+      layerGroups: currentGroups,
+    });
 
     const updated: LayerGroups = {
       ...currentGroups,
@@ -482,16 +492,14 @@ export function useLayerActions({
     if (!hasChange) return false;
 
     if (!options?.skipHistory) {
-      useHistoryStore
-        .getState()
-        .pushState(
-          km,
-          pos,
-          currentStatPositions,
-          currentGraphPositions,
-          currentPluginElements,
-          historyLayerGroups,
-        );
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: pos,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
+        pluginElements: currentPluginElements,
+        layerGroups: historyLayerGroups,
+      });
     }
 
     useKeyStore.getState().setLocalUpdateInProgress(true);

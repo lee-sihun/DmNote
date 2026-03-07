@@ -85,16 +85,14 @@ export async function groupSelectedElements(
   if (!hasChange) return false;
 
   // 히스토리 저장
-  useHistoryStore
-    .getState()
-    .pushState(
-      keyMappings,
-      positions,
-      statPos,
-      graphPos,
-      pluginEls,
-      currentLayerGroups,
-    );
+  useHistoryStore.getState().pushState({
+    keyMappings,
+    positions,
+    statPositions: statPos,
+    graphPositions: graphPos,
+    pluginElements: pluginEls,
+    layerGroups: currentLayerGroups,
+  });
 
   // 스토어 반영
   useKeyStore.getState().setPositions(normalized.keyPositions);
@@ -157,16 +155,14 @@ export async function ungroupSelectedElements(
   if (!hasChange) return false;
 
   // 히스토리 저장
-  useHistoryStore
-    .getState()
-    .pushState(
-      keyMappings,
-      positions,
-      statPos,
-      graphPos,
-      pluginEls,
-      currentLayerGroups,
-    );
+  useHistoryStore.getState().pushState({
+    keyMappings,
+    positions,
+    statPositions: statPos,
+    graphPositions: graphPos,
+    pluginElements: pluginEls,
+    layerGroups: currentLayerGroups,
+  });
 
   // 스토어 반영
   useKeyStore.getState().setPositions(normalized.keyPositions);

@@ -113,30 +113,35 @@ SettingToolProps) => {
     }
   };
 
-  const captureHistorySnapshot = () => ({
-    keyMappings: useKeyStore.getState().keyMappings,
-    positions: useKeyStore.getState().positions,
-    statPositions: useStatItemStore.getState().positions,
-    graphPositions: useGraphItemStore.getState().positions,
-    pluginElements: usePluginDisplayElementStore.getState().elements,
-    layerGroups: useLayerGroupStore.getState().layerGroups,
-    keyCounters: getCounterSnapshot(),
-  });
+  const captureHistorySnapshot = () => {
+    const keyState = useKeyStore.getState();
+    return {
+      keyMappings: keyState.keyMappings,
+      positions: keyState.positions,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      pluginElements: usePluginDisplayElementStore.getState().elements,
+      layerGroups: useLayerGroupStore.getState().layerGroups,
+      keyCounters: getCounterSnapshot(),
+      customTabs: keyState.customTabs,
+      selectedKeyType: keyState.selectedKeyType,
+    };
+  };
 
   const handlePresetLoad = async () => {
     try {
       const before = captureHistorySnapshot();
       const result = await window.api.presets.load();
       if (result?.success) {
-        pushHistoryState(
-          before.keyMappings,
-          before.positions,
-          before.statPositions,
-          before.graphPositions,
-          before.pluginElements,
-          before.layerGroups,
-          before.keyCounters,
-        );
+        pushHistoryState({
+          keyMappings: before.keyMappings,
+          positions: before.positions,
+          statPositions: before.statPositions,
+          graphPositions: before.graphPositions,
+          pluginElements: before.pluginElements,
+          layerGroups: before.layerGroups,
+          keyCounters: before.keyCounters,
+        });
       }
       showAlert?.(
         result?.success ? t('preset.loadSuccess') : t('preset.loadFail'),
@@ -187,15 +192,15 @@ SettingToolProps) => {
       const before = captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
       if (result?.success) {
-        pushHistoryState(
-          before.keyMappings,
-          before.positions,
-          before.statPositions,
-          before.graphPositions,
-          before.pluginElements,
-          before.layerGroups,
-          before.keyCounters,
-        );
+        pushHistoryState({
+          keyMappings: before.keyMappings,
+          positions: before.positions,
+          statPositions: before.statPositions,
+          graphPositions: before.graphPositions,
+          pluginElements: before.pluginElements,
+          layerGroups: before.layerGroups,
+          keyCounters: before.keyCounters,
+        });
       }
       showAlert?.(
         result?.success ? t('preset.loadTabSuccess') : t('preset.loadTabFail'),

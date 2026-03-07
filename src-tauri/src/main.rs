@@ -196,6 +196,7 @@ fn main() {
             commands::keys::keys::custom_tabs_create,
             commands::keys::keys::custom_tabs_delete,
             commands::keys::keys::custom_tabs_select,
+            commands::keys::keys::custom_tabs_restore,
             commands::keys::keys::layer_groups_get,
             commands::keys::keys::layer_groups_update,
             commands::keys::key_sound::key_sound_get_status,

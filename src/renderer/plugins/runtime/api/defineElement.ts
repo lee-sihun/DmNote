@@ -235,13 +235,13 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       const { pushState } = await import('@stores/data/useHistoryStore').then(
         (m) => m.useHistoryStore.getState(),
       );
-      pushState(
+      pushState({
         keyMappings,
         positions,
         statPositions,
         graphPositions,
         pluginElements,
-      );
+      });
 
       const currentSettings: Record<string, unknown> = {
         ...defaultSettings,

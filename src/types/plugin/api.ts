@@ -759,6 +759,7 @@ export interface DMNoteAPI {
       create(name: string): Promise<CustomTabResult>;
       delete(id: string): Promise<CustomTabDeleteResult>;
       select(id: string): Promise<CustomTabDeleteResult>;
+      restore(customTabs: CustomTab[], selectedKeyType: string): Promise<void>;
       onChanged(
         listener: (payload: CustomTabsChangePayload) => void,
       ): Unsubscribe;

@@ -75,15 +75,13 @@ function pushHistorySnapshot(
   const currentPluginElements =
     usePluginDisplayElementStore.getState().elements;
   const { keyMappings: km } = useKeyStore.getState();
-  useHistoryStore
-    .getState()
-    .pushState(
-      km,
-      currentKeyPositions,
-      currentStatPositions,
-      currentGraphPositions,
-      currentPluginElements,
-    );
+  useHistoryStore.getState().pushState({
+    keyMappings: km,
+    positions: currentKeyPositions,
+    statPositions: currentStatPositions,
+    graphPositions: currentGraphPositions,
+    pluginElements: currentPluginElements,
+  });
 }
 
 // Stat positions persist 헬퍼
