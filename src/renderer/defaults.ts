@@ -6,6 +6,7 @@ import type { NoteSettings } from '@src/types/settings/noteSettings';
 import type { GridSettings, SettingsState } from '@src/types/settings/settings';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import type { FontSettings } from '@src/types/settings/fonts';
+import { DEFAULT_OBS_PORT } from '@src/types/obs';
 
 export interface DefaultsPayload {
   settings: SettingsState;
@@ -210,5 +211,7 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     keyCounterEnabled: false,
     gridSettings: FALLBACK_GRID_SETTINGS(),
     shortcuts: FALLBACK_SHORTCUTS(),
+    obsModeEnabled: false,
+    obsPort: DEFAULT_OBS_PORT,
   };
 }

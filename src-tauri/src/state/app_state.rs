@@ -223,6 +223,8 @@ impl AppState {
                 key_counter_enabled: state.key_counter_enabled,
                 grid_settings: state.grid_settings.clone(),
                 shortcuts: state.shortcuts.clone(),
+                obs_mode_enabled: state.obs_mode_enabled,
+                obs_port: state.obs_port,
             },
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),

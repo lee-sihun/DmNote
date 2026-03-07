@@ -35,6 +35,9 @@ sha2 = "0.10"
 webp-animation = "0.9.0"
 rodio = { version = "0.19", default-features = false }
 symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = [

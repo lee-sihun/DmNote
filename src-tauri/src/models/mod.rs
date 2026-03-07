@@ -1,3 +1,5 @@
+pub mod obs;
+
 use serde::de::Error as DeError;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -1147,6 +1149,10 @@ fn default_auto_update_enabled() -> bool {
     true
 }
 
+fn default_obs_port() -> u16 {
+    obs::DEFAULT_OBS_PORT
+}
+
 fn default_grid_snap_size() -> u32 {
     5
 }
@@ -1282,6 +1288,12 @@ pub struct AppStoreData {
     /// 사운드 라이브러리 메타데이터 (키: 절대 경로, 값: 메타데이터)
     #[serde(default)]
     pub sound_library: HashMap<String, SoundLibraryEntry>,
+    /// OBS 모드 활성화 여부
+    #[serde(default)]
+    pub obs_mode_enabled: bool,
+    /// OBS WebSocket 서버 포트
+    #[serde(default = "default_obs_port")]
+    pub obs_port: u16,
     /// 플러그인 데이터 저장소 (plugin_data_* 키로 저장)
     #[serde(default, flatten)]
     pub plugin_data: HashMap<String, serde_json::Value>,
@@ -1332,6 +1344,8 @@ impl Default for AppStoreData {
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
             sound_library: HashMap::new(),
+            obs_mode_enabled: false,
+            obs_port: default_obs_port(),
             plugin_data: HashMap::new(),
         }
     }
@@ -1598,6 +1612,10 @@ pub struct SettingsState {
     pub grid_settings: GridSettings,
     #[serde(default)]
     pub shortcuts: ShortcutsState,
+    #[serde(default)]
+    pub obs_mode_enabled: bool,
+    #[serde(default = "default_obs_port")]
+    pub obs_port: u16,
 }
 
 impl Default for SettingsState {
@@ -1628,6 +1646,8 @@ impl Default for SettingsState {
             key_counter_enabled: false,
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
+            obs_mode_enabled: false,
+            obs_port: default_obs_port(),
         }
     }
 }
