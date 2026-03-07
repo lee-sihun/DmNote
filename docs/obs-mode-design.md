@@ -465,13 +465,13 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 
 | # | 작업 | 설명 | 상태 |
 |---|------|------|------|
-| 5 | **커스텀 CSS** | OBS 페이지에 사용자 CSS 주입, HTTP 서빙 경로로 제공 | ❌ |
-| 6 | **배경 이미지/영상** | 사용자 미디어 파일 HTTP 서빙 + 경로 해석 | ❌ |
+| 5 | **커스텀 CSS** | OBS 페이지에 사용자 CSS 주입, HTTP 서빙 경로로 제공 | ✅ |
+| 6 | **배경 이미지/영상** | 사용자 미디어 파일 HTTP 서빙 + 경로 해석 | ✅ |
 | 7 | **keyDisplayDelayMs** | OBS에서 키 표시 지연 반영 (메인 오버레이와 동일 패턴) | ✅ |
 | 8 | **개별 키 noteEffectEnabled** | 키별 노트 효과 on/off 반영 | ✅ |
-| 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ❌ |
-| 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ❌ |
-| 11 | **DataSource 호환성 레이어** | Tauri API / WebSocket 통합 인터페이스 (DataSource adapter) 도입, overlay/obs 공용 레이아웃 훅 추출로 중복 제거 | ❌ |
+| 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ✅ |
+| 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ✅ |
+| 11 | **DataSource 호환성 레이어** | Tauri API / WebSocket 통합 인터페이스 (DataSource adapter) 도입, overlay/obs 공용 레이아웃 훅 추출로 중복 제거 | ✅ |
 
 #### v3+ 이후 (P3)
 
