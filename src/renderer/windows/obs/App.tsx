@@ -20,6 +20,9 @@ import type { KeyMappings, KeyPosition, KeyPositions } from '@src/types/key/keys
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
+import type { CustomCss } from '@src/types/plugin/css';
+
+const OBS_CUSTOM_CSS_ID = 'dmn-obs-custom-css';
 
 export default function App() {
   // WS 연결 URL: HTTP로 서빙된 경우 같은 호스트:포트, 아닌 경우 query param fallback
@@ -42,6 +45,31 @@ export default function App() {
   const [backgroundColor, setBackgroundColor] = useState('transparent');
   const [keyCounterEnabled, setKeyCounterEnabled] = useState(false);
   const [initialized, setInitialized] = useState(false);
+
+  // 커스텀 CSS 주입
+  const cssStateRef = useRef({ enabled: false, content: '' });
+  const cssStyleElRef = useRef<HTMLStyleElement | null>(null);
+
+  const applyCssToDOM = useCallback(() => {
+    let el = cssStyleElRef.current;
+    if (!el) {
+      el = document.getElementById(OBS_CUSTOM_CSS_ID) as HTMLStyleElement | null;
+      if (!el) {
+        el = document.createElement('style');
+        el.id = OBS_CUSTOM_CSS_ID;
+        document.head.appendChild(el);
+      }
+      cssStyleElRef.current = el;
+    }
+    const { enabled, content } = cssStateRef.current;
+    if (enabled && content) {
+      el.textContent = content;
+      el.disabled = false;
+    } else {
+      el.textContent = '';
+      el.disabled = true;
+    }
+  }, []);
 
   // 노트 시스템
   const {
@@ -153,6 +181,13 @@ export default function App() {
       );
       setBackgroundColor(settings.backgroundColor ?? 'transparent');
       setKeyCounterEnabled(settings.keyCounterEnabled ?? false);
+
+      // 커스텀 CSS 적용
+      cssStateRef.current = {
+        enabled: settings.useCustomCSS ?? false,
+        content: (settings.customCSS as CustomCss | undefined)?.content ?? '',
+      };
+      applyCssToDOM();
     }
 
     // 카운터 초기화
@@ -197,7 +232,7 @@ export default function App() {
 
     resetAllKeySignals();
     setInitialized(true);
-  }, []);
+  }, [applyCssToDOM]);
 
   // 키 딜레이 적용 신호 업데이트
   const updateKeySignalWithDelay = useCallback(
@@ -270,7 +305,22 @@ export default function App() {
       setBackgroundColor(diff.backgroundColor as string);
     if ('keyCounterEnabled' in diff)
       setKeyCounterEnabled(diff.keyCounterEnabled as boolean);
-  }, []);
+
+    // 커스텀 CSS 변경
+    let cssChanged = false;
+    if ('useCustomCSS' in diff) {
+      cssStateRef.current.enabled = diff.useCustomCSS as boolean;
+      cssChanged = true;
+    }
+    if ('customCSS' in diff) {
+      const css = diff.customCSS as Partial<CustomCss> | undefined;
+      if (css?.content !== undefined) {
+        cssStateRef.current.content = css.content;
+        cssChanged = true;
+      }
+    }
+    if (cssChanged) applyCssToDOM();
+  }, [applyCssToDOM]);
 
   // 카운터 업데이트
   const onCounterUpdate = useCallback((data: Record<string, unknown>) => {

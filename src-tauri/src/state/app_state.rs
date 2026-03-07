@@ -372,6 +372,20 @@ impl AppState {
         }
     }
 
+    /// OBS 브릿지에 설정 diff 전송 + 캐시 스냅샷 갱신 (전체 스냅샷 broadcast 없음)
+    /// CSS 등 개별 설정 변경이 OBS 런타임 상태(키 시그널, KPS)를 리셋하지 않도록 사용
+    pub fn notify_obs_settings_diff(&self, diff: serde_json::Value) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        self.obs_bridge.broadcast_settings_diff(diff);
+        // 캐시 스냅샷 갱신 (새 클라이언트 접속 시 최신 설정 제공)
+        let bp = self.bootstrap_payload();
+        if let Ok(snap) = serde_json::to_value(&bp) {
+            self.obs_bridge.update_snapshot(snap);
+        }
+    }
+
     /// OBS 브릿지에 카운터 상태 브로드캐스트
     pub fn obs_broadcast_counters(&self) {
         if !self.obs_bridge.is_running() {
