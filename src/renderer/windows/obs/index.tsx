@@ -11,7 +11,10 @@ async function bootstrap() {
   } catch (error) {
     const err = error as Error;
     console.error('[OBS] Failed to mount React app:', err);
-    document.body.innerHTML = `<pre style="color: red; padding: 20px;">OBS Error: ${err.message}\n${err.stack}</pre>`;
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'color: red; padding: 20px;';
+    pre.textContent = `OBS Error: ${err.message}\n${err.stack}`;
+    document.body.replaceChildren(pre);
   }
 }
 

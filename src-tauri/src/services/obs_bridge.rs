@@ -24,6 +24,8 @@ pub struct ObsBridgeService {
     cached_snapshot: RwLock<Value>,
     broadcast_tx: broadcast::Sender<ObsBroadcast>,
     shutdown_tx: RwLock<Option<oneshot::Sender<()>>>,
+    /// 서버 루프 태스크 핸들 (stop→start 경쟁 조건 방지)
+    server_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// 빌드된 OBS 정적 파일 경로 (dist/renderer/obs)
     static_dir: RwLock<Option<PathBuf>>,
     server_version: String,
@@ -39,6 +41,7 @@ impl ObsBridgeService {
             cached_snapshot: RwLock::new(Value::Null),
             broadcast_tx,
             shutdown_tx: RwLock::new(None),
+            server_handle: tokio::sync::Mutex::new(None),
             static_dir: RwLock::new(None),
             server_version: version.to_string(),
         }
@@ -104,6 +107,14 @@ impl ObsBridgeService {
             return Err("OBS bridge already running".to_string());
         }
 
+        // 이전 서버 태스크 종료 대기 (stop→start 경쟁 조건 방지)
+        {
+            let mut handle = self.server_handle.lock().await;
+            if let Some(h) = handle.take() {
+                let _ = h.await;
+            }
+        }
+
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
         let listener = match TcpListener::bind(addr).await {
             Ok(l) => l,
@@ -113,16 +124,23 @@ impl ObsBridgeService {
             }
         };
 
+        // 실제 바인딩된 포트 저장 (port=0인 경우 OS 할당 포트 반영)
+        let actual_port = listener
+            .local_addr()
+            .map(|a| a.port())
+            .unwrap_or(port);
+
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         *self.shutdown_tx.write() = Some(shutdown_tx);
-        *self.port.write() = port;
+        *self.port.write() = actual_port;
 
         let bridge = Arc::clone(self);
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             bridge.server_loop(listener, shutdown_rx).await;
         });
+        *self.server_handle.lock().await = Some(handle);
 
-        log::info!("[ObsBridge] 서버 시작: http://127.0.0.1:{port}");
+        log::info!("[ObsBridge] 서버 시작: http://127.0.0.1:{actual_port}");
         Ok(())
     }
 
@@ -166,7 +184,7 @@ impl ObsBridgeService {
                 }
             }
         }
-        self.running.store(false, Ordering::Relaxed);
+        // running 플래그는 stop()에서 관리 (server_loop에서 해제하면 restart 시 경쟁 조건 발생)
     }
 
     async fn handle_connection(self: &Arc<Self>, mut stream: TcpStream, addr: SocketAddr) {
@@ -236,8 +254,12 @@ impl ObsBridgeService {
             path.trim_start_matches('/')
         };
 
-        // 경로 탐색 공격 방지 (.. 포함 시 거부)
-        if normalized.contains("..") {
+        // 경로 탐색 공격 방지 (.., 절대경로, 드라이브 경로 거부)
+        if normalized.contains("..")
+            || normalized.starts_with('/')
+            || normalized.starts_with('\\')
+            || normalized.contains(':')
+        {
             let _ = stream
                 .write_all(
                     b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -248,11 +270,23 @@ impl ObsBridgeService {
 
         let file_path = static_dir.join(normalized);
 
+        // canonicalize 후 static_dir 하위인지 재검증
+        if let Ok(canonical) = file_path.canonicalize() {
+            if !canonical.starts_with(&static_dir) {
+                let _ = stream
+                    .write_all(
+                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+                return;
+            }
+        }
+
         match tokio::fs::read(&file_path).await {
             Ok(content) => {
                 let mime = guess_mime(normalized);
                 let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
                     content.len()
                 );
                 let _ = stream.write_all(response.as_bytes()).await;
@@ -264,7 +298,7 @@ impl ObsBridgeService {
                 match tokio::fs::read(&index_path).await {
                     Ok(content) => {
                         let response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
                             content.len()
                         );
                         let _ = stream.write_all(response.as_bytes()).await;

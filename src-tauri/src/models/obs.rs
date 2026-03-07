@@ -20,29 +20,7 @@ pub struct ObsEnvelope {
     pub payload: Value,
 }
 
-// ── 클라이언트 → 서버 메시지 ──
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[allow(dead_code)]
-pub enum ObsInMessage {
-    Hello { payload: HelloPayload },
-    Ping,
-    ResyncRequest,
-}
-
 // ── Payload 타입 ──
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HelloPayload {
-    pub client: String,
-    pub protocol: u32,
-    #[serde(default)]
-    pub app_version: String,
-    #[serde(default)]
-    pub resume_from_seq: u64,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
