@@ -78,6 +78,8 @@ pub enum ObsBroadcast {
     LayoutDiff(Value),
     CounterUpdate(Value),
     Snapshot(Value),
+    /// 서버 종료 신호 — 클라이언트 세션 종료용
+    Shutdown,
 }
 
 /// OBS 연결 상태 (프론트엔드 표시용)

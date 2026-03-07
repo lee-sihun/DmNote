@@ -31,11 +31,12 @@ use crate::{
     audio::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
+        obs::KeyState as ObsKeyState,
         overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
         KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
         SettingsDiff, SettingsState,
     },
-    services::{css_watcher::CssWatcher, settings::SettingsService},
+    services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
 
 const OVERLAY_LABEL: &str = "overlay";
@@ -63,6 +64,8 @@ pub struct AppState {
     key_sound: Arc<KeySoundEngine>,
     /// CSS 파일 핫리로딩 워처
     css_watcher: RwLock<Option<CssWatcher>>,
+    /// OBS WebSocket 브릿지
+    pub obs_bridge: Arc<ObsBridgeService>,
 }
 
 impl AppState {
@@ -78,6 +81,7 @@ impl AppState {
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
         let active_keys = Arc::new(RwLock::new(HashSet::new()));
         let key_sound = Arc::new(KeySoundEngine::new());
+        let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
 
         Ok(Self {
             store,
@@ -93,6 +97,7 @@ impl AppState {
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
             css_watcher: RwLock::new(None),
+            obs_bridge,
         })
     }
 
@@ -259,6 +264,12 @@ impl AppState {
         self.apply_settings_effects(diff, app)?;
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
+        }
+        // OBS 브릿지 설정 변경 브로드캐스트
+        if self.obs_bridge.is_running() {
+            if let Ok(diff_json) = serde_json::to_value(&diff.changed) {
+                self.obs_bridge.broadcast_settings_diff(diff_json);
+            }
         }
         // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
         let mut payload = diff.clone();
@@ -809,6 +820,20 @@ impl AppState {
                                 }
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
+
+                            // OBS 브릿지 키 이벤트 브로드캐스트
+                            if app_state.obs_bridge.is_running() {
+                                let obs_key_state = if state == "DOWN" {
+                                    ObsKeyState::Down
+                                } else {
+                                    ObsKeyState::Up
+                                };
+                                app_state.obs_bridge.broadcast_key_event(
+                                    key_label.to_string(),
+                                    obs_key_state,
+                                    mode.to_string(),
+                                );
+                            }
 
                             let mut emitted = false;
                             if let Some(overlay) = overlay_window.as_ref() {

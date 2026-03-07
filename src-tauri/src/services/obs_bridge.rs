@@ -128,12 +128,12 @@ impl ObsBridgeService {
         if !self.running.load(Ordering::Relaxed) {
             return;
         }
+        // 기존 클라이언트 세션에 종료 신호 전송
+        let _ = self.broadcast_tx.send(ObsBroadcast::Shutdown);
         if let Some(tx) = self.shutdown_tx.write().take() {
             let _ = tx.send(());
         }
         self.running.store(false, Ordering::Relaxed);
-        // client_count는 리셋하지 않음 — 각 클라이언트 세션이
-        // broadcast 채널 종료를 감지하고 자연 종료되면서 스스로 감소
         log::info!("[ObsBridge] 서버 종료");
     }
 
@@ -265,6 +265,7 @@ impl ObsBridgeService {
                 // broadcast 채널에서 메시지 수신 → 클라이언트에 전송
                 result = broadcast_rx.recv() => {
                     match result {
+                        Ok(ObsBroadcast::Shutdown) => break,
                         Ok(broadcast) => {
                             let msg = broadcast_to_envelope(&broadcast, next_seq());
                             if ws_tx.send(Message::Text(msg.to_string().into())).await.is_err() {
@@ -355,5 +356,6 @@ fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
         ObsBroadcast::Snapshot(snapshot) => {
             make_envelope("snapshot", seq, snapshot.clone())
         }
+        ObsBroadcast::Shutdown => unreachable!("Shutdown은 직접 처리됨"),
     }
 }

@@ -152,6 +152,10 @@ fn main() {
             commands::app::system::app_quit,
             commands::app::system::window_open_devtools_all,
             commands::app::system::get_cursor_settings,
+            // OBS 모드
+            commands::app::obs::obs_start,
+            commands::app::obs::obs_stop,
+            commands::app::obs::obs_status,
             // 에디터 콘텐츠
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,
