@@ -955,7 +955,7 @@ impl AppState {
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
 
-                            // OBS 모드 활성 시: WS로만 전송, 숨겨진 오버레이에 emit 생략
+                            // OBS 모드 활성 시: WebSocket으로만 전송, 숨겨진 오버레이에 emit 생략
                             if app_state.obs_bridge.is_running() {
                                 let obs_key_state = if state == "DOWN" {
                                     ObsKeyState::Down
