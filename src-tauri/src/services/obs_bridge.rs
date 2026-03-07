@@ -261,6 +261,12 @@ impl ObsBridgeService {
             .and_then(|line| line.split_whitespace().nth(1))
             .unwrap_or("/");
 
+        // /media/<base64-encoded-path>?token=xxx — 사용자 로컬 미디어 파일 서빙
+        if let Some(rest) = path.strip_prefix("/media/") {
+            self.handle_media_request(stream, rest).await;
+            return;
+        }
+
         // 경로 정규화: "/" → "/index.html", 디렉토리 탐색 방지
         let normalized = if path == "/" || path.is_empty() {
             "index.html"
@@ -493,23 +499,143 @@ impl ObsBridgeService {
             self.client_count()
         );
     }
+
+    /// /media/<base64url-encoded-path>?token=xxx — 사용자 로컬 미디어 파일 서빙
+    async fn handle_media_request(&self, stream: &mut TcpStream, rest: &str) {
+        use base64::Engine;
+
+        // 경로와 쿼리 분리: "base64path?token=xxx"
+        let (encoded, query) = rest.split_once('?').unwrap_or((rest, ""));
+
+        // 토큰 검증
+        let expected_token = self.session_token.read().clone();
+        if !expected_token.is_empty() {
+            let client_token = query
+                .split('&')
+                .find_map(|pair| pair.strip_prefix("token="))
+                .unwrap_or("");
+            if client_token != expected_token {
+                let _ = stream
+                    .write_all(
+                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+                return;
+            }
+        }
+
+        // URL 디코딩 (%2F 등) + base64url → 절대 파일 경로
+        let decoded_url = percent_decode(encoded);
+        let file_path = match base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(decoded_url.as_bytes())
+        {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(path) => PathBuf::from(path),
+                Err(_) => {
+                    let _ = stream
+                        .write_all(
+                            b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .await;
+                    return;
+                }
+            },
+            Err(_) => {
+                let _ = stream
+                    .write_all(
+                        b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+                return;
+            }
+        };
+
+        // 허용 확장자 화이트리스트 (미디어/폰트 파일만)
+        let ext = file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
+                | "mp4" | "webm" | "ogg"
+                | "woff" | "woff2" | "ttf" | "otf"
+        ) {
+            let _ = stream
+                .write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await;
+            return;
+        }
+
+        // 파일 읽기 및 서빙
+        match tokio::fs::read(&file_path).await {
+            Ok(content) => {
+                let mime = guess_mime(&file_path.to_string_lossy());
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: max-age=3600\r\nConnection: close\r\n\r\n",
+                    content.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.write_all(&content).await;
+            }
+            Err(_) => {
+                let _ = stream
+                    .write_all(
+                        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+            }
+        }
+    }
 }
 
 /// 파일 확장자로 MIME 타입 추정
 fn guess_mime(path: &str) -> &'static str {
-    match path.rsplit('.').next().unwrap_or("") {
+    match path.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
         "html" | "htm" => "text/html; charset=utf-8",
         "js" | "mjs" => "application/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
         "json" => "application/json; charset=utf-8",
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "ogg" => "video/ogg",
         "woff2" => "font/woff2",
         "woff" => "font/woff",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
         "wasm" => "application/wasm",
         _ => "application/octet-stream",
     }
+}
+
+/// 간단한 percent-decoding (%XX → 바이트)
+fn percent_decode(input: &str) -> String {
+    let mut result = Vec::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(
+                &input[i + 1..i + 3],
+                16,
+            ) {
+                result.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        result.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&result).into_owned()
 }
 
 /// ObsBroadcast → JSON envelope 변환
