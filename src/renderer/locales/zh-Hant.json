@@ -72,7 +72,18 @@
     "keyCounterDesc": "追蹤並顯示每個按鍵的按下次數.",
     "counterResetButton": "重置",
     "counterReset": "按鍵計數器已重置.",
-    "counterResetFailed": "重置按鍵計數器失敗."
+    "counterResetFailed": "重置按鍵計數器失敗.",
+    "obsMode": "OBS Mode",
+    "obsPort": "Port",
+    "obsStart": "Start",
+    "obsStop": "Stop",
+    "obsRunning": "Running",
+    "obsStopped": "Stopped",
+    "obsClients": "{{count}} client(s) connected",
+    "obsCopyUrl": "Copy URL",
+    "obsCopied": "OBS URL copied to clipboard.",
+    "obsStartFailed": "Failed to start OBS server.",
+    "obsStopFailed": "Failed to stop OBS server."
   },
   "shortcutSetting": {
     "title": "快捷鍵設定",

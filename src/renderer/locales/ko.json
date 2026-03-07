@@ -72,7 +72,18 @@
     "keyCounterDesc": "각 키 입력 횟수를 기록하고 표시합니다.",
     "counterResetButton": "초기화",
     "counterReset": "키 카운터가 초기화되었습니다.",
-    "counterResetFailed": "키 카운터 초기화에 실패했습니다."
+    "counterResetFailed": "키 카운터 초기화에 실패했습니다.",
+    "obsMode": "OBS 모드",
+    "obsPort": "포트",
+    "obsStart": "시작",
+    "obsStop": "중지",
+    "obsRunning": "실행 중",
+    "obsStopped": "중지됨",
+    "obsClients": "클라이언트 {{count}}개 연결됨",
+    "obsCopyUrl": "URL 복사",
+    "obsCopied": "OBS URL이 클립보드에 복사되었습니다.",
+    "obsStartFailed": "OBS 서버 시작에 실패했습니다.",
+    "obsStopFailed": "OBS 서버 중지에 실패했습니다."
   },
   "shortcutSetting": {
     "title": "단축키 설정",

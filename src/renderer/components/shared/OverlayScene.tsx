@@ -192,14 +192,18 @@ const OverlayScene = ({
           statType === 'kpsAvg'
             ? 'AVG'
             : statType === 'kpsMax'
-              ? 'MAX'
-              : statType === 'total'
-                ? 'Total'
-                : 'KPS';
+            ? 'MAX'
+            : statType === 'total'
+            ? 'Total'
+            : 'KPS';
         const label =
-          (((pos as { displayText?: string }).displayText || '') as string)
-            .trim() || defaultLabel;
-        const position = { ...pos, zIndex: (pos as { zIndex?: number }).zIndex ?? index };
+          (
+            ((pos as { displayText?: string }).displayText || '') as string
+          ).trim() || defaultLabel;
+        const position = {
+          ...pos,
+          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+        };
 
         return (
           <OverlayStatItem
@@ -213,7 +217,10 @@ const OverlayScene = ({
       })}
       {displayGraphPositions.map((pos, index) => {
         if (!pos || (pos as { hidden?: boolean }).hidden) return null;
-        const graphPosition = { ...pos, zIndex: (pos as { zIndex?: number }).zIndex ?? index };
+        const graphPosition = {
+          ...pos,
+          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+        };
         return (
           <OverlayGraphItem
             key={`graph-${selectedKeyType}-${index}`}

@@ -72,7 +72,18 @@
     "keyCounterDesc": "Track and display the number of presses for each key.",
     "counterResetButton": "Reset",
     "counterReset": "Key counters have been reset.",
-    "counterResetFailed": "Failed to reset key counters."
+    "counterResetFailed": "Failed to reset key counters.",
+    "obsMode": "OBS Mode",
+    "obsPort": "Port",
+    "obsStart": "Start",
+    "obsStop": "Stop",
+    "obsRunning": "Running",
+    "obsStopped": "Stopped",
+    "obsClients": "{{count}} client(s) connected",
+    "obsCopyUrl": "Copy URL",
+    "obsCopied": "OBS URL copied to clipboard.",
+    "obsStartFailed": "Failed to start OBS server.",
+    "obsStopFailed": "Failed to stop OBS server."
   },
   "shortcutSetting": {
     "title": "Shortcut Settings",

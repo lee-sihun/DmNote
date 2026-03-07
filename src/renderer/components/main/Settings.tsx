@@ -26,6 +26,9 @@ import type {
 } from '@src/types/plugin/api';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { KeyCounters } from '@src/types/key/keys';
+import { obsApi } from '@api/modules/obsApi';
+import type { ObsStatus } from '@src/types/obs';
+import { DEFAULT_OBS_PORT } from '@src/types/obs';
 
 // 설정 미리보기 영상
 const PREVIEW_SOURCES: Record<string, string> = {
@@ -124,6 +127,15 @@ const Settings = ({
   const [isAddingPlugins, setIsAddingPlugins] = useState<boolean>(false);
   const [pendingPluginId, setPendingPluginId] = useState<string | null>(null);
 
+  // OBS 모드
+  const [obsStatus, setObsStatus] = useState<ObsStatus>({
+    running: false,
+    port: DEFAULT_OBS_PORT,
+    clientCount: 0,
+  });
+  const [obsPort, setObsPort] = useState<string>(String(DEFAULT_OBS_PORT));
+  const [obsLoading, setObsLoading] = useState<boolean>(false);
+
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
 
@@ -153,6 +165,30 @@ const Settings = ({
       setAngleMode('metal');
     }
   }, [isMacOS, angleMode, setAngleMode]);
+
+  // OBS 상태 초기 로드 + 주기적 폴링
+  useEffect(() => {
+    let mounted = true;
+    const fetchStatus = async () => {
+      try {
+        const status = await obsApi.status();
+        if (!mounted) return;
+        setObsStatus((prev) =>
+          prev.running === status.running &&
+          prev.port === status.port &&
+          prev.clientCount === status.clientCount
+            ? prev
+            : status,
+        );
+      } catch {}
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 3000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
     { value: 'ko', label: '한국어' },
@@ -523,6 +559,45 @@ const Settings = ({
     }
   };
 
+  const handleObsToggle = async (): Promise<void> => {
+    if (obsLoading) return;
+    setObsLoading(true);
+    try {
+      if (obsStatus.running) {
+        const status = await obsApi.stop();
+        setObsStatus(status);
+      } else {
+        const port = parseInt(obsPort, 10);
+        if (isNaN(port) || port < 1024 || port > 65535) {
+          showAlert?.(t('settings.obsStartFailed'));
+          return;
+        }
+        const status = await obsApi.start(port);
+        setObsStatus(status);
+      }
+    } catch (error) {
+      console.error('Failed to toggle OBS mode', error);
+      showAlert?.(
+        obsStatus.running
+          ? t('settings.obsStopFailed')
+          : t('settings.obsStartFailed'),
+      );
+    } finally {
+      setObsLoading(false);
+    }
+  };
+
+  const handleObsCopyUrl = async (): Promise<void> => {
+    // v1: HTTP 정적 서빙 미구현 — WS 엔드포인트만 제공
+    const url = `ws://localhost:${obsStatus.port}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showAlert?.(t('settings.obsCopied'));
+    } catch {
+      showAlert?.(url);
+    }
+  };
+
   const handleDeveloperModeToggle = async (): Promise<void> => {
     const next: boolean = !developerModeEnabled;
     setDeveloperModeEnabled(next);
@@ -823,6 +898,67 @@ const Settings = ({
                       {t('settings.managePlugins')}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+            {/* OBS 모드 */}
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div className="flex flex-row justify-between items-center h-[40px]">
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t('settings.obsMode')}
+                </p>
+                <div className="flex items-center gap-[8px]">
+                  {obsStatus.running && (
+                    <span className="text-style-2 text-[#8B8D97]">
+                      {t('settings.obsClients', {
+                        count: obsStatus.clientCount,
+                      })}
+                    </span>
+                  )}
+                  <span
+                    className={`text-style-2 ${
+                      obsStatus.running ? 'text-[#4ADE80]' : 'text-[#8B8D97]'
+                    }`}
+                  >
+                    {obsStatus.running
+                      ? t('settings.obsRunning')
+                      : t('settings.obsStopped')}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-row justify-between items-center h-[40px]">
+                <div className="flex items-center gap-[8px]">
+                  <p className="text-style-3 text-[#FFFFFF]">
+                    {t('settings.obsPort')}
+                  </p>
+                  <input
+                    type="number"
+                    value={obsPort}
+                    onChange={(e) => setObsPort(e.target.value)}
+                    disabled={obsStatus.running}
+                    className="w-[80px] bg-[#2A2A31] border border-[#3A3944] rounded-[5px] px-[8px] py-[3px] text-style-2 text-[#DBDEE8] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    min={1024}
+                    max={65535}
+                  />
+                </div>
+                <div className="flex items-center gap-[6px]">
+                  {obsStatus.running && (
+                    <button
+                      onClick={handleObsCopyUrl}
+                      className={actionButtonClass(true)}
+                    >
+                      {t('settings.obsCopyUrl')}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleObsToggle}
+                    disabled={obsLoading}
+                    className={actionButtonClass(!obsLoading)}
+                  >
+                    {obsStatus.running
+                      ? t('settings.obsStop')
+                      : t('settings.obsStart')}
+                  </button>
                 </div>
               </div>
             </div>

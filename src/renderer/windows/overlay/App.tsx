@@ -30,7 +30,9 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import OverlayScene, { FALLBACK_POSITION } from '@components/shared/OverlayScene';
+import OverlayScene, {
+  FALLBACK_POSITION,
+} from '@components/shared/OverlayScene';
 
 const PADDING = 30;
 

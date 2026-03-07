@@ -72,7 +72,18 @@
     "keyCounterDesc": "Учитывать и показывать число нажатий клавиш.",
     "counterResetButton": "Сброс",
     "counterReset": "Счётчики сброшены.",
-    "counterResetFailed": "Ошибка сброса счётчиков."
+    "counterResetFailed": "Ошибка сброса счётчиков.",
+    "obsMode": "OBS Mode",
+    "obsPort": "Port",
+    "obsStart": "Start",
+    "obsStop": "Stop",
+    "obsRunning": "Running",
+    "obsStopped": "Stopped",
+    "obsClients": "{{count}} client(s) connected",
+    "obsCopyUrl": "Copy URL",
+    "obsCopied": "OBS URL copied to clipboard.",
+    "obsStartFailed": "Failed to start OBS server.",
+    "obsStopFailed": "Failed to stop OBS server."
   },
   "shortcutSetting": {
     "title": "Горячие клавиши",

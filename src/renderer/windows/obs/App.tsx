@@ -2,16 +2,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useObsWebSocket } from '@hooks/obs/useObsWebSocket';
 import { useNoteSystem } from '@hooks/overlay/useNoteSystem';
 import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
-import { mergeNoteSettings, NOTE_SETTINGS_DEFAULTS } from '@src/types/settings/noteSettings';
+import {
+  mergeNoteSettings,
+  NOTE_SETTINGS_DEFAULTS,
+} from '@src/types/settings/noteSettings';
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
-import {
-  applyCounterSnapshot,
-} from '@stores/signals/keyCounterSignals';
+import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { applyStatsSnapshot } from '@stores/signals/statsSignals';
-import OverlayScene, { FALLBACK_POSITION } from '@components/shared/OverlayScene';
+import OverlayScene, {
+  FALLBACK_POSITION,
+} from '@components/shared/OverlayScene';
 import type { BootstrapPayload } from '@src/types/app';
 import type { KeyEventPayload } from '@src/types/obs';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
@@ -36,7 +39,9 @@ export default function App() {
   const [graphPositions, setGraphPositions] = useState<GraphItemPositions>({});
   const [selectedKeyType, setSelectedKeyType] = useState('4key');
   const [noteEffect, setNoteEffect] = useState(true);
-  const [noteSettings, setNoteSettings] = useState<NoteSettings>(NOTE_SETTINGS_DEFAULTS);
+  const [noteSettings, setNoteSettings] = useState<NoteSettings>(
+    NOTE_SETTINGS_DEFAULTS,
+  );
   const [backgroundColor, setBackgroundColor] = useState('transparent');
   const [keyCounterEnabled, setKeyCounterEnabled] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -71,7 +76,10 @@ export default function App() {
     if (settings) {
       setNoteEffect(settings.noteEffect ?? true);
       setNoteSettings(
-        mergeNoteSettings(settings.noteSettings ?? NOTE_SETTINGS_DEFAULTS, null),
+        mergeNoteSettings(
+          settings.noteSettings ?? NOTE_SETTINGS_DEFAULTS,
+          null,
+        ),
       );
       setBackgroundColor(settings.backgroundColor ?? 'transparent');
       setKeyCounterEnabled(settings.keyCounterEnabled ?? false);
@@ -103,28 +111,25 @@ export default function App() {
   }, []);
 
   // 설정 변경
-  const onSettingsDiff = useCallback(
-    (diff: Record<string, unknown>) => {
-      if ('noteEffect' in diff) setNoteEffect(diff.noteEffect as boolean);
-      if ('noteSettings' in diff)
-        setNoteSettings((prev) =>
-          mergeNoteSettings({ ...prev, ...(diff.noteSettings as Partial<NoteSettings>) }, null),
-        );
-      if ('backgroundColor' in diff)
-        setBackgroundColor(diff.backgroundColor as string);
-      if ('keyCounterEnabled' in diff)
-        setKeyCounterEnabled(diff.keyCounterEnabled as boolean);
-    },
-    [],
-  );
+  const onSettingsDiff = useCallback((diff: Record<string, unknown>) => {
+    if ('noteEffect' in diff) setNoteEffect(diff.noteEffect as boolean);
+    if ('noteSettings' in diff)
+      setNoteSettings((prev) =>
+        mergeNoteSettings(
+          { ...prev, ...(diff.noteSettings as Partial<NoteSettings>) },
+          null,
+        ),
+      );
+    if ('backgroundColor' in diff)
+      setBackgroundColor(diff.backgroundColor as string);
+    if ('keyCounterEnabled' in diff)
+      setKeyCounterEnabled(diff.keyCounterEnabled as boolean);
+  }, []);
 
   // 카운터 업데이트
-  const onCounterUpdate = useCallback(
-    (data: Record<string, unknown>) => {
-      applyCounterSnapshot(data as Record<string, Record<string, number>>);
-    },
-    [],
-  );
+  const onCounterUpdate = useCallback((data: Record<string, unknown>) => {
+    applyCounterSnapshot(data as Record<string, Record<string, number>>);
+  }, []);
 
   useObsWebSocket({
     url: wsUrl,
@@ -140,7 +145,8 @@ export default function App() {
   const currentStatPositions = statPositions[selectedKeyType] ?? [];
   const currentGraphPositions = graphPositions[selectedKeyType] ?? [];
 
-  const trackHeight = noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight;
+  const trackHeight =
+    noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight;
 
   // bounds 계산
   const bounds = (() => {
