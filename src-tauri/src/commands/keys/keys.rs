@@ -106,6 +106,7 @@ pub fn keys_set_mode(
         state.keyboard.current_mode()
     };
 
+    state.transfer_active_keys(&effective);
     state.store.set_selected_key_type(effective.clone())?;
 
     app.emit(
@@ -491,6 +492,7 @@ pub fn custom_tabs_select(
 
     state.store.set_selected_key_type(id.clone())?;
     state.keyboard.set_mode(id.clone());
+    state.transfer_active_keys(&id);
 
     app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
 

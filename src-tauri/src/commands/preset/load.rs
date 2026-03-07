@@ -115,6 +115,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(selected_key_type.clone());
+    state.transfer_active_keys(&selected_key_type);
 
     let diff = state.settings.apply_patch(SettingsPatchInput {
         background_color: Some(

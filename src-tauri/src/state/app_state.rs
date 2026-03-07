@@ -1242,6 +1242,20 @@ impl AppState {
         self.active_keys.write().clear();
     }
 
+    /// 모드 전환 시 active_keys의 prefix를 새 모드로 교체
+    pub fn transfer_active_keys(&self, new_mode: &str) {
+        let mut guard = self.active_keys.write();
+        let transferred: HashSet<String> = guard
+            .drain()
+            .filter_map(|entry| {
+                entry
+                    .split_once("::")
+                    .map(|(_, key)| Self::compose_active_key(new_mode, key))
+            })
+            .collect();
+        *guard = transferred;
+    }
+
     pub fn persist_key_counters(&self) -> Result<KeyCounters> {
         let snapshot = self.key_counters.read().clone();
         self.store.set_key_counters(snapshot.clone())?;
