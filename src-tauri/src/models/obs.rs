@@ -69,6 +69,9 @@ pub struct ObsStatus {
     pub running: bool,
     pub port: u16,
     pub client_count: u32,
+    /// 세션 보안 토큰 (서버 시작 시 생성, WS hello에서 검증)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// JSON envelope 생성 헬퍼

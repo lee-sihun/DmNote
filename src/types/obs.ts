@@ -18,6 +18,7 @@ export interface HelloPayload {
   protocol: number;
   appVersion: string;
   resumeFromSeq: number;
+  token?: string;
 }
 
 // ── 서버 → 클라이언트 ──
@@ -37,6 +38,7 @@ export interface ObsStatus {
   running: boolean;
   port: number;
   clientCount: number;
+  token?: string;
 }
 
 // ── WS 메시지 타입 문자열 ──
@@ -51,4 +53,5 @@ export type ObsMessageType =
   | 'counter_update'
   | 'ping'
   | 'pong'
-  | 'resync_request';
+  | 'resync_request'
+  | 'error';

@@ -184,7 +184,8 @@ const Settings = ({
         setObsStatus((prev) =>
           prev.running === status.running &&
           prev.port === status.port &&
-          prev.clientCount === status.clientCount
+          prev.clientCount === status.clientCount &&
+          prev.token === status.token
             ? prev
             : status,
         );
@@ -599,7 +600,8 @@ const Settings = ({
   };
 
   const handleObsCopyUrl = async (): Promise<void> => {
-    const url = `http://localhost:${obsStatus.port}`;
+    const tokenParam = obsStatus.token ? `?token=${obsStatus.token}` : '';
+    const url = `http://localhost:${obsStatus.port}${tokenParam}`;
     try {
       await navigator.clipboard.writeText(url);
       showAlert?.(t('settings.obsCopied'));

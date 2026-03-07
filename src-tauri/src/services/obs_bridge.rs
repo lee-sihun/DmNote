@@ -7,6 +7,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde_json::Value;
+use uuid::Uuid;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot};
@@ -29,6 +30,8 @@ pub struct ObsBridgeService {
     /// 빌드된 OBS 정적 파일 경로 (dist/renderer/obs)
     static_dir: RwLock<Option<PathBuf>>,
     server_version: String,
+    /// 세션 보안 토큰 (서버 시작 시 랜덤 생성)
+    session_token: RwLock<String>,
 }
 
 impl ObsBridgeService {
@@ -44,6 +47,7 @@ impl ObsBridgeService {
             server_handle: tokio::sync::Mutex::new(None),
             static_dir: RwLock::new(None),
             server_version: version.to_string(),
+            session_token: RwLock::new(String::new()),
         }
     }
 
@@ -60,10 +64,15 @@ impl ObsBridgeService {
     }
 
     pub fn status(&self) -> ObsStatus {
+        let token = {
+            let t = self.session_token.read();
+            if t.is_empty() { None } else { Some(t.clone()) }
+        };
         ObsStatus {
             running: self.is_running(),
             port: *self.port.read(),
             client_count: self.client_count(),
+            token,
         }
     }
 
@@ -115,11 +124,15 @@ impl ObsBridgeService {
             }
         }
 
+        // 세션 토큰 생성 (UUID v4, 하이픈 제거 = 32자 hex)
+        *self.session_token.write() = Uuid::new_v4().simple().to_string();
+
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
         let listener = match TcpListener::bind(addr).await {
             Ok(l) => l,
             Err(e) => {
                 self.running.store(false, Ordering::Relaxed);
+                self.session_token.write().clear();
                 return Err(format!("포트 {port} 바인드 실패: {e}"));
             }
         };
@@ -155,6 +168,7 @@ impl ObsBridgeService {
             let _ = tx.send(());
         }
         self.running.store(false, Ordering::Relaxed);
+        self.session_token.write().clear();
         log::info!("[ObsBridge] 서버 종료");
     }
 
@@ -353,7 +367,7 @@ impl ObsBridgeService {
         })
         .await;
 
-        let _hello = match hello_result {
+        let hello = match hello_result {
             Ok(Some(envelope)) => envelope,
             _ => {
                 log::warn!("[ObsBridge] {addr}: hello 타임아웃 또는 연결 종료");
@@ -361,6 +375,22 @@ impl ObsBridgeService {
                 return;
             }
         };
+
+        // 보안 토큰 검증
+        let expected_token = self.session_token.read().clone();
+        if !expected_token.is_empty() {
+            let client_token = hello.payload.get("token")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if client_token != expected_token {
+                log::warn!("[ObsBridge] {addr}: 토큰 불일치, 연결 거부");
+                let err_msg = make_envelope("error", 0,
+                    serde_json::json!({"code": "AUTH_FAILED", "message": "Invalid token"}));
+                let _ = ws_tx.send(Message::Text(err_msg.to_string())).await;
+                self.client_count.fetch_sub(1, Ordering::Relaxed);
+                return;
+            }
+        }
 
         // hello_ack 전송
         let ack_payload = serde_json::to_value(HelloAckPayload {

@@ -7,6 +7,7 @@ type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
 interface UseObsWebSocketOptions {
   url: string;
+  token?: string;
   onSnapshot: (payload: BootstrapPayload) => void;
   onKeyEvent: (payload: KeyEventPayload) => void;
   onSettingsDiff: (diff: Record<string, unknown>) => void;
@@ -15,6 +16,7 @@ interface UseObsWebSocketOptions {
 
 function useObsWebSocket({
   url,
+  token,
   onSnapshot,
   onKeyEvent,
   onSettingsDiff,
@@ -78,6 +80,7 @@ function useObsWebSocket({
           protocol: OBS_PROTOCOL_VERSION,
           appVersion: '',
           resumeFromSeq: 0,
+          token: token || undefined,
         });
       };
 
@@ -111,6 +114,14 @@ function useObsWebSocket({
             case 'ping':
               sendMessage('pong');
               break;
+            case 'error': {
+              const payload = envelope.payload as Record<string, unknown>;
+              if (payload?.code === 'AUTH_FAILED') {
+                console.warn('[ObsWS] 토큰 인증 실패, 재연결 중단');
+                disposed = true; // 재연결 루프 방지
+              }
+              break;
+            }
           }
         } catch {
           // 파싱 실패 무시
@@ -142,7 +153,7 @@ function useObsWebSocket({
         wsRef.current = null;
       }
     };
-  }, [url]);
+  }, [url, token]);
 
   const requestResync = () => {
     const ws = wsRef.current;

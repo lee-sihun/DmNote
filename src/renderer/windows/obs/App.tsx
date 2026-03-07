@@ -26,6 +26,7 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const host = params.get('host') || window.location.hostname || '127.0.0.1';
   const port = params.get('port') || window.location.port || '34891';
+  const token = params.get('token') || '';
   const wsUrl = `ws://${host}:${port}`;
 
   // 상태
@@ -287,6 +288,7 @@ export default function App() {
 
   useObsWebSocket({
     url: wsUrl,
+    token,
     onSnapshot,
     onKeyEvent,
     onSettingsDiff,
