@@ -278,6 +278,28 @@ impl AppState {
         Ok(())
     }
 
+    /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신
+    pub fn refresh_obs_snapshot(&self) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        let payload = self.bootstrap_payload();
+        if let Ok(snapshot) = serde_json::to_value(&payload) {
+            self.obs_bridge.update_snapshot(snapshot);
+        }
+    }
+
+    /// OBS 브릿지에 카운터 상태 브로드캐스트
+    pub fn obs_broadcast_counters(&self) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        let counters = self.snapshot_key_counters();
+        if let Ok(data) = serde_json::to_value(&counters) {
+            self.obs_bridge.broadcast_counter_update(data);
+        }
+    }
+
     pub fn set_overlay_visibility(&self, app: &AppHandle, visible: bool) -> Result<()> {
         log::debug!("[IPC] set_overlay_visibility: visible={}", visible);
 

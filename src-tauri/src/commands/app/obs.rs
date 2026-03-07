@@ -12,6 +12,8 @@ pub async fn obs_start(state: State<'_, AppState>, port: Option<u16>) -> CmdResu
     state.obs_bridge.start(port).await.map_err(|e| {
         crate::errors::CommandError::msg(e)
     })?;
+    // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
+    state.refresh_obs_snapshot();
     Ok(state.obs_bridge.status())
 }
 

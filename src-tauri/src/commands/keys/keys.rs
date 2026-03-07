@@ -79,6 +79,7 @@ pub fn keys_update(
     app.emit("keys:changed", &updated)?;
     state.sync_counters_with_keys(&updated);
     app.emit("keys:counters", &state.snapshot_key_counters())?;
+    state.obs_broadcast_counters();
     Ok(updated)
 }
 
@@ -220,6 +221,7 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
         )?;
     }
     app.emit("keys:counters", &counters_snapshot)?;
+    state.obs_broadcast_counters();
 
     Ok(ResetAllResponse {
         keys,
@@ -300,6 +302,7 @@ pub fn keys_reset_mode(
         )?;
     }
     app.emit("keys:counters", &state.snapshot_key_counters())?;
+    state.obs_broadcast_counters();
 
     Ok(ResetModeResponse {
         success: true,
@@ -378,6 +381,7 @@ pub fn custom_tabs_create(
     app.emit("positions:changed", &positions)?;
     app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
     app.emit("keys:counters", &state.snapshot_key_counters())?;
+    state.obs_broadcast_counters();
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -457,6 +461,7 @@ pub fn custom_tabs_delete(
         &serde_json::json!({ "mode": &next_selected }),
     )?;
     app.emit("keys:counters", &state.snapshot_key_counters())?;
+    state.obs_broadcast_counters();
 
     Ok(CustomTabDeleteResult {
         success: true,
@@ -538,6 +543,7 @@ pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> CmdRes
     let snapshot = state.reset_key_counters();
     state.persist_key_counters()?;
     app.emit("keys:counters", &snapshot)?;
+    state.obs_broadcast_counters();
     Ok(snapshot)
 }
 
@@ -551,6 +557,7 @@ pub fn keys_reset_counters_mode(
     state.persist_key_counters()?;
     let snapshot = state.snapshot_key_counters();
     app.emit("keys:counters", &snapshot)?;
+    state.obs_broadcast_counters();
     Ok(snapshot)
 }
 
@@ -565,6 +572,7 @@ pub fn keys_reset_single_counter(
     state.persist_key_counters()?;
     let snapshot = state.snapshot_key_counters();
     app.emit("keys:counters", &snapshot)?;
+    state.obs_broadcast_counters();
     Ok(snapshot)
 }
 
@@ -577,6 +585,7 @@ pub fn keys_set_counters(
     let keys_snapshot = state.store.snapshot().keys;
     let updated = state.replace_key_counters(counters, &keys_snapshot)?;
     app.emit("keys:counters", &updated)?;
+    state.obs_broadcast_counters();
     Ok(updated)
 }
 

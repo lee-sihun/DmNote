@@ -161,6 +161,10 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     app.emit("js:use", &serde_json::json!({ "enabled": js_use }))?;
     app.emit("js:content", &custom_js)?;
 
+    // OBS 브릿지: 프리셋 로드 시 전체 스냅샷 재전송
+    state.refresh_obs_snapshot();
+    state.obs_bridge.broadcast_snapshot();
+
     Ok(PresetOperationResult {
         success: true,
         error: None,
@@ -295,6 +299,10 @@ pub fn preset_load_tab(
     app.emit("statPositions:changed", &full_stat_positions)?;
     app.emit("graphPositions:changed", &full_graph_positions)?;
     app.emit("tabNote:changed_all", &full_tab_note_overrides)?;
+
+    // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
+    state.refresh_obs_snapshot();
+    state.obs_bridge.broadcast_snapshot();
 
     Ok(PresetOperationResult {
         success: true,
