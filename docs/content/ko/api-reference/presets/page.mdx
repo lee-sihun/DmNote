@@ -80,6 +80,36 @@ dmn.plugin.registerCleanup(() => {
 });
 ```
 
+## 이벤트 구독
+
+### onSnapshot(listener)
+
+프리셋 로드 완료 시 적용된 스냅샷 데이터를 수신합니다. 키 매핑, 위치, 탭, 모드 등이 한 번에 전달됩니다.
+
+```typescript
+interface PresetSnapshot {
+  keys: KeyMappings;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  customTabs: CustomTab[];
+  selectedKeyType: string;
+  tabNoteOverrides: TabNoteOverrides;
+}
+```
+
+```javascript
+const unsub = dmn.presets.onSnapshot((snapshot) => {
+  console.log("프리셋 로드됨:", snapshot.selectedKeyType);
+  console.log("키 매핑:", snapshot.keys);
+});
+```
+
+<Callout type="info">
+  프리셋 로드 시 개별 이벤트(`onChanged`, `onPositionsChanged` 등)는 발행되지 않습니다.
+  프리셋 로드를 감지하려면 `onSnapshot`을 사용하세요.
+</Callout>
+
 ## 프리셋에 포함되는 항목
 
 프리셋은 “전체 설정 덤프”가 아니라, 아래 항목들을 파일로 저장/복원합니다.

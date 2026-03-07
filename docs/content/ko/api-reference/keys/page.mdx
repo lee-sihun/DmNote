@@ -272,6 +272,17 @@ const result = await dmn.keys.customTabs.delete("custom-123");
 await dmn.keys.customTabs.select("custom-123");
 ```
 
+### restore(customTabs, selectedKeyType)
+
+커스텀 탭 목록과 선택된 모드를 일괄 복원합니다. 백엔드 상태, 오버레이, 메인 윈도우가 모두 동기화됩니다.
+
+```javascript
+await dmn.keys.customTabs.restore(
+  [{ id: "custom-123", name: "My Keys", keys: ["KeyA", "KeyS"] }],
+  "custom-123",
+);
+```
+
 ### onChanged(listener)
 
 커스텀 탭 변경 이벤트를 구독합니다.

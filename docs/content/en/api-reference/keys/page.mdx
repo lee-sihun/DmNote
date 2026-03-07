@@ -145,6 +145,17 @@ const unsub = dmn.keys.registerCustomTab({
 });
 ```
 
+### `dmn.keys.customTabs.restore(customTabs, selectedKeyType): Promise<void>`
+
+Restores custom tabs and selected mode atomically. Syncs backend state, overlay, and main window.
+
+```javascript
+await dmn.keys.customTabs.restore(
+  [{ id: "custom-123", name: "My Keys", keys: ["KeyA", "KeyS"] }],
+  "custom-123",
+);
+```
+
 ---
 
 ## Stats API

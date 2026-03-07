@@ -76,6 +76,36 @@ const unsub = dmn.presets.onChanged((presets) => {
 
 ---
 
+## Snapshot Event
+
+### `dmn.presets.onSnapshot(callback): Unsubscribe`
+
+Subscribes to preset load completions. Receives the full snapshot of applied data (key mappings, positions, tabs, mode, etc.) in a single event.
+
+```typescript
+interface PresetSnapshot {
+  keys: KeyMappings;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  customTabs: CustomTab[];
+  selectedKeyType: string;
+  tabNoteOverrides: TabNoteOverrides;
+}
+
+const unsub = dmn.presets.onSnapshot((snapshot) => {
+  console.log("Preset loaded:", snapshot.selectedKeyType);
+  console.log("Key mappings:", snapshot.keys);
+});
+```
+
+<Callout type="info">
+  Individual change events (`onChanged`, `onPositionsChanged`, etc.) are not emitted during preset load.
+  Use `onSnapshot` to detect preset loads.
+</Callout>
+
+---
+
 ## Example Usage
 
 ```javascript

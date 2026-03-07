@@ -124,6 +124,11 @@ src-tauri/src/
 - `useMemo` / `useCallback` 의존성 배열에서 배열/객체는 개별 요소 비교 고려
 - 린트 자동 수정이 의도적 패턴을 덮어쓸 수 있으므로 필요시 `eslint-disable` 주석 사용
 
+## API 문서 동기화
+
+- 프론트엔드 플러그인 API(`dmn.*`) 또는 Tauri 커맨드에 변경이 있으면 `docs/content/` 하위 관련 MDX 문서를 업데이트
+- 문서는 `en/`, `ko/` 두 언어로 관리되므로 양쪽 모두 반영
+
 ## 작업 마무리 체크리스트
 
 ### 프론트엔드 (TypeScript/React) 변경 시
