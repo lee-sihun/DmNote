@@ -315,7 +315,10 @@ impl AppState {
                     log::info!("[ObsBridge] auto-start 성공 (port={})", port);
                 }
                 Err(e) => {
-                    log::error!("[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구", e);
+                    log::error!(
+                        "[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구",
+                        e
+                    );
                     let _ = store.update(|state| {
                         state.obs_mode_enabled = false;
                     });

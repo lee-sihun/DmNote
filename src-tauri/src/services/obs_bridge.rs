@@ -7,11 +7,11 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde_json::Value;
-use uuid::Uuid;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot};
 use tokio_tungstenite::tungstenite::Message;
+use uuid::Uuid;
 
 use crate::models::obs::{
     make_envelope, HelloAckPayload, KeyEventPayload, KeyState, ObsBroadcast, ObsEnvelope, ObsStatus,
@@ -73,7 +73,11 @@ impl ObsBridgeService {
     pub fn status(&self) -> ObsStatus {
         let token = {
             let t = self.session_token.read();
-            if t.is_empty() { None } else { Some(t.clone()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.clone())
+            }
         };
         ObsStatus {
             running: self.is_running(),
@@ -145,10 +149,7 @@ impl ObsBridgeService {
         };
 
         // 실제 바인딩된 포트 저장 (port=0인 경우 OS 할당 포트 반영)
-        let actual_port = listener
-            .local_addr()
-            .map(|a| a.port())
-            .unwrap_or(port);
+        let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         *self.shutdown_tx.write() = Some(shutdown_tx);
@@ -301,9 +302,10 @@ impl ObsBridgeService {
             return;
         }
 
-        // 경로 정규화: "/" → "/index.html", 디렉토리 탐색 방지
+        // 경로 정규화: "/" → "obs/index.html", 디렉토리 탐색 방지
+        // static_dir은 dist/renderer/ (obs/index.html이 ../assets/ 참조하므로)
         let normalized = if path == "/" || path.is_empty() {
-            "index.html"
+            "obs/index.html"
         } else {
             path.trim_start_matches('/')
         };
@@ -357,8 +359,8 @@ impl ObsBridgeService {
                     return;
                 }
 
-                // SPA fallback: 확장자 없는 경로 → index.html
-                let index_path = static_dir.join("index.html");
+                // SPA fallback: 확장자 없는 경로 → obs/index.html
+                let index_path = static_dir.join("obs/index.html");
                 match tokio::fs::read(&index_path).await {
                     Ok(content) => {
                         let response = format!(
@@ -429,13 +431,18 @@ impl ObsBridgeService {
         // 보안 토큰 검증
         let expected_token = self.session_token.read().clone();
         if !expected_token.is_empty() {
-            let client_token = hello.payload.get("token")
+            let client_token = hello
+                .payload
+                .get("token")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             if client_token != expected_token {
                 log::warn!("[ObsBridge] {addr}: 토큰 불일치, 연결 거부");
-                let err_msg = make_envelope("error", 0,
-                    serde_json::json!({"code": "AUTH_FAILED", "message": "Invalid token"}));
+                let err_msg = make_envelope(
+                    "error",
+                    0,
+                    serde_json::json!({"code": "AUTH_FAILED", "message": "Invalid token"}),
+                );
                 let _ = ws_tx.send(Message::Text(err_msg.to_string())).await;
                 self.client_count.fetch_sub(1, Ordering::Relaxed);
                 return;
@@ -602,9 +609,19 @@ impl ObsBridgeService {
             .to_ascii_lowercase();
         if !matches!(
             ext.as_str(),
-            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
-                | "mp4" | "webm" | "ogg"
-                | "woff" | "woff2" | "ttf" | "otf"
+            "png"
+                | "jpg"
+                | "jpeg"
+                | "gif"
+                | "webp"
+                | "svg"
+                | "mp4"
+                | "webm"
+                | "ogg"
+                | "woff"
+                | "woff2"
+                | "ttf"
+                | "otf"
         ) {
             let _ = stream
                 .write_all(
@@ -638,7 +655,13 @@ impl ObsBridgeService {
 
 /// 파일 확장자로 MIME 타입 추정
 fn guess_mime(path: &str) -> &'static str {
-    match path.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+    match path
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "html" | "htm" => "text/html; charset=utf-8",
         "js" | "mjs" => "application/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
@@ -667,10 +690,7 @@ fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                &input[i + 1..i + 3],
-                16,
-            ) {
+            if let Ok(byte) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
                 result.push(byte);
                 i += 3;
                 continue;

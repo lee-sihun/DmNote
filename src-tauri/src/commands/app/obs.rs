@@ -4,22 +4,22 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
 
-/// OBS 빌드 정적 파일 경로 탐색
+/// OBS 빌드 정적 파일 루트 경로 탐색 (dist/renderer/)
+/// obs/index.html이 ../assets/ 를 참조하므로, obs/ 상위인 renderer/ 루트를 반환
 pub fn resolve_obs_static_dir(app: &AppHandle) -> Option<PathBuf> {
-    // 1. Tauri resource_dir/obs/ (프로덕션 번들)
+    // 1. Tauri resource_dir (프로덕션 번들)
     if let Ok(res) = app.path().resource_dir() {
-        let obs = res.join("obs");
-        if obs.join("index.html").exists() {
-            return Some(obs);
+        if res.join("obs/index.html").exists() {
+            return Some(res);
         }
     }
 
     // 2. 실행 파일 기준 탐색 (dev mode: src-tauri/target/debug/)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            let dev = exe_dir.join("../../../dist/renderer/obs");
-            if dev.join("index.html").exists() {
-                return dev.canonicalize().ok();
+            let renderer_root = exe_dir.join("../../../dist/renderer");
+            if renderer_root.join("obs/index.html").exists() {
+                return renderer_root.canonicalize().ok();
             }
         }
     }
