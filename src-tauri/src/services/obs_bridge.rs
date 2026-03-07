@@ -29,6 +29,8 @@ pub struct ObsBridgeService {
     server_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// 빌드된 OBS 정적 파일 경로 (dist/renderer/obs)
     static_dir: RwLock<Option<PathBuf>>,
+    /// dev 모드 Vite dev server URL (예: "http://localhost:3400")
+    dev_url: RwLock<Option<String>>,
     server_version: String,
     /// 세션 보안 토큰 (서버 시작 시 랜덤 생성)
     session_token: RwLock<String>,
@@ -46,6 +48,7 @@ impl ObsBridgeService {
             shutdown_tx: RwLock::new(None),
             server_handle: tokio::sync::Mutex::new(None),
             static_dir: RwLock::new(None),
+            dev_url: RwLock::new(None),
             server_version: version.to_string(),
             session_token: RwLock::new(String::new()),
         }
@@ -53,6 +56,10 @@ impl ObsBridgeService {
 
     pub fn set_static_dir(&self, dir: PathBuf) {
         *self.static_dir.write() = Some(dir);
+    }
+
+    pub fn set_dev_url(&self, url: String) {
+        *self.dev_url.write() = Some(url);
     }
 
     pub fn is_running(&self) -> bool {
@@ -240,9 +247,36 @@ impl ObsBridgeService {
 
         // RwLockReadGuard를 await 전에 해제하기 위해 즉시 clone
         let static_dir = self.static_dir.read().clone();
+        let dev_url = self.dev_url.read().clone();
         let static_dir = match static_dir.as_ref() {
             Some(dir) => dir.clone(),
             None => {
+                // dev 모드: Vite dev server로 리다이렉트
+                if let Some(dev_base) = &dev_url {
+                    let path = request
+                        .lines()
+                        .next()
+                        .and_then(|line| line.split_whitespace().nth(1))
+                        .unwrap_or("/");
+                    // /media/ 경로는 이미 위에서 처리됨 → 정적 파일만 리다이렉트
+                    let obs_path = if path == "/" || path.is_empty() {
+                        "/obs/index.html"
+                    } else {
+                        path
+                    };
+                    // OBS 정적 파일 경로가 /obs/로 시작하지 않으면 추가
+                    let redirect_path = if obs_path.starts_with("/obs/") {
+                        obs_path.to_string()
+                    } else {
+                        format!("/obs{obs_path}")
+                    };
+                    let location = format!("{dev_base}{redirect_path}");
+                    let response = format!(
+                        "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                    return;
+                }
                 let body = "OBS bridge: static directory not configured";
                 let response = format!(
                     "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
