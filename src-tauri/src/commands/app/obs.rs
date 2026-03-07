@@ -36,14 +36,14 @@ pub async fn obs_start(
     let port = port.unwrap_or(state.store.with_state(|s| s.obs_port));
 
     // OBS 정적 파일 경로 설정
-    if let Some(dir) = resolve_obs_static_dir(&app) {
-        log::info!("[ObsBridge] static_dir: {}", dir.display());
-        state.obs_bridge.set_static_dir(dir);
-    } else if cfg!(debug_assertions) {
-        // dev 모드: Vite dev server로 리다이렉트
+    // dev 모드에서는 Vite dev server 우선 사용 (stale 빌드 디렉토리 회피)
+    if cfg!(debug_assertions) {
         let dev_url = "http://localhost:3400".to_string();
         log::info!("[ObsBridge] dev 모드: Vite dev server로 리다이렉트 ({dev_url})");
         state.obs_bridge.set_dev_url(dev_url);
+    } else if let Some(dir) = resolve_obs_static_dir(&app) {
+        log::info!("[ObsBridge] static_dir: {}", dir.display());
+        state.obs_bridge.set_static_dir(dir);
     } else {
         log::warn!("[ObsBridge] OBS 정적 파일 디렉토리를 찾을 수 없음 (HTTP 서빙 비활성)");
     }
