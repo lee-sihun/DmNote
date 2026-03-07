@@ -842,9 +842,11 @@ impl AppState {
                                 if let Some(main) = app_handle.get_webview_window("main") {
                                     let _ = main.emit("input:raw", &raw_payload);
                                 }
-                                // 오버레이에도 emit (플러그인용)
-                                if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
-                                    let _ = overlay.emit("input:raw", &raw_payload);
+                                // 오버레이에도 emit (플러그인용, OBS 모드 시 생략)
+                                if !app_state.obs_bridge.is_running() {
+                                    if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
+                                        let _ = overlay.emit("input:raw", &raw_payload);
+                                    }
                                 }
                             }
 
@@ -953,7 +955,7 @@ impl AppState {
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
 
-                            // OBS 브릿지 키 이벤트 브로드캐스트
+                            // OBS 모드 활성 시: WS로만 전송, 숨겨진 오버레이에 emit 생략
                             if app_state.obs_bridge.is_running() {
                                 let obs_key_state = if state == "DOWN" {
                                     ObsKeyState::Down
@@ -965,45 +967,45 @@ impl AppState {
                                     obs_key_state,
                                     mode.to_string(),
                                 );
-                            }
-
-                            let mut emitted = false;
-                            if let Some(overlay) = overlay_window.as_ref() {
-                                match overlay.emit("keys:state", &payload) {
-                                    Ok(_) => emitted = true,
-                                    Err(err) => {
-                                        error!("failed to emit keys:state to overlay: {err}");
-                                        overlay_window = None;
-                                    }
-                                }
-                            }
-                            if !emitted {
-                                if overlay_window.is_none() {
-                                    overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
-                                    if let Some(overlay) = overlay_window.as_ref() {
-                                        if overlay.emit("keys:state", &payload).is_ok() {
-                                            emitted = true;
-                                        } else {
+                            } else {
+                                let mut emitted = false;
+                                if let Some(overlay) = overlay_window.as_ref() {
+                                    match overlay.emit("keys:state", &payload) {
+                                        Ok(_) => emitted = true,
+                                        Err(err) => {
+                                            error!("failed to emit keys:state to overlay: {err}");
                                             overlay_window = None;
                                         }
                                     }
                                 }
                                 if !emitted {
-                                    if let Err(err) = app_handle.emit("keys:state", &payload) {
-                                        error!("failed to emit keys:state (fallback): {err}");
+                                    if overlay_window.is_none() {
+                                        overlay_window = app_handle.get_webview_window(OVERLAY_LABEL);
+                                        if let Some(overlay) = overlay_window.as_ref() {
+                                            if overlay.emit("keys:state", &payload).is_ok() {
+                                                emitted = true;
+                                            } else {
+                                                overlay_window = None;
+                                            }
+                                        }
+                                    }
+                                    if !emitted {
+                                        if let Err(err) = app_handle.emit("keys:state", &payload) {
+                                            error!("failed to emit keys:state (fallback): {err}");
+                                        }
                                     }
                                 }
-                            }
 
-                            if emitted {
-                                keys_state_emit_count += 1;
-                                if keys_state_emit_count % 500 == 0 {
-                                    log::debug!(
-                                        "[AppState] emitted keys:state {} times (last key={}, state={})",
-                                        keys_state_emit_count,
-                                        key_label,
-                                        state
-                                    );
+                                if emitted {
+                                    keys_state_emit_count += 1;
+                                    if keys_state_emit_count % 500 == 0 {
+                                        log::debug!(
+                                            "[AppState] emitted keys:state {} times (last key={}, state={})",
+                                            keys_state_emit_count,
+                                            key_label,
+                                            state
+                                        );
+                                    }
                                 }
                             }
                         }

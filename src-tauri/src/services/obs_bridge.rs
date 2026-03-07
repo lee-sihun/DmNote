@@ -341,9 +341,7 @@ impl ObsBridgeService {
         }
 
         let _ = stream
-            .write_all(
-                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            )
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;
     }
 
