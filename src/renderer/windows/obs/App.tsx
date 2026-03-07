@@ -12,18 +12,14 @@ import {
 } from '@stores/signals/keySignals';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { applyStatsSnapshot } from '@stores/signals/statsSignals';
-import OverlayScene, {
-  FALLBACK_POSITION,
-} from '@components/shared/OverlayScene';
+import OverlayScene from '@components/shared/OverlayScene';
+import { computeLayout } from '@hooks/shared/useLayoutComputation';
 import type { BootstrapPayload } from '@src/types/app';
 import type { KeyEventPayload } from '@src/types/obs';
 import type { KeyMappings, KeyPosition, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
-import { DEFAULT_NOTE_BORDER_RADIUS } from '@constants/overlayDefaults';
-
-const PADDING = 30;
 
 export default function App() {
   // WS 연결 URL: HTTP로 서빙된 경우 같은 호스트:포트, 아닌 경우 query param fallback
@@ -306,136 +302,19 @@ export default function App() {
   const trackHeight =
     noteSettings?.trackHeight ?? DEFAULT_NOTE_SETTINGS.trackHeight;
 
-  // bounds 계산
-  const bounds = (() => {
-    if (
-      !currentPositions.length &&
-      !currentStatPositions.length &&
-      !currentGraphPositions.length
-    )
-      return null;
-
-    const xs: number[] = [];
-    const ys: number[] = [];
-    const widths: number[] = [];
-    const heights: number[] = [];
-
-    currentPositions.forEach((pos) => {
-      if (pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + pos.width);
-      heights.push(pos.dy + pos.height);
-    });
-
-    currentStatPositions.forEach((pos) => {
-      if (!pos || pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 60));
-      heights.push(pos.dy + (pos.height ?? 60));
-    });
-
-    currentGraphPositions.forEach((pos) => {
-      if (!pos || pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 200));
-      heights.push(pos.dy + (pos.height ?? 100));
-    });
-
-    if (xs.length === 0) return null;
-
-    return {
-      minX: Math.min(...xs),
-      minY: Math.min(...ys),
-      maxX: Math.max(...widths),
-      maxY: Math.max(...heights),
-    };
-  })();
-
-  // 표시 위치 계산
-  const displayPositions = (() => {
-    if (!bounds || !currentPositions.length) return currentPositions;
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-    return currentPositions.map((pos) => ({
-      ...pos,
-      dx: pos.dx + offsetX,
-      dy: pos.dy + offsetY,
-    }));
-  })();
-
-  const displayStatPositions = (() => {
-    if (!bounds || !currentStatPositions.length) return currentStatPositions;
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-    return currentStatPositions.map((pos) => ({
-      ...pos,
-      dx: pos.dx + offsetX,
-      dy: pos.dy + offsetY,
-    }));
-  })();
-
-  const displayGraphPositions = (() => {
-    if (!bounds || !currentGraphPositions.length) return currentGraphPositions;
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-    return currentGraphPositions.map((pos) => ({
-      ...pos,
-      dx: pos.dx + offsetX,
-      dy: pos.dy + offsetY,
-    }));
-  })();
-
-  const topMostY = bounds ? trackHeight + PADDING : 0;
-
-  // WebGL 트랙 계산
-  const webglTracks = currentKeys
-    .map((key, index) => {
-      const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
-      if (originalPosition.hidden) return null;
-      const position = displayPositions[index] ?? originalPosition;
-      const useAutoCorrection = position.noteAutoYCorrection !== false;
-      const trackStartY = useAutoCorrection ? topMostY : position.dy;
-      const keyWidth = position.width;
-      const desiredNoteWidth =
-        typeof position.noteWidth === 'number' &&
-        Number.isFinite(position.noteWidth)
-          ? Math.max(1, Math.round(position.noteWidth))
-          : keyWidth;
-      const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
-
-      return {
-        trackKey: key,
-        trackIndex: position.zIndex ?? index,
-        position: {
-          ...position,
-          dx: position.dx + noteOffsetX,
-          dy: trackStartY,
-        },
-        width: desiredNoteWidth,
-        height: trackHeight,
-        noteColor: position.noteColor,
-        noteOpacity: position.noteOpacity,
-        noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
-        noteOpacityBottom: position.noteOpacityBottom ?? position.noteOpacity,
-        noteGlowEnabled: position.noteGlowEnabled ?? false,
-        noteGlowSize: position.noteGlowSize ?? 20,
-        noteGlowOpacity: position.noteGlowOpacity ?? 70,
-        noteGlowOpacityTop:
-          position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
-        noteGlowOpacityBottom:
-          position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
-        noteGlowColor: position.noteGlowColor ?? position.noteColor,
-        flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
-        borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
-      };
-    })
-    .filter(Boolean);
+  const {
+    displayPositions,
+    displayStatPositions,
+    displayGraphPositions,
+    webglTracks,
+  } = computeLayout({
+    currentKeys,
+    currentPositions,
+    currentStatPositions,
+    currentGraphPositions,
+    trackHeight,
+    noteSettings,
+  });
 
   useEffect(() => {
     updateTrackLayouts(webglTracks);

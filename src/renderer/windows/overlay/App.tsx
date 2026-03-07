@@ -7,10 +7,7 @@ import {
 import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
 import { useTranslation } from '@contexts/useTranslation';
-import {
-  DEFAULT_NOTE_BORDER_RADIUS,
-  DEFAULT_NOTE_SETTINGS,
-} from '@constants/overlayDefaults';
+import { DEFAULT_NOTE_SETTINGS } from '@constants/overlayDefaults';
 import { mergeNoteSettings } from '@src/types/settings/noteSettings';
 import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
 import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
@@ -30,9 +27,8 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import OverlayScene, {
-  FALLBACK_POSITION,
-} from '@components/shared/OverlayScene';
+import OverlayScene from '@components/shared/OverlayScene';
+import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
 const PADDING = 30;
 
@@ -488,201 +484,27 @@ export default function App() {
   ]);
 
   const currentKeys = keyMappings[selectedKeyType] ?? [];
-
   const currentPositions = positions[selectedKeyType] ?? [];
-
   const currentStatPositions = statPositions[selectedKeyType] ?? [];
-
   const currentGraphPositions = graphPositions[selectedKeyType] ?? [];
 
-  const bounds = (() => {
-    if (
-      !currentPositions.length &&
-      !currentStatPositions.length &&
-      !currentGraphPositions.length &&
-      !pluginElements.length
-    )
-      return null;
-
-    const xs: number[] = [];
-    const ys: number[] = [];
-    const widths: number[] = [];
-    const heights: number[] = [];
-
-    // 키 위치
-    currentPositions.forEach((pos) => {
-      if (pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + pos.width);
-      heights.push(pos.dy + pos.height);
-    });
-
-    // 통계 요소 위치
-    currentStatPositions.forEach((pos) => {
-      if (!pos || pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 60));
-      heights.push(pos.dy + (pos.height ?? 60));
-    });
-
-    // 그래프 요소 위치
-    currentGraphPositions.forEach((pos) => {
-      if (!pos || pos.hidden) return;
-      xs.push(pos.dx);
-      ys.push(pos.dy);
-      widths.push(pos.dx + (pos.width ?? 200));
-      heights.push(pos.dy + (pos.height ?? 100));
-    });
-
-    // 플러그인 요소 위치 (앵커 기반 계산 포함)
-    pluginElements
-      .filter((el) => !el.hidden && (!el.tabId || el.tabId === selectedKeyType))
-      .forEach((element) => {
-        let x = element.position.x;
-        let y = element.position.y;
-
-        // 앵커 기반 위치 계산
-        if (element.anchor?.keyCode && selectedKeyType) {
-          const keyIndex = currentKeys.findIndex(
-            (key) => key === element.anchor?.keyCode,
-          );
-          if (keyIndex >= 0 && currentPositions[keyIndex]) {
-            const keyPosition = currentPositions[keyIndex];
-            const offsetX = element.anchor.offset?.x ?? 0;
-            const offsetY = element.anchor.offset?.y ?? 0;
-            x = keyPosition.dx + offsetX;
-            y = keyPosition.dy + offsetY;
-          }
-        }
-
-        // 실제 측정된 크기 또는 추정 크기 사용
-        const width =
-          element.measuredSize?.width ?? element.estimatedSize?.width ?? 200;
-        const height =
-          element.measuredSize?.height ?? element.estimatedSize?.height ?? 150;
-
-        xs.push(x);
-        ys.push(y);
-        widths.push(x + width);
-        heights.push(y + height);
-      });
-
-    if (xs.length === 0) return null;
-
-    return {
-      minX: Math.min(...xs),
-      minY: Math.min(...ys),
-      maxX: Math.max(...widths),
-      maxY: Math.max(...heights),
-    };
-  })();
-
-  const displayPositions = (() => {
-    if (!bounds || !currentPositions.length) {
-      return currentPositions;
-    }
-
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-
-    return currentPositions.map((position) => ({
-      ...position,
-      dx: position.dx + offsetX,
-      dy: position.dy + offsetY,
-    }));
-  })();
-
-  const displayStatPositions = (() => {
-    if (!bounds || !currentStatPositions.length) {
-      return currentStatPositions;
-    }
-
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-
-    return currentStatPositions.map((position) => ({
-      ...position,
-      dx: position.dx + offsetX,
-      dy: position.dy + offsetY,
-    }));
-  })();
-
-  const displayGraphPositions = (() => {
-    if (!bounds || !currentGraphPositions.length) {
-      return currentGraphPositions;
-    }
-
-    const topOffset = trackHeight + PADDING;
-    const offsetX = PADDING - bounds.minX;
-    const offsetY = topOffset - bounds.minY;
-
-    return currentGraphPositions.map((position) => ({
-      ...position,
-      dx: position.dx + offsetX,
-      dy: position.dy + offsetY,
-    }));
-  })();
-
-  // 오버레이의 위치 오프셋 계산
-  const positionOffset = (() => {
-    if (!bounds) return { x: 0, y: 0 };
-    const topOffset = trackHeight + PADDING;
-    return {
-      x: PADDING - bounds.minX,
-      y: topOffset - bounds.minY,
-    };
-  })();
-
-  // 키+통계+그래프+플러그인 모두 포함한 최상단 Y (bounds 기반)
-  const topMostY = bounds ? trackHeight + PADDING : 0;
-
-  const webglTracks = currentKeys
-    .map((key, index) => {
-      const originalPosition = currentPositions[index] ?? FALLBACK_POSITION;
-      if (originalPosition.hidden) return null;
-      const position = displayPositions[index] ?? originalPosition;
-      // noteAutoYCorrection이 false면 원래 위치 사용, 아니면 topMostY로 보정
-      const useAutoCorrection = position.noteAutoYCorrection !== false;
-      const trackStartY = useAutoCorrection ? topMostY : position.dy;
-      const keyWidth = position.width;
-      const desiredNoteWidth =
-        typeof position.noteWidth === 'number' &&
-        Number.isFinite(position.noteWidth)
-          ? Math.max(1, Math.round(position.noteWidth))
-          : keyWidth;
-      const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
-
-      return {
-        trackKey: key,
-        trackIndex: position.zIndex ?? index,
-        position: {
-          ...position,
-          dx: position.dx + noteOffsetX,
-          dy: trackStartY,
-        },
-        width: desiredNoteWidth,
-        height: trackHeight,
-        noteColor: position.noteColor,
-        noteOpacity: position.noteOpacity,
-        noteOpacityTop: position.noteOpacityTop ?? position.noteOpacity,
-        noteOpacityBottom: position.noteOpacityBottom ?? position.noteOpacity,
-        noteGlowEnabled: position.noteGlowEnabled ?? false,
-        noteGlowSize: position.noteGlowSize ?? 20,
-        noteGlowOpacity: position.noteGlowOpacity ?? 70,
-        noteGlowOpacityTop:
-          position.noteGlowOpacityTop ?? position.noteGlowOpacity ?? 70,
-        noteGlowOpacityBottom:
-          position.noteGlowOpacityBottom ?? position.noteGlowOpacity ?? 70,
-        noteGlowColor: position.noteGlowColor ?? position.noteColor,
-        flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
-        borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
-      };
-    })
-    .filter(Boolean);
+  const {
+    bounds,
+    displayPositions,
+    displayStatPositions,
+    displayGraphPositions,
+    positionOffset,
+    webglTracks,
+  } = computeLayout({
+    currentKeys,
+    currentPositions,
+    currentStatPositions,
+    currentGraphPositions,
+    trackHeight,
+    noteSettings,
+    selectedKeyType,
+    pluginElements,
+  });
 
   useEffect(() => {
     updateTrackLayouts(webglTracks);
