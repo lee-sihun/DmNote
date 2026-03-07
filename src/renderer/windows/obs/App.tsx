@@ -17,7 +17,7 @@ import OverlayScene, {
 } from '@components/shared/OverlayScene';
 import type { BootstrapPayload } from '@src/types/app';
 import type { KeyEventPayload } from '@src/types/obs';
-import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
+import type { KeyMappings, KeyPosition, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
@@ -69,6 +69,37 @@ export default function App() {
   useEffect(() => {
     selectedKeyTypeRef.current = selectedKeyType;
   }, [selectedKeyType]);
+
+  // 현재 모드의 키/포지션을 ref로 유지 (이벤트 콜백에서 최신 값 참조)
+  const keyMappingsRef = useRef<string[]>([]);
+  const positionsRef = useRef<KeyPosition[]>([]);
+  useEffect(() => {
+    keyMappingsRef.current = keyMappings[selectedKeyType] ?? [];
+    positionsRef.current = positions[selectedKeyType] ?? [];
+  }, [keyMappings, positions, selectedKeyType]);
+
+  // 키 딜레이 설정
+  const keyDisplayDelayMsRef = useRef(0);
+  const keyDelayTimersRef = useRef<
+    Map<string, { timers: Set<ReturnType<typeof setTimeout>> }>
+  >(new Map());
+
+  useEffect(() => {
+    keyDisplayDelayMsRef.current = Number(
+      noteSettings?.keyDisplayDelayMs ?? 0,
+    );
+  }, [noteSettings?.keyDisplayDelayMs]);
+
+  // 딜레이 타이머 클린업
+  useEffect(() => {
+    const timers = keyDelayTimersRef.current;
+    return () => {
+      timers.forEach((entry) => {
+        entry.timers.forEach((timer) => clearTimeout(timer));
+      });
+      timers.clear();
+    };
+  }, []);
 
   // KPS 로컬 계산 (1초 슬라이딩 윈도우)
   const kpsRef = useRef({
@@ -150,15 +181,61 @@ export default function App() {
     tracker.total = totalFromCounters;
     applyStatsSnapshot({ kps: 0, kpsAvg: 0, kpsMax: 0, total: totalFromCounters });
 
+    // 딜레이 타이머 정리 (resync 시 이전 타이머 잔류 방지)
+    keyDelayTimersRef.current.forEach((entry) => {
+      entry.timers.forEach((timer) => clearTimeout(timer));
+      entry.timers.clear();
+    });
+
+    // ref 즉시 동기화 (useEffect 지연 없이 첫 key_event에서 최신 값 사용)
+    const mode = payload.selectedKeyType ?? '4key';
+    selectedKeyTypeRef.current = mode;
+    keyMappingsRef.current = (payload.keys ?? {})[mode] ?? [];
+    positionsRef.current = (payload.positions ?? {})[mode] ?? [];
+    if (payload.settings?.noteSettings) {
+      keyDisplayDelayMsRef.current = Number(
+        payload.settings.noteSettings.keyDisplayDelayMs ?? 0,
+      );
+    }
+
     resetAllKeySignals();
     setInitialized(true);
   }, []);
+
+  // 키 딜레이 적용 신호 업데이트
+  const updateKeySignalWithDelay = useCallback(
+    (key: string, isDown: boolean) => {
+      const delayMs = keyDisplayDelayMsRef.current;
+
+      let timerEntry = keyDelayTimersRef.current.get(key);
+      if (!timerEntry) {
+        timerEntry = { timers: new Set() };
+        keyDelayTimersRef.current.set(key, timerEntry);
+      }
+
+      if (delayMs <= 0) {
+        timerEntry.timers.forEach((timer) => clearTimeout(timer));
+        timerEntry.timers.clear();
+        setKeyActiveSignal(key, isDown);
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        setKeyActiveSignal(key, isDown);
+        timerEntry?.timers.delete(timer);
+      }, delayMs);
+      timerEntry.timers.add(timer);
+    },
+    [],
+  );
 
   // 키 이벤트 수신
   const onKeyEvent = useCallback((payload: KeyEventPayload) => {
     const { key, state } = payload;
     const isDown = state === 'DOWN';
-    setKeyActiveSignal(key, isDown);
+
+    // 키 UI 업데이트 (딜레이 적용)
+    updateKeySignalWithDelay(key, isDown);
 
     // KPS 로컬 계산 피드
     const tracker = kpsRef.current;
@@ -168,12 +245,19 @@ export default function App() {
         tracker.timestamps.push(performance.now());
         tracker.total++;
       }
-      requestAnimationFrame(() => handleKeyDownRef.current(key));
+      // 개별 키의 noteEffectEnabled 확인
+      const keys = keyMappingsRef.current;
+      const pos = positionsRef.current;
+      const keyIndex = keys.indexOf(key);
+      const keyPosition = pos[keyIndex];
+      if (keyPosition?.noteEffectEnabled !== false) {
+        requestAnimationFrame(() => handleKeyDownRef.current(key));
+      }
     } else {
       tracker.activeKeys.delete(key);
       requestAnimationFrame(() => handleKeyUpRef.current(key));
     }
-  }, []);
+  }, [updateKeySignalWithDelay]);
 
   // 설정 변경
   const onSettingsDiff = useCallback((diff: Record<string, unknown>) => {
