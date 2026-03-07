@@ -143,26 +143,23 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 
     state.emit_settings_changed(&diff, &app)?;
 
-    app.emit("keys:changed", &keys)?;
-    app.emit("positions:changed", &positions)?;
-    app.emit("statPositions:changed", &stat_positions)?;
-    app.emit("graphPositions:changed", &graph_positions)?;
+    // 프리셋 데이터를 단일 이벤트로 원자적 전달
     app.emit(
-        "customTabs:changed",
-        &crate::commands::keys::CustomTabChangePayload {
-            custom_tabs: custom_tabs.clone(),
-            selected_key_type: selected_key_type.clone(),
+        "preset:snapshot",
+        &super::PresetSnapshot {
+            keys,
+            positions,
+            stat_positions,
+            graph_positions,
+            custom_tabs,
+            selected_key_type,
+            tab_note_overrides,
         },
-    )?;
-    app.emit(
-        "keys:mode-changed",
-        &serde_json::json!({ "mode": &selected_key_type }),
     )?;
     app.emit("css:use", &serde_json::json!({ "enabled": css_use }))?;
     app.emit("css:content", &custom_css)?;
     app.emit("js:use", &serde_json::json!({ "enabled": js_use }))?;
     app.emit("js:content", &custom_js)?;
-    app.emit("tabNote:changed_all", &tab_note_overrides)?;
 
     Ok(PresetOperationResult {
         success: true,

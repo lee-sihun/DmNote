@@ -18,6 +18,19 @@ pub struct PresetOperationResult {
     pub error: Option<String>,
 }
 
+/// 프리셋 로드 시 프론트엔드에 원자적으로 전달되는 스냅샷
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresetSnapshot {
+    pub keys: KeyMappings,
+    pub positions: KeyPositions,
+    pub stat_positions: StatPositions,
+    pub graph_positions: GraphPositions,
+    pub custom_tabs: Vec<CustomTab>,
+    pub selected_key_type: String,
+    pub tab_note_overrides: TabNoteOverrides,
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PresetFile {

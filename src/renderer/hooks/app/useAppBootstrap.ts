@@ -332,6 +332,27 @@ export function useAppBootstrap() {
         if (disposed) return;
         useSettingsStore.setState({ tabNoteOverrides });
       }),
+      window.api.presets.onSnapshot((snapshot) => {
+        if (disposed) return;
+        useKeyStore.setState((state) => ({
+          ...state,
+          keyMappings: snapshot.keys,
+          positions: snapshot.positions,
+          customTabs: snapshot.customTabs,
+          selectedKeyType: snapshot.selectedKeyType,
+        }));
+        useStatItemStore.setState((state) => ({
+          ...state,
+          positions: snapshot.statPositions,
+        }));
+        useGraphItemStore.setState((state) => ({
+          ...state,
+          positions: snapshot.graphPositions,
+        }));
+        useSettingsStore.setState({
+          tabNoteOverrides: snapshot.tabNoteOverrides,
+        });
+      }),
       window.api.overlay.onLock(({ locked }) => {
         useSettingsStore.setState({ overlayLocked: locked });
       }),

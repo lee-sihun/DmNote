@@ -252,6 +252,16 @@ export type CustomTabDeleteResult = {
 export type KeyCounterUpdate = { mode: string; key: string; count: number };
 
 export type PresetOperationResult = { success: boolean; error?: string };
+
+export type PresetSnapshot = {
+  keys: KeyMappings;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  customTabs: CustomTab[];
+  selectedKeyType: string;
+  tabNoteOverrides: import('@src/types/settings/noteSettings').TabNoteOverrides;
+};
 export type AppAutoUpdateResult = {
   previousVersion: string;
   updatedTo: string;
@@ -912,6 +922,7 @@ export interface DMNoteAPI {
     load(): Promise<PresetOperationResult>;
     saveTab(): Promise<PresetOperationResult>;
     loadTab(): Promise<PresetOperationResult>;
+    onSnapshot(listener: (snapshot: PresetSnapshot) => void): Unsubscribe;
   };
   bridge: {
     send(type: string, data?: unknown): Promise<void>;

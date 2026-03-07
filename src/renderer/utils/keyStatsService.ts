@@ -22,6 +22,7 @@ class KeyStatsService {
   private unlistenCounterChanged: (() => void) | null = null;
   private unlistenCountersChanged: (() => void) | null = null;
   private unlistenModeChanged: (() => void) | null = null;
+  private unlistenPresetSnapshot: (() => void) | null = null;
   private updateInterval: ReturnType<typeof setInterval> | null = null;
 
   // KPS 계산용 타임스탬프 배열 (최근 1초)
@@ -79,6 +80,15 @@ class KeyStatsService {
         'keys:mode-changed',
         ({ payload }) => {
           this.currentMode = payload.mode;
+          this.updateTotal();
+        },
+      );
+
+      // 프리셋 로드 시 모드 동기화
+      this.unlistenPresetSnapshot = await listen<{ selectedKeyType: string }>(
+        'preset:snapshot',
+        ({ payload }) => {
+          this.currentMode = payload.selectedKeyType;
           this.updateTotal();
         },
       );
@@ -331,6 +341,11 @@ class KeyStatsService {
     if (this.unlistenModeChanged) {
       this.unlistenModeChanged();
       this.unlistenModeChanged = null;
+    }
+
+    if (this.unlistenPresetSnapshot) {
+      this.unlistenPresetSnapshot();
+      this.unlistenPresetSnapshot = null;
     }
 
     this.initialized = false;
