@@ -474,7 +474,7 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 | 8 | **개별 키 noteEffectEnabled** | 키별 노트 효과 on/off 반영 | ✅ |
 | 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ✅ |
 | 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ✅ |
-| 11 | **DataSource 호환성 레이어** | Tauri API / WebSocket 통합 인터페이스 (DataSource adapter) 도입, overlay/obs 공용 레이아웃 훅 추출로 중복 제거 | ⚠️ 레이아웃 추출만 완료, adapter 미구현 |
+| 11 | **DataSource 호환성 레이어** | OverlayHost adapter로 Tauri API / WebSocket 통합 인터페이스 도입 (§12 참조) | ⚠️ computeLayout 추출 완료, adapter 설계 확정 / 구현 대기 |
 
 #### v3+ 이후 (P3)
 
@@ -492,3 +492,126 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 | layout_diff | 서버 API만 구현 | 모드/키/위치/탭 변경 시 자동 broadcast |
 | cached_snapshot | 초기 + 프리셋 로드 시만 갱신 | 모든 diff 시 증분 갱신 |
 | 메인 UI URL 복사 | `ws://localhost:PORT` | `http://localhost:PORT` |
+
+---
+
+## 12. OverlayHost 호환성 레이어 설계
+
+> 상태: **설계 확정** / 구현 대기
+> P2 #11 상세 설계
+
+### 12.1 배경 및 목표
+
+현재 overlay/App.tsx와 obs/App.tsx는 동일한 UI를 렌더링하면서 데이터 수신 방식만 다름:
+- overlay: Tauri API (`invoke`, `listen`, window API) — 19+ 이벤트 구독, 12+ invoke, 8+ window API
+- obs: WebSocket (`useObsWebSocket`) — snapshot/diff/key_event 수신
+
+이 구조의 문제:
+1. **렌더링 로직 중복** — 키 상태 관리, KPS 계산, 딜레이 처리 등이 양쪽에 복제됨
+2. **유지보수 부담** — 기능 추가 시 overlay/obs 양쪽 모두 수정 필요
+3. **불일치 위험** — 한쪽만 수정하고 다른 쪽을 빠뜨릴 가능성
+
+### 12.2 검토한 접근 방식
+
+#### A. 현재 구조 유지 (분리형)
+
+```
+overlay/App.tsx ──→ Tauri API ──→ OverlayScene
+obs/App.tsx     ──→ WebSocket ──→ OverlayScene
+                    (computeLayout 공유)
+```
+
+- 장점: 단순, 각 환경에 최적화 가능
+- 단점: 렌더링 로직 중복, 기능 추가마다 양쪽 수정
+- 적합: 기능이 안정화되어 변경이 적을 때
+
+#### B. OverlayRuntime 공유 훅
+
+```
+overlay/App.tsx ──→ TauriDataSource ──→ useOverlayRuntime() ──→ OverlayScene
+obs/App.tsx     ──→ WsDataSource    ──→ useOverlayRuntime() ──→ OverlayScene
+```
+
+- 장점: 렌더링 로직 단일화, 데이터 소스만 교체
+- 단점: 추상화 인터페이스 설계/유지 비용
+
+#### C. Tauri API shim (폴리필)
+
+```
+overlay/App.tsx ──→ window.__TAURI__ (real) ──→ OverlayScene
+obs/App.tsx     ──→ window.__TAURI__ (shim) ──→ OverlayScene
+                    (WS가 Tauri API를 흉내)
+```
+
+- 장점: overlay 코드 변경 최소화
+- 단점: Tauri API의 모든 시그니처를 정확히 흉내내야 함, edge case 많음
+
+### 12.3 최종 결정: B 방식 (OverlayHost adapter)
+
+**"B with C's philosophy"** — 새 인터페이스를 정의하되, overlay가 실제 사용하는 기능만 포함.
+
+B와 C는 개념적으로 수렴하지만, B 형태(새 인터페이스)가 구현이 깔끔함:
+- Tauri API 시그니처를 완벽히 흉내내는 것보다, 필요한 기능만 정의하는 것이 안전
+- 마이그레이션은 한 번이지만 이후 유지보수가 단순화됨
+
+### 12.4 OverlayHost 인터페이스
+
+```typescript
+// src/renderer/hosts/types.ts
+
+interface OverlayHostCallbacks {
+  onSnapshot: (payload: BootstrapPayload) => void;
+  onKeyEvent: (payload: KeyEventPayload) => void;
+  onSettingsDiff: (diff: Record<string, unknown>) => void;
+  onCounterUpdate: (data: Record<string, unknown>) => void;
+}
+
+interface OverlayHost {
+  /** 호스트 타입 식별 */
+  type: 'tauri' | 'websocket';
+
+  /** 데이터 구독 시작 (콜백 등록) */
+  subscribe(callbacks: OverlayHostCallbacks): () => void;  // unsubscribe 반환
+
+  /** 설정 변경 요청 (overlay에서 설정 UI 조작 시) */
+  invoke?(command: string, args?: unknown): Promise<unknown>;
+
+  /** 창 제어 (overlay 전용, OBS에서는 no-op) */
+  window?: {
+    startDragging(): void;
+    setIgnoreCursorEvents(ignore: boolean): void;
+    // ... overlay에서 사용하는 window API만 포함
+  };
+}
+```
+
+### 12.5 구현 계획
+
+```
+src/renderer/
+├── hosts/
+│   ├── types.ts              ← OverlayHost 인터페이스 정의
+│   ├── TauriHost.ts          ← Tauri API 기반 구현
+│   └── WebSocketHost.ts      ← WebSocket 기반 구현
+├── hooks/shared/
+│   └── useOverlayRuntime.ts  ← 공용 렌더링 로직 (키 상태, KPS, 딜레이 등)
+└── windows/
+    ├── overlay/App.tsx       ← TauriHost + useOverlayRuntime + OverlayScene
+    └── obs/App.tsx           ← WebSocketHost + useOverlayRuntime + OverlayScene
+```
+
+단계:
+1. `OverlayHost` 인터페이스 + `WebSocketHost` 구현 (기존 useObsWebSocket 리팩토링)
+2. `useOverlayRuntime` 훅 추출 (obs/App.tsx에서 렌더링 로직 분리)
+3. `TauriHost` 구현 (overlay/App.tsx에서 Tauri API 호출 래핑)
+4. overlay/App.tsx를 `TauriHost + useOverlayRuntime` 으로 마이그레이션
+5. 검증: 양쪽 동작 확인 후 기존 중복 코드 제거
+
+### 12.6 범위 제한
+
+현재 P2 범위에서는 다음만 포함:
+- **포함**: 키 이벤트, 설정 동기화, 카운터, KPS, 레이아웃, CSS
+- **제외**: 플러그인 엘리먼트 (P3), 커스텀 JS (P3), 창 드래그/리사이즈 (overlay 전용)
+
+overlay 전용 기능(창 제어, 컨텍스트 메뉴 등)은 `OverlayHost.window?`로 분리하여
+OBS 환경에서는 자연스럽게 비활성화됨.
