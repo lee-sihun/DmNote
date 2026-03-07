@@ -83,7 +83,9 @@
     "obsCopyUrl": "Copy URL",
     "obsCopied": "OBS URL copied to clipboard.",
     "obsStartFailed": "Failed to start OBS server.",
-    "obsStopFailed": "Failed to stop OBS server."
+    "obsStopFailed": "Failed to stop OBS server.",
+    "obsGuide": "Add a Browser Source in OBS and paste the URL above. Set the width/height to match your overlay size.",
+    "obsOverlayHidden": "Overlay is hidden while OBS mode is active."
   },
   "shortcutSetting": {
     "title": "Shortcut Settings",

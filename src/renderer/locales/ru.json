@@ -83,7 +83,9 @@
     "obsCopyUrl": "Copy URL",
     "obsCopied": "OBS URL copied to clipboard.",
     "obsStartFailed": "Failed to start OBS server.",
-    "obsStopFailed": "Failed to stop OBS server."
+    "obsStopFailed": "Failed to stop OBS server.",
+    "obsGuide": "Добавьте источник «Браузер» в OBS и вставьте URL выше. Установите ширину/высоту в соответствии с размером оверлея.",
+    "obsOverlayHidden": "Оверлей скрыт, пока активен режим OBS."
   },
   "shortcutSetting": {
     "title": "Горячие клавиши",

@@ -83,7 +83,9 @@
     "obsCopyUrl": "URL 복사",
     "obsCopied": "OBS URL이 클립보드에 복사되었습니다.",
     "obsStartFailed": "OBS 서버 시작에 실패했습니다.",
-    "obsStopFailed": "OBS 서버 중지에 실패했습니다."
+    "obsStopFailed": "OBS 서버 중지에 실패했습니다.",
+    "obsGuide": "OBS에서 브라우저 소스를 추가하고 위 URL을 붙여넣으세요. 너비/높이를 오버레이 크기에 맞게 설정하세요.",
+    "obsOverlayHidden": "OBS 모드 활성화 중에는 오버레이가 숨겨집니다."
   },
   "shortcutSetting": {
     "title": "단축키 설정",

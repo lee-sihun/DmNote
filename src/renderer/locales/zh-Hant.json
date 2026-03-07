@@ -83,7 +83,9 @@
     "obsCopyUrl": "Copy URL",
     "obsCopied": "OBS URL copied to clipboard.",
     "obsStartFailed": "Failed to start OBS server.",
-    "obsStopFailed": "Failed to stop OBS server."
+    "obsStopFailed": "Failed to stop OBS server.",
+    "obsGuide": "在 OBS 中新增瀏覽器來源並貼上上方 URL。將寬度/高度設定為與覆蓋層大小一致。",
+    "obsOverlayHidden": "OBS 模式啟用期間覆蓋層已隱藏。"
   },
   "shortcutSetting": {
     "title": "快捷鍵設定",

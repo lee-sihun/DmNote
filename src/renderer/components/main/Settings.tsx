@@ -971,6 +971,16 @@ const Settings = ({
                   </button>
                 </div>
               </div>
+              {obsStatus.running && (
+                <div className="flex flex-col gap-[4px] pb-[8px] pt-[2px]" role="status">
+                  <p className="text-style-2 text-[#8B8D97] leading-[1.4]">
+                    {t('settings.obsGuide')}
+                  </p>
+                  <p className="text-style-2 text-[#F59E0B] leading-[1.4]">
+                    {t('settings.obsOverlayHidden')}
+                  </p>
+                </div>
+              )}
             </div>
             {/* 기타 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
