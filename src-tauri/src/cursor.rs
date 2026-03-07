@@ -3,8 +3,9 @@
 
 #[cfg(target_os = "macos")]
 use objc::{
-    class, msg_send, sel, sel_impl,
-    runtime::{BOOL, Object, YES},
+    class, msg_send,
+    runtime::{Object, BOOL, YES},
+    sel, sel_impl,
 };
 #[cfg(target_os = "macos")]
 use std::{
@@ -58,8 +59,8 @@ impl Default for MacOSCursorSettings {
     fn default() -> Self {
         Self {
             size: 1.0,
-            fill_color: Some([0.0, 0.0, 0.0]),      // 기본 검정
-            outline_color: Some([1.0, 1.0, 1.0]),   // 기본 흰색
+            fill_color: Some([0.0, 0.0, 0.0]),    // 기본 검정
+            outline_color: Some([1.0, 1.0, 1.0]), // 기본 흰색
         }
     }
 }
@@ -76,12 +77,13 @@ pub fn get_macos_cursor_settings() -> MacOSCursorSettings {
         let suite_defaults = create_suite_defaults("com.apple.universalaccess");
 
         // 커서 크기 읽기 (mouseDriverCursorSize)
-        let size = read_double_from_cf_preferences("mouseDriverCursorSize", kCFPreferencesCurrentHost)
-            .or_else(|| {
-                read_double_from_cf_preferences("mouseDriverCursorSize", kCFPreferencesAnyHost)
-            })
-            .or_else(|| read_double_from_user_defaults(suite_defaults, "mouseDriverCursorSize"))
-            .or_else(|| read_double_from_prefs(prefs, "mouseDriverCursorSize"));
+        let size =
+            read_double_from_cf_preferences("mouseDriverCursorSize", kCFPreferencesCurrentHost)
+                .or_else(|| {
+                    read_double_from_cf_preferences("mouseDriverCursorSize", kCFPreferencesAnyHost)
+                })
+                .or_else(|| read_double_from_user_defaults(suite_defaults, "mouseDriverCursorSize"))
+                .or_else(|| read_double_from_prefs(prefs, "mouseDriverCursorSize"));
         if let Some(size) = size {
             if size >= 1.0 && size <= 4.0 {
                 settings.size = size;
@@ -101,63 +103,35 @@ pub fn get_macos_cursor_settings() -> MacOSCursorSettings {
         ];
 
         // 커서 채우기 색상 읽기
-        if let Some(color) = read_color_from_cf_preferences_keys(
-            &fill_keys,
-            kCFPreferencesCurrentHost,
-        )
-        .or_else(|| {
-            read_color_from_cf_preferences_keys(
-                &fill_keys,
-                kCFPreferencesAnyHost,
-            )
-        })
-        .or_else(|| {
-            read_color_from_user_defaults_keys(
-                suite_defaults,
-                &fill_keys,
-            )
-        })
-        .or_else(|| {
-            read_color_from_prefs_keys(
-                prefs,
-                &fill_keys,
-            )
-        }) {
+        if let Some(color) =
+            read_color_from_cf_preferences_keys(&fill_keys, kCFPreferencesCurrentHost)
+                .or_else(|| read_color_from_cf_preferences_keys(&fill_keys, kCFPreferencesAnyHost))
+                .or_else(|| read_color_from_user_defaults_keys(suite_defaults, &fill_keys))
+                .or_else(|| read_color_from_prefs_keys(prefs, &fill_keys))
+        {
             settings.fill_color = Some(color);
         }
-        
+
         // 커서 테두리 색상 읽기
-        if let Some(color) = read_color_from_cf_preferences_keys(
-            &outline_keys,
-            kCFPreferencesCurrentHost,
-        )
-        .or_else(|| {
-            read_color_from_cf_preferences_keys(
-                &outline_keys,
-                kCFPreferencesAnyHost,
-            )
-        })
-        .or_else(|| {
-            read_color_from_user_defaults_keys(
-                suite_defaults,
-                &outline_keys,
-            )
-        })
-        .or_else(|| read_color_from_prefs_keys(prefs, &outline_keys)) {
+        if let Some(color) =
+            read_color_from_cf_preferences_keys(&outline_keys, kCFPreferencesCurrentHost)
+                .or_else(|| {
+                    read_color_from_cf_preferences_keys(&outline_keys, kCFPreferencesAnyHost)
+                })
+                .or_else(|| read_color_from_user_defaults_keys(suite_defaults, &outline_keys))
+                .or_else(|| read_color_from_prefs_keys(prefs, &outline_keys))
+        {
             settings.outline_color = Some(color);
         }
 
         release_obj(suite_defaults);
-        
+
         settings
     }
 }
 
 #[cfg(target_os = "macos")]
-unsafe fn read_color_from_prefs_keys(
-    prefs: *mut Object,
-    keys: &[&str],
-) -> Option<[f64; 3]> {
+unsafe fn read_color_from_prefs_keys(prefs: *mut Object, keys: &[&str]) -> Option<[f64; 3]> {
     for key in keys {
         if let Some(color) = read_color_from_prefs(prefs, key) {
             return Some(color);
@@ -196,10 +170,7 @@ unsafe fn read_color_from_user_defaults_keys(
 }
 
 #[cfg(target_os = "macos")]
-unsafe fn read_color_from_user_defaults(
-    defaults: *mut Object,
-    key: &str,
-) -> Option<[f64; 3]> {
+unsafe fn read_color_from_user_defaults(defaults: *mut Object, key: &str) -> Option<[f64; 3]> {
     if defaults.is_null() {
         return None;
     }
@@ -369,12 +340,7 @@ unsafe fn read_cf_preferences_value(key: &str, host: CFStringRef) -> *mut Object
         cf_release_if_needed(app_ref as CFTypeRef);
         return ptr::null_mut();
     }
-    let value = CFPreferencesCopyValue(
-        key_ref,
-        app_ref,
-        kCFPreferencesCurrentUser,
-        host,
-    );
+    let value = CFPreferencesCopyValue(key_ref, app_ref, kCFPreferencesCurrentUser, host);
     cf_release_if_needed(key_ref as CFTypeRef);
     cf_release_if_needed(app_ref as CFTypeRef);
     value as *mut Object
@@ -418,18 +384,9 @@ unsafe fn nscolor_to_rgb(color: *mut Object) -> Option<[f64; 3]> {
 
 #[cfg(target_os = "macos")]
 unsafe fn color_from_dict(dict: *mut Object) -> Option<[f64; 3]> {
-    let r = read_component_from_dict(
-        dict,
-        &["Red Component", "red", "Red", "NSRed"],
-    )?;
-    let g = read_component_from_dict(
-        dict,
-        &["Green Component", "green", "Green", "NSGreen"],
-    )?;
-    let b = read_component_from_dict(
-        dict,
-        &["Blue Component", "blue", "Blue", "NSBlue"],
-    )?;
+    let r = read_component_from_dict(dict, &["Red Component", "red", "Red", "NSRed"])?;
+    let g = read_component_from_dict(dict, &["Green Component", "green", "Green", "NSGreen"])?;
+    let b = read_component_from_dict(dict, &["Blue Component", "blue", "Blue", "NSBlue"])?;
     Some([r, g, b])
 }
 
@@ -485,7 +442,7 @@ pub fn rgb_to_hex(rgb: [f64; 3]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rgb_to_hex() {
         assert_eq!(rgb_to_hex([0.0, 0.0, 0.0]), "#000000");

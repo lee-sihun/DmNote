@@ -1,56 +1,56 @@
-import React, { useRef, useState, useEffect } from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import TitleBar from "@components/main/TitleBar";
-import { useCustomCssInjection } from "@hooks/useCustomCssInjection";
-import { useCustomJsInjection } from "@hooks/useCustomJsInjection";
-import { useBlockBrowserShortcuts } from "@hooks/useBlockBrowserShortcuts";
-import ToolBar from "@components/main/Tool/ToolBar";
-import Grid from "@components/main/Grid";
-import SettingTab from "@components/main/Settings";
-import { useKeyManager } from "@hooks/useKeyManager";
-import { usePalette } from "@hooks/usePalette";
-import CustomAlert from "@components/main/Modal/content/Alert";
-import NoteSettingModal from "@components/main/Modal/content/NoteSetting";
-import UpdateModal from "@components/main/Modal/content/UpdateModal";
-import PropertiesPanel from "@components/main/Grid/PropertiesPanel";
-import { useSettingsStore } from "@stores/useSettingsStore";
-import type { ShortcutBinding } from "@src/types/shortcuts";
-import FloatingPopup from "@components/main/Modal/FloatingPopup";
-import Palette from "@components/main/Modal/content/Palette";
-import ColorPicker from "@components/main/Modal/content/ColorPicker";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useAppBootstrap } from "@hooks/useAppBootstrap";
+import React, { useRef, useState, useEffect } from 'react';
+import { useTranslation } from '@contexts/useTranslation';
+import TitleBar from '@components/main/TitleBar';
+import { useCustomCssInjection } from '@hooks/app/useCustomCssInjection';
+import { useCustomJsInjection } from '@hooks/app/useCustomJsInjection';
+import { useBlockBrowserShortcuts } from '@hooks/app/useBlockBrowserShortcuts';
+import ToolBar from '@components/main/Tool/ToolBar';
+import Grid from '@components/main/Grid';
+import SettingTab from '@components/main/Settings';
+import { useKeyManager } from '@hooks/useKeyManager';
+import { usePalette } from '@hooks/Modal/usePalette';
+import CustomAlert from '@components/main/Modal/content/dialogs/Alert';
+import NoteSettingModal from '@components/main/Modal/content/settings/NoteSetting';
+import UpdateModal from '@components/main/Modal/content/dialogs/UpdateModal';
+import PropertiesPanel from '@components/main/Grid/PropertiesPanel';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import type { ShortcutBinding } from '@src/types/settings/shortcuts';
+import FloatingPopup from '@components/main/Modal/FloatingPopup';
+import Palette from '@components/main/Modal/content/pickers/Palette';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
 import {
   useUpdateCheck,
   hasPendingPostUpdateReleaseNotice,
   clearPendingPostUpdateReleaseNotice,
-} from "@hooks/useUpdateCheck";
-import { usePropertiesPanelStore } from "@stores/usePropertiesPanelStore";
-import { useGridSelectionStore } from "@stores/useGridSelectionStore";
+} from '@hooks/app/useUpdateCheck';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
+import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
-import { useUIStore } from "@stores/useUIStore";
+import { useUIStore } from '@stores/useUIStore';
 
-type ToolbarAddItemType = "key" | "stat" | "graph";
+type ToolbarAddItemType = 'key' | 'stat' | 'graph';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
-  if (typeof error === "string" && error.trim()) {
+  if (typeof error === 'string' && error.trim()) {
     return error;
   }
-  if (error && typeof error === "object") {
+  if (error && typeof error === 'object') {
     const maybeMessage = (error as { message?: unknown }).message;
-    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
       return maybeMessage;
     }
     try {
       return JSON.stringify(error);
     } catch {
-      return "";
+      return '';
     }
   }
-  return "";
+  return '';
 }
 
 export default function App() {
@@ -74,7 +74,7 @@ export default function App() {
   } = useUpdateCheck();
 
   const [pendingPostUpdateNotice, setPendingPostUpdateNotice] = useState(() =>
-    hasPendingPostUpdateReleaseNotice()
+    hasPendingPostUpdateReleaseNotice(),
   );
 
   // 앱 시작 시 업데이트 체크 (자동 업데이트 직후에는 최신 버전 모달을 1회 표시)
@@ -89,30 +89,30 @@ export default function App() {
   // 윈도우 타입
   useEffect(() => {
     try {
-      (window as any).__dmn_window_type = "main";
-    } catch (e) {
-      // ignore
+      window.__dmn_window_type = 'main';
+    } catch {
+      // 무시
     }
     return () => {
       try {
-        delete (window as any).__dmn_window_type;
-      } catch (e) {
-        // ignore
+        delete window.__dmn_window_type;
+      } catch {
+        // 무시
       }
     };
   }, []);
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
 
     const disableSpellcheck = () => {
       document.documentElement.spellcheck = false;
       if (document.body) {
         document.body.spellcheck = false;
       }
-      document.querySelectorAll("input, textarea").forEach((el) => {
+      document.querySelectorAll('input, textarea').forEach((el) => {
         if (el instanceof HTMLElement) {
-          el.setAttribute("spellcheck", "false");
+          el.setAttribute('spellcheck', 'false');
         }
       });
     };
@@ -160,7 +160,7 @@ export default function App() {
   const { color, palette, setPalette, handleColorChange, handlePaletteClose } =
     usePalette();
 
-  const [activeTool, setActiveTool] = useState("move");
+  const [activeTool, setActiveTool] = useState('move');
   const [toolbarAddRequest, setToolbarAddRequest] = useState<{
     id: number;
     type: ToolbarAddItemType;
@@ -172,10 +172,10 @@ export default function App() {
   const selectedKeyTypeAtSettingsOpenRef = useRef(selectedKeyType);
   const {
     noteEffect,
-    angleMode,
-    setAngleMode,
-    language: storeLanguage,
-    setLanguage,
+    angleMode: _angleMode,
+    setAngleMode: _setAngleMode,
+    language: _storeLanguage,
+    setLanguage: _setLanguage,
     noteSettings,
     setNoteSettings,
     autoUpdateEnabled,
@@ -183,23 +183,20 @@ export default function App() {
     shortcuts,
   } = useSettingsStore();
 
-  const matchesShortcut = React.useCallback(
-    (event: KeyboardEvent, binding?: ShortcutBinding) => {
-      if (!binding?.key) return false;
-      const ctrl = !!binding.ctrl;
-      const shift = !!binding.shift;
-      const alt = !!binding.alt;
-      const meta = !!binding.meta;
-      return (
-        event.code === binding.key &&
-        event.ctrlKey === ctrl &&
-        event.shiftKey === shift &&
-        event.altKey === alt &&
-        event.metaKey === meta
-      );
-    },
-    []
-  );
+  const matchesShortcut = (event: KeyboardEvent, binding?: ShortcutBinding) => {
+    if (!binding?.key) return false;
+    const ctrl = !!binding.ctrl;
+    const shift = !!binding.shift;
+    const alt = !!binding.alt;
+    const meta = !!binding.meta;
+    return (
+      event.code === binding.key &&
+      event.ctrlKey === ctrl &&
+      event.shiftKey === shift &&
+      event.altKey === alt &&
+      event.metaKey === meta
+    );
+  };
 
   // 개발자 모드 비활성 시 DevTools 단축키 차단
   useEffect(() => {
@@ -208,16 +205,16 @@ export default function App() {
         const isCtrlShiftI =
           (e.ctrlKey || e.metaKey) &&
           e.shiftKey &&
-          (e.key === "I" || e.key === "i");
-        const isF12 = e.key === "F12";
+          (e.key === 'I' || e.key === 'i');
+        const isF12 = e.key === 'F12';
         if (isCtrlShiftI || isF12) {
           e.preventDefault();
           e.stopPropagation();
         }
       }
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [developerModeEnabled]);
 
   const { t } = useTranslation();
@@ -225,9 +222,9 @@ export default function App() {
   const cancelCallbackRef = useRef<(() => void) | null>(null);
   const [alertState, setAlertState] = useState(() => ({
     isOpen: false,
-    message: "",
-    confirmText: t("common.confirm"),
-    type: "alert" as "alert" | "confirm" | "custom",
+    message: '',
+    confirmText: t('common.confirm'),
+    type: 'alert' as 'alert' | 'confirm' | 'custom',
   }));
 
   // Custom Dialog 상태 (HTML 콘텐츠)
@@ -243,7 +240,7 @@ export default function App() {
     showCancel?: boolean;
   }>({
     isOpen: false,
-    html: "",
+    html: '',
     confirmText: undefined,
     cancelText: undefined,
     showCancel: false,
@@ -263,7 +260,7 @@ export default function App() {
     referenceElement?: HTMLElement;
   }>({
     isOpen: false,
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     position: undefined,
     id: undefined,
     referenceElement: undefined,
@@ -274,20 +271,20 @@ export default function App() {
       if (!matchesShortcut(e, shortcuts?.switchKeyMode)) return;
       const active = document.activeElement as HTMLElement | null;
       if (active) {
-        const tag = (active.tagName || "").toLowerCase();
+        const tag = (active.tagName || '').toLowerCase();
         const editable = active.isContentEditable;
-        if (tag === "input" || tag === "textarea" || editable) return;
+        if (tag === 'input' || tag === 'textarea' || editable) return;
       }
       // 모달이 열려있으면 탭 전환 차단
       const hasModal = document.querySelector(
-        "[data-dmn-modal-backdrop='true']"
+        "[data-dmn-modal-backdrop='true']",
       );
       if (hasModal) return;
 
       // 키 리스닝 중이면 탭 전환 차단
-      if ((window as any).__dmn_isKeyListening) return;
+      if (window.__dmn_isKeyListening) return;
 
-      const defaults = ["4key", "5key", "6key", "8key"];
+      const defaults = ['4key', '5key', '6key', '8key'];
       if (!isBootstrapped || !defaults.includes(selectedKeyType)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -295,10 +292,9 @@ export default function App() {
       const next = defaults[(idx + 1) % defaults.length];
       setSelectedKeyType(next);
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [
-    matchesShortcut,
     selectedKeyType,
     setSelectedKeyType,
     isBootstrapped,
@@ -312,19 +308,19 @@ export default function App() {
       if (isSettingsOpen) return;
       const active = document.activeElement as HTMLElement | null;
       if (active) {
-        const tag = (active.tagName || "").toLowerCase();
+        const tag = (active.tagName || '').toLowerCase();
         const editable = active.isContentEditable;
-        if (tag === "input" || tag === "textarea" || editable) return;
+        if (tag === 'input' || tag === 'textarea' || editable) return;
       }
 
       // 모달이 열려있으면 토글 차단
       const hasModal = document.querySelector(
-        "[data-dmn-modal-backdrop='true']"
+        "[data-dmn-modal-backdrop='true']",
       );
       if (hasModal) return;
 
       // 키 리스닝 중이면 토글 차단
-      if ((window as any).__dmn_isKeyListening) return;
+      if (window.__dmn_isKeyListening) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -332,20 +328,16 @@ export default function App() {
       usePropertiesPanelStore.getState().requestCanvasPanelToggle();
     };
 
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
-  }, [
-    matchesShortcut,
-    shortcuts?.toggleSettingsPanel,
-    isSettingsOpen,
-  ]);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [shortcuts?.toggleSettingsPanel, isSettingsOpen]);
 
   const showAlert = (message: string, confirmText?: string) => {
     setAlertState({
       isOpen: true,
       message,
-      type: "alert",
-      confirmText: confirmText || t("common.confirm"),
+      type: 'alert',
+      confirmText: confirmText || t('common.confirm'),
     });
   };
 
@@ -356,7 +348,7 @@ export default function App() {
       try {
         await window.api.app.openExternal(updateInfo.releaseUrl);
       } catch (error) {
-        console.error("Failed to open release URL", error);
+        console.error('Failed to open release URL', error);
       }
       return;
     }
@@ -365,12 +357,12 @@ export default function App() {
       await runAutoUpdate(updateInfo.latestVersion);
     } catch (error) {
       const detail = getErrorMessage(error);
-      console.error("Automatic update failed:", error);
+      console.error('Automatic update failed:', error);
       if (detail) {
-        showAlert(`${t("update.autoUpdateFailed")}\n${detail}`);
+        showAlert(`${t('update.autoUpdateFailed')}\n${detail}`);
         return;
       }
-      showAlert(t("update.autoUpdateFailed"));
+      showAlert(t('update.autoUpdateFailed'));
     }
   };
 
@@ -386,21 +378,21 @@ export default function App() {
     message: string,
     onConfirm: () => void,
     onCancel?: () => void,
-    confirmText = t("common.confirm")
+    confirmText = t('common.confirm'),
   ) => {
     confirmCallbackRef.current =
-      typeof onConfirm === "function" ? onConfirm : null;
+      typeof onConfirm === 'function' ? onConfirm : null;
     cancelCallbackRef.current =
-      typeof onCancel === "function" ? onCancel : null;
-    setAlertState({ isOpen: true, message, confirmText, type: "confirm" });
+      typeof onCancel === 'function' ? onCancel : null;
+    setAlertState({ isOpen: true, message, confirmText, type: 'confirm' });
   };
 
   const closeAlert = () => {
     setAlertState({
       isOpen: false,
-      message: "",
-      confirmText: t("common.confirm"),
-      type: "alert",
+      message: '',
+      confirmText: t('common.confirm'),
+      type: 'alert',
     });
     confirmCallbackRef.current = null;
     cancelCallbackRef.current = null;
@@ -429,7 +421,7 @@ export default function App() {
       confirmText?: string;
       cancelText?: string;
       showCancel?: boolean;
-    }
+    },
   ) => {
     customDialogCallbackRef.current = {
       onConfirm: options?.onConfirm,
@@ -447,7 +439,7 @@ export default function App() {
   const closeCustomDialog = () => {
     setCustomDialogState({
       isOpen: false,
-      html: "",
+      html: '',
       confirmText: undefined,
       cancelText: undefined,
       showCancel: false,
@@ -470,6 +462,17 @@ export default function App() {
   };
 
   // Global Color Picker 핸들러
+  const showColorPickerImpl = useRef<
+    (options: {
+      initialColor: string;
+      onColorChange: (color: string) => void;
+      position?: { x: number; y: number };
+      id?: string;
+      referenceElement?: HTMLElement;
+      onClose?: () => void;
+      onColorChangeComplete?: (color: string) => void;
+    }) => void
+  >(() => {});
   const showColorPicker = (options: {
     initialColor: string;
     onColorChange: (color: string) => void;
@@ -479,27 +482,7 @@ export default function App() {
     onClose?: () => void;
     onColorChangeComplete?: (color: string) => void;
   }) => {
-    // Toggle logic - 이미 열려있으면 닫기만 하고 종료
-    if (
-      options.id &&
-      colorPickerState.isOpen &&
-      colorPickerState.id === options.id
-    ) {
-      closeColorPicker();
-      return;
-    }
-
-    // 다른 컬러 픽커가 열려있으면 먼저 닫기
-    if (colorPickerState.isOpen) {
-      closeColorPicker();
-      // 약간의 지연 후 새 컬러 픽커 열기 (상태 갱신을 위해)
-      setTimeout(() => {
-        openColorPickerWithOptions(options);
-      }, 0);
-      return;
-    }
-
-    openColorPickerWithOptions(options);
+    showColorPickerImpl.current(options);
   };
 
   const openColorPickerWithOptions = (options: {
@@ -534,6 +517,40 @@ export default function App() {
     colorPickerCloseCallbackRef.current = null;
   };
 
+  useEffect(() => {
+    showColorPickerImpl.current = (options: {
+      initialColor: string;
+      onColorChange: (color: string) => void;
+      position?: { x: number; y: number };
+      id?: string;
+      referenceElement?: HTMLElement;
+      onClose?: () => void;
+      onColorChangeComplete?: (color: string) => void;
+    }) => {
+      // Toggle logic - 이미 열려있으면 닫기만 하고 종료
+      if (
+        options.id &&
+        colorPickerState.isOpen &&
+        colorPickerState.id === options.id
+      ) {
+        closeColorPicker();
+        return;
+      }
+
+      // 다른 컬러 픽커가 열려있으면 먼저 닫기
+      if (colorPickerState.isOpen) {
+        closeColorPicker();
+        // 약간의 지연 후 새 컬러 픽커 열기 (상태 갱신을 위해)
+        setTimeout(() => {
+          openColorPickerWithOptions(options);
+        }, 0);
+        return;
+      }
+
+      openColorPickerWithOptions(options);
+    };
+  });
+
   const handleGlobalColorChange = (newColor: string) => {
     setColorPickerState((prev) => ({ ...prev, color: newColor }));
     if (colorPickerCallbackRef.current) {
@@ -547,30 +564,28 @@ export default function App() {
     }
   };
 
-  const getColorPickerState = () => colorPickerState;
+  const colorPickerStateRef = useRef(colorPickerState);
+  useEffect(() => {
+    colorPickerStateRef.current = colorPickerState;
+  }, [colorPickerState]);
+  const getColorPickerState = () => colorPickerStateRef.current;
 
   // Dialog API를 전역으로 노출
   useEffect(() => {
-    (window as any).__dmn_showAlert = showAlert;
-    (window as any).__dmn_showConfirm = showConfirm;
-    (window as any).__dmn_showCustomDialog = showCustomDialog;
-    (window as any).__dmn_showColorPicker = showColorPicker;
-    (window as any).__dmn_getColorPickerState = getColorPickerState;
+    window.__dmn_showAlert = showAlert;
+    window.__dmn_showConfirm = showConfirm;
+    window.__dmn_showCustomDialog = showCustomDialog;
+    window.__dmn_showColorPicker = showColorPicker;
+    window.__dmn_getColorPickerState = getColorPickerState;
 
     return () => {
-      delete (window as any).__dmn_showAlert;
-      delete (window as any).__dmn_showConfirm;
-      delete (window as any).__dmn_showCustomDialog;
-      delete (window as any).__dmn_showColorPicker;
-      delete (window as any).__dmn_getColorPickerState;
+      delete window.__dmn_showAlert;
+      delete window.__dmn_showConfirm;
+      delete window.__dmn_showCustomDialog;
+      delete window.__dmn_showColorPicker;
+      delete window.__dmn_getColorPickerState;
     };
-  }, [
-    showAlert,
-    showConfirm,
-    showCustomDialog,
-    showColorPicker,
-    getColorPickerState,
-  ]);
+  });
 
   return (
     <div className="bg-[#111012] w-full h-full flex flex-col overflow-hidden rounded-[7px] border border-[rgba(255,255,255,0.1)]">
@@ -647,22 +662,22 @@ export default function App() {
         isPaletteOpen={palette}
         onResetCurrentMode={() =>
           showConfirm(
-            t("confirm.resetCurrentTab"),
+            t('confirm.resetCurrentTab'),
             async () => {
               await handleResetCurrentMode();
             },
             undefined,
-            t("confirm.reset")
+            t('confirm.reset'),
           )
         }
         onResetCounters={() =>
           showConfirm(
-            t("confirm.resetCountersCurrentTab"),
+            t('confirm.resetCountersCurrentTab'),
             async () => {
               await window.api.keys.resetCountersMode(selectedKeyType);
             },
             undefined,
-            t("confirm.reset")
+            t('confirm.reset'),
           )
         }
         activeTool={activeTool}
@@ -704,7 +719,7 @@ export default function App() {
               await window.api.settings.update({ noteSettings: normalized });
               setNoteSettings(normalized);
             } catch (error) {
-              console.error("Failed to update note settings", error);
+              console.error('Failed to update note settings', error);
             }
           }}
         />
@@ -758,9 +773,9 @@ export default function App() {
           primaryActionLabel={
             autoUpdateEnabled
               ? isAutoUpdating
-                ? t("update.autoUpdating")
-                : t("update.autoUpdate")
-              : t("update.goToRelease")
+                ? t('update.autoUpdating')
+                : t('update.autoUpdate')
+              : t('update.goToRelease')
           }
           primaryActionDisabled={isAutoUpdating}
         />

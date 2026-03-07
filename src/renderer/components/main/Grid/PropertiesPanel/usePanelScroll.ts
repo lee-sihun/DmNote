@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useLenis } from "@hooks/useLenis";
-import { TABS, TabType } from "./types";
+import { useCallback, useEffect, useRef } from 'react';
+import { useLenis } from '@hooks/useLenis';
+import { TABS, TabType } from './types';
 
 interface ScrollThumbState {
   top: number;
@@ -9,13 +9,13 @@ interface ScrollThumbState {
 }
 
 interface UsePanelScrollReturn {
-  // Batch scroll refs
+  // 일괄 스크롤 ref
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  // Single scroll refs
+  // 단일 스크롤 ref
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  // Update thumbs manually
+  // 수동 thumb 업데이트
   updateThumbs: (tab: TabType) => void;
 }
 
@@ -36,12 +36,16 @@ export function usePanelScroll(
   });
 
   // Scroll element refs (탭별, thumb 계산용)
-  const batchScrollElementRefs = useRef<Record<TabType, HTMLDivElement | null>>({
-    [TABS.STYLE]: null,
-    [TABS.NOTE]: null,
-    [TABS.COUNTER]: null,
-  });
-  const singleScrollElementRefs = useRef<Record<TabType, HTMLDivElement | null>>({
+  const batchScrollElementRefs = useRef<Record<TabType, HTMLDivElement | null>>(
+    {
+      [TABS.STYLE]: null,
+      [TABS.NOTE]: null,
+      [TABS.COUNTER]: null,
+    },
+  );
+  const singleScrollElementRefs = useRef<
+    Record<TabType, HTMLDivElement | null>
+  >({
     [TABS.STYLE]: null,
     [TABS.NOTE]: null,
     [TABS.COUNTER]: null,
@@ -71,7 +75,7 @@ export function usePanelScroll(
       const thumb = calculateThumb(scrollEl);
       thumbEl.style.top = `${thumb.top}px`;
       thumbEl.style.height = `${thumb.height}px`;
-      thumbEl.style.display = thumb.visible ? "block" : "none";
+      thumbEl.style.display = thumb.visible ? 'block' : 'none';
     },
     [calculateThumb],
   );
@@ -164,8 +168,14 @@ export function usePanelScroll(
 
   const updateThumbs = useCallback(
     (tab: TabType) => {
-      updateThumbDOM(batchThumbRefs.current[tab], batchScrollElementRefs.current[tab]);
-      updateThumbDOM(singleThumbRefs.current[tab], singleScrollElementRefs.current[tab]);
+      updateThumbDOM(
+        batchThumbRefs.current[tab],
+        batchScrollElementRefs.current[tab],
+      );
+      updateThumbDOM(
+        singleThumbRefs.current[tab],
+        singleScrollElementRefs.current[tab],
+      );
     },
     [updateThumbDOM],
   );

@@ -1,62 +1,49 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-} from "react";
-import type { ReactNode } from "react";
-import type { SettingsDiff, SettingsState } from "@src/types/settings";
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { SettingsDiff, SettingsState } from '@src/types/settings/settings';
+import { I18nContext } from './I18nContextDef';
+import type { SupportedLocale, I18nContextValue } from './I18nContextDef';
 
-export type SupportedLocale = "ko" | "en" | "zh-cn" | "zh-Hant" | "ru";
+export type { SupportedLocale } from './I18nContextDef';
 
 type Messages = Record<string, unknown>;
 
-interface I18nContextValue {
-  locale: SupportedLocale;
-  setLocale: (locale: SupportedLocale) => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}
-
-const STORAGE_KEY = "dmnote:locale";
-const LOCALE_INIT_KEY = "dmnote:locale_initialized";
-const DEFAULT_LOCALE: SupportedLocale = "ko";
-
-const I18nContext = createContext<I18nContextValue | null>(null);
+const STORAGE_KEY = 'dmnote:locale';
+const LOCALE_INIT_KEY = 'dmnote:locale_initialized';
+const DEFAULT_LOCALE: SupportedLocale = 'ko';
 
 function isSupportedLocale(value: unknown): value is SupportedLocale {
   return (
-    value === "ko" ||
-    value === "en" ||
-    value === "zh-cn" ||
-    value === "zh-Hant" ||
-    value === "ru"
+    value === 'ko' ||
+    value === 'en' ||
+    value === 'zh-cn' ||
+    value === 'zh-Hant' ||
+    value === 'ru'
   );
 }
 
 function safeLocalStorageGet(key: string) {
-  if (typeof window === "undefined") return null;
+  if (typeof window === 'undefined') return null;
   try {
     return window.localStorage.getItem(key);
   } catch (error) {
-    console.warn("Failed to read localStorage", error);
+    console.warn('Failed to read localStorage', error);
     return null;
   }
 }
 
 function safeLocalStorageSet(key: string, value: string) {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(key, value);
   } catch (error) {
-    console.warn("Failed to persist localStorage", error);
+    console.warn('Failed to persist localStorage', error);
   }
 }
 
 function getNestedValue(messages: Messages, path: string) {
-  return path.split(".").reduce<unknown>((acc, part) => {
-    if (acc && typeof acc === "object" && part in acc) {
+  return path.split('.').reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === 'object' && part in acc) {
       return (acc as Record<string, unknown>)[part];
     }
     return undefined;
@@ -70,12 +57,12 @@ function interpolate(
   if (!params) return template;
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const value = params[key];
-    return value === undefined ? "" : String(value);
+    return value === undefined ? '' : String(value);
   });
 }
 
 function detectBrowserLocale(): SupportedLocale {
-  if (typeof navigator === "undefined") return DEFAULT_LOCALE;
+  if (typeof navigator === 'undefined') return DEFAULT_LOCALE;
 
   const candidates: string[] = [];
   try {
@@ -94,36 +81,36 @@ function detectBrowserLocale(): SupportedLocale {
     .map((value) => String(value).trim().toLowerCase());
 
   const isKorean = normalized.some(
-    (value) => value === "ko" || value.startsWith("ko-"),
+    (value) => value === 'ko' || value.startsWith('ko-'),
   );
-  if (isKorean) return "ko";
+  if (isKorean) return 'ko';
 
   const isSimplifiedChinese = normalized.some(
     (value) =>
-      value === "zh-cn" ||
-      value === "zh-hans" ||
-      value.startsWith("zh-cn") ||
-      value.startsWith("zh-hans"),
+      value === 'zh-cn' ||
+      value === 'zh-hans' ||
+      value.startsWith('zh-cn') ||
+      value.startsWith('zh-hans'),
   );
-  if (isSimplifiedChinese) return "zh-cn";
+  if (isSimplifiedChinese) return 'zh-cn';
 
   const isTraditionalChinese = normalized.some(
     (value) =>
-      value === "zh-tw" ||
-      value === "zh-hk" ||
-      value === "zh-hant" ||
-      value.startsWith("zh-tw") ||
-      value.startsWith("zh-hk") ||
-      value.startsWith("zh-hant"),
+      value === 'zh-tw' ||
+      value === 'zh-hk' ||
+      value === 'zh-hant' ||
+      value.startsWith('zh-tw') ||
+      value.startsWith('zh-hk') ||
+      value.startsWith('zh-hant'),
   );
-  if (isTraditionalChinese) return "zh-Hant";
+  if (isTraditionalChinese) return 'zh-Hant';
 
   const isRussian = normalized.some(
-    (value) => value === "ru" || value.startsWith("ru-"),
+    (value) => value === 'ru' || value.startsWith('ru-'),
   );
-  if (isRussian) return "ru";
+  if (isRussian) return 'ru';
 
-  return "en";
+  return 'en';
 }
 
 function loadInitialLocale(): SupportedLocale {
@@ -155,7 +142,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           setHasInitialized(true);
         }
       } catch (error) {
-        console.error("Failed to load locale messages", error);
+        console.error('Failed to load locale messages', error);
       }
     })();
 
@@ -173,13 +160,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         const storedLocale = safeLocalStorageGet(STORAGE_KEY);
-        const hasLocaleInit = safeLocalStorageGet(LOCALE_INIT_KEY) === "1";
+        const hasLocaleInit = safeLocalStorageGet(LOCALE_INIT_KEY) === '1';
         const shouldAutoInitLocale =
           !hasLocaleInit && !isSupportedLocale(storedLocale);
         const detected = detectBrowserLocale();
 
         if (shouldAutoInitLocale) {
-          safeLocalStorageSet(LOCALE_INIT_KEY, "1");
+          safeLocalStorageSet(LOCALE_INIT_KEY, '1');
           if (
             isSupportedLocale(settings.language) &&
             settings.language !== detected
@@ -189,7 +176,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
             window.api.settings
               .update({ language: detected })
               .catch((error) => {
-                console.error("Failed to update initial language", error);
+                console.error('Failed to update initial language', error);
               });
             return;
           }
@@ -200,7 +187,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           safeLocalStorageSet(STORAGE_KEY, settings.language);
         }
       } catch (error) {
-        console.error("Failed to fetch initial language", error);
+        console.error('Failed to fetch initial language', error);
       }
     })();
 
@@ -222,62 +209,40 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       try {
         unsubscribe();
       } catch (error) {
-        console.error("Failed to remove settings listener", error);
+        console.error('Failed to remove settings listener', error);
       }
     };
   }, []);
 
-  const changeLocale = useCallback((next: SupportedLocale) => {
+  const changeLocale = (next: SupportedLocale) => {
     setLocaleState(next);
     safeLocalStorageSet(STORAGE_KEY, next);
     window.api.settings.update({ language: next }).catch((error) => {
-      console.error("Failed to update language", error);
+      console.error('Failed to update language', error);
     });
-  }, []);
+  };
 
-  const t = useMemo(
-    () =>
-      function translate(
-        key: string,
-        params?: Record<string, string | number>,
-      ): string {
-        const raw = getNestedValue(messages, key);
-        if (typeof raw === "string") {
-          return interpolate(raw, params);
-        }
-        if (typeof raw === "number") {
-          return String(raw);
-        }
-        return key;
-      },
-    [messages],
-  );
+  const t = function translate(
+    key: string,
+    params?: Record<string, string | number>,
+  ): string {
+    const raw = getNestedValue(messages, key);
+    if (typeof raw === 'string') {
+      return interpolate(raw, params);
+    }
+    if (typeof raw === 'number') {
+      return String(raw);
+    }
+    return key;
+  };
 
-  const value = useMemo<I18nContextValue>(
-    () => ({
-      locale,
-      setLocale: changeLocale,
-      t,
-    }),
-    [locale, changeLocale, t],
-  );
+  const value: I18nContextValue = {
+    locale,
+    setLocale: changeLocale,
+    t,
+  };
 
   if (!hasInitialized) return null;
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
-
-export function useTranslation() {
-  const ctx = useContext(I18nContext);
-  if (!ctx) {
-    throw new Error("useTranslation must be used within I18nProvider");
-  }
-
-  return {
-    t: ctx.t,
-    i18n: {
-      language: ctx.locale,
-      changeLanguage: ctx.setLocale,
-    },
-  };
 }

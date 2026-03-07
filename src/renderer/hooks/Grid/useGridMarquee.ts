@@ -2,24 +2,27 @@
  * Grid 마퀴(범위 선택) 관련 로직 훅
  */
 
-import { useCallback, useEffect } from "react";
+import { useEffect } from 'react';
 import {
   useGridSelectionStore,
   isElementInMarquee,
   getMarqueeRect,
   type SelectedElement,
-} from "@stores/useGridSelectionStore";
-import type { PluginDisplayElementInternal } from "@src/types/api";
+} from '@stores/grid/useGridSelectionStore';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
 
 interface UseGridMarqueeParams {
-  positions: Record<string, any[]>;
-  statPositions: Record<string, any[]>;
-  graphPositions: Record<string, any[]>;
+  positions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
     clientX: number,
-    clientY: number
+    clientY: number,
   ) => { x: number; y: number } | null;
 }
 
@@ -44,39 +47,36 @@ export function useGridMarquee({
   clientToGridCoords,
 }: UseGridMarqueeParams): UseGridMarqueeReturn {
   const isMarqueeSelecting = useGridSelectionStore(
-    (state) => state.isMarqueeSelecting
+    (state) => state.isMarqueeSelecting,
   );
   const startMarqueeSelection = useGridSelectionStore(
-    (state) => state.startMarqueeSelection
+    (state) => state.startMarqueeSelection,
   );
   const updateMarqueeSelection = useGridSelectionStore(
-    (state) => state.updateMarqueeSelection
+    (state) => state.updateMarqueeSelection,
   );
   const endMarqueeSelection = useGridSelectionStore(
-    (state) => state.endMarqueeSelection
+    (state) => state.endMarqueeSelection,
   );
   const marqueeStart = useGridSelectionStore((state) => state.marqueeStart);
   const marqueeEnd = useGridSelectionStore((state) => state.marqueeEnd);
   const setSelectedElements = useGridSelectionStore(
-    (state) => state.setSelectedElements
+    (state) => state.setSelectedElements,
   );
   const clearSelection = useGridSelectionStore((state) => state.clearSelection);
 
   // 마퀴 선택 중 마우스 이동 핸들러
-  const handleMarqueeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isMarqueeSelecting) return;
+  const handleMarqueeMouseMove = (e: MouseEvent) => {
+    if (!isMarqueeSelecting) return;
 
-      const gridCoords = clientToGridCoords(e.clientX, e.clientY);
-      if (gridCoords) {
-        updateMarqueeSelection(gridCoords.x, gridCoords.y);
-      }
-    },
-    [isMarqueeSelecting, clientToGridCoords, updateMarqueeSelection]
-  );
+    const gridCoords = clientToGridCoords(e.clientX, e.clientY);
+    if (gridCoords) {
+      updateMarqueeSelection(gridCoords.x, gridCoords.y);
+    }
+  };
 
   // 마퀴 선택 완료 시 요소 선택 처리
-  const handleMarqueeMouseUp = useCallback(() => {
+  const handleMarqueeMouseUp = () => {
     if (!isMarqueeSelecting) return;
 
     const rect = getMarqueeRect(marqueeStart, marqueeEnd);
@@ -97,7 +97,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "key",
+            type: 'key',
             id: `key-${index}`,
             index,
           });
@@ -116,7 +116,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "stat",
+            type: 'stat',
             id: `stat-${index}`,
             index,
           });
@@ -135,7 +135,7 @@ export function useGridMarquee({
         };
         if (isElementInMarquee(elementBounds, rect)) {
           newSelectedElements.push({
-            type: "graph",
+            type: 'graph',
             id: `graph-${index}`,
             index,
           });
@@ -155,7 +155,7 @@ export function useGridMarquee({
           };
           if (isElementInMarquee(elementBounds, rect)) {
             newSelectedElements.push({
-              type: "plugin",
+              type: 'plugin',
               id: el.fullId,
             });
           }
@@ -169,32 +169,20 @@ export function useGridMarquee({
     }
 
     endMarqueeSelection();
-  }, [
-    isMarqueeSelecting,
-    marqueeStart,
-    marqueeEnd,
-    positions,
-    statPositions,
-    graphPositions,
-    selectedKeyType,
-    pluginElements,
-    setSelectedElements,
-    clearSelection,
-    endMarqueeSelection,
-  ]);
+  };
 
   // 마퀴 선택 이벤트 등록
   useEffect(() => {
     if (isMarqueeSelecting) {
-      document.addEventListener("mousemove", handleMarqueeMouseMove);
-      document.addEventListener("mouseup", handleMarqueeMouseUp);
+      document.addEventListener('mousemove', handleMarqueeMouseMove);
+      document.addEventListener('mouseup', handleMarqueeMouseUp);
 
       return () => {
-        document.removeEventListener("mousemove", handleMarqueeMouseMove);
-        document.removeEventListener("mouseup", handleMarqueeMouseUp);
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
       };
     }
-  }, [isMarqueeSelecting, handleMarqueeMouseMove, handleMarqueeMouseUp]);
+  });
 
   return {
     isMarqueeSelecting,

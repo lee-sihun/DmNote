@@ -1,0 +1,45 @@
+import { useEffect } from 'react';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { applyStatsSnapshot } from '@stores/signals/statsSignals';
+
+export function useBuiltinStatsSubscription() {
+  const statPositions = useStatItemStore((state) => state.positions);
+  const graphPositions = useGraphItemStore((state) => state.positions);
+
+  const hasAnyStatConsumer = (() => {
+    const hasStat = Object.values(statPositions || {}).some(
+      (list) => Array.isArray(list) && list.length > 0,
+    );
+    if (hasStat) return true;
+
+    return Object.values(graphPositions || {}).some(
+      (list) => Array.isArray(list) && list.length > 0,
+    );
+  })();
+
+  useEffect(() => {
+    if (!hasAnyStatConsumer) {
+      return;
+    }
+
+    // 초기 스냅샷
+    try {
+      applyStatsSnapshot(window.api.stats.get());
+    } catch {
+      // ignore
+    }
+
+    const unsubscribe = window.api.stats.subscribe((stats) => {
+      applyStatsSnapshot(stats);
+    });
+
+    return () => {
+      try {
+        unsubscribe();
+      } catch {
+        // ignore
+      }
+    };
+  }, [hasAnyStatConsumer]);
+}

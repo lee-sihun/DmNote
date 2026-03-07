@@ -1,0 +1,68 @@
+use serde::Deserialize;
+use tauri::{AppHandle, State};
+
+use crate::{
+    errors::CmdResult,
+    models::{BootstrapOverlayState, OverlayBounds},
+    state::AppState,
+};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayResizeArgs {
+    pub width: f64,
+    pub height: f64,
+    #[serde(default)]
+    pub anchor: Option<String>,
+    #[serde(default)]
+    pub content_top_offset: Option<f64>,
+    #[serde(default)]
+    pub fixed_position_delta_x: Option<f64>,
+    #[serde(default)]
+    pub fixed_position_delta_y: Option<f64>,
+}
+
+#[tauri::command]
+pub fn overlay_get(state: State<'_, AppState>) -> CmdResult<BootstrapOverlayState> {
+    Ok(state.overlay_status())
+}
+
+#[tauri::command]
+pub fn overlay_set_visible(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    visible: bool,
+) -> CmdResult<()> {
+    Ok(state.set_overlay_visibility(&app, visible)?)
+}
+
+#[tauri::command]
+pub fn overlay_set_lock(state: State<'_, AppState>, app: AppHandle, locked: bool) -> CmdResult<()> {
+    Ok(state.set_overlay_lock(&app, locked, true)?)
+}
+
+#[tauri::command]
+pub fn overlay_set_anchor(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    anchor: String,
+) -> CmdResult<String> {
+    Ok(state.set_overlay_anchor(&app, &anchor)?)
+}
+
+#[tauri::command]
+pub fn overlay_resize(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    payload: OverlayResizeArgs,
+) -> CmdResult<OverlayBounds> {
+    Ok(state.resize_overlay(
+        &app,
+        payload.width,
+        payload.height,
+        payload.anchor,
+        payload.content_top_offset,
+        payload.fixed_position_delta_x,
+        payload.fixed_position_delta_y,
+    )?)
+}

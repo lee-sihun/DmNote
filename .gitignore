@@ -2,7 +2,6 @@ node_modules
 dist
 
 .roo
-AGENTS.md
 copilot-instructions.md
 src-tauri/target
 .DS_Store
@@ -12,5 +11,4 @@ src-tauri/target
 src-tauri/webview2-fixed-runtime/*
 !src-tauri/webview2-fixed-runtime/placeholder.txt
 
-.claude
-.omc
+.mcp.json

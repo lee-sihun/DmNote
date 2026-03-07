@@ -3,29 +3,29 @@
  * 플러그인에서 디스플레이 요소를 생성, 조회, 수정, 삭제하는 API를 제공합니다.
  */
 
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useKeyStore } from "@stores/useKeyStore";
-import { DisplayElementInstance } from "@utils/displayElementInstance";
-import { html } from "@utils/templateEngine";
-import { createPluginTranslator } from "@utils/pluginI18n";
-import { handlerRegistry } from "../handlers";
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { DisplayElementInstance } from '@utils/displayElementInstance';
+import { html } from '@utils/core/templateEngine';
+import { createPluginTranslator } from '@utils/plugin/pluginI18n';
+import { handlerRegistry } from '../handlers';
 import {
   registerDisplayElementInstance,
   unregisterDisplayElementInstance,
-} from "./instanceRegistry";
+} from './instanceRegistry';
 import {
   resolveFullId,
   resolveInstance,
   createNoopDisplayElementInstance,
   type DisplayElementTarget,
-} from "./targetResolver";
-import { buildDisplayElementTemplate } from "./templateBuilder";
-import { saveToHistory } from "./historyUtils";
+} from './targetResolver';
+import { buildDisplayElementTemplate } from './templateBuilder';
+import { saveToHistory } from './historyUtils';
 import type {
   PluginDisplayElement,
   PluginDisplayElementConfig,
   PluginDisplayElementInternal,
-} from "@src/types/api";
+} from '@src/types/plugin/api';
 
 /**
  * 내부용 디스플레이 요소 제거 함수
@@ -55,16 +55,16 @@ export const displayElementApi = {
    * 새로운 디스플레이 요소를 추가합니다.
    */
   add: (element: PluginDisplayElementConfig): DisplayElementInstance => {
-    if ((window as any).__dmn_window_type !== "main") {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
-        "[UI API] displayElement.add is only available in main window"
+        '[UI API] displayElement.add is only available in main window',
       );
       return createNoopDisplayElementInstance();
     }
 
-    const pluginId = (window as any).__dmn_current_plugin_id;
+    const pluginId = window.__dmn_current_plugin_id;
     if (!pluginId) {
-      console.warn("[UI API] displayElement.add called outside plugin context");
+      console.warn('[UI API] displayElement.add called outside plugin context');
       return createNoopDisplayElementInstance();
     }
 
@@ -86,18 +86,18 @@ export const displayElementApi = {
     const currentTabId =
       elementOptions.tabId || useKeyStore.getState().selectedKeyType;
 
-    const templateFn = typeof template === "function" ? template : undefined;
+    const templateFn = typeof template === 'function' ? template : undefined;
     const stateSnapshot = initialState
       ? { ...initialState }
       : templateFn
       ? {}
       : undefined;
 
-    const htmlContent = typeof initialHtml === "string" ? initialHtml : "";
+    const htmlContent = typeof initialHtml === 'string' ? initialHtml : '';
 
     if (!htmlContent && !templateFn) {
       console.warn(
-        `[UI API] displayElement '${fullId}' has no HTML content. The panel will be empty until setState/setHTML is called.`
+        `[UI API] displayElement '${fullId}' has no HTML content. The panel will be empty until setState/setHTML is called.`,
       );
     }
 
@@ -105,16 +105,16 @@ export const displayElementApi = {
     let onPositionChangeId: string | undefined;
     let onDeleteId: string | undefined;
 
-    if (typeof elementOptions.onClick === "function") {
+    if (typeof elementOptions.onClick === 'function') {
       onClickId = handlerRegistry.register(pluginId, elementOptions.onClick);
     }
-    if (typeof elementOptions.onPositionChange === "function") {
+    if (typeof elementOptions.onPositionChange === 'function') {
       onPositionChangeId = handlerRegistry.register(
         pluginId,
-        elementOptions.onPositionChange
+        elementOptions.onPositionChange,
       );
     }
-    if (typeof elementOptions.onDelete === "function") {
+    if (typeof elementOptions.onDelete === 'function') {
       onDeleteId = handlerRegistry.register(pluginId, elementOptions.onDelete);
     }
 
@@ -127,17 +127,17 @@ export const displayElementApi = {
       tabId: currentTabId,
       onClick:
         onClickId ||
-        (typeof elementOptions.onClick === "string"
+        (typeof elementOptions.onClick === 'string'
           ? elementOptions.onClick
           : undefined),
       onPositionChange:
         onPositionChangeId ||
-        (typeof elementOptions.onPositionChange === "string"
+        (typeof elementOptions.onPositionChange === 'string'
           ? elementOptions.onPositionChange
           : undefined),
       onDelete:
         onDeleteId ||
-        (typeof elementOptions.onDelete === "string"
+        (typeof elementOptions.onDelete === 'string'
           ? elementOptions.onDelete
           : undefined),
       _onClickId: onClickId,
@@ -147,8 +147,8 @@ export const displayElementApi = {
 
     usePluginDisplayElementStore.getState().addElement(internalElement);
 
-    const currentLocale = (window as any).__dmn_current_locale || "ko";
-    const pluginMessages = (window as any).__dmn_plugin_messages?.[pluginId];
+    const currentLocale = window.__dmn_current_locale || 'ko';
+    const pluginMessages = window.__dmn_plugin_messages?.[pluginId];
     const t = createPluginTranslator(pluginMessages, currentLocale);
 
     const instance = new DisplayElementInstance({
@@ -186,7 +186,10 @@ export const displayElementApi = {
   /**
    * 디스플레이 요소의 상태를 업데이트합니다.
    */
-  setState: (target: DisplayElementTarget, updates: Record<string, any>) => {
+  setState: (
+    target: DisplayElementTarget,
+    updates: Record<string, unknown>,
+  ) => {
     const instance = resolveInstance(target);
     if (!instance) return;
     instance.setState(updates || {});
@@ -195,7 +198,7 @@ export const displayElementApi = {
   /**
    * 디스플레이 요소의 데이터를 업데이트합니다.
    */
-  setData: (target: DisplayElementTarget, updates: Record<string, any>) => {
+  setData: (target: DisplayElementTarget, updates: Record<string, unknown>) => {
     const instance = resolveInstance(target);
     if (!instance) return;
     instance.setData(updates || {});
@@ -216,7 +219,7 @@ export const displayElementApi = {
   setHTML: (
     target: DisplayElementTarget,
     selector: string,
-    htmlContent: string
+    htmlContent: string,
   ) => {
     const instance = resolveInstance(target);
     if (!instance) return;
@@ -229,7 +232,7 @@ export const displayElementApi = {
   setStyle: (
     target: DisplayElementTarget,
     selector: string,
-    styles: Record<string, string>
+    styles: Record<string, string>,
   ) => {
     const instance = resolveInstance(target);
     if (!instance) return;
@@ -268,7 +271,7 @@ export const displayElementApi = {
   toggleClass: (
     target: DisplayElementTarget,
     selector: string,
-    className: string
+    className: string,
   ) => {
     const instance = resolveInstance(target);
     if (!instance || !className) return;
@@ -289,11 +292,11 @@ export const displayElementApi = {
    */
   update: (
     target: DisplayElementTarget,
-    updates: Partial<PluginDisplayElement>
+    updates: Partial<PluginDisplayElement>,
   ) => {
-    if ((window as any).__dmn_window_type !== "main") {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
-        "[UI API] displayElement.update is only available in main window"
+        '[UI API] displayElement.update is only available in main window',
       );
       return;
     }
@@ -306,9 +309,9 @@ export const displayElementApi = {
    * 디스플레이 요소를 제거합니다.
    */
   remove: (target: DisplayElementTarget) => {
-    if ((window as any).__dmn_window_type !== "main") {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
-        "[UI API] displayElement.remove is only available in main window"
+        '[UI API] displayElement.remove is only available in main window',
       );
       return;
     }
@@ -325,16 +328,16 @@ export const displayElementApi = {
    * 현재 플러그인의 모든 디스플레이 요소를 제거합니다.
    */
   clearMyElements: () => {
-    if ((window as any).__dmn_window_type !== "main") {
+    if (window.__dmn_window_type !== 'main') {
       console.warn(
-        "[UI API] displayElement.clearMyElements is only available in main window"
+        '[UI API] displayElement.clearMyElements is only available in main window',
       );
       return;
     }
 
-    const pluginId = (window as any).__dmn_current_plugin_id;
+    const pluginId = window.__dmn_current_plugin_id;
     if (!pluginId) {
-      console.warn("[UI API] clearMyElements called outside plugin context");
+      console.warn('[UI API] clearMyElements called outside plugin context');
       return;
     }
 

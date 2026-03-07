@@ -3,23 +3,23 @@
  * 플러그인에서 사용하는 템플릿 관련 유틸리티를 제공합니다.
  */
 
-import { html, styleMap, css } from "@utils/templateEngine";
+import { html, styleMap, css } from '@utils/core/templateEngine';
 import type {
   DisplayElementTemplate,
   DisplayElementTemplateFactoryValue,
   DisplayElementTemplateHelpers,
   DisplayElementTemplateValueResolver,
-} from "@src/types/api";
+} from '@src/types/plugin/api';
 
 type CompiledTemplateChunk =
-  | { type: "fn"; fn: DisplayElementTemplateValueResolver }
-  | { type: "value"; value: DisplayElementTemplateFactoryValue };
+  | { type: 'fn'; fn: DisplayElementTemplateValueResolver }
+  | { type: 'value'; value: DisplayElementTemplateFactoryValue };
 
 export const displayElementTemplateHelpers: DisplayElementTemplateHelpers = {
-  html,
+  html: html as unknown as DisplayElementTemplateHelpers['html'],
   styleMap,
   css,
-  locale: "ko",
+  locale: 'ko',
   t: (key) => key,
 };
 
@@ -32,22 +32,22 @@ export const buildDisplayElementTemplate = (
   ...values: DisplayElementTemplateFactoryValue[]
 ): DisplayElementTemplate => {
   const compiledChunks: CompiledTemplateChunk[] = values.map((value) =>
-    typeof value === "function"
-      ? { type: "fn", fn: value as DisplayElementTemplateValueResolver }
-      : { type: "value", value }
+    typeof value === 'function'
+      ? { type: 'fn', fn: value as DisplayElementTemplateValueResolver }
+      : { type: 'value', value },
   );
 
   return (state, helpers = displayElementTemplateHelpers) => {
     const resolvedValues = compiledChunks.map((chunk) => {
-      if (chunk.type === "fn") {
+      if (chunk.type === 'fn') {
         try {
           return chunk.fn(state, helpers);
         } catch (error) {
           console.error(
-            "[UI API] displayElement.template value resolver failed",
-            error
+            '[UI API] displayElement.template value resolver failed',
+            error,
           );
-          return "";
+          return '';
         }
       }
       return chunk.value;

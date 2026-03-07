@@ -55,8 +55,13 @@ pub enum HookKeyState {
 #[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{GetLastError, ERROR_PIPE_CONNECTED},
-    Storage::FileSystem::{CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_INBOUND},
-    System::Pipes::{ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT},
+    Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        PIPE_ACCESS_INBOUND,
+    },
+    System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+    },
 };
 
 #[cfg(target_os = "windows")]
@@ -85,8 +90,8 @@ pub fn pipe_server_create(name: &str) -> anyhow::Result<std::fs::File> {
 
         let res = ConnectNamedPipe(handle, None);
         if res.is_err() {
-            // If a client connected between CreateNamedPipeW and ConnectNamedPipe,
-            // ConnectNamedPipe returns error with ERROR_PIPE_CONNECTED; treat as success.
+            // CreateNamedPipeW와 ConnectNamedPipe 사이에 클라이언트가 연결된 경우
+            // ERROR_PIPE_CONNECTED 에러 반환 — 성공으로 처리
             let err = GetLastError();
             if err != ERROR_PIPE_CONNECTED {
                 return Err(anyhow::anyhow!("ConnectNamedPipe failed: {:?}", err));

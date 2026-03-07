@@ -1,16 +1,13 @@
-pub mod app_state;
+pub mod audio;
 pub mod commands;
 pub mod cursor;
 pub mod defaults;
-pub mod keyboard;
-pub mod keyboard_daemon;
-pub mod key_sound;
-#[cfg(target_os = "windows")]
-pub mod keyboard_labels;
+pub mod errors;
 pub mod ipc;
+pub mod keyboard;
 pub mod models;
 pub mod services;
-pub mod store;
+pub mod state;
 
 /// Windows 접근성 "텍스트 크기" 설정에 의한 WebView2 스케일링을 보상하는 줌 레벨을 계산
 ///
@@ -43,11 +40,11 @@ pub fn compute_compensating_zoom() -> f64 {
 /// 읽기에 실패하거나 설정이 없으면 1.0(100%)을 반환합니다.
 #[cfg(target_os = "windows")]
 fn get_windows_text_scale_factor() -> f64 {
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ,
-        REG_DWORD, REG_VALUE_TYPE,
-    };
     use windows::core::w;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
+        REG_VALUE_TYPE,
+    };
 
     unsafe {
         let mut key_handle = HKEY::default();

@@ -1,40 +1,40 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { getKeyInfoByGlobalKey } from "@utils/KeyMaps";
-import { isGradientColor, normalizeColorInput } from "@utils/colorUtils";
+import { useState, useRef, useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
+import { isGradientColor, normalizeColorInput } from '@utils/color/colorUtils';
 import {
   createDefaultCounterSettings,
   normalizeCounterSettings,
-} from "@src/types/keys";
-import type { NoteColor, KeyCounterSettings } from "@src/types/keys";
+} from '@src/types/key/keys';
+import type { NoteColor, KeyCounterSettings } from '@src/types/key/keys';
 
 // ============================================================================
 // 타입 정의
 // ============================================================================
 
 export const TABS = {
-  KEY: "key",
-  NOTE: "note",
-  COUNTER: "counter",
+  KEY: 'key',
+  NOTE: 'note',
+  COUNTER: 'counter',
 } as const;
 
 export type TabType = (typeof TABS)[keyof typeof TABS];
 
 export const COLOR_MODES = {
-  solid: "solid",
-  gradient: "gradient",
+  solid: 'solid',
+  gradient: 'gradient',
 } as const;
 
 export type ColorMode = (typeof COLOR_MODES)[keyof typeof COLOR_MODES];
 
 export interface GradientColor {
-  type: "gradient";
+  type: 'gradient';
   top: string;
   bottom: string;
 }
 
 export const toGradient = (top: string, bottom: string): GradientColor => ({
-  type: "gradient",
+  type: 'gradient',
   top,
   bottom,
 });
@@ -119,7 +119,7 @@ export interface CounterTabState {
 
 // 미리보기 타입
 export interface KeyPreviewData {
-  type: "key";
+  type: 'key';
   activeImage?: string;
   inactiveImage?: string;
   width?: number;
@@ -130,7 +130,7 @@ export interface KeyPreviewData {
 }
 
 export interface NotePreviewData {
-  type: "note";
+  type: 'note';
   noteColor?: NoteColor;
   noteOpacity?: number;
   noteEffectEnabled?: boolean;
@@ -142,7 +142,7 @@ export interface NotePreviewData {
 }
 
 export interface CounterPreviewData {
-  type: "counter";
+  type: 'counter';
   enabled?: boolean;
   placement?: string;
   align?: string;
@@ -153,7 +153,7 @@ export interface CounterPreviewData {
 }
 
 export interface RollbackData {
-  type: "rollback";
+  type: 'rollback';
   key: KeyData;
   counter: KeyCounterSettings | null;
 }
@@ -194,13 +194,13 @@ export function createInitialKeyState(keyData: KeyData): KeyTabState {
     key: keyData.key,
     displayKey: getKeyInfoByGlobalKey(keyData.key).displayName,
     isListening: false,
-    activeImage: keyData.activeImage || "",
-    inactiveImage: keyData.inactiveImage || "",
+    activeImage: keyData.activeImage || '',
+    inactiveImage: keyData.inactiveImage || '',
     width: keyData.width || 60,
     height: keyData.height || 60,
     idleTransparent: keyData.idleTransparent || false,
     activeTransparent: keyData.activeTransparent || false,
-    className: keyData.className || "",
+    className: keyData.className || '',
     showImagePicker: false,
     widthFocused: false,
     heightFocused: false,
@@ -208,7 +208,7 @@ export function createInitialKeyState(keyData: KeyData): KeyTabState {
 }
 
 export function createInitialNoteState(keyData: KeyData): NoteTabState {
-  const initialNoteColor = keyData.noteColor || "#FFFFFF";
+  const initialNoteColor = keyData.noteColor || '#FFFFFF';
   const initialGlowSource = keyData.noteGlowColor ?? initialNoteColor;
 
   return {
@@ -223,9 +223,9 @@ export function createInitialNoteState(keyData: KeyData): NoteTabState {
     noteOpacity: keyData.noteOpacity ?? 80,
     glowEnabled: keyData.noteGlowEnabled ?? false,
     glowSize:
-      typeof keyData.noteGlowSize === "number" ? keyData.noteGlowSize : 20,
+      typeof keyData.noteGlowSize === 'number' ? keyData.noteGlowSize : 20,
     glowOpacity:
-      typeof keyData.noteGlowOpacity === "number"
+      typeof keyData.noteGlowOpacity === 'number'
         ? keyData.noteGlowOpacity
         : 70,
     glowColor: isGradientColor(initialGlowSource)
@@ -241,28 +241,28 @@ export function createInitialNoteState(keyData: KeyData): NoteTabState {
     showGlowPicker: false,
     isFocused: false,
     displayNoteOpacity:
-      typeof keyData.noteOpacity === "number"
+      typeof keyData.noteOpacity === 'number'
         ? `${keyData.noteOpacity}%`
-        : "80%",
+        : '80%',
     glowSizeFocused: false,
     glowOpacityFocused: false,
     displayGlowSize:
-      typeof keyData.noteGlowSize === "number"
+      typeof keyData.noteGlowSize === 'number'
         ? keyData.noteGlowSize.toString()
-        : "20",
+        : '20',
     displayGlowOpacity:
-      typeof keyData.noteGlowOpacity === "number"
+      typeof keyData.noteGlowOpacity === 'number'
         ? `${keyData.noteGlowOpacity}%`
-        : "70%",
+        : '70%',
     autoYCorrection: keyData.noteAutoYCorrection !== false,
   };
 }
 
 export function createInitialCounterState(
-  initialCounterSettings: KeyCounterSettings | null | undefined
+  initialCounterSettings: KeyCounterSettings | null | undefined,
 ): CounterTabState {
   const resolved = normalizeCounterSettings(
-    initialCounterSettings ?? createDefaultCounterSettings()
+    initialCounterSettings ?? createDefaultCounterSettings(),
   );
 
   return {
@@ -312,74 +312,61 @@ export function useUnifiedKeySettingState({
 
   // 키 탭 상태
   const [keyState, setKeyState] = useState<KeyTabState>(() =>
-    createInitialKeyState(keyData)
+    createInitialKeyState(keyData),
   );
 
   // 노트 탭 상태
   const [noteState, setNoteState] = useState<NoteTabState>(() =>
-    createInitialNoteState(keyData)
+    createInitialNoteState(keyData),
   );
 
   // 카운터 탭 상태
-  const resolvedCounterSettings = useMemo(
-    () =>
-      normalizeCounterSettings(
-        initialCounterSettings ?? createDefaultCounterSettings()
-      ),
-    [initialCounterSettings]
+  const _resolvedCounterSettings = normalizeCounterSettings(
+    initialCounterSettings ?? createDefaultCounterSettings(),
   );
 
   const [counterState, setCounterState] = useState<CounterTabState>(() =>
-    createInitialCounterState(initialCounterSettings)
+    createInitialCounterState(initialCounterSettings),
   );
 
   // 미리보기 핸들러
-  const handleKeyPreview = useCallback(
-    (updates: Omit<KeyPreviewData, "type">) => {
-      if (!onPreview) return;
-      onPreview({
-        type: "key",
-        ...updates,
-      });
-    },
-    [onPreview]
-  );
+  const handleKeyPreview = (updates: Omit<KeyPreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'key',
+      ...updates,
+    });
+  };
 
-  const handleNotePreview = useCallback(
-    (updates: Omit<NotePreviewData, "type">) => {
-      if (!onPreview) return;
-      onPreview({
-        type: "note",
-        ...updates,
-      });
-    },
-    [onPreview]
-  );
+  const handleNotePreview = (updates: Omit<NotePreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'note',
+      ...updates,
+    });
+  };
 
-  const handleCounterPreview = useCallback(
-    (updates: Omit<CounterPreviewData, "type">) => {
-      if (!onPreview) return;
-      onPreview({
-        type: "counter",
-        ...updates,
-      });
-    },
-    [onPreview]
-  );
+  const handleCounterPreview = (updates: Omit<CounterPreviewData, 'type'>) => {
+    if (!onPreview) return;
+    onPreview({
+      type: 'counter',
+      ...updates,
+    });
+  };
 
   // 백그라운드 GIF 최적화 완료 시(원본 -> WebP 치환) 편집 중 상태도 동기화
   useEffect(() => {
     const unlistenPromise = listen<{ fromPath?: string; toPath?: string }>(
-      "image:optimized",
+      'image:optimized',
       ({ payload }) => {
         const fromPath =
-          typeof payload?.fromPath === "string" ? payload.fromPath.trim() : "";
+          typeof payload?.fromPath === 'string' ? payload.fromPath.trim() : '';
         const toPath =
-          typeof payload?.toPath === "string" ? payload.toPath.trim() : "";
+          typeof payload?.toPath === 'string' ? payload.toPath.trim() : '';
 
         if (!fromPath || !toPath || fromPath === toPath) return;
 
-        let previewUpdates: Omit<KeyPreviewData, "type"> | null = null;
+        let previewUpdates: Omit<KeyPreviewData, 'type'> | null = null;
 
         setKeyState((prev) => {
           let changed = false;
@@ -409,11 +396,11 @@ export function useUnifiedKeySettingState({
 
         if (previewUpdates && onPreview) {
           onPreview({
-            type: "key",
+            type: 'key',
             ...previewUpdates,
           });
         }
-      }
+      },
     );
 
     return () => {
@@ -422,7 +409,7 @@ export function useUnifiedKeySettingState({
   }, [onPreview]);
 
   // 저장 핸들러
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = () => {
     const noteColorValue =
       noteState.colorMode === COLOR_MODES.gradient
         ? toGradient(noteState.noteColor, noteState.gradientBottom)
@@ -439,11 +426,11 @@ export function useUnifiedKeySettingState({
       activeImage: keyState.activeImage,
       inactiveImage: keyState.inactiveImage,
       width:
-        typeof keyState.width === "number"
+        typeof keyState.width === 'number'
           ? keyState.width
           : parseInt(keyState.width, 10) || 60,
       height:
-        typeof keyState.height === "number"
+        typeof keyState.height === 'number'
           ? keyState.height
           : parseInt(keyState.height, 10) || 60,
       idleTransparent: keyState.idleTransparent,
@@ -475,20 +462,20 @@ export function useUnifiedKeySettingState({
         },
       }),
     });
-  }, [keyState, noteState, counterState, onSave]);
+  };
 
   // 취소 핸들러 (원본으로 롤백)
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (onPreview) {
       const original = originalDataRef.current;
       onPreview({
-        type: "rollback",
+        type: 'rollback',
         key: original.key,
         counter: original.counter,
       });
     }
     onClose();
-  }, [onPreview, onClose]);
+  };
 
   return {
     // 탭 상태

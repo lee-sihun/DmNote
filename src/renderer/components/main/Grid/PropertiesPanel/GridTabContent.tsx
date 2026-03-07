@@ -1,8 +1,8 @@
-import React from "react";
-import { useTranslation } from "@contexts/I18nContext";
-import { useSettingsStore, type GridSettings } from "@stores/useSettingsStore";
-import { SectionDivider, PropertyRow, NumberInput } from "./PropertyInputs";
-import Checkbox from "@components/main/common/Checkbox";
+import React from 'react';
+import { useTranslation } from '@contexts/useTranslation';
+import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
+import { SectionDivider, PropertyRow, NumberInput } from './PropertyInputs';
+import Checkbox from '@components/main/common/Checkbox';
 
 // ============================================================================
 // 그리드 탭 콘텐츠 컴포넌트
@@ -27,7 +27,7 @@ const GridTabContent: React.FC = () => {
   // 설정 변경 핸들러 (즉시 저장)
   const handleSettingChange = async (
     key: keyof GridSettings,
-    value: boolean | number
+    value: boolean | number,
   ) => {
     const newSettings: GridSettings = {
       ...gridSettings,
@@ -37,17 +37,17 @@ const GridTabContent: React.FC = () => {
     try {
       await window.api.settings.update({ gridSettings: newSettings });
     } catch (error) {
-      console.error("Failed to update grid settings", error);
+      console.error('Failed to update grid settings', error);
     }
   };
 
   return (
     <div className="flex flex-col gap-[12px] p-[12px]">
       {/* 그리드 스냅 크기 */}
-      <PropertyRow label={t("gridSettings.gridSnapSize")}>
+      <PropertyRow label={t('gridSettings.gridSnapSize')}>
         <NumberInput
           value={gridSettings.gridSnapSize}
-          onChange={(val) => handleSettingChange("gridSnapSize", val)}
+          onChange={(val) => handleSettingChange('gridSnapSize', val)}
           min={1}
           max={10}
           suffix="px"
@@ -59,10 +59,10 @@ const GridTabContent: React.FC = () => {
 
       {/* 미니맵 */}
       <CheckboxRow
-        label={t("gridSettings.minimapEnabled")}
+        label={t('gridSettings.minimapEnabled')}
         checked={gridSettings.minimapEnabled}
         onChange={() =>
-          handleSettingChange("minimapEnabled", !gridSettings.minimapEnabled)
+          handleSettingChange('minimapEnabled', !gridSettings.minimapEnabled)
         }
       />
 
@@ -70,24 +70,24 @@ const GridTabContent: React.FC = () => {
 
       {/* 스마트 가이드 */}
       <CheckboxRow
-        label={t("gridSettings.alignmentGuides")}
+        label={t('gridSettings.alignmentGuides')}
         checked={gridSettings.alignmentGuides}
         onChange={() =>
-          handleSettingChange("alignmentGuides", !gridSettings.alignmentGuides)
+          handleSettingChange('alignmentGuides', !gridSettings.alignmentGuides)
         }
       />
       <CheckboxRow
-        label={t("gridSettings.spacingGuides")}
+        label={t('gridSettings.spacingGuides')}
         checked={gridSettings.spacingGuides}
         onChange={() =>
-          handleSettingChange("spacingGuides", !gridSettings.spacingGuides)
+          handleSettingChange('spacingGuides', !gridSettings.spacingGuides)
         }
       />
       <CheckboxRow
-        label={t("gridSettings.sizeMatchGuides")}
+        label={t('gridSettings.sizeMatchGuides')}
         checked={gridSettings.sizeMatchGuides}
         onChange={() =>
-          handleSettingChange("sizeMatchGuides", !gridSettings.sizeMatchGuides)
+          handleSettingChange('sizeMatchGuides', !gridSettings.sizeMatchGuides)
         }
       />
     </div>

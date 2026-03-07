@@ -7,9 +7,9 @@ import {
   createNamespacedStorage,
   wrapApiValue,
   wrapFunctionWithContext,
-} from "../context";
-import { createDefineElement } from "./defineElement";
-import { createDefineSettings } from "./defineSettings";
+} from '../context';
+import { createDefineElement } from './defineElement';
+import { createDefineSettings } from './defineSettings';
 
 interface CreatePluginApiProxyOptions {
   pluginId: string;
@@ -21,16 +21,23 @@ interface CreatePluginApiProxyOptions {
  * 플러그인용 API 프록시를 생성합니다.
  */
 export const createPluginApiProxy = (
-  options: CreatePluginApiProxyOptions
+  options: CreatePluginApiProxyOptions,
 ): typeof window.api => {
   const { pluginId, registerCleanup, isReloading } = options;
 
   const originalStorage = window.api.plugin.storage;
   const namespacedStorage = createNamespacedStorage(pluginId, originalStorage);
 
-  const wrappedApi = wrapApiValue(window.api, pluginId);
+  const wrappedApi = wrapApiValue(window.api, pluginId) as Record<
+    string,
+    unknown
+  > & {
+    window?: Record<string, unknown>;
+    plugin?: Record<string, unknown>;
+  };
 
-  const wrapWithContext = (fn: any) => wrapFunctionWithContext(fn, pluginId);
+  const wrapWithContext = (fn: (...args: unknown[]) => unknown) =>
+    wrapFunctionWithContext(fn, pluginId) as (...args: unknown[]) => unknown;
 
   const defineElement = createDefineElement({
     pluginId,
@@ -49,11 +56,11 @@ export const createPluginApiProxy = (
   const proxiedApi = {
     ...wrappedApi,
     window: {
-      ...(wrappedApi.window || {}),
-      type: (window as any).__dmn_window_type as "main" | "overlay",
+      ...(wrappedApi.window ?? {}),
+      type: window.__dmn_window_type as 'main' | 'overlay',
     },
     plugin: {
-      ...(wrappedApi.plugin || {}),
+      ...(wrappedApi.plugin ?? {}),
       storage: namespacedStorage,
       registerCleanup: (cleanup: () => void) => registerCleanup(cleanup),
       defineElement,
@@ -68,16 +75,16 @@ export const createPluginApiProxy = (
  * 플러그인용 Window 프록시를 생성합니다.
  */
 export const createPluginWindowProxy = (
-  proxiedApi: typeof window.api
+  proxiedApi: typeof window.api,
 ): Window => {
   return new Proxy(window, {
     get(target, prop: string | symbol, receiver) {
-      if (prop === "api") return proxiedApi;
-      if (prop === "dmn") return proxiedApi; // dmn 별칭도 프록시된 API 반환
-      return Reflect.get(target as any, prop, receiver);
+      if (prop === 'api') return proxiedApi;
+      if (prop === 'dmn') return proxiedApi; // dmn 별칭도 프록시된 API 반환
+      return Reflect.get(target, prop, receiver);
     },
     set(target, prop: string | symbol, value, receiver) {
-      return Reflect.set(target as any, prop, value, receiver);
+      return Reflect.set(target, prop, value, receiver);
     },
   });
 };

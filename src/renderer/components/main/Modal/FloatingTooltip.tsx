@@ -1,4 +1,5 @@
-import React, { useState, useRef, useId, useContext } from "react";
+/* eslint-disable react-hooks/refs */
+import React, { useState, useRef, useId, useContext } from 'react';
 import {
   useFloating,
   offset,
@@ -6,21 +7,21 @@ import {
   shift,
   arrow,
   autoUpdate,
-} from "@floating-ui/react";
-import { TooltipGroupContext } from "./TooltipGroup";
+} from '@floating-ui/react';
+import { TooltipGroupContext } from './TooltipGroupContext';
 
-type FloatingTooltipProps = {
+interface FloatingTooltipProps {
   content: React.ReactNode;
   children: React.ReactElement;
-  placement?: "top" | "bottom" | "left" | "right";
-  delay?: number; // ms to wait before showing tooltip on hover
-  disabled?: boolean; // when true, tooltip won't show
-};
+  placement?: 'top' | 'bottom' | 'left' | 'right';
+  delay?: number; // hover 시 툴팁 표시 전 대기 시간 (ms)
+  disabled?: boolean; // true일 때 툴팁 미표시
+}
 
 const FloatingTooltip = ({
   content,
   children,
-  placement = "top",
+  placement = 'top',
   delay = 500,
   disabled = false,
 }: FloatingTooltipProps) => {
@@ -35,10 +36,9 @@ const FloatingTooltip = ({
     whileElementsMounted: autoUpdate,
   });
 
-  // When a pointer (mouse/touch) interaction clicks the reference element,
-  // it will also trigger a focus event. We want pointer interactions to close
-  // the tooltip and NOT immediately reopen via the focus handler. Use a ref
-  // to ignore the next focus event if it was caused by a pointer interaction.
+  // 포인터(마우스/터치) 클릭 시 focus 이벤트도 함께 발생.
+  // 포인터 상호작용으로 툴팁을 닫은 후 focus 핸들러로 재오픈 방지.
+  // 포인터 상호작용에 의한 focus 이벤트를 무시하기 위한 ref.
   const ignoreFocusRef = useRef(false);
 
   const handleOpen = () => {
@@ -47,10 +47,10 @@ const FloatingTooltip = ({
   };
   const handleClose = () => setOpen(false);
 
-  // track whether this open should animate (first in group)
+  // 열기 시 애니메이션 여부 추적 (그룹 내 첫 번째)
   const shouldAnimateOpenRef = useRef<boolean>(false);
 
-  // timer ref for hover delay
+  // hover 딜레이 타이머 ref
   const openTimerRef = useRef<number | null>(null);
 
   const startOpenTimer = () => {
@@ -60,7 +60,7 @@ const FloatingTooltip = ({
       openTimerRef.current = null;
     }
     const effectiveDelay = group?.getEffectiveDelay(delay) ?? delay;
-    // decide animation for this upcoming open
+    // 이번 열기의 애니메이션 여부 결정
     shouldAnimateOpenRef.current = !!group?.shouldAnimate?.();
 
     const finalizeOpen = () => {
@@ -85,12 +85,12 @@ const FloatingTooltip = ({
       window.clearTimeout(openTimerRef.current);
       openTimerRef.current = null;
     }
-    // reset pending animation flag
+    // 대기 중 애니메이션 플래그 초기화
     shouldAnimateOpenRef.current = false;
   };
 
   const handlePointerDown = () => {
-    // cancel any pending open timer, mark that the next focus should be ignored and close tooltip
+    // 대기 중 열기 타이머 취소, 다음 focus 무시 플래그 설정, 툴팁 닫기
     cancelOpenTimer();
     ignoreFocusRef.current = true;
     setOpen(false);
@@ -98,14 +98,14 @@ const FloatingTooltip = ({
 
   const handleFocus = () => {
     if (ignoreFocusRef.current) {
-      // consume the focus caused by pointer interaction and reset flag
+      // 포인터 상호작용에 의한 focus 소비 후 플래그 초기화
       ignoreFocusRef.current = false;
       return;
     }
     handleOpen();
   };
 
-  // ensure timers are cleaned up on unmount
+  // unmount 시 타이머 정리
   React.useEffect(() => {
     return () => {
       cancelOpenTimer();
@@ -116,19 +116,19 @@ const FloatingTooltip = ({
   const arrowY = middlewareData.arrow?.y ?? 0;
 
   const arrowStyle: React.CSSProperties = {};
-  // placement may include variations like "top-start", so check startsWith
-  if (placement.startsWith("top")) {
+  // placement에 "top-start" 등 변형 포함 가능, startsWith로 확인
+  if (placement.startsWith('top')) {
     arrowStyle.left = `${arrowX}px`;
-    arrowStyle.bottom = "-4px";
-  } else if (placement.startsWith("bottom")) {
+    arrowStyle.bottom = '-4px';
+  } else if (placement.startsWith('bottom')) {
     arrowStyle.left = `${arrowX}px`;
-    arrowStyle.top = "-4px";
-  } else if (placement.startsWith("left")) {
+    arrowStyle.top = '-4px';
+  } else if (placement.startsWith('left')) {
     arrowStyle.top = `${arrowY}px`;
-    arrowStyle.right = "-4px";
+    arrowStyle.right = '-4px';
   } else {
     arrowStyle.top = `${arrowY}px`;
-    arrowStyle.left = "-4px";
+    arrowStyle.left = '-4px';
   }
 
   return (
@@ -160,12 +160,12 @@ const FloatingTooltip = ({
             zIndex: 90,
           }}
           className={
-            shouldAnimateOpenRef.current ? "tooltip-fade-in" : undefined
+            shouldAnimateOpenRef.current ? 'tooltip-fade-in' : undefined
           }
         >
-            <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm whitespace-nowrap">
+          <div className="bg-[#1E1E22] text-[#EDEDED] text-[12px] px-2 py-1 rounded-md shadow-sm whitespace-nowrap">
             {content}
-            </div>
+          </div>
           <div
             ref={arrowRef}
             style={arrowStyle}

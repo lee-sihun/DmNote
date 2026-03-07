@@ -1,19 +1,19 @@
-import type { SelectedElement } from "@stores/useGridSelectionStore";
-import type { KeyPositions } from "@src/types/keys";
-import type { StatItemPositions } from "@src/types/statItems";
-import type { GraphItemPositions } from "@src/types/graphItems";
-import type { LayerGroups, LayerGroupDef } from "@src/types/layerGroups";
-import type { PluginDisplayElementInternal } from "@src/types/api";
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import type { KeyPositions } from '@src/types/key/keys';
+import type { StatItemPositions } from '@src/types/key/statItems';
+import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 type Groupable = SelectedElement & {
-  type: "key" | "stat" | "graph";
+  type: 'key' | 'stat' | 'graph';
   index: number;
 };
 
 function isGroupableElement(el: SelectedElement): el is Groupable {
   return (
-    (el.type === "key" || el.type === "stat" || el.type === "graph") &&
-    typeof el.index === "number"
+    (el.type === 'key' || el.type === 'stat' || el.type === 'graph') &&
+    typeof el.index === 'number'
   );
 }
 
@@ -24,17 +24,17 @@ function getElementGroupId(
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
 ): string | undefined {
-  if (element.type === "key") {
+  if (element.type === 'key') {
     return keyPositions[mode]?.[element.index]?.groupId;
   }
-  if (element.type === "stat") {
+  if (element.type === 'stat') {
     return statPositions[mode]?.[element.index]?.groupId;
   }
   return graphPositions[mode]?.[element.index]?.groupId;
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function collectModeGroupMemberCounts(
@@ -60,7 +60,7 @@ export function buildNextLayerGroupName(
   baseLabel: string,
   groups: LayerGroupDef[],
 ): string {
-  const normalizedBase = (baseLabel || "New Group").trim() || "New Group";
+  const normalizedBase = (baseLabel || 'New Group').trim() || 'New Group';
   const pattern = new RegExp(`^${escapeRegExp(normalizedBase)}\\s+(\\d+)$`);
   const usedNumbers = new Set<number>();
 
@@ -144,7 +144,7 @@ export function applyGroupIdToSelectedElements(params: {
   selectedElements.forEach((element) => {
     if (!isGroupableElement(element)) return;
 
-    if (element.type === "key") {
+    if (element.type === 'key') {
       const current = nextKeyMode[element.index];
       if (!current || current.groupId === targetGroupId) return;
       nextKeyMode[element.index] = { ...current, groupId: targetGroupId };
@@ -152,7 +152,7 @@ export function applyGroupIdToSelectedElements(params: {
       return;
     }
 
-    if (element.type === "stat") {
+    if (element.type === 'stat') {
       const current = nextStatMode[element.index];
       if (!current || current.groupId === targetGroupId) return;
       nextStatMode[element.index] = { ...current, groupId: targetGroupId };
@@ -197,7 +197,8 @@ export function normalizeLayerGroupsForMode(params: {
   graphPositions: GraphItemPositions;
   layerGroups: LayerGroups;
 }): NormalizeLayerGroupsResult {
-  const { mode, keyPositions, statPositions, graphPositions, layerGroups } = params;
+  const { mode, keyPositions, statPositions, graphPositions, layerGroups } =
+    params;
 
   const currentModeGroups = layerGroups[mode] || [];
   const nextKeyPositions: KeyPositions = { ...keyPositions };
@@ -292,7 +293,7 @@ export function normalizeLayerGroupsForMode(params: {
 // ============================================================================
 
 export interface LayerItemForOrder {
-  type: "key" | "stat" | "graph" | "plugin";
+  type: 'key' | 'stat' | 'graph' | 'plugin';
   id: string;
   index?: number;
   zIndex: number;
@@ -311,7 +312,7 @@ export function buildLayerItemsForMode(
 
   (keyPositions[mode] || []).forEach((pos, index) => {
     items.push({
-      type: "key",
+      type: 'key',
       id: `key-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
@@ -321,32 +322,32 @@ export function buildLayerItemsForMode(
 
   (statPositions[mode] || []).forEach((pos, index) => {
     items.push({
-      type: "stat",
+      type: 'stat',
       id: `stat-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
-      groupId: (pos as any).groupId,
+      groupId: pos.groupId,
     });
   });
 
   (graphPositions[mode] || []).forEach((pos, index) => {
     items.push({
-      type: "graph",
+      type: 'graph',
       id: `graph-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
-      groupId: (pos as any).groupId,
+      groupId: pos.groupId,
     });
   });
 
   pluginElements
-    .filter((el) => (el as any).tabId === mode)
+    .filter((el) => el.tabId === mode)
     .forEach((el) => {
       items.push({
-        type: "plugin",
+        type: 'plugin',
         id: el.fullId,
         zIndex: el.zIndex ?? 0,
-        groupId: (el as any).groupId,
+        groupId: el.groupId,
       });
     });
 
@@ -411,13 +412,25 @@ export function applyZIndexToLayerOrder(
 
   orderedItems.forEach((item, idx) => {
     const z = maxZIndex - idx;
-    if (item.type === "key" && item.index !== undefined && keyMode[item.index]) {
+    if (
+      item.type === 'key' &&
+      item.index !== undefined &&
+      keyMode[item.index]
+    ) {
       keyMode[item.index] = { ...keyMode[item.index], zIndex: z };
-    } else if (item.type === "stat" && item.index !== undefined && statMode[item.index]) {
+    } else if (
+      item.type === 'stat' &&
+      item.index !== undefined &&
+      statMode[item.index]
+    ) {
       statMode[item.index] = { ...statMode[item.index], zIndex: z };
-    } else if (item.type === "graph" && item.index !== undefined && graphMode[item.index]) {
+    } else if (
+      item.type === 'graph' &&
+      item.index !== undefined &&
+      graphMode[item.index]
+    ) {
       graphMode[item.index] = { ...graphMode[item.index], zIndex: z };
-    } else if (item.type === "plugin") {
+    } else if (item.type === 'plugin') {
       pluginUpdates.push({ fullId: item.id, zIndex: z });
     }
   });

@@ -1,18 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app_state;
+mod audio;
 mod commands;
 mod cursor;
 mod defaults;
+mod errors;
 mod ipc;
 mod keyboard;
-mod keyboard_daemon;
-mod key_sound;
-#[cfg(target_os = "windows")]
-mod keyboard_labels;
 mod models;
 mod services;
-mod store;
+mod state;
 
 use anyhow::Result;
 use log::LevelFilter;
@@ -31,14 +28,12 @@ use tauri::{
 
 use dm_note::compute_compensating_zoom;
 
-use app_state::AppState;
-use store::AppStore;
+use state::{AppState, AppStore};
 
 fn main() {
     #[cfg(target_os = "windows")]
     {
-        // WebView2 투명 오버레이(레이어드/알파) 이슈가 특정 런타임 버전에서 발생할 수 있어,
-        // 고정(Fixed) 런타임을 번들/지정한 경우 우선 사용하도록 합니다.
+        // WebView2 투명 오버레이 이슈 방지 — 번들된 Fixed 런타임 우선 적용
         apply_embedded_webview2_fixed_runtime_override();
         apply_webview2_fixed_runtime_override();
 
@@ -57,15 +52,14 @@ fn main() {
     }
 
     if std::env::args().any(|arg| arg == "--keyboard-daemon") {
-        if let Err(err) = keyboard_daemon::run() {
+        if let Err(err) = keyboard::daemon::run() {
             eprintln!("keyboard daemon error: {err:?}");
             std::process::exit(1);
         }
         return;
     }
 
-    // macOS: 키보드/마우스 캡처를 위해 접근성 권한을 확인하고,
-    // 권한이 없으면 시스템 권한 요청 다이얼로그를 자동으로 표시합니다.
+    // macOS: 접근성 권한 확인 및 미부여 시 시스템 다이얼로그 표시
     #[cfg(target_os = "macos")]
     {
         request_accessibility_permission();
@@ -102,8 +96,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            // macOS: 편집 메뉴 추가 (Cmd+Z/X/C/V/A 등 네이티브 편집 단축키 활성화)
-            // WKWebView에서 단축키들이 동작하려면 네이티브 Edit 메뉴가 필요
+            // macOS: 네이티브 Edit 메뉴 추가 — WKWebView 편집 단축키(Cmd+Z/X/C/V/A) 활성화
             #[cfg(target_os = "macos")]
             {
                 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
@@ -148,103 +141,110 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::app::app_bootstrap,
-            commands::update::app_auto_update,
-            commands::settings::settings_get,
-            commands::settings::settings_update,
-            commands::keys::keys_get,
-            commands::keys::positions_get,
-            commands::keys::keys_update,
-            commands::keys::positions_update,
-            commands::stat_items::stat_positions_get,
-            commands::stat_items::stat_positions_update,
-            commands::graph_items::graph_positions_get,
-            commands::graph_items::graph_positions_update,
-            commands::keys::keys_set_mode,
-            commands::keys::keys_reset_all,
-            commands::keys::keys_reset_mode,
-            commands::keys::keys_reset_counters,
-            commands::keys::keys_reset_counters_mode,
-            commands::keys::keys_reset_single_counter,
-            commands::keys::keys_set_counters,
-            commands::keys::raw_input_subscribe,
-            commands::keys::raw_input_unsubscribe,
-            commands::key_sound::key_sound_get_status,
-            commands::key_sound::key_sound_set_enabled,
-            commands::key_sound::key_sound_set_volume,
-            commands::key_sound::key_sound_load_soundpack,
-            commands::key_sound::key_sound_unload_soundpack,
-            commands::key_sound::key_sound_set_latency_logging,
-            commands::keys::custom_tabs_list,
-            commands::keys::custom_tabs_create,
-            commands::keys::custom_tabs_delete,
-            commands::keys::custom_tabs_select,
-            commands::keys::layer_groups_get,
-            commands::keys::layer_groups_update,
-            commands::css::css_get,
-            commands::css::css_get_use,
-            commands::css::css_toggle,
-            commands::css::css_reset,
-            commands::css::css_set_content,
-            commands::css::css_load,
-            commands::css::css_tab_get_all,
-            commands::css::css_tab_get,
-            commands::css::css_tab_load,
-            commands::css::css_tab_clear,
-            commands::css::css_tab_set,
-            commands::css::css_tab_toggle,
-            commands::note_tab::note_tab_get_all,
-            commands::note_tab::note_tab_get,
-            commands::note_tab::note_tab_set,
-            commands::note_tab::note_tab_clear,
-            commands::font::font_load,
-            commands::image::image_load,
-            commands::sound::sound_load,
-            commands::sound::sound_list,
-            commands::sound::sound_set_enabled,
-            commands::sound::sound_delete,
-            commands::sound::sound_save_processed_wav,
-            commands::sound::sound_load_original,
-            commands::sound::sound_update_processed_wav,
-            commands::counter_animation::counter_animation_list,
-            commands::counter_animation::counter_animation_create,
-            commands::counter_animation::counter_animation_update,
-            commands::counter_animation::counter_animation_delete,
-            commands::js::js_get,
-            commands::js::js_get_use,
-            commands::js::js_toggle,
-            commands::js::js_reset,
-            commands::js::js_set_content,
-            commands::js::js_load,
-            commands::js::js_reload,
-            commands::js::js_remove_plugin,
-            commands::js::js_set_plugin_enabled,
-            commands::preset::preset_save,
-            commands::preset::preset_load,
-            commands::preset::preset_save_tab,
-            commands::preset::preset_load_tab,
-            commands::overlay::overlay_get,
-            commands::overlay::overlay_set_visible,
-            commands::overlay::overlay_set_lock,
-            commands::overlay::overlay_set_anchor,
-            commands::overlay::overlay_resize,
-            commands::bridge::plugin_bridge_send,
-            commands::bridge::plugin_bridge_send_to,
-            commands::plugin_storage::plugin_storage_get,
-            commands::plugin_storage::plugin_storage_set,
-            commands::plugin_storage::plugin_storage_remove,
-            commands::plugin_storage::plugin_storage_clear,
-            commands::plugin_storage::plugin_storage_keys,
-            commands::plugin_storage::plugin_storage_has_data,
-            commands::plugin_storage::plugin_storage_clear_by_prefix,
-            commands::system::window_minimize,
-            commands::system::window_close,
-            commands::system::window_show_main,
-            commands::system::app_open_external,
-            commands::system::app_restart,
-            commands::system::app_quit,
-            commands::system::window_open_devtools_all,
-            commands::system::get_cursor_settings,
+            // 앱 생명주기
+            commands::app::bootstrap::app_bootstrap,
+            commands::app::update::app_auto_update,
+            commands::app::system::window_minimize,
+            commands::app::system::window_close,
+            commands::app::system::window_show_main,
+            commands::app::system::app_open_external,
+            commands::app::system::app_restart,
+            commands::app::system::app_quit,
+            commands::app::system::window_open_devtools_all,
+            commands::app::system::get_cursor_settings,
+            // 에디터 콘텐츠
+            commands::editor::css::css_get,
+            commands::editor::css::css_get_use,
+            commands::editor::css::css_toggle,
+            commands::editor::css::css_reset,
+            commands::editor::css::css_set_content,
+            commands::editor::css::css_load,
+            commands::editor::css::css_tab_get_all,
+            commands::editor::css::css_tab_get,
+            commands::editor::css::css_tab_load,
+            commands::editor::css::css_tab_clear,
+            commands::editor::css::css_tab_set,
+            commands::editor::css::css_tab_toggle,
+            commands::editor::js::js_get,
+            commands::editor::js::js_get_use,
+            commands::editor::js::js_toggle,
+            commands::editor::js::js_reset,
+            commands::editor::js::js_set_content,
+            commands::editor::js::js_load,
+            commands::editor::js::js_reload,
+            commands::editor::js::js_remove_plugin,
+            commands::editor::js::js_set_plugin_enabled,
+            commands::editor::note_tab::note_tab_get_all,
+            commands::editor::note_tab::note_tab_get,
+            commands::editor::note_tab::note_tab_set,
+            commands::editor::note_tab::note_tab_clear,
+            // 키 입력/설정
+            commands::keys::keys::keys_get,
+            commands::keys::keys::positions_get,
+            commands::keys::keys::keys_update,
+            commands::keys::keys::positions_update,
+            commands::keys::keys::keys_set_mode,
+            commands::keys::keys::keys_reset_all,
+            commands::keys::keys::keys_reset_mode,
+            commands::keys::keys::keys_reset_counters,
+            commands::keys::keys::keys_reset_counters_mode,
+            commands::keys::keys::keys_reset_single_counter,
+            commands::keys::keys::keys_set_counters,
+            commands::keys::keys::raw_input_subscribe,
+            commands::keys::keys::raw_input_unsubscribe,
+            commands::keys::keys::custom_tabs_list,
+            commands::keys::keys::custom_tabs_create,
+            commands::keys::keys::custom_tabs_delete,
+            commands::keys::keys::custom_tabs_select,
+            commands::keys::keys::layer_groups_get,
+            commands::keys::keys::layer_groups_update,
+            commands::keys::key_sound::key_sound_get_status,
+            commands::keys::key_sound::key_sound_set_enabled,
+            commands::keys::key_sound::key_sound_set_volume,
+            commands::keys::key_sound::key_sound_load_soundpack,
+            commands::keys::key_sound::key_sound_unload_soundpack,
+            commands::keys::key_sound::key_sound_set_latency_logging,
+            commands::keys::sound::sound_load,
+            commands::keys::sound::sound_list,
+            commands::keys::sound::sound_set_enabled,
+            commands::keys::sound::sound_delete,
+            commands::keys::sound::sound_save_processed_wav,
+            commands::keys::sound::sound_load_original,
+            commands::keys::sound::sound_update_processed_wav,
+            // 레이아웃/오버레이
+            commands::layout::settings::settings_get,
+            commands::layout::settings::settings_update,
+            commands::layout::stat_items::stat_positions_get,
+            commands::layout::stat_items::stat_positions_update,
+            commands::layout::graph_items::graph_positions_get,
+            commands::layout::graph_items::graph_positions_update,
+            commands::layout::font::font_load,
+            commands::layout::overlay::overlay_get,
+            commands::layout::overlay::overlay_set_visible,
+            commands::layout::overlay::overlay_set_lock,
+            commands::layout::overlay::overlay_set_anchor,
+            commands::layout::overlay::overlay_resize,
+            // 미디어
+            commands::media::image::image_load,
+            commands::media::counter_animation::counter_animation_list,
+            commands::media::counter_animation::counter_animation_create,
+            commands::media::counter_animation::counter_animation_update,
+            commands::media::counter_animation::counter_animation_delete,
+            // 프리셋
+            commands::preset::save::preset_save,
+            commands::preset::save::preset_save_tab,
+            commands::preset::load::preset_load,
+            commands::preset::load::preset_load_tab,
+            // 플러그인
+            commands::plugin::bridge::plugin_bridge_send,
+            commands::plugin::bridge::plugin_bridge_send_to,
+            commands::plugin::storage::plugin_storage_get,
+            commands::plugin::storage::plugin_storage_set,
+            commands::plugin::storage::plugin_storage_remove,
+            commands::plugin::storage::plugin_storage_clear,
+            commands::plugin::storage::plugin_storage_keys,
+            commands::plugin::storage::plugin_storage_has_data,
+            commands::plugin::storage::plugin_storage_clear_by_prefix,
         ])
         .run(context)
         .expect("error while running tauri application");
@@ -254,7 +254,7 @@ fn main() {
 fn apply_webview2_additional_args(arg: &str) {
     use std::env;
     const KEY: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
-    // Append the argument if it's not already present to preserve user-provided args.
+    // 기존 사용자 인자를 유지하면서, 없는 경우에만 추가
     let existing = env::var(KEY).unwrap_or_default();
     let already_present = existing
         .split_whitespace()
@@ -273,7 +273,7 @@ fn apply_webview2_additional_args(arg: &str) {
 /// store.json에서 렌더러 설정(angleMode)을 읽어 WebView2 플래그로 적용
 #[cfg(target_os = "windows")]
 fn apply_renderer_settings() {
-    // Tauri 초기화 전이므로 직접 경로를 찾아야 함
+    // Tauri 초기화 전 — 경로 직접 탐색
     let store_path = get_store_path();
 
     let angle_mode = if let Some(path) = store_path {
@@ -308,7 +308,7 @@ fn apply_renderer_settings() {
 /// 앱 데이터 디렉토리에서 store.json 경로 찾기
 #[cfg(target_os = "windows")]
 fn get_store_path() -> Option<PathBuf> {
-    // Windows: %APPDATA%/com.dmnote.desktop/store.json
+    // Windows 경로: %APPDATA%/com.dmnote.desktop/store.json
     dirs_next::config_dir().map(|config| config.join("com.dmnote.desktop").join("store.json"))
 }
 
@@ -617,7 +617,7 @@ fn apply_webview2_fixed_runtime_override() {
     }
 
     if cfg!(debug_assertions) {
-        // `tauri dev`에서는 바이너리 위치가 변하므로, 저장소 기준 경로도 함께 확인합니다.
+        // `tauri dev` — 바이너리 위치 가변, 저장소 기준 경로 추가 확인
         candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("webview2-fixed-runtime"));
         candidates.push(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -679,7 +679,7 @@ fn apply_embedded_webview2_fixed_runtime_override() {
     };
 
     if needs_extract {
-        // Clean up previous attempts.
+        // 이전 추출 시도 정리
         let _ = fs::remove_dir_all(&extract_dir);
         if let Err(err) = fs::create_dir_all(&extract_dir) {
             log::warn!(

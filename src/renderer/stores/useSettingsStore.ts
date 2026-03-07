@@ -1,15 +1,18 @@
-import { create } from "zustand";
-import type { NoteSettings, TabNoteOverrides } from "@src/types/noteSettings";
-import type { FontSettings } from "@src/types/fonts";
-import type { OverlayResizeAnchor } from "@src/types/settings";
-import type { JsPlugin } from "@src/types/js";
-import type { ShortcutsState } from "@src/types/shortcuts";
+import { create } from 'zustand';
+import type {
+  NoteSettings,
+  TabNoteOverrides,
+} from '@src/types/settings/noteSettings';
+import type { FontSettings } from '@src/types/settings/fonts';
+import type { OverlayResizeAnchor } from '@src/types/settings/settings';
+import type { JsPlugin } from '@src/types/plugin/js';
+import type { ShortcutsState } from '@src/types/settings/shortcuts';
 import {
   getDefaultNoteSettings,
   getDefaultFontSettings,
   getDefaultGridSettings,
   getDefaultShortcuts,
-} from "@src/renderer/defaults";
+} from '@src/renderer/defaults';
 
 export interface GridSettings {
   alignmentGuides: boolean;
@@ -72,54 +75,54 @@ interface SettingsState {
 
 export type SettingsStateSnapshot = Omit<
   SettingsState,
-  | "setAll"
-  | "merge"
-  | "setLaboratoryEnabled"
-  | "setTrayEnabled"
-  | "setAutoUpdateEnabled"
-  | "setHardwareAcceleration"
-  | "setAlwaysOnTop"
-  | "setUseCustomCSS"
-  | "setCustomCSSContent"
-  | "setCustomCSSPath"
-  | "setUseCustomJS"
-  | "setJsPlugins"
-  | "setOverlayLocked"
-  | "setAngleMode"
-  | "setNoteEffect"
-  | "setNoteSettings"
-  | "setTabNoteOverrides"
-  | "setFontSettings"
-  | "setLanguage"
-  | "setBackgroundColor"
-  | "setOverlayResizeAnchor"
-  | "setKeyCounterEnabled"
-  | "setDeveloperModeEnabled"
-  | "setGridSettings"
-  | "setShortcuts"
+  | 'setAll'
+  | 'merge'
+  | 'setLaboratoryEnabled'
+  | 'setTrayEnabled'
+  | 'setAutoUpdateEnabled'
+  | 'setHardwareAcceleration'
+  | 'setAlwaysOnTop'
+  | 'setUseCustomCSS'
+  | 'setCustomCSSContent'
+  | 'setCustomCSSPath'
+  | 'setUseCustomJS'
+  | 'setJsPlugins'
+  | 'setOverlayLocked'
+  | 'setAngleMode'
+  | 'setNoteEffect'
+  | 'setNoteSettings'
+  | 'setTabNoteOverrides'
+  | 'setFontSettings'
+  | 'setLanguage'
+  | 'setBackgroundColor'
+  | 'setOverlayResizeAnchor'
+  | 'setKeyCounterEnabled'
+  | 'setDeveloperModeEnabled'
+  | 'setGridSettings'
+  | 'setShortcuts'
 >;
 
 const initialState: SettingsStateSnapshot = {
   hardwareAcceleration: true,
   alwaysOnTop: true,
   overlayLocked: false,
-  angleMode: "d3d11",
+  angleMode: 'd3d11',
   noteEffect: false,
   noteSettings: getDefaultNoteSettings(),
   tabNoteOverrides: {},
   fontSettings: getDefaultFontSettings(),
   useCustomCSS: false,
-  customCSSContent: "",
+  customCSSContent: '',
   customCSSPath: null,
   useCustomJS: false,
   jsPlugins: [],
-  backgroundColor: "transparent",
-  language: "ko",
+  backgroundColor: 'transparent',
+  language: 'ko',
   laboratoryEnabled: false,
   developerModeEnabled: false,
   trayEnabled: false,
   autoUpdateEnabled: true,
-  overlayResizeAnchor: "top-left",
+  overlayResizeAnchor: 'top-left',
   keyCounterEnabled: false,
   gridSettings: getDefaultGridSettings(),
   shortcuts: getDefaultShortcuts(),
@@ -127,7 +130,7 @@ const initialState: SettingsStateSnapshot = {
 
 function mergeSnapshot(
   prev: SettingsStateSnapshot,
-  patch: Partial<SettingsStateSnapshot>
+  patch: Partial<SettingsStateSnapshot>,
 ): SettingsStateSnapshot {
   const next: SettingsStateSnapshot = {
     ...prev,

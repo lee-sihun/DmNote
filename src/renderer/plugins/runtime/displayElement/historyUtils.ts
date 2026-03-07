@@ -3,11 +3,11 @@
  * Undo/Redo 관련 상태 및 히스토리 저장 기능을 관리합니다.
  */
 
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
 
 // 히스토리 저장 플래그 (undo/redo 중에는 저장하지 않음)
 let isUndoRedoInProgress = false;
@@ -24,7 +24,7 @@ let isInitialLoading = false;
 export const saveToHistory = (): void => {
   if (isUndoRedoInProgress) return;
   if (isInitialLoading) return;
-  if ((window as any).__dmn_window_type !== "main") return;
+  if (window.__dmn_window_type !== 'main') return;
 
   const { keyMappings, positions } = useKeyStore.getState();
   const statPositions = useStatItemStore.getState().positions;
@@ -37,7 +37,7 @@ export const saveToHistory = (): void => {
       positions,
       statPositions,
       graphPositions,
-      pluginElements
+      pluginElements,
     );
 };
 

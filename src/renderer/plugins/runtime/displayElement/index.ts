@@ -5,7 +5,7 @@
 export {
   displayElementApi,
   removeDisplayElementInternal,
-} from "./displayElementApi";
+} from './displayElementApi';
 export {
   displayElementInstanceRegistry,
   registerDisplayElementInstance,
@@ -13,7 +13,7 @@ export {
   clearInstancesByPlugin,
   clearAllInstances,
   getDisplayElementInstance,
-} from "./instanceRegistry";
+} from './instanceRegistry';
 export {
   saveToHistory,
   setUndoRedoInProgress,
@@ -21,14 +21,14 @@ export {
   getUndoRedoInProgress,
   getUndoRedoChangedAt,
   getInitialLoading,
-} from "./historyUtils";
+} from './historyUtils';
 export {
   resolveFullId,
   resolveInstance,
   createNoopDisplayElementInstance,
   type DisplayElementTarget,
-} from "./targetResolver";
+} from './targetResolver';
 export {
   buildDisplayElementTemplate,
   displayElementTemplateHelpers,
-} from "./templateBuilder";
+} from './templateBuilder';

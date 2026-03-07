@@ -5,5 +5,5 @@
 export {
   createNamespacedStorage,
   type NamespacedStorage,
-} from "./storageWrapper";
-export { wrapFunctionWithContext, wrapApiValue } from "./functionWrapper";
+} from './storageWrapper';
+export { wrapFunctionWithContext, wrapApiValue } from './functionWrapper';

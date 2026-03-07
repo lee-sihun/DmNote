@@ -1,24 +1,25 @@
-import type { KeyPosition, ImageFit, NoteColor, KeyCounterSettings } from "@src/types/keys";
+import type { KeyPosition } from '@src/types/key/keys';
 
 // ============================================================================
 // 탭 상수
 // ============================================================================
 
 export const TABS = {
-  STYLE: "style",
-  NOTE: "note",
-  COUNTER: "counter",
+  STYLE: 'style',
+  NOTE: 'note',
+  COUNTER: 'counter',
 } as const;
 
 export type TabType = (typeof TABS)[keyof typeof TABS];
 
 // 레이어 패널 탭 상수
 export const LAYER_PANEL_TABS = {
-  LAYER: "layer",
-  GRID: "grid",
+  LAYER: 'layer',
+  GRID: 'grid',
 } as const;
 
-export type LayerPanelTabType = (typeof LAYER_PANEL_TABS)[keyof typeof LAYER_PANEL_TABS];
+export type LayerPanelTabType =
+  (typeof LAYER_PANEL_TABS)[keyof typeof LAYER_PANEL_TABS];
 
 // ============================================================================
 // 컴포넌트 Props 타입
@@ -72,8 +73,8 @@ export interface ColorInputProps {
   onActiveChange?: (value: string) => void;
   onActiveChangeComplete?: (value: string) => void;
   showStateTabs?: boolean;
-  stateMode?: "idle" | "active";
-  onStateModeChange?: (mode: "idle" | "active") => void;
+  stateMode?: 'idle' | 'active';
+  onStateModeChange?: (mode: 'idle' | 'active') => void;
   colorId?: string;
   solidOnly?: boolean;
   panelElement?: HTMLElement | null;
@@ -137,28 +138,28 @@ export interface SingleKeyContentProps {
   keyPosition: KeyPosition;
   keyCode: string | null;
   keyInfo: { globalKey: string; displayName: string } | null;
-  
+
   // 탭 상태
   activeTab: TabType;
-  
+
   // 핸들러
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyMappingChange?: (index: number, newKey: string) => void;
-  
+
   // 키 리스닝 상태 (옵션 - 개별 편집 모드에서는 사용하지 않음)
   isListening?: boolean;
   onKeyListen?: () => void;
-  
+
   // 이미지 픽커 상태 (옵션 - 개별 편집 모드에서는 사용하지 않음)
   showImagePicker?: boolean;
   onToggleImagePicker?: () => void;
   imageButtonRef?: React.RefObject<HTMLButtonElement>;
-  
+
   // 커스텀 CSS 설정
   useCustomCSS?: boolean;
-  
+
   // 번역 함수
   t: (key: string) => string;
 }
@@ -223,3 +224,35 @@ export interface KeyData {
   keyCode: string | null;
   keyInfo: { globalKey: string; displayName: string } | null;
 }
+
+// ============================================================================
+// 레이어 패널 타입
+// ============================================================================
+
+export interface LayerItem {
+  type: 'key' | 'stat' | 'graph' | 'plugin';
+  id: string;
+  index?: number;
+  name: string;
+  zIndex: number;
+  hidden: boolean;
+  groupId?: string;
+}
+
+export interface GroupHeaderItem {
+  displayType: 'group-header';
+  groupId: string;
+  groupName: string;
+  isCollapsed: boolean;
+  childCount: number;
+  allHidden: boolean;
+}
+
+export interface LayerDisplayItem {
+  displayType: 'layer';
+  item: LayerItem;
+  groupDepth: number;
+  flatIndex: number;
+}
+
+export type DisplayItem = GroupHeaderItem | LayerDisplayItem;

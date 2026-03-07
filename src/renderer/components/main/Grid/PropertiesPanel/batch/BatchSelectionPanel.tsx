@@ -1,0 +1,1331 @@
+/* eslint-disable react-hooks/refs */
+import React from 'react';
+import type {
+  KeyPosition,
+  NoteColor,
+  KeyCounterSettings,
+} from '@src/types/key/keys';
+import type {
+  GraphItemPosition,
+  GraphItemType,
+} from '@src/types/key/graphItems';
+import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
+import {
+  normalizeCounterSettings,
+  createDefaultCounterSettings,
+} from '@src/types/key/keys';
+import {
+  PropertyRow,
+  NumberInput,
+  ColorInput,
+  SidebarToggleIcon,
+  ModeToggleIcon,
+  Tabs,
+  BatchStyleTabContent,
+  BatchNoteTabContent,
+  BatchCounterTabContent,
+  TABS,
+  TabType,
+} from '../index';
+import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
+import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
+
+const RenameIcon: React.FC = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M12 20H21"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5V3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+// ============================================================================
+// Mixed key-like + graph batch selection panel
+// ============================================================================
+
+type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
+
+type MixedValueResult<T> = { isMixed: boolean; value: T };
+type MixedValueGetter<P> = <T>(
+  getter: (pos: P) => T | undefined,
+  defaultValue: T,
+) => MixedValueResult<T>;
+
+interface KeyData {
+  index: number;
+  position: KeyPosition | undefined;
+  keyCode: string | null;
+  keyInfo: { globalKey: string; displayName: string } | null;
+}
+
+interface BatchLocalColors {
+  noteColor: NoteColor;
+  glowColor: NoteColor;
+  fillIdle: string;
+  fillActive: string;
+  strokeIdle: string;
+  strokeActive: string;
+}
+
+interface BatchKeyLikePanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  selectedBatchStyleElements: SelectedElement[];
+  selectedKeyElements: SelectedElement[];
+  selectedStatElements: SelectedElement[];
+  selectedGraphElements: SelectedElement[];
+  selectedKeyLikeElements: SelectedElement[];
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleToggleMode: () => void;
+  handleTogglePanel: () => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
+  // batch handlers
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  handleBatchSpacingPreview: (spacing: number) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
+  handleKeyOnlyStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
+  handleBatchCounterUpdate: (updates: Partial<KeyCounterSettings>) => void;
+  handleBatchNoteColorChange: (value: NoteColor) => void;
+  handleBatchNoteColorChangeComplete: (value: NoteColor) => void;
+  handleBatchGlowColorChange: (value: NoteColor) => void;
+  handleBatchGlowColorChangeComplete: (value: NoteColor) => void;
+  handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
+  // mixed value getters
+  getMixedValue: MixedValueGetter<KeyPosition>;
+  getMixedValueBatch: MixedValueGetter<KeyPosition>;
+  getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
+  getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
+  getMixedValueKeysOnly: MixedValueGetter<KeyPosition>;
+  getSelectedKeysData: () => KeyData[];
+  getSelectedGraphsData: () => KeyData[];
+  getSelectedBatchStyleData: () => KeyData[];
+  getSelectedKeyOnlyPositions: () => { index: number; position: KeyPosition }[];
+  // batch key-only handlers
+  handleBatchKeyOnlyStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => void;
+  handleBatchNoteColorChangeKeysOnly: (value: NoteColor) => void;
+  handleBatchNoteColorChangeCompleteKeysOnly: (value: NoteColor) => void;
+  handleBatchGlowColorChangeKeysOnly: (value: NoteColor) => void;
+  handleBatchGlowColorChangeCompleteKeysOnly: (value: NoteColor) => void;
+  // refs
+  batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
+  batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
+  batchCounterFillButtonRef: React.RefObject<HTMLButtonElement | null>;
+  batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement | null>;
+  batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
+  // state
+  showBatchImagePicker: boolean;
+  setShowBatchImagePicker: (value: boolean) => void;
+  batchPickerFor: BatchPickerTarget;
+  setBatchPickerFor: (value: BatchPickerTarget) => void;
+  batchCounterColorState: 'idle' | 'active';
+  setBatchCounterColorState: (value: 'idle' | 'active') => void;
+  batchLocalColors: BatchLocalColors;
+  setBatchLocalColors: React.Dispatch<React.SetStateAction<BatchLocalColors>>;
+  batchLocalOpacities: { noteOpacity: number; glowOpacity: number };
+  setBatchLocalOpacities: React.Dispatch<
+    React.SetStateAction<{ noteOpacity: number; glowOpacity: number }>
+  >;
+  handleBatchPickerToggle: (target: BatchPickerTarget) => void;
+  handleBatchPickerColorChange: (newColor: NoteColor) => void;
+  handleBatchPickerColorChangeComplete: (newColor: NoteColor) => void;
+  getBatchPickerColor: () => NoteColor | string;
+  getBatchPickerRef: () => React.RefObject<HTMLButtonElement | null> | null;
+  batchColorPickerInteractiveRefs: React.RefObject<HTMLButtonElement | null>[];
+  panelElement: HTMLDivElement | null;
+  useCustomCSS: boolean;
+  selectedKeyType: string;
+  t: (key: string) => string | undefined;
+}
+
+export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
+  setPanelElement,
+  selectedBatchStyleElements,
+  selectedKeyElements,
+  selectedStatElements: _selectedStatElements,
+  selectedGraphElements,
+  selectedKeyLikeElements,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleToggleMode,
+  handleTogglePanel,
+  activeTab,
+  setActiveTab,
+  handleBatchAlign,
+  handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingPreview,
+  handleBatchSpacingCommit,
+  getBatchSpacingValue,
+  handleBatchResize,
+  handleBatchStyleChange,
+  handleBatchStyleChangeComplete,
+  handleKeyOnlyStyleChangeComplete,
+  handleBatchCounterUpdate,
+  handleGraphBatchSharedSetting,
+  getMixedValue,
+  getMixedValueBatch,
+  getMixedValueGraphs,
+  getMixedValueKeysOnly,
+  getSelectedKeysData,
+  getSelectedGraphsData,
+  getSelectedBatchStyleData,
+  getSelectedKeyOnlyPositions: _getSelectedKeyOnlyPositions,
+  handleBatchKeyOnlyStyleChangeComplete,
+  handleBatchNoteColorChangeKeysOnly: _handleBatchNoteColorChangeKeysOnly,
+  handleBatchNoteColorChangeCompleteKeysOnly:
+    _handleBatchNoteColorChangeCompleteKeysOnly,
+  handleBatchGlowColorChangeKeysOnly: _handleBatchGlowColorChangeKeysOnly,
+  handleBatchGlowColorChangeCompleteKeysOnly:
+    _handleBatchGlowColorChangeCompleteKeysOnly,
+  handleBatchNoteColorChange: _handleBatchNoteColorChange,
+  handleBatchNoteColorChangeComplete: _handleBatchNoteColorChangeComplete,
+  handleBatchGlowColorChange: _handleBatchGlowColorChange,
+  handleBatchGlowColorChangeComplete: _handleBatchGlowColorChangeComplete,
+  batchScrollRefFor,
+  batchThumbRefFor,
+  batchNoteColorButtonRef,
+  batchGlowColorButtonRef,
+  batchCounterFillButtonRef,
+  batchCounterStrokeButtonRef,
+  batchImageButtonRef,
+  showBatchImagePicker,
+  setShowBatchImagePicker,
+  batchPickerFor,
+  setBatchPickerFor,
+  batchCounterColorState,
+  setBatchCounterColorState,
+  batchLocalColors,
+  setBatchLocalColors: _setBatchLocalColors,
+  batchLocalOpacities,
+  setBatchLocalOpacities,
+  handleBatchPickerToggle,
+  handleBatchPickerColorChange,
+  handleBatchPickerColorChangeComplete,
+  getBatchPickerColor,
+  getBatchPickerRef,
+  batchColorPickerInteractiveRefs,
+  panelElement,
+  useCustomCSS,
+  selectedKeyType,
+  t,
+}) => {
+  const hasGraphSelection = selectedGraphElements.length > 0;
+  const styleMixedValueGetter = hasGraphSelection
+    ? getMixedValueBatch
+    : getMixedValue;
+  const styleSelectedDataGetter = hasGraphSelection
+    ? getSelectedBatchStyleData
+    : getSelectedKeysData;
+
+  const getBatchNoteColorDisplay = () => {
+    if (batchPickerFor === 'noteColor') {
+      const value = batchLocalColors.noteColor;
+      if (
+        value &&
+        typeof value === 'object' &&
+        'type' in value &&
+        value.type === 'gradient'
+      ) {
+        return {
+          style: {
+            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+          },
+          label: 'Gradient',
+          isMixed: false,
+        };
+      }
+      const color = typeof value === 'string' ? value : '#FFFFFF';
+      return {
+        style: { backgroundColor: color },
+        label: color.replace(/^#/, ''),
+        isMixed: false,
+      };
+    }
+
+    const mixedFn =
+      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+    const { isMixed, value } = mixedFn(
+      (pos) => pos.noteColor,
+      '#FFFFFF' as NoteColor,
+    );
+    if (isMixed)
+      return {
+        style: { backgroundColor: '#666' },
+        label: 'Mixed',
+        isMixed: true,
+      };
+    if (
+      value &&
+      typeof value === 'object' &&
+      'type' in value &&
+      value.type === 'gradient'
+    ) {
+      return {
+        style: {
+          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        },
+        label: 'Gradient',
+        isMixed: false,
+      };
+    }
+    const color = typeof value === 'string' ? value : '#FFFFFF';
+    return {
+      style: { backgroundColor: color },
+      label: color.replace(/^#/, ''),
+      isMixed: false,
+    };
+  };
+
+  const getBatchGlowColorDisplay = () => {
+    if (batchPickerFor === 'glowColor') {
+      const value = batchLocalColors.glowColor;
+      if (
+        value &&
+        typeof value === 'object' &&
+        'type' in value &&
+        value.type === 'gradient'
+      ) {
+        return {
+          style: {
+            background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+          },
+          label: 'Gradient',
+          isMixed: false,
+        };
+      }
+      const color = typeof value === 'string' ? value : '#FFFFFF';
+      return {
+        style: { backgroundColor: color },
+        label: color.replace(/^#/, ''),
+        isMixed: false,
+      };
+    }
+
+    const mixedFn =
+      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+    const { isMixed, value } = mixedFn(
+      (pos) => pos.noteGlowColor ?? pos.noteColor,
+      '#FFFFFF' as NoteColor,
+    );
+    if (isMixed)
+      return {
+        style: { backgroundColor: '#666' },
+        label: 'Mixed',
+        isMixed: true,
+      };
+    if (
+      value &&
+      typeof value === 'object' &&
+      'type' in value &&
+      value.type === 'gradient'
+    ) {
+      return {
+        style: {
+          background: `linear-gradient(to bottom, ${value.top}, ${value.bottom})`,
+        },
+        label: 'Gradient',
+        isMixed: false,
+      };
+    }
+    const color = typeof value === 'string' ? value : '#FFFFFF';
+    return {
+      style: { backgroundColor: color },
+      label: color.replace(/^#/, ''),
+      isMixed: false,
+    };
+  };
+
+  const keysData = getSelectedKeysData();
+  const batchCounterSettings = keysData[0]?.position
+    ? normalizeCounterSettings(keysData[0].position.counter)
+    : createDefaultCounterSettings();
+  const firstPos = keysData[0]?.position;
+  const batchKeyVisual = firstPos
+    ? {
+        width: firstPos.width,
+        height: firstPos.height,
+        backgroundColor: firstPos.backgroundColor,
+        borderColor: firstPos.borderColor,
+        borderWidth: firstPos.borderWidth,
+        borderRadius: firstPos.borderRadius,
+        fontColor: firstPos.fontColor,
+        fontSize: firstPos.fontSize,
+        fontWeight: firstPos.fontWeight,
+        fontFamily: firstPos.fontFamily,
+        fontItalic: firstPos.fontItalic,
+        fontUnderline: firstPos.fontUnderline,
+        fontStrikethrough: firstPos.fontStrikethrough,
+        displayText: firstPos.displayText,
+        displayName: keysData[0]?.keyInfo?.displayName,
+        className: firstPos.className,
+        activeBackgroundColor: firstPos.activeBackgroundColor,
+        activeBorderColor: firstPos.activeBorderColor,
+        activeFontColor: firstPos.activeFontColor,
+        useInlineStyles: firstPos.useInlineStyles,
+        isStat: selectedKeyLikeElements[0]?.type === 'stat',
+      }
+    : undefined;
+  const noteOpacityMixed = getMixedValue((pos) => pos.noteOpacity, 80).isMixed;
+  const glowOpacityMixed = getMixedValue(
+    (pos) => pos.noteGlowOpacity,
+    70,
+  ).isMixed;
+  const batchSpacing = getBatchSpacingValue();
+  const graphTypeState = getMixedValueGraphs(
+    (pos) => pos.graphType || 'line',
+    'line' as string,
+  );
+  const showAvgLineState = getMixedValueGraphs(
+    (pos) => pos.showAvgLine ?? true,
+    true,
+  );
+  const graphSpeedState = getMixedValueGraphs(
+    (pos) => Math.round(pos.graphSpeed || 1000),
+    1000,
+  );
+  const graphColorState = getMixedValueGraphs(
+    (pos) => pos.graphColor || '#86EFAC',
+    '#86EFAC',
+  );
+  const graphAnimationState = getMixedValueGraphs(
+    (pos) => pos.graphAnimationEnabled ?? true,
+    true,
+  );
+  const hasLineGraph = getSelectedGraphsData().some(
+    (data) =>
+      ((data.position as GraphItemPosition | undefined)?.graphType ||
+        'line') === 'line',
+  );
+  const graphShapeOptions = [
+    { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
+    { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
+  ];
+
+  const getCounterColorDisplay = (target: 'fill' | 'stroke') => {
+    const key =
+      target === 'fill'
+        ? batchCounterColorState === 'active'
+          ? 'fillActive'
+          : 'fillIdle'
+        : batchCounterColorState === 'active'
+        ? 'strokeActive'
+        : 'strokeIdle';
+
+    if (batchPickerFor === target) {
+      return batchLocalColors[key];
+    }
+
+    return target === 'fill'
+      ? batchCounterColorState === 'active'
+        ? batchCounterSettings.fill.active
+        : batchCounterSettings.fill.idle
+      : batchCounterColorState === 'active'
+      ? batchCounterSettings.stroke.active
+      : batchCounterSettings.stroke.idle;
+  };
+
+  return (
+    <div
+      ref={setPanelElement}
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+    >
+      {/* 헤더 + 탭 영역 */}
+      <div className="flex-shrink-0 border-b border-[#3A3943]">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+          <div className="flex items-center gap-[8px]">
+            {selectedGroupInfo ? (
+              isRenaming ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelledRef.current) {
+                      handleRenameCommit(renameValue);
+                    }
+                    renameCancelledRef.current = false;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleRenameCancel();
+                    }
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-[4px] min-w-0">
+                  <span
+                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    onDoubleClick={handleRenameStart}
+                    title={selectedGroupInfo.name}
+                  >
+                    {selectedGroupInfo.name}
+                  </span>
+                  <button
+                    onClick={handleRenameStart}
+                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    title={t('contextMenu.rename') || 'Rename'}
+                  >
+                    <RenameIcon />
+                  </button>
+                </div>
+              )
+            ) : (
+              <span className="text-[#DBDEE8] text-style-2">
+                {t('propertiesPanel.multiSelection') || '다중 선택'}
+              </span>
+            )}
+            {!selectedGroupInfo && (
+              <span className="text-[#6B6D75] text-style-4">
+                ({selectedBatchStyleElements.length})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-[4px]">
+            <button
+              onClick={handleToggleMode}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            >
+              <ModeToggleIcon mode="layer" />
+            </button>
+            <button
+              onClick={handleTogglePanel}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+            >
+              <SidebarToggleIcon isOpen={true} />
+            </button>
+          </div>
+        </div>
+
+        {/* 탭 */}
+        <div className="px-[12px] pb-[12px]">
+          <Tabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            t={t}
+            availableTabs={
+              selectedKeyElements.length > 0
+                ? [TABS.STYLE, TABS.NOTE, TABS.COUNTER]
+                : [TABS.STYLE, TABS.COUNTER]
+            }
+          />
+        </div>
+      </div>
+
+      <>
+        <div className="flex-1 properties-panel-overlay-scroll">
+          {/* STYLE 탭 viewport */}
+          <div
+            ref={batchScrollRefFor(TABS.STYLE)}
+            className={`properties-panel-overlay-viewport ${
+              activeTab === TABS.STYLE ? '' : 'hidden'
+            }`}
+          >
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <BatchStyleTabContent
+                selectedCount={selectedBatchStyleElements.length}
+                showSoundControls={selectedKeyElements.length > 0}
+                getMixedValue={styleMixedValueGetter}
+                getSelectedKeysData={styleSelectedDataGetter}
+                afterSizeContent={
+                  hasGraphSelection ? (
+                    <>
+                      <PropertyRow
+                        label={t('propertiesPanel.graphShape') || 'Graph Shape'}
+                      >
+                        {graphTypeState.isMixed ? (
+                          <span className="text-[#6B6D75] text-style-4 italic">
+                            Mixed
+                          </span>
+                        ) : null}
+                        <Dropdown
+                          options={graphShapeOptions}
+                          value={graphTypeState.value}
+                          onChange={(value) =>
+                            handleGraphBatchSharedSetting({
+                              graphType: value as GraphItemType,
+                            })
+                          }
+                        />
+                      </PropertyRow>
+
+                      {hasLineGraph && (
+                        <div className="flex justify-between items-center w-full h-[23px]">
+                          <p className="text-white text-style-2">
+                            {t('propertiesPanel.graphShowAverageLine') ||
+                              'Show Average Line'}
+                          </p>
+                          <Checkbox
+                            checked={showAvgLineState.value}
+                            onChange={() =>
+                              handleGraphBatchSharedSetting({
+                                showAvgLine: !showAvgLineState.value,
+                              })
+                            }
+                          />
+                        </div>
+                      )}
+
+                      <PropertyRow
+                        label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
+                      >
+                        {graphSpeedState.isMixed ? (
+                          <span className="text-[#6B6D75] text-style-4 italic">
+                            Mixed
+                          </span>
+                        ) : null}
+                        <NumberInput
+                          value={graphSpeedState.value}
+                          width="62px"
+                          onChange={(value) => {
+                            const clamped = Math.max(
+                              500,
+                              Math.min(5000, value),
+                            );
+                            const snapped = Math.round(clamped / 100) * 100;
+                            handleGraphBatchSharedSetting({
+                              graphSpeed: snapped,
+                            });
+                          }}
+                          min={500}
+                          max={5000}
+                          suffix="ms"
+                          isMixed={graphSpeedState.isMixed}
+                        />
+                      </PropertyRow>
+
+                      <PropertyRow
+                        label={t('propertiesPanel.graphColor') || 'Graph Color'}
+                      >
+                        {graphColorState.isMixed ? (
+                          <span className="text-[#6B6D75] text-style-4 italic">
+                            Mixed
+                          </span>
+                        ) : null}
+                        <ColorInput
+                          value={graphColorState.value}
+                          onChange={() => {}}
+                          onChangeComplete={(value) =>
+                            handleGraphBatchSharedSetting({
+                              graphColor: value,
+                            })
+                          }
+                          colorId={`graph-batch-mixed-color-${selectedKeyType}`}
+                          panelElement={panelElement}
+                        />
+                      </PropertyRow>
+
+                      <div className="flex justify-between items-center w-full h-[23px]">
+                        <p className="text-white text-style-2">
+                          {t('propertiesPanel.graphAnimation') ||
+                            'Graph Animation'}
+                        </p>
+                        <div className="flex items-center gap-[6px]">
+                          {graphAnimationState.isMixed ? (
+                            <span className="text-[#6B6D75] text-style-4 italic">
+                              Mixed
+                            </span>
+                          ) : null}
+                          <Checkbox
+                            checked={graphAnimationState.value}
+                            onChange={() =>
+                              handleGraphBatchSharedSetting({
+                                graphAnimationEnabled:
+                                  !graphAnimationState.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : undefined
+                }
+                handleBatchAlign={handleBatchAlign}
+                handleBatchDistribute={handleBatchDistribute}
+                handleBatchSpacing={handleBatchSpacing}
+                handleBatchSpacingPreview={handleBatchSpacingPreview}
+                handleBatchSpacingCommit={handleBatchSpacingCommit}
+                batchSpacing={batchSpacing}
+                handleBatchResize={handleBatchResize}
+                handleBatchStyleChange={handleBatchStyleChange}
+                handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+                getKeyOnlyMixedValue={getMixedValueKeysOnly}
+                handleKeyOnlyStyleChangeComplete={
+                  handleKeyOnlyStyleChangeComplete
+                }
+                showBatchImagePicker={showBatchImagePicker}
+                onToggleBatchImagePicker={() =>
+                  setShowBatchImagePicker(!showBatchImagePicker)
+                }
+                batchImageButtonRef={batchImageButtonRef}
+                panelElement={panelElement}
+                useCustomCSS={useCustomCSS}
+                t={t}
+              />
+            </div>
+            <div className="properties-panel-overlay-bar">
+              <div
+                ref={batchThumbRefFor(TABS.STYLE)}
+                className="properties-panel-overlay-thumb"
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
+
+          {/* NOTE 탭 viewport */}
+          {selectedKeyElements.length > 0 && (
+            <div
+              ref={batchScrollRefFor(TABS.NOTE)}
+              className={`properties-panel-overlay-viewport ${
+                activeTab === TABS.NOTE ? '' : 'hidden'
+              }`}
+            >
+              <div className="p-[12px] flex flex-col gap-[12px]">
+                <BatchNoteTabContent
+                  getMixedValue={getMixedValueKeysOnly}
+                  handleBatchStyleChangeComplete={
+                    handleBatchKeyOnlyStyleChangeComplete
+                  }
+                  getBatchNoteColorDisplay={getBatchNoteColorDisplay}
+                  getBatchGlowColorDisplay={getBatchGlowColorDisplay}
+                  onNoteColorPickerToggle={() =>
+                    handleBatchPickerToggle('noteColor')
+                  }
+                  onGlowColorPickerToggle={() =>
+                    handleBatchPickerToggle('glowColor')
+                  }
+                  isNoteColorPickerOpen={batchPickerFor === 'noteColor'}
+                  isGlowColorPickerOpen={batchPickerFor === 'glowColor'}
+                  batchNoteColorButtonRef={batchNoteColorButtonRef}
+                  batchGlowColorButtonRef={batchGlowColorButtonRef}
+                  t={t}
+                />
+              </div>
+              <div className="properties-panel-overlay-bar">
+                <div
+                  ref={batchThumbRefFor(TABS.NOTE)}
+                  className="properties-panel-overlay-thumb"
+                  style={{ display: 'none' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* COUNTER 탭 viewport */}
+          <div
+            ref={batchScrollRefFor(TABS.COUNTER)}
+            className={`properties-panel-overlay-viewport ${
+              activeTab === TABS.COUNTER ? '' : 'hidden'
+            }`}
+          >
+            <div className="p-[12px] flex flex-col gap-[12px]">
+              <BatchCounterTabContent
+                batchCounterSettings={batchCounterSettings}
+                keyVisual={batchKeyVisual}
+                handleBatchCounterUpdate={handleBatchCounterUpdate}
+                colorState={batchCounterColorState}
+                getCounterColorDisplay={getCounterColorDisplay}
+                onFillPickerToggle={() => handleBatchPickerToggle('fill')}
+                onStrokePickerToggle={() => handleBatchPickerToggle('stroke')}
+                batchCounterFillButtonRef={batchCounterFillButtonRef}
+                batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
+                isFillPickerOpen={batchPickerFor === 'fill'}
+                isStrokePickerOpen={batchPickerFor === 'stroke'}
+                panelElement={panelElement}
+                t={t}
+              />
+            </div>
+            <div className="properties-panel-overlay-bar">
+              <div
+                ref={batchThumbRefFor(TABS.COUNTER)}
+                className="properties-panel-overlay-thumb"
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 배치 편집용 로컬 ColorPicker */}
+        {batchPickerFor && (
+          <ColorPicker
+            open={!!batchPickerFor}
+            referenceRef={getBatchPickerRef()}
+            panelElement={panelElement}
+            color={getBatchPickerColor()}
+            onColorChange={handleBatchPickerColorChange}
+            onColorChangeComplete={handleBatchPickerColorChangeComplete}
+            onClose={() => setBatchPickerFor(null)}
+            interactiveRefs={batchColorPickerInteractiveRefs}
+            solidOnly={
+              batchPickerFor !== 'noteColor' && batchPickerFor !== 'glowColor'
+            }
+            stateMode={
+              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+                ? batchCounterColorState
+                : undefined
+            }
+            onStateModeChange={
+              batchPickerFor === 'fill' || batchPickerFor === 'stroke'
+                ? setBatchCounterColorState
+                : undefined
+            }
+            opacityPercent={
+              batchPickerFor === 'noteColor'
+                ? batchLocalOpacities.noteOpacity
+                : batchPickerFor === 'glowColor'
+                ? batchLocalOpacities.glowOpacity
+                : undefined
+            }
+            onOpacityPercentChange={(value: number) => {
+              if (batchPickerFor === 'noteColor') {
+                setBatchLocalOpacities((prev) => ({
+                  ...prev,
+                  noteOpacity: value,
+                }));
+                handleBatchStyleChange('noteOpacity', value);
+              } else if (batchPickerFor === 'glowColor') {
+                setBatchLocalOpacities((prev) => ({
+                  ...prev,
+                  glowOpacity: value,
+                }));
+                handleBatchStyleChange('noteGlowOpacity', value);
+              }
+            }}
+            onOpacityPercentChangeComplete={(value: number) => {
+              if (batchPickerFor === 'noteColor') {
+                setBatchLocalOpacities((prev) => ({
+                  ...prev,
+                  noteOpacity: value,
+                }));
+                handleBatchStyleChangeComplete('noteOpacity', value);
+              } else if (batchPickerFor === 'glowColor') {
+                setBatchLocalOpacities((prev) => ({
+                  ...prev,
+                  glowOpacity: value,
+                }));
+                handleBatchStyleChangeComplete('noteGlowOpacity', value);
+              }
+            }}
+            opacityPercentLabel={
+              batchPickerFor === 'noteColor'
+                ? t('keySetting.noteOpacity') || '노트 투명도'
+                : batchPickerFor === 'glowColor'
+                ? t('keySetting.noteGlowOpacity') || '글로우 투명도'
+                : undefined
+            }
+            opacityPercentMixed={
+              batchPickerFor === 'noteColor'
+                ? noteOpacityMixed
+                : batchPickerFor === 'glowColor'
+                ? glowOpacityMixed
+                : false
+            }
+          />
+        )}
+
+        {/* 다중 선택용 ImagePicker */}
+        {showBatchImagePicker && batchImageButtonRef.current && (
+          <ImagePicker
+            open={showBatchImagePicker}
+            referenceRef={batchImageButtonRef}
+            panelElement={panelElement}
+            idleImage={
+              styleMixedValueGetter((pos) => pos.inactiveImage, '').isMixed
+                ? ''
+                : styleMixedValueGetter((pos) => pos.inactiveImage, '').value
+            }
+            activeImage={
+              styleMixedValueGetter((pos) => pos.activeImage, '').isMixed
+                ? ''
+                : styleMixedValueGetter((pos) => pos.activeImage, '').value
+            }
+            idleTransparent={
+              styleMixedValueGetter((pos) => pos.idleTransparent, false).value
+            }
+            activeTransparent={
+              styleMixedValueGetter((pos) => pos.activeTransparent, false).value
+            }
+            onIdleImageChange={(imageUrl: string) => {
+              handleBatchStyleChangeComplete('inactiveImage', imageUrl);
+            }}
+            onActiveImageChange={(imageUrl: string) => {
+              handleBatchStyleChangeComplete('activeImage', imageUrl);
+            }}
+            onIdleTransparentChange={(value: boolean) => {
+              handleBatchStyleChangeComplete('idleTransparent', value);
+            }}
+            onActiveTransparentChange={(value: boolean) => {
+              handleBatchStyleChangeComplete('activeTransparent', value);
+            }}
+            onIdleImageReset={() => {
+              handleBatchStyleChangeComplete('inactiveImage', '');
+            }}
+            onActiveImageReset={() => {
+              handleBatchStyleChangeComplete('activeImage', '');
+            }}
+            onClose={() => setShowBatchImagePicker(false)}
+          />
+        )}
+      </>
+    </div>
+  );
+};
+
+// ============================================================================
+// Graph-only batch selection panel
+// ============================================================================
+
+interface BatchGraphOnlyPanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  selectedGraphElements: SelectedElement[];
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleToggleMode: () => void;
+  handleTogglePanel: () => void;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  handleBatchSpacingPreview: (spacing: number) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
+  handleGraphBatchSharedSetting: (updates: Partial<GraphItemPosition>) => void;
+  getMixedValueGraphs: MixedValueGetter<GraphItemPosition>;
+  getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
+  getSelectedGraphsData: () => KeyData[];
+  batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
+  showBatchImagePicker: boolean;
+  setShowBatchImagePicker: (value: boolean) => void;
+  panelElement: HTMLDivElement | null;
+  useCustomCSS: boolean;
+  selectedKeyType: string;
+  t: (key: string) => string | undefined;
+}
+
+export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
+  setPanelElement,
+  selectedGraphElements,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleToggleMode,
+  handleTogglePanel,
+  handleBatchAlign,
+  handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingPreview,
+  handleBatchSpacingCommit,
+  getBatchSpacingValue,
+  handleBatchResize,
+  handleBatchStyleChange,
+  handleBatchStyleChangeComplete,
+  handleGraphBatchSharedSetting,
+  getMixedValueGraphs,
+  getMixedValueGraphsAsKey,
+  getSelectedGraphsData,
+  batchScrollRefFor,
+  batchThumbRefFor,
+  batchImageButtonRef,
+  showBatchImagePicker,
+  setShowBatchImagePicker,
+  panelElement,
+  useCustomCSS,
+  selectedKeyType,
+  t,
+}) => {
+  const graphShapeOptions = [
+    { label: t('propertiesPanel.graphShapeLine') || 'Line', value: 'line' },
+    { label: t('propertiesPanel.graphShapeBar') || 'Bar', value: 'bar' },
+  ];
+  const graphTypeState = getMixedValueGraphs(
+    (pos) => pos.graphType || 'line',
+    'line' as string,
+  );
+  const showAvgLineState = getMixedValueGraphs(
+    (pos) => pos.showAvgLine ?? true,
+    true,
+  );
+  const graphSpeedState = getMixedValueGraphs(
+    (pos) => Math.round(pos.graphSpeed || 1000),
+    1000,
+  );
+  const graphColorState = getMixedValueGraphs(
+    (pos) => pos.graphColor || '#86EFAC',
+    '#86EFAC',
+  );
+  const graphAnimationState = getMixedValueGraphs(
+    (pos) => pos.graphAnimationEnabled ?? true,
+    true,
+  );
+  const hasLineGraph = getSelectedGraphsData().some(
+    (data) =>
+      ((data.position as GraphItemPosition | undefined)?.graphType ||
+        'line') === 'line',
+  );
+  const batchGraphSpacing = getBatchSpacingValue();
+
+  return (
+    <div
+      ref={setPanelElement}
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+    >
+      <div className="flex-shrink-0 border-b border-[#3A3943]">
+        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+          <div className="flex items-center gap-[8px]">
+            {selectedGroupInfo ? (
+              isRenaming ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelledRef.current) {
+                      handleRenameCommit(renameValue);
+                    }
+                    renameCancelledRef.current = false;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleRenameCancel();
+                    }
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-[4px] min-w-0">
+                  <span
+                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    onDoubleClick={handleRenameStart}
+                    title={selectedGroupInfo.name}
+                  >
+                    {selectedGroupInfo.name}
+                  </span>
+                  <button
+                    onClick={handleRenameStart}
+                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    title={t('contextMenu.rename') || 'Rename'}
+                  >
+                    <RenameIcon />
+                  </button>
+                </div>
+              )
+            ) : (
+              <span className="text-[#DBDEE8] text-style-2">
+                {t('propertiesPanel.multiSelection') || '다중 선택'}
+              </span>
+            )}
+            {!selectedGroupInfo && (
+              <span className="text-[#6B6D75] text-style-4">
+                ({selectedGraphElements.length})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-[4px]">
+            <button
+              onClick={handleToggleMode}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            >
+              <ModeToggleIcon mode="layer" />
+            </button>
+            <button
+              onClick={handleTogglePanel}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+            >
+              <SidebarToggleIcon isOpen={true} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={batchScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <div className="p-[12px] flex flex-col gap-[12px]">
+            <BatchStyleTabContent
+              selectedCount={selectedGraphElements.length}
+              hideDisplayText
+              hideFontControls
+              showSoundControls={false}
+              afterSizeContent={
+                <>
+                  <PropertyRow
+                    label={t('propertiesPanel.graphShape') || 'Graph Shape'}
+                  >
+                    {graphTypeState.isMixed ? (
+                      <span className="text-[#6B6D75] text-style-4 italic">
+                        Mixed
+                      </span>
+                    ) : null}
+                    <Dropdown
+                      options={graphShapeOptions}
+                      value={graphTypeState.value}
+                      onChange={(value) =>
+                        handleGraphBatchSharedSetting({
+                          graphType: value as GraphItemType,
+                        })
+                      }
+                    />
+                  </PropertyRow>
+
+                  {hasLineGraph && (
+                    <div className="flex justify-between items-center w-full h-[23px]">
+                      <p className="text-white text-style-2">
+                        {t('propertiesPanel.graphShowAverageLine') ||
+                          'Show Average Line'}
+                      </p>
+                      <Checkbox
+                        checked={showAvgLineState.value}
+                        onChange={() =>
+                          handleGraphBatchSharedSetting({
+                            showAvgLine: !showAvgLineState.value,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+
+                  <PropertyRow
+                    label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
+                  >
+                    {graphSpeedState.isMixed ? (
+                      <span className="text-[#6B6D75] text-style-4 italic">
+                        Mixed
+                      </span>
+                    ) : null}
+                    <NumberInput
+                      value={graphSpeedState.value}
+                      width="62px"
+                      onChange={(value) => {
+                        const clamped = Math.max(500, Math.min(5000, value));
+                        const snapped = Math.round(clamped / 100) * 100;
+                        handleGraphBatchSharedSetting({
+                          graphSpeed: snapped,
+                        });
+                      }}
+                      min={500}
+                      max={5000}
+                      suffix="ms"
+                      isMixed={graphSpeedState.isMixed}
+                    />
+                  </PropertyRow>
+
+                  <PropertyRow
+                    label={t('propertiesPanel.graphColor') || 'Graph Color'}
+                  >
+                    {graphColorState.isMixed ? (
+                      <span className="text-[#6B6D75] text-style-4 italic">
+                        Mixed
+                      </span>
+                    ) : null}
+                    <ColorInput
+                      value={graphColorState.value}
+                      onChange={() => {}}
+                      onChangeComplete={(value) =>
+                        handleGraphBatchSharedSetting({ graphColor: value })
+                      }
+                      colorId={`graph-batch-color-${selectedKeyType}`}
+                      panelElement={panelElement}
+                    />
+                  </PropertyRow>
+
+                  <div className="flex justify-between items-center w-full h-[23px]">
+                    <p className="text-white text-style-2">
+                      {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
+                    </p>
+                    <div className="flex items-center gap-[6px]">
+                      {graphAnimationState.isMixed ? (
+                        <span className="text-[#6B6D75] text-style-4 italic">
+                          Mixed
+                        </span>
+                      ) : null}
+                      <Checkbox
+                        checked={graphAnimationState.value}
+                        onChange={() =>
+                          handleGraphBatchSharedSetting({
+                            graphAnimationEnabled: !graphAnimationState.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              }
+              getMixedValue={getMixedValueGraphsAsKey}
+              getSelectedKeysData={getSelectedGraphsData}
+              handleBatchAlign={handleBatchAlign}
+              handleBatchDistribute={handleBatchDistribute}
+              handleBatchSpacing={handleBatchSpacing}
+              handleBatchSpacingPreview={handleBatchSpacingPreview}
+              handleBatchSpacingCommit={handleBatchSpacingCommit}
+              batchSpacing={batchGraphSpacing}
+              handleBatchResize={handleBatchResize}
+              handleBatchStyleChange={handleBatchStyleChange}
+              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              showBatchImagePicker={showBatchImagePicker}
+              onToggleBatchImagePicker={() =>
+                setShowBatchImagePicker(!showBatchImagePicker)
+              }
+              batchImageButtonRef={batchImageButtonRef}
+              panelElement={panelElement}
+              useCustomCSS={useCustomCSS}
+              t={t}
+            />
+          </div>
+          <div className="properties-panel-overlay-bar">
+            <div
+              ref={batchThumbRefFor(TABS.STYLE)}
+              className="properties-panel-overlay-thumb"
+              style={{ display: 'none' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {showBatchImagePicker && batchImageButtonRef.current && (
+        <ImagePicker
+          open={showBatchImagePicker}
+          referenceRef={batchImageButtonRef}
+          panelElement={panelElement}
+          idleImage={
+            getMixedValueGraphs((pos) => pos.inactiveImage, '').isMixed
+              ? ''
+              : getMixedValueGraphs((pos) => pos.inactiveImage, '').value
+          }
+          activeImage={
+            getMixedValueGraphs((pos) => pos.activeImage, '').isMixed
+              ? ''
+              : getMixedValueGraphs((pos) => pos.activeImage, '').value
+          }
+          idleTransparent={
+            getMixedValueGraphs((pos) => pos.idleTransparent, false).value
+          }
+          activeTransparent={
+            getMixedValueGraphs((pos) => pos.activeTransparent, false).value
+          }
+          onIdleImageChange={(imageUrl: string) => {
+            handleGraphBatchSharedSetting({ inactiveImage: imageUrl });
+          }}
+          onActiveImageChange={(imageUrl: string) => {
+            handleGraphBatchSharedSetting({ activeImage: imageUrl });
+          }}
+          onIdleTransparentChange={(value: boolean) => {
+            handleGraphBatchSharedSetting({ idleTransparent: value });
+          }}
+          onActiveTransparentChange={(value: boolean) => {
+            handleGraphBatchSharedSetting({ activeTransparent: value });
+          }}
+          onIdleImageReset={() => {
+            handleGraphBatchSharedSetting({ inactiveImage: '' });
+          }}
+          onActiveImageReset={() => {
+            handleGraphBatchSharedSetting({ activeImage: '' });
+          }}
+          onClose={() => setShowBatchImagePicker(false)}
+        />
+      )}
+    </div>
+  );
+};

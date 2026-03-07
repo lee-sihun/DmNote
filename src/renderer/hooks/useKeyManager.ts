@@ -1,45 +1,55 @@
-import { useState, useCallback } from "react";
-import { useKeyStore } from "@stores/useKeyStore";
-import { useStatItemStore } from "@stores/useStatItemStore";
-import { useGraphItemStore } from "@stores/useGraphItemStore";
-import { useLayerGroupStore } from "@stores/useLayerGroupStore";
-import { useHistoryStore } from "@stores/useHistoryStore";
-import { usePluginDisplayElementStore } from "@stores/usePluginDisplayElementStore";
-import { setUndoRedoInProgress } from "@api/pluginDisplayElements";
-import { applyCounterSnapshot } from "@stores/keyCounterSignals";
+import { useState, useRef } from 'react';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
 import type {
-  CounterAnimationBezier,
   KeyMappings,
   KeyPositions,
   NoteColor,
   KeyCounterSettings,
   ImageFit,
-} from "@src/types/keys";
+} from '@src/types/key/keys';
+import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+
+// editor/model — 순수 상태 변환 함수
 import {
-  createDefaultCounterSettings,
-  normalizeCounterSettings,
-} from "@src/types/keys";
+  addKey,
+  removeKey,
+  duplicateKey,
+  updateKeyPosition,
+  updateKeyStyle,
+  batchUpdateKeyStyle,
+  updateNoteColor,
+  updateCounterSettings,
+  updateKeyMapping,
+} from '@src/renderer/editor/model/keys';
+import {
+  computeMoveToFront,
+  computeMoveToBack,
+  computeMoveForward,
+  computeMoveBackward,
+  type ExternalZIndexSource,
+} from '@src/renderer/editor/model/zOrder';
+
+// editor/runtime — store/API 연동
+import {
+  pushCurrentStateToHistory,
+  applyRestoredStateToStores,
+  applyRestoredPluginElements,
+  persistRestoredState,
+} from '@src/renderer/editor/runtime/editorSnapshot';
+import {
+  persistPositionsWithSync,
+  persistMappingsAndPositions,
+  persistPositions,
+  persistPositionsWithFlag,
+} from '@src/renderer/editor/runtime/persistState';
 
 type SelectedKey = { key: string; index: number } | null;
-
-type BoundingBox = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-/**
- * 두 바운딩 박스가 겹치는지 확인
- */
-function boxesOverlap(a: BoundingBox, b: BoundingBox): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  );
-}
 
 type KeyUpdatePayload = {
   key: string;
@@ -60,7 +70,25 @@ type KeyUpdatePayload = {
   className?: string;
 };
 
-type CounterUpdatePayload = KeyCounterSettings;
+/** 플러그인 요소에서 zIndex + bounds 정보 추출 */
+function getPluginExternalElements(): ExternalZIndexSource[] {
+  const pluginElements = usePluginDisplayElementStore.getState().elements;
+  return pluginElements.map((el) => ({
+    zIndex: el.zIndex ?? 0,
+    bounds: {
+      x: el.position.x,
+      y: el.position.y,
+      width: el.measuredSize?.width ?? el.estimatedSize?.width ?? 100,
+      height: el.measuredSize?.height ?? el.estimatedSize?.height ?? 100,
+    },
+  }));
+}
+
+/** 플러그인 요소의 zIndex 목록 추출 */
+function getPluginZIndexes(): number[] {
+  const pluginElements = usePluginDisplayElementStore.getState().elements;
+  return pluginElements.map((el) => el.zIndex ?? 0);
+}
 
 export function useKeyManager() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
@@ -74,7 +102,6 @@ export function useKeyManager() {
     (state) => state.setLocalUpdateInProgress,
   );
 
-  const pushState = useHistoryStore((state) => state.pushState);
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
   const undo = useHistoryStore((state) => state.undo);
@@ -82,62 +109,34 @@ export function useKeyManager() {
 
   const [selectedKey, setSelectedKey] = useState<SelectedKey>(null);
 
-  // 플러그인 요소 스토어
-  const pluginElements = usePluginDisplayElementStore(
-    (state) => state.elements,
-  );
-  const setPluginElements = usePluginDisplayElementStore(
-    (state) => state.setElements,
-  );
+  // preview 시작 시 히스토리 저장 여부 추적
+  // preview가 store를 직접 변경하므로, commit 시점이 아닌 preview 시작 시점에 저장해야 함
+  const previewHistorySavedRef = useRef(false);
 
-  // 히스토리에 현재 상태 저장 (플러그인 요소 포함)
-  const saveToHistory = useCallback(() => {
-    pushState(
-      keyMappings,
-      positions,
-      statPositions,
-      graphPositions,
-      pluginElements
-    );
-  }, [
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    pluginElements,
-    pushState,
-  ]);
+  // ────────────────────────────────────────────────────────────────────────
+  // 키 CRUD
+  // ────────────────────────────────────────────────────────────────────────
 
   const handlePositionChange = (index: number, dx: number, dy: number) => {
     const current = positions[selectedKeyType] || [];
     const oldPosition = current[index];
-
-    // 실제로 위치가 변경된 경우에만 히스토리에 저장
     if (oldPosition && (oldPosition.dx !== dx || oldPosition.dy !== dy)) {
-      saveToHistory();
+      pushCurrentStateToHistory();
     }
 
-    const nextPositions: KeyPositions = {
-      ...positions,
-      [selectedKeyType]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              dx,
-              dy,
-            }
-          : pos,
-      ),
-    };
+    const nextPositions = updateKeyPosition(
+      positions,
+      selectedKeyType,
+      index,
+      dx,
+      dy,
+    );
     setPositions(nextPositions);
-    window.api.keys.updatePositions(nextPositions).catch((error) => {
-      console.error("Failed to update key positions", error);
-    });
+    persistPositions(nextPositions);
   };
 
   const handleKeyUpdate = (keyData: KeyUpdatePayload) => {
-    // 키 설정 모달에서 적용하기 클릭 시 호출됨
-    saveToHistory();
+    pushCurrentStateToHistory();
 
     const mapping = keyMappings[selectedKeyType] || [];
     const pos = positions[selectedKeyType] || [];
@@ -164,7 +163,7 @@ export function useKeyManager() {
                   keyData.idleTransparent ?? value.idleTransparent ?? false,
                 width: keyData.width,
                 height: keyData.height,
-                noteColor: keyData.noteColor ?? value.noteColor ?? "#FFFFFF",
+                noteColor: keyData.noteColor ?? value.noteColor ?? '#FFFFFF',
                 noteOpacity: keyData.noteOpacity ?? value.noteOpacity ?? 80,
                 noteEffectEnabled:
                   keyData.noteEffectEnabled ?? value.noteEffectEnabled ?? true,
@@ -178,7 +177,7 @@ export function useKeyManager() {
                   keyData.noteAutoYCorrection ??
                   value.noteAutoYCorrection ??
                   true,
-                className: keyData.className ?? value.className ?? "",
+                className: keyData.className ?? value.className ?? '',
               }
             : value,
         ),
@@ -186,198 +185,61 @@ export function useKeyManager() {
 
       setKeyMappings(updatedMappings);
       setPositions(updatedPositions);
-
-      Promise.all([
-        window.api.keys.update(updatedMappings),
-        window.api.keys.updatePositions(updatedPositions),
-      ]).catch((error) => {
-        console.error("Failed to persist key update", error);
-      });
-
+      persistMappingsAndPositions(updatedMappings, updatedPositions);
       setSelectedKey(null);
     }
   };
 
   const handleAddKey = () => {
-    saveToHistory();
-
-    const mapping = keyMappings[selectedKeyType] || [];
-    const pos = positions[selectedKeyType] || [];
-
-    const updatedMappings: KeyMappings = {
-      ...keyMappings,
-      [selectedKeyType]: [...mapping, ""],
-    };
-
-    const updatedPositions: KeyPositions = {
-      ...positions,
-      [selectedKeyType]: [
-        ...pos,
-        {
-          dx: 0,
-          dy: 0,
-          width: 60,
-          height: 60,
-          hidden: false,
-          activeImage: "",
-          inactiveImage: "",
-          soundPath: "",
-          soundVolume: 100,
-          activeTransparent: false,
-          idleTransparent: false,
-          count: 0,
-          noteColor: "#FFFFFF",
-          noteOpacity: 80,
-          noteEffectEnabled: true,
-          noteGlowEnabled: false,
-          noteGlowSize: 20,
-          noteGlowOpacity: 70,
-          noteGlowColor: "#FFFFFF",
-          noteAutoYCorrection: true,
-          className: "",
-          counter: createDefaultCounterSettings(),
-        },
-      ],
-    };
-
-    setKeyMappings(updatedMappings);
-    setPositions(updatedPositions);
-
-    Promise.all([
-      window.api.keys.update(updatedMappings),
-      window.api.keys.updatePositions(updatedPositions),
-    ]).catch((error) => {
-      console.error("Failed to persist new key", error);
-    });
+    pushCurrentStateToHistory();
+    const result = addKey(keyMappings, positions, selectedKeyType);
+    setKeyMappings(result.mappings);
+    setPositions(result.positions);
+    persistMappingsAndPositions(result.mappings, result.positions);
   };
 
   const handleAddKeyAt = (dx: number, dy: number) => {
-    saveToHistory();
-
-    const mapping = keyMappings[selectedKeyType] || [];
-    const pos = positions[selectedKeyType] || [];
-
-    const updatedMappings: KeyMappings = {
-      ...keyMappings,
-      [selectedKeyType]: [...mapping, ""],
-    };
-
-    const updatedPositions: KeyPositions = {
-      ...positions,
-      [selectedKeyType]: [
-        ...pos,
-        {
-          dx,
-          dy,
-          width: 60,
-          height: 60,
-          hidden: false,
-          activeImage: "",
-          inactiveImage: "",
-          soundPath: "",
-          soundVolume: 100,
-          activeTransparent: false,
-          idleTransparent: false,
-          count: 0,
-          noteColor: "#FFFFFF",
-          noteOpacity: 80,
-          noteEffectEnabled: true,
-          noteGlowEnabled: false,
-          noteGlowSize: 20,
-          noteGlowOpacity: 70,
-          noteGlowColor: "#FFFFFF",
-          noteAutoYCorrection: true,
-          className: "",
-          counter: createDefaultCounterSettings(),
-        },
-      ],
-    };
-
-    setKeyMappings(updatedMappings);
-    setPositions(updatedPositions);
-
-    Promise.all([
-      window.api.keys.update(updatedMappings),
-      window.api.keys.updatePositions(updatedPositions),
-    ]).catch((error) => {
-      console.error("Failed to persist new key at position", error);
-    });
+    pushCurrentStateToHistory();
+    const result = addKey(keyMappings, positions, selectedKeyType, dx, dy);
+    setKeyMappings(result.mappings);
+    setPositions(result.positions);
+    persistMappingsAndPositions(result.mappings, result.positions);
   };
 
   const handleDuplicateKey = (sourceIndex: number, dx: number, dy: number) => {
-    saveToHistory();
+    const result = duplicateKey(
+      keyMappings,
+      positions,
+      selectedKeyType,
+      sourceIndex,
+      dx,
+      dy,
+    );
+    if (!result) return;
 
-    const mapping = keyMappings[selectedKeyType] || [];
-    const pos = positions[selectedKeyType] || [];
-    const sourceKey = mapping[sourceIndex];
-    const sourcePosition = pos[sourceIndex];
-
-    if (typeof sourceKey === "undefined" || !sourcePosition) {
-      return;
-    }
-
-    const clonedNoteColor =
-      sourcePosition.noteColor &&
-      typeof sourcePosition.noteColor === "object" &&
-      sourcePosition.noteColor !== null
-        ? { ...sourcePosition.noteColor }
-        : sourcePosition.noteColor;
-
-    const sourceCounter = sourcePosition.counter
-      ? normalizeCounterSettings(sourcePosition.counter)
-      : createDefaultCounterSettings();
-    const clonedCounter = {
-      ...sourceCounter,
-      fill: { ...sourceCounter.fill },
-      stroke: { ...sourceCounter.stroke },
-      animation: {
-        ...sourceCounter.animation,
-        presetId: sourceCounter.animation.presetId ?? null,
-        bezier: [
-          Number(sourceCounter.animation.bezier[0]),
-          Number(sourceCounter.animation.bezier[1]),
-          Number(sourceCounter.animation.bezier[2]),
-          Number(sourceCounter.animation.bezier[3]),
-        ] as CounterAnimationBezier,
-      },
-    };
-
-    const snappedDx = Math.round(dx);
-    const snappedDy = Math.round(dy);
-
-    const clonedPosition = {
-      ...sourcePosition,
-      dx: snappedDx,
-      dy: snappedDy,
-      counter: clonedCounter,
-      noteColor: clonedNoteColor,
-      noteGlowEnabled: sourcePosition.noteGlowEnabled ?? true,
-      noteGlowSize: sourcePosition.noteGlowSize ?? 20,
-      noteGlowOpacity: sourcePosition.noteGlowOpacity ?? 70,
-      noteGlowColor: clonedNoteColor,
-      noteAutoYCorrection: sourcePosition.noteAutoYCorrection ?? true,
-    };
-
-    const updatedMappings: KeyMappings = {
-      ...keyMappings,
-      [selectedKeyType]: [...mapping, sourceKey],
-    };
-
-    const updatedPositions: KeyPositions = {
-      ...positions,
-      [selectedKeyType]: [...pos, clonedPosition],
-    };
-
-    setKeyMappings(updatedMappings);
-    setPositions(updatedPositions);
-
-    Promise.all([
-      window.api.keys.update(updatedMappings),
-      window.api.keys.updatePositions(updatedPositions),
-    ]).catch((error) => {
-      console.error("Failed to duplicate key", error);
-    });
+    pushCurrentStateToHistory();
+    setKeyMappings(result.mappings);
+    setPositions(result.positions);
+    persistMappingsAndPositions(result.mappings, result.positions);
   };
+
+  const handleDeleteKey = (indexToDelete: number) => {
+    pushCurrentStateToHistory();
+    const result = removeKey(
+      keyMappings,
+      positions,
+      selectedKeyType,
+      indexToDelete,
+    );
+    setKeyMappings(result.mappings);
+    setPositions(result.positions);
+    persistMappingsAndPositions(result.mappings, result.positions);
+    setSelectedKey(null);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 스타일 / 노트 / 카운터 업데이트
+  // ────────────────────────────────────────────────────────────────────────
 
   const handleNoteColorUpdate = (
     index: number,
@@ -388,39 +250,21 @@ export function useKeyManager() {
     noteGlowOpacity: number,
     noteGlowColor: NoteColor | undefined,
   ) => {
-    // 노트 색상 설정 모달에서 적용하기 클릭 시 호출됨
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
-    if (!current[index]) return;
-
-    const updatedPositions: KeyPositions = {
-      ...currentPositions,
-      [mode]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              noteColor,
-              noteOpacity,
-              noteGlowEnabled,
-              noteGlowSize,
-              noteGlowOpacity,
-              noteGlowColor: noteGlowColor ?? noteColor,
-            }
-          : pos,
-      ),
-    };
-
-    setPositions(updatedPositions);
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to update note color settings", error);
+    const updatedPositions = updateNoteColor(state.positions, mode, index, {
+      noteColor,
+      noteOpacity,
+      noteGlowEnabled,
+      noteGlowSize,
+      noteGlowOpacity,
+      noteGlowColor,
     });
+    setPositions(updatedPositions);
+    persistPositions(updatedPositions);
   };
 
-  // 미리보기 전용: 오버레이 실시간 업데이트를 위해 로컬 스토어만 갱신, 영구 저장은 하지 않음
   const handleNoteColorPreview = (
     index: number,
     noteColor: NoteColor,
@@ -434,38 +278,20 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
-    if (!current[index]) return;
-
-    const updatedPositions: KeyPositions = {
-      ...currentPositions,
-      [mode]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              noteColor,
-              noteOpacity,
-              noteGlowEnabled,
-              noteGlowSize,
-              noteGlowOpacity,
-              noteGlowColor: noteGlowColor ?? noteColor,
-              noteAutoYCorrection:
-                noteAutoYCorrection ?? pos.noteAutoYCorrection,
-              noteEffectEnabled: noteEffectEnabled ?? pos.noteEffectEnabled,
-            }
-          : pos,
-      ),
-    };
-
-    setPositions(updatedPositions);
-    // 미리보기라도 오버레이에 반영되도록 이벤트 브로드캐스트
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview note color settings", error);
+    const updatedPositions = updateNoteColor(state.positions, mode, index, {
+      noteColor,
+      noteOpacity,
+      noteGlowEnabled,
+      noteGlowSize,
+      noteGlowOpacity,
+      noteGlowColor,
+      noteAutoYCorrection,
+      noteEffectEnabled,
     });
+    setPositions(updatedPositions);
+    persistPositions(updatedPositions);
   };
 
-  // 키 설정 미리보기 (이미지/회전/크기/스타일)
   const handleKeyPreview = (
     index: number,
     updates: Partial<{
@@ -496,12 +322,18 @@ export function useKeyManager() {
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
+    const current = state.positions[mode] || [];
     if (!current[index]) return;
 
+    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+      previewHistorySavedRef.current = true;
+    }
+
+    // 프리뷰는 필드별 undefined 체크를 유지해야 하므로 직접 매핑
     const updatedPositions: KeyPositions = {
-      ...currentPositions,
+      ...state.positions,
       [mode]: current.map((pos, i) =>
         i === index
           ? {
@@ -531,20 +363,19 @@ export function useKeyManager() {
                   ? updates.idleTransparent
                   : pos.idleTransparent ?? false,
               width:
-                typeof updates.width === "number" &&
+                typeof updates.width === 'number' &&
                 !Number.isNaN(updates.width)
                   ? updates.width
                   : pos.width,
               height:
-                typeof updates.height === "number" &&
+                typeof updates.height === 'number' &&
                 !Number.isNaN(updates.height)
                   ? updates.height
                   : pos.height,
               className:
                 updates.className !== undefined
                   ? updates.className
-                  : pos.className ?? "",
-              // 새 스타일 속성들
+                  : pos.className ?? '',
               backgroundColor:
                 updates.backgroundColor !== undefined
                   ? updates.backgroundColor
@@ -607,12 +438,9 @@ export function useKeyManager() {
     };
 
     setPositions(updatedPositions);
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview key settings", error);
-    });
+    persistPositions(updatedPositions);
   };
 
-  // 다중 선택 시 여러 키를 한 번에 프리뷰 (배치 프리뷰)
   const handleKeyBatchPreview = (
     updates: Array<{
       index: number;
@@ -645,23 +473,26 @@ export function useKeyManager() {
   ) => {
     if (updates.length === 0) return;
 
+    // preview가 store를 직접 변경하므로, 첫 preview 시 히스토리 저장
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+      previewHistorySavedRef.current = true;
+    }
+
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
+    const current = state.positions[mode] || [];
 
-    // 업데이트할 인덱스들을 Map으로 변환
     const updateMap = new Map<number, (typeof updates)[number]>();
     for (const update of updates) {
       if (current[update.index]) {
         updateMap.set(update.index, update);
       }
     }
-
     if (updateMap.size === 0) return;
 
     const updatedPositions: KeyPositions = {
-      ...currentPositions,
+      ...state.positions,
       [mode]: current.map((pos, i) => {
         const update = updateMap.get(i);
         if (!update) return pos;
@@ -677,9 +508,7 @@ export function useKeyManager() {
               ? update.inactiveImage
               : pos.inactiveImage,
           soundPath:
-            update.soundPath !== undefined
-              ? update.soundPath
-              : pos.soundPath,
+            update.soundPath !== undefined ? update.soundPath : pos.soundPath,
           soundVolume:
             update.soundVolume !== undefined
               ? update.soundVolume
@@ -693,17 +522,17 @@ export function useKeyManager() {
               ? update.idleTransparent
               : pos.idleTransparent ?? false,
           width:
-            typeof update.width === "number" && !Number.isNaN(update.width)
+            typeof update.width === 'number' && !Number.isNaN(update.width)
               ? update.width
               : pos.width,
           height:
-            typeof update.height === "number" && !Number.isNaN(update.height)
+            typeof update.height === 'number' && !Number.isNaN(update.height)
               ? update.height
               : pos.height,
           className:
             update.className !== undefined
               ? update.className
-              : pos.className ?? "",
+              : pos.className ?? '',
           backgroundColor:
             update.backgroundColor !== undefined
               ? update.backgroundColor
@@ -765,354 +594,197 @@ export function useKeyManager() {
     };
 
     setPositions(updatedPositions);
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to batch preview key settings", error);
-    });
+    persistPositions(updatedPositions);
   };
 
   const handleCounterSettingsUpdate = (
     index: number,
-    payload: CounterUpdatePayload,
+    payload: KeyCounterSettings,
   ) => {
-    // 카운터 설정 모달에서 적용하기 클릭 시 호출됨
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
-    if (!current[index]) return;
-
-    const normalized = normalizeCounterSettings(payload);
-    const updatedPositions: KeyPositions = {
-      ...currentPositions,
-      [mode]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              counter: normalized,
-            }
-          : pos,
-      ),
-    };
-
+    const updatedPositions = updateCounterSettings(
+      state.positions,
+      mode,
+      index,
+      payload,
+    );
     setPositions(updatedPositions);
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to update counter settings", error);
-    });
+    persistPositions(updatedPositions);
   };
 
-  // 미리보기 전용: 오버레이 실시간 업데이트를 위해 로컬 스토어만 갱신, 영구 저장은 하지 않음
   const handleCounterSettingsPreview = (
     index: number,
-    payload: CounterUpdatePayload,
+    payload: KeyCounterSettings,
   ) => {
     const state = useKeyStore.getState();
     const mode = state.selectedKeyType || selectedKeyType;
-    const currentPositions = state.positions;
-    const current = currentPositions[mode] || [];
-    if (!current[index]) return;
-
-    const normalized = normalizeCounterSettings(payload);
-    const updatedPositions: KeyPositions = {
-      ...currentPositions,
-      [mode]: current.map((pos, i) =>
-        i === index
-          ? {
-              ...pos,
-              counter: normalized,
-            }
-          : pos,
-      ),
-    };
-
+    const updatedPositions = updateCounterSettings(
+      state.positions,
+      mode,
+      index,
+      payload,
+    );
     setPositions(updatedPositions);
-    // 미리보기라도 오버레이에 반영되도록 이벤트 브로드캐스트
-    window.api.keys.updatePositions(updatedPositions).catch((error) => {
-      console.error("Failed to preview counter settings", error);
-    });
+    persistPositions(updatedPositions);
   };
 
-  const handleDeleteKey = (indexToDelete: number) => {
-    saveToHistory();
-
-    const mapping = keyMappings[selectedKeyType] || [];
-    const pos = positions[selectedKeyType] || [];
-
-    const updatedMappings: KeyMappings = {
-      ...keyMappings,
-      [selectedKeyType]: mapping.filter((_, index) => index !== indexToDelete),
-    };
-
-    const updatedPositions: KeyPositions = {
-      ...positions,
-      [selectedKeyType]: pos.filter((_, index) => index !== indexToDelete),
-    };
-
-    setKeyMappings(updatedMappings);
-    setPositions(updatedPositions);
-
-    Promise.all([
-      window.api.keys.update(updatedMappings),
-      window.api.keys.updatePositions(updatedPositions),
-    ]).catch((error) => {
-      console.error("Failed to delete key", error);
-    });
-
-    setSelectedKey(null);
-  };
+  // ────────────────────────────────────────────────────────────────────────
+  // z-order 이동
+  // ────────────────────────────────────────────────────────────────────────
 
   const handleMoveToFront = async (index: number) => {
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const pos = positions[selectedKeyType] || [];
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-
-    // 키와 플러그인 요소 중 가장 높은 zIndex 찾기
-    const keyZIndexes = pos.map((p, i) => p.zIndex ?? i);
-    const pluginZIndexes = pluginElements.map((el) => el.zIndex ?? 0);
-    const maxZIndex = Math.max(0, ...keyZIndexes, ...pluginZIndexes);
-
-    // 대상 키의 zIndex를 가장 높은 값 + 1로 설정
+    const updated = computeMoveToFront(pos, index, getPluginZIndexes());
     const updatedPositions: KeyPositions = {
       ...positions,
-      [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: maxZIndex + 1 } : p,
-      ),
+      [selectedKeyType]: updated,
     };
-
-    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-    setLocalUpdateInProgress(true);
-    setPositions(updatedPositions);
-
-    try {
-      await window.api.keys.updatePositions(updatedPositions);
-      // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
-        positions: updatedPositions,
-      });
-    } catch (error) {
-      console.error("Failed to move key to front", error);
-    } finally {
-      setLocalUpdateInProgress(false);
-    }
+    await persistPositionsWithSync(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
   };
 
   const handleMoveToBack = async (index: number) => {
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const pos = positions[selectedKeyType] || [];
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-
-    // 키와 플러그인 요소 중 가장 낮은 zIndex 찾기 (음수 가능)
-    const keyZIndexes = pos.map((p, i) => p.zIndex ?? i);
-    const pluginZIndexes = pluginElements.map((el) => el.zIndex ?? 0);
-    const minZIndex = Math.min(0, ...keyZIndexes, ...pluginZIndexes);
-
-    // 대상 키의 zIndex를 가장 낮은 값 - 1로 설정
+    const updated = computeMoveToBack(pos, index, getPluginZIndexes());
     const updatedPositions: KeyPositions = {
       ...positions,
-      [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: minZIndex - 1 } : p,
-      ),
+      [selectedKeyType]: updated,
     };
-
-    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-    setLocalUpdateInProgress(true);
-    setPositions(updatedPositions);
-
-    try {
-      await window.api.keys.updatePositions(updatedPositions);
-      // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
-        positions: updatedPositions,
-      });
-    } catch (error) {
-      console.error("Failed to move key to back", error);
-    } finally {
-      setLocalUpdateInProgress(false);
-    }
+    await persistPositionsWithSync(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
   };
 
   const handleMoveForward = async (index: number) => {
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const pos = positions[selectedKeyType] || [];
-    const targetKey = pos[index];
-    if (!targetKey) return;
-
-    const currentZIndex = targetKey.zIndex ?? index;
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-
-    // 대상 키의 바운딩 박스
-    const targetBox = {
-      x: targetKey.dx,
-      y: targetKey.dy,
-      width: targetKey.width,
-      height: targetKey.height,
-    };
-
-    // 겹치는 요소들의 zIndex 수집 (현재 요소보다 위에 있는 것만)
-    const overlappingZIndexes: number[] = [];
-
-    // 다른 키들 중 겹치는 것
-    pos.forEach((p, i) => {
-      if (i === index) return;
-      const keyZ = p.zIndex ?? i;
-      if (keyZ <= currentZIndex) return; // 현재보다 아래면 무시
-
-      const keyBox = { x: p.dx, y: p.dy, width: p.width, height: p.height };
-      if (boxesOverlap(targetBox, keyBox)) {
-        overlappingZIndexes.push(keyZ);
-      }
-    });
-
-    // 플러그인 요소들 중 겹치는 것
-    pluginElements.forEach((el) => {
-      const elZ = el.zIndex ?? 0;
-      if (elZ <= currentZIndex) return; // 현재보다 아래면 무시
-
-      const elBox = {
-        x: el.position.x,
-        y: el.position.y,
-        width: el.measuredSize?.width ?? el.estimatedSize?.width ?? 100,
-        height: el.measuredSize?.height ?? el.estimatedSize?.height ?? 100,
-      };
-      if (boxesOverlap(targetBox, elBox)) {
-        overlappingZIndexes.push(elZ);
-      }
-    });
-
-    // 겹치는 요소가 없으면 단순히 +1
-    // 겹치는 요소가 있으면 바로 위 요소의 zIndex보다 1 크게 설정
-    let newZIndex: number;
-    if (overlappingZIndexes.length === 0) {
-      newZIndex = currentZIndex + 1;
-    } else {
-      const minOverlappingZ = Math.min(...overlappingZIndexes);
-      newZIndex = minOverlappingZ + 1;
-    }
-
+    const updated = computeMoveForward(pos, index, getPluginExternalElements());
     const updatedPositions: KeyPositions = {
       ...positions,
-      [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: newZIndex } : p,
-      ),
+      [selectedKeyType]: updated,
     };
-
-    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-    setLocalUpdateInProgress(true);
-    setPositions(updatedPositions);
-
-    try {
-      await window.api.keys.updatePositions(updatedPositions);
-      // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
-        positions: updatedPositions,
-      });
-    } catch (error) {
-      console.error("Failed to move key forward", error);
-    } finally {
-      setLocalUpdateInProgress(false);
-    }
+    await persistPositionsWithSync(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
   };
 
   const handleMoveBackward = async (index: number) => {
-    saveToHistory();
-
+    pushCurrentStateToHistory();
     const pos = positions[selectedKeyType] || [];
-    const targetKey = pos[index];
-    if (!targetKey) return;
-
-    const currentZIndex = targetKey.zIndex ?? index;
-    const pluginElements = usePluginDisplayElementStore.getState().elements;
-
-    // 대상 키의 바운딩 박스
-    const targetBox = {
-      x: targetKey.dx,
-      y: targetKey.dy,
-      width: targetKey.width,
-      height: targetKey.height,
-    };
-
-    // 겹치는 요소들의 zIndex 수집 (현재 요소보다 아래에 있는 것만)
-    const overlappingZIndexes: number[] = [];
-
-    // 다른 키들 중 겹치는 것
-    pos.forEach((p, i) => {
-      if (i === index) return;
-      const keyZ = p.zIndex ?? i;
-      if (keyZ >= currentZIndex) return; // 현재보다 위면 무시
-
-      const keyBox = { x: p.dx, y: p.dy, width: p.width, height: p.height };
-      if (boxesOverlap(targetBox, keyBox)) {
-        overlappingZIndexes.push(keyZ);
-      }
-    });
-
-    // 플러그인 요소들 중 겹치는 것
-    pluginElements.forEach((el) => {
-      const elZ = el.zIndex ?? 0;
-      if (elZ >= currentZIndex) return; // 현재보다 위면 무시
-
-      const elBox = {
-        x: el.position.x,
-        y: el.position.y,
-        width: el.measuredSize?.width ?? el.estimatedSize?.width ?? 100,
-        height: el.measuredSize?.height ?? el.estimatedSize?.height ?? 100,
-      };
-      if (boxesOverlap(targetBox, elBox)) {
-        overlappingZIndexes.push(elZ);
-      }
-    });
-
-    // 겹치는 요소가 없으면 단순히 -1
-    // 겹치는 요소가 있으면 바로 아래 요소의 zIndex보다 1 작게 설정
-    let newZIndex: number;
-    if (overlappingZIndexes.length === 0) {
-      newZIndex = currentZIndex - 1;
-    } else {
-      const maxOverlappingZ = Math.max(...overlappingZIndexes);
-      newZIndex = maxOverlappingZ - 1;
-    }
-
+    const updated = computeMoveBackward(
+      pos,
+      index,
+      getPluginExternalElements(),
+    );
     const updatedPositions: KeyPositions = {
       ...positions,
-      [selectedKeyType]: pos.map((p, i) =>
-        i === index ? { ...p, zIndex: newZIndex } : p,
-      ),
+      [selectedKeyType]: updated,
     };
-
-    // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-    setLocalUpdateInProgress(true);
-    setPositions(updatedPositions);
-
-    try {
-      await window.api.keys.updatePositions(updatedPositions);
-      // 오버레이에 직접 동기화
-      window.api.bridge.sendTo("overlay", "positions:sync", {
-        positions: updatedPositions,
-      });
-    } catch (error) {
-      console.error("Failed to move key backward", error);
-    } finally {
-      setLocalUpdateInProgress(false);
-    }
+    await persistPositionsWithSync(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
   };
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 키 스타일 업데이트 (속성 패널)
+  // ────────────────────────────────────────────────────────────────────────
+
+  const handleKeyMappingChange = (index: number, newKey: string) => {
+    pushCurrentStateToHistory();
+    const updatedMappings = updateKeyMapping(
+      keyMappings,
+      selectedKeyType,
+      index,
+      newKey,
+    );
+    setKeyMappings(updatedMappings);
+    window.api.keys.update(updatedMappings).catch((error) => {
+      console.error('Failed to update key mapping', error);
+    });
+  };
+
+  const handleKeyStyleUpdate = (
+    index: number,
+    updates: Partial<KeyPositions[string][number]>,
+  ) => {
+    const state = useKeyStore.getState();
+    const mode = state.selectedKeyType || selectedKeyType;
+    if (!(state.positions[mode] || [])[index]) return;
+
+    // preview에서 이미 히스토리를 저장했으면 skip
+    if (!previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+    }
+    previewHistorySavedRef.current = false;
+    const updatedPositions = updateKeyStyle(
+      state.positions,
+      mode,
+      index,
+      updates,
+    );
+    persistPositionsWithFlag(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
+  };
+
+  const handleKeyBatchStyleUpdate = (
+    updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
+
+    const state = useKeyStore.getState();
+    const mode = state.selectedKeyType || selectedKeyType;
+    const updatedPositions = batchUpdateKeyStyle(
+      state.positions,
+      mode,
+      updates,
+    );
+    if (updatedPositions === state.positions) return;
+
+    // preview에서 이미 히스토리를 저장했으면 skip
+    if (!options?.skipHistory && !previewHistorySavedRef.current) {
+      pushCurrentStateToHistory();
+    }
+    previewHistorySavedRef.current = false;
+    persistPositionsWithFlag(
+      updatedPositions,
+      setPositions,
+      setLocalUpdateInProgress,
+    );
+  };
+
+  // ────────────────────────────────────────────────────────────────────────
+  // 리셋 / undo / redo
+  // ────────────────────────────────────────────────────────────────────────
 
   const handleResetCurrentMode = async () => {
     try {
       await window.api.keys.resetMode(selectedKeyType);
       setSelectedKey(null);
     } catch (error) {
-      console.error("Failed to reset current mode", error);
+      console.error('Failed to reset current mode', error);
     }
   };
 
-  const handleUndo = useCallback(async () => {
+  const handleUndo = async () => {
     setUndoRedoInProgress(true);
     try {
-      // 현재 상태를 가져와서 undo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -1126,155 +798,32 @@ export function useKeyManager() {
       );
 
       if (previousState) {
-        setKeyMappings(previousState.keyMappings);
-        setPositions(previousState.positions);
-        useStatItemStore.getState().setPositions(previousState.statPositions);
-        useGraphItemStore.getState().setPositions(previousState.graphPositions);
-        if (previousState.layerGroups !== undefined) {
-          useLayerGroupStore.getState().setLayerGroups(previousState.layerGroups);
-        }
+        applyRestoredStateToStores(previousState);
 
-        // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
-        if (previousState.keyCounters) {
-          applyCounterSnapshot(previousState.keyCounters);
-        }
+        applyRestoredPluginElements(
+          previousState.pluginElements as
+            | PluginDisplayElementInternal[]
+            | undefined,
+          currentPluginElements,
+          previousState.pluginElements
+            ? new Set(previousState.pluginElements.map((el) => el.fullId))
+            : undefined,
+        );
 
-        // 플러그인 요소 복원 (pluginElements가 존재하는 경우에만)
-        // undefined인 경우는 해당 히스토리 항목이 플러그인 요소 변경과 무관하므로 현재 상태 유지
-        if (previousState.pluginElements !== undefined) {
-          // 현재 요소들의 핸들러 정보를 유지하면서 위치/설정만 복원
-          const currentElements = currentPluginElements;
-
-          // 요소 복원 함수 맵 가져오기
-          const elementRestorers = (window as any).__dmn_element_restorers as
-            | Map<string, (el: any) => any>
-            | undefined;
-
-          const restoredElements = previousState.pluginElements.map(
-            (savedEl) => {
-              // 같은 fullId를 가진 현재 요소 찾기
-              const currentEl = currentElements.find(
-                (el) => el.fullId === savedEl.fullId,
-              );
-              if (currentEl) {
-                // 현재 요소의 핸들러 정보 유지, 저장된 위치/설정으로 복원
-                return {
-                  ...currentEl,
-                  position: savedEl.position,
-                  settings: savedEl.settings,
-                  state: savedEl.state,
-                  measuredSize: savedEl.measuredSize,
-                  resizeAnchor: savedEl.resizeAnchor,
-                  zIndex: savedEl.zIndex,
-                  hidden: (savedEl as any).hidden,
-                };
-              }
-
-              // 현재 없는 요소 (삭제된 요소 복구)
-              // definitionId가 있으면 해당 정의의 복원 함수 사용
-              if (
-                savedEl.definitionId &&
-                elementRestorers?.has(savedEl.definitionId)
-              ) {
-                const restorer = elementRestorers.get(savedEl.definitionId)!;
-                return restorer(savedEl);
-              }
-
-              // 복원 함수가 없으면 그대로 반환 (핸들러 없이)
-              return savedEl;
-            },
-          );
-
-          // 현재 있지만 저장된 상태에 없는 요소 제거 (추가된 요소 취소)
-          const savedFullIds = new Set(
-            previousState.pluginElements.map((el) => el.fullId),
-          );
-          const finalElements = restoredElements.filter(
-            (el) =>
-              savedFullIds.has(el.fullId) ||
-              currentElements.some((cur) => cur.fullId === el.fullId),
-          );
-
-          setPluginElements(finalElements as any);
-
-          // 오버레이로 동기화
-          if (window.api?.bridge) {
-            window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
-              elements: finalElements,
-            });
-          }
-        }
-
-        // 백엔드에도 반영
-        // 중요: keys.update()가 counters를 keys 기준으로 sync 하므로,
-        // counters 복원은 keys/positions 복원 이후에 실행해야 값이 유지됨
         try {
-          // counters sync는 keys.update() 결과에 의존하므로 먼저 실행
-          await window.api.keys.update(previousState.keyMappings);
-
-          // positions는 실패해도 undo의 핵심(키/카운터 복구)을 막지 않도록 분리
-          window.api.keys
-            .updatePositions(previousState.positions)
-            .catch((error) => {
-              console.error("Failed to apply undo positions", error);
-            });
-
-          window.api.statItems
-            .updatePositions(previousState.statPositions as any)
-            .catch((error) => {
-              console.error("Failed to apply undo stat positions", error);
-            });
-          window.api.graphItems
-            .updatePositions(previousState.graphPositions as any)
-            .catch((error) => {
-              console.error("Failed to apply undo graph positions", error);
-            });
-          if (previousState.layerGroups !== undefined) {
-            window.api.layerGroups.update(previousState.layerGroups).catch((error) => {
-              console.error("Failed to apply undo layer groups", error);
-            });
-          }
-
-          if (previousState.keyCounters) {
-            await window.api.keys.setCounters(previousState.keyCounters);
-          }
-
-          try {
-            window.api.bridge.sendTo("overlay", "statPositions:sync", {
-              positions: previousState.statPositions,
-            });
-          } catch {
-            // ignore
-          }
-          try {
-            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-              positions: previousState.graphPositions,
-            });
-          } catch {
-            // ignore
-          }
+          await persistRestoredState(previousState);
         } catch (error) {
-          console.error("Failed to apply undo", error);
+          console.error('Failed to apply undo', error);
         }
       }
     } finally {
       setUndoRedoInProgress(false);
     }
-  }, [
-    undo,
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    setKeyMappings,
-    setPositions,
-    setPluginElements,
-  ]);
+  };
 
-  const handleRedo = useCallback(async () => {
+  const handleRedo = async () => {
     setUndoRedoInProgress(true);
     try {
-      // 현재 상태를 가져와서 redo 호출 시 전달
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -1288,250 +837,28 @@ export function useKeyManager() {
       );
 
       if (nextState) {
-        setKeyMappings(nextState.keyMappings);
-        setPositions(nextState.positions);
-        useStatItemStore.getState().setPositions(nextState.statPositions);
-        useGraphItemStore.getState().setPositions(nextState.graphPositions);
-        if (nextState.layerGroups !== undefined) {
-          useLayerGroupStore.getState().setLayerGroups(nextState.layerGroups);
-        }
+        applyRestoredStateToStores(nextState);
 
-        // UI는 즉시 반영 (백엔드 이벤트로 다시 한번 동기화됨)
-        if (nextState.keyCounters) {
-          applyCounterSnapshot(nextState.keyCounters);
-        }
+        applyRestoredPluginElements(
+          nextState.pluginElements as
+            | PluginDisplayElementInternal[]
+            | undefined,
+          currentPluginElements,
+          nextState.pluginElements
+            ? new Set(nextState.pluginElements.map((el) => el.fullId))
+            : undefined,
+        );
 
-        // 플러그인 요소 복원 (pluginElements가 존재하는 경우에만)
-        // undefined인 경우는 해당 히스토리 항목이 플러그인 요소 변경과 무관하므로 현재 상태 유지
-        if (nextState.pluginElements !== undefined) {
-          // 현재 요소들의 핸들러 정보를 유지하면서 위치/설정만 복원
-          const currentElements = currentPluginElements;
-
-          // 요소 복원 함수 맵 가져오기
-          const elementRestorers = (window as any).__dmn_element_restorers as
-            | Map<string, (el: any) => any>
-            | undefined;
-
-          const restoredElements = nextState.pluginElements.map((savedEl) => {
-            // 같은 fullId를 가진 현재 요소 찾기
-            const currentEl = currentElements.find(
-              (el) => el.fullId === savedEl.fullId,
-            );
-            if (currentEl) {
-              // 현재 요소의 핸들러 정보 유지, 저장된 위치/설정으로 복원
-              return {
-                ...currentEl,
-                position: savedEl.position,
-                settings: savedEl.settings,
-                state: savedEl.state,
-                measuredSize: savedEl.measuredSize,
-                resizeAnchor: savedEl.resizeAnchor,
-                zIndex: savedEl.zIndex,
-                hidden: (savedEl as any).hidden,
-              };
-            }
-
-            // 현재 없는 요소 (삭제된 요소 복구 - redo에서는 드물지만 처리)
-            // definitionId가 있으면 해당 정의의 복원 함수 사용
-            if (
-              savedEl.definitionId &&
-              elementRestorers?.has(savedEl.definitionId)
-            ) {
-              const restorer = elementRestorers.get(savedEl.definitionId)!;
-              return restorer(savedEl);
-            }
-
-            // 복원 함수가 없으면 그대로 반환
-            return savedEl;
-          });
-
-          // 저장된 상태에 있는 요소만 유지
-          const savedFullIds = new Set(
-            nextState.pluginElements.map((el) => el.fullId),
-          );
-          const finalElements = restoredElements.filter((el) =>
-            savedFullIds.has(el.fullId),
-          );
-
-          setPluginElements(finalElements as any);
-
-          // 오버레이로 동기화
-          if (window.api?.bridge) {
-            window.api.bridge.sendTo("overlay", "plugin:displayElements:sync", {
-              elements: finalElements,
-            });
-          }
-        }
-
-        // 백엔드에도 반영 (keys/positions 복원 후 counters 복원)
         try {
-          await window.api.keys.update(nextState.keyMappings);
-          window.api.keys
-            .updatePositions(nextState.positions)
-            .catch((error) => {
-              console.error("Failed to apply redo positions", error);
-            });
-
-          window.api.statItems
-            .updatePositions(nextState.statPositions as any)
-            .catch((error) => {
-              console.error("Failed to apply redo stat positions", error);
-            });
-          window.api.graphItems
-            .updatePositions(nextState.graphPositions as any)
-            .catch((error) => {
-              console.error("Failed to apply redo graph positions", error);
-            });
-          if (nextState.layerGroups !== undefined) {
-            window.api.layerGroups.update(nextState.layerGroups).catch((error) => {
-              console.error("Failed to apply redo layer groups", error);
-            });
-          }
-
-          if (nextState.keyCounters) {
-            await window.api.keys.setCounters(nextState.keyCounters);
-          }
-
-          try {
-            window.api.bridge.sendTo("overlay", "statPositions:sync", {
-              positions: nextState.statPositions,
-            });
-          } catch {
-            // ignore
-          }
-          try {
-            window.api.bridge.sendTo("overlay", "graphPositions:sync", {
-              positions: nextState.graphPositions,
-            });
-          } catch {
-            // ignore
-          }
+          await persistRestoredState(nextState);
         } catch (error) {
-          console.error("Failed to apply redo", error);
+          console.error('Failed to apply redo', error);
         }
       }
     } finally {
       setUndoRedoInProgress(false);
     }
-  }, [
-    redo,
-    keyMappings,
-    positions,
-    statPositions,
-    graphPositions,
-    setKeyMappings,
-    setPositions,
-    setPluginElements,
-  ]);
-
-  // 속성 패널에서 키 매핑 변경 (인덱스로 키 코드 업데이트)
-  const handleKeyMappingChange = useCallback(
-    (index: number, newKey: string) => {
-      saveToHistory();
-
-      const mapping = keyMappings[selectedKeyType] || [];
-      const updatedMappings: KeyMappings = {
-        ...keyMappings,
-        [selectedKeyType]: mapping.map((key, i) =>
-          i === index ? newKey : key,
-        ),
-      };
-
-      setKeyMappings(updatedMappings);
-      window.api.keys.update(updatedMappings).catch((error) => {
-        console.error("Failed to update key mapping", error);
-      });
-    },
-    [selectedKeyType, keyMappings, saveToHistory, setKeyMappings],
-  );
-
-  // 속성 패널에서 인덱스로 키 속성 업데이트 (히스토리 포함)
-  const handleKeyStyleUpdate = useCallback(
-    (index: number, updates: Partial<KeyPositions[string][number]>) => {
-      const state = useKeyStore.getState();
-      const mode = state.selectedKeyType || selectedKeyType;
-      const currentPositions = state.positions;
-      const current = currentPositions[mode] || [];
-      if (!current[index]) return;
-
-      // 히스토리에 현재 상태 저장
-      saveToHistory();
-
-      const updatedPositions: KeyPositions = {
-        ...currentPositions,
-        [mode]: current.map((pos, i) =>
-          i === index ? { ...pos, ...updates } : pos,
-        ),
-      };
-
-      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-      setLocalUpdateInProgress(true);
-      setPositions(updatedPositions);
-      window.api.keys
-        .updatePositions(updatedPositions)
-        .catch((error) => {
-          console.error("Failed to update key style", error);
-        })
-        .finally(() => {
-          setLocalUpdateInProgress(false);
-        });
-    },
-    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
-  );
-
-  // 다중 선택 시 여러 키를 한 번에 업데이트 (배치 업데이트)
-  const handleKeyBatchStyleUpdate = useCallback(
-    (
-      updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
-      options?: { skipHistory?: boolean },
-    ) => {
-      if (updates.length === 0) return;
-
-      const state = useKeyStore.getState();
-      const mode = state.selectedKeyType || selectedKeyType;
-      const currentPositions = state.positions;
-      const current = currentPositions[mode] || [];
-
-      // 업데이트할 인덱스들을 Map으로 변환하여 O(1) 조회
-      const updateMap = new Map<
-        number,
-        Partial<KeyPositions[string][number]>
-      >();
-      for (const { index, ...rest } of updates) {
-        if (current[index]) {
-          updateMap.set(index, rest);
-        }
-      }
-
-      if (updateMap.size === 0) return;
-
-      // 히스토리에 현재 상태 저장 (한 번만)
-      if (!options?.skipHistory) {
-        saveToHistory();
-      }
-
-      const updatedPositions: KeyPositions = {
-        ...currentPositions,
-        [mode]: current.map((pos, i) => {
-          const update = updateMap.get(i);
-          return update ? { ...pos, ...update } : pos;
-        }),
-      };
-
-      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-      setLocalUpdateInProgress(true);
-      setPositions(updatedPositions);
-      window.api.keys
-        .updatePositions(updatedPositions)
-        .catch((error) => {
-          console.error("Failed to batch update key styles", error);
-        })
-        .finally(() => {
-          setLocalUpdateInProgress(false);
-        });
-    },
-    [selectedKeyType, saveToHistory, setPositions, setLocalUpdateInProgress],
-  );
+  };
 
   return {
     selectedKey,

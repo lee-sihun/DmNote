@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const layerGroupDefSchema = z.object({
   id: z.string(),
@@ -7,6 +7,9 @@ export const layerGroupDefSchema = z.object({
 
 export type LayerGroupDef = z.infer<typeof layerGroupDefSchema>;
 
-export const layerGroupsSchema = z.record(z.string(), z.array(layerGroupDefSchema));
+export const layerGroupsSchema = z.record(
+  z.string(),
+  z.array(layerGroupDefSchema),
+);
 
 export type LayerGroups = Record<string, LayerGroupDef[]>;
