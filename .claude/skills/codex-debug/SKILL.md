@@ -1,5 +1,5 @@
 ---
-name: debug
+name: codex-debug
 description: "버그 원인 추적 및 수정을 위한 Claude + Codex 협업 디버깅. 에러/증상 분석, 재현, 원인 특정, 회귀 디버깅 시 사용."
 disable-model-invocation: false
 argument-hint: "[증상/에러 메시지/재현 방법]"

@@ -52,6 +52,8 @@ pub struct AppState {
     pub keyboard: KeyboardManager,
     overlay_visible: Arc<RwLock<bool>>,
     overlay_force_close: Arc<AtomicBool>,
+    /// 오버레이 윈도우 초기화 중 Moved/Resized 이벤트에서 bounds 저장 억제
+    overlay_initializing: Arc<AtomicBool>,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     key_counters: Arc<RwLock<KeyCounters>>,
     key_counter_enabled: Arc<AtomicBool>,
@@ -83,6 +85,7 @@ impl AppState {
             keyboard,
             overlay_visible: Arc::new(RwLock::new(false)),
             overlay_force_close: Arc::new(AtomicBool::new(false)),
+            overlay_initializing: Arc::new(AtomicBool::new(false)),
             keyboard_task: RwLock::new(None),
             key_counters,
             key_counter_enabled,
@@ -387,49 +390,69 @@ impl AppState {
         let mut new_x = position.x;
         let mut new_y = position.y;
 
-        match anchor {
-            OverlayResizeAnchor::BottomLeft => new_y += size.height - height,
-            OverlayResizeAnchor::TopRight => new_x += size.width - width,
-            OverlayResizeAnchor::BottomRight => {
-                new_x += size.width - width;
-                new_y += size.height - height;
+        // 초기화 중(첫 resize)에는 anchor 기반 position 재계산을 건너뛰고
+        // store에 저장된 위치를 사용 (빌더 position이 무시될 수 있으므로)
+        let initializing = self.overlay_initializing.swap(false, Ordering::SeqCst);
+        if initializing {
+            // store에서 저장된 위치를 가져와 사용 (빌더 position이 무시될 수 있으므로)
+            if let Some(stored) = self.store.snapshot().overlay_bounds.as_ref() {
+                new_x = stored.x;
+                new_y = stored.y;
             }
-            OverlayResizeAnchor::Center => {
-                new_x += (size.width - width) / 2.0;
-                new_y += (size.height - height) / 2.0;
-            }
-            OverlayResizeAnchor::FixedPosition => {}
-            OverlayResizeAnchor::TopLeft => {}
-        }
-
-        if anchor == OverlayResizeAnchor::FixedPosition {
-            if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
-                new_x += delta_x;
-            }
-            if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
-                new_y += delta_y;
-            }
-        }
-
-        if let Some(offset) = content_top_offset {
-            if offset.is_finite() {
-                let previous = self
-                    .store
-                    .snapshot()
-                    .overlay_last_content_top_offset
-                    .unwrap_or(offset);
-                let delta = offset - previous;
-                if delta != 0.0 {
-                    match anchor {
-                        OverlayResizeAnchor::Center => new_y -= delta / 2.0,
-                        OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
-                        OverlayResizeAnchor::FixedPosition => new_y -= delta,
-                        _ => new_y -= delta,
-                    }
+            // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
+            if let Some(offset) = content_top_offset {
+                if offset.is_finite() {
+                    let _ = self.store.update(|state| {
+                        state.overlay_last_content_top_offset = Some(offset);
+                    })?;
                 }
-                let _ = self.store.update(|state| {
-                    state.overlay_last_content_top_offset = Some(offset);
-                })?;
+            }
+        } else {
+            match anchor {
+                OverlayResizeAnchor::BottomLeft => new_y += size.height - height,
+                OverlayResizeAnchor::TopRight => new_x += size.width - width,
+                OverlayResizeAnchor::BottomRight => {
+                    new_x += size.width - width;
+                    new_y += size.height - height;
+                }
+                OverlayResizeAnchor::Center => {
+                    new_x += (size.width - width) / 2.0;
+                    new_y += (size.height - height) / 2.0;
+                }
+                OverlayResizeAnchor::FixedPosition => {}
+                OverlayResizeAnchor::TopLeft => {}
+            }
+
+            if anchor == OverlayResizeAnchor::FixedPosition {
+                if let Some(delta_x) = fixed_position_delta_x.filter(|value| value.is_finite()) {
+                    new_x += delta_x;
+                }
+                if let Some(delta_y) = fixed_position_delta_y.filter(|value| value.is_finite()) {
+                    new_y += delta_y;
+                }
+            }
+
+            if let Some(offset) = content_top_offset {
+                if offset.is_finite() {
+                    let previous = self
+                        .store
+                        .snapshot()
+                        .overlay_last_content_top_offset
+                        .unwrap_or(offset);
+                    let delta = offset - previous;
+                    if delta != 0.0 {
+                        match anchor {
+                            OverlayResizeAnchor::Center => new_y -= delta / 2.0,
+                            OverlayResizeAnchor::BottomLeft
+                            | OverlayResizeAnchor::BottomRight => {}
+                            OverlayResizeAnchor::FixedPosition => new_y -= delta,
+                            _ => new_y -= delta,
+                        }
+                    }
+                    let _ = self.store.update(|state| {
+                        state.overlay_last_content_top_offset = Some(offset);
+                    })?;
+                }
             }
         }
 
@@ -919,6 +942,8 @@ impl AppState {
             bounds_are_logical = true;
         }
 
+        self.overlay_initializing.store(true, Ordering::SeqCst);
+
         let window_builder = {
             let window_builder = WebviewWindowBuilder::new(
                 app,
@@ -946,6 +971,12 @@ impl AppState {
             .devtools(true)
             .build()
             .context("failed to create overlay window")?;
+
+        // Windows에서 WebviewWindowBuilder::position()이 무시되는 경우가 있어
+        // 빌드 직후 명시적으로 위치 재설정
+        if let Err(err) = window.set_position(LogicalPosition::new(bounds.x, bounds.y)) {
+            log::warn!("failed to set overlay position after build: {err}");
+        }
 
         // Windows 접근성 텍스트 크기 설정에 의한 WebView2 스케일링을 보상
         let zoom = crate::compute_compensating_zoom();
@@ -994,6 +1025,9 @@ impl AppState {
             }
         }
 
+        // overlay_initializing은 첫 resize_overlay 호출 시 해제됨
+        // (프론트엔드 초기 렌더에서 resize가 반드시 호출되므로)
+
         // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
         // store의 overlay_visible 상태에 따라 조건부 표시
         if snapshot.overlay_visible {
@@ -1015,6 +1049,7 @@ impl AppState {
         let app_handle = app.clone();
         let overlay_window = window.clone();
         let force_close_flag = self.overlay_force_close.clone();
+        let initializing_flag = self.overlay_initializing.clone();
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
@@ -1051,8 +1086,11 @@ impl AppState {
                 apply_macos_overlay_fullscreen_behavior(&overlay_window, snapshot.always_on_top);
             }
             WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                if let Err(err) = persist_overlay_bounds(&overlay_window, &store) {
-                    log::warn!("failed to persist overlay bounds: {err}");
+                // 윈도우 초기화 중에는 OS가 보고하는 좌표로 저장된 bounds를 덮어쓰지 않음
+                if !initializing_flag.load(Ordering::SeqCst) {
+                    if let Err(err) = persist_overlay_bounds(&overlay_window, &store) {
+                        log::warn!("failed to persist overlay bounds: {err}");
+                    }
                 }
             }
             _ => {}
