@@ -711,12 +711,8 @@ export default function App() {
     };
   })();
 
-  const topMostY = (() => {
-    if (!displayPositions.length) return 0;
-    const visible = displayPositions.filter((position) => !position.hidden);
-    if (visible.length === 0) return 0;
-    return Math.min(...visible.map((position) => position.dy));
-  })();
+  // 키+통계+그래프+플러그인 모두 포함한 최상단 Y (bounds 기반)
+  const topMostY = bounds ? trackHeight + PADDING : 0;
 
   const webglTracks = currentKeys
     .map((key, index) => {
