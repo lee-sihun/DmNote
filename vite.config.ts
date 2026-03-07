@@ -90,6 +90,7 @@ export default defineConfig(() => {
         input: {
           main: path.resolve(windowsRoot, "main/index.html"),
           overlay: path.resolve(windowsRoot, "overlay/index.html"),
+          obs: path.resolve(windowsRoot, "obs/index.html"),
         },
       },
     },
