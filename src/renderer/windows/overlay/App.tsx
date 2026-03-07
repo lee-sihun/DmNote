@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   currentMonitor,
   getCurrentWindow,
@@ -6,8 +6,6 @@ import {
 } from '@tauri-apps/api/window';
 import { LogicalPosition, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { Menu } from '@tauri-apps/api/menu';
-import { isMac } from '@utils/core/platform';
-import { Key } from '@components/shared/Key';
 import { useTranslation } from '@contexts/useTranslation';
 import {
   DEFAULT_NOTE_BORDER_RADIUS,
@@ -28,86 +26,13 @@ import {
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
-import {
-  createDefaultCounterSettings,
-  type KeyPosition,
-} from '@src/types/key/keys';
+import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
-import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
-import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import StatItem from '@components/overlay/counters/StatItem';
-import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
-import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
-
-const FALLBACK_POSITION: KeyPosition = {
-  dx: 0,
-  dy: 0,
-  width: 60,
-  height: 60,
-  hidden: false,
-  activeImage: '',
-  inactiveImage: '',
-  activeTransparent: false,
-  idleTransparent: false,
-  count: 0,
-  noteColor: '#FFFFFF',
-  noteOpacity: 80,
-  noteEffectEnabled: true,
-  noteGlowEnabled: false,
-  noteGlowSize: 20,
-  noteGlowOpacity: 70,
-  noteGlowColor: '#FFFFFF',
-  noteAutoYCorrection: true,
-  className: '',
-  counter: createDefaultCounterSettings(),
-};
+import OverlayScene, { FALLBACK_POSITION } from '@components/shared/OverlayScene';
 
 const PADDING = 30;
-
-interface OverlayKeyProps {
-  keyName: string;
-  globalKey: string;
-  position: KeyPosition;
-  mode?: string;
-  counterEnabled?: boolean;
-}
-
-interface OverlayStatItemProps {
-  statType: string;
-  label?: string;
-  position: Record<string, unknown>;
-  counterEnabled?: boolean;
-}
-
-interface OverlayStatCounterLayerProps {
-  positions: Record<string, unknown>[];
-}
-
-interface OverlayGraphItemProps {
-  index?: number;
-  position: Record<string, unknown>;
-}
-
-const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
-const OverlayStatItem =
-  StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
-const OverlayStatCounterLayer =
-  StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
-const OverlayGraphItem =
-  OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
-
-// Tracks 레이지 로딩
-const Tracks = lazy(async () => {
-  const mod = await import('@components/overlay/WebGLTracksOGL.jsx');
-  return {
-    default: mod.WebGLTracksOGL as unknown as React.ComponentType<
-      Record<string, unknown>
-    >,
-  };
-});
 
 type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
 
@@ -118,7 +43,6 @@ export default function App() {
   useBuiltinStatsSubscription();
   useBlockBrowserShortcuts();
   const { t } = useTranslation();
-  const macOS = isMac();
   const developerModeEnabled = useSettingsStore(
     (state) => state.developerModeEnabled,
   );
@@ -836,109 +760,24 @@ export default function App() {
   }, [bounds, trackHeight, overlayAnchor]);
 
   return (
-    <div
-      className="relative w-full h-screen m-0 overflow-hidden"
-      style={{
-        backgroundColor:
-          backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
-        ...(macOS
-          ? {
-              // macOS(WebKit)에서 투명 전환 시 'contents' will-change + 강한 contain 조합이
-              // 레이어 재구성을 유발해 반영이 늦어지는 케이스가 있어 완화.
-              willChange: 'background-color',
-            }
-          : {
-              willChange: 'contents',
-              contain: 'layout style paint',
-            }),
-      }}
+    <OverlayScene
+      currentKeys={currentKeys}
+      displayPositions={displayPositions}
+      currentPositions={currentPositions}
+      displayStatPositions={displayStatPositions}
+      displayGraphPositions={displayGraphPositions}
+      selectedKeyType={selectedKeyType}
+      noteEffect={noteEffect}
+      noteSettings={noteSettings}
+      webglTracks={webglTracks}
+      notesRef={notesRef}
+      subscribe={subscribe}
+      noteBuffer={noteBuffer}
+      backgroundColor={backgroundColor}
+      keyCounterEnabled={keyCounterEnabled}
+      positionOffset={positionOffset}
       onMouseDownCapture={handleOverlayMouseDownCapture}
-    >
-      {noteEffect && (
-        <Suspense fallback={null}>
-          <Tracks
-            tracks={webglTracks}
-            notesRef={notesRef}
-            subscribe={subscribe}
-            noteSettings={noteSettings}
-            noteBuffer={noteBuffer}
-          />
-        </Suspense>
-      )}
-
-      {currentKeys.map((key, index) => {
-        const { displayName } = getKeyInfoByGlobalKey(key);
-        const basePosition =
-          displayPositions[index] ??
-          currentPositions[index] ??
-          FALLBACK_POSITION;
-
-        // zIndex가 null/undefined인 경우 index를 fallback으로 사용 (메인 그리드와 동일하게)
-        const position = {
-          ...basePosition,
-          zIndex: basePosition.zIndex ?? index,
-        };
-
-        return (
-          <OverlayKey
-            key={`${selectedKeyType}-${index}`}
-            keyName={displayName}
-            globalKey={key}
-            position={position}
-            mode={selectedKeyType}
-            counterEnabled={keyCounterEnabled}
-          />
-        );
-      })}
-      {displayStatPositions.map((pos, index) => {
-        if (!pos || pos.hidden) return null;
-
-        const defaultLabel =
-          pos.statType === 'kpsAvg'
-            ? 'AVG'
-            : pos.statType === 'kpsMax'
-            ? 'MAX'
-            : pos.statType === 'total'
-            ? 'Total'
-            : 'KPS';
-        const label = (pos.displayText || '').trim() || defaultLabel;
-        const position = { ...pos, zIndex: pos.zIndex ?? index };
-
-        return (
-          <OverlayStatItem
-            key={`stat-${selectedKeyType}-${index}`}
-            statType={pos.statType}
-            label={label}
-            position={position}
-            counterEnabled={true}
-          />
-        );
-      })}
-      {displayGraphPositions.map((pos, index) => {
-        if (!pos || pos.hidden) return null;
-        const graphPosition = { ...pos, zIndex: pos.zIndex ?? index };
-        return (
-          <OverlayGraphItem
-            key={`graph-${selectedKeyType}-${index}`}
-            index={index}
-            position={graphPosition}
-          />
-        );
-      })}
-      {keyCounterEnabled ? (
-        <KeyCounterLayer
-          keys={currentKeys}
-          positions={
-            displayPositions.length ? displayPositions : currentPositions
-          }
-          mode={selectedKeyType}
-        />
-      ) : null}
-      <OverlayStatCounterLayer positions={displayStatPositions} />
-      <PluginElementsRenderer
-        windowType="overlay"
-        positionOffset={positionOffset}
-      />
-    </div>
+      showPluginElements={true}
+    />
   );
 }
