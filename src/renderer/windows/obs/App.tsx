@@ -64,6 +64,48 @@ export default function App() {
     handleKeyUpRef.current = handleKeyUp;
   }, [handleKeyDown, handleKeyUp]);
 
+  // selectedKeyType를 ref로 유지 (콜백에서 최신 값 참조)
+  const selectedKeyTypeRef = useRef(selectedKeyType);
+  useEffect(() => {
+    selectedKeyTypeRef.current = selectedKeyType;
+  }, [selectedKeyType]);
+
+  // KPS 로컬 계산 (1초 슬라이딩 윈도우)
+  const kpsRef = useRef({
+    timestamps: [] as number[],
+    total: 0,
+    kpsMax: 0,
+    kpsSumForAvg: 0,
+    kpsNonZeroCount: 0,
+    activeKeys: new Set<string>(),
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const tracker = kpsRef.current;
+      const now = performance.now();
+      while (tracker.timestamps.length > 0 && now - tracker.timestamps[0] > 1000) {
+        tracker.timestamps.shift();
+      }
+      const kps = tracker.timestamps.length;
+      if (kps > tracker.kpsMax) tracker.kpsMax = kps;
+      if (kps > 0) {
+        tracker.kpsSumForAvg += kps;
+        tracker.kpsNonZeroCount++;
+      }
+      const kpsAvg = tracker.kpsNonZeroCount > 0
+        ? Math.round(tracker.kpsSumForAvg / tracker.kpsNonZeroCount)
+        : 0;
+      applyStatsSnapshot({
+        kps,
+        kpsAvg,
+        kpsMax: tracker.kpsMax,
+        total: tracker.total,
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
   // 스냅샷 수신
   const onSnapshot = useCallback((payload: BootstrapPayload) => {
     setKeyMappings(payload.keys ?? {});
@@ -90,8 +132,23 @@ export default function App() {
       applyCounterSnapshot(payload.keyCounters);
     }
 
-    // 통계 초기화
-    applyStatsSnapshot({ kps: 0, kpsAvg: 0, kpsMax: 0, total: 0 });
+    // KPS 트래커 리셋
+    const tracker = kpsRef.current;
+    tracker.timestamps = [];
+    tracker.kpsMax = 0;
+    tracker.kpsSumForAvg = 0;
+    tracker.kpsNonZeroCount = 0;
+    tracker.activeKeys.clear();
+    // total은 카운터 합산으로 초기화
+    let totalFromCounters = 0;
+    if (payload.keyCounters) {
+      const modeCounters = payload.keyCounters[payload.selectedKeyType ?? '4key'];
+      if (modeCounters) {
+        totalFromCounters = Object.values(modeCounters).reduce((sum, v) => sum + v, 0);
+      }
+    }
+    tracker.total = totalFromCounters;
+    applyStatsSnapshot({ kps: 0, kpsAvg: 0, kpsMax: 0, total: totalFromCounters });
 
     resetAllKeySignals();
     setInitialized(true);
@@ -103,9 +160,17 @@ export default function App() {
     const isDown = state === 'DOWN';
     setKeyActiveSignal(key, isDown);
 
+    // KPS 로컬 계산 피드
+    const tracker = kpsRef.current;
     if (isDown) {
+      if (!tracker.activeKeys.has(key)) {
+        tracker.activeKeys.add(key);
+        tracker.timestamps.push(performance.now());
+        tracker.total++;
+      }
       requestAnimationFrame(() => handleKeyDownRef.current(key));
     } else {
+      tracker.activeKeys.delete(key);
       requestAnimationFrame(() => handleKeyUpRef.current(key));
     }
   }, []);
@@ -128,7 +193,16 @@ export default function App() {
 
   // 카운터 업데이트
   const onCounterUpdate = useCallback((data: Record<string, unknown>) => {
-    applyCounterSnapshot(data as Record<string, Record<string, number>>);
+    const counters = data as Record<string, Record<string, number>>;
+    applyCounterSnapshot(counters);
+    // 카운터 리셋/수정 시 total 재계산
+    const modeCounters = counters[selectedKeyTypeRef.current];
+    if (modeCounters) {
+      kpsRef.current.total = Object.values(modeCounters).reduce(
+        (sum, v) => sum + v,
+        0,
+      );
+    }
   }, []);
 
   useObsWebSocket({

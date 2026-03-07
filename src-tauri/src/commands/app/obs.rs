@@ -50,12 +50,16 @@ pub async fn obs_start(
         .map_err(crate::errors::CommandError::msg)?;
     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
     state.refresh_obs_snapshot();
+    // 오버레이 숨김 (이전 상태 보존)
+    state.obs_hide_overlay(&app);
     Ok(state.obs_bridge.status())
 }
 
 #[tauri::command]
-pub fn obs_stop(state: State<'_, AppState>) -> CmdResult<ObsStatus> {
+pub fn obs_stop(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     state.obs_bridge.stop();
+    // 오버레이 복원
+    state.obs_restore_overlay(&app);
     Ok(state.obs_bridge.status())
 }
 

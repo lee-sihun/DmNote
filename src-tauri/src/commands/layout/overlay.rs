@@ -33,6 +33,12 @@ pub fn overlay_set_visible(
     app: AppHandle,
     visible: bool,
 ) -> CmdResult<()> {
+    // OBS 모드 활성화 중에는 오버레이 수동 토글 차단
+    if state.is_obs_mode_active() {
+        return Err(crate::errors::CommandError::msg(
+            "OBS 모드 활성화 중에는 오버레이를 수동으로 전환할 수 없습니다",
+        ));
+    }
     Ok(state.set_overlay_visibility(&app, visible)?)
 }
 

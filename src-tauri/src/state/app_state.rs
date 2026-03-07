@@ -65,6 +65,8 @@ pub struct AppState {
     css_watcher: RwLock<Option<CssWatcher>>,
     /// OBS WebSocket 브릿지
     pub obs_bridge: Arc<ObsBridgeService>,
+    /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
+    obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
 }
 
 impl AppState {
@@ -97,6 +99,7 @@ impl AppState {
             key_sound,
             css_watcher: RwLock::new(None),
             obs_bridge,
+            obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -299,6 +302,12 @@ impl AppState {
             bridge.set_static_dir(dir);
         }
 
+        // 오버레이 숨김 (부팅 시 flash 방지)
+        self.obs_hide_overlay(app);
+
+        let obs_previous_overlay_visible = self.obs_previous_overlay_visible.clone();
+        let overlay_visible = self.overlay_visible.clone();
+
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
             match bridge.start(port).await {
@@ -307,13 +316,48 @@ impl AppState {
                 }
                 Err(e) => {
                     log::error!("[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구", e);
-                    // 실패 시 obs_mode_enabled를 false로 복구
                     let _ = store.update(|state| {
                         state.obs_mode_enabled = false;
                     });
+                    // 실패 시 오버레이 상태 복원 (플래그 + 실제 윈도우)
+                    if let Some(true) = obs_previous_overlay_visible.write().take() {
+                        *overlay_visible.write() = true;
+                        let _ = store.update(|state| {
+                            state.overlay_visible = true;
+                        });
+                        if let Some(window) = app_handle.get_webview_window(OVERLAY_LABEL) {
+                            let _ = window.show();
+                        }
+                    }
                 }
             }
         });
+    }
+
+    /// OBS 시작 시 오버레이 숨김 (이전 상태 보존)
+    pub fn obs_hide_overlay(&self, app: &AppHandle) {
+        let was_visible = *self.overlay_visible.read();
+        *self.obs_previous_overlay_visible.write() = Some(was_visible);
+        if was_visible {
+            if let Err(e) = self.set_overlay_visibility(app, false) {
+                log::warn!("[ObsBridge] 오버레이 숨기기 실패: {}", e);
+            }
+        }
+    }
+
+    /// OBS 중지 시 오버레이 복원
+    pub fn obs_restore_overlay(&self, app: &AppHandle) {
+        let prev = self.obs_previous_overlay_visible.write().take();
+        if let Some(true) = prev {
+            if let Err(e) = self.set_overlay_visibility(app, true) {
+                log::warn!("[ObsBridge] 오버레이 복원 실패: {}", e);
+            }
+        }
+    }
+
+    /// OBS 모드 활성화 여부
+    pub fn is_obs_mode_active(&self) -> bool {
+        self.obs_bridge.is_running()
     }
 
     /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신 + 연결된 클라이언트에 broadcast
@@ -664,9 +708,13 @@ impl AppState {
                                     crate::ipc::DaemonCommand::ToggleOverlay => {
                                         log::info!("[AppState] received ToggleOverlay command from daemon");
                                         let app_state = app_handle.state::<AppState>();
+                                        if app_state.is_obs_mode_active() {
+                                            log::info!("[AppState] OBS 모드 활성화 중 — 오버레이 토글 무시");
+                                        } else {
                                         let is_visible = *app_state.overlay_visible.read();
                                         if let Err(err) = app_state.set_overlay_visibility(&app_handle, !is_visible) {
                                             log::error!("failed to toggle overlay visibility: {err}");
+                                        }
                                         }
                                     }
                                     crate::ipc::DaemonCommand::ToggleOverlayLock => {
