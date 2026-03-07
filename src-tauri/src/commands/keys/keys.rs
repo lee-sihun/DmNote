@@ -80,6 +80,7 @@ pub fn keys_update(
     state.sync_counters_with_keys(&updated);
     app.emit("keys:counters", &state.snapshot_key_counters())?;
     state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
     Ok(updated)
 }
 
@@ -91,6 +92,7 @@ pub fn positions_update(
 ) -> CmdResult<KeyPositions> {
     let updated = state.store.update_positions(positions)?;
     app.emit("positions:changed", &updated)?;
+    state.refresh_obs_snapshot();
     Ok(updated)
 }
 
@@ -114,6 +116,7 @@ pub fn keys_set_mode(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &effective }),
     )?;
+    state.refresh_obs_snapshot();
     Ok(ModeResponse {
         success,
         mode: effective,
@@ -222,6 +225,7 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
     }
     app.emit("keys:counters", &counters_snapshot)?;
     state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
 
     Ok(ResetAllResponse {
         keys,
@@ -303,6 +307,7 @@ pub fn keys_reset_mode(
     }
     app.emit("keys:counters", &state.snapshot_key_counters())?;
     state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
 
     Ok(ResetModeResponse {
         success: true,
@@ -382,6 +387,7 @@ pub fn custom_tabs_create(
     app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
     app.emit("keys:counters", &state.snapshot_key_counters())?;
     state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
 
     Ok(CustomTabCreateResult {
         result: Some(tab),
@@ -462,6 +468,7 @@ pub fn custom_tabs_delete(
     )?;
     app.emit("keys:counters", &state.snapshot_key_counters())?;
     state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
 
     Ok(CustomTabDeleteResult {
         success: true,
@@ -500,6 +507,7 @@ pub fn custom_tabs_select(
     state.transfer_active_keys(&id);
 
     app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
+    state.refresh_obs_snapshot();
 
     Ok(CustomTabSelectResult {
         success: true,
@@ -535,6 +543,7 @@ pub fn custom_tabs_restore(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &selected_key_type }),
     )?;
+    state.refresh_obs_snapshot();
     Ok(())
 }
 
@@ -602,6 +611,7 @@ pub fn layer_groups_update(
 ) -> CmdResult<LayerGroups> {
     let updated = state.store.update_layer_groups(groups)?;
     app.emit("layerGroups:changed", &updated)?;
+    state.refresh_obs_snapshot();
     Ok(updated)
 }
 

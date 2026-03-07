@@ -163,7 +163,6 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
 
     // OBS 브릿지: 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
-    state.obs_bridge.broadcast_snapshot();
 
     Ok(PresetOperationResult {
         success: true,
@@ -302,7 +301,6 @@ pub fn preset_load_tab(
 
     // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
     state.refresh_obs_snapshot();
-    state.obs_bridge.broadcast_snapshot();
 
     Ok(PresetOperationResult {
         success: true,

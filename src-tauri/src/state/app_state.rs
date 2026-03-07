@@ -264,10 +264,15 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // OBS 브릿지 설정 변경 브로드캐스트
+        // OBS 브릿지 설정 변경 브로드캐스트 + 캐시 갱신
         if self.obs_bridge.is_running() {
             if let Ok(diff_json) = serde_json::to_value(&diff.changed) {
                 self.obs_bridge.broadcast_settings_diff(diff_json);
+            }
+            // cached_snapshot도 갱신 (새 클라이언트 접속 시 최신 설정 제공)
+            let bp = self.bootstrap_payload();
+            if let Ok(snap) = serde_json::to_value(&bp) {
+                self.obs_bridge.update_snapshot(snap);
             }
         }
         // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
@@ -277,7 +282,7 @@ impl AppState {
         Ok(())
     }
 
-    /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신
+    /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신 + 연결된 클라이언트에 broadcast
     pub fn refresh_obs_snapshot(&self) {
         if !self.obs_bridge.is_running() {
             return;
@@ -285,6 +290,7 @@ impl AppState {
         let payload = self.bootstrap_payload();
         if let Ok(snapshot) = serde_json::to_value(&payload) {
             self.obs_bridge.update_snapshot(snapshot);
+            self.obs_bridge.broadcast_snapshot();
         }
     }
 

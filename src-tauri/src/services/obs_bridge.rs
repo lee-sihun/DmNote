@@ -7,6 +7,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde_json::Value;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot};
 use tokio_tungstenite::tungstenite::Message;
@@ -43,7 +44,6 @@ impl ObsBridgeService {
         }
     }
 
-    #[allow(dead_code)] // v2: HTTP 정적 서빙
     pub fn set_static_dir(&self, dir: PathBuf) {
         *self.static_dir.write() = Some(dir);
     }
@@ -122,7 +122,7 @@ impl ObsBridgeService {
             bridge.server_loop(listener, shutdown_rx).await;
         });
 
-        log::info!("[ObsBridge] 서버 시작: ws://127.0.0.1:{port}/ws");
+        log::info!("[ObsBridge] 서버 시작: http://127.0.0.1:{port}");
         Ok(())
     }
 
@@ -169,17 +169,113 @@ impl ObsBridgeService {
         self.running.store(false, Ordering::Relaxed);
     }
 
-    async fn handle_connection(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) {
-        let ws_stream = match tokio_tungstenite::accept_async(stream).await {
-            Ok(ws) => ws,
-            Err(_) => {
-                // WS 핸드셰이크 실패 (일반 HTTP 등) — 현재는 무시
-                // HTTP 정적 파일 서빙은 후속 구현 (hyper/axum 통합)
-                log::debug!("[ObsBridge] non-WS connection from {addr}");
+    async fn handle_connection(self: &Arc<Self>, mut stream: TcpStream, addr: SocketAddr) {
+        // TCP 스트림을 peek하여 WebSocket upgrade 요청인지 판별
+        let mut peek_buf = [0u8; 4096];
+        let n = match stream.peek(&mut peek_buf).await {
+            Ok(n) if n > 0 => n,
+            _ => return,
+        };
+
+        let request_preview = String::from_utf8_lossy(&peek_buf[..n]);
+        let is_websocket = request_preview.lines().any(|line| {
+            line.to_ascii_lowercase().starts_with("upgrade:")
+                && line.to_ascii_lowercase().contains("websocket")
+        });
+
+        if is_websocket {
+            // WebSocket 핸드셰이크
+            let ws_stream = match tokio_tungstenite::accept_async(stream).await {
+                Ok(ws) => ws,
+                Err(e) => {
+                    log::debug!("[ObsBridge] WS 핸드셰이크 실패 from {addr}: {e}");
+                    return;
+                }
+            };
+            self.handle_ws_client(ws_stream, addr).await;
+        } else {
+            // HTTP 정적 파일 서빙
+            self.handle_http_request(&mut stream, &request_preview)
+                .await;
+        }
+    }
+
+    /// HTTP GET 요청에 대해 정적 파일 서빙
+    async fn handle_http_request(&self, stream: &mut TcpStream, request: &str) {
+        // 요청 소비 (peek 데이터를 실제로 읽어야 함)
+        let mut discard = vec![0u8; request.len()];
+        let _ = stream.read(&mut discard).await;
+
+        // RwLockReadGuard를 await 전에 해제하기 위해 즉시 clone
+        let static_dir = self.static_dir.read().clone();
+        let static_dir = match static_dir.as_ref() {
+            Some(dir) => dir.clone(),
+            None => {
+                let body = "OBS bridge: static directory not configured";
+                let response = format!(
+                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
                 return;
             }
         };
-        self.handle_ws_client(ws_stream, addr).await;
+
+        // GET 경로 파싱
+        let path = request
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("/");
+
+        // 경로 정규화: "/" → "/index.html", 디렉토리 탐색 방지
+        let normalized = if path == "/" || path.is_empty() {
+            "index.html"
+        } else {
+            path.trim_start_matches('/')
+        };
+
+        // 경로 탐색 공격 방지 (.. 포함 시 거부)
+        if normalized.contains("..") {
+            let _ = stream
+                .write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await;
+            return;
+        }
+
+        let file_path = static_dir.join(normalized);
+
+        match tokio::fs::read(&file_path).await {
+            Ok(content) => {
+                let mime = guess_mime(normalized);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                    content.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.write_all(&content).await;
+            }
+            Err(_) => {
+                // SPA fallback: 존재하지 않는 경로 → index.html
+                let index_path = static_dir.join("index.html");
+                match tokio::fs::read(&index_path).await {
+                    Ok(content) => {
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                            content.len()
+                        );
+                        let _ = stream.write_all(response.as_bytes()).await;
+                        let _ = stream.write_all(&content).await;
+                    }
+                    Err(_) => {
+                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                    }
+                }
+            }
+        }
     }
 
     async fn handle_ws_client(
@@ -332,6 +428,23 @@ impl ObsBridgeService {
             "[ObsBridge] 클라이언트 연결 종료: {addr} (남은 {})",
             self.client_count()
         );
+    }
+}
+
+/// 파일 확장자로 MIME 타입 추정
+fn guess_mime(path: &str) -> &'static str {
+    match path.rsplit('.').next().unwrap_or("") {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "js" | "mjs" => "application/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json; charset=utf-8",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "wasm" => "application/wasm",
+        _ => "application/octet-stream",
     }
 }
 

@@ -588,8 +588,7 @@ const Settings = ({
   };
 
   const handleObsCopyUrl = async (): Promise<void> => {
-    // v1: HTTP 정적 서빙 미구현 — WS 엔드포인트만 제공
-    const url = `ws://localhost:${obsStatus.port}`;
+    const url = `http://localhost:${obsStatus.port}`;
     try {
       await navigator.clipboard.writeText(url);
       showAlert?.(t('settings.obsCopied'));

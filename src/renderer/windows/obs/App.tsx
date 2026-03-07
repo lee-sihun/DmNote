@@ -26,11 +26,11 @@ import { DEFAULT_NOTE_BORDER_RADIUS } from '@constants/overlayDefaults';
 const PADDING = 30;
 
 export default function App() {
-  // URL에서 포트와 호스트 결정
+  // WS 연결 URL: HTTP로 서빙된 경우 같은 호스트:포트, 아닌 경우 query param fallback
   const params = new URLSearchParams(window.location.search);
-  const port = params.get('port') || '34891';
-  const host = params.get('host') || '127.0.0.1';
-  const wsUrl = `ws://${host}:${port}/ws`;
+  const host = params.get('host') || window.location.hostname || '127.0.0.1';
+  const port = params.get('port') || window.location.port || '34891';
+  const wsUrl = `ws://${host}:${port}`;
 
   // 상태
   const [keyMappings, setKeyMappings] = useState<KeyMappings>({});

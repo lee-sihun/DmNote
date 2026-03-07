@@ -15,5 +15,6 @@ pub fn stat_positions_update(
 ) -> CmdResult<StatPositions> {
     let updated = state.store.update_stat_positions(positions)?;
     app.emit("statPositions:changed", &updated)?;
+    state.refresh_obs_snapshot();
     Ok(updated)
 }
