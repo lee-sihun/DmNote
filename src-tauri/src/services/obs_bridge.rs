@@ -347,7 +347,17 @@ impl ObsBridgeService {
                 let _ = stream.write_all(&content).await;
             }
             Err(_) => {
-                // SPA fallback: 존재하지 않는 경로 → index.html
+                // 확장자가 있는 정적 리소스 요청은 SPA fallback 하지 않음 (404)
+                let has_extension = normalized
+                    .rsplit('/')
+                    .next()
+                    .map_or(false, |filename| filename.contains('.'));
+                if has_extension {
+                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                    return;
+                }
+
+                // SPA fallback: 확장자 없는 경로 → index.html
                 let index_path = static_dir.join("index.html");
                 match tokio::fs::read(&index_path).await {
                     Ok(content) => {

@@ -200,6 +200,9 @@ pub struct ObsBridgeService {
     shutdown_tx: RwLock<Option<oneshot::Sender<()>>>,
     server_version: String,
     static_dir: RwLock<Option<PathBuf>>,      // v2: HTTP 정적 서빙용
+    server_handle: tokio::sync::Mutex<Option<JoinHandle<()>>>,  // v3: stop→start 경쟁 방지
+    dev_url: RwLock<Option<String>>,          // v3: dev 모드 Vite dev server URL
+    session_token: RwLock<String>,            // v3: UUID v4 세션 토큰
 }
 ```
 
@@ -217,7 +220,7 @@ pub struct ObsBridgeService {
 ### 4.3 크레이트 의존성 ✅
 
 ```toml
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.24"
 futures-util = "0.3"
 ```
 > tokio는 기존에 이미 포함됨
@@ -269,7 +272,7 @@ src/renderer/
 |------|:---:|:---:|:---:|
 | 키 UI 렌더링 | ✅ | | |
 | 노트 효과 (WebGL) | ✅ | | |
-| bounds/position 계산 | | ✅ | ✅ (중복) |
+| bounds/position 계산 | | ✅ | ✅ (공유: computeLayout) |
 | 통계/그래프 표시 | ✅ | | |
 | 플러그인 엘리먼트 | ✅ (props로 제어) | | |
 | 창 드래그/리사이즈 | | ✅ | |
@@ -338,13 +341,13 @@ v3 추가:
 - ✅ 안내 문구 (OBS 설정 방법 가이드 + 오버레이 숨김 경고)
 - 라디오 버튼 모드 전환은 자동 숨김/복원으로 대체
 
-### 7.2 모드 전환 동작 ⚠️ 부분 구현
+### 7.2 모드 전환 동작 ✅
 
 1. ✅ OBS 모드 ON → WS 서버 bind → URL 표시
 2. ✅ OBS 클라이언트 접속 → 상태 점등
 3. ✅ 연결 끊김 → 서버 유지, 상태 표시 갱신
-4. ❌ 오버레이 창 자동 숨김/복구 미구현
-5. ❌ OBS 설정이 백엔드 설정 모델과 분리 (런타임 토글만, 재시작 시 초기화)
+4. ✅ 오버레이 창 자동 숨김/복구 (v3: obs_hide_overlay / obs_restore_overlay)
+5. ✅ 설정 영속화 (v3: obs_port, obs_mode_enabled store 저장, 재시작 시 복원)
 
 ### 7.3 포트 충돌 처리 ✅
 
@@ -362,7 +365,7 @@ v3 추가:
 | OBS CEF Chromium 버전 차이 | 중 | WebGL 1.0 기준 유지 | ⚠️ 미검증 |
 | 키 이벤트 지연 (WS 전송) | 낮 | localhost <1ms, seq+ts로 모니터링 | ✅ |
 | 상태 일관성 (프리셋 로드 시) | 중 | snapshot 재전송으로 대응 | ✅ |
-| 포트 보안 | 중 | 랜덤 세션 토큰 검토 필요 | ❌ 미구현 |
+| 포트 보안 | 중 | UUID v4 세션 토큰 + WS hello/HTTP 검증 | ✅ (v3) |
 | tokio 런타임 추가 | 낮 | 기존 tokio 재사용 | ✅ |
 
 ### 8.2 기능 제약 (v2 기준)
@@ -370,12 +373,12 @@ v3 추가:
 | 기능 | 지원 여부 |
 |------|-----------|
 | 키 UI + 노트 효과 | ✅ 지원 |
-| 통계/그래프 표시 | ✅ 지원 (렌더링만, KPS 값은 항상 0) |
+| 통계/그래프 표시 | ✅ 지원 (v3: KPS 로컬 1초 슬라이딩 윈도우 계산) |
 | 키 카운터 | ✅ 지원 |
 | HTTP 정적 서빙 | ✅ 지원 |
 | 레이아웃 동기화 | ✅ 지원 (snapshot 재전송) |
-| 커스텀 CSS | × 미지원 |
-| 배경 미디어 서빙 | × 미지원 |
+| 커스텀 CSS | ✅ 지원 (v3: settings_diff 경유 실시간 주입) |
+| 배경 미디어 서빙 | ✅ 지원 (v3: /media/ 엔드포인트 + 토큰 검증) |
 | 커스텀 JS (플러그인) | × 미지원 (Tauri API 의존) |
 | 플러그인 엘리먼트 | × 미지원 (bridge API 의존) |
 
@@ -471,7 +474,7 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 | 8 | **개별 키 noteEffectEnabled** | 키별 노트 효과 on/off 반영 | ✅ |
 | 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ✅ |
 | 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ✅ |
-| 11 | **DataSource 호환성 레이어** | Tauri API / WebSocket 통합 인터페이스 (DataSource adapter) 도입, overlay/obs 공용 레이아웃 훅 추출로 중복 제거 | ✅ |
+| 11 | **DataSource 호환성 레이어** | Tauri API / WebSocket 통합 인터페이스 (DataSource adapter) 도입, overlay/obs 공용 레이아웃 훅 추출로 중복 제거 | ⚠️ 레이아웃 추출만 완료, adapter 미구현 |
 
 #### v3+ 이후 (P3)
 
