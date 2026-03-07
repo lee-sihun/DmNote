@@ -17,6 +17,9 @@ use crate::models::obs::{
     make_envelope, HelloAckPayload, KeyEventPayload, KeyState, ObsBroadcast, ObsEnvelope, ObsStatus,
 };
 
+/// 임베딩 에셋 조회 함수 타입 (path → Option<(bytes, mime_type)>)
+pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
+
 /// OBS WebSocket 서버
 pub struct ObsBridgeService {
     running: AtomicBool,
@@ -27,8 +30,8 @@ pub struct ObsBridgeService {
     shutdown_tx: RwLock<Option<oneshot::Sender<()>>>,
     /// 서버 루프 태스크 핸들 (stop→start 경쟁 조건 방지)
     server_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
-    /// 빌드된 OBS 정적 파일 경로 (dist/renderer/obs)
-    static_dir: RwLock<Option<PathBuf>>,
+    /// Tauri 임베딩 에셋 조회 (포터블 exe용)
+    asset_fetcher: RwLock<Option<AssetFetcher>>,
     /// dev 모드 Vite dev server URL (예: "http://localhost:3400")
     dev_url: RwLock<Option<String>>,
     server_version: String,
@@ -47,15 +50,15 @@ impl ObsBridgeService {
             broadcast_tx,
             shutdown_tx: RwLock::new(None),
             server_handle: tokio::sync::Mutex::new(None),
-            static_dir: RwLock::new(None),
+            asset_fetcher: RwLock::new(None),
             dev_url: RwLock::new(None),
             server_version: version.to_string(),
             session_token: RwLock::new(String::new()),
         }
     }
 
-    pub fn set_static_dir(&self, dir: PathBuf) {
-        *self.static_dir.write() = Some(dir);
+    pub fn set_asset_fetcher(&self, fetcher: AssetFetcher) {
+        *self.asset_fetcher.write() = Some(fetcher);
     }
 
     pub fn set_dev_url(&self, url: String) {
@@ -246,49 +249,6 @@ impl ObsBridgeService {
         let mut discard = vec![0u8; request.len()];
         let _ = stream.read(&mut discard).await;
 
-        // RwLockReadGuard를 await 전에 해제하기 위해 즉시 clone
-        let static_dir = self.static_dir.read().clone();
-        let dev_url = self.dev_url.read().clone();
-        let static_dir = match static_dir.as_ref() {
-            Some(dir) => dir.clone(),
-            None => {
-                // dev 모드: Vite dev server로 리다이렉트
-                if let Some(dev_base) = &dev_url {
-                    let path = request
-                        .lines()
-                        .next()
-                        .and_then(|line| line.split_whitespace().nth(1))
-                        .unwrap_or("/");
-                    // /media/ 경로는 이미 위에서 처리됨 → 정적 파일만 리다이렉트
-                    let obs_path = if path == "/" || path.is_empty() {
-                        "/obs/index.html"
-                    } else {
-                        path
-                    };
-                    // OBS 정적 파일 경로가 /obs/로 시작하지 않으면 추가
-                    let redirect_path = if obs_path.starts_with("/obs/") {
-                        obs_path.to_string()
-                    } else {
-                        format!("/obs{obs_path}")
-                    };
-                    let location = format!("{dev_base}{redirect_path}");
-                    let response = format!(
-                        "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                    );
-                    let _ = stream.write_all(response.as_bytes()).await;
-                    return;
-                }
-                let body = "OBS bridge: static directory not configured";
-                let response = format!(
-                    "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = stream.write_all(response.as_bytes()).await;
-                return;
-            }
-        };
-
         // GET 경로 파싱
         let path = request
             .lines()
@@ -296,14 +256,42 @@ impl ObsBridgeService {
             .and_then(|line| line.split_whitespace().nth(1))
             .unwrap_or("/");
 
+        // dev 모드: Vite dev server로 리다이렉트
+        let dev_url = self.dev_url.read().clone();
+        if let Some(dev_base) = &dev_url {
+            let obs_path = if path == "/" || path.is_empty() {
+                "/obs/index.html"
+            } else {
+                path
+            };
+            let redirect_path = if obs_path.starts_with("/obs/") {
+                obs_path.to_string()
+            } else {
+                format!("/obs{obs_path}")
+            };
+            // WS 연결에 필요한 port/token을 query param으로 전달
+            // (Vite dev server 포트 ≠ OBS bridge 포트)
+            let port = *self.port.read();
+            let token = self.session_token.read().clone();
+            let location = if redirect_path.contains('?') {
+                format!("{dev_base}{redirect_path}&port={port}&token={token}")
+            } else {
+                format!("{dev_base}{redirect_path}?port={port}&token={token}")
+            };
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+            return;
+        }
+
         // /media/<base64-encoded-path>?token=xxx — 사용자 로컬 미디어 파일 서빙
         if let Some(rest) = path.strip_prefix("/media/") {
             self.handle_media_request(stream, rest).await;
             return;
         }
 
-        // 경로 정규화: "/" → "obs/index.html", 디렉토리 탐색 방지
-        // static_dir은 dist/renderer/ (obs/index.html이 ../assets/ 참조하므로)
+        // 경로 정규화: "/" → "obs/index.html"
         let normalized = if path == "/" || path.is_empty() {
             "obs/index.html"
         } else {
@@ -324,58 +312,48 @@ impl ObsBridgeService {
             return;
         }
 
-        let file_path = static_dir.join(normalized);
-
-        // canonicalize 후 static_dir 하위인지 재검증
-        if let Ok(canonical) = file_path.canonicalize() {
-            if !canonical.starts_with(&static_dir) {
-                let _ = stream
-                    .write_all(
-                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                    )
-                    .await;
-                return;
-            }
+        // 에셋 조회: 1) Tauri 임베딩 에셋 2) 디스크 정적 파일
+        if let Some((content, mime)) = self.resolve_asset(normalized).await {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                content.len()
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.write_all(&content).await;
+            return;
         }
 
-        match tokio::fs::read(&file_path).await {
-            Ok(content) => {
-                let mime = guess_mime(normalized);
+        // SPA fallback: 확장자 없는 경로 → obs/index.html
+        let has_extension = normalized
+            .rsplit('/')
+            .next()
+            .map_or(false, |filename| filename.contains('.'));
+        if !has_extension {
+            if let Some((content, mime)) = self.resolve_asset("obs/index.html").await {
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
                     content.len()
                 );
                 let _ = stream.write_all(response.as_bytes()).await;
                 let _ = stream.write_all(&content).await;
-            }
-            Err(_) => {
-                // 확장자가 있는 정적 리소스 요청은 SPA fallback 하지 않음 (404)
-                let has_extension = normalized
-                    .rsplit('/')
-                    .next()
-                    .map_or(false, |filename| filename.contains('.'));
-                if has_extension {
-                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
-                    return;
-                }
-
-                // SPA fallback: 확장자 없는 경로 → obs/index.html
-                let index_path = static_dir.join("obs/index.html");
-                match tokio::fs::read(&index_path).await {
-                    Ok(content) => {
-                        let response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
-                            content.len()
-                        );
-                        let _ = stream.write_all(response.as_bytes()).await;
-                        let _ = stream.write_all(&content).await;
-                    }
-                    Err(_) => {
-                        let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
-                    }
-                }
+                return;
             }
         }
+
+        let _ = stream
+            .write_all(
+                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await;
+    }
+
+    /// Tauri 임베딩 에셋 조회
+    async fn resolve_asset(&self, path: &str) -> Option<(Vec<u8>, String)> {
+        let fetcher = self.asset_fetcher.read().clone();
+        if let Some(ref f) = fetcher {
+            return f(path);
+        }
+        None
     }
 
     async fn handle_ws_client(

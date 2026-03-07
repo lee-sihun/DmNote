@@ -1,31 +1,8 @@
-use std::path::PathBuf;
+use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
-
-/// OBS 빌드 정적 파일 루트 경로 탐색 (dist/renderer/)
-/// obs/index.html이 ../assets/ 를 참조하므로, obs/ 상위인 renderer/ 루트를 반환
-pub fn resolve_obs_static_dir(app: &AppHandle) -> Option<PathBuf> {
-    // 1. Tauri resource_dir (프로덕션 번들)
-    if let Ok(res) = app.path().resource_dir() {
-        if res.join("obs/index.html").exists() {
-            return Some(res);
-        }
-    }
-
-    // 2. 실행 파일 기준 탐색 (dev mode: src-tauri/target/debug/)
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let renderer_root = exe_dir.join("../../../dist/renderer");
-            if renderer_root.join("obs/index.html").exists() {
-                return renderer_root.canonicalize().ok();
-            }
-        }
-    }
-
-    None
-}
 
 #[tauri::command]
 pub async fn obs_start(
@@ -35,17 +12,24 @@ pub async fn obs_start(
 ) -> CmdResult<ObsStatus> {
     let port = port.unwrap_or(state.store.with_state(|s| s.obs_port));
 
-    // OBS 정적 파일 경로 설정
-    // dev 모드에서는 Vite dev server 우선 사용 (stale 빌드 디렉토리 회피)
+    // OBS 정적 파일 서빙 설정
     if cfg!(debug_assertions) {
+        // dev 모드: Vite dev server로 리다이렉트
         let dev_url = "http://localhost:3400".to_string();
         log::info!("[ObsBridge] dev 모드: Vite dev server로 리다이렉트 ({dev_url})");
         state.obs_bridge.set_dev_url(dev_url);
-    } else if let Some(dir) = resolve_obs_static_dir(&app) {
-        log::info!("[ObsBridge] static_dir: {}", dir.display());
-        state.obs_bridge.set_static_dir(dir);
     } else {
-        log::warn!("[ObsBridge] OBS 정적 파일 디렉토리를 찾을 수 없음 (HTTP 서빙 비활성)");
+        // 프로덕션: Tauri 임베딩 에셋으로 서빙 (포터블 단일 exe 지원)
+        let handle = app.clone();
+        let fetcher = Arc::new(move |path: &str| {
+            let resolver = handle.asset_resolver();
+            resolver.get(path.into()).map(|asset| {
+                let mime = asset.mime_type.clone();
+                (asset.bytes.to_vec(), mime)
+            })
+        });
+        state.obs_bridge.set_asset_fetcher(fetcher);
+        log::info!("[ObsBridge] Tauri 임베딩 에셋으로 HTTP 서빙");
     }
 
     state

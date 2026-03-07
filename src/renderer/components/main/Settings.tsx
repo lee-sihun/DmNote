@@ -585,7 +585,10 @@ const Settings = ({
         const status = await obsApi.start(port);
         setObsStatus(status);
         // 시작 성공 후에만 영속화 (실패 시 obsModeEnabled=true 잔류 방지)
-        await window.api.settings.update({ obsModeEnabled: true, obsPort: port });
+        await window.api.settings.update({
+          obsModeEnabled: true,
+          obsPort: port,
+        });
       }
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
@@ -974,7 +977,10 @@ const Settings = ({
                 </div>
               </div>
               {obsStatus.running && (
-                <div className="flex flex-col gap-[4px] pb-[8px] pt-[2px]" role="status">
+                <div
+                  className="flex flex-col gap-[4px] pb-[8px] pt-[2px]"
+                  role="status"
+                >
                   <p className="text-style-2 text-[#8B8D97] leading-[1.4]">
                     {t('settings.obsGuide')}
                   </p>

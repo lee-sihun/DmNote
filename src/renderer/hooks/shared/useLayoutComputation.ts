@@ -114,9 +114,7 @@ export function computeLayout(input: LayoutInput) {
           }
 
           const width =
-            element.measuredSize?.width ??
-            element.estimatedSize?.width ??
-            200;
+            element.measuredSize?.width ?? element.estimatedSize?.width ?? 200;
           const height =
             element.measuredSize?.height ??
             element.estimatedSize?.height ??
@@ -159,9 +157,7 @@ export function computeLayout(input: LayoutInput) {
   const displayStatPositions = applyOffset(currentStatPositions);
   const displayGraphPositions = applyOffset(currentGraphPositions);
 
-  const positionOffset = bounds
-    ? { x: offsetX, y: offsetY }
-    : { x: 0, y: 0 };
+  const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
   const topMostY = bounds ? topOffset : 0;
 

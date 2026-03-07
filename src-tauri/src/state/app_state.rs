@@ -296,10 +296,17 @@ impl AppState {
         let port = store.with_state(|s| s.obs_port);
         let app_handle = app.clone();
 
-        // 정적 파일 경로 설정
-        if let Some(dir) = crate::commands::app::obs::resolve_obs_static_dir(&app_handle) {
-            log::info!("[ObsBridge] auto-start static_dir: {}", dir.display());
-            bridge.set_static_dir(dir);
+        // 프로덕션: Tauri 임베딩 에셋으로 서빙
+        if !cfg!(debug_assertions) {
+            let handle = app_handle.clone();
+            let fetcher = std::sync::Arc::new(move |path: &str| {
+                let resolver = handle.asset_resolver();
+                resolver.get(path.into()).map(|asset| {
+                    let mime = asset.mime_type.clone();
+                    (asset.bytes.to_vec(), mime)
+                })
+            });
+            bridge.set_asset_fetcher(fetcher);
         }
 
         // 오버레이 숨김 (부팅 시 flash 방지)

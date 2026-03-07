@@ -85,46 +85,47 @@ function useObsWebSocket({
       };
 
       ws.onmessage = (event) => {
+        let envelope: ObsEnvelope;
         try {
-          const envelope = JSON.parse(event.data as string) as ObsEnvelope;
-          switch (envelope.type) {
-            case 'hello_ack':
-              setConnectionState('connected');
-              break;
-            case 'snapshot':
-              callbacksRef.current.onSnapshot(
-                envelope.payload as BootstrapPayload,
-              );
-              break;
-            case 'key_event':
-              callbacksRef.current.onKeyEvent(
-                envelope.payload as KeyEventPayload,
-              );
-              break;
-            case 'settings_diff':
-              callbacksRef.current.onSettingsDiff(
-                envelope.payload as Record<string, unknown>,
-              );
-              break;
-            case 'counter_update':
-              callbacksRef.current.onCounterUpdate(
-                envelope.payload as Record<string, unknown>,
-              );
-              break;
-            case 'ping':
-              sendMessage('pong');
-              break;
-            case 'error': {
-              const payload = envelope.payload as Record<string, unknown>;
-              if (payload?.code === 'AUTH_FAILED') {
-                console.warn('[ObsWS] 토큰 인증 실패, 재연결 중단');
-                disposed = true; // 재연결 루프 방지
-              }
-              break;
-            }
-          }
+          envelope = JSON.parse(event.data as string) as ObsEnvelope;
         } catch {
-          // 파싱 실패 무시
+          return; // JSON 파싱 실패 무시
+        }
+        switch (envelope.type) {
+          case 'hello_ack':
+            setConnectionState('connected');
+            break;
+          case 'snapshot':
+            callbacksRef.current.onSnapshot(
+              envelope.payload as BootstrapPayload,
+            );
+            break;
+          case 'key_event':
+            callbacksRef.current.onKeyEvent(
+              envelope.payload as KeyEventPayload,
+            );
+            break;
+          case 'settings_diff':
+            callbacksRef.current.onSettingsDiff(
+              envelope.payload as Record<string, unknown>,
+            );
+            break;
+          case 'counter_update':
+            callbacksRef.current.onCounterUpdate(
+              envelope.payload as Record<string, unknown>,
+            );
+            break;
+          case 'ping':
+            sendMessage('pong');
+            break;
+          case 'error': {
+            const payload = envelope.payload as Record<string, unknown>;
+            if (payload?.code === 'AUTH_FAILED') {
+              console.warn('[ObsWS] 토큰 인증 실패, 재연결 중단');
+              disposed = true; // 재연결 루프 방지
+            }
+            break;
+          }
         }
       };
 
