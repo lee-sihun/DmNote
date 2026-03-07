@@ -31,10 +31,9 @@ use crate::{
     audio::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
-        obs::KeyState as ObsKeyState,
-        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
-        KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
-        SettingsDiff, SettingsState,
+        obs::KeyState as ObsKeyState, overlay_resize_anchor_from_str, BootstrapOverlayState,
+        BootstrapPayload, DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
+        OverlayBounds, OverlayResizeAnchor, SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
@@ -478,8 +477,7 @@ impl AppState {
                     if delta != 0.0 {
                         match anchor {
                             OverlayResizeAnchor::Center => new_y -= delta / 2.0,
-                            OverlayResizeAnchor::BottomLeft
-                            | OverlayResizeAnchor::BottomRight => {}
+                            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
                             OverlayResizeAnchor::FixedPosition => new_y -= delta,
                             _ => new_y -= delta,
                         }
@@ -1196,8 +1194,7 @@ impl AppState {
         if let Some(best) =
             monitors.find_best_overlap(bounds.x, bounds.y, bounds.width, bounds.height)
         {
-            let area =
-                best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
+            let area = best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
             if area >= min_visible_area {
                 // 충분히 보이므로 저장 좌표 그대로 복원
                 return OverlayPosition {
@@ -1933,13 +1930,7 @@ impl MonitorData {
     }
 
     /// 주어진 사각형과 가장 많이 겹치는 모니터를 반환
-    fn find_best_overlap(
-        &self,
-        x: f64,
-        y: f64,
-        width: f64,
-        height: f64,
-    ) -> Option<&MonitorSpec> {
+    fn find_best_overlap(&self, x: f64, y: f64, width: f64, height: f64) -> Option<&MonitorSpec> {
         self.specs
             .iter()
             .max_by(|a, b| {

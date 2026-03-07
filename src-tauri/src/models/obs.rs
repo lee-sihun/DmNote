@@ -10,6 +10,7 @@ pub const DEFAULT_OBS_PORT: u16 = 34891;
 // ── 공통 Envelope (수신 파싱용) ──
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ObsEnvelope {
     #[serde(default)]
     pub v: u32,
@@ -23,6 +24,7 @@ pub struct ObsEnvelope {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(dead_code)]
 pub enum ObsInMessage {
     Hello { payload: HelloPayload },
     Ping,
