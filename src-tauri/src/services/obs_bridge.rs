@@ -12,8 +12,7 @@ use tokio::sync::{broadcast, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::models::obs::{
-    make_envelope, HelloAckPayload, KeyEventPayload, KeyState, ObsBroadcast, ObsEnvelope,
-    ObsStatus,
+    make_envelope, HelloAckPayload, KeyEventPayload, KeyState, ObsBroadcast, ObsEnvelope, ObsStatus,
 };
 
 /// OBS WebSocket 서버
@@ -44,6 +43,7 @@ impl ObsBridgeService {
         }
     }
 
+    #[allow(dead_code)] // v2: HTTP 정적 서빙
     pub fn set_static_dir(&self, dir: PathBuf) {
         *self.static_dir.write() = Some(dir);
     }
@@ -69,13 +69,16 @@ impl ObsBridgeService {
     }
 
     pub fn broadcast_key_event(&self, key: String, state: KeyState, mode: String) {
-        let _ = self.broadcast_tx.send(ObsBroadcast::KeyEvent { key, state, mode });
+        let _ = self
+            .broadcast_tx
+            .send(ObsBroadcast::KeyEvent { key, state, mode });
     }
 
     pub fn broadcast_settings_diff(&self, diff: Value) {
         let _ = self.broadcast_tx.send(ObsBroadcast::SettingsDiff(diff));
     }
 
+    #[allow(dead_code)] // v2: layout 변경 broadcast
     pub fn broadcast_layout_diff(&self, diff: Value) {
         let _ = self.broadcast_tx.send(ObsBroadcast::LayoutDiff(diff));
     }
@@ -237,7 +240,7 @@ impl ObsBridgeService {
         .unwrap_or_default();
         let ack_msg = make_envelope("hello_ack", next_seq(), ack_payload);
         if ws_tx
-            .send(Message::Text(ack_msg.to_string().into()))
+            .send(Message::Text(ack_msg.to_string()))
             .await
             .is_err()
         {
@@ -249,7 +252,7 @@ impl ObsBridgeService {
         let snapshot = self.cached_snapshot.read().clone();
         let snapshot_msg = make_envelope("snapshot", next_seq(), snapshot);
         if ws_tx
-            .send(Message::Text(snapshot_msg.to_string().into()))
+            .send(Message::Text(snapshot_msg.to_string()))
             .await
             .is_err()
         {
@@ -268,7 +271,7 @@ impl ObsBridgeService {
                         Ok(ObsBroadcast::Shutdown) => break,
                         Ok(broadcast) => {
                             let msg = broadcast_to_envelope(&broadcast, next_seq());
-                            if ws_tx.send(Message::Text(msg.to_string().into())).await.is_err() {
+                            if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                 break;
                             }
                         }
@@ -276,7 +279,7 @@ impl ObsBridgeService {
                             log::warn!("[ObsBridge] {addr}: {n}개 메시지 누락, 스냅샷 재전송");
                             let snapshot = self.cached_snapshot.read().clone();
                             let msg = make_envelope("snapshot", next_seq(), snapshot);
-                            if ws_tx.send(Message::Text(msg.to_string().into())).await.is_err() {
+                            if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                 break;
                             }
                         }
@@ -292,14 +295,14 @@ impl ObsBridgeService {
                                 match envelope.msg_type.as_str() {
                                     "ping" => {
                                         let pong = make_envelope("pong", next_seq(), Value::Null);
-                                        if ws_tx.send(Message::Text(pong.to_string().into())).await.is_err() {
+                                        if ws_tx.send(Message::Text(pong.to_string())).await.is_err() {
                                             break;
                                         }
                                     }
                                     "resync_request" => {
                                         let snapshot = self.cached_snapshot.read().clone();
                                         let msg = make_envelope("snapshot", next_seq(), snapshot);
-                                        if ws_tx.send(Message::Text(msg.to_string().into())).await.is_err() {
+                                        if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
                                             break;
                                         }
                                     }
@@ -317,7 +320,7 @@ impl ObsBridgeService {
                 // 서버 주도 ping (연결 유지)
                 _ = ping_interval.tick() => {
                     let ping_msg = make_envelope("ping", next_seq(), Value::Null);
-                    if ws_tx.send(Message::Text(ping_msg.to_string().into())).await.is_err() {
+                    if ws_tx.send(Message::Text(ping_msg.to_string())).await.is_err() {
                         break;
                     }
                 }
@@ -344,18 +347,10 @@ fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
             .unwrap_or_default();
             make_envelope("key_event", seq, payload)
         }
-        ObsBroadcast::SettingsDiff(diff) => {
-            make_envelope("settings_diff", seq, diff.clone())
-        }
-        ObsBroadcast::LayoutDiff(diff) => {
-            make_envelope("layout_diff", seq, diff.clone())
-        }
-        ObsBroadcast::CounterUpdate(data) => {
-            make_envelope("counter_update", seq, data.clone())
-        }
-        ObsBroadcast::Snapshot(snapshot) => {
-            make_envelope("snapshot", seq, snapshot.clone())
-        }
+        ObsBroadcast::SettingsDiff(diff) => make_envelope("settings_diff", seq, diff.clone()),
+        ObsBroadcast::LayoutDiff(diff) => make_envelope("layout_diff", seq, diff.clone()),
+        ObsBroadcast::CounterUpdate(data) => make_envelope("counter_update", seq, data.clone()),
+        ObsBroadcast::Snapshot(snapshot) => make_envelope("snapshot", seq, snapshot.clone()),
         ObsBroadcast::Shutdown => unreachable!("Shutdown은 직접 처리됨"),
     }
 }
