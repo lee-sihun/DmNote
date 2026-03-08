@@ -76,6 +76,10 @@ codex exec -C "$(pwd)" -s danger-full-access --json "다음 작업에 대한 구
 - `--ephemeral`은 사용하지 않습니다 (후속 resume 보존).
 - Bash의 `run_in_background: true`로 실행합니다. 백그라운드이므로 즉시 반환되며, Codex 작업은 완료까지 제한 없이 계속됩니다.
 - 완료 시 시스템이 자동 알림 → TaskOutput으로 결과를 수집합니다.
+- **중요: 결론을 내리기 전에 반드시 `TaskOutput(block: false)`로 Codex 상태를 확인합니다.**
+  - `status: running` → Codex가 작업 중이므로 대기. 대기 중에는 Claude 선분석 등 병렬 가능한 작업만 수행.
+  - `status: completed` → 결과를 수집하여 반영.
+  - `status: failed` 또는 에러 → 즉시 fallback (Claude 단독 진행). 대기하지 않음.
 
 ### 진행 상황 확인
 백그라운드 실행 중 TaskOutput으로 중간 출력을 확인합니다.

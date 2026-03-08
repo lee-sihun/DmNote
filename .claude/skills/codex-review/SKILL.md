@@ -72,6 +72,10 @@ codex exec resume --last "해당 이슈에 대한 구체적인 수정 코드를 
 - `--ephemeral`은 사용하지 않습니다 (후속 resume 보존).
 - Bash의 `run_in_background: true`로 실행합니다. 백그라운드이므로 즉시 반환되며, Codex 작업은 완료까지 제한 없이 계속됩니다.
 - 완료 시 시스템이 자동 알림 → TaskOutput으로 결과를 수집합니다.
+- **중요: 리뷰 결론을 내리기 전에 반드시 `TaskOutput(block: false)`로 Codex 상태를 확인합니다.**
+  - `status: running` → Codex가 작업 중이므로 대기. 단독으로 리뷰를 완료하지 않음.
+  - `status: completed` → 결과를 수집하여 반영.
+  - `status: failed` 또는 에러 → 즉시 fallback (Claude 단독 리뷰). 대기하지 않음.
 
 ## 실패 처리
 
