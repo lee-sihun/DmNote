@@ -1565,6 +1565,9 @@ pub struct BootstrapPayload {
     pub current_mode: String,
     pub overlay: BootstrapOverlayState,
     pub key_counters: KeyCounters,
+    pub layer_groups: LayerGroups,
+    pub tab_note_overrides: TabNoteOverrides,
+    pub tab_css_overrides: TabCssOverrides,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

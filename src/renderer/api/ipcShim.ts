@@ -314,15 +314,9 @@ function onWsMessage(envelope: ObsEnvelope) {
         selectedKeyType: snapshot.selectedKeyType,
       });
 
-      const tabNoteOverrides =
-        (snapshot as BootstrapPayload & Record<string, unknown>)
-          .tabNoteOverrides ?? {};
-      dispatchEvent('tabNote:changed_all', tabNoteOverrides);
+      dispatchEvent('tabNote:changed_all', snapshot.tabNoteOverrides ?? {});
 
-      const layerGroups =
-        (snapshot as BootstrapPayload & Record<string, unknown>).layerGroups ??
-        {};
-      dispatchEvent('layerGroups:changed', layerGroups);
+      dispatchEvent('layerGroups:changed', snapshot.layerGroups ?? {});
 
       // preset:snapshot (프리셋 로드 시)
       if (prev) {
@@ -333,7 +327,7 @@ function onWsMessage(envelope: ObsEnvelope) {
           graphPositions: snapshot.graphPositions,
           customTabs: snapshot.customTabs,
           selectedKeyType: snapshot.selectedKeyType,
-          tabNoteOverrides,
+          tabNoteOverrides: snapshot.tabNoteOverrides ?? {},
         });
       }
 

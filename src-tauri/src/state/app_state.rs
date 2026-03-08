@@ -250,6 +250,9 @@ impl AppState {
                 anchor: state.overlay_resize_anchor.as_str().to_string(),
             },
             key_counters: self.key_counters.read().clone(),
+            layer_groups: state.layer_groups.clone(),
+            tab_note_overrides: state.tab_note_overrides.clone(),
+            tab_css_overrides: state.tab_css_overrides.clone(),
         }
     }
 
