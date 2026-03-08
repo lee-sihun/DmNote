@@ -187,6 +187,7 @@
     "importExport": "Импорт/экспорт",
     "overlayClose": "Закрыть оверлей",
     "overlayOpen": "Открыть оверлей",
+    "overlayObsDisabled": "Режим OBS активен",
     "back": "Назад",
     "settings": "Настройки",
     "etcSettings": "Прочее",

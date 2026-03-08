@@ -174,27 +174,36 @@ const Settings = ({
     }
   }, [isMacOS, angleMode, setAngleMode]);
 
-  // OBS 상태 초기 로드 + 주기적 폴링
+  // OBS 상태 이벤트 구독 + clientCount 폴링
   useEffect(() => {
     let mounted = true;
-    const fetchStatus = async () => {
+    obsApi
+      .status()
+      .then((status) => {
+        if (mounted) setObsStatus(status);
+      })
+      .catch(() => undefined);
+
+    // start/stop 이벤트 구독
+    const unsubscribe = obsApi.onStatus((status) => {
+      if (mounted) setObsStatus(status);
+    });
+
+    // clientCount는 connect/disconnect 이벤트가 없으므로 폴링 유지
+    const interval = setInterval(async () => {
       try {
         const status = await obsApi.status();
-        if (!mounted) return;
-        setObsStatus((prev) =>
-          prev.running === status.running &&
-          prev.port === status.port &&
-          prev.clientCount === status.clientCount &&
-          prev.token === status.token
-            ? prev
-            : status,
-        );
+        if (mounted) {
+          setObsStatus((prev) =>
+            prev.clientCount === status.clientCount ? prev : status,
+          );
+        }
       } catch {}
-    };
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
+    }, 5000);
+
     return () => {
       mounted = false;
+      unsubscribe();
       clearInterval(interval);
     };
   }, []);

@@ -187,6 +187,7 @@
     "importExport": "Import/Export",
     "overlayClose": "Close Overlay",
     "overlayOpen": "Open Overlay",
+    "overlayObsDisabled": "OBS mode active",
     "back": "Back",
     "settings": "Settings",
     "etcSettings": "Etc",

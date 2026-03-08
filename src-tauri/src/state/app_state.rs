@@ -67,6 +67,8 @@ pub struct AppState {
     pub obs_bridge: Arc<ObsBridgeService>,
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
+    /// OBS 모드에서 오버레이 윈도우를 destroy할 때 close를 허용하는 플래그
+    overlay_obs_close: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -100,14 +102,18 @@ impl AppState {
             css_watcher: RwLock::new(None),
             obs_bridge,
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
+            overlay_obs_close: Arc::new(AtomicBool::new(false)),
         })
     }
 
     pub fn initialize_runtime(&self, app: &AppHandle) -> Result<()> {
         self.attach_main_window_handlers(app);
-        self.ensure_overlay_window(app)?;
-        // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         let snapshot = self.store.snapshot();
+        // OBS 모드가 활성화된 상태로 부팅하면 오버레이 생성 건너뛰기 (create→destroy 낭비 방지)
+        if !snapshot.obs_mode_enabled {
+            self.ensure_overlay_window(app)?;
+        }
+        // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
                 let _ = main.open_devtools();
@@ -318,17 +324,18 @@ impl AppState {
         // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
         bridge.register_event_forwarding(app);
 
-        // 오버레이 숨김 (부팅 시 flash 방지)
-        self.obs_hide_overlay(app);
-
-        let obs_previous_overlay_visible = self.obs_previous_overlay_visible.clone();
-        let overlay_visible = self.overlay_visible.clone();
+        // 부팅 시에는 오버레이를 생성하지 않았으므로 상태만 저장
+        // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
+        let was_visible = self.store.with_state(|s| s.overlay_visible);
+        *self.obs_previous_overlay_visible.write() = Some(was_visible);
 
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
             match bridge.start(port).await {
                 Ok(()) => {
                     log::info!("[ObsBridge] auto-start 성공 (port={})", port);
+                    let state = app_handle.state::<AppState>();
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
                 Err(e) => {
                     log::error!(
@@ -338,36 +345,51 @@ impl AppState {
                     let _ = store.update(|state| {
                         state.obs_mode_enabled = false;
                     });
-                    // 실패 시 오버레이 상태 복원 (플래그 + 실제 윈도우)
-                    if let Some(true) = obs_previous_overlay_visible.write().take() {
-                        *overlay_visible.write() = true;
-                        let _ = store.update(|state| {
-                            state.overlay_visible = true;
-                        });
-                        if let Some(window) = app_handle.get_webview_window(OVERLAY_LABEL) {
-                            let _ = window.show();
-                        }
-                    }
+                    // 실패 시 오버레이 복원 (윈도우 재생성 포함)
+                    let state = app_handle.state::<AppState>();
+                    state.obs_restore_overlay(&app_handle);
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
                 }
             }
         });
     }
 
-    /// OBS 시작 시 오버레이 숨김 (이전 상태 보존)
+    /// OBS 시작 시 오버레이 윈도우 destroy (이전 상태 보존)
     pub fn obs_hide_overlay(&self, app: &AppHandle) {
         let was_visible = *self.overlay_visible.read();
         *self.obs_previous_overlay_visible.write() = Some(was_visible);
-        if was_visible {
-            if let Err(e) = self.set_overlay_visibility(app, false) {
-                log::warn!("[ObsBridge] 오버레이 숨기기 실패: {}", e);
+        // 오버레이 윈도우 destroy
+        if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
+            self.overlay_obs_close.store(true, Ordering::SeqCst);
+            if let Err(e) = window.close() {
+                log::warn!("[ObsBridge] 오버레이 destroy 실패: {}", e);
+                self.overlay_obs_close.store(false, Ordering::SeqCst);
+                // close 실패 시 hide로 fallback
+                if was_visible {
+                    if let Err(e) = self.set_overlay_visibility(app, false) {
+                        log::warn!("[ObsBridge] 오버레이 hide fallback 실패: {}", e);
+                    }
+                }
+                return;
             }
         }
+        // close 성공(또는 윈도우 부재) 후 가시성 상태 갱신
+        *self.overlay_visible.write() = false;
+        let _ = self.store.update(|state| {
+            state.overlay_visible = false;
+        });
+        let _ = app.emit("overlay:visibility", &json!({ "visible": false }));
     }
 
-    /// OBS 중지 시 오버레이 복원
+    /// OBS 중지 시 오버레이 재생성 + 복원
     pub fn obs_restore_overlay(&self, app: &AppHandle) {
+        // 이전 close() 요청이 아직 처리 중일 수 있으므로 플래그를 리셋하여
+        // 지연된 CloseRequested가 새로 복원된 오버레이를 destroy하지 않도록 방지
+        self.overlay_obs_close.store(false, Ordering::SeqCst);
+
         let prev = self.obs_previous_overlay_visible.write().take();
         if let Some(true) = prev {
+            // set_overlay_visibility(true) 내부에서 ensure_overlay_window + show + store 갱신 + emit 처리
             if let Err(e) = self.set_overlay_visibility(app, true) {
                 log::warn!("[ObsBridge] 오버레이 복원 실패: {}", e);
             }
@@ -1201,12 +1223,16 @@ impl AppState {
         let app_handle = app.clone();
         let overlay_window = window.clone();
         let force_close_flag = self.overlay_force_close.clone();
+        let obs_close_flag = self.overlay_obs_close.clone();
         let initializing_flag = self.overlay_initializing.clone();
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
                 if force_close_flag.swap(false, Ordering::SeqCst) {
+                    // 앱 종료 시 — 실제 close 허용
                     *overlay_visible.write() = false;
+                } else if obs_close_flag.swap(false, Ordering::SeqCst) {
+                    // OBS 모드 시 — 실제 close 허용 (visibility는 obs_hide_overlay에서 처리)
                 } else {
                     api.prevent_close();
                     if let Err(err) = overlay_window.hide() {

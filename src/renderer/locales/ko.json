@@ -187,6 +187,7 @@
     "importExport": "불러오기/내보내기",
     "overlayClose": "오버레이 닫기",
     "overlayOpen": "오버레이 열기",
+    "overlayObsDisabled": "OBS 모드 사용 중",
     "back": "돌아가기",
     "settings": "설정",
     "etcSettings": "기타 설정",

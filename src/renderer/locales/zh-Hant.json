@@ -187,6 +187,7 @@
     "importExport": "導入/導出",
     "overlayClose": "關閉懸浮窗",
     "overlayOpen": "打開懸浮窗",
+    "overlayObsDisabled": "OBS 模式使用中",
     "back": "返回",
     "settings": "設定",
     "etcSettings": "其他設定",
