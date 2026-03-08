@@ -70,6 +70,11 @@ pub enum ObsBroadcast {
     LayoutDiff(Value),
     CounterUpdate(Value),
     Snapshot(Value),
+    /// 범용 Tauri 이벤트 포워딩 (event 이름 + JSON 데이터)
+    TauriEvent {
+        event: String,
+        data: Value,
+    },
     /// 서버 종료 신호 — 클라이언트 세션 종료용
     Shutdown,
 }

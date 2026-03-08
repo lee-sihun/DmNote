@@ -101,6 +101,8 @@ pub struct ObsBridgeService {
     session_token: RwLock<String>,
     /// Tauri AppHandle (invoke_request 디스패치용)
     app_handle: RwLock<Option<AppHandle<Wry>>>,
+    /// 이벤트 포워딩용 리스너 ID (stop 시 해제)
+    event_listener_ids: RwLock<Vec<tauri::EventId>>,
 }
 
 impl ObsBridgeService {
@@ -119,6 +121,7 @@ impl ObsBridgeService {
             server_version: version.to_string(),
             session_token: RwLock::new(String::new()),
             app_handle: RwLock::new(None),
+            event_listener_ids: RwLock::new(Vec::new()),
         }
     }
 
@@ -132,6 +135,61 @@ impl ObsBridgeService {
 
     pub fn set_app_handle(&self, handle: AppHandle<Wry>) {
         *self.app_handle.write() = Some(handle);
+    }
+
+    /// Tauri 이벤트를 OBS WS 클라이언트에 포워딩하는 리스너 등록
+    pub fn register_event_forwarding(&self, app: &AppHandle<Wry>) {
+        use tauri::Listener;
+
+        // 기존 리스너 해제 (중복 호출 시 누적 방지)
+        for id in self.event_listener_ids.write().drain(..) {
+            app.unlisten(id);
+        }
+
+        // OBS 오버레이가 수신하는 이벤트 목록
+        let forwarded_events = [
+            "settings:changed",
+            "keys:state",
+            "keys:changed",
+            "keys:counters",
+            "keys:counter",
+            "keys:mode-changed",
+            "positions:changed",
+            "statPositions:changed",
+            "graphPositions:changed",
+            "layerGroups:changed",
+            "overlay:visibility",
+            "overlay:lock",
+            "overlay:anchor",
+            "input:raw",
+            "css:use",
+            "css:content",
+            "js:use",
+            "js:content",
+            "tabNote:changed",
+            "tabNote:changed_all",
+            "tabCss:changed",
+            "plugin-bridge:message",
+        ];
+
+        let mut ids = Vec::with_capacity(forwarded_events.len());
+        for event_name in &forwarded_events {
+            let tx = self.broadcast_tx.clone();
+            let name = event_name.to_string();
+            let id = app.listen(*event_name, move |evt| {
+                let data: Value = serde_json::from_str(evt.payload()).unwrap_or(Value::Null);
+                let _ = tx.send(ObsBroadcast::TauriEvent {
+                    event: name.clone(),
+                    data,
+                });
+            });
+            ids.push(id);
+        }
+        *self.event_listener_ids.write() = ids;
+        log::info!(
+            "[ObsBridge] 이벤트 포워딩 등록: {}개 이벤트",
+            forwarded_events.len()
+        );
     }
 
     pub fn is_running(&self) -> bool {
@@ -180,6 +238,14 @@ impl ObsBridgeService {
 
     pub fn broadcast_counter_update(&self, data: Value) {
         let _ = self.broadcast_tx.send(ObsBroadcast::CounterUpdate(data));
+    }
+
+    /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
+    #[allow(dead_code)]
+    pub fn broadcast_tauri_event(&self, event: String, data: Value) {
+        let _ = self
+            .broadcast_tx
+            .send(ObsBroadcast::TauriEvent { event, data });
     }
 
     /// 전체 스냅샷 재전송 (프리셋 로드 등 대규모 변경 시)
@@ -241,6 +307,13 @@ impl ObsBridgeService {
     pub fn stop(&self) {
         if !self.running.load(Ordering::Relaxed) {
             return;
+        }
+        // 이벤트 포워딩 리스너 해제
+        if let Some(app) = self.app_handle.read().as_ref() {
+            use tauri::Listener;
+            for id in self.event_listener_ids.write().drain(..) {
+                app.unlisten(id);
+            }
         }
         // 기존 클라이언트 세션에 종료 신호 전송
         let _ = self.broadcast_tx.send(ObsBroadcast::Shutdown);
@@ -893,6 +966,11 @@ fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
         ObsBroadcast::LayoutDiff(diff) => make_envelope("layout_diff", seq, diff.clone()),
         ObsBroadcast::CounterUpdate(data) => make_envelope("counter_update", seq, data.clone()),
         ObsBroadcast::Snapshot(snapshot) => make_envelope("snapshot", seq, snapshot.clone()),
+        ObsBroadcast::TauriEvent { event, data } => make_envelope(
+            "tauri_event",
+            seq,
+            serde_json::json!({ "event": event, "data": data }),
+        ),
         ObsBroadcast::Shutdown => unreachable!("Shutdown은 직접 처리됨"),
     }
 }

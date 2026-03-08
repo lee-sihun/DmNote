@@ -34,6 +34,8 @@ pub async fn obs_start(
 
     // AppHandle 전달 (invoke_request 디스패치용)
     state.obs_bridge.set_app_handle(app.clone());
+    // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
+    state.obs_bridge.register_event_forwarding(&app);
 
     state
         .obs_bridge

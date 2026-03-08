@@ -296,8 +296,13 @@ impl AppState {
         let port = store.with_state(|s| s.obs_port);
         let app_handle = app.clone();
 
-        // 프로덕션: Tauri 임베딩 에셋으로 서빙
-        if !cfg!(debug_assertions) {
+        // dev 모드: Vite dev server로 리다이렉트
+        if cfg!(debug_assertions) {
+            let dev_url = "http://localhost:3400".to_string();
+            log::info!("[ObsBridge] dev 모드: Vite dev server로 리다이렉트 ({dev_url})");
+            bridge.set_dev_url(dev_url);
+        } else {
+            // 프로덕션: Tauri 임베딩 에셋으로 서빙
             let handle = app_handle.clone();
             let fetcher = std::sync::Arc::new(move |path: &str| {
                 let resolver = handle.asset_resolver();
@@ -308,6 +313,11 @@ impl AppState {
             });
             bridge.set_asset_fetcher(fetcher);
         }
+
+        // AppHandle 전달 (invoke_request 디스패치용)
+        bridge.set_app_handle(app.clone());
+        // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
+        bridge.register_event_forwarding(app);
 
         // 오버레이 숨김 (부팅 시 flash 방지)
         self.obs_hide_overlay(app);
