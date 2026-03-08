@@ -267,33 +267,6 @@ function onWsMessage(envelope: ObsEnvelope) {
       break;
     }
 
-    // [과도기] 기존 WS 메시지 → Tauri 이벤트 매핑
-    // 백엔드가 tauri_event로 통합하면 아래 case들 제거
-    case 'key_event':
-      dispatchEvent('keys:state', envelope.payload);
-      break;
-
-    case 'settings_diff': {
-      const patch = envelope.payload as Record<string, unknown>;
-      dispatchEvent('settings:changed', { changed: patch });
-      if (snapshotCache) {
-        Object.assign(snapshotCache.settings, patch);
-      }
-      break;
-    }
-
-    case 'counter_update': {
-      const counters = envelope.payload as Record<
-        string,
-        Record<string, number>
-      >;
-      dispatchEvent('keys:counters', counters);
-      if (snapshotCache) {
-        snapshotCache.keyCounters = counters;
-      }
-      break;
-    }
-
     case 'snapshot': {
       const snapshot = envelope.payload as BootstrapPayload;
       const prev = snapshotCache;

@@ -35,40 +35,16 @@ pub struct HelloAckPayload {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvokeRequestPayload {
-    pub req_id: u32,
-    pub cmd: String,
+    pub request_id: String,
+    pub command: String,
     #[serde(default)]
     pub args: Value,
-}
-
-/// 키 상태 (DOWN/UP)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum KeyState {
-    Down,
-    Up,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KeyEventPayload {
-    pub key: String,
-    pub state: KeyState,
-    pub mode: String,
 }
 
 // ── 브로드캐스트 내부 메시지 (tokio::sync::broadcast용) ──
 
 #[derive(Debug, Clone)]
 pub enum ObsBroadcast {
-    KeyEvent {
-        key: String,
-        state: KeyState,
-        mode: String,
-    },
-    SettingsDiff(Value),
-    LayoutDiff(Value),
-    CounterUpdate(Value),
     Snapshot(Value),
     /// 범용 Tauri 이벤트 포워딩 (event 이름 + JSON 데이터)
     TauriEvent {

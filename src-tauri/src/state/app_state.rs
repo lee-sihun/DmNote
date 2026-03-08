@@ -31,7 +31,7 @@ use crate::{
     audio::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
-        obs::KeyState as ObsKeyState, overlay_resize_anchor_from_str, BootstrapOverlayState,
+        overlay_resize_anchor_from_str, BootstrapOverlayState,
         BootstrapPayload, DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
         OverlayBounds, OverlayResizeAnchor, SettingsDiff, SettingsState,
     },
@@ -274,12 +274,8 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
-        // OBS 브릿지 설정 변경 브로드캐스트 + 캐시 갱신
+        // OBS 브릿지 캐시 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
         if self.obs_bridge.is_running() {
-            if let Ok(diff_json) = serde_json::to_value(&diff.changed) {
-                self.obs_bridge.broadcast_settings_diff(diff_json);
-            }
-            // cached_snapshot도 갱신 (새 클라이언트 접속 시 최신 설정 제공)
             let bp = self.bootstrap_payload();
             if let Ok(snap) = serde_json::to_value(&bp) {
                 self.obs_bridge.update_snapshot(snap);
@@ -395,28 +391,26 @@ impl AppState {
         }
     }
 
-    /// OBS 브릿지에 설정 diff 전송 + 캐시 스냅샷 갱신 (전체 스냅샷 broadcast 없음)
+    /// OBS 브릿지 캐시 스냅샷 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
     /// CSS 등 개별 설정 변경이 OBS 런타임 상태(키 시그널, KPS)를 리셋하지 않도록 사용
-    pub fn notify_obs_settings_diff(&self, diff: serde_json::Value) {
+    pub fn notify_obs_settings_diff(&self, _diff: serde_json::Value) {
         if !self.obs_bridge.is_running() {
             return;
         }
-        self.obs_bridge.broadcast_settings_diff(diff);
-        // 캐시 스냅샷 갱신 (새 클라이언트 접속 시 최신 설정 제공)
         let bp = self.bootstrap_payload();
         if let Ok(snap) = serde_json::to_value(&bp) {
             self.obs_bridge.update_snapshot(snap);
         }
     }
 
-    /// OBS 브릿지에 카운터 상태 브로드캐스트
+    /// OBS 브릿지 캐시 스냅샷 갱신 (카운터 이벤트는 register_event_forwarding이 자동 포워딩)
     pub fn obs_broadcast_counters(&self) {
         if !self.obs_bridge.is_running() {
             return;
         }
-        let counters = self.snapshot_key_counters();
-        if let Ok(data) = serde_json::to_value(&counters) {
-            self.obs_bridge.broadcast_counter_update(data);
+        let bp = self.bootstrap_payload();
+        if let Ok(snap) = serde_json::to_value(&bp) {
+            self.obs_bridge.update_snapshot(snap);
         }
     }
 
@@ -965,20 +959,6 @@ impl AppState {
                                 }
                             }
                             let payload = json!({ "key": key_label, "state": state, "mode": mode });
-
-                            // OBS 브릿지 키 이벤트 브로드캐스트
-                            if app_state.obs_bridge.is_running() {
-                                let obs_key_state = if state == "DOWN" {
-                                    ObsKeyState::Down
-                                } else {
-                                    ObsKeyState::Up
-                                };
-                                app_state.obs_bridge.broadcast_key_event(
-                                    key_label.to_string(),
-                                    obs_key_state,
-                                    mode.to_string(),
-                                );
-                            }
 
                             let mut emitted = false;
                             if let Some(overlay) = overlay_window.as_ref() {

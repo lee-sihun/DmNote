@@ -18,8 +18,7 @@ use tauri::webview::InvokeRequest;
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::models::obs::{
-    make_envelope, HelloAckPayload, InvokeRequestPayload, KeyEventPayload, KeyState, ObsBroadcast,
-    ObsEnvelope, ObsStatus,
+    make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
 };
 
 /// OBS 클라이언트에서 실행 불가능한 커맨드 목록
@@ -219,25 +218,6 @@ impl ObsBridgeService {
 
     pub fn update_snapshot(&self, snapshot: Value) {
         *self.cached_snapshot.write() = snapshot;
-    }
-
-    pub fn broadcast_key_event(&self, key: String, state: KeyState, mode: String) {
-        let _ = self
-            .broadcast_tx
-            .send(ObsBroadcast::KeyEvent { key, state, mode });
-    }
-
-    pub fn broadcast_settings_diff(&self, diff: Value) {
-        let _ = self.broadcast_tx.send(ObsBroadcast::SettingsDiff(diff));
-    }
-
-    #[allow(dead_code)] // v2: layout 변경 broadcast
-    pub fn broadcast_layout_diff(&self, diff: Value) {
-        let _ = self.broadcast_tx.send(ObsBroadcast::LayoutDiff(diff));
-    }
-
-    pub fn broadcast_counter_update(&self, data: Value) {
-        let _ = self.broadcast_tx.send(ObsBroadcast::CounterUpdate(data));
     }
 
     /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
@@ -598,7 +578,7 @@ impl ObsBridgeService {
 
         // RPC 응답 채널 (invoke_request → invoke_response)
         let (rpc_tx, mut rpc_rx) =
-            tokio::sync::mpsc::unbounded_channel::<(u32, Result<Value, Value>)>();
+            tokio::sync::mpsc::unbounded_channel::<(String, Result<Value, Value>)>();
 
         // 메인 루프: broadcast 수신 + 클라이언트 메시지 수신 + RPC 응답
         let mut ping_interval = tokio::time::interval(Duration::from_secs(30));
@@ -665,10 +645,10 @@ impl ObsBridgeService {
                     }
                 }
                 // RPC 응답 전송 (invoke_request → invoke_response)
-                Some((req_id, result)) = rpc_rx.recv() => {
+                Some((request_id, result)) = rpc_rx.recv() => {
                     let payload = match result {
-                        Ok(data) => serde_json::json!({ "reqId": req_id, "ok": data }),
-                        Err(err) => serde_json::json!({ "reqId": req_id, "err": err }),
+                        Ok(data) => serde_json::json!({ "requestId": request_id, "result": data }),
+                        Err(err) => serde_json::json!({ "requestId": request_id, "error": err }),
                     };
                     let msg = make_envelope("invoke_response", next_seq(), payload);
                     if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
@@ -697,16 +677,16 @@ impl ObsBridgeService {
         &self,
         payload: &Value,
         addr: &SocketAddr,
-        rpc_tx: tokio::sync::mpsc::UnboundedSender<(u32, Result<Value, Value>)>,
+        rpc_tx: tokio::sync::mpsc::UnboundedSender<(String, Result<Value, Value>)>,
     ) {
         let req: InvokeRequestPayload = match serde_json::from_value(payload.clone()) {
             Ok(r) => r,
             Err(e) => {
                 log::warn!("[ObsBridge] {addr}: invoke_request 파싱 실패: {e}");
-                // reqId를 추출 시도하여 에러 응답 전송 (파싱 실패여도 클라이언트 대기 방지)
-                if let Some(req_id) = payload.get("reqId").and_then(|v| v.as_u64()) {
+                // requestId를 추출 시도하여 에러 응답 전송 (파싱 실패여도 클라이언트 대기 방지)
+                if let Some(request_id) = payload.get("requestId").and_then(|v| v.as_str()) {
                     let _ = rpc_tx.send((
-                        req_id as u32,
+                        request_id.to_string(),
                         Err(serde_json::json!(format!("Invalid invoke_request: {e}"))),
                     ));
                 }
@@ -715,11 +695,11 @@ impl ObsBridgeService {
         };
 
         // deny 체크 (이중 안전망 — 프론트엔드에서도 차단하지만 백엔드에서 한번 더)
-        if is_denied(&req.cmd) {
-            log::debug!("[ObsBridge] {addr}: denied cmd={}", req.cmd);
+        if is_denied(&req.command) {
+            log::debug!("[ObsBridge] {addr}: denied cmd={}", req.command);
             let _ = rpc_tx.send((
-                req.req_id,
-                Err(serde_json::json!(format!("Command denied: {}", req.cmd))),
+                req.request_id,
+                Err(serde_json::json!(format!("Command denied: {}", req.command))),
             ));
             return;
         }
@@ -730,7 +710,7 @@ impl ObsBridgeService {
             None => {
                 log::warn!("[ObsBridge] {addr}: AppHandle 미설정");
                 let _ = rpc_tx.send((
-                    req.req_id,
+                    req.request_id,
                     Err(serde_json::json!("AppHandle not available")),
                 ));
                 return;
@@ -742,7 +722,7 @@ impl ObsBridgeService {
             None => {
                 log::warn!("[ObsBridge] {addr}: overlay webview 없음");
                 let _ = rpc_tx.send((
-                    req.req_id,
+                    req.request_id,
                     Err(serde_json::json!("Overlay webview not found")),
                 ));
                 return;
@@ -758,7 +738,7 @@ impl ObsBridgeService {
         };
         let invoke_key = app_handle.invoke_key().to_string();
         let request = InvokeRequest {
-            cmd: req.cmd.clone(),
+            cmd: req.command.clone(),
             callback: CallbackFn(0),
             error: CallbackFn(1),
             url: local_url,
@@ -767,8 +747,8 @@ impl ObsBridgeService {
             invoke_key,
         };
 
-        let req_id = req.req_id;
-        let cmd = req.cmd.clone();
+        let request_id = req.request_id;
+        let cmd = req.command.clone();
         let addr_clone = *addr;
 
         // OwnedInvokeResponder: 응답을 rpc_tx 채널로 전송
@@ -792,10 +772,10 @@ impl ObsBridgeService {
                     }
                     InvokeResponse::Err(err) => Err(err.0),
                 };
-                let _ = rpc_tx.send((req_id, result));
+                let _ = rpc_tx.send((request_id, result));
             });
 
-        log::debug!("[ObsBridge] {addr_clone}: invoke cmd={cmd} reqId={req_id}");
+        log::debug!("[ObsBridge] {addr_clone}: invoke cmd={cmd}");
         webview_window.on_message(request, responder);
     }
 
@@ -953,18 +933,6 @@ fn percent_decode(input: &str) -> String {
 /// ObsBroadcast → JSON envelope 변환
 fn broadcast_to_envelope(broadcast: &ObsBroadcast, seq: u64) -> Value {
     match broadcast {
-        ObsBroadcast::KeyEvent { key, state, mode } => {
-            let payload = serde_json::to_value(KeyEventPayload {
-                key: key.clone(),
-                state: state.clone(),
-                mode: mode.clone(),
-            })
-            .unwrap_or_default();
-            make_envelope("key_event", seq, payload)
-        }
-        ObsBroadcast::SettingsDiff(diff) => make_envelope("settings_diff", seq, diff.clone()),
-        ObsBroadcast::LayoutDiff(diff) => make_envelope("layout_diff", seq, diff.clone()),
-        ObsBroadcast::CounterUpdate(data) => make_envelope("counter_update", seq, data.clone()),
         ObsBroadcast::Snapshot(snapshot) => make_envelope("snapshot", seq, snapshot.clone()),
         ObsBroadcast::TauriEvent { event, data } => make_envelope(
             "tauri_event",

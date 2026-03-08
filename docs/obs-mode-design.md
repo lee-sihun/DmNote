@@ -2,7 +2,7 @@
 
 > 작성일: 2026-03-07
 > 목표: OBS 브라우저 소스로 키뷰어를 표시하여 게임 FPS 영향 완전 제거
-> 상태: **v4 IPC Shim 구현 완료** (`feat/obs-mode` 브랜치)
+> 상태: **v4 IPC Shim + 프로토콜 통합 완료** (`feat/obs-mode` 브랜치)
 
 ---
 
@@ -71,15 +71,14 @@
 
 ### 3.2 메시지 타입
 
-| 방향 | 타입 | 용도 | 빈도 | v1 상태 |
-|------|------|------|------|---------|
+| 방향 | 타입 | 용도 | 빈도 | 상태 |
+|------|------|------|------|------|
 | C→S | `hello` | 최초 접속 핸드셰이크 | 1회 | ✅ |
-| S→C | `hello_ack` | 프로토콜 승인 | 1회 | ✅ |
+| S→C | `hello_ack` | 프로토콜 승인 + deny list | 1회 | ✅ |
 | S→C | `snapshot` | 전체 상태 동기화 | 접속 시 + resync | ✅ |
-| S→C | `key_event` | 키 입력 이벤트 | 매우 빈번 | ✅ |
-| S→C | `settings_diff` | 설정 변경분 | 가끔 | ✅ |
-| S→C | `layout_diff` | 레이아웃/모드/탭 변경 | 가끔 | ✅ snapshot 재전송으로 대체 |
-| S→C | `counter_update` | 키 카운터 갱신 | 주기적 | ✅ |
+| S→C | `tauri_event` | 범용 Tauri 이벤트 포워딩 | 빈번 | ✅ (v4: 기존 key_event/settings_diff/counter_update 통합) |
+| C→S | `invoke_request` | 커맨드 실행 요청 (WS RPC) | 초기 + 간헐 | ✅ |
+| S→C | `invoke_response` | 커맨드 실행 결과 | invoke 당 1회 | ✅ |
 | 양방향 | `ping` / `pong` | 연결 상태 확인 | 주기적 | ✅ |
 | C→S | `resync_request` | 상태 재동기화 요청 | 드묾 | ✅ |
 
@@ -87,10 +86,10 @@
 
 ```
 1. OBS 페이지 접속 (WS 직접 연결)              ← v1: HTTP upgrade 없이 직접 WS
-2. 클라이언트 → hello { client, protocol, appVersion }
-3. 서버 → hello_ack { serverVersion, obsMode }
+2. 클라이언트 → hello { client, protocol, appVersion, token }
+3. 서버 → hello_ack { serverVersion, obsMode, denyList }
 4. 서버 → snapshot { 전체 상태 }
-5. 이후 key_event, settings_diff, counter_update 스트리밍
+5. 이후 tauri_event (keys:state, settings:changed 등) + invoke_request/invoke_response
 6. seq gap 감지 시 → resync_request → snapshot 재전송
 ```
 
@@ -131,37 +130,20 @@
 }
 ```
 
-#### key_event (S→C) ✅
+#### tauri_event (S→C) ✅
 ```json
 {
   "v": 1,
-  "type": "key_event",
+  "type": "tauri_event",
   "seq": 11,
   "payload": {
-    "key": "A",
-    "state": "DOWN",
-    "mode": "4key"
+    "event": "keys:state",
+    "data": { "key": "A", "state": "DOWN", "mode": "4key" }
   }
 }
 ```
-
-#### layout_diff (S→C) ✅ snapshot 재전송으로 대체
-```json
-{
-  "v": 1,
-  "type": "layout_diff",
-  "seq": 15,
-  "payload": {
-    "reason": "preset_loaded",
-    "selectedKeyType": "6key",
-    "keys": {},
-    "positions": {},
-    "statPositions": {},
-    "graphPositions": {},
-    "tabNoteOverrides": {}
-  }
-}
-```
+> v4에서 기존 `key_event`, `settings_diff`, `counter_update` 전용 메시지를 `tauri_event`로 통합.
+> 백엔드 `register_event_forwarding()`이 22개 Tauri 이벤트를 자동 포워딩.
 
 ### 3.5 상태 일관성 ✅
 
@@ -212,13 +194,15 @@ pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + S
 주요 API:
 - `start(port: u16)` — WS 서버 bind ✅
 - `stop()` — Shutdown broadcast → 서버 shutdown ✅
-- `broadcast_key_event(key, state, mode)` — 키 이벤트 전송 ✅
-- `broadcast_settings_diff(diff)` — 설정 변경 전송 ✅
-- `broadcast_layout_diff(diff)` — 레이아웃 변경 전송 ✅ (서버측, 호출 지점 미연동)
-- `broadcast_counter_update(data)` — 카운터 갱신 전송 ✅
-- `broadcast_snapshot(snapshot)` — 스냅샷 전송 ✅
+- `broadcast_snapshot()` — 스냅샷 전송 ✅
+- `broadcast_tauri_event(event, data)` — 범용 Tauri 이벤트 포워딩 ✅
 - `update_snapshot(snapshot)` — 캐시 갱신 ✅
+- `register_event_forwarding(app)` — 22개 Tauri 이벤트 → WS 자동 포워딩 ✅
+- `set_app_handle(handle)` — invoke_request WS RPC용 AppHandle 설정 ✅
 - `status()` — 실행 상태 + 포트 + 클라이언트 수 조회 ✅
+
+> v4 Tier 2에서 `broadcast_key_event()`, `broadcast_settings_diff()`, `broadcast_counter_update()` 삭제.
+> 모든 이벤트는 `register_event_forwarding()`이 `tauri_event`로 자동 포워딩.
 
 ### 4.3 크레이트 의존성 ✅
 
@@ -230,12 +214,12 @@ futures-util = "0.3"
 
 ### 4.4 기존 코드 연동 지점
 
-| 기존 코드 위치 | 추가할 호출 | v1 상태 |
-|----------------|-------------|---------|
-| `app_state.rs` 키 입력 처리 루프 (~L813) | `obs_bridge.broadcast_key_event()` | ✅ |
-| `app_state.rs` emit_settings_changed (~L252) | `obs_bridge.broadcast_settings_diff()` | ✅ |
+| 기존 코드 위치 | 호출 | 상태 |
+|----------------|------|------|
+| `app_state.rs` 키 입력 처리 루프 | ~~`broadcast_key_event()`~~ → `register_event_forwarding`이 `keys:state` 자동 포워딩 | ✅ (Tier 2 통합) |
+| `app_state.rs` emit_settings_changed | ~~`broadcast_settings_diff()`~~ → `register_event_forwarding`이 `settings:changed` 자동 포워딩 | ✅ (Tier 2 통합) |
 | `commands/preset/load.rs` 프리셋 로드 후 | `refresh_obs_snapshot()` + `broadcast_snapshot()` | ✅ |
-| `commands/keys/keys.rs` 카운터 emit 지점 (9개) | `obs_broadcast_counters()` | ✅ |
+| `commands/keys/keys.rs` 카운터 emit 지점 | ~~`obs_broadcast_counters()`~~ → `register_event_forwarding`이 `keys:counters` 자동 포워딩 (캐시 갱신만 유지) | ✅ (Tier 2 통합) |
 | `commands/keys/keys.rs` 모드 변경 | `refresh_obs_snapshot()` | ✅ |
 | `commands/layout/*` 레이아웃 변경 | `refresh_obs_snapshot()` | ✅ |
 
@@ -308,11 +292,11 @@ TCP 스트림을 peek하여 `Upgrade: websocket` 헤더 유무로 분기.
 
 | 계층 | 데이터 | 변경 빈도 | v1 상태 |
 |------|--------|-----------|---------|
-| 글로벌 설정 | noteEffect, noteSettings, backgroundColor | 드묾 | ✅ settings_diff |
-| 레이아웃 | selectedKeyType, keys, positions, statPositions, graphPositions | 가끔 | ✅ 변경 시 snapshot 재전송 |
-| 탭/프리셋 | customTabs, tabNoteOverrides | 가끔 | ✅ 변경 시 snapshot 재전송 |
-| 런타임 | keyCounters, active mode | 실시간 | ✅ counter_update |
-| 키 입력 | key, state | 매우 빈번 | ✅ key_event |
+| 글로벌 설정 | noteEffect, noteSettings, backgroundColor | 드묾 | ✅ `tauri_event(settings:changed)` |
+| 레이아웃 | selectedKeyType, keys, positions, statPositions, graphPositions | 가끔 | ✅ `tauri_event` + snapshot 재전송 |
+| 탭/프리셋 | customTabs, tabNoteOverrides | 가끔 | ✅ `tauri_event` + snapshot 재전송 |
+| 런타임 | keyCounters, active mode | 실시간 | ✅ `tauri_event(keys:counters)` |
+| 키 입력 | key, state | 매우 빈번 | ✅ `tauri_event(keys:state)` |
 
 ### 6.2 동기화 전략
 
@@ -500,7 +484,7 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 
 ## 12. Tauri IPC Shim 호환성 레이어 설계
 
-> 상태: **Tier 1 구현 완료** / Tier 2 (프로토콜 통합) 대기
+> 상태: **Tier 1~3 구현 완료**
 > P2 #11 상세 설계
 
 ### 12.1 배경 및 목표
@@ -681,11 +665,11 @@ WS 브로드캐스트 메시지를 수신하면 Tauri 이벤트명으로 변환�
 
 | WS 메시지 타입 | → Tauri 이벤트 | 비고 |
 |---------------|---------------|------|
-| `key_event` | `keys:state` | keyEventBus 구독 |
-| `settings_diff` | `settings:changed` | `{ changed: patch }` 래핑 |
-| `counter_update` | `keys:counters` | 전체 카운터 |
+| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 — 22개 이벤트 자동 디스패치 |
 | `snapshot` | `keys:changed`, `positions:changed`, `settings:changed` 등 | 다수 이벤트 일괄 디스패치 |
-| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 (§12.12) |
+| `invoke_response` | — | WS RPC 응답 (pendingRpc resolve/reject) |
+
+> v4 Tier 2에서 기존 전용 메시지(`key_event`, `settings_diff`, `counter_update`)를 `tauri_event`로 완전 통합.
 
 #### stats 구독
 
@@ -934,60 +918,44 @@ pub fn forward_tauri_event(&self, event: &str, payload: &impl Serialize) {
 | `input:raw` | rawKeyEventBus (플러그인) | **신규** — raw_input_subscribe 시 |
 | `plugin-bridge:message` | PluginElementsRenderer | **신규** — 플러그인 지원 시 |
 
-#### 전환 전략
+#### 전환 전략 ✅ 완료
 
-기존 전용 WS 메시지(`key_event`, `settings_diff`, `counter_update`)를 즉시 제거하면 하위 호환 깨짐.
-단계적 전환:
+기존 전용 WS 메시지(`key_event`, `settings_diff`, `counter_update`)를 `tauri_event`로 통합 완료.
 
-1. **1단계**: `tauri_event` 포워딩 추가 (신규 이벤트만: `keys:counter`, `css:*`, `js:*`, `input:raw`)
-2. **2단계**: shim의 `onWsMessage`에서 기존 메시지 타입 처리 유지 + `tauri_event` 처리 추가
-3. **3단계** (선택): 기존 전용 메시지를 `tauri_event`로 통합, `onWsMessage` 매핑 로직 제거
+1. ~~**1단계**: `tauri_event` 포워딩 추가~~ ✅ Tier 1에서 완료
+2. ~~**2단계**: shim의 `onWsMessage`에서 기존 메시지 타입 처리 유지 + `tauri_event` 처리 추가~~ ✅ Tier 1에서 완료
+3. ~~**3단계**: 기존 전용 메시지를 `tauri_event`로 통합, `onWsMessage` 매핑 로직 제거~~ ✅ Tier 2에서 완료
 
-### 12.13 프론트엔드 shim 최종 구조
+변경 내역:
+- 백엔드: `ObsBroadcast` enum에서 `KeyEvent`, `SettingsDiff`, `CounterUpdate` 제거
+- 백엔드: `broadcast_key_event()`, `broadcast_settings_diff()`, `broadcast_counter_update()` 삭제
+- 백엔드: `app_state.rs`에서 직접 broadcast 호출 제거 (캐시 갱신만 유지)
+- 프론트: `ipcShim.ts`에서 `key_event`, `settings_diff`, `counter_update` 전용 핸들러 제거
+- 모든 이벤트는 `register_event_forwarding()`이 `tauri_event`로 자동 포워딩
 
-위 백엔드 호환성 레이어가 완성되면, ipcShim.ts는 다음으로 축소:
+### 12.13 프론트엔드 shim 최종 구조 ✅
+
+Tier 2 통합 완료 후 ipcShim.ts의 WS 메시지 핸들러는 3가지만 처리:
 
 ```typescript
-// ── deny 리스트 (hello_ack에서 수신, 하드코딩 없음) ──
-let denyList: string[] = [];
-
-// ── invoke 핸들러 ──
-async function shimInvoke(cmd, args) {
-  // 1. 이벤트 플러그인 (프론트엔드 로컬 — 콜백 레지스트리)
-  if (cmd.startsWith('plugin:event|')) { /* listen/unlisten/emit */ }
-
-  // 2. deny 체크 ("|"로 끝나면 prefix, 아니면 exact)
-  if (isDenied(cmd)) return;
-
-  // 3. WS RPC (백엔드가 처리)
-  return wsRpc(cmd, args);
-}
-
-// ── WS 메시지 수신 ──
+// ── WS 메시지 수신 (최종) ──
 function onWsMessage(envelope) {
   switch (envelope.type) {
-    // 기존 호환 (1단계)
-    case 'key_event':      dispatchEvent('keys:state', envelope.payload); break;
-    case 'settings_diff':  dispatchEvent('settings:changed', { changed: envelope.payload }); break;
-    case 'counter_update': dispatchEvent('keys:counters', envelope.payload); break;
-    case 'snapshot':       /* 다수 이벤트 일괄 디스패치 */ break;
-
-    // 범용 포워딩 (2단계)
-    case 'tauri_event':    dispatchEvent(envelope.payload.event, envelope.payload.data); break;
-
-    // RPC 응답
+    case 'tauri_event':     dispatchEvent(envelope.payload.event, envelope.payload.data); break;
     case 'invoke_response': /* pending RPC resolve/reject */ break;
+    case 'snapshot':        /* 다수 이벤트 일괄 디스패치 */ break;
   }
 }
 ```
 
-3단계 전환 완료 후에는 기존 `case 'key_event'` 등이 제거되고 `tauri_event` 하나로 통합.
+기존 `key_event`, `settings_diff`, `counter_update` 전용 핸들러 제거 완료.
+모든 이벤트는 백엔드 `register_event_forwarding()`이 `tauri_event`로 통합 포워딩.
 
 ---
 
 ## 13. 작업 진행 현황 (2026-03-08 기준)
 
-> v4 Tier 1 구현 완료. Tier 2 (프로토콜 통합)는 후속 작업.
+> v4 Tier 1~3 구현 완료.
 
 ### Tier 1 — IPC Shim + 백엔드 호환성 레이어 (§12) ✅ 완료
 
@@ -1015,20 +983,27 @@ Codex(GPT 5.4) 리뷰에서 발견/수정한 이슈:
 - deny list 확장 (obs_start/stop, 파일 커맨드, 프리셋 등 11항목 추가)
 - 리스너 lifecycle (중복 등록 방지 + stop 시 해제)
 
-### Tier 2 — 프로토콜 통합 (후속 작업)
+### Tier 2 — 프로토콜 통합 ✅ 완료
 
 | # | 작업 | 설명 | 상태 |
 |---|------|------|------|
-| 8 | **기존 WS 메시지를 `tauri_event`로 통합** | `key_event` → `tauri_event { event: "keys:state" }` 등 | ❌ |
-| 9 | **shim `onWsMessage` 매핑 제거** | 통합 후 `tauri_event` + `invoke_response` 만 남김 | ❌ |
+| 8 | **기존 WS 메시지를 `tauri_event`로 통합** | `key_event`, `settings_diff`, `counter_update` 제거, `tauri_event`로 일원화 | ✅ |
+| 9 | **shim `onWsMessage` 매핑 제거** | `tauri_event` + `invoke_response` + `snapshot` 만 남김 | ✅ |
 
-### Tier 3 — 알려진 이슈 (낮은 우선순위)
+변경 내역:
+- `ObsBroadcast` enum에서 `KeyEvent`, `SettingsDiff`, `LayoutDiff`, `CounterUpdate` 제거
+- `KeyState`, `KeyEventPayload` 타입 삭제
+- `broadcast_key_event()`, `broadcast_settings_diff()`, `broadcast_counter_update()` 삭제
+- `app_state.rs`에서 직접 broadcast 호출 제거 (캐시 갱신만 유지)
+- `ipcShim.ts`에서 전용 핸들러 3개 제거
 
-| # | 이슈 | 증상 | 비고 |
+### Tier 3 — 알려진 이슈 ✅ 해결 / 확인 완료
+
+| # | 이슈 | 증상 | 상태 |
 |---|------|------|------|
-| 10 | **초기 접속 시 빈 화면** | 최초 접속 시 키 UI 미표시, 위치 변경 후 표시 | IPC shim 도입으로 자연 해소 가능성 → 실제 테스트 필요 |
-| 11 | **`input:raw` 이중 전달** | main+overlay 양쪽 `window.emit()` → 리스너 2회 트리거 | OBS 클라이언트에서 dedup 필요할 수 있음 |
-| 12 | **`tabCssOverrides` resync** | reconnect 시 snapshot만으로는 탭 CSS 미갱신 | `tabCss:changed` 이벤트 포워딩으로 커버, 초기 snapshot은 포함됨 |
+| 10 | **초기 접속 시 빈 화면** | `invoke_request` 필드명 불일치 (`reqId`/`cmd` vs `requestId`/`command`) | ✅ 수정 완료 |
+| 11 | **`input:raw` 이중 전달** | main+overlay 양쪽 `window.emit()` → 리스너 2회 트리거 | ⚠️ 유지 (실사용 시 문제 발생하면 대응) |
+| 12 | **OBS CEF 호환** | OBS 28+ 브라우저 소스에서 WebGL/CSS 동작 검증 | ✅ 사용자 테스트 확인 완료 |
 
 ### 완료된 주요 마일스톤
 
@@ -1038,5 +1013,7 @@ v2: HTTP+WS 통합 서빙, layout_diff, cached_snapshot 증분 갱신
 v3 P1: 설정 영속화, 오버레이 연동, KPS 로컬 계산, UI 안내
 v3 P2: 커스텀 CSS, 배경 미디어, keyDisplayDelayMs, 키별 노트 효과,
        보안 토큰, dev 모드 서빙, 포터블 exe AssetFetcher
-v4: Tauri IPC Shim + 백엔드 호환성 레이어 → 완전한 코드 재사용 ✅
+v4 Tier 1: Tauri IPC Shim + 백엔드 호환성 레이어 → 완전한 코드 재사용 ✅
+v4 Tier 2: 프로토콜 통합 — 전용 WS 메시지를 tauri_event로 일원화 ✅
+v4 Tier 3: invoke_request 필드명 수정 + OBS CEF 호환 확인 ✅
 ```
