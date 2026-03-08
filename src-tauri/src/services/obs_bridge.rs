@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
 use tauri::webview::InvokeRequest;
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Listener, Manager, Wry};
 
 use crate::models::obs::{
     make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
@@ -138,8 +138,6 @@ impl ObsBridgeService {
 
     /// Tauri 이벤트를 OBS WS 클라이언트에 포워딩하는 리스너 등록
     pub fn register_event_forwarding(&self, app: &AppHandle<Wry>) {
-        use tauri::Listener;
-
         // 기존 리스너 해제 (중복 호출 시 누적 방지)
         for id in self.event_listener_ids.write().drain(..) {
             app.unlisten(id);
@@ -171,11 +169,13 @@ impl ObsBridgeService {
             "plugin-bridge:message",
         ];
 
+        // listen_any: 모든 타깃(App/Window/Webview)의 이벤트를 캡처
+        // emit_to()로 특정 윈도우에 보낸 이벤트도 포워딩됨
         let mut ids = Vec::with_capacity(forwarded_events.len());
         for event_name in &forwarded_events {
             let tx = self.broadcast_tx.clone();
             let name = event_name.to_string();
-            let id = app.listen(*event_name, move |evt| {
+            let id = app.listen_any(*event_name, move |evt| {
                 let data: Value = serde_json::from_str(evt.payload()).unwrap_or(Value::Null);
                 let _ = tx.send(ObsBroadcast::TauriEvent {
                     event: name.clone(),

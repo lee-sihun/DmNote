@@ -144,3 +144,8 @@ src-tauri/src/
 2. **린트**: `cd src-tauri && cargo clippy`
 3. **포맷팅**: `cd src-tauri && cargo fmt`
 4. **permissions 확인**: 커맨드 추가/삭제 시 빌드 후 `permissions/dmnote-allow-all.json` 자동 갱신 확인
+
+### OBS 모드 이벤트 포워딩
+
+- 새로운 Tauri 이벤트(`app.emit("event:name", ...)`)를 추가할 때, OBS 오버레이에도 전달되어야 하면 `src-tauri/src/services/obs_bridge.rs`의 `register_event_forwarding()` 이벤트 목록에 등록 필요
+- OBS 모드의 IPC shim(`src/renderer/api/ipcShim.ts`)은 generic 설계이므로 수정 불필요 — 백엔드에서 포워딩만 등록하면 프론트는 자동으로 수신
