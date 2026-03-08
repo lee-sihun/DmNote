@@ -717,13 +717,17 @@ impl ObsBridgeService {
             }
         };
 
-        let webview_window = match app_handle.get_webview_window("overlay") {
+        // OBS 모드에서 오버레이가 destroy된 상태일 수 있으므로 main window로 fallback
+        let webview_window = match app_handle
+            .get_webview_window("overlay")
+            .or_else(|| app_handle.get_webview_window("main"))
+        {
             Some(w) => w,
             None => {
-                log::warn!("[ObsBridge] {addr}: overlay webview 없음");
+                log::warn!("[ObsBridge] {addr}: webview 없음 (overlay/main 모두)");
                 let _ = rpc_tx.send((
                     req.request_id,
-                    Err(serde_json::json!("Overlay webview not found")),
+                    Err(serde_json::json!("No webview window available")),
                 ));
                 return;
             }

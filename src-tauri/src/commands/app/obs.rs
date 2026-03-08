@@ -52,9 +52,9 @@ pub async fn obs_start(
 }
 
 #[tauri::command]
-pub fn obs_stop(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
+pub async fn obs_stop(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     state.obs_bridge.stop();
-    // 오버레이 재생성 + 복원
+    // 오버레이 재생성 + 복원 (async context에서 실행해야 WebView2 초기화가 정상 완료됨)
     state.obs_restore_overlay(&app);
     let status = state.obs_bridge.status();
     let _ = app.emit("obs:status", &status);
