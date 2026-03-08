@@ -74,8 +74,8 @@ codex exec -C "$(pwd)" -s danger-full-access --json "다음 작업에 대한 구
 ### 공통 규칙
 - `-C "$(pwd)"`, `-s danger-full-access`, `--json` 기본 적용.
 - `--ephemeral`은 사용하지 않습니다 (후속 resume 보존).
-- Bash의 `run_in_background: true`로 실행합니다. `timeout: 600000`은 Bash 도구의 최대 대기 시간이며, 백그라운드 실행이므로 Codex 작업 자체는 완료까지 계속됩니다.
-- 완료 알림을 받으면 TaskOutput으로 결과를 수집합니다.
+- Bash의 `run_in_background: true`로 실행합니다. 백그라운드이므로 즉시 반환되며, Codex 작업은 완료까지 제한 없이 계속됩니다.
+- 완료 시 시스템이 자동 알림 → TaskOutput으로 결과를 수집합니다.
 
 ### 진행 상황 확인
 백그라운드 실행 중 TaskOutput으로 중간 출력을 확인합니다.

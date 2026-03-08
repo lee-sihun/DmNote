@@ -199,11 +199,14 @@ pub struct ObsBridgeService {
     broadcast_tx: broadcast::Sender<ObsBroadcast>,
     shutdown_tx: RwLock<Option<oneshot::Sender<()>>>,
     server_version: String,
-    static_dir: RwLock<Option<PathBuf>>,      // v2: HTTP 정적 서빙용
+    asset_fetcher: RwLock<Option<AssetFetcher>>,  // v4: Tauri 임베딩 에셋 (포터블 exe)
     server_handle: tokio::sync::Mutex<Option<JoinHandle<()>>>,  // v3: stop→start 경쟁 방지
     dev_url: RwLock<Option<String>>,          // v3: dev 모드 Vite dev server URL
     session_token: RwLock<String>,            // v3: UUID v4 세션 토큰
 }
+
+// 임베딩 에셋 조회 함수 타입
+pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
 ```
 
 주요 API:
@@ -375,7 +378,7 @@ v3 추가:
 | 키 UI + 노트 효과 | ✅ 지원 |
 | 통계/그래프 표시 | ✅ 지원 (v3: KPS 로컬 1초 슬라이딩 윈도우 계산) |
 | 키 카운터 | ✅ 지원 |
-| HTTP 정적 서빙 | ✅ 지원 |
+| HTTP 정적 서빙 | ✅ 지원 (Tauri 임베딩 에셋, 포터블 exe 호환) |
 | 레이아웃 동기화 | ✅ 지원 (snapshot 재전송) |
 | 커스텀 CSS | ✅ 지원 (v3: settings_diff 경유 실시간 주입) |
 | 배경 미디어 서빙 | ✅ 지원 (v3: /media/ 엔드포인트 + 토큰 검증) |
@@ -475,6 +478,7 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 | 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ✅ |
 | 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ✅ |
 | 11 | **DataSource 호환성 레이어** | OverlayHost adapter로 Tauri API / WebSocket 통합 인터페이스 도입 (§12 참조) | ⚠️ computeLayout 추출 완료, adapter 설계 확정 / 구현 대기 |
+| 12 | **포터블 exe 에셋 서빙** | static_dir 디스크 파일 → Tauri asset_resolver() 기반 AssetFetcher로 전환, 단일 exe 배포 지원 | ✅ |
 
 #### v3+ 이후 (P3)
 
@@ -495,123 +499,254 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 
 ---
 
-## 12. OverlayHost 호환성 레이어 설계
+## 12. Tauri IPC Shim 호환성 레이어 설계
 
-> 상태: **설계 확정** / 구현 대기
+> 상태: **설계 확정 (C 방식)** / 구현 대기
 > P2 #11 상세 설계
 
 ### 12.1 배경 및 목표
 
 현재 overlay/App.tsx와 obs/App.tsx는 동일한 UI를 렌더링하면서 데이터 수신 방식만 다름:
-- overlay: Tauri API (`invoke`, `listen`, window API) — 19+ 이벤트 구독, 12+ invoke, 8+ window API
-- obs: WebSocket (`useObsWebSocket`) — snapshot/diff/key_event 수신
+- overlay: Tauri IPC (`invoke`, `listen`) → `window.api.*` → Zustand 스토어 → OverlayScene
+- obs: WebSocket → `useOverlayRuntime` (중복 로직) → OverlayScene
 
 이 구조의 문제:
-1. **렌더링 로직 중복** — 키 상태 관리, KPS 계산, 딜레이 처리 등이 양쪽에 복제됨
+1. **렌더링 로직 중복** — 키 딜레이, KPS 계산, 레이아웃 등이 useOverlayRuntime에 복제됨
 2. **유지보수 부담** — 기능 추가 시 overlay/obs 양쪽 모두 수정 필요
-3. **불일치 위험** — 한쪽만 수정하고 다른 쪽을 빠뜨릴 가능성
+3. **플러그인 미지원** — OBS에서 커스텀 JS/플러그인이 동작하지 않음
 
 ### 12.2 검토한 접근 방식
 
-#### A. 현재 구조 유지 (분리형)
+| 방식 | 설명 | overlay 변경 | 중복 제거 | 비고 |
+|------|------|:---:|:---:|------|
+| A. 분리형 유지 | 현재 구조 유지, computeLayout만 공유 | 없음 | 일부 | 변경 적을 때만 적합 |
+| B. OverlayRuntime 통합 | TauriHost/WebSocketHost → useOverlayRuntime | 대규모 | 완전 | 기존 훅 해체 필요 |
+| **C. Tauri IPC Shim** | `invoke`/`listen` 프리미티브를 WS로 교체 | **없음** | **완전** | **채택** |
+
+### 12.3 최종 결정: C 방식 (Tauri IPC Shim)
+
+Tauri 프론트엔드 API는 모두 두 가지 프리미티브에 의존:
+- `invoke(command, args)` → 요청/응답 (81개 커맨드)
+- `listen(event, callback)` → 이벤트 구독 (25개 이벤트)
+
+이 두 함수는 내부적으로 `window.__TAURI_INTERNALS__`를 호출함.
+**OBS 진입점에서 이 글로벌을 WS 기반 shim으로 교체**하면,
+overlay/App.tsx 및 모든 의존 훅(useAppBootstrap, keyEventBus 등)이 코드 변경 없이 동작.
 
 ```
-overlay/App.tsx ──→ Tauri API ──→ OverlayScene
-obs/App.tsx     ──→ WebSocket ──→ OverlayScene
-                    (computeLayout 공유)
+overlay 환경:
+  overlay/App.tsx → window.api.* → invoke/listen → Tauri IPC → Rust 백엔드
+
+OBS 환경:
+  obs/App.tsx → initIpcShim() → overlay/App.tsx (동일 코드)
+                    ↓
+  window.__TAURI_INTERNALS__ = { invoke: wsInvoke, ... }
+                    ↓
+  invoke/listen → WebSocket → Rust 백엔드 (동일 서버)
 ```
 
-- 장점: 단순, 각 환경에 최적화 가능
-- 단점: 렌더링 로직 중복, 기능 추가마다 양쪽 수정
-- 적합: 기능이 안정화되어 변경이 적을 때
+장점:
+- **overlay/App.tsx 변경 0** — 기존 훅, 스토어, 이벤트 버스 모두 그대로
+- **useOverlayRuntime.ts 제거** — 중복 로직 완전 해소
+- **shim 표면적 최소** — invoke + listen 2개만 교체
+- **향후 확장 자동 지원** — 새 window.api 메서드 추가 시 shim 수정 불필요
+- **플러그인 자연 지원** — dmn.* API가 invoke를 사용하므로 자동 호환
 
-#### B. OverlayRuntime 공유 훅
-
-```
-overlay/App.tsx ──→ TauriDataSource ──→ useOverlayRuntime() ──→ OverlayScene
-obs/App.tsx     ──→ WsDataSource    ──→ useOverlayRuntime() ──→ OverlayScene
-```
-
-- 장점: 렌더링 로직 단일화, 데이터 소스만 교체
-- 단점: 추상화 인터페이스 설계/유지 비용
-
-#### C. Tauri API shim (폴리필)
-
-```
-overlay/App.tsx ──→ window.__TAURI__ (real) ──→ OverlayScene
-obs/App.tsx     ──→ window.__TAURI__ (shim) ──→ OverlayScene
-                    (WS가 Tauri API를 흉내)
-```
-
-- 장점: overlay 코드 변경 최소화
-- 단점: Tauri API의 모든 시그니처를 정확히 흉내내야 함, edge case 많음
-
-### 12.3 최종 결정: B 방식 (OverlayHost adapter)
-
-**"B with C's philosophy"** — 새 인터페이스를 정의하되, overlay가 실제 사용하는 기능만 포함.
-
-B와 C는 개념적으로 수렴하지만, B 형태(새 인터페이스)가 구현이 깔끔함:
-- Tauri API 시그니처를 완벽히 흉내내는 것보다, 필요한 기능만 정의하는 것이 안전
-- 마이그레이션은 한 번이지만 이후 유지보수가 단순화됨
-
-### 12.4 OverlayHost 인터페이스
+### 12.4 IPC Shim 구현
 
 ```typescript
-// src/renderer/hosts/types.ts
+// src/renderer/api/ipcShim.ts
 
-interface OverlayHostCallbacks {
-  onSnapshot: (payload: BootstrapPayload) => void;
-  onKeyEvent: (payload: KeyEventPayload) => void;
-  onSettingsDiff: (diff: Record<string, unknown>) => void;
-  onCounterUpdate: (data: Record<string, unknown>) => void;
+/**
+ * OBS 환경에서 Tauri IPC를 WebSocket으로 교체하는 shim.
+ * obs/index.tsx에서 앱 마운트 전에 호출.
+ */
+
+// invoke shim: WS RPC (requestId 기반)
+async function wsInvoke(command: string, args?: unknown): Promise<unknown> {
+  // 1. no-op 커맨드 → 즉시 반환 (overlay_resize, overlay_set_visible 등)
+  // 2. 캐시 커맨드 → snapshot 데이터에서 반환 (app_bootstrap, settings_get 등)
+  // 3. RPC 커맨드 → WS invoke_request 전송 → invoke_response 대기 (향후)
 }
 
-interface OverlayHost {
-  /** 호스트 타입 식별 */
-  type: 'tauri' | 'websocket';
+// listen shim: WS 메시지를 이벤트로 디스패치
+function wsListen(event: string, callback: Function): Promise<() => void> {
+  // WS 메시지 타입 → Tauri 이벤트명 매핑:
+  //   key_event     → 'keys:state'
+  //   settings_diff → 'settings:changed'
+  //   counter_update → 'keys:counters'
+  //   snapshot      → 모든 *:changed 이벤트 일괄 디스패치
+}
 
-  /** 데이터 구독 시작 (콜백 등록) */
-  subscribe(callbacks: OverlayHostCallbacks): () => void;  // unsubscribe 반환
-
-  /** 설정 변경 요청 (overlay에서 설정 UI 조작 시) */
-  invoke?(command: string, args?: unknown): Promise<unknown>;
-
-  /** 창 제어 (overlay 전용, OBS에서는 no-op) */
-  window?: {
-    startDragging(): void;
-    setIgnoreCursorEvents(ignore: boolean): void;
-    // ... overlay에서 사용하는 window API만 포함
-  };
+export function initIpcShim(wsUrl: string, token: string): Promise<void> {
+  // 1. WS 연결 + hello 핸드셰이크
+  // 2. snapshot 수신 → 캐시 저장
+  // 3. window.__TAURI_INTERNALS__ 설치
+  // 4. 창 관리 API no-op 스텁 설치 (@tauri-apps/api/window, menu 등)
 }
 ```
 
-### 12.5 구현 계획
+### 12.5 WS ↔ Tauri 이벤트 매핑
+
+#### invoke 매핑 (요청/응답)
+
+| invoke 커맨드 | OBS shim 처리 |
+|---------------|---------------|
+| `app_bootstrap` | snapshot 캐시에서 BootstrapPayload 형태로 변환 반환 |
+| `settings_get` | snapshot.settings에서 반환 |
+| `keys_get` / `positions_get` | snapshot에서 반환 |
+| `css_get` / `css_get_use` / `css_tab_get_all` | snapshot에서 반환 |
+| `note_tab_get_all` | snapshot에서 반환 |
+| `stat_positions_get` / `graph_positions_get` | snapshot에서 반환 |
+| `layer_groups_get` | snapshot에서 반환 |
+| `stats_get` | 로컬 KPS 초기값 반환 |
+| `overlay_resize` / `overlay_set_visible` | no-op |
+| `settings_update` / `overlay_set_lock` | no-op (또는 향후 WS RPC) |
+| `window_show_main` / `app_quit` | no-op |
+| `plugin_storage_*` | 향후 WS RPC로 확장 |
+
+#### listen 매핑 (이벤트 구독)
+
+| Tauri 이벤트 | WS 메시지 소스 | 비고 |
+|-------------|---------------|------|
+| `keys:state` | `key_event` | keyEventBus가 구독 |
+| `settings:changed` | `settings_diff` | useAppBootstrap이 구독 |
+| `keys:counter` / `keys:counters` | `counter_update` | |
+| `keys:changed` | `snapshot` 재전송 | snapshot 수신 시 디스패치 |
+| `positions:changed` | `snapshot` 재전송 | |
+| `statPositions:changed` | `snapshot` 재전송 | |
+| `graphPositions:changed` | `snapshot` 재전송 | |
+| `keys:mode-changed` | `snapshot` 재전송 | |
+| `preset:snapshot` | `snapshot` 재전송 | |
+| `css:use` / `css:content` | `settings_diff` | CSS 관련 필드 감지 시 |
+| `tabCss:changed` | `settings_diff` | |
+| `js:use` / `js:content` | `settings_diff` | 플러그인 지원 시 |
+| `tabNote:changed` / `tabNote:changed_all` | `snapshot` 재전송 | |
+| `customTabs:changed` | `snapshot` 재전송 | |
+| `overlay:lock` / `overlay:anchor` | 미사용 (OBS에서 의미 없음) | |
+| `plugin-bridge:message` | 향후 WS 확장 | 플러그인 브릿지 지원 시 |
+
+#### stats 구독 특수 처리
+
+`window.api.stats.subscribe()`는 `listen`이 아닌 별도 메커니즘.
+OBS에서는 기존 `useOverlayRuntime`의 로컬 KPS 슬라이딩 윈도우를 `keyStatsService` shim으로 이전.
+
+### 12.6 창 관리 API No-op 스텁
+
+overlay/App.tsx가 직접 사용하는 non-IPC Tauri API:
+
+| 모듈 | API | No-op 처리 |
+|------|-----|-----------|
+| `@tauri-apps/api/window` | `getCurrentWindow()` | `startDragging()` 등 전부 no-op Promise 반환 |
+| `@tauri-apps/api/window` | `currentMonitor()` | `null` 반환 |
+| `@tauri-apps/api/window` | `Window.getByLabel()` | `null` 반환 |
+| `@tauri-apps/api/dpi` | `LogicalPosition`, `PhysicalPosition` | 빈 클래스 |
+| `@tauri-apps/api/menu` | `Menu.new()`, `menu.popup()` | no-op Promise |
+| `@tauri-apps/api/core` | `convertFileSrc()` | OBS HTTP `/media/` 경로로 변환 |
+
+구현 방식: Vite alias 또는 obs 진입점에서 모듈 모킹
+
+### 12.7 obs/App.tsx 최종 형태
+
+```tsx
+// src/renderer/windows/obs/App.tsx
+import { useEffect, useState } from 'react';
+import { initIpcShim, disposeIpcShim } from '@api/ipcShim';
+
+// shim 설치 후 overlay App을 동적 임포트
+const App = () => {
+  const [OverlayApp, setOverlayApp] = useState<React.ComponentType | null>(null);
+
+  useEffect(() => {
+    const { host, port, token } = parseUrlParams();
+    initIpcShim(`ws://${host}:${port}`, token).then(async () => {
+      const { default: Overlay } = await import('@windows/overlay/App');
+      setOverlayApp(() => Overlay);
+    });
+    return () => disposeIpcShim();
+  }, []);
+
+  if (!OverlayApp) return <div>Connecting...</div>;
+  return <OverlayApp />;
+};
+```
+
+### 12.8 구현 단계
+
+| 단계 | 작업 | 파일 |
+|------|------|------|
+| 1 | **IPC shim 인프라** — WS 연결, invoke/listen 기본 구조 | 신설: `api/ipcShim.ts` |
+| 2 | **invoke shim** — snapshot 캐시 기반 반환 + no-op 매핑 | `api/ipcShim.ts` |
+| 3 | **listen shim** — WS 메시지 → Tauri 이벤트 디스패치 | `api/ipcShim.ts` |
+| 4 | **창 관리 no-op** — window/menu/dpi 모킹 | Vite alias 또는 `api/ipcShim.ts` |
+| 5 | **obs/App.tsx 재작성** — shim 초기화 + overlay App 임포트 | `windows/obs/App.tsx` |
+| 6 | **검증** — dev 모드에서 OBS 페이지 동작 확인 | |
+| 7 | **정리** — useOverlayRuntime.ts 제거, useObsWebSocket.ts 제거/내부 흡수 | |
+
+### 12.9 서버 확장 (향후)
+
+현재 WS 프로토콜로 대부분의 overlay 기능이 동작하지만,
+플러그인 `dmn.*` API의 쓰기 연산을 위해 WS RPC 프로토콜 추가 필요:
 
 ```
-src/renderer/
-├── hosts/
-│   ├── types.ts              ← OverlayHost 인터페이스 정의
-│   ├── TauriHost.ts          ← Tauri API 기반 구현
-│   └── WebSocketHost.ts      ← WebSocket 기반 구현
-├── hooks/shared/
-│   └── useOverlayRuntime.ts  ← 공용 렌더링 로직 (키 상태, KPS, 딜레이 등)
-└── windows/
-    ├── overlay/App.tsx       ← TauriHost + useOverlayRuntime + OverlayScene
-    └── obs/App.tsx           ← WebSocketHost + useOverlayRuntime + OverlayScene
+C→S: { type: "invoke_request", requestId: "uuid", command: "plugin_storage_get", args: {...} }
+S→C: { type: "invoke_response", requestId: "uuid", result: {...} }
 ```
 
-단계:
-1. `OverlayHost` 인터페이스 + `WebSocketHost` 구현 (기존 useObsWebSocket 리팩토링)
-2. `useOverlayRuntime` 훅 추출 (obs/App.tsx에서 렌더링 로직 분리)
-3. `TauriHost` 구현 (overlay/App.tsx에서 Tauri API 호출 래핑)
-4. overlay/App.tsx를 `TauriHost + useOverlayRuntime` 으로 마이그레이션
-5. 검증: 양쪽 동작 확인 후 기존 중복 코드 제거
+- 화이트리스트 기반 커맨드 허용 (보안)
+- requestId + pending map + timeout (30초)
+- 단계 1~6 완료 후 별도 구현
 
-### 12.6 범위 제한
+### 12.10 리스크 및 제약
 
-현재 P2 범위에서는 다음만 포함:
-- **포함**: 키 이벤트, 설정 동기화, 카운터, KPS, 레이아웃, CSS
-- **제외**: 플러그인 엘리먼트 (P3), 커스텀 JS (P3), 창 드래그/리사이즈 (overlay 전용)
+| 리스크 | 심각도 | 대응 |
+|--------|--------|------|
+| `window.__TAURI_INTERNALS__` 내부 API 변경 | 중 | Tauri 버전 고정 + 업그레이드 시 shim 검증 |
+| snapshot → BootstrapPayload 변환 불일치 | 중 | 타입 검증 + 단계별 테스트 |
+| overlay 전용 API 누락으로 런타임 에러 | 낮 | try/catch 가드 + no-op 폴백 |
+| stats 구독 메커니즘 차이 | 낮 | 로컬 KPS 계산 유지 (기존 검증됨) |
 
-overlay 전용 기능(창 제어, 컨텍스트 메뉴 등)은 `OverlayHost.window?`로 분리하여
-OBS 환경에서는 자연스럽게 비활성화됨.
+---
+
+## 13. 남은 작업 우선순위 (2026-03-08 기준)
+
+> v3 P1/P2 대부분 완료. 아래는 미완료 항목을 우선순위별로 정리.
+
+### Tier 1 — Tauri IPC Shim (§12, 다음 작업)
+
+| # | 작업 | 예상 규모 | 비고 |
+|---|------|-----------|------|
+| 1 | **IPC shim 인프라 + invoke/listen 구현** | `api/ipcShim.ts` 1파일 | WS 연결 + snapshot 캐시 + invoke no-op/캐시 반환 + listen → WS 메시지 디스패치 |
+| 2 | **창 관리 API no-op 스텁** | Vite alias 또는 shim 내부 | window/menu/dpi 모킹 |
+| 3 | **obs/App.tsx 재작성** | 기존 33줄 → shim 초기화 + overlay App 임포트 | |
+| 4 | **검증 + 정리** | useOverlayRuntime.ts, useObsWebSocket.ts 제거 | |
+
+구현 결과:
+- overlay/App.tsx **코드 변경 0**
+- obs/App.tsx가 overlay/App.tsx와 **동일 코드** 실행
+- 중복 로직 **완전 해소** (useOverlayRuntime 417줄 제거)
+
+### Tier 2 — 플러그인 OBS 지원 (§12 완료 후)
+
+| # | 작업 | 설명 | 비고 |
+|---|------|------|------|
+| 5 | **WS invoke RPC 프로토콜** | invoke_request/response + 화이트리스트 | IPC shim이 RPC 커맨드를 실제 WS로 전송 |
+| 6 | **플러그인 엘리먼트** | snapshot에 pluginElements 포함 | shim이 자동 처리 (코드 변경 없음) |
+| 7 | **커스텀 JS** | js:use/js:content 이벤트 + plugin_storage_* RPC | #5 의존 |
+
+### Tier 3 — 알려진 이슈 (낮은 우선순위)
+
+| # | 이슈 | 증상 | 추정 원인 |
+|---|------|------|-----------|
+| 8 | **초기 접속 시 빈 화면** | 브라우저 최초 접속 시 키 UI가 보이지 않다가, 키 위치를 한 번 변경하면 전부 표시됨 | snapshot → bootstrap 변환 시 레이아웃 계산 타이밍. IPC shim 도입 시 자연 해소 가능성 있음 |
+
+### 완료된 주요 마일스톤
+
+```
+v1: WS 서버 + OBS 페이지 기본 동작
+v2: HTTP+WS 통합 서빙, layout_diff, cached_snapshot 증분 갱신
+v3 P1: 설정 영속화, 오버레이 연동, KPS 로컬 계산, UI 안내
+v3 P2: 커스텀 CSS, 배경 미디어, keyDisplayDelayMs, 키별 노트 효과,
+       보안 토큰, dev 모드 서빙, 포터블 exe AssetFetcher
+v4 (예정): Tauri IPC Shim → overlay 코드 재사용 + useOverlayRuntime 제거
+```
