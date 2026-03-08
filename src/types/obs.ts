@@ -29,33 +29,9 @@ export interface HelloAckPayload {
   denyList?: string[];
 }
 
-export interface KeyEventPayload {
-  key: string;
-  state: 'DOWN' | 'UP';
-  mode: string;
-}
-
 export interface ObsStatus {
   running: boolean;
   port: number;
   clientCount: number;
   token?: string;
 }
-
-// ── WS 메시지 타입 문자열 ──
-
-export type ObsMessageType =
-  | 'hello'
-  | 'hello_ack'
-  | 'snapshot'
-  | 'key_event'
-  | 'settings_diff'
-  | 'layout_diff'
-  | 'counter_update'
-  | 'ping'
-  | 'pong'
-  | 'resync_request'
-  | 'error'
-  | 'invoke_request'
-  | 'invoke_response'
-  | 'tauri_event';

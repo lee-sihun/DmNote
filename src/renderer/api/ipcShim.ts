@@ -244,6 +244,20 @@ function onWsMessage(envelope: ObsEnvelope) {
         event: string;
         data: unknown;
       };
+      // snapshotCache 증분 갱신 (getter 폴백 정합성 유지)
+      if (snapshotCache) {
+        if (event === 'settings:changed') {
+          const patch = (data as Record<string, unknown>)?.changed;
+          if (patch && typeof patch === 'object') {
+            Object.assign(snapshotCache.settings, patch);
+          }
+        } else if (event === 'keys:counters') {
+          snapshotCache.keyCounters = data as Record<
+            string,
+            Record<string, number>
+          >;
+        }
+      }
       dispatchEvent(event, data);
       break;
     }
