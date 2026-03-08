@@ -29,11 +29,13 @@ let connToken = '';
 // deny 리스트 — hello_ack에서 수신 (백엔드가 source of truth)
 // 구 버전 백엔드가 denyList를 보내지 않을 때의 폴백
 const DEFAULT_DENY_LIST = [
+  // 오버레이 제어 (OBS에서 조작 불가)
   'overlay_resize',
   'overlay_set_visible',
   'overlay_set_lock',
   'overlay_set_anchor',
   'overlay_get',
+  // 윈도우/앱 제어
   'window_minimize',
   'window_close',
   'window_show_main',
@@ -42,6 +44,22 @@ const DEFAULT_DENY_LIST = [
   'app_restart',
   'app_open_external',
   'app_auto_update',
+  // OBS 서버 제어 (자기 자신 종료/재시작 방지)
+  'obs_start',
+  'obs_stop',
+  // 파일 대화상자 / 파일 쓰기 (로컬 파일 시스템 접근)
+  'image_load',
+  'font_load',
+  'sound_load',
+  'sound_save_processed_wav',
+  'css_load',
+  'css_reset',
+  'js_load',
+  'js_reset',
+  'js_reload',
+  'preset_load',
+  'preset_load_tab',
+  // Tauri 플러그인 (네이티브 윈도우/메뉴/리소스)
   'plugin:window|',
   'plugin:menu|',
   'plugin:resources|',

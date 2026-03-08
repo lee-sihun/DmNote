@@ -27,6 +27,18 @@ pub struct ObsEnvelope {
 pub struct HelloAckPayload {
     pub server_version: String,
     pub obs_mode: bool,
+    /// OBS 클라이언트에 전달할 deny list (|로 끝나면 prefix 매칭)
+    pub deny_list: Vec<String>,
+}
+
+/// invoke_request 페이로드 (클라이언트 → 서버)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvokeRequestPayload {
+    pub req_id: u32,
+    pub cmd: String,
+    #[serde(default)]
+    pub args: Value,
 }
 
 /// 키 상태 (DOWN/UP)

@@ -32,6 +32,9 @@ pub async fn obs_start(
         log::info!("[ObsBridge] Tauri 임베딩 에셋으로 HTTP 서빙");
     }
 
+    // AppHandle 전달 (invoke_request 디스패치용)
+    state.obs_bridge.set_app_handle(app.clone());
+
     state
         .obs_bridge
         .start(port)

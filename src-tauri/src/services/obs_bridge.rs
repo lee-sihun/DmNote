@@ -13,9 +13,71 @@ use tokio::sync::{broadcast, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
+use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
+use tauri::webview::InvokeRequest;
+use tauri::{AppHandle, Manager, Wry};
+
 use crate::models::obs::{
-    make_envelope, HelloAckPayload, KeyEventPayload, KeyState, ObsBroadcast, ObsEnvelope, ObsStatus,
+    make_envelope, HelloAckPayload, InvokeRequestPayload, KeyEventPayload, KeyState, ObsBroadcast,
+    ObsEnvelope, ObsStatus,
 };
+
+/// OBS 클라이언트에서 실행 불가능한 커맨드 목록
+/// `|`로 끝나는 항목은 prefix 매칭 (예: "plugin:window|" → "plugin:window|*" 전부 차단)
+const DENIED_WS_COMMANDS: &[&str] = &[
+    // 오버레이 제어 (OBS에서 조작 불가)
+    "overlay_resize",
+    "overlay_set_visible",
+    "overlay_set_lock",
+    "overlay_set_anchor",
+    "overlay_get",
+    // 윈도우/앱 제어
+    "window_minimize",
+    "window_close",
+    "window_show_main",
+    "window_open_devtools_all",
+    "app_quit",
+    "app_restart",
+    "app_open_external",
+    "app_auto_update",
+    // OBS 서버 제어 (자기 자신 종료/재시작 방지)
+    "obs_start",
+    "obs_stop",
+    // 파일 대화상자 / 파일 쓰기 (로컬 파일 시스템 접근)
+    "image_load",
+    "font_load",
+    "sound_load",
+    "sound_save_processed_wav",
+    "css_load",
+    "css_reset",
+    "js_load",
+    "js_reset",
+    "js_reload",
+    "preset_load",
+    "preset_load_tab",
+    // Tauri 플러그인 (네이티브 윈도우/메뉴/리소스)
+    "plugin:window|",
+    "plugin:menu|",
+    "plugin:resources|",
+];
+
+/// 커맨드가 deny list에 해당하는지 확인
+fn is_denied(cmd: &str) -> bool {
+    DENIED_WS_COMMANDS.iter().any(|entry| {
+        if let Some(prefix) = entry.strip_suffix('|') {
+            cmd.starts_with(prefix)
+                && cmd.len() > prefix.len()
+                && cmd.as_bytes()[prefix.len()] == b'|'
+        } else {
+            cmd == *entry
+        }
+    })
+}
+
+/// deny list를 Vec<String>으로 변환 (hello_ack 전송용)
+fn build_deny_list() -> Vec<String> {
+    DENIED_WS_COMMANDS.iter().map(|s| s.to_string()).collect()
+}
 
 /// 임베딩 에셋 조회 함수 타입 (path → Option<(bytes, mime_type)>)
 pub type AssetFetcher = Arc<dyn Fn(&str) -> Option<(Vec<u8>, String)> + Send + Sync>;
@@ -37,6 +99,8 @@ pub struct ObsBridgeService {
     server_version: String,
     /// 세션 보안 토큰 (서버 시작 시 랜덤 생성)
     session_token: RwLock<String>,
+    /// Tauri AppHandle (invoke_request 디스패치용)
+    app_handle: RwLock<Option<AppHandle<Wry>>>,
 }
 
 impl ObsBridgeService {
@@ -54,6 +118,7 @@ impl ObsBridgeService {
             dev_url: RwLock::new(None),
             server_version: version.to_string(),
             session_token: RwLock::new(String::new()),
+            app_handle: RwLock::new(None),
         }
     }
 
@@ -63,6 +128,10 @@ impl ObsBridgeService {
 
     pub fn set_dev_url(&self, url: String) {
         *self.dev_url.write() = Some(url);
+    }
+
+    pub fn set_app_handle(&self, handle: AppHandle<Wry>) {
+        *self.app_handle.write() = Some(handle);
     }
 
     pub fn is_running(&self) -> bool {
@@ -341,9 +410,7 @@ impl ObsBridgeService {
         }
 
         let _ = stream
-            .write_all(
-                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            )
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;
     }
 
@@ -427,10 +494,11 @@ impl ObsBridgeService {
             }
         }
 
-        // hello_ack 전송
+        // hello_ack 전송 (deny list 포함)
         let ack_payload = serde_json::to_value(HelloAckPayload {
             server_version: self.server_version.clone(),
             obs_mode: true,
+            deny_list: build_deny_list(),
         })
         .unwrap_or_default();
         let ack_msg = make_envelope("hello_ack", next_seq(), ack_payload);
@@ -455,7 +523,11 @@ impl ObsBridgeService {
             return;
         }
 
-        // 메인 루프: broadcast 수신 + 클라이언트 메시지 수신
+        // RPC 응답 채널 (invoke_request → invoke_response)
+        let (rpc_tx, mut rpc_rx) =
+            tokio::sync::mpsc::unbounded_channel::<(u32, Result<Value, Value>)>();
+
+        // 메인 루프: broadcast 수신 + 클라이언트 메시지 수신 + RPC 응답
         let mut ping_interval = tokio::time::interval(Duration::from_secs(30));
 
         loop {
@@ -501,6 +573,13 @@ impl ObsBridgeService {
                                             break;
                                         }
                                     }
+                                    "invoke_request" => {
+                                        self.handle_invoke_request(
+                                            &envelope.payload,
+                                            &addr,
+                                            rpc_tx.clone(),
+                                        );
+                                    }
                                     _ => {}
                                 }
                             }
@@ -510,6 +589,17 @@ impl ObsBridgeService {
                             let _ = ws_tx.send(Message::Pong(data)).await;
                         }
                         _ => {}
+                    }
+                }
+                // RPC 응답 전송 (invoke_request → invoke_response)
+                Some((req_id, result)) = rpc_rx.recv() => {
+                    let payload = match result {
+                        Ok(data) => serde_json::json!({ "reqId": req_id, "ok": data }),
+                        Err(err) => serde_json::json!({ "reqId": req_id, "err": err }),
+                    };
+                    let msg = make_envelope("invoke_response", next_seq(), payload);
+                    if ws_tx.send(Message::Text(msg.to_string())).await.is_err() {
+                        break;
                     }
                 }
                 // 서버 주도 ping (연결 유지)
@@ -527,6 +617,113 @@ impl ObsBridgeService {
             "[ObsBridge] 클라이언트 연결 종료: {addr} (남은 {})",
             self.client_count()
         );
+    }
+
+    /// invoke_request 처리: webview.on_message()로 Tauri 커맨드 파이프라인에 주입
+    fn handle_invoke_request(
+        &self,
+        payload: &Value,
+        addr: &SocketAddr,
+        rpc_tx: tokio::sync::mpsc::UnboundedSender<(u32, Result<Value, Value>)>,
+    ) {
+        let req: InvokeRequestPayload = match serde_json::from_value(payload.clone()) {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("[ObsBridge] {addr}: invoke_request 파싱 실패: {e}");
+                // reqId를 추출 시도하여 에러 응답 전송 (파싱 실패여도 클라이언트 대기 방지)
+                if let Some(req_id) = payload.get("reqId").and_then(|v| v.as_u64()) {
+                    let _ = rpc_tx.send((
+                        req_id as u32,
+                        Err(serde_json::json!(format!("Invalid invoke_request: {e}"))),
+                    ));
+                }
+                return;
+            }
+        };
+
+        // deny 체크 (이중 안전망 — 프론트엔드에서도 차단하지만 백엔드에서 한번 더)
+        if is_denied(&req.cmd) {
+            log::debug!("[ObsBridge] {addr}: denied cmd={}", req.cmd);
+            let _ = rpc_tx.send((
+                req.req_id,
+                Err(serde_json::json!(format!("Command denied: {}", req.cmd))),
+            ));
+            return;
+        }
+
+        // AppHandle에서 overlay webview 가져오기
+        let app_handle = match self.app_handle.read().clone() {
+            Some(h) => h,
+            None => {
+                log::warn!("[ObsBridge] {addr}: AppHandle 미설정");
+                let _ = rpc_tx.send((
+                    req.req_id,
+                    Err(serde_json::json!("AppHandle not available")),
+                ));
+                return;
+            }
+        };
+
+        let webview_window = match app_handle.get_webview_window("overlay") {
+            Some(w) => w,
+            None => {
+                log::warn!("[ObsBridge] {addr}: overlay webview 없음");
+                let _ = rpc_tx.send((
+                    req.req_id,
+                    Err(serde_json::json!("Overlay webview not found")),
+                ));
+                return;
+            }
+        };
+
+        // InvokeRequest 구성
+        // 플랫폼별 로컬 URL (Windows: http://tauri.localhost, macOS/Linux: tauri://localhost)
+        let local_url = if cfg!(windows) || cfg!(target_os = "android") {
+            tauri::Url::parse("http://tauri.localhost").unwrap()
+        } else {
+            tauri::Url::parse("tauri://localhost").unwrap()
+        };
+        let invoke_key = app_handle.invoke_key().to_string();
+        let request = InvokeRequest {
+            cmd: req.cmd.clone(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: local_url,
+            body: InvokeBody::Json(req.args),
+            headers: Default::default(),
+            invoke_key,
+        };
+
+        let req_id = req.req_id;
+        let cmd = req.cmd.clone();
+        let addr_clone = *addr;
+
+        // OwnedInvokeResponder: 응답을 rpc_tx 채널로 전송
+        let responder: Box<tauri::ipc::OwnedInvokeResponder<Wry>> =
+            Box::new(move |_webview, _cmd, response, _callback, _error| {
+                let result = match response {
+                    InvokeResponse::Ok(body) => {
+                        let value = match body {
+                            InvokeResponseBody::Json(json_str) => {
+                                serde_json::from_str(&json_str).unwrap_or(Value::Null)
+                            }
+                            InvokeResponseBody::Raw(bytes) => {
+                                // Raw bytes → base64 인코딩
+                                use base64::Engine;
+                                Value::String(
+                                    base64::engine::general_purpose::STANDARD.encode(&bytes),
+                                )
+                            }
+                        };
+                        Ok(value)
+                    }
+                    InvokeResponse::Err(err) => Err(err.0),
+                };
+                let _ = rpc_tx.send((req_id, result));
+            });
+
+        log::debug!("[ObsBridge] {addr_clone}: invoke cmd={cmd} reqId={req_id}");
+        webview_window.on_message(request, responder);
     }
 
     /// /media/<base64url-encoded-path>?token=xxx — 사용자 로컬 미디어 파일 서빙
