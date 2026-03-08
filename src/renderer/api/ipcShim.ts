@@ -8,12 +8,10 @@
  * 설계 원칙 (§12.4):
  * - 커맨드별 분기 없음. 3단계만: plugin:event → deny → WS RPC
  * - deny 리스트는 hello_ack에서 수신 (백엔드가 유일한 source of truth)
- * - 백엔드 WS RPC 미구현 시 캐시 폴백 (과도기)
  */
 
 import { OBS_PROTOCOL_VERSION } from '@src/types/obs';
 import type { ObsEnvelope, HelloAckPayload } from '@src/types/obs';
-import type { BootstrapPayload } from '@src/types/app';
 
 // ── 내부 상태 ──
 
@@ -26,45 +24,8 @@ let connHost = '127.0.0.1';
 let connPort = '34891';
 let connToken = '';
 
-// deny 리스트 — hello_ack에서 수신 (백엔드가 source of truth)
-// 구 버전 백엔드가 denyList를 보내지 않을 때의 폴백
-const DEFAULT_DENY_LIST = [
-  // 오버레이 제어 (OBS에서 조작 불가)
-  'overlay_resize',
-  'overlay_set_visible',
-  'overlay_set_lock',
-  'overlay_set_anchor',
-  'overlay_get',
-  // 윈도우/앱 제어
-  'window_minimize',
-  'window_close',
-  'window_show_main',
-  'window_open_devtools_all',
-  'app_quit',
-  'app_restart',
-  'app_open_external',
-  'app_auto_update',
-  // OBS 서버 제어 (자기 자신 종료/재시작 방지)
-  'obs_start',
-  'obs_stop',
-  // 파일 대화상자 / 파일 쓰기 (로컬 파일 시스템 접근)
-  'image_load',
-  'font_load',
-  'sound_load',
-  'sound_save_processed_wav',
-  'css_load',
-  'css_reset',
-  'js_load',
-  'js_reset',
-  'js_reload',
-  'preset_load',
-  'preset_load_tab',
-  // Tauri 플러그인 (네이티브 윈도우/메뉴/리소스)
-  'plugin:window|',
-  'plugin:menu|',
-  'plugin:resources|',
-];
-let denyList: string[] = DEFAULT_DENY_LIST;
+// deny 리스트 — hello_ack에서 수신 (백엔드가 유일한 source of truth)
+let denyList: string[] = [];
 
 // 콜백 레지스트리 (transformCallback/runCallback)
 const callbacks = new Map<number, (data: unknown) => void>();
@@ -84,60 +45,8 @@ const pendingRpc = new Map<
   { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
 >();
 
-// ── [과도기] 캐시 — 백엔드 WS RPC 구현 후 제거 예정 ──
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let snapshotCache: (BootstrapPayload & Record<string, any>) | null = null;
-
-/**
- * [과도기] 백엔드 WS RPC가 없는 동안 snapshot 캐시에서 응답.
- * §12.11 백엔드 구현 후 이 함수와 snapshotCache를 제거.
- */
-function handleCacheCommand(
-  cmd: string,
-  _args: Record<string, unknown>,
-): unknown | undefined {
-  if (!snapshotCache) return undefined;
-
-  switch (cmd) {
-    case 'app_bootstrap':
-      return snapshotCache;
-    case 'settings_get':
-      return snapshotCache.settings;
-    case 'keys_get':
-      return snapshotCache.keys;
-    case 'positions_get':
-      return snapshotCache.positions;
-    case 'stat_positions_get':
-      return snapshotCache.statPositions;
-    case 'graph_positions_get':
-      return snapshotCache.graphPositions;
-    case 'custom_tabs_list':
-      return snapshotCache.customTabs;
-    case 'layer_groups_get':
-      return snapshotCache.layerGroups ?? {};
-    case 'note_tab_get_all':
-      return snapshotCache.tabNoteOverrides ?? {};
-    case 'css_get':
-      return snapshotCache.settings?.customCSS ?? { content: '', path: null };
-    case 'css_get_use':
-      return snapshotCache.settings?.useCustomCSS ?? false;
-    case 'css_tab_get_all':
-      return snapshotCache.tabCssOverrides ?? {};
-    case 'js_get':
-      return (
-        snapshotCache.settings?.customJS ?? {
-          content: '',
-          path: null,
-          plugins: [],
-        }
-      );
-    case 'js_get_use':
-      return snapshotCache.settings?.useCustomJS ?? false;
-    default:
-      return undefined;
-  }
-}
+// snapshot 수신 여부 (initIpcShim에서 연결 준비 확인용)
+let snapshotReceived = false;
 
 // ── deny 체크 ──
 
@@ -244,20 +153,6 @@ function onWsMessage(envelope: ObsEnvelope) {
         event: string;
         data: unknown;
       };
-      // snapshotCache 증분 갱신 (getter 폴백 정합성 유지)
-      if (snapshotCache) {
-        if (event === 'settings:changed') {
-          const patch = (data as Record<string, unknown>)?.changed;
-          if (patch && typeof patch === 'object') {
-            Object.assign(snapshotCache.settings, patch);
-          }
-        } else if (event === 'keys:counters') {
-          snapshotCache.keyCounters = data as Record<
-            string,
-            Record<string, number>
-          >;
-        }
-      }
       dispatchEvent(event, data);
       break;
     }
@@ -282,47 +177,8 @@ function onWsMessage(envelope: ObsEnvelope) {
     }
 
     case 'snapshot': {
-      const snapshot = envelope.payload as BootstrapPayload;
-      const prev = snapshotCache;
-      snapshotCache = snapshot;
-
-      // 개별 이벤트 디스패치 (useAppBootstrap이 구독)
-      dispatchEvent('keys:changed', snapshot.keys);
-      dispatchEvent('positions:changed', snapshot.positions);
-      dispatchEvent('statPositions:changed', snapshot.statPositions);
-      dispatchEvent('graphPositions:changed', snapshot.graphPositions);
-      dispatchEvent('keys:mode-changed', {
-        mode: snapshot.selectedKeyType,
-      });
-      dispatchEvent('keys:counters', snapshot.keyCounters);
-
-      dispatchEvent('customTabs:changed', {
-        customTabs: snapshot.customTabs,
-        selectedKeyType: snapshot.selectedKeyType,
-      });
-
-      dispatchEvent('tabNote:changed_all', snapshot.tabNoteOverrides ?? {});
-
-      dispatchEvent('layerGroups:changed', snapshot.layerGroups ?? {});
-
-      // preset:snapshot (프리셋 로드 시)
-      if (prev) {
-        dispatchEvent('preset:snapshot', {
-          keys: snapshot.keys,
-          positions: snapshot.positions,
-          statPositions: snapshot.statPositions,
-          graphPositions: snapshot.graphPositions,
-          customTabs: snapshot.customTabs,
-          selectedKeyType: snapshot.selectedKeyType,
-          tabNoteOverrides: snapshot.tabNoteOverrides ?? {},
-        });
-      }
-
-      if (snapshot.settings) {
-        dispatchEvent('settings:changed', {
-          changed: snapshot.settings,
-        });
-      }
+      // 재연결 시 snapshot 수신 — 연결 준비 신호로만 사용
+      snapshotReceived = true;
       break;
     }
   }
@@ -367,13 +223,7 @@ async function shimInvoke(
     return;
   }
 
-  // 3-a. [과도기] 캐시 폴백 — 백엔드 WS RPC 구현 후 제거
-  const cached = handleCacheCommand(cmd, args);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  // 3-b. WS RPC (백엔드가 처리)
+  // 3. WS RPC (백엔드가 처리)
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     return Promise.reject(new Error(`[IPC Shim] WS not connected: ${cmd}`));
   }
@@ -482,7 +332,7 @@ export function initIpcShim(wsUrl: string, token: string): Promise<void> {
 
         // snapshot 수신 시 글로벌 설치 후 resolve
         if (envelope.type === 'snapshot' && !resolved) {
-          snapshotCache = envelope.payload as BootstrapPayload;
+          snapshotReceived = true;
           installGlobals();
           resolved = true;
           resolve();
@@ -575,6 +425,6 @@ export function disposeIpcShim() {
   callbacks.clear();
   eventListeners.clear();
   eventListenersByName.clear();
-  denyList = DEFAULT_DENY_LIST;
-  snapshotCache = null;
+  denyList = [];
+  snapshotReceived = false;
 }
