@@ -552,159 +552,437 @@ OBS 환경:
 - **향후 확장 자동 지원** — 새 window.api 메서드 추가 시 shim 수정 불필요
 - **플러그인 자연 지원** — dmn.* API가 invoke를 사용하므로 자동 호환
 
+#### 재사용성 원칙
+
+이 호환성 레이어는 **DmNote에 종속되지 않는 범용 구조**로 설계:
+
+| 계층 | 역할 | 프로젝트 종속 여부 |
+|------|------|:---:|
+| 프론트 IPC shim | `__TAURI_INTERNALS__` → WS RPC 교체 | **범용** |
+| 프론트 이벤트 시스템 | 콜백 레지스트리 + `tauri_event` 디스패치 | **범용** |
+| 프론트 deny 체크 | `hello_ack`에서 수신한 단일 배열로 동적 구성 | **백엔드에서 수신 (관리 불필요)** |
+| 백엔드 WS RPC | `invoke_request` → `webview.on_message()` 자동 디스패치 | **범용** |
+| 백엔드 deny 리스트 | OBS에서 의미 없는 커맨드 차단 | **프로젝트별 설정 (유일한 관리 포인트)** |
+| 백엔드 이벤트 포워딩 | Tauri emit → `tauri_event` WS 브로드캐스트 | **범용** |
+
+프로젝트별로 관리하는 것은 **deny 리스트 하나뿐** — **백엔드 Rust 코드에서 1곳만 관리**.
+프론트엔드는 WS handshake(`hello_ack`)에서 deny 리스트를 수신하여 No-op Set을 동적 구성.
+나머지 인프라는 어떤 Tauri 앱이든 그대로 이식 가능.
+
 ### 12.4 IPC Shim 구현
+
+#### 설계 원칙
+
+shim은 **커맨드별 분기를 하지 않는다**. 모든 invoke 호출은 다음 3단계로만 처리:
+
+1. **이벤트 플러그인** (`plugin:event|*`) → 로컬 콜백 레지스트리에서 처리
+2. **No-op** (OBS에서 의미 없는 창 관리 커맨드) → 즉시 반환
+3. **WS RPC** → 백엔드에 전달, 실제 커맨드 핸들러가 처리
 
 ```typescript
 // src/renderer/api/ipcShim.ts
 
-/**
- * OBS 환경에서 Tauri IPC를 WebSocket으로 교체하는 shim.
- * obs/index.tsx에서 앱 마운트 전에 호출.
- */
+// deny 리스트는 하드코딩 아님 — WS handshake(hello_ack)에서 수신
+let denyList: string[] = [];
 
-// invoke shim: WS RPC (requestId 기반)
-async function wsInvoke(command: string, args?: unknown): Promise<unknown> {
-  // 1. no-op 커맨드 → 즉시 반환 (overlay_resize, overlay_set_visible 등)
-  // 2. 캐시 커맨드 → snapshot 데이터에서 반환 (app_bootstrap, settings_get 등)
-  // 3. RPC 커맨드 → WS invoke_request 전송 → invoke_response 대기 (향후)
+async function shimInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+  // 1. 이벤트 플러그인 (프론트엔드 로컬)
+  if (cmd === 'plugin:event|listen') return handleEventListen(args);
+  if (cmd === 'plugin:event|unlisten') { handleEventUnlisten(args); return; }
+  if (cmd === 'plugin:event|emit') { handleEventEmit(args); return; }
+
+  // 2. deny 체크 (백엔드에서 수신한 단일 리스트)
+  if (isDenied(cmd)) return;
+
+  // 3. 나머지 전부 → WS RPC (백엔드가 실제 처리)
+  return wsRpc(cmd, args);
 }
 
-// listen shim: WS 메시지를 이벤트로 디스패치
-function wsListen(event: string, callback: Function): Promise<() => void> {
-  // WS 메시지 타입 → Tauri 이벤트명 매핑:
-  //   key_event     → 'keys:state'
-  //   settings_diff → 'settings:changed'
-  //   counter_update → 'keys:counters'
-  //   snapshot      → 모든 *:changed 이벤트 일괄 디스패치
-}
-
-export function initIpcShim(wsUrl: string, token: string): Promise<void> {
-  // 1. WS 연결 + hello 핸드셰이크
-  // 2. snapshot 수신 → 캐시 저장
-  // 3. window.__TAURI_INTERNALS__ 설치
-  // 4. 창 관리 API no-op 스텁 설치 (@tauri-apps/api/window, menu 등)
+// "|"로 끝나면 prefix 매칭, 아니면 exact 매칭
+function isDenied(cmd: string): boolean {
+  return denyList.some(entry =>
+    entry.endsWith('|') ? cmd.startsWith(entry) : cmd === entry
+  );
 }
 ```
 
+**커맨드 추가 시 shim 수정 불필요** — 백엔드에 커맨드가 있으면 자동으로 동작.
+
+#### deny 리스트 일원화
+
+**백엔드가 유일한 source of truth**. 단일 배열 하나로 exact + prefix 매칭 통합.
+`|`로 끝나는 항목은 prefix 매칭, 아니면 exact 매칭.
+프론트엔드는 WS handshake에서 수신:
+
+```json
+// hello_ack 응답에 deny 리스트 포함
+{
+  "type": "hello_ack",
+  "payload": {
+    "serverVersion": "1.5.2",
+    "obsMode": true,
+    "denyList": [
+      "overlay_resize", "overlay_set_visible", "overlay_set_lock",
+      "overlay_set_anchor", "overlay_get",
+      "window_minimize", "window_close", "window_show_main",
+      "window_open_devtools_all",
+      "app_quit", "app_restart", "app_open_external", "app_auto_update",
+      "plugin:window|", "plugin:menu|", "plugin:resources|"
+    ]
+  }
+}
+```
+
+프론트 shim은 `hello_ack` 수신 시 `denyList`를 그대로 저장:
+
+```typescript
+function onHelloAck(payload: HelloAckPayload) {
+  denyList = payload.denyList ?? [];
+}
+```
+
+이 구조의 장점:
+- **관리 포인트 1곳** — Rust 코드의 `DENIED_WS_COMMANDS` 배열 하나만 수정
+- **단일 배열** — exact/prefix 구분 없이 하나의 리스트로 통합 (`|` suffix 컨벤션)
+- **빌드 의존성 없음** — codegen이나 공유 JSON 파일 불필요
+- **런타임 동기화** — 백엔드 버전이 올라가도 프론트 shim 재빌드 필요 없음
+
+#### deny 커맨드 목록 (참고 — Rust에서만 관리)
+
+| 항목 | 매칭 | 이유 |
+|------|------|------|
+| `overlay_resize`, `overlay_set_visible` 등 | exact | Tauri 윈도우 조작 |
+| `window_minimize`, `window_close` 등 | exact | 네이티브 윈도우 제어 |
+| `app_quit`, `app_restart` 등 | exact | 앱 생명주기 |
+| `plugin:window\|` | prefix | Tauri window 플러그인 전체 |
+| `plugin:menu\|` | prefix | Tauri menu 플러그인 전체 |
+| `plugin:resources\|` | prefix | Tauri resources 플러그인 전체 |
+
+`raw_input_subscribe` 등 **백엔드 기능이 필요한 커맨드**는 deny가 아닌 WS RPC로 처리.
+
 ### 12.5 WS ↔ Tauri 이벤트 매핑
 
-#### invoke 매핑 (요청/응답)
+#### invoke (요청/응답) — 백엔드 WS RPC
 
-| invoke 커맨드 | OBS shim 처리 |
-|---------------|---------------|
-| `app_bootstrap` | snapshot 캐시에서 BootstrapPayload 형태로 변환 반환 |
-| `settings_get` | snapshot.settings에서 반환 |
-| `keys_get` / `positions_get` | snapshot에서 반환 |
-| `css_get` / `css_get_use` / `css_tab_get_all` | snapshot에서 반환 |
-| `note_tab_get_all` | snapshot에서 반환 |
-| `stat_positions_get` / `graph_positions_get` | snapshot에서 반환 |
-| `layer_groups_get` | snapshot에서 반환 |
-| `stats_get` | 로컬 KPS 초기값 반환 |
-| `overlay_resize` / `overlay_set_visible` | no-op |
-| `settings_update` / `overlay_set_lock` | no-op (또는 향후 WS RPC) |
-| `window_show_main` / `app_quit` | no-op |
-| `plugin_storage_*` | 향후 WS RPC로 확장 |
+shim에서는 커맨드를 구분하지 않고 전부 WS RPC로 전달.
+백엔드 WS 서버가 실제 커맨드 핸들러를 호출하여 응답 (§12.11 참조).
 
-#### listen 매핑 (이벤트 구독)
+```
+프론트엔드                        백엔드
+shimInvoke('settings_get')
+  → WS: { type: "invoke_request", requestId, command: "settings_get", args }
+                                  → settings_get() 핸들러 호출
+                                  ← WS: { type: "invoke_response", requestId, result: {...} }
+  ← resolve(result)
+```
 
-| Tauri 이벤트 | WS 메시지 소스 | 비고 |
-|-------------|---------------|------|
-| `keys:state` | `key_event` | keyEventBus가 구독 |
-| `settings:changed` | `settings_diff` | useAppBootstrap이 구독 |
-| `keys:counter` / `keys:counters` | `counter_update` | |
-| `keys:changed` | `snapshot` 재전송 | snapshot 수신 시 디스패치 |
-| `positions:changed` | `snapshot` 재전송 | |
-| `statPositions:changed` | `snapshot` 재전송 | |
-| `graphPositions:changed` | `snapshot` 재전송 | |
-| `keys:mode-changed` | `snapshot` 재전송 | |
-| `preset:snapshot` | `snapshot` 재전송 | |
-| `css:use` / `css:content` | `settings_diff` | CSS 관련 필드 감지 시 |
-| `tabCss:changed` | `settings_diff` | |
-| `js:use` / `js:content` | `settings_diff` | 플러그인 지원 시 |
-| `tabNote:changed` / `tabNote:changed_all` | `snapshot` 재전송 | |
-| `customTabs:changed` | `snapshot` 재전송 | |
-| `overlay:lock` / `overlay:anchor` | 미사용 (OBS에서 의미 없음) | |
-| `plugin-bridge:message` | 향후 WS 확장 | 플러그인 브릿지 지원 시 |
+#### listen (이벤트 구독) — WS 메시지 → Tauri 이벤트 디스패치
 
-#### stats 구독 특수 처리
+WS 브로드캐스트 메시지를 수신하면 Tauri 이벤트명으로 변환하여 등록된 리스너에 디스패치:
 
-`window.api.stats.subscribe()`는 `listen`이 아닌 별도 메커니즘.
-OBS에서는 기존 `useOverlayRuntime`의 로컬 KPS 슬라이딩 윈도우를 `keyStatsService` shim으로 이전.
+| WS 메시지 타입 | → Tauri 이벤트 | 비고 |
+|---------------|---------------|------|
+| `key_event` | `keys:state` | keyEventBus 구독 |
+| `settings_diff` | `settings:changed` | `{ changed: patch }` 래핑 |
+| `counter_update` | `keys:counters` | 전체 카운터 |
+| `snapshot` | `keys:changed`, `positions:changed`, `settings:changed` 등 | 다수 이벤트 일괄 디스패치 |
+| `tauri_event` | 이벤트명 그대로 | 범용 이벤트 포워딩 (§12.12) |
+
+#### stats 구독
+
+`keyStatsService`가 `listen('keys:state')` + `invoke('app_bootstrap')`을 사용.
+shim이 설치되면 자동으로 WS 경유 동작 — 별도 처리 불필요.
 
 ### 12.6 창 관리 API No-op 스텁
 
-overlay/App.tsx가 직접 사용하는 non-IPC Tauri API:
+overlay/App.tsx가 `@tauri-apps/api/window`, `@tauri-apps/api/menu` 등을 직접 import.
+이 모듈들은 내부적으로 `invoke('plugin:window|...', ...)` 형태로 호출.
 
-| 모듈 | API | No-op 처리 |
-|------|-----|-----------|
-| `@tauri-apps/api/window` | `getCurrentWindow()` | `startDragging()` 등 전부 no-op Promise 반환 |
-| `@tauri-apps/api/window` | `currentMonitor()` | `null` 반환 |
-| `@tauri-apps/api/window` | `Window.getByLabel()` | `null` 반환 |
-| `@tauri-apps/api/dpi` | `LogicalPosition`, `PhysicalPosition` | 빈 클래스 |
-| `@tauri-apps/api/menu` | `Menu.new()`, `menu.popup()` | no-op Promise |
-| `@tauri-apps/api/core` | `convertFileSrc()` | OBS HTTP `/media/` 경로로 변환 |
+백엔드 deny 리스트의 `denyPrefixes`에 `plugin:window|`, `plugin:menu|` 등이 포함되어
+shim이 handshake 시 수신한 prefix 매칭으로 자동 no-op 처리 — 별도 모듈 모킹 불필요.
 
-구현 방식: Vite alias 또는 obs 진입점에서 모듈 모킹
+`convertFileSrc()`는 `__TAURI_INTERNALS__.convertFileSrc`에 설치되므로 shim에서 직접 제공.
+OBS HTTP 서버의 `/media/<base64>?token=...` 경로로 변환:
 
-### 12.7 obs/App.tsx 최종 형태
+```typescript
+function shimConvertFileSrc(filePath: string): string {
+  const encoded = btoa(filePath);
+  return `http://${host}:${port}/media/${encoded}?token=${sessionToken}`;
+}
+```
+
+### 12.7 obs/index.tsx 진입점
 
 ```tsx
-// src/renderer/windows/obs/App.tsx
-import { useEffect, useState } from 'react';
+// src/renderer/windows/obs/index.tsx
 import { initIpcShim, disposeIpcShim } from '@api/ipcShim';
 
-// shim 설치 후 overlay App을 동적 임포트
-const App = () => {
-  const [OverlayApp, setOverlayApp] = useState<React.ComponentType | null>(null);
+async function bootstrap() {
+  const params = new URLSearchParams(window.location.search);
+  const host = params.get('host') || window.location.hostname || '127.0.0.1';
+  const port = params.get('port') || window.location.port || '34891';
+  const token = params.get('token') || '';
+  const wsUrl = `ws://${host}:${port}`;
 
-  useEffect(() => {
-    const { host, port, token } = parseUrlParams();
-    initIpcShim(`ws://${host}:${port}`, token).then(async () => {
-      const { default: Overlay } = await import('@windows/overlay/App');
-      setOverlayApp(() => Overlay);
-    });
-    return () => disposeIpcShim();
-  }, []);
+  await initIpcShim(wsUrl, token);
+  await import('@api/dmnoteApi');
+  window.__dmn_window_type = 'overlay';
 
-  if (!OverlayApp) return <div>Connecting...</div>;
-  return <OverlayApp />;
-};
+  const { I18nProvider } = await import('@contexts/I18nContext');
+  const { default: App } = await import('@windows/overlay/App');
+  // render <I18nProvider><App /></I18nProvider>
+}
 ```
 
 ### 12.8 구현 단계
 
-| 단계 | 작업 | 파일 |
+| 단계 | 작업 | 영역 |
 |------|------|------|
-| 1 | **IPC shim 인프라** — WS 연결, invoke/listen 기본 구조 | 신설: `api/ipcShim.ts` |
-| 2 | **invoke shim** — snapshot 캐시 기반 반환 + no-op 매핑 | `api/ipcShim.ts` |
-| 3 | **listen shim** — WS 메시지 → Tauri 이벤트 디스패치 | `api/ipcShim.ts` |
-| 4 | **창 관리 no-op** — window/menu/dpi 모킹 | Vite alias 또는 `api/ipcShim.ts` |
-| 5 | **obs/App.tsx 재작성** — shim 초기화 + overlay App 임포트 | `windows/obs/App.tsx` |
-| 6 | **검증** — dev 모드에서 OBS 페이지 동작 확인 | |
-| 7 | **정리** — useOverlayRuntime.ts 제거, useObsWebSocket.ts 제거/내부 흡수 | |
+| 1 | **프론트 IPC shim** — WS 연결, `__TAURI_INTERNALS__` 설치, No-op, WS RPC | `api/ipcShim.ts` |
+| 2 | **백엔드 WS RPC 핸들러** — `invoke_request` 수신 → 커맨드 라우팅 → `invoke_response` (§12.11) | `obs_bridge.rs` |
+| 3 | **백엔드 이벤트 포워딩** — Tauri 이벤트를 `tauri_event` WS 메시지로 포워딩 (§12.12) | `obs_bridge.rs` |
+| 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` 추가 | `app_state.rs`, `mod.rs` |
+| 5 | **obs/index.tsx 재작성** — shim 초기화 + overlay/App 동적 임포트 | `windows/obs/index.tsx` |
+| 6 | **convertFileSrc 수정** — OBS HTTP `/media/` 경로 매핑 | `api/ipcShim.ts` |
+| 7 | **검증 + 정리** — useOverlayRuntime.ts, useObsWebSocket.ts 제거 | |
 
-### 12.9 서버 확장 (향후)
+### 12.9 WS 프로토콜 확장
 
-현재 WS 프로토콜로 대부분의 overlay 기능이 동작하지만,
-플러그인 `dmn.*` API의 쓰기 연산을 위해 WS RPC 프로토콜 추가 필요:
+#### 신규 메시지 타입
 
+| 방향 | 타입 | 용도 |
+|------|------|------|
+| C→S | `invoke_request` | 커맨드 실행 요청 |
+| S→C | `invoke_response` | 커맨드 실행 결과 |
+| S→C | `tauri_event` | 범용 Tauri 이벤트 포워딩 |
+
+#### invoke_request / invoke_response
+
+```json
+// C→S
+{ "v": 1, "type": "invoke_request", "seq": 42,
+  "payload": { "requestId": "rpc_xxx", "command": "settings_get", "args": {} } }
+
+// S→C
+{ "v": 1, "type": "invoke_response", "seq": 43,
+  "payload": { "requestId": "rpc_xxx", "result": { ... } } }
+// 에러 시
+{ "v": 1, "type": "invoke_response", "seq": 43,
+  "payload": { "requestId": "rpc_xxx", "error": "Not found" } }
 ```
-C→S: { type: "invoke_request", requestId: "uuid", command: "plugin_storage_get", args: {...} }
-S→C: { type: "invoke_response", requestId: "uuid", result: {...} }
-```
 
-- 화이트리스트 기반 커맨드 허용 (보안)
-- requestId + pending map + timeout (30초)
-- 단계 1~6 완료 후 별도 구현
+#### tauri_event (범용 이벤트 포워딩)
+
+```json
+// S→C — 백엔드의 모든 Tauri emit을 WS로 전달
+{ "v": 1, "type": "tauri_event", "seq": 44,
+  "payload": { "event": "keys:counter", "data": { "mode": "4key", "key": "A", "count": 42 } } }
+```
 
 ### 12.10 리스크 및 제약
 
 | 리스크 | 심각도 | 대응 |
 |--------|--------|------|
 | `window.__TAURI_INTERNALS__` 내부 API 변경 | 중 | Tauri 버전 고정 + 업그레이드 시 shim 검증 |
-| snapshot → BootstrapPayload 변환 불일치 | 중 | 타입 검증 + 단계별 테스트 |
-| overlay 전용 API 누락으로 런타임 에러 | 낮 | try/catch 가드 + no-op 폴백 |
-| stats 구독 메커니즘 차이 | 낮 | 로컬 KPS 계산 유지 (기존 검증됨) |
+| WS RPC 보안 (임의 커맨드 실행) | 중 | deny 리스트 + Tauri ACL 재사용 + 세션 토큰 검증 |
+| `InvokeRequest` API 안정성 | 중 | Tauri 2.x 내 변경 가능성 낮음, 업그레이드 시 한 곳만 수정 |
+| overlay 전용 API 누락으로 런타임 에러 | 낮 | No-op prefix 매칭 (`plugin:window|*`) + try/catch 가드 |
+| WS RPC 지연 (localhost) | 낮 | <1ms, 체감 불가 |
+| pendingRpc dispose 시 미해결 Promise | 낮 | dispose 시 모든 pending을 reject 처리 |
+
+### 12.11 백엔드 WS RPC 핸들러
+
+OBS 브라우저에서 `invoke(cmd, args)`가 호출되면 shim이 WS `invoke_request`로 전달.
+백엔드 WS 서버가 이를 **Tauri의 기존 커맨드 파이프라인에 주입**하여 자동 처리.
+
+#### 핵심: `Webview::on_message(InvokeRequest)` 활용
+
+Tauri v2는 `WebviewWindow::on_message(request, responder)` API를 제공.
+이를 통해 WS 요청을 "가짜 IPC"로 주입하면 **수동 커맨드 라우팅 없이** 기존 `#[tauri::command]` 파이프라인을 그대로 탈 수 있음.
+
+```rust
+// obs_bridge.rs — WS invoke_request 핸들러
+async fn handle_invoke_request(
+    app: &AppHandle,
+    request_id: &str,
+    command: &str,
+    args: Value,
+    ws_tx: &WsSender,
+) {
+    // 1. deny 리스트 체크 (= 프론트 No-op 리스트와 동일)
+    if DENIED_WS_COMMANDS.contains(&command) {
+        ws_tx.send(invoke_response_error(request_id, "Command not allowed"));
+        return;
+    }
+
+    // 2. Tauri 파이프라인에 주입 — match문 없음
+    let webview = app.get_webview_window("main").unwrap();
+    let request = InvokeRequest {
+        cmd: command.to_string(),
+        body: InvokeBody::Json(args),
+        headers: Default::default(),
+        url: webview.url().unwrap(),  // ACL 검증용
+        invoke_key: app.invoke_key().to_string(),
+    };
+
+    let request_id = request_id.to_string();
+    let tx = ws_tx.clone();
+    webview.on_message(request, Box::new(move |_webview, _cmd, response, _cb, _err| {
+        // 3. Tauri 응답을 WS invoke_response로 변환
+        tx.send(invoke_response(&request_id, response));
+    }));
+}
+```
+
+#### deny 리스트 (유일한 source of truth)
+
+**이 배열 하나가 프론트/백엔드 양쪽의 유일한 관리 포인트**.
+`|`로 끝나는 항목은 prefix 매칭, 아니면 exact 매칭 — 프론트/백엔드 동일 규칙.
+WS handshake 시 `hello_ack`에 포함하여 프론트엔드에 전달 (§12.4 참조).
+
+```rust
+// obs_bridge.rs — 유일한 deny 리스트 정의 (단일 배열)
+const DENIED_WS_COMMANDS: &[&str] = &[
+    // exact 매칭
+    "overlay_resize", "overlay_set_visible", "overlay_set_lock",
+    "overlay_set_anchor", "overlay_get",
+    "window_minimize", "window_close", "window_show_main",
+    "window_open_devtools_all",
+    "app_quit", "app_restart", "app_open_external", "app_auto_update",
+    // prefix 매칭 ("|"로 끝남)
+    "plugin:window|", "plugin:menu|", "plugin:resources|",
+];
+
+fn is_denied(cmd: &str) -> bool {
+    DENIED_WS_COMMANDS.iter().any(|entry| {
+        if entry.ends_with('|') { cmd.starts_with(entry) }
+        else { cmd == *entry }
+    })
+}
+```
+
+```rust
+// hello_ack 전송 시 deny 리스트 포함
+fn build_hello_ack(&self) -> Value {
+    json!({
+        "serverVersion": self.server_version,
+        "obsMode": true,
+        "denyList": DENIED_WS_COMMANDS,
+    })
+}
+```
+
+deny에 없는 커맨드는 **자동으로 Tauri가 처리** — 새 커맨드 추가 시 양쪽 모두 수정 불필요.
+Tauri의 ACL 시스템이 보안 경계 역할을 하므로 별도 화이트리스트 불필요.
+
+#### 장점
+
+- **match문 완전 제거** — 커맨드별 분기 없음
+- **인자 역직렬화 자동** — Tauri의 `#[tauri::command]` 매크로가 처리
+- **ACL 재사용** — Tauri permissions 시스템이 보안 검증
+- **새 커맨드 자동 지원** — `#[tauri::command]` 추가하면 WS에서도 즉시 동작
+- **관리 포인트 1개** — Rust deny 리스트만 수정하면 `hello_ack`로 프론트에 자동 전파
+
+#### 제약
+
+- `InvokeRequest`는 Tauri에서 stable API로 보장하지 않음 — Tauri 메이저 업그레이드 시 검증 필요
+- `webview.on_message()` 호출에 기존 Webview 인스턴스 필요 (main window 사용)
+- `invoke_key`는 내부 보안 키이므로 외부 노출 금지
+
+### 12.12 백엔드 이벤트 포워딩
+
+현재 WS 서버는 `key_event`, `settings_diff`, `counter_update`, `snapshot`만 전송.
+IPC shim이 모든 이벤트를 `listen()`할 수 있으려면 백엔드가 **Tauri 이벤트를 WS로 포워딩**해야 함.
+
+#### 접근 방식: `tauri_event` 범용 메시지
+
+백엔드에서 Tauri 이벤트가 emit될 때 WS 클라이언트에도 전달:
+
+```rust
+// app_state.rs — 이벤트 emit 시 WS도 함께 전송
+fn emit_and_forward(&self, event: &str, payload: &impl Serialize) {
+    // 1. 기존: Tauri 윈도우로 emit
+    self.app_handle.emit(event, payload).ok();
+
+    // 2. 신규: OBS WS 클라이언트로 포워딩
+    if let Some(bridge) = &self.obs_bridge {
+        bridge.forward_tauri_event(event, payload);
+    }
+}
+```
+
+```rust
+// obs_bridge.rs
+pub fn forward_tauri_event(&self, event: &str, payload: &impl Serialize) {
+    let envelope = ObsEnvelope::tauri_event(event, serde_json::to_value(payload).unwrap());
+    self.broadcast(envelope);
+}
+```
+
+#### 포워딩 대상 이벤트
+
+| 이벤트 | 소비자 | 기존 WS 대체 |
+|--------|--------|-------------|
+| `keys:state` | keyEventBus, keyStatsService | 기존 `key_event` → `tauri_event`로 통합 가능 |
+| `keys:counter` | keyStatsService (total 실시간 갱신) | **신규** — 현재 누락 |
+| `keys:counters` | useAppBootstrap | 기존 `counter_update` |
+| `settings:changed` | useAppBootstrap | 기존 `settings_diff` |
+| `keys:changed` | useAppBootstrap | 기존 `snapshot` 내 |
+| `positions:changed` | useAppBootstrap | 기존 `snapshot` 내 |
+| `css:use`, `css:content` | useCustomCssInjection | **신규** — 현재 누락 |
+| `tabCss:changed` | useCustomCssInjection | **신규** — 현재 누락 |
+| `js:use`, `js:content` | customJsRuntime | **신규** — 현재 누락 |
+| `input:raw` | rawKeyEventBus (플러그인) | **신규** — raw_input_subscribe 시 |
+| `plugin-bridge:message` | PluginElementsRenderer | **신규** — 플러그인 지원 시 |
+
+#### 전환 전략
+
+기존 전용 WS 메시지(`key_event`, `settings_diff`, `counter_update`)를 즉시 제거하면 하위 호환 깨짐.
+단계적 전환:
+
+1. **1단계**: `tauri_event` 포워딩 추가 (신규 이벤트만: `keys:counter`, `css:*`, `js:*`, `input:raw`)
+2. **2단계**: shim의 `onWsMessage`에서 기존 메시지 타입 처리 유지 + `tauri_event` 처리 추가
+3. **3단계** (선택): 기존 전용 메시지를 `tauri_event`로 통합, `onWsMessage` 매핑 로직 제거
+
+### 12.13 프론트엔드 shim 최종 구조
+
+위 백엔드 호환성 레이어가 완성되면, ipcShim.ts는 다음으로 축소:
+
+```typescript
+// ── deny 리스트 (hello_ack에서 수신, 하드코딩 없음) ──
+let denyList: string[] = [];
+
+// ── invoke 핸들러 ──
+async function shimInvoke(cmd, args) {
+  // 1. 이벤트 플러그인 (프론트엔드 로컬 — 콜백 레지스트리)
+  if (cmd.startsWith('plugin:event|')) { /* listen/unlisten/emit */ }
+
+  // 2. deny 체크 ("|"로 끝나면 prefix, 아니면 exact)
+  if (isDenied(cmd)) return;
+
+  // 3. WS RPC (백엔드가 처리)
+  return wsRpc(cmd, args);
+}
+
+// ── WS 메시지 수신 ──
+function onWsMessage(envelope) {
+  switch (envelope.type) {
+    // 기존 호환 (1단계)
+    case 'key_event':      dispatchEvent('keys:state', envelope.payload); break;
+    case 'settings_diff':  dispatchEvent('settings:changed', { changed: envelope.payload }); break;
+    case 'counter_update': dispatchEvent('keys:counters', envelope.payload); break;
+    case 'snapshot':       /* 다수 이벤트 일괄 디스패치 */ break;
+
+    // 범용 포워딩 (2단계)
+    case 'tauri_event':    dispatchEvent(envelope.payload.event, envelope.payload.data); break;
+
+    // RPC 응답
+    case 'invoke_response': /* pending RPC resolve/reject */ break;
+  }
+}
+```
+
+3단계 전환 완료 후에는 기존 `case 'key_event'` 등이 제거되고 `tauri_event` 하나로 통합.
 
 ---
 
@@ -712,33 +990,37 @@ S→C: { type: "invoke_response", requestId: "uuid", result: {...} }
 
 > v3 P1/P2 대부분 완료. 아래는 미완료 항목을 우선순위별로 정리.
 
-### Tier 1 — Tauri IPC Shim (§12, 다음 작업)
+### Tier 1 — IPC Shim + 백엔드 호환성 레이어 (§12)
 
-| # | 작업 | 예상 규모 | 비고 |
-|---|------|-----------|------|
-| 1 | **IPC shim 인프라 + invoke/listen 구현** | `api/ipcShim.ts` 1파일 | WS 연결 + snapshot 캐시 + invoke no-op/캐시 반환 + listen → WS 메시지 디스패치 |
-| 2 | **창 관리 API no-op 스텁** | Vite alias 또는 shim 내부 | window/menu/dpi 모킹 |
-| 3 | **obs/App.tsx 재작성** | 기존 33줄 → shim 초기화 + overlay App 임포트 | |
-| 4 | **검증 + 정리** | useOverlayRuntime.ts, useObsWebSocket.ts 제거 | |
+| # | 작업 | 영역 | 비고 |
+|---|------|------|------|
+| 1 | **프론트 IPC shim** — WS 연결 + invoke/listen + No-op + WS RPC | `api/ipcShim.ts` | |
+| 2 | **백엔드 WS RPC** — `invoke_request` → `webview.on_message()` 자동 디스패치 | `obs_bridge.rs` | §12.11 |
+| 3 | **백엔드 이벤트 포워딩** — `tauri_event` WS 메시지 추가 | `obs_bridge.rs`, `app_state.rs` | §12.12 |
+| 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` | `app_state.rs`, `mod.rs` | |
+| 5 | **convertFileSrc 수정** — OBS HTTP `/media/` 경로 매핑 | `api/ipcShim.ts` | |
+| 6 | **obs/index.tsx 재작성** — shim → dmnoteApi → overlay/App | `windows/obs/index.tsx` | |
+| 7 | **검증 + 정리** — useOverlayRuntime.ts, useObsWebSocket.ts 제거 | | |
 
 구현 결과:
 - overlay/App.tsx **코드 변경 0**
 - obs/App.tsx가 overlay/App.tsx와 **동일 코드** 실행
 - 중복 로직 **완전 해소** (useOverlayRuntime 417줄 제거)
+- **커맨드 추가 시 양쪽 모두 수정 불필요** — deny 리스트에 없으면 자동 동작
+- **deny 리스트 관리 포인트 1곳** — Rust `DENIED_WS_COMMANDS` 수정 시 WS handshake로 프론트에 자동 반영
 
-### Tier 2 — 플러그인 OBS 지원 (§12 완료 후)
+### Tier 2 — 프로토콜 통합 (Tier 1 완료 후)
 
-| # | 작업 | 설명 | 비고 |
-|---|------|------|------|
-| 5 | **WS invoke RPC 프로토콜** | invoke_request/response + 화이트리스트 | IPC shim이 RPC 커맨드를 실제 WS로 전송 |
-| 6 | **플러그인 엘리먼트** | snapshot에 pluginElements 포함 | shim이 자동 처리 (코드 변경 없음) |
-| 7 | **커스텀 JS** | js:use/js:content 이벤트 + plugin_storage_* RPC | #5 의존 |
+| # | 작업 | 설명 |
+|---|------|------|
+| 8 | **기존 WS 메시지를 `tauri_event`로 통합** | `key_event` → `tauri_event { event: "keys:state" }` 등 |
+| 9 | **shim `onWsMessage` 매핑 제거** | 통합 후 `tauri_event` + `invoke_response` 만 남김 |
 
 ### Tier 3 — 알려진 이슈 (낮은 우선순위)
 
 | # | 이슈 | 증상 | 추정 원인 |
 |---|------|------|-----------|
-| 8 | **초기 접속 시 빈 화면** | 브라우저 최초 접속 시 키 UI가 보이지 않다가, 키 위치를 한 번 변경하면 전부 표시됨 | snapshot → bootstrap 변환 시 레이아웃 계산 타이밍. IPC shim 도입 시 자연 해소 가능성 있음 |
+| 10 | **초기 접속 시 빈 화면** | 최초 접속 시 키 UI 미표시, 위치 변경 후 표시 | 레이아웃 계산 타이밍. IPC shim 도입 시 자연 해소 가능성 |
 
 ### 완료된 주요 마일스톤
 
@@ -748,5 +1030,5 @@ v2: HTTP+WS 통합 서빙, layout_diff, cached_snapshot 증분 갱신
 v3 P1: 설정 영속화, 오버레이 연동, KPS 로컬 계산, UI 안내
 v3 P2: 커스텀 CSS, 배경 미디어, keyDisplayDelayMs, 키별 노트 효과,
        보안 토큰, dev 모드 서빙, 포터블 exe AssetFetcher
-v4 (예정): Tauri IPC Shim → overlay 코드 재사용 + useOverlayRuntime 제거
+v4 (예정): Tauri IPC Shim + 백엔드 호환성 레이어 → 완전한 코드 재사용
 ```

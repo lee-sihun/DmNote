@@ -26,6 +26,7 @@ export interface HelloPayload {
 export interface HelloAckPayload {
   serverVersion: string;
   obsMode: boolean;
+  denyList?: string[];
 }
 
 export interface KeyEventPayload {
@@ -54,4 +55,7 @@ export type ObsMessageType =
   | 'ping'
   | 'pong'
   | 'resync_request'
-  | 'error';
+  | 'error'
+  | 'invoke_request'
+  | 'invoke_response'
+  | 'tauri_event';
