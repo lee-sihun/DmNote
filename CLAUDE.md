@@ -105,6 +105,12 @@ src-tauri/src/
 - 동기 `fn` 기본, `async fn`은 실제 await가 필요한 경우만 사용
 - 에러 타입: `Result<T, String>` (향후 `CmdResult<T>` 전환 예정)
 
+### OBS 모드 (WebSocket 브릿지)
+
+- **이벤트 포워딩**: 새 Tauri 이벤트(`app.emit(...)`)를 추가할 때, OBS 오버레이에도 전달되어야 하면 `src-tauri/src/services/obs_bridge.rs`의 `register_event_forwarding()` 이벤트 목록에 등록
+- **deny 리스트**: OBS 클라이언트에서 실행 불가능한 커맨드는 `obs_bridge.rs`의 `DENIED_WS_COMMANDS`에 등록 (백엔드가 유일한 source of truth)
+- **IPC shim**: `src/renderer/api/ipcShim.ts`는 generic 설계 — 커맨드/이벤트별 분기 없음. 이벤트나 커맨드 추가 시 수정 불필요
+
 ### 주석
 
 - 기술 용어(React, Tauri, KPS 등)를 제외하면 **한글**로 작성
@@ -145,7 +151,3 @@ src-tauri/src/
 3. **포맷팅**: `cd src-tauri && cargo fmt`
 4. **permissions 확인**: 커맨드 추가/삭제 시 빌드 후 `permissions/dmnote-allow-all.json` 자동 갱신 확인
 
-### OBS 모드 이벤트 포워딩
-
-- 새로운 Tauri 이벤트(`app.emit("event:name", ...)`)를 추가할 때, OBS 오버레이에도 전달되어야 하면 `src-tauri/src/services/obs_bridge.rs`의 `register_event_forwarding()` 이벤트 목록에 등록 필요
-- OBS 모드의 IPC shim(`src/renderer/api/ipcShim.ts`)은 generic 설계이므로 수정 불필요 — 백엔드에서 포워딩만 등록하면 프론트는 자동으로 수신
