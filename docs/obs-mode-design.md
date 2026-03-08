@@ -2,7 +2,7 @@
 
 > 작성일: 2026-03-07
 > 목표: OBS 브라우저 소스로 키뷰어를 표시하여 게임 FPS 영향 완전 제거
-> 상태: **v2 구현 완료** (`feat/obs-mode` 브랜치)
+> 상태: **v4 IPC Shim 구현 완료** (`feat/obs-mode` 브랜치)
 
 ---
 
@@ -40,7 +40,7 @@
 
 1. **AppState가 단일 상태 소스** — 키보드 데몬이 직접 WS로 보내지 않음 ✅
 2. **렌더링 코드 재사용** — useNoteSystem, noteBuffer, WebGLTracksOGL 공유 ✅
-3. **OBS 페이지는 Tauri API 무의존** — window.api.* 참조 없음 ✅
+3. **OBS 페이지는 overlay/App.tsx 재사용** — IPC Shim으로 Tauri API 호환 ✅
 
 ### 데이터 흐름
 
@@ -248,26 +248,25 @@ futures-util = "0.3"
 ```
 src/renderer/
 ├── windows/
-│   ├── overlay/App.tsx         ✅ 기존 (OverlayScene 사용으로 리팩터링)
+│   ├── overlay/App.tsx         ✅ 기존 (OBS에서도 동일 코드 재사용)
 │   └── obs/
-│       ├── App.tsx             ✅ 신설 (WebSocket + OverlayScene)
-│       ├── index.tsx           ✅ 신설 (bootstrap)
-│       └── index.html          ✅ 신설
+│       ├── index.tsx           ✅ IPC Shim 초기화 → overlay/App 동적 import
+│       └── index.html          ✅ 엔트리
+├── api/
+│   └── ipcShim.ts              ✅ 신설 (v4: WS→Tauri IPC 호환 레이어)
 ├── components/shared/
-│   └── OverlayScene.tsx        ✅ 신설 (공용 렌더링 컴포넌트)
-├── hooks/obs/
-│   └── useObsWebSocket.ts      ✅ 신설 (WS 연결 + auto-reconnect)
+│   └── OverlayScene.tsx        ✅ 공용 렌더링 컴포넌트
 ├── hooks/overlay/
 │   └── useNoteSystem.ts        ✅ 그대로 재사용
 ├── stores/signals/
 │   └── noteBuffer.ts           ✅ 그대로 재사용
 ├── api/modules/
-│   └── obsApi.ts               ✅ 신설 (Tauri 커맨드 래퍼)
+│   └── obsApi.ts               ✅ Tauri 커맨드 래퍼
 └── components/overlay/
     └── WebGLTracksOGL.tsx      ✅ 그대로 재사용
 ```
 
-> 설계 문서의 adapter 패턴 대신, OBS App.tsx에서 직접 상태 관리하는 단순한 구조로 구현
+> v4: IPC Shim으로 overlay/App.tsx를 코드 변경 없이 재사용. obs/App.tsx, useObsWebSocket.ts, useOverlayRuntime.ts **삭제됨**.
 
 ### 5.2 OverlayScene 추출 ✅
 
@@ -382,8 +381,8 @@ v3 추가:
 | 레이아웃 동기화 | ✅ 지원 (snapshot 재전송) |
 | 커스텀 CSS | ✅ 지원 (v3: settings_diff 경유 실시간 주입) |
 | 배경 미디어 서빙 | ✅ 지원 (v3: /media/ 엔드포인트 + 토큰 검증) |
-| 커스텀 JS (플러그인) | × 미지원 (Tauri API 의존) |
-| 플러그인 엘리먼트 | × 미지원 (bridge API 의존) |
+| 커스텀 JS (플러그인) | ✅ 지원 (v4: IPC Shim으로 invoke/listen 호환) |
+| 플러그인 엘리먼트 | ✅ 지원 (v4: bridge API → WS RPC 자동 라우팅) |
 
 ### 8.3 성능 참고
 
@@ -477,16 +476,16 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 | 8 | **개별 키 noteEffectEnabled** | 키별 노트 효과 on/off 반영 | ✅ |
 | 9 | **보안 토큰** | 랜덤 세션 토큰 생성 + WS hello 검증 | ✅ |
 | 10 | **Dev 모드 서빙** | dev 모드 시 Vite dev server로 프록시하여 빌드 없이 OBS 페이지 테스트 가능하도록 지원 | ✅ |
-| 11 | **DataSource 호환성 레이어** | OverlayHost adapter로 Tauri API / WebSocket 통합 인터페이스 도입 (§12 참조) | ⚠️ computeLayout 추출 완료, adapter 설계 확정 / 구현 대기 |
+| 11 | **Tauri IPC Shim 호환성 레이어** | IPC Shim으로 invoke/listen 프리미티브 교체, overlay/App.tsx 코드 변경 없이 재사용 (§12 참조) | ✅ Tier 1 구현 완료 |
 | 12 | **포터블 exe 에셋 서빙** | static_dir 디스크 파일 → Tauri asset_resolver() 기반 AssetFetcher로 전환, 단일 exe 배포 지원 | ✅ |
 
 #### v3+ 이후 (P3)
 
 | # | 작업 | 설명 | 상태 |
 |---|------|------|------|
-| 10 | **플러그인 엘리먼트** | bridge API 없는 환경에서 플러그인 UI 렌더링 (서버 HTML 스냅샷 등) | ❌ |
-| 11 | **커스텀 JS (플러그인)** | bridge API WebSocket 프록시 레이어로 Tauri API 의존 해소 | ❌ |
-| 12 | **OBS CEF 호환 테스트** | OBS 28+ 브라우저 소스에서 WebGL/CSS 실제 검증 | ❌ |
+| 10 | **플러그인 엘리먼트** | IPC Shim으로 bridge API가 WS RPC를 통해 자동 동작 | ✅ (v4 IPC Shim으로 해소) |
+| 11 | **커스텀 JS (플러그인)** | IPC Shim으로 invoke/listen 호환, dmn.* API 자동 지원 | ✅ (v4 IPC Shim으로 해소) |
+| 12 | **OBS CEF 호환 테스트** | OBS 28+ 브라우저 소스에서 WebGL/CSS 실제 검증 | ❌ 미검증 |
 
 ### 11.3 v1 → v2 변경 요약
 
@@ -501,7 +500,7 @@ v3는 **OBS 모드의 완성도를 높이고 실사용 편의성을 개선**하�
 
 ## 12. Tauri IPC Shim 호환성 레이어 설계
 
-> 상태: **설계 확정 (C 방식)** / 구현 대기
+> 상태: **Tier 1 구현 완료** / Tier 2 (프로토콜 통합) 대기
 > P2 #11 상세 설계
 
 ### 12.1 배경 및 목표
@@ -986,41 +985,50 @@ function onWsMessage(envelope) {
 
 ---
 
-## 13. 남은 작업 우선순위 (2026-03-08 기준)
+## 13. 작업 진행 현황 (2026-03-08 기준)
 
-> v3 P1/P2 대부분 완료. 아래는 미완료 항목을 우선순위별로 정리.
+> v4 Tier 1 구현 완료. Tier 2 (프로토콜 통합)는 후속 작업.
 
-### Tier 1 — IPC Shim + 백엔드 호환성 레이어 (§12)
+### Tier 1 — IPC Shim + 백엔드 호환성 레이어 (§12) ✅ 완료
 
-| # | 작업 | 영역 | 비고 |
+| # | 작업 | 영역 | 상태 |
 |---|------|------|------|
-| 1 | **프론트 IPC shim** — WS 연결 + invoke/listen + No-op + WS RPC | `api/ipcShim.ts` | |
-| 2 | **백엔드 WS RPC** — `invoke_request` → `webview.on_message()` 자동 디스패치 | `obs_bridge.rs` | §12.11 |
-| 3 | **백엔드 이벤트 포워딩** — `tauri_event` WS 메시지 추가 | `obs_bridge.rs`, `app_state.rs` | §12.12 |
-| 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` | `app_state.rs`, `mod.rs` | |
-| 5 | **convertFileSrc 수정** — OBS HTTP `/media/` 경로 매핑 | `api/ipcShim.ts` | |
-| 6 | **obs/index.tsx 재작성** — shim → dmnoteApi → overlay/App | `windows/obs/index.tsx` | |
-| 7 | **검증 + 정리** — useOverlayRuntime.ts, useObsWebSocket.ts 제거 | | |
+| 1 | **프론트 IPC shim** — WS 연결 + invoke/listen + No-op + WS RPC | `api/ipcShim.ts` | ✅ `dac007a` |
+| 2 | **백엔드 WS RPC** — `invoke_request` → `webview.on_message()` 자동 디스패치 | `obs_bridge.rs` | ✅ `3893666` |
+| 3 | **백엔드 이벤트 포워딩** — 22개 Tauri 이벤트 → `tauri_event` WS 포워딩 | `obs_bridge.rs`, `app_state.rs` | ✅ `28adb94` |
+| 4 | **snapshot 필드 보강** — `layerGroups`, `tabNoteOverrides`, `tabCssOverrides` | `app_state.rs`, `mod.rs`, `app.ts` | ✅ `f32faf4` |
+| 5 | **convertFileSrc 수정** — OBS HTTP `/media/` base64url 매핑 | `api/ipcShim.ts` | ✅ (Step 1에 포함) |
+| 6 | **obs/index.tsx 재작성** — shim → dmnoteApi → overlay/App | `windows/obs/index.tsx` | ✅ (기존 구현 검증) |
+| 7 | **레거시 정리** — obs/App.tsx, useOverlayRuntime.ts, useObsWebSocket.ts 삭제 | | ✅ `9cc15e0` (624줄 삭제) |
 
 구현 결과:
 - overlay/App.tsx **코드 변경 0**
-- obs/App.tsx가 overlay/App.tsx와 **동일 코드** 실행
-- 중복 로직 **완전 해소** (useOverlayRuntime 417줄 제거)
+- obs/index.tsx → IPC Shim 설치 → overlay/App.tsx **동일 코드** 실행
+- 중복 로직 **완전 해소** (레거시 624줄 삭제)
 - **커맨드 추가 시 양쪽 모두 수정 불필요** — deny 리스트에 없으면 자동 동작
 - **deny 리스트 관리 포인트 1곳** — Rust `DENIED_WS_COMMANDS` 수정 시 WS handshake로 프론트에 자동 반영
+- **auto_start_obs 경로**에도 IPC Shim 지원 추가 (set_app_handle + register_event_forwarding)
 
-### Tier 2 — 프로토콜 통합 (Tier 1 완료 후)
+Codex(GPT 5.4) 리뷰에서 발견/수정한 이슈:
+- `keys:counter-changed` → `keys:counter` 이벤트명 오류 수정
+- cross-platform URL (`tauri://localhost` vs `http://tauri.localhost`) 대응
+- deny list 확장 (obs_start/stop, 파일 커맨드, 프리셋 등 11항목 추가)
+- 리스너 lifecycle (중복 등록 방지 + stop 시 해제)
 
-| # | 작업 | 설명 |
-|---|------|------|
-| 8 | **기존 WS 메시지를 `tauri_event`로 통합** | `key_event` → `tauri_event { event: "keys:state" }` 등 |
-| 9 | **shim `onWsMessage` 매핑 제거** | 통합 후 `tauri_event` + `invoke_response` 만 남김 |
+### Tier 2 — 프로토콜 통합 (후속 작업)
+
+| # | 작업 | 설명 | 상태 |
+|---|------|------|------|
+| 8 | **기존 WS 메시지를 `tauri_event`로 통합** | `key_event` → `tauri_event { event: "keys:state" }` 등 | ❌ |
+| 9 | **shim `onWsMessage` 매핑 제거** | 통합 후 `tauri_event` + `invoke_response` 만 남김 | ❌ |
 
 ### Tier 3 — 알려진 이슈 (낮은 우선순위)
 
-| # | 이슈 | 증상 | 추정 원인 |
-|---|------|------|-----------|
-| 10 | **초기 접속 시 빈 화면** | 최초 접속 시 키 UI 미표시, 위치 변경 후 표시 | 레이아웃 계산 타이밍. IPC shim 도입 시 자연 해소 가능성 |
+| # | 이슈 | 증상 | 비고 |
+|---|------|------|------|
+| 10 | **초기 접속 시 빈 화면** | 최초 접속 시 키 UI 미표시, 위치 변경 후 표시 | IPC shim 도입으로 자연 해소 가능성 → 실제 테스트 필요 |
+| 11 | **`input:raw` 이중 전달** | main+overlay 양쪽 `window.emit()` → 리스너 2회 트리거 | OBS 클라이언트에서 dedup 필요할 수 있음 |
+| 12 | **`tabCssOverrides` resync** | reconnect 시 snapshot만으로는 탭 CSS 미갱신 | `tabCss:changed` 이벤트 포워딩으로 커버, 초기 snapshot은 포함됨 |
 
 ### 완료된 주요 마일스톤
 
@@ -1030,5 +1038,5 @@ v2: HTTP+WS 통합 서빙, layout_diff, cached_snapshot 증분 갱신
 v3 P1: 설정 영속화, 오버레이 연동, KPS 로컬 계산, UI 안내
 v3 P2: 커스텀 CSS, 배경 미디어, keyDisplayDelayMs, 키별 노트 효과,
        보안 토큰, dev 모드 서빙, 포터블 exe AssetFetcher
-v4 (예정): Tauri IPC Shim + 백엔드 호환성 레이어 → 완전한 코드 재사용
+v4: Tauri IPC Shim + 백엔드 호환성 레이어 → 완전한 코드 재사용 ✅
 ```
