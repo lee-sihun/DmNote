@@ -12,3 +12,4 @@ src-tauri/webview2-fixed-runtime/*
 !src-tauri/webview2-fixed-runtime/placeholder.txt
 
 .mcp.json
+mcp.json

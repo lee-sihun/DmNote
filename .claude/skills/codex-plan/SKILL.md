@@ -1,5 +1,5 @@
 ---
-name: plan
+name: codex-plan
 description: "작업 전 Codex(GPT 5.4)와 협업하여 구현 계획을 수립. 작업 계획, 설계 논의, 접근 방식 검토 시 사용."
 disable-model-invocation: false
 argument-hint: "[작업 설명]"
@@ -14,7 +14,11 @@ Claude가 코드를 분석하고 초안 계획을 작성한 뒤, Codex(GPT 5.4)�
 
 ### 기본 모드 (B: 순차 협업)
 대부분의 작업에 사용합니다.
-1. Claude가 Read, Grep, Glob으로 관련 코드를 분석합니다.
+1. Claude가 **codebase-memory-mcp 그래프 도구를 우선** 사용하여 관련 코드를 분석합니다.
+   - `search_graph`로 관련 함수/클래스/모듈 탐색
+   - `trace_call_path`로 콜체인 및 영향 범위 추적
+   - `get_architecture`로 구조 파악
+   - 그래프에 없는 정보(문자열 리터럴, 설정값 등)만 Read/Grep/Glob으로 보완
 2. 코드 구조, 영향 범위, 초안 계획을 정리합니다.
 3. 분석 결과를 Codex에게 전달하여 검증/보완을 요청합니다.
 4. Codex 피드백을 반영하여 최종 계획을 확정합니다.
@@ -26,7 +30,7 @@ Claude가 코드를 분석하고 초안 계획을 작성한 뒤, Codex(GPT 5.4)�
 - 실패 비용이 큰 리팩토링/마이그레이션일 때
 
 1. Claude 분석과 Codex 분석을 동시에 진행합니다.
-   - Claude: Read, Grep, Glob으로 코드 분석
+   - Claude: 그래프 도구(search_graph, trace_call_path 등) 우선, 필요시 Read/Grep 보완
    - Codex: `codex exec`로 독립적 분석 (백그라운드)
 2. 두 분석 결과를 종합하여 최종 계획을 작성합니다.
 

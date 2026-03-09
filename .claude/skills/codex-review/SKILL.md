@@ -13,7 +13,10 @@ Codex는 `danger-full-access` 권한으로 직접 파일 읽기, 쉘 명령 실�
 ## 절차
 
 1. Claude가 `git diff --stat`으로 변경 범위를 파악합니다.
-2. 핵심 변경 파일을 Read로 확인하고 **diff 요약, 의도 추정, 위험 포인트**를 정리합니다.
+2. **codebase-memory-mcp 그래프 도구를 우선** 사용하여 변경의 영향 범위를 분석합니다.
+   - `detect_changes`로 변경된 심볼과 blast radius 확인
+   - `trace_call_path`로 변경 함수의 호출자/피호출자 추적
+   - 핵심 변경 파일은 Read로 확인하고 **diff 요약, 의도 추정, 위험 포인트**를 정리합니다.
 3. Claude의 선분석 결과를 Codex에게 전달하여 검증/심층 리뷰를 요청합니다 (백그라운드).
 4. 진행 상황을 주기적으로 확인하여 사용자에게 보고합니다.
 5. 필요시 `codex exec resume --last`로 심화 리뷰합니다.
