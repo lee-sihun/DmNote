@@ -17,7 +17,7 @@ Codex는 `danger-full-access` 권한으로 직접 파일 읽기, 쉘 명령 실�
    - `detect_changes`로 변경된 심볼과 blast radius 확인
    - `trace_call_path`로 변경 함수의 호출자/피호출자 추적
    - 핵심 변경 파일은 Read로 확인하고 **diff 요약, 의도 추정, 위험 포인트**를 정리합니다.
-3. Claude의 선분석 결과를 Codex에게 전달하여 검증/심층 리뷰를 요청합니다 (백그라운드).
+3. 변경 파일 목록과 영향 범위(사실 정보)를 Codex에게 전달하여 독립 리뷰를 요청합니다 (백그라운드).
 4. 진행 상황을 주기적으로 확인하여 사용자에게 보고합니다.
 5. 필요시 `codex exec resume --last`로 심화 리뷰합니다.
 6. Codex 피드백을 종합하여 최종 리뷰 결과를 보고합니다.
@@ -25,18 +25,19 @@ Codex는 `danger-full-access` 권한으로 직접 파일 읽기, 쉘 명령 실�
 ## Codex 호출 방법
 
 ### 리뷰 요청
-Claude의 선분석 결과를 프롬프트에 포함하여 검증을 요청합니다.
+변경된 파일 목록과 diff 범위만 전달하고, Claude의 판단/결론은 포함하지 않습니다.
 ```bash
-codex exec -C "$(pwd)" -s danger-full-access --json "다음은 Claude(Opus)가 작성한 코드 리뷰 선분석입니다. 검증하고 심층 리뷰해주세요.
+codex exec -C "$(pwd)" -s danger-full-access --json "다음 변경사항을 독립적으로 코드 리뷰해주세요.
 
 git diff와 git diff --cached를 직접 실행하여 변경사항을 확인하고,
 필요하면 관련 파일의 전체 컨텍스트도 읽어주세요.
 
-Claude 선분석:
-(diff 요약, 의도 추정, 위험 포인트)
+변경 정보:
+- 변경 파일: (git diff --stat 결과)
+- 변경 의도: (사용자가 요청한 작업 내용)
+- 영향 범위: (변경 함수의 호출자/피호출자 목록)
 
-검증해줄 사항:
-- Claude가 놓친 이슈가 있는지
+리뷰 항목:
 - 타입 안정성, 네이밍 컨벤션 준수 여부
 - React Compiler 호환성 (useSignals 시 'use no memo' 필수)
 - 불필요한 리렌더링 패턴
@@ -44,6 +45,16 @@ Claude 선분석:
 - 테스트 영향 및 회귀 가능성
 
 리뷰 초점: (사용자 인자 또는 전반적 리뷰)
+
+출력 형식 (반드시 준수):
+## 리뷰 요약
+(전체 코드 품질 한 줄 평가)
+## 이슈
+- [Critical] 파일:라인 - 설명
+- [Warning] 파일:라인 - 설명
+- [Suggestion] 파일:라인 - 설명
+## 개선 제안
+(구체적 수정 코드 - before/after)
 
 한글로 간결하게 답변해주세요." 2>/dev/null
 ```
@@ -71,14 +82,16 @@ codex exec resume --last "해당 이슈에 대한 구체적인 수정 코드를 
 ```
 
 ### 호출 규칙
+- Claude의 판단/결론은 Codex에 전달하지 않음 — 사실 정보만 전달 (anchoring bias 방지).
 - `-C "$(pwd)"`, `-s danger-full-access`, `--json` 기본 적용.
 - `--ephemeral`은 사용하지 않습니다 (후속 resume 보존).
 - Bash의 `run_in_background: true`로 실행합니다. 백그라운드이므로 즉시 반환되며, Codex 작업은 완료까지 제한 없이 계속됩니다.
 - 완료 시 시스템이 자동 알림 → TaskOutput으로 결과를 수집합니다.
 - **중요: 리뷰 결론을 내리기 전에 반드시 `TaskOutput(block: false)`로 Codex 상태를 확인합니다.**
-  - `status: running` → Codex가 작업 중이므로 대기. 단독으로 리뷰를 완료하지 않음.
+  - `status: running` → Codex가 작업 중이므로 **완료될 때까지 대기**. TaskOutput 타임아웃은 Codex 실패가 아님 — `status: running`이면 `TaskOutput(block: true)`로 재시도하여 끝까지 기다림. 단독으로 리뷰를 완료하지 않음.
   - `status: completed` → 결과를 수집하여 반영.
   - `status: failed` 또는 에러 → 즉시 fallback (Claude 단독 리뷰). 대기하지 않음.
+  - **fallback 조건은 오직 `status: failed`/에러뿐**. 시간이 오래 걸리는 것은 fallback 사유가 아님.
 
 ## 실패 처리
 
