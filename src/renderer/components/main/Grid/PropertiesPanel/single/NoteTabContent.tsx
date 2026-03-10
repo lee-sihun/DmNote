@@ -9,6 +9,7 @@ import {
   SectionDivider,
 } from '../PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { isGradientColor } from '@utils/color/colorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
@@ -447,6 +448,33 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           suffix="px"
           min={1}
           placeholder={`${Math.round(keyPosition.width)}px`}
+        />
+      </PropertyRow>
+
+      {/* 노트 정렬 */}
+      <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
+        <Dropdown
+          options={[
+            {
+              label: t('keySetting.noteAlignLeft') || '좌측',
+              value: 'left',
+            },
+            {
+              label: t('keySetting.noteAlignCenter') || '가운데',
+              value: 'center',
+            },
+            {
+              label: t('keySetting.noteAlignRight') || '우측',
+              value: 'right',
+            },
+          ]}
+          value={keyPosition.noteAlignment ?? 'center'}
+          onChange={(value) =>
+            handleStyleChangeComplete(
+              'noteAlignment',
+              value as 'left' | 'center' | 'right',
+            )
+          }
         />
       </PropertyRow>
 

@@ -27,6 +27,7 @@ const FALLBACK_POSITION: KeyPosition = {
   count: 0,
   noteColor: '#FFFFFF',
   noteOpacity: 80,
+  noteAlignment: 'center',
   noteEffectEnabled: true,
   noteGlowEnabled: false,
   noteGlowSize: 20,

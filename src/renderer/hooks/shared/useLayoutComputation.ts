@@ -175,7 +175,13 @@ export function computeLayout(input: LayoutInput) {
         Number.isFinite(position.noteWidth)
           ? Math.max(1, Math.round(position.noteWidth))
           : keyWidth;
-      const noteOffsetX = (keyWidth - desiredNoteWidth) / 2;
+      const noteAlign = position.noteAlignment ?? 'center';
+      const noteOffsetX =
+        noteAlign === 'left'
+          ? 0
+          : noteAlign === 'right'
+            ? keyWidth - desiredNoteWidth
+            : (keyWidth - desiredNoteWidth) / 2;
 
       return {
         trackKey: key,

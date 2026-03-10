@@ -151,7 +151,11 @@
     "cancel": "取消",
     "noteGlowColor": "發光顏色",
     "noteAutoYCorrection": "自動 Y 軸校正",
-    "noteEffectEnabled": "啟用鍵雨"
+    "noteEffectEnabled": "啟用鍵雨",
+    "noteAlignment": "鍵雨對齊",
+    "noteAlignLeft": "靠左",
+    "noteAlignCenter": "置中",
+    "noteAlignRight": "靠右"
   },
   "imagePicker": {
     "idle": "閒置",

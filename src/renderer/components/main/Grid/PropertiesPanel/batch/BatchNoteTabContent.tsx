@@ -7,6 +7,7 @@ import {
   SectionDivider,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
+import Dropdown from '@components/main/common/Dropdown';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
@@ -117,6 +118,38 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={1}
           placeholder="Auto"
+        />
+      </PropertyRow>
+
+      {/* 노트 정렬 */}
+      <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
+        {getMixedValue((pos) => pos.noteAlignment, 'center').isMixed ? (
+          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+        ) : null}
+        <Dropdown
+          options={[
+            {
+              label: t('keySetting.noteAlignLeft') || '좌측',
+              value: 'left',
+            },
+            {
+              label: t('keySetting.noteAlignCenter') || '가운데',
+              value: 'center',
+            },
+            {
+              label: t('keySetting.noteAlignRight') || '우측',
+              value: 'right',
+            },
+          ]}
+          value={
+            getMixedValue((pos) => pos.noteAlignment, 'center').value
+          }
+          onChange={(value) =>
+            handleBatchStyleChangeComplete(
+              'noteAlignment',
+              value as 'left' | 'center' | 'right',
+            )
+          }
         />
       </PropertyRow>
 

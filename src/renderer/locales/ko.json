@@ -151,7 +151,11 @@
     "noteGlow": "글로우 효과",
     "noteGlowColor": "글로우 색상",
     "noteAutoYCorrection": "Y축 자동 보정",
-    "noteEffectEnabled": "노트 효과 표시"
+    "noteEffectEnabled": "노트 효과 표시",
+    "noteAlignment": "노트 정렬",
+    "noteAlignLeft": "좌측",
+    "noteAlignCenter": "가운데",
+    "noteAlignRight": "우측"
   },
   "imagePicker": {
     "idle": "대기",

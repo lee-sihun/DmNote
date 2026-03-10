@@ -151,7 +151,11 @@
     "cancel": "Отмена",
     "noteGlowColor": "Цвет свечения",
     "noteAutoYCorrection": "Авто-коррекция Y",
-    "noteEffectEnabled": "Эффект ноты вкл."
+    "noteEffectEnabled": "Эффект ноты вкл.",
+    "noteAlignment": "Выравнивание ноты",
+    "noteAlignLeft": "Слева",
+    "noteAlignCenter": "По центру",
+    "noteAlignRight": "Справа"
   },
   "imagePicker": {
     "idle": "Покой",

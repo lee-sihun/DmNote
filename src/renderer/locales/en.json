@@ -151,7 +151,11 @@
     "cancel": "Cancel",
     "noteGlowColor": "Glow Color",
     "noteAutoYCorrection": "Auto Y Correction",
-    "noteEffectEnabled": "Enable Note Effect"
+    "noteEffectEnabled": "Enable Note Effect",
+    "noteAlignment": "Note Alignment",
+    "noteAlignLeft": "Left",
+    "noteAlignCenter": "Center",
+    "noteAlignRight": "Right"
   },
   "imagePicker": {
     "idle": "Idle",

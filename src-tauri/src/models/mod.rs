@@ -150,6 +150,16 @@ impl<'de> Deserialize<'de> for NoteColor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+#[derive(Default)]
+pub enum NoteAlignment {
+    Left,
+    #[default]
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPosition {
     pub dx: f64,
@@ -184,6 +194,9 @@ pub struct KeyPosition {
     /// 노트 넓이(px). None이면 키 width를 사용(자동).
     #[serde(default)]
     pub note_width: Option<u32>,
+    /// 노트 정렬 (left/center/right). 기본값 center.
+    #[serde(default)]
+    pub note_alignment: NoteAlignment,
     #[serde(default = "default_note_effect_enabled")]
     pub note_effect_enabled: bool,
     #[serde(default = "default_note_glow_enabled")]
