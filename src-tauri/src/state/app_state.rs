@@ -18,7 +18,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
@@ -172,12 +172,26 @@ impl AppState {
         let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
         let overlay_force_close = self.overlay_force_close.clone();
 
-        let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID).menu(&menu);
+        let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
+            .menu(&menu)
+            .show_menu_on_left_click(false);
         if let Some(icon) = app.default_window_icon().cloned() {
             tray_builder = tray_builder.icon(icon);
         }
 
         tray_builder
+            .on_tray_icon_event(|tray, event| {
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
+                    if let Err(err) = show_main_window(tray.app_handle()) {
+                        log::error!("failed to show main window from tray click: {err}");
+                    }
+                }
+            })
             .on_menu_event(move |app_handle, event| {
                 if event.id() == TRAY_MENU_SETTINGS_ID {
                     if let Err(err) = show_main_window(app_handle) {
