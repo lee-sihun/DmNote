@@ -67,6 +67,7 @@
           "note_tab_get",
           "note_tab_get_all",
           "note_tab_set",
+          "obs_regenerate_token",
           "obs_start",
           "obs_status",
           "obs_stop",

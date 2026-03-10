@@ -7,6 +7,7 @@ export const obsApi = {
   start: (port?: number) => invoke<ObsStatus>('obs_start', { port }),
   stop: () => invoke<ObsStatus>('obs_stop'),
   status: () => invoke<ObsStatus>('obs_status'),
+  regenerateToken: () => invoke<ObsStatus>('obs_regenerate_token'),
   onStatus: (listener: (status: ObsStatus) => void) =>
     subscribe<ObsStatus>('obs:status', listener),
 };

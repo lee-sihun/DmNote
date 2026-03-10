@@ -294,8 +294,8 @@ SettingToolProps) => {
               isObsModeActive
                 ? t('tooltip.overlayObsDisabled')
                 : isOverlayVisible
-                  ? t('tooltip.overlayClose')
-                  : t('tooltip.overlayOpen')
+                ? t('tooltip.overlayClose')
+                : t('tooltip.overlayOpen')
             }
           >
             <Button
@@ -358,7 +358,12 @@ interface ButtonProps {
   onClick?: () => void;
 }
 
-const Button = ({ icon, isSelected = false, disabled = false, onClick }: ButtonProps) => {
+const Button = ({
+  icon,
+  isSelected = false,
+  disabled = false,
+  onClick,
+}: ButtonProps) => {
   return (
     <button
       type="button"

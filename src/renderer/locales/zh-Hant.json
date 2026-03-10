@@ -85,7 +85,11 @@
     "obsStartFailed": "Failed to start OBS server.",
     "obsStopFailed": "Failed to stop OBS server.",
     "obsGuide": "在 OBS 中新增瀏覽器來源並貼上上方 URL。將寬度/高度設定為與覆蓋層大小一致。",
-    "obsOverlayHidden": "OBS 模式啟用期間覆蓋層已隱藏。"
+    "obsOverlayHidden": "OBS 模式啟用期間覆蓋層已隱藏。",
+    "obsRegenToken": "重新產生權杖",
+    "obsTokenRegenMessage": "是否重新產生工作階段權杖？",
+    "obsTokenRegenWarning": "權杖變更後，您需要使用新權杖更新 OBS 瀏覽器來源中的 URL。目前連線的用戶端在下次連線時需要新權杖。",
+    "obsTokenRegenConfirm": "重新產生"
   },
   "shortcutSetting": {
     "title": "快捷鍵設定",

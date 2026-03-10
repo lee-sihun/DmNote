@@ -8,6 +8,7 @@ import Dropdown from '@components/main/common/Dropdown';
 import FlaskIcon from '@assets/svgs/flask.svg';
 import { PluginManagerModal } from '@components/main/Modal/content/managers/PluginManagerModal';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
+import { ObsTokenRegenModal } from '@components/main/Modal/content/dialogs/ObsTokenRegenModal';
 import ShortcutSettingsModal from '@components/main/Modal/content/settings/ShortcutSettingsModal';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
@@ -136,6 +137,8 @@ const Settings = ({
   });
   const [obsPort, setObsPort] = useState<string>(String(storedObsPort));
   const [obsLoading, setObsLoading] = useState<boolean>(false);
+  const [isTokenRegenModalOpen, setTokenRegenModalOpen] =
+    useState<boolean>(false);
 
   // 스토어 포트 변경 시 로컬 상태 동기화 (bootstrap 비동기 로딩 대응)
   useEffect(() => {
@@ -622,6 +625,16 @@ const Settings = ({
     }
   };
 
+  const handleObsRegenerateToken = async (): Promise<void> => {
+    setTokenRegenModalOpen(false);
+    try {
+      const status = await obsApi.regenerateToken();
+      setObsStatus(status);
+    } catch (error) {
+      console.error('Failed to regenerate OBS token', error);
+    }
+  };
+
   const handleDeveloperModeToggle = async (): Promise<void> => {
     const next: boolean = !developerModeEnabled;
     setDeveloperModeEnabled(next);
@@ -967,12 +980,20 @@ const Settings = ({
                 </div>
                 <div className="flex items-center gap-[6px]">
                   {obsStatus.running && (
-                    <button
-                      onClick={handleObsCopyUrl}
-                      className={actionButtonClass(true)}
-                    >
-                      {t('settings.obsCopyUrl')}
-                    </button>
+                    <>
+                      <button
+                        onClick={handleObsCopyUrl}
+                        className={actionButtonClass(true)}
+                      >
+                        {t('settings.obsCopyUrl')}
+                      </button>
+                      <button
+                        onClick={() => setTokenRegenModalOpen(true)}
+                        className={actionButtonClass(true)}
+                      >
+                        {t('settings.obsRegenToken')}
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={handleObsToggle}
@@ -1146,6 +1167,12 @@ const Settings = ({
           onSave={handleSaveShortcuts}
         />
       )}
+      <ObsTokenRegenModal
+        isOpen={isTokenRegenModalOpen}
+        onClose={() => setTokenRegenModalOpen(false)}
+        onConfirm={handleObsRegenerateToken}
+        t={t}
+      />
     </div>
   );
 };

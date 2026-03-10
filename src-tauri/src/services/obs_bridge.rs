@@ -7,15 +7,13 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde_json::Value;
+use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
+use tauri::webview::InvokeRequest;
+use tauri::{AppHandle, Listener, Manager, Wry};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, oneshot};
 use tokio_tungstenite::tungstenite::Message;
-use uuid::Uuid;
-
-use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
-use tauri::webview::InvokeRequest;
-use tauri::{AppHandle, Listener, Manager, Wry};
 
 use crate::models::obs::{
     make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
@@ -42,6 +40,7 @@ const DENIED_WS_COMMANDS: &[&str] = &[
     // OBS 서버 제어 (자기 자신 종료/재시작 방지)
     "obs_start",
     "obs_stop",
+    "obs_regenerate_token",
     // 파일 대화상자 / 파일 쓰기 (로컬 파일 시스템 접근)
     "image_load",
     "font_load",
@@ -234,8 +233,8 @@ impl ObsBridgeService {
         let _ = self.broadcast_tx.send(ObsBroadcast::Snapshot(snapshot));
     }
 
-    /// WS 서버 시작
-    pub async fn start(self: &Arc<Self>, port: u16) -> Result<(), String> {
+    /// WS 서버 시작 (토큰은 호출자가 전달)
+    pub async fn start(self: &Arc<Self>, port: u16, token: String) -> Result<(), String> {
         // 원자적 check-and-set
         if self
             .running
@@ -253,15 +252,14 @@ impl ObsBridgeService {
             }
         }
 
-        // 세션 토큰 생성 (UUID v4, 하이픈 제거 = 32자 hex)
-        *self.session_token.write() = Uuid::new_v4().simple().to_string();
+        // 세션 토큰 설정 (호출자가 생성/재사용 결정)
+        *self.session_token.write() = token;
 
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let addr = SocketAddr::from(([0, 0, 0, 0], port));
         let listener = match TcpListener::bind(addr).await {
             Ok(l) => l,
             Err(e) => {
                 self.running.store(false, Ordering::Relaxed);
-                self.session_token.write().clear();
                 return Err(format!("포트 {port} 바인드 실패: {e}"));
             }
         };
@@ -279,7 +277,7 @@ impl ObsBridgeService {
         });
         *self.server_handle.lock().await = Some(handle);
 
-        log::info!("[ObsBridge] 서버 시작: http://127.0.0.1:{actual_port}");
+        log::info!("[ObsBridge] 서버 시작: http://0.0.0.0:{actual_port}");
         Ok(())
     }
 
@@ -301,8 +299,13 @@ impl ObsBridgeService {
             let _ = tx.send(());
         }
         self.running.store(false, Ordering::Relaxed);
-        self.session_token.write().clear();
+        // 토큰은 유지 (재시작 시 동일 토큰 재사용)
         log::info!("[ObsBridge] 서버 종료");
+    }
+
+    /// 세션 토큰 교체 (실행 중 호출 가능)
+    pub fn set_token(&self, token: String) {
+        *self.session_token.write() = token;
     }
 
     async fn server_loop(
@@ -699,7 +702,10 @@ impl ObsBridgeService {
             log::debug!("[ObsBridge] {addr}: denied cmd={}", req.command);
             let _ = rpc_tx.send((
                 req.request_id,
-                Err(serde_json::json!(format!("Command denied: {}", req.command))),
+                Err(serde_json::json!(format!(
+                    "Command denied: {}",
+                    req.command
+                ))),
             ));
             return;
         }

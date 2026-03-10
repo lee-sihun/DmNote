@@ -1294,6 +1294,9 @@ pub struct AppStoreData {
     /// OBS WebSocket 서버 포트
     #[serde(default = "default_obs_port")]
     pub obs_port: u16,
+    /// OBS 세션 토큰 (영구 저장, 앱 재시작 시 재사용)
+    #[serde(default)]
+    pub obs_token: Option<String>,
     /// 플러그인 데이터 저장소 (plugin_data_* 키로 저장)
     #[serde(default, flatten)]
     pub plugin_data: HashMap<String, serde_json::Value>,
@@ -1346,6 +1349,7 @@ impl Default for AppStoreData {
             sound_library: HashMap::new(),
             obs_mode_enabled: false,
             obs_port: default_obs_port(),
+            obs_token: None,
             plugin_data: HashMap::new(),
         }
     }

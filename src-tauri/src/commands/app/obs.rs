@@ -1,8 +1,26 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
+use uuid::Uuid;
 
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
+
+/// 저장된 토큰 재사용 또는 신규 생성 후 store에 저장
+fn resolve_and_save_token(state: &AppState) -> String {
+    let existing = state.store.with_state(|s| s.obs_token.clone());
+    if let Some(token) = existing {
+        if !token.is_empty() {
+            return token;
+        }
+    }
+    // 신규 생성 후 저장
+    let token = Uuid::new_v4().simple().to_string();
+    let t = token.clone();
+    let _ = state.store.update(|s| {
+        s.obs_token = Some(t.clone());
+    });
+    token
+}
 
 #[tauri::command]
 pub async fn obs_start(
@@ -11,6 +29,7 @@ pub async fn obs_start(
     port: Option<u16>,
 ) -> CmdResult<ObsStatus> {
     let port = port.unwrap_or(state.store.with_state(|s| s.obs_port));
+    let token = resolve_and_save_token(&state);
 
     // OBS 정적 파일 서빙 설정
     if cfg!(debug_assertions) {
@@ -39,7 +58,7 @@ pub async fn obs_start(
 
     state
         .obs_bridge
-        .start(port)
+        .start(port, token)
         .await
         .map_err(crate::errors::CommandError::msg)?;
     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
@@ -64,4 +83,21 @@ pub async fn obs_stop(app: AppHandle, state: State<'_, AppState>) -> CmdResult<O
 #[tauri::command]
 pub fn obs_status(state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     Ok(state.obs_bridge.status())
+}
+
+#[tauri::command]
+pub fn obs_regenerate_token(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
+    let token = Uuid::new_v4().simple().to_string();
+    // store에 저장
+    let t = token.clone();
+    let _ = state.store.update(|s| {
+        s.obs_token = Some(t.clone());
+    });
+    // 실행 중이면 bridge 메모리 토큰도 교체
+    if state.obs_bridge.is_running() {
+        state.obs_bridge.set_token(token);
+    }
+    let status = state.obs_bridge.status();
+    let _ = app.emit("obs:status", &status);
+    Ok(status)
 }

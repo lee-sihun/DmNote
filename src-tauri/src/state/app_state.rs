@@ -31,9 +31,9 @@ use crate::{
     audio::{KeySoundEngine, KeySoundStatus},
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, BootstrapOverlayState,
-        BootstrapPayload, DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
-        OverlayBounds, OverlayResizeAnchor, SettingsDiff, SettingsState,
+        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
+        KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
+        SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
@@ -295,7 +295,19 @@ impl AppState {
     fn auto_start_obs(&self, app: &AppHandle) {
         let bridge = self.obs_bridge.clone();
         let store = self.store.clone();
-        let port = store.with_state(|s| s.obs_port);
+        let (port, existing_token) = store.with_state(|s| (s.obs_port, s.obs_token.clone()));
+        // 저장된 토큰 재사용 또는 신규 생성
+        let token = match existing_token {
+            Some(t) if !t.is_empty() => t,
+            _ => {
+                let t = uuid::Uuid::new_v4().simple().to_string();
+                let tc = t.clone();
+                let _ = store.update(|s| {
+                    s.obs_token = Some(tc.clone());
+                });
+                t
+            }
+        };
         let app_handle = app.clone();
 
         // dev 모드: Vite dev server로 리다이렉트
@@ -328,7 +340,7 @@ impl AppState {
 
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
-            match bridge.start(port).await {
+            match bridge.start(port, token).await {
                 Ok(()) => {
                     log::info!("[ObsBridge] auto-start 성공 (port={})", port);
                     let state = app_handle.state::<AppState>();

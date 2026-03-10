@@ -156,6 +156,7 @@ fn main() {
             commands::app::obs::obs_start,
             commands::app::obs::obs_stop,
             commands::app::obs::obs_status,
+            commands::app::obs::obs_regenerate_token,
             // 에디터 콘텐츠
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,

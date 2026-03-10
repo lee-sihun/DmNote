@@ -85,7 +85,11 @@
     "obsStartFailed": "OBS 서버 시작에 실패했습니다.",
     "obsStopFailed": "OBS 서버 중지에 실패했습니다.",
     "obsGuide": "OBS에서 브라우저 소스를 추가하고 위 URL을 붙여넣으세요. 너비/높이를 오버레이 크기에 맞게 설정하세요.",
-    "obsOverlayHidden": "OBS 모드 활성화 중에는 오버레이가 숨겨집니다."
+    "obsOverlayHidden": "OBS 모드 활성화 중에는 오버레이가 숨겨집니다.",
+    "obsRegenToken": "토큰 재생성",
+    "obsTokenRegenMessage": "세션 토큰을 재생성하시겠습니까?",
+    "obsTokenRegenWarning": "토큰이 변경되면 기존 OBS 브라우저 소스의 URL을 새 토큰으로 업데이트해야 합니다. 현재 연결된 클라이언트는 다음 연결 시 새 토큰이 필요합니다.",
+    "obsTokenRegenConfirm": "재생성"
   },
   "shortcutSetting": {
     "title": "단축키 설정",
