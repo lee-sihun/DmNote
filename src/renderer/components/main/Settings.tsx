@@ -923,71 +923,65 @@ const Settings = ({
             </div>
             {/* OBS 모드 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
-              <div className="flex flex-row justify-between items-center h-[40px]">
+              <div
+                className={`flex flex-row justify-between items-center h-[40px] ${
+                  obsLoading
+                    ? 'pointer-events-none opacity-50'
+                    : 'cursor-pointer'
+                }`}
+                onClick={handleObsToggle}
+              >
                 <p className="text-style-3 text-[#FFFFFF]">
                   {t('settings.obsMode')}
                 </p>
-                <div className="flex items-center gap-[8px]">
-                  {obsStatus.running && (
-                    <span className="text-style-2 text-[#8B8D97]">
-                      {t('settings.obsClients', {
-                        count: obsStatus.clientCount,
-                      })}
-                    </span>
-                  )}
-                  <span
-                    className={`text-style-2 ${
-                      obsStatus.running ? 'text-[#4ADE80]' : 'text-[#8B8D97]'
-                    }`}
-                  >
-                    {obsStatus.running
-                      ? t('settings.obsRunning')
-                      : t('settings.obsStopped')}
-                  </span>
-                </div>
+                <Checkbox
+                  checked={obsStatus.running}
+                  onChange={handleObsToggle}
+                />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
+                <p
+                  className={
+                    'text-[12px] ' +
+                    (obsStatus.running ? 'text-[#989BA6]' : 'text-[#44464E]')
+                  }
+                >
+                  {obsStatus.running
+                    ? obsStatus.clientCount > 0
+                      ? `${t('settings.obsRunning')} · ${t('settings.obsClients', { count: obsStatus.clientCount })}`
+                      : t('settings.obsRunning')
+                    : t('settings.obsStopped')}
+                </p>
                 <div className="flex items-center gap-[6px]">
-                  {obsStatus.running && (
-                    <>
-                      <button
-                        onClick={handleObsCopyUrl}
-                        className={actionButtonClass(true)}
-                      >
-                        {t('settings.obsCopyUrl')}
-                      </button>
-                      <button
-                        onClick={() => setTokenRegenModalOpen(true)}
-                        className={actionButtonClass(true)}
-                      >
-                        {t('settings.obsRegenToken')}
-                      </button>
-                    </>
-                  )}
                   <button
-                    onClick={handleObsToggle}
-                    disabled={obsLoading}
-                    className={actionButtonClass(!obsLoading)}
+                    onClick={handleObsCopyUrl}
+                    disabled={!obsStatus.running}
+                    className={actionButtonClass(obsStatus.running)}
                   >
-                    {obsStatus.running
-                      ? t('settings.obsStop')
-                      : t('settings.obsStart')}
+                    {t('settings.obsCopyUrl')}
+                  </button>
+                  <button
+                    onClick={() => setTokenRegenModalOpen(true)}
+                    disabled={!obsStatus.running}
+                    className={actionButtonClass(obsStatus.running)}
+                  >
+                    {t('settings.obsRegenToken')}
                   </button>
                 </div>
               </div>
-              {obsStatus.running && (
-                <div
-                  className="flex flex-col gap-[4px] pb-[8px] pt-[2px]"
-                  role="status"
-                >
-                  <p className="text-style-2 text-[#8B8D97] leading-[1.4]">
-                    {t('settings.obsGuide')}
-                  </p>
-                  <p className="text-style-2 text-[#F59E0B] leading-[1.4]">
-                    {t('settings.obsOverlayHidden')}
-                  </p>
-                </div>
-              )}
+              <div
+                className={`flex flex-col gap-[2px] pb-[8px] pt-[2px] ${
+                  !obsStatus.running ? 'opacity-40' : ''
+                }`}
+                role="status"
+              >
+                <p className="text-style-2 text-[#8B8D97] leading-[1.4]">
+                  {t('settings.obsGuide')}
+                </p>
+                <p className="text-style-2 text-[#F59E0B] leading-[1.4]">
+                  {t('settings.obsOverlayHidden')}
+                </p>
+              </div>
             </div>
             {/* 기타 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
