@@ -62,11 +62,11 @@ pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
 #[tauri::command]
 pub fn window_open_devtools_all(app: AppHandle) -> CmdResult<()> {
     if let Some(main) = app.get_webview_window("main") {
-        let _ = main.open_devtools();
+        main.open_devtools();
         let _ = main.show();
     }
     if let Some(overlay) = app.get_webview_window("overlay") {
-        let _ = overlay.open_devtools();
+        overlay.open_devtools();
         let _ = overlay.show();
     }
     Ok(())

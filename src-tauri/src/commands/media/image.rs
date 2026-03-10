@@ -242,20 +242,22 @@ fn convert_gif_to_webp(gif_bytes: &[u8], output_path: &Path) -> CmdResult<()> {
     let repeat = decoder.repeat();
     let mut screen = Screen::new_decoder(&decoder);
 
-    let mut encoder_options = EncoderOptions::default();
-    encoder_options.anim_params = AnimParams {
-        loop_count: gif_repeat_to_loop_count(repeat),
-    };
-    encoder_options.allow_mixed = true;
-    encoder_options.minimize_size = true;
-    encoder_options.encoding_config = Some(EncodingConfig {
-        encoding_type: EncodingType::Lossy(LossyEncodingConfig {
-            alpha_compression: true,
-            ..Default::default()
+    let encoder_options = EncoderOptions {
+        anim_params: AnimParams {
+            loop_count: gif_repeat_to_loop_count(repeat),
+        },
+        allow_mixed: true,
+        minimize_size: true,
+        encoding_config: Some(EncodingConfig {
+            encoding_type: EncodingType::Lossy(LossyEncodingConfig {
+                alpha_compression: true,
+                ..Default::default()
+            }),
+            quality: 78.0,
+            method: 4,
         }),
-        quality: 78.0,
-        method: 4,
-    });
+        ..Default::default()
+    };
 
     let mut encoder = Encoder::new_with_options((width, height), encoder_options)
         .map_err(|e| CommandError::msg(format!("WebP 인코더 초기화 실패: {e}")))?;

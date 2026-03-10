@@ -49,6 +49,7 @@ impl SettingsService {
             state.key_counter_enabled = next.key_counter_enabled;
             state.grid_settings = next.grid_settings.clone();
             state.shortcuts = next.shortcuts.clone();
+            state.obs_mode_enabled = next.obs_mode_enabled;
         })?;
 
         Ok(SettingsDiff {
@@ -177,6 +178,9 @@ fn normalize_patch(patch: &SettingsPatchInput, current: &SettingsState) -> Setti
         }
         normalized.shortcuts = Some(merged);
     }
+    if let Some(value) = patch.obs_mode_enabled {
+        normalized.obs_mode_enabled = Some(value);
+    }
     normalized
 }
 
@@ -243,6 +247,9 @@ fn apply_changes(mut current: SettingsState, patch: &SettingsPatch) -> SettingsS
     }
     if let Some(value) = patch.shortcuts.as_ref() {
         current.shortcuts = value.clone();
+    }
+    if let Some(value) = patch.obs_mode_enabled {
+        current.obs_mode_enabled = value;
     }
     current
 }

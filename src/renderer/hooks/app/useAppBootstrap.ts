@@ -207,6 +207,7 @@ export function useAppBootstrap() {
         gridSettings:
           bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
         shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
+        obsModeEnabled: bootstrap.settings.obsModeEnabled ?? false,
       });
       useFontStore.setState({
         customFonts: bootstrap.settings.fontSettings.customFonts.map(

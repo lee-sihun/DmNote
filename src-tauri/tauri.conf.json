@@ -45,8 +45,7 @@
         ]
       },
       "capabilities": [
-        "main",
-        "dmnote-dev"
+        "main"
       ]
     },
     "withGlobalTauri": true

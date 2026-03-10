@@ -17,6 +17,7 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
+import { obsApi } from '@api/modules/obsApi';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -35,6 +36,7 @@ const SettingTool = ({
 SettingToolProps) => {
   const { t } = useTranslation();
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const [isObsModeActive, setIsObsModeActive] = useState(false);
   const [isExportImportOpenLocal, setIsExportImportOpenLocal] = useState(false);
   // const [isExtrasOpen, setIsExtrasOpenLocal] = useState(false);
   const exportImportRef = useRef<HTMLButtonElement | null>(null);
@@ -87,6 +89,20 @@ SettingToolProps) => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
+  }, []);
+
+  // OBS 모드 상태 구독
+  useEffect(() => {
+    obsApi
+      .status()
+      .then((status) => setIsObsModeActive(status.running))
+      .catch(() => undefined);
+
+    const unsubscribeObs = obsApi.onStatus((status) => {
+      setIsObsModeActive(status.running);
+    });
+
+    return () => unsubscribeObs();
   }, []);
 
   // const menuItems: ListItem[] = [
@@ -275,14 +291,17 @@ SettingToolProps) => {
         <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
           <FloatingTooltip
             content={
-              isOverlayVisible
+              isObsModeActive
+                ? t('tooltip.overlayObsDisabled')
+                : isOverlayVisible
                 ? t('tooltip.overlayClose')
                 : t('tooltip.overlayOpen')
             }
           >
             <Button
               icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
-              onClick={toggleOverlay}
+              onClick={isObsModeActive ? undefined : toggleOverlay}
+              disabled={isObsModeActive}
             />
           </FloatingTooltip>
           <div className="flex items-center">
@@ -335,19 +354,30 @@ SettingToolProps) => {
 interface ButtonProps {
   icon: React.ReactNode;
   isSelected?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }
 
-const Button = ({ icon, isSelected = false, onClick }: ButtonProps) => {
+const Button = ({
+  icon,
+  isSelected = false,
+  disabled = false,
+  onClick,
+}: ButtonProps) => {
   return (
     <button
       type="button"
-      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors active:bg-button-active ${
-        isSelected
-          ? 'bg-button-active'
-          : 'bg-button-primary hover:bg-button-hover'
+      disabled={disabled}
+      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors ${
+        disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : `active:bg-button-active ${
+              isSelected
+                ? 'bg-button-active'
+                : 'bg-button-primary hover:bg-button-hover'
+            }`
       }`}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
     >
       {icon}
     </button>

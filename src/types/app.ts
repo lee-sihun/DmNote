@@ -8,6 +8,9 @@ import {
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { DefaultsPayload } from '@src/renderer/defaults';
+import type { LayerGroups } from '@src/types/layerGroups';
+import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
+import type { TabCssOverrides } from '@src/types/plugin/css';
 
 export interface BootstrapPayload {
   settings: SettingsState;
@@ -25,4 +28,7 @@ export interface BootstrapPayload {
     anchor: string;
   };
   keyCounters: KeyCounters;
+  layerGroups: LayerGroups;
+  tabNoteOverrides: TabNoteOverrides;
+  tabCssOverrides: TabCssOverrides;
 }

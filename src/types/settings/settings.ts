@@ -55,6 +55,7 @@ export interface SettingsState {
   keyCounterEnabled: boolean;
   gridSettings: GridSettings;
   shortcuts: ShortcutsState;
+  obsModeEnabled: boolean;
 }
 
 /** @deprecated Use getDefaultSettingsState() from @src/renderer/defaults */

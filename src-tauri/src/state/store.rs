@@ -295,15 +295,18 @@ fn settings_from_store(store: &AppStoreData) -> SettingsState {
         key_counter_enabled: store.key_counter_enabled,
         grid_settings: store.grid_settings.clone(),
         shortcuts: store.shortcuts.clone(),
+        obs_mode_enabled: store.obs_mode_enabled,
     }
 }
 
 fn initialize_default_state() -> AppStoreData {
     use crate::defaults::{default_keys, default_positions};
 
-    let mut data = AppStoreData::default();
-    data.keys = default_keys().clone();
-    data.key_positions = default_positions().clone();
+    let data = AppStoreData {
+        keys: default_keys().clone(),
+        key_positions: default_positions().clone(),
+        ..Default::default()
+    };
     normalize_state(data)
 }
 

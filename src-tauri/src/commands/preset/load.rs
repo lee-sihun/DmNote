@@ -10,7 +10,7 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        NoteSettingsPatch, SettingsPatchInput, StatPositions,
     },
     state::AppState,
 };
@@ -52,22 +52,23 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let selected_key_type =
         choose_selected_key_type(preset.selected_key_type, &keys, snapshot.selected_key_type);
 
-    let mut desired_settings = preset.note_settings.unwrap_or_else(NoteSettings::default);
+    let mut desired_settings = preset.note_settings.unwrap_or_default();
     desired_settings.migrate_fade_position();
-    let mut note_patch = NoteSettingsPatch::default();
-    note_patch.frame_limit = Some(desired_settings.frame_limit);
-    note_patch.speed = Some(desired_settings.speed);
-    note_patch.track_height = Some(desired_settings.track_height);
-    note_patch.reverse = Some(desired_settings.reverse);
-    note_patch.fade_position = Some(desired_settings.fade_position);
-    note_patch.fade_top_px = Some(desired_settings.fade_top_px);
-    note_patch.fade_bottom_px = Some(desired_settings.fade_bottom_px);
-    note_patch.reverse_fade_top_px = Some(desired_settings.reverse_fade_top_px);
-    note_patch.reverse_fade_bottom_px = Some(desired_settings.reverse_fade_bottom_px);
-    note_patch.delayed_note_enabled = Some(desired_settings.delayed_note_enabled);
-    note_patch.short_note_threshold_ms = Some(desired_settings.short_note_threshold_ms);
-    note_patch.short_note_min_length_px = Some(desired_settings.short_note_min_length_px);
-    note_patch.key_display_delay_ms = Some(desired_settings.key_display_delay_ms);
+    let note_patch = NoteSettingsPatch {
+        frame_limit: Some(desired_settings.frame_limit),
+        speed: Some(desired_settings.speed),
+        track_height: Some(desired_settings.track_height),
+        reverse: Some(desired_settings.reverse),
+        fade_position: Some(desired_settings.fade_position),
+        fade_top_px: Some(desired_settings.fade_top_px),
+        fade_bottom_px: Some(desired_settings.fade_bottom_px),
+        reverse_fade_top_px: Some(desired_settings.reverse_fade_top_px),
+        reverse_fade_bottom_px: Some(desired_settings.reverse_fade_bottom_px),
+        delayed_note_enabled: Some(desired_settings.delayed_note_enabled),
+        short_note_threshold_ms: Some(desired_settings.short_note_threshold_ms),
+        short_note_min_length_px: Some(desired_settings.short_note_min_length_px),
+        key_display_delay_ms: Some(desired_settings.key_display_delay_ms),
+    };
 
     let css_use = preset.use_custom_css.unwrap_or(false);
     let custom_css = preset.custom_css.unwrap_or_default();
@@ -160,6 +161,9 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     app.emit("css:content", &custom_css)?;
     app.emit("js:use", &serde_json::json!({ "enabled": js_use }))?;
     app.emit("js:content", &custom_js)?;
+
+    // OBS 브릿지: 프리셋 로드 시 전체 스냅샷 재전송
+    state.refresh_obs_snapshot();
 
     Ok(PresetOperationResult {
         success: true,
@@ -295,6 +299,9 @@ pub fn preset_load_tab(
     app.emit("statPositions:changed", &full_stat_positions)?;
     app.emit("graphPositions:changed", &full_graph_positions)?;
     app.emit("tabNote:changed_all", &full_tab_note_overrides)?;
+
+    // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
+    state.refresh_obs_snapshot();
 
     Ok(PresetOperationResult {
         success: true,

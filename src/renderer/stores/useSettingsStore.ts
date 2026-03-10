@@ -46,6 +46,7 @@ interface SettingsState {
   keyCounterEnabled: boolean;
   gridSettings: GridSettings;
   shortcuts: ShortcutsState;
+  obsModeEnabled: boolean;
   setAll: (payload: SettingsStateSnapshot) => void;
   merge: (payload: Partial<SettingsStateSnapshot>) => void;
   setLaboratoryEnabled: (value: boolean) => void;
@@ -71,6 +72,7 @@ interface SettingsState {
   setKeyCounterEnabled: (value: boolean) => void;
   setGridSettings: (value: GridSettings) => void;
   setShortcuts: (value: ShortcutsState) => void;
+  setObsModeEnabled: (value: boolean) => void;
 }
 
 export type SettingsStateSnapshot = Omit<
@@ -100,6 +102,7 @@ export type SettingsStateSnapshot = Omit<
   | 'setDeveloperModeEnabled'
   | 'setGridSettings'
   | 'setShortcuts'
+  | 'setObsModeEnabled'
 >;
 
 const initialState: SettingsStateSnapshot = {
@@ -126,6 +129,7 @@ const initialState: SettingsStateSnapshot = {
   keyCounterEnabled: false,
   gridSettings: getDefaultGridSettings(),
   shortcuts: getDefaultShortcuts(),
+  obsModeEnabled: false,
 };
 
 function mergeSnapshot(
@@ -204,4 +208,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setKeyCounterEnabled: (value) => set({ keyCounterEnabled: value }),
   setGridSettings: (value) => set({ gridSettings: value }),
   setShortcuts: (value) => set({ shortcuts: value }),
+  setObsModeEnabled: (value) => set({ obsModeEnabled: value }),
 }));

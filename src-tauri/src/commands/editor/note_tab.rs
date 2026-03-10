@@ -69,6 +69,7 @@ pub fn note_tab_set(
         settings: settings.clone(),
     };
     app.emit("tabNote:changed", &response)?;
+    state.refresh_obs_snapshot();
 
     Ok(TabNoteSetResponse {
         success: true,
@@ -93,6 +94,7 @@ pub fn note_tab_clear(
         settings: None,
     };
     app.emit("tabNote:changed", &response)?;
+    state.refresh_obs_snapshot();
 
     Ok(TabNoteClearResponse {
         success: true,

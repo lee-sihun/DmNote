@@ -1,5 +1,5 @@
 ---
-name: plan
+name: codex-plan
 description: "작업 전 Codex(GPT 5.4)와 협업하여 구현 계획을 수립. 작업 계획, 설계 논의, 접근 방식 검토 시 사용."
 disable-model-invocation: false
 argument-hint: "[작업 설명]"
@@ -14,9 +14,13 @@ Claude가 코드를 분석하고 초안 계획을 작성한 뒤, Codex(GPT 5.4)�
 
 ### 기본 모드 (B: 순차 협업)
 대부분의 작업에 사용합니다.
-1. Claude가 Read, Grep, Glob으로 관련 코드를 분석합니다.
+1. Claude가 **codebase-memory-mcp 그래프 도구를 우선** 사용하여 관련 코드를 분석합니다.
+   - `search_graph`로 관련 함수/클래스/모듈 탐색
+   - `trace_call_path`로 콜체인 및 영향 범위 추적
+   - `get_architecture`로 구조 파악
+   - 그래프에 없는 정보(문자열 리터럴, 설정값 등)만 Read/Grep/Glob으로 보완
 2. 코드 구조, 영향 범위, 초안 계획을 정리합니다.
-3. 분석 결과를 Codex에게 전달하여 검증/보완을 요청합니다.
+3. 사실 정보(파일 목록, 코드 구조, 영향 범위)를 Codex에게 전달하여 독립 검증을 요청합니다.
 4. Codex 피드백을 반영하여 최종 계획을 확정합니다.
 
 ### 병렬 모드 (C: 독립 분석)
@@ -26,29 +30,40 @@ Claude가 코드를 분석하고 초안 계획을 작성한 뒤, Codex(GPT 5.4)�
 - 실패 비용이 큰 리팩토링/마이그레이션일 때
 
 1. Claude 분석과 Codex 분석을 동시에 진행합니다.
-   - Claude: Read, Grep, Glob으로 코드 분석
+   - Claude: 그래프 도구(search_graph, trace_call_path 등) 우선, 필요시 Read/Grep 보완
    - Codex: `codex exec`로 독립적 분석 (백그라운드)
 2. 두 분석 결과를 종합하여 최종 계획을 작성합니다.
 
 ## Codex 호출 방법
 
 ### 기본 모드 프롬프트
-Claude의 분석 결과를 프롬프트에 포함하여 검증을 요청합니다.
+사실 정보(파일 목록, 코드 구조, 영향 범위)만 전달하고, Claude의 판단/결론은 포함하지 않습니다.
 ```bash
-codex exec -C "$(pwd)" -s danger-full-access --json "다음은 Claude(Opus)가 작성한 구현 계획 초안입니다. 검증하고 보완해주세요.
+codex exec -C "$(pwd)" -s danger-full-access --json "다음 작업에 대한 구현 계획을 독립적으로 검증하고 보완해주세요.
 
 프로젝트 기술 스택: Tauri(Rust + React), Zustand, Preact Signals, Tailwind CSS, Vite
 필요하면 관련 파일을 직접 읽어서 확인해주세요.
 
 작업 내용: (사용자 요청)
 
-Claude 분석 결과:
-(코드 구조, 영향 범위, 초안 계획)
+관련 코드 정보:
+- 관련 파일: (파일 경로 목록)
+- 코드 구조: (함수/모듈 관계, 콜체인 등 사실 정보)
+- 영향 범위: (변경 시 영향받는 파일/함수 목록)
 
-검증해줄 사항:
+요청:
+- 위 작업의 구현 계획을 수립해주세요
 - 누락된 영향 범위나 리스크가 있는지
 - 더 나은 접근 방식이 있는지
-- 초안 계획의 순서나 우선순위가 적절한지
+- 단계별 순서와 우선순위 제안
+
+출력 형식 (반드시 준수):
+## 구현 계획
+1. (단계별 작업 - 파일명과 변경 내용)
+## 리스크
+- (잠재적 문제점과 근거)
+## 대안
+- (고려한 다른 접근 방식이 있다면)
 
 한글로 간결하게 답변해주세요." 2>/dev/null
 ```
@@ -72,10 +87,16 @@ codex exec -C "$(pwd)" -s danger-full-access --json "다음 작업에 대한 구
 ```
 
 ### 공통 규칙
+- Claude의 판단/결론은 Codex에 전달하지 않음 — 사실 정보만 전달 (anchoring bias 방지).
 - `-C "$(pwd)"`, `-s danger-full-access`, `--json` 기본 적용.
 - `--ephemeral`은 사용하지 않습니다 (후속 resume 보존).
-- Bash의 `run_in_background: true`로 실행합니다. `timeout: 600000`은 Bash 도구의 최대 대기 시간이며, 백그라운드 실행이므로 Codex 작업 자체는 완료까지 계속됩니다.
-- 완료 알림을 받으면 TaskOutput으로 결과를 수집합니다.
+- Bash의 `run_in_background: true`로 실행합니다. 백그라운드이므로 즉시 반환되며, Codex 작업은 완료까지 제한 없이 계속됩니다.
+- 완료 시 시스템이 자동 알림 → TaskOutput으로 결과를 수집합니다.
+- **중요: 결론을 내리기 전에 반드시 `TaskOutput(block: false)`로 Codex 상태를 확인합니다.**
+  - `status: running` → Codex가 작업 중이므로 **완료될 때까지 대기**. TaskOutput 타임아웃은 Codex 실패가 아님 — `status: running`이면 `TaskOutput(block: true)`로 재시도하여 끝까지 기다림. 대기 중에는 Claude 선분석 등 병렬 가능한 작업만 수행.
+  - `status: completed` → 결과를 수집하여 반영.
+  - `status: failed` 또는 에러 → 즉시 fallback (Claude 단독 진행). 대기하지 않음.
+  - **fallback 조건은 오직 `status: failed`/에러뿐**. 시간이 오래 걸리는 것은 fallback 사유가 아님.
 
 ### 진행 상황 확인
 백그라운드 실행 중 TaskOutput으로 중간 출력을 확인합니다.
@@ -97,6 +118,12 @@ codex exec resume --last "추가 질문"
   → Claude 단독으로 계획을 수립합니다.
 - Codex 응답이 불충분하면 resume으로 한 번 더 질문하되, 2회 이상 실패 시 포기합니다.
 - fallback 발생 시 반드시 사용자에게 원인을 명시합니다.
+
+## 피드백 필터링
+
+Codex 피드백을 반영할 때 Claude(Opus)가 자체 판단으로 필터링합니다:
+- **방어적 코딩 수준의 제안** (에러 핸들링 강화, 옵셔널 체크 추가 등)이 실질적 버그가 아니라 오버엔지니어링에 해당하면 **반영하지 않고 생략**합니다.
+- 프로젝트 컨벤션(예: `let _ = store.update(...)` 패턴)에 부합하는 코드에 대한 지적은 무시합니다.
 
 ## 출력 형식
 

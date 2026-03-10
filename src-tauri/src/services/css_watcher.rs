@@ -14,10 +14,10 @@ use std::time::Duration;
 use notify::RecommendedWatcher;
 use notify_debouncer_mini::{new_debouncer, Debouncer};
 use parking_lot::RwLock;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::models::{CustomCss, TabCss};
-use crate::state::AppStore;
+use crate::state::{AppState, AppStore};
 
 /// CSS 워칭 타입
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -246,6 +246,15 @@ fn reload_global_css(store: &AppStore, app: &AppHandle, path: &str) -> Result<()
         .map_err(|e| e.to_string())?;
 
     app.emit("css:content", &css).map_err(|e| e.to_string())?;
+
+    // OBS 브릿지에 CSS 변경 알림 (settings_diff 방식 — 전체 스냅샷은 키 상태 리셋 유발)
+    let app_state = app.state::<AppState>();
+    let snap = store.snapshot();
+    let diff = serde_json::json!({
+        "useCustomCSS": snap.use_custom_css,
+        "customCSS": snap.custom_css,
+    });
+    app_state.notify_obs_settings_diff(diff);
 
     log::info!("[CssWatcher] Reloaded global CSS from: {}", path);
     Ok(())

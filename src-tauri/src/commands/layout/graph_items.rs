@@ -15,5 +15,6 @@ pub fn graph_positions_update(
 ) -> CmdResult<GraphPositions> {
     let updated = state.store.update_graph_positions(positions)?;
     app.emit("graphPositions:changed", &updated)?;
+    state.refresh_obs_snapshot();
     Ok(updated)
 }

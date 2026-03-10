@@ -210,5 +210,6 @@ function FALLBACK_SETTINGS_STATE(): SettingsState {
     keyCounterEnabled: false,
     gridSettings: FALLBACK_GRID_SETTINGS(),
     shortcuts: FALLBACK_SHORTCUTS(),
+    obsModeEnabled: false,
   };
 }

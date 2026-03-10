@@ -17,6 +17,7 @@ fn default_device_kind() -> InputDeviceKind {
 /// Command messages from keyboard daemon (e.g., global hotkeys)
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub enum DaemonCommand {
     /// Toggle overlay visibility (Ctrl+Shift+O)
     ToggleOverlay,
@@ -97,7 +98,7 @@ pub fn pipe_server_create(name: &str) -> anyhow::Result<std::fs::File> {
                 return Err(anyhow::anyhow!("ConnectNamedPipe failed: {:?}", err));
             }
         }
-        let file = std::fs::File::from_raw_handle(handle.0 as *mut std::ffi::c_void);
+        let file = std::fs::File::from_raw_handle(handle.0);
         Ok(file)
     }
 }
@@ -127,7 +128,7 @@ pub fn pipe_client_connect(name: &str) -> anyhow::Result<std::fs::File> {
             Ok(h) => h,
             Err(e) => return Err(anyhow::anyhow!("CreateFileW to pipe failed: {}", e)),
         };
-        let file = std::fs::File::from_raw_handle(handle.0 as *mut std::ffi::c_void);
+        let file = std::fs::File::from_raw_handle(handle.0);
         Ok(file)
     }
 }

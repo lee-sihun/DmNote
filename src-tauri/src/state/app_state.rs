@@ -18,7 +18,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, Monitor, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
@@ -35,7 +35,7 @@ use crate::{
         KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
         SettingsDiff, SettingsState,
     },
-    services::{css_watcher::CssWatcher, settings::SettingsService},
+    services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
 
 const OVERLAY_LABEL: &str = "overlay";
@@ -63,6 +63,10 @@ pub struct AppState {
     key_sound: Arc<KeySoundEngine>,
     /// CSS 파일 핫리로딩 워처
     css_watcher: RwLock<Option<CssWatcher>>,
+    /// OBS WebSocket 브릿지
+    pub obs_bridge: Arc<ObsBridgeService>,
+    /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
+    obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
 }
 
 impl AppState {
@@ -78,6 +82,7 @@ impl AppState {
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
         let active_keys = Arc::new(RwLock::new(HashSet::new()));
         let key_sound = Arc::new(KeySoundEngine::new());
+        let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
 
         Ok(Self {
             store,
@@ -93,25 +98,34 @@ impl AppState {
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
             css_watcher: RwLock::new(None),
+            obs_bridge,
+            obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
         })
     }
 
     pub fn initialize_runtime(&self, app: &AppHandle) -> Result<()> {
         self.attach_main_window_handlers(app);
-        self.ensure_overlay_window(app)?;
-        // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         let snapshot = self.store.snapshot();
+        // OBS 모드가 활성화된 상태로 부팅하면 오버레이 생성 건너뛰기 (create→destroy 낭비 방지)
+        if !snapshot.obs_mode_enabled {
+            self.ensure_overlay_window(app)?;
+        }
+        // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
-                let _ = main.open_devtools();
+                main.open_devtools();
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
-                let _ = overlay.open_devtools();
+                overlay.open_devtools();
             }
         }
         self.start_keyboard_hook(app.clone())?;
         // CSS 핫리로딩 워처 초기화
         self.initialize_css_watcher(app);
+        // OBS 모드 자동 복원
+        if snapshot.obs_mode_enabled {
+            self.auto_start_obs(app);
+        }
         Ok(())
     }
 
@@ -158,12 +172,26 @@ impl AppState {
         let menu = Menu::with_items(app, &[&settings_item, &quit_item])?;
         let overlay_force_close = self.overlay_force_close.clone();
 
-        let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID).menu(&menu);
+        let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
+            .menu(&menu)
+            .show_menu_on_left_click(false);
         if let Some(icon) = app.default_window_icon().cloned() {
             tray_builder = tray_builder.icon(icon);
         }
 
         tray_builder
+            .on_tray_icon_event(|tray, event| {
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
+                    if let Err(err) = show_main_window(tray.app_handle()) {
+                        log::error!("failed to show main window from tray click: {err}");
+                    }
+                }
+            })
             .on_menu_event(move |app_handle, event| {
                 if event.id() == TRAY_MENU_SETTINGS_ID {
                     if let Err(err) = show_main_window(app_handle) {
@@ -223,6 +251,7 @@ impl AppState {
                 key_counter_enabled: state.key_counter_enabled,
                 grid_settings: state.grid_settings.clone(),
                 shortcuts: state.shortcuts.clone(),
+                obs_mode_enabled: state.obs_mode_enabled,
             },
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),
@@ -237,6 +266,9 @@ impl AppState {
                 anchor: state.overlay_resize_anchor.as_str().to_string(),
             },
             key_counters: self.key_counters.read().clone(),
+            layer_groups: state.layer_groups.clone(),
+            tab_note_overrides: state.tab_note_overrides.clone(),
+            tab_css_overrides: state.tab_css_overrides.clone(),
         }
     }
 
@@ -258,11 +290,183 @@ impl AppState {
         if let Some(value) = diff.changed.key_counter_enabled {
             self.key_counter_enabled.store(value, Ordering::SeqCst);
         }
+        // OBS 브릿지 캐시 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+        if self.obs_bridge.is_running() {
+            let bp = self.bootstrap_payload();
+            if let Ok(snap) = serde_json::to_value(&bp) {
+                self.obs_bridge.update_snapshot(snap);
+            }
+        }
         // 전체 설정 페이로드 전송 방지 (임베디드 폰트 등 대용량 데이터 제외)
         let mut payload = diff.clone();
         payload.full = None;
         app.emit("settings:changed", payload)?;
         Ok(())
+    }
+
+    /// 부팅 시 OBS 모드 자동 시작 (obs_mode_enabled=true일 때)
+    fn auto_start_obs(&self, app: &AppHandle) {
+        let bridge = self.obs_bridge.clone();
+        let store = self.store.clone();
+        let (port, existing_token) = store.with_state(|s| (s.obs_port, s.obs_token.clone()));
+        // 저장된 토큰 재사용 또는 신규 생성
+        let token = match existing_token {
+            Some(t) if !t.is_empty() => t,
+            _ => {
+                let t = uuid::Uuid::new_v4().simple().to_string();
+                let tc = t.clone();
+                let _ = store.update(|s| {
+                    s.obs_token = Some(tc.clone());
+                });
+                t
+            }
+        };
+        let app_handle = app.clone();
+
+        // dev 모드: Vite dev server로 리다이렉트
+        if cfg!(debug_assertions) {
+            let dev_url = "http://localhost:3400".to_string();
+            log::info!("[ObsBridge] dev 모드: Vite dev server로 리다이렉트 ({dev_url})");
+            bridge.set_dev_url(dev_url);
+        } else {
+            // 프로덕션: Tauri 임베딩 에셋으로 서빙
+            let handle = app_handle.clone();
+            let fetcher = std::sync::Arc::new(move |path: &str| {
+                let resolver = handle.asset_resolver();
+                resolver.get(path.into()).map(|asset| {
+                    let mime = asset.mime_type.clone();
+                    (asset.bytes.to_vec(), mime)
+                })
+            });
+            bridge.set_asset_fetcher(fetcher);
+        }
+
+        // AppHandle 전달 (invoke_request 디스패치용)
+        bridge.set_app_handle(app.clone());
+        // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
+        bridge.register_event_forwarding(app);
+
+        // 부팅 시에는 오버레이를 생성하지 않았으므로 상태만 저장
+        // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
+        let was_visible = self.store.with_state(|s| s.overlay_visible);
+        *self.obs_previous_overlay_visible.write() = Some(was_visible);
+
+        // async start를 tokio 런타임에서 실행
+        tauri::async_runtime::spawn(async move {
+            match bridge.start(port, token).await {
+                Ok(actual_port) => {
+                    log::info!("[ObsBridge] auto-start 성공 (port={})", actual_port);
+                    // fallback 포트가 사용된 경우 store에 저장
+                    if actual_port != port {
+                        let _ = store.update(|s| {
+                            s.obs_port = actual_port;
+                        });
+                    }
+                    let state = app_handle.state::<AppState>();
+                    // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
+                    state.refresh_obs_snapshot();
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
+                }
+                Err(e) => {
+                    log::error!(
+                        "[ObsBridge] auto-start 실패: {} — obs_mode_enabled를 false로 복구",
+                        e
+                    );
+                    let _ = store.update(|state| {
+                        state.obs_mode_enabled = false;
+                    });
+                    // 실패 시 오버레이 복원 (윈도우 재생성 포함)
+                    let state = app_handle.state::<AppState>();
+                    state.obs_restore_overlay(&app_handle);
+                    let _ = app_handle.emit("obs:status", &state.obs_bridge.status());
+                }
+            }
+        });
+    }
+
+    /// OBS 시작 시 오버레이 윈도우 destroy (이전 상태 보존)
+    pub fn obs_hide_overlay(&self, app: &AppHandle) {
+        let was_visible = *self.overlay_visible.read();
+        *self.obs_previous_overlay_visible.write() = Some(was_visible);
+        // destroy()는 CloseRequested 이벤트 없이 즉시 윈도우를 파괴
+        if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
+            if let Err(e) = window.destroy() {
+                log::warn!("[ObsBridge] 오버레이 destroy 실패: {}", e);
+                // destroy 실패 시 hide로 fallback
+                if was_visible {
+                    if let Err(e) = self.set_overlay_visibility(app, false) {
+                        log::warn!("[ObsBridge] 오버레이 hide fallback 실패: {}", e);
+                    }
+                }
+                return;
+            }
+        }
+        // destroy 성공(또는 윈도우 부재) 후 런타임 플래그만 갱신
+        // store.overlay_visible은 변경하지 않음 — ensure_overlay_window가 재생성 시
+        // 이 값을 기준으로 show/hide를 결정하므로, 원래 값을 유지해야 함
+        *self.overlay_visible.write() = false;
+        let _ = app.emit("overlay:visibility", &json!({ "visible": false }));
+    }
+
+    /// OBS 중지 시 오버레이 재생성 + 복원
+    pub fn obs_restore_overlay(&self, app: &AppHandle) {
+        let prev = self.obs_previous_overlay_visible.write().take();
+        match prev {
+            Some(true) => {
+                // set_overlay_visibility(true) 내부에서 ensure_overlay_window + show + store 갱신 + emit 처리
+                if let Err(e) = self.set_overlay_visibility(app, true) {
+                    log::warn!("[ObsBridge] 오버레이 복원 실패: {}", e);
+                }
+            }
+            Some(false) => {
+                // 이전 상태가 hidden이었더라도 윈도우는 재생성 필요
+                // (이후 sync 커맨드에서 WebView2 빌드 시 메시지 루프 블로킹 방지)
+                if let Err(e) = self.ensure_overlay_window(app) {
+                    log::warn!("[ObsBridge] 오버레이 윈도우 재생성 실패: {}", e);
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// OBS 모드 활성화 여부
+    pub fn is_obs_mode_active(&self) -> bool {
+        self.obs_bridge.is_running()
+    }
+
+    /// OBS 브릿지용 전체 스냅샷 빌드 + 캐시 갱신 + 연결된 클라이언트에 broadcast
+    pub fn refresh_obs_snapshot(&self) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        let payload = self.bootstrap_payload();
+        if let Ok(snapshot) = serde_json::to_value(&payload) {
+            self.obs_bridge.update_snapshot(snapshot);
+            self.obs_bridge.broadcast_snapshot();
+        }
+    }
+
+    /// OBS 브릿지 캐시 스냅샷 갱신 (이벤트는 register_event_forwarding이 자동 포워딩)
+    /// CSS 등 개별 설정 변경이 OBS 런타임 상태(키 시그널, KPS)를 리셋하지 않도록 사용
+    pub fn notify_obs_settings_diff(&self, _diff: serde_json::Value) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        let bp = self.bootstrap_payload();
+        if let Ok(snap) = serde_json::to_value(&bp) {
+            self.obs_bridge.update_snapshot(snap);
+        }
+    }
+
+    /// OBS 브릿지 캐시 스냅샷 갱신 (카운터 이벤트는 register_event_forwarding이 자동 포워딩)
+    pub fn obs_broadcast_counters(&self) {
+        if !self.obs_bridge.is_running() {
+            return;
+        }
+        let bp = self.bootstrap_payload();
+        if let Ok(snap) = serde_json::to_value(&bp) {
+            self.obs_bridge.update_snapshot(snap);
+        }
     }
 
     pub fn set_overlay_visibility(&self, app: &AppHandle, visible: bool) -> Result<()> {
@@ -355,6 +559,7 @@ impl AppState {
         Ok(updated.overlay_resize_anchor.as_str().to_string())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn resize_overlay(
         &self,
         app: &AppHandle,
@@ -443,8 +648,7 @@ impl AppState {
                     if delta != 0.0 {
                         match anchor {
                             OverlayResizeAnchor::Center => new_y -= delta / 2.0,
-                            OverlayResizeAnchor::BottomLeft
-                            | OverlayResizeAnchor::BottomRight => {}
+                            OverlayResizeAnchor::BottomLeft | OverlayResizeAnchor::BottomRight => {}
                             OverlayResizeAnchor::FixedPosition => new_y -= delta,
                             _ => new_y -= delta,
                         }
@@ -591,9 +795,13 @@ impl AppState {
                                     crate::ipc::DaemonCommand::ToggleOverlay => {
                                         log::info!("[AppState] received ToggleOverlay command from daemon");
                                         let app_state = app_handle.state::<AppState>();
+                                        if app_state.is_obs_mode_active() {
+                                            log::info!("[AppState] OBS 모드 활성화 중 — 오버레이 토글 무시");
+                                        } else {
                                         let is_visible = *app_state.overlay_visible.read();
                                         if let Err(err) = app_state.set_overlay_visibility(&app_handle, !is_visible) {
                                             log::error!("failed to toggle overlay visibility: {err}");
+                                        }
                                         }
                                     }
                                     crate::ipc::DaemonCommand::ToggleOverlayLock => {
@@ -678,8 +886,7 @@ impl AppState {
                                 crate::ipc::HookKeyState::Up => "UP",
                             };
                             let labels_for_emit = message.labels.clone();
-                            let primary_label = labels_for_emit
-                                .get(0)
+                            let primary_label = labels_for_emit.first()
                                 .cloned()
                                 .unwrap_or_else(|| String::from(""));
 
@@ -1054,6 +1261,7 @@ impl AppState {
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
                 if force_close_flag.swap(false, Ordering::SeqCst) {
+                    // 앱 종료 시 — 실제 close 허용
                     *overlay_visible.write() = false;
                 } else {
                     api.prevent_close();
@@ -1147,8 +1355,7 @@ impl AppState {
         if let Some(best) =
             monitors.find_best_overlap(bounds.x, bounds.y, bounds.width, bounds.height)
         {
-            let area =
-                best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
+            let area = best.intersection_area(bounds.x, bounds.y, bounds.width, bounds.height);
             if area >= min_visible_area {
                 // 충분히 보이므로 저장 좌표 그대로 복원
                 return OverlayPosition {
@@ -1193,10 +1400,10 @@ impl AppState {
             // 활성화 시에만 DevTools 열기
             if enabled {
                 if let Some(main) = app.get_webview_window("main") {
-                    let _ = main.open_devtools();
+                    main.open_devtools();
                 }
                 if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
-                    let _ = overlay.open_devtools();
+                    overlay.open_devtools();
                 }
             }
         }
@@ -1681,7 +1888,6 @@ fn set_window_no_activate(window: &WebviewWindow) -> Result<()> {
 /// (Electron의 hookWindowMessage 방식과 동일)
 #[cfg(target_os = "windows")]
 fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
-    use std::ffi::c_void;
     use windows::Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         UI::{
@@ -1720,7 +1926,7 @@ fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
     }
 
     let hwnd = window.hwnd()?;
-    let hwnd_win = HWND(hwnd.0 as *mut c_void);
+    let hwnd_win = HWND(hwnd.0);
 
     unsafe {
         SetWindowSubclass(hwnd_win, Some(subclass_proc), SUBCLASS_ID, 0)
@@ -1884,13 +2090,7 @@ impl MonitorData {
     }
 
     /// 주어진 사각형과 가장 많이 겹치는 모니터를 반환
-    fn find_best_overlap(
-        &self,
-        x: f64,
-        y: f64,
-        width: f64,
-        height: f64,
-    ) -> Option<&MonitorSpec> {
+    fn find_best_overlap(&self, x: f64, y: f64, width: f64, height: f64) -> Option<&MonitorSpec> {
         self.specs
             .iter()
             .max_by(|a, b| {

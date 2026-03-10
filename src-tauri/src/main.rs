@@ -92,7 +92,11 @@ fn main() {
             }
         }))
         .setup(|app| {
-            register_dev_capability(app)?;
+            // dev 빌드에서만 remote URL capability 등록 (릴리즈에서는 local:true만 사용)
+            if cfg!(debug_assertions) {
+                register_dev_capability(app)?;
+            }
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
@@ -122,7 +126,7 @@ fn main() {
             }
 
             let resolver = app.path();
-            let store = AppStore::initialize(&resolver)
+            let store = AppStore::initialize(resolver)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             let app_state = AppState::initialize(store)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
@@ -131,10 +135,10 @@ fn main() {
             {
                 let state = app.state::<AppState>();
                 state
-                    .initialize_runtime(&handle)
+                    .initialize_runtime(handle)
                     .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             }
-            configure_main_window(&app.handle());
+            configure_main_window(app.handle());
 
             #[cfg(target_os = "macos")]
             launch_macos_dock_helper();
@@ -152,6 +156,11 @@ fn main() {
             commands::app::system::app_quit,
             commands::app::system::window_open_devtools_all,
             commands::app::system::get_cursor_settings,
+            // OBS 모드
+            commands::app::obs::obs_start,
+            commands::app::obs::obs_stop,
+            commands::app::obs::obs_status,
+            commands::app::obs::obs_regenerate_token,
             // 에디터 콘텐츠
             commands::editor::css::css_get,
             commands::editor::css::css_get_use,
@@ -640,7 +649,7 @@ fn apply_webview2_fixed_runtime_override() {
 }
 
 #[cfg(target_os = "windows")]
-fn is_valid_webview2_fixed_runtime_dir(dir: &PathBuf) -> bool {
+fn is_valid_webview2_fixed_runtime_dir(dir: &std::path::Path) -> bool {
     dir.is_dir() && dir.join("msedgewebview2.exe").is_file()
 }
 

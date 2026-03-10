@@ -10,6 +10,16 @@ use crate::{
     state::AppState,
 };
 
+/// OBS 브릿지에 CSS 설정 변경을 settings_diff로 전달 (전체 스냅샷 브로드캐스트 방지)
+fn notify_obs_css(state: &AppState) {
+    let snap = state.store.snapshot();
+    let diff = serde_json::json!({
+        "useCustomCSS": snap.use_custom_css,
+        "customCSS": snap.custom_css,
+    });
+    state.notify_obs_settings_diff(diff);
+}
+
 #[derive(Serialize)]
 pub struct CssToggleResponse {
     pub enabled: bool,
@@ -114,6 +124,7 @@ pub fn css_toggle(
         state.unwatch_global_css();
     }
 
+    notify_obs_css(&state);
     Ok(CssToggleResponse { enabled })
 }
 
@@ -129,6 +140,8 @@ pub fn css_reset(state: State<'_, AppState>, app: AppHandle) -> CmdResult<()> {
 
     app.emit("css:use", &CssToggleResponse { enabled: false })?;
     app.emit("css:content", &CustomCss::default())?;
+
+    notify_obs_css(&state);
     Ok(())
 }
 
@@ -147,6 +160,7 @@ pub fn css_set_content(
 
     app.emit("css:content", &current)?;
 
+    notify_obs_css(&state);
     Ok(CssSetContentResponse {
         success: true,
         error: None,
@@ -189,6 +203,7 @@ pub fn css_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<CssLoad
                 }
             }
 
+            notify_obs_css(&state);
             Ok(CssLoadResponse {
                 success: true,
                 error: None,
