@@ -14,7 +14,7 @@ pub struct AutoUpdateResult {
 pub fn app_auto_update(app: AppHandle, tag: String) -> CmdResult<AutoUpdateResult> {
     #[cfg(target_os = "windows")]
     {
-        return app_auto_update_windows(app, &tag);
+        app_auto_update_windows(app, &tag)
     }
 
     #[cfg(not(target_os = "windows"))]

@@ -264,9 +264,7 @@ impl ObsBridgeService {
             match TcpListener::bind(addr).await {
                 Ok(l) => {
                     if offset > 0 {
-                        log::info!(
-                            "[ObsBridge] 포트 {port} 사용 불가, {try_port}로 fallback"
-                        );
+                        log::info!("[ObsBridge] 포트 {port} 사용 불가, {try_port}로 fallback");
                     }
                     listener = Some(l);
                     break;

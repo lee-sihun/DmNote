@@ -535,6 +535,7 @@ impl AppState {
         Ok(updated.overlay_resize_anchor.as_str().to_string())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn resize_overlay(
         &self,
         app: &AppHandle,

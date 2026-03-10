@@ -568,7 +568,7 @@ fn play_on_stream(
             *stream_handler = OutputStream::try_default().ok();
             stream_handler
                 .as_ref()
-                .map_or(false, |h| try_play(&h.1, source, volume).is_ok())
+                .is_some_and(|h| try_play(&h.1, source, volume).is_ok())
         }
         Err(_) => false,
     }

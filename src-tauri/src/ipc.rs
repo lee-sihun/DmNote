@@ -17,6 +17,7 @@ fn default_device_kind() -> InputDeviceKind {
 /// Command messages from keyboard daemon (e.g., global hotkeys)
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::enum_variant_names)]
 pub enum DaemonCommand {
     /// Toggle overlay visibility (Ctrl+Shift+O)
     ToggleOverlay,

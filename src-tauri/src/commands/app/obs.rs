@@ -23,10 +23,7 @@ fn resolve_and_save_token(state: &AppState) -> String {
 }
 
 #[tauri::command]
-pub async fn obs_start(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> CmdResult<ObsStatus> {
+pub async fn obs_start(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     let port = state.store.with_state(|s| s.obs_port);
     let token = resolve_and_save_token(&state);
 

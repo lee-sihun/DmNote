@@ -413,8 +413,8 @@ pub fn custom_tabs_delete(
     let custom_tabs: Vec<CustomTab> = snapshot
         .custom_tabs
         .iter()
+        .filter(|&tab| tab.id != id)
         .cloned()
-        .filter(|tab| tab.id != id)
         .collect();
     let mut keys = snapshot.keys.clone();
     let mut positions = snapshot.key_positions.clone();

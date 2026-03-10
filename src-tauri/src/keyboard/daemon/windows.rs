@@ -365,8 +365,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                         // 가짜 키는 스캔 코드 기반 복구 우선
                         let mut vk_norm = vkey;
                         if vk_norm == 0 || vk_norm == 0xFF {
-                            let mapped =
-                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
+                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
                             if mapped != 0 {
                                 vk_norm = mapped;
                             } else {
@@ -389,8 +388,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                         const VK_RMENU: u32 = 0xA5;
 
                         if vk_norm == VK_SHIFT {
-                            let mapped =
-                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
+                            let mapped = MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
                             match mapped {
                                 VK_LSHIFT | VK_RSHIFT => vk_norm = mapped,
                                 _ => match scan_code {

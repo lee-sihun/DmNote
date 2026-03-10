@@ -302,9 +302,11 @@ fn settings_from_store(store: &AppStoreData) -> SettingsState {
 fn initialize_default_state() -> AppStoreData {
     use crate::defaults::{default_keys, default_positions};
 
-    let mut data = AppStoreData::default();
-    data.keys = default_keys().clone();
-    data.key_positions = default_positions().clone();
+    let data = AppStoreData {
+        keys: default_keys().clone(),
+        key_positions: default_positions().clone(),
+        ..Default::default()
+    };
     normalize_state(data)
 }
 

@@ -38,7 +38,7 @@ fn write_command(sink: &mut Box<dyn Write + Send>, command: &DaemonCommand) -> R
 pub fn run() -> Result<()> {
     #[cfg(target_os = "windows")]
     {
-        return windows::run_raw_input();
+        windows::run_raw_input()
     }
 
     #[cfg(target_os = "macos")]

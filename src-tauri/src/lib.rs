@@ -79,7 +79,7 @@ fn get_windows_text_scale_factor() -> f64 {
         }
 
         let factor = data as f64 / 100.0;
-        if factor.is_finite() && factor >= 1.0 && factor <= 2.25 {
+        if factor.is_finite() && (1.0..=2.25).contains(&factor) {
             factor
         } else {
             1.0

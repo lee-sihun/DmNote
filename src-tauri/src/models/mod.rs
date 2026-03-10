@@ -44,17 +44,10 @@ pub struct CustomFont {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct FontSettings {
     #[serde(default)]
     pub custom_fonts: Vec<CustomFont>,
-}
-
-impl Default for FontSettings {
-    fn default() -> Self {
-        Self {
-            custom_fonts: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -312,43 +305,31 @@ pub struct GraphPosition {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum KeyCounterPlacement {
+    #[default]
     Inside,
     Outside,
 }
 
-impl Default for KeyCounterPlacement {
-    fn default() -> Self {
-        KeyCounterPlacement::Inside
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum KeyCounterAlign {
+    #[default]
     Top,
     Bottom,
     Left,
     Right,
 }
 
-impl Default for KeyCounterAlign {
-    fn default() -> Self {
-        KeyCounterAlign::Top
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum KeyCounterAlignMode {
+    #[default]
     Center,
     Between,
-}
-
-impl Default for KeyCounterAlignMode {
-    fn default() -> Self {
-        KeyCounterAlignMode::Center
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -796,17 +777,13 @@ pub enum FadePosition {
 /// 이미지 맞춤 설정 (CSS object-fit과 동일)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum ImageFit {
+    #[default]
     Cover,
     Contain,
     Fill,
     None,
-}
-
-impl Default for ImageFit {
-    fn default() -> Self {
-        ImageFit::Cover
-    }
 }
 
 impl Default for NoteSettings {
@@ -929,18 +906,10 @@ impl TabNoteSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct CustomCss {
     pub path: Option<String>,
     pub content: String,
-}
-
-impl Default for CustomCss {
-    fn default() -> Self {
-        Self {
-            path: None,
-            content: String::new(),
-        }
-    }
 }
 
 /// 탭별 CSS 설정
@@ -974,6 +943,7 @@ pub type TabCssOverrides = HashMap<String, TabCss>;
 /// 탭별 노트 트랙 설정 (전역 NoteSettings를 탭별로 오버라이드)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct TabNoteSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_limit: Option<u32>,
@@ -1003,26 +973,6 @@ pub struct TabNoteSettings {
     pub key_display_delay_ms: Option<u32>,
 }
 
-impl Default for TabNoteSettings {
-    fn default() -> Self {
-        Self {
-            frame_limit: None,
-            speed: None,
-            track_height: None,
-            reverse: None,
-            fade_position: None,
-            fade_top_px: None,
-            fade_bottom_px: None,
-            reverse_fade_top_px: None,
-            reverse_fade_bottom_px: None,
-            delayed_note_enabled: None,
-            short_note_threshold_ms: None,
-            short_note_min_length_px: None,
-            key_display_delay_ms: None,
-        }
-    }
-}
-
 /// 탭별 노트 트랙 설정 오버라이드 맵 (키: 탭 ID, 값: TabNoteSettings)
 pub type TabNoteOverrides = HashMap<String, TabNoteSettings>;
 
@@ -1038,6 +988,7 @@ pub struct JsPlugin {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct CustomJs {
     #[serde(default)]
     pub path: Option<String>,
@@ -1045,16 +996,6 @@ pub struct CustomJs {
     pub content: String,
     #[serde(default)]
     pub plugins: Vec<JsPlugin>,
-}
-
-impl Default for CustomJs {
-    fn default() -> Self {
-        Self {
-            path: None,
-            content: String::new(),
-            plugins: Vec::new(),
-        }
-    }
 }
 
 impl CustomJs {
@@ -1105,19 +1046,15 @@ impl CustomJs {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum OverlayResizeAnchor {
+    #[default]
     TopLeft,
     TopRight,
     BottomLeft,
     BottomRight,
     Center,
     FixedPosition,
-}
-
-impl Default for OverlayResizeAnchor {
-    fn default() -> Self {
-        OverlayResizeAnchor::TopLeft
-    }
 }
 
 /// 그리드 스마트 가이드 설정
@@ -1658,6 +1595,7 @@ impl Default for SettingsState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+#[derive(Default)]
 pub struct NoteSettingsPatch {
     pub frame_limit: Option<u32>,
     pub speed: Option<u32>,
@@ -1672,26 +1610,6 @@ pub struct NoteSettingsPatch {
     pub short_note_threshold_ms: Option<u32>,
     pub short_note_min_length_px: Option<u32>,
     pub key_display_delay_ms: Option<u32>,
-}
-
-impl Default for NoteSettingsPatch {
-    fn default() -> Self {
-        Self {
-            frame_limit: None,
-            speed: None,
-            track_height: None,
-            reverse: None,
-            fade_position: None,
-            fade_top_px: None,
-            fade_bottom_px: None,
-            reverse_fade_top_px: None,
-            reverse_fade_bottom_px: None,
-            delayed_note_enabled: None,
-            short_note_threshold_ms: None,
-            short_note_min_length_px: None,
-            key_display_delay_ms: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
