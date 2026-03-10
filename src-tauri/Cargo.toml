@@ -38,7 +38,6 @@ symphonia = { version = "0.5", default-features = false, features = ["ogg", "vor
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = "0.24"
 futures-util = "0.3"
-
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61.3", features = [
 	"Win32_Foundation",

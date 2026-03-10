@@ -92,7 +92,11 @@ fn main() {
             }
         }))
         .setup(|app| {
-            register_dev_capability(app)?;
+            // dev 빌드에서만 remote URL capability 등록 (릴리즈에서는 local:true만 사용)
+            if cfg!(debug_assertions) {
+                register_dev_capability(app)?;
+            }
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 

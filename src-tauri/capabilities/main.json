@@ -11,14 +11,5 @@
     "core:window:allow-outer-size",
     "core:window:allow-set-position",
     "dmnote-allow-all"
-  ],
-  "remote": {
-    "urls": [
-      "http://127.0.0.1:3000/**",
-      "http://localhost:3000/**",
-      "http://127.0.0.1:3400/**",
-      "http://localhost:3400/**",
-      "tauri://localhost/**"
-    ]
-  }
+  ]
 }
