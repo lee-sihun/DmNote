@@ -233,8 +233,8 @@ impl ObsBridgeService {
         let _ = self.broadcast_tx.send(ObsBroadcast::Snapshot(snapshot));
     }
 
-    /// WS 서버 시작 (토큰은 호출자가 전달)
-    pub async fn start(self: &Arc<Self>, port: u16, token: String) -> Result<(), String> {
+    /// WS 서버 시작 (토큰은 호출자가 전달, 포트 자동 fallback)
+    pub async fn start(self: &Arc<Self>, port: u16, token: String) -> Result<u16, String> {
         // 원자적 check-and-set
         if self
             .running
@@ -255,12 +255,32 @@ impl ObsBridgeService {
         // 세션 토큰 설정 (호출자가 생성/재사용 결정)
         *self.session_token.write() = token;
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], port));
-        let listener = match TcpListener::bind(addr).await {
-            Ok(l) => l,
-            Err(e) => {
+        // 포트 자동 fallback: 기본 포트 → +1 ~ +9 순차 시도
+        let mut listener = None;
+        let mut last_err = String::new();
+        for offset in 0u16..10 {
+            let try_port = port.saturating_add(offset);
+            let addr = SocketAddr::from(([0, 0, 0, 0], try_port));
+            match TcpListener::bind(addr).await {
+                Ok(l) => {
+                    if offset > 0 {
+                        log::info!(
+                            "[ObsBridge] 포트 {port} 사용 불가, {try_port}로 fallback"
+                        );
+                    }
+                    listener = Some(l);
+                    break;
+                }
+                Err(e) => {
+                    last_err = format!("포트 {try_port} 바인드 실패: {e}");
+                }
+            }
+        }
+        let listener = match listener {
+            Some(l) => l,
+            None => {
                 self.running.store(false, Ordering::Relaxed);
-                return Err(format!("포트 {port} 바인드 실패: {e}"));
+                return Err(last_err);
             }
         };
 
@@ -278,7 +298,7 @@ impl ObsBridgeService {
         *self.server_handle.lock().await = Some(handle);
 
         log::info!("[ObsBridge] 서버 시작: http://0.0.0.0:{actual_port}");
-        Ok(())
+        Ok(actual_port)
     }
 
     /// 서버 종료

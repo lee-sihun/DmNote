@@ -7,7 +7,6 @@ import type { FontSettings } from '@src/types/settings/fonts';
 import type { OverlayResizeAnchor } from '@src/types/settings/settings';
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { ShortcutsState } from '@src/types/settings/shortcuts';
-import { DEFAULT_OBS_PORT } from '@src/types/obs';
 import {
   getDefaultNoteSettings,
   getDefaultFontSettings,
@@ -48,7 +47,6 @@ interface SettingsState {
   gridSettings: GridSettings;
   shortcuts: ShortcutsState;
   obsModeEnabled: boolean;
-  obsPort: number;
   setAll: (payload: SettingsStateSnapshot) => void;
   merge: (payload: Partial<SettingsStateSnapshot>) => void;
   setLaboratoryEnabled: (value: boolean) => void;
@@ -75,7 +73,6 @@ interface SettingsState {
   setGridSettings: (value: GridSettings) => void;
   setShortcuts: (value: ShortcutsState) => void;
   setObsModeEnabled: (value: boolean) => void;
-  setObsPort: (value: number) => void;
 }
 
 export type SettingsStateSnapshot = Omit<
@@ -106,7 +103,6 @@ export type SettingsStateSnapshot = Omit<
   | 'setGridSettings'
   | 'setShortcuts'
   | 'setObsModeEnabled'
-  | 'setObsPort'
 >;
 
 const initialState: SettingsStateSnapshot = {
@@ -134,7 +130,6 @@ const initialState: SettingsStateSnapshot = {
   gridSettings: getDefaultGridSettings(),
   shortcuts: getDefaultShortcuts(),
   obsModeEnabled: false,
-  obsPort: DEFAULT_OBS_PORT,
 };
 
 function mergeSnapshot(
@@ -214,5 +209,4 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setGridSettings: (value) => set({ gridSettings: value }),
   setShortcuts: (value) => set({ shortcuts: value }),
   setObsModeEnabled: (value) => set({ obsModeEnabled: value }),
-  setObsPort: (value) => set({ obsPort: value }),
 }));

@@ -74,7 +74,6 @@
     "counterReset": "Key counters have been reset.",
     "counterResetFailed": "Failed to reset key counters.",
     "obsMode": "OBS Mode",
-    "obsPort": "Port",
     "obsStart": "Start",
     "obsStop": "Stop",
     "obsRunning": "Running",

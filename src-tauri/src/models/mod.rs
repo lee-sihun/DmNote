@@ -1621,8 +1621,6 @@ pub struct SettingsState {
     pub shortcuts: ShortcutsState,
     #[serde(default)]
     pub obs_mode_enabled: bool,
-    #[serde(default = "default_obs_port")]
-    pub obs_port: u16,
 }
 
 impl Default for SettingsState {
@@ -1654,7 +1652,6 @@ impl Default for SettingsState {
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
             obs_mode_enabled: false,
-            obs_port: default_obs_port(),
         }
     }
 }
@@ -1727,7 +1724,6 @@ pub struct SettingsPatchInput {
     pub grid_settings: Option<GridSettings>,
     pub shortcuts: Option<ShortcutsPatchInput>,
     pub obs_mode_enabled: Option<bool>,
-    pub obs_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1784,7 +1780,6 @@ impl SettingsDiff {
             p.grid_settings.is_some(),
             p.shortcuts.is_some(),
             p.obs_mode_enabled.is_some(),
-            p.obs_port.is_some(),
         ]
         .iter()
         .filter(|&&x| x)
@@ -1843,6 +1838,4 @@ pub struct SettingsPatch {
     pub shortcuts: Option<ShortcutsState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obs_mode_enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub obs_port: Option<u16>,
 }

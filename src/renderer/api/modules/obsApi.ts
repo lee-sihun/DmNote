@@ -4,7 +4,7 @@ import { subscribe } from './shared';
 import type { ObsStatus } from '@src/types/obs';
 
 export const obsApi = {
-  start: (port?: number) => invoke<ObsStatus>('obs_start', { port }),
+  start: () => invoke<ObsStatus>('obs_start'),
   stop: () => invoke<ObsStatus>('obs_stop'),
   status: () => invoke<ObsStatus>('obs_status'),
   regenerateToken: () => invoke<ObsStatus>('obs_regenerate_token'),

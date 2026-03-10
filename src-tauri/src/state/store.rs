@@ -296,7 +296,6 @@ fn settings_from_store(store: &AppStoreData) -> SettingsState {
         grid_settings: store.grid_settings.clone(),
         shortcuts: store.shortcuts.clone(),
         obs_mode_enabled: store.obs_mode_enabled,
-        obs_port: store.obs_port,
     }
 }
 

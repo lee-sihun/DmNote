@@ -74,7 +74,6 @@
     "counterReset": "按键计数器已重置.",
     "counterResetFailed": "重置按键计数器失败.",
     "obsMode": "OBS Mode",
-    "obsPort": "Port",
     "obsStart": "Start",
     "obsStop": "Stop",
     "obsRunning": "Running",

@@ -74,7 +74,6 @@
     "counterReset": "키 카운터가 초기화되었습니다.",
     "counterResetFailed": "키 카운터 초기화에 실패했습니다.",
     "obsMode": "OBS 모드",
-    "obsPort": "포트",
     "obsStart": "시작",
     "obsStop": "중지",
     "obsRunning": "실행 중",

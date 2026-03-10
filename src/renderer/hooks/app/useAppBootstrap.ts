@@ -27,7 +27,6 @@ import {
   refreshCursorSettings,
 } from '@utils/grid/cursorUtils';
 import type { CustomJs, JsPlugin } from '@src/types/plugin/js';
-import { DEFAULT_OBS_PORT } from '@src/types/obs';
 
 function clonePlugins(source?: CustomJs | null): JsPlugin[] {
   if (!source) return [];
@@ -209,7 +208,6 @@ export function useAppBootstrap() {
           bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
         shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
         obsModeEnabled: bootstrap.settings.obsModeEnabled ?? false,
-        obsPort: bootstrap.settings.obsPort ?? DEFAULT_OBS_PORT,
       });
       useFontStore.setState({
         customFonts: bootstrap.settings.fontSettings.customFonts.map(

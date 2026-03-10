@@ -26,9 +26,8 @@ fn resolve_and_save_token(state: &AppState) -> String {
 pub async fn obs_start(
     app: AppHandle,
     state: State<'_, AppState>,
-    port: Option<u16>,
 ) -> CmdResult<ObsStatus> {
-    let port = port.unwrap_or(state.store.with_state(|s| s.obs_port));
+    let port = state.store.with_state(|s| s.obs_port);
     let token = resolve_and_save_token(&state);
 
     // OBS 정적 파일 서빙 설정
@@ -56,11 +55,17 @@ pub async fn obs_start(
     // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
     state.obs_bridge.register_event_forwarding(&app);
 
-    state
+    let actual_port = state
         .obs_bridge
         .start(port, token)
         .await
         .map_err(crate::errors::CommandError::msg)?;
+    // 성공한 포트를 store에 저장 (fallback 시 다음 시작에 재사용)
+    if actual_port != port {
+        let _ = state.store.update(|s| {
+            s.obs_port = actual_port;
+        });
+    }
     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
     state.refresh_obs_snapshot();
     // 오버레이 destroy (이전 상태 보존)

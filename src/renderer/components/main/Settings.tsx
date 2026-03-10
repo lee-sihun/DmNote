@@ -111,7 +111,6 @@ const Settings = ({
     setKeyCounterEnabled,
     shortcuts,
     setShortcuts,
-    obsPort: storedObsPort,
   } = useSettingsStore();
 
   const { checkForUpdates, isChecking } = useUpdateCheck();
@@ -135,17 +134,9 @@ const Settings = ({
     port: DEFAULT_OBS_PORT,
     clientCount: 0,
   });
-  const [obsPort, setObsPort] = useState<string>(String(storedObsPort));
   const [obsLoading, setObsLoading] = useState<boolean>(false);
   const [isTokenRegenModalOpen, setTokenRegenModalOpen] =
     useState<boolean>(false);
-
-  // 스토어 포트 변경 시 로컬 상태 동기화 (bootstrap 비동기 로딩 대응)
-  useEffect(() => {
-    if (!obsStatus.running) {
-      setObsPort(String(storedObsPort));
-    }
-  }, [storedObsPort, obsStatus.running]);
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -589,18 +580,10 @@ const Settings = ({
         setObsStatus(status);
         await window.api.settings.update({ obsModeEnabled: false });
       } else {
-        const port = parseInt(obsPort, 10);
-        if (isNaN(port) || port < 1024 || port > 65535) {
-          showAlert?.(t('settings.obsStartFailed'));
-          return;
-        }
-        const status = await obsApi.start(port);
+        const status = await obsApi.start();
         setObsStatus(status);
         // 시작 성공 후에만 영속화 (실패 시 obsModeEnabled=true 잔류 방지)
-        await window.api.settings.update({
-          obsModeEnabled: true,
-          obsPort: port,
-        });
+        await window.api.settings.update({ obsModeEnabled: true });
       }
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
@@ -964,20 +947,6 @@ const Settings = ({
                 </div>
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <div className="flex items-center gap-[8px]">
-                  <p className="text-style-3 text-[#FFFFFF]">
-                    {t('settings.obsPort')}
-                  </p>
-                  <input
-                    type="number"
-                    value={obsPort}
-                    onChange={(e) => setObsPort(e.target.value)}
-                    disabled={obsStatus.running}
-                    className="w-[80px] bg-[#2A2A31] border border-[#3A3944] rounded-[5px] px-[8px] py-[3px] text-style-2 text-[#DBDEE8] disabled:opacity-50 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    min={1024}
-                    max={65535}
-                  />
-                </div>
                 <div className="flex items-center gap-[6px]">
                   {obsStatus.running && (
                     <>

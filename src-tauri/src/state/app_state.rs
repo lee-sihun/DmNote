@@ -238,7 +238,6 @@ impl AppState {
                 grid_settings: state.grid_settings.clone(),
                 shortcuts: state.shortcuts.clone(),
                 obs_mode_enabled: state.obs_mode_enabled,
-                obs_port: state.obs_port,
             },
             keys: state.keys.clone(),
             positions: state.key_positions.clone(),
@@ -341,8 +340,14 @@ impl AppState {
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
             match bridge.start(port, token).await {
-                Ok(()) => {
-                    log::info!("[ObsBridge] auto-start 성공 (port={})", port);
+                Ok(actual_port) => {
+                    log::info!("[ObsBridge] auto-start 성공 (port={})", actual_port);
+                    // fallback 포트가 사용된 경우 store에 저장
+                    if actual_port != port {
+                        let _ = store.update(|s| {
+                            s.obs_port = actual_port;
+                        });
+                    }
                     let state = app_handle.state::<AppState>();
                     // 초기 스냅샷 캐싱 (신규 클라이언트에 전송됨)
                     state.refresh_obs_snapshot();
