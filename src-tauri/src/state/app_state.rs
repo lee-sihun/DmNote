@@ -113,10 +113,10 @@ impl AppState {
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
         if snapshot.developer_mode_enabled {
             if let Some(main) = app.get_webview_window("main") {
-                let _ = main.open_devtools();
+                main.open_devtools();
             }
             if let Some(overlay) = app.get_webview_window("overlay") {
-                let _ = overlay.open_devtools();
+                overlay.open_devtools();
             }
         }
         self.start_keyboard_hook(app.clone())?;
@@ -861,8 +861,7 @@ impl AppState {
                                 crate::ipc::HookKeyState::Up => "UP",
                             };
                             let labels_for_emit = message.labels.clone();
-                            let primary_label = labels_for_emit
-                                .get(0)
+                            let primary_label = labels_for_emit.first()
                                 .cloned()
                                 .unwrap_or_else(|| String::from(""));
 
@@ -1376,10 +1375,10 @@ impl AppState {
             // 활성화 시에만 DevTools 열기
             if enabled {
                 if let Some(main) = app.get_webview_window("main") {
-                    let _ = main.open_devtools();
+                    main.open_devtools();
                 }
                 if let Some(overlay) = app.get_webview_window(OVERLAY_LABEL) {
-                    let _ = overlay.open_devtools();
+                    overlay.open_devtools();
                 }
             }
         }
@@ -1864,7 +1863,6 @@ fn set_window_no_activate(window: &WebviewWindow) -> Result<()> {
 /// (Electron의 hookWindowMessage 방식과 동일)
 #[cfg(target_os = "windows")]
 fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
-    use std::ffi::c_void;
     use windows::Win32::{
         Foundation::{HWND, LPARAM, LRESULT, WPARAM},
         UI::{
@@ -1903,7 +1901,7 @@ fn disable_system_context_menu(window: &WebviewWindow) -> Result<()> {
     }
 
     let hwnd = window.hwnd()?;
-    let hwnd_win = HWND(hwnd.0 as *mut c_void);
+    let hwnd_win = HWND(hwnd.0);
 
     unsafe {
         SetWindowSubclass(hwnd_win, Some(subclass_proc), SUBCLASS_ID, 0)

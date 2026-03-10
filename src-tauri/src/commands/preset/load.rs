@@ -10,7 +10,7 @@ use crate::{
     errors::{CmdResult, CommandError},
     models::{
         CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
-        NoteSettings, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        NoteSettingsPatch, SettingsPatchInput, StatPositions,
     },
     state::AppState,
 };
@@ -52,7 +52,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     let selected_key_type =
         choose_selected_key_type(preset.selected_key_type, &keys, snapshot.selected_key_type);
 
-    let mut desired_settings = preset.note_settings.unwrap_or_else(NoteSettings::default);
+    let mut desired_settings = preset.note_settings.unwrap_or_default();
     desired_settings.migrate_fade_position();
     let mut note_patch = NoteSettingsPatch::default();
     note_patch.frame_limit = Some(desired_settings.frame_limit);

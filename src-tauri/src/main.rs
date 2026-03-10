@@ -122,7 +122,7 @@ fn main() {
             }
 
             let resolver = app.path();
-            let store = AppStore::initialize(&resolver)
+            let store = AppStore::initialize(resolver)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             let app_state = AppState::initialize(store)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
@@ -131,10 +131,10 @@ fn main() {
             {
                 let state = app.state::<AppState>();
                 state
-                    .initialize_runtime(&handle)
+                    .initialize_runtime(handle)
                     .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             }
-            configure_main_window(&app.handle());
+            configure_main_window(app.handle());
 
             #[cfg(target_os = "macos")]
             launch_macos_dock_helper();
@@ -645,7 +645,7 @@ fn apply_webview2_fixed_runtime_override() {
 }
 
 #[cfg(target_os = "windows")]
-fn is_valid_webview2_fixed_runtime_dir(dir: &PathBuf) -> bool {
+fn is_valid_webview2_fixed_runtime_dir(dir: &std::path::Path) -> bool {
     dir.is_dir() && dir.join("msedgewebview2.exe").is_file()
 }
 

@@ -472,7 +472,7 @@ impl ObsBridgeService {
         let has_extension = normalized
             .rsplit('/')
             .next()
-            .map_or(false, |filename| filename.contains('.'));
+            .is_some_and(|filename| filename.contains('.'));
         if !has_extension {
             if let Some((content, mime)) = self.resolve_asset("obs/index.html").await {
                 let response = format!(

@@ -46,7 +46,7 @@ const pendingRpc = new Map<
 >();
 
 // snapshot 수신 여부 (initIpcShim에서 연결 준비 확인용)
-let snapshotReceived = false;
+let _snapshotReceived = false;
 
 // ── deny 체크 ──
 
@@ -178,7 +178,7 @@ function onWsMessage(envelope: ObsEnvelope) {
 
     case 'snapshot': {
       // 재연결 시 snapshot 수신 — 연결 준비 신호로만 사용
-      snapshotReceived = true;
+      _snapshotReceived = true;
       break;
     }
   }
@@ -332,7 +332,7 @@ export function initIpcShim(wsUrl: string, token: string): Promise<void> {
 
         // snapshot 수신 시 글로벌 설치 후 resolve
         if (envelope.type === 'snapshot' && !resolved) {
-          snapshotReceived = true;
+          _snapshotReceived = true;
           installGlobals();
           resolved = true;
           resolve();
@@ -426,5 +426,5 @@ export function disposeIpcShim() {
   eventListeners.clear();
   eventListenersByName.clear();
   denyList = [];
-  snapshotReceived = false;
+  _snapshotReceived = false;
 }

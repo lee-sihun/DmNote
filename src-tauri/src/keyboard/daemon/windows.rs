@@ -134,7 +134,7 @@ fn vk_from_key_code(code: &str) -> Option<u32> {
     if let Some(rest) = code.strip_prefix("Key") {
         if rest.len() == 1 {
             let ch = rest.chars().next()?.to_ascii_uppercase();
-            if ('A'..='Z').contains(&ch) {
+            if ch.is_ascii_uppercase() {
                 return Some(ch as u32);
             }
         }
@@ -143,7 +143,7 @@ fn vk_from_key_code(code: &str) -> Option<u32> {
     if let Some(rest) = code.strip_prefix("Digit") {
         if rest.len() == 1 {
             let ch = rest.chars().next()?;
-            if ('0'..='9').contains(&ch) {
+            if ch.is_ascii_digit() {
                 return Some(ch as u32);
             }
         }
@@ -323,8 +323,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                     continue;
                 }
 
-                let mut buffer: Vec<u8> = Vec::with_capacity(size as usize);
-                buffer.set_len(size as usize);
+                let mut buffer: Vec<u8> = vec![0u8; size as usize];
 
                 let hraw = HRAWINPUT(msg.lParam.0 as *mut c_void);
                 let res = GetRawInputData(
@@ -367,7 +366,7 @@ pub(super) fn run_raw_input() -> Result<()> {
                         let mut vk_norm = vkey;
                         if vk_norm == 0 || vk_norm == 0xFF {
                             let mapped =
-                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
                             if mapped != 0 {
                                 vk_norm = mapped;
                             } else {
@@ -391,7 +390,7 @@ pub(super) fn run_raw_input() -> Result<()> {
 
                         if vk_norm == VK_SHIFT {
                             let mapped =
-                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX) as u32;
+                                MapVirtualKeyW(scan_code_prefixed, MAPVK_VSC_TO_VK_EX);
                             match mapped {
                                 VK_LSHIFT | VK_RSHIFT => vk_norm = mapped,
                                 _ => match scan_code {
