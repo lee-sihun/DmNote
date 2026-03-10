@@ -460,7 +460,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               value: 'left',
             },
             {
-              label: t('keySetting.noteAlignCenter') || '가운데',
+              label: t('keySetting.noteAlignCenter') || '중앙',
               value: 'center',
             },
             {
