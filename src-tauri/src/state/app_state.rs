@@ -397,11 +397,21 @@ impl AppState {
     /// OBS 중지 시 오버레이 재생성 + 복원
     pub fn obs_restore_overlay(&self, app: &AppHandle) {
         let prev = self.obs_previous_overlay_visible.write().take();
-        if let Some(true) = prev {
-            // set_overlay_visibility(true) 내부에서 ensure_overlay_window + show + store 갱신 + emit 처리
-            if let Err(e) = self.set_overlay_visibility(app, true) {
-                log::warn!("[ObsBridge] 오버레이 복원 실패: {}", e);
+        match prev {
+            Some(true) => {
+                // set_overlay_visibility(true) 내부에서 ensure_overlay_window + show + store 갱신 + emit 처리
+                if let Err(e) = self.set_overlay_visibility(app, true) {
+                    log::warn!("[ObsBridge] 오버레이 복원 실패: {}", e);
+                }
             }
+            Some(false) => {
+                // 이전 상태가 hidden이었더라도 윈도우는 재생성 필요
+                // (이후 sync 커맨드에서 WebView2 빌드 시 메시지 루프 블로킹 방지)
+                if let Err(e) = self.ensure_overlay_window(app) {
+                    log::warn!("[ObsBridge] 오버레이 윈도우 재생성 실패: {}", e);
+                }
+            }
+            None => {}
         }
     }
 
