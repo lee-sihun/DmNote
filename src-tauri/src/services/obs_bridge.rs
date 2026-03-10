@@ -207,11 +207,15 @@ impl ObsBridgeService {
                 Some(t.clone())
             }
         };
+        let local_ip = local_ip_address::local_ip()
+            .ok()
+            .map(|ip| ip.to_string());
         ObsStatus {
             running: self.is_running(),
             port: *self.port.read(),
             client_count: self.client_count(),
             token,
+            local_ip,
         }
     }
 

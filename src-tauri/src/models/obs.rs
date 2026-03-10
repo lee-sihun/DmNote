@@ -65,6 +65,9 @@ pub struct ObsStatus {
     /// 세션 보안 토큰 (서버 시작 시 생성, WS hello에서 검증)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// 로컬 네트워크 IP (같은 네트워크 내 다른 PC 접속용)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_ip: Option<String>,
 }
 
 /// JSON envelope 생성 헬퍼

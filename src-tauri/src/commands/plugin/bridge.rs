@@ -1,7 +1,8 @@
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::errors::{CmdResult, CommandError};
+use crate::state::AppState;
 
 /// 플러그인 간 윈도우 브릿지 메시지 전송
 /// 모든 윈도우에 브로드캐스트
@@ -31,6 +32,7 @@ pub fn plugin_bridge_send(
 #[tauri::command]
 pub fn plugin_bridge_send_to(
     app: AppHandle,
+    state: State<'_, AppState>,
     target: String,
     message_type: String,
     data: Option<Value>,
@@ -62,6 +64,9 @@ pub fn plugin_bridge_send_to(
     // 특정 윈도우에만 이벤트 전송
     if let Some(window) = app.get_webview_window(window_label) {
         window.emit("plugin-bridge:message", payload)?;
+        Ok(())
+    } else if window_label == "overlay" && state.is_obs_mode_active() {
+        // OBS 모드에서 overlay가 destroy된 상태 — 정상 무시
         Ok(())
     } else {
         Err(CommandError::msg(format!(

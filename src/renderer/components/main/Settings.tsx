@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -6,9 +6,9 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FlaskIcon from '@assets/svgs/flask.svg';
+import ResetIcon from '@assets/svgs/reset.svg';
 import { PluginManagerModal } from '@components/main/Modal/content/managers/PluginManagerModal';
 import { PluginDataDeleteModal } from '@components/main/Modal/content/dialogs/PluginDataDeleteModal';
-import { ObsTokenRegenModal } from '@components/main/Modal/content/dialogs/ObsTokenRegenModal';
 import ShortcutSettingsModal from '@components/main/Modal/content/settings/ShortcutSettingsModal';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
@@ -134,9 +134,7 @@ const Settings = ({
     port: DEFAULT_OBS_PORT,
     clientCount: 0,
   });
-  const [obsLoading, setObsLoading] = useState<boolean>(false);
-  const [isTokenRegenModalOpen, setTokenRegenModalOpen] =
-    useState<boolean>(false);
+  const obsTogglingRef = useRef(false);
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -572,34 +570,29 @@ const Settings = ({
   };
 
   const handleObsToggle = async (): Promise<void> => {
-    if (obsLoading) return;
-    setObsLoading(true);
+    const next = !obsStatus.running;
+    setObsStatus((prev) => ({ ...prev, running: next }));
+    if (obsTogglingRef.current) return;
+    obsTogglingRef.current = true;
     try {
-      if (obsStatus.running) {
-        const status = await obsApi.stop();
-        setObsStatus(status);
-        await window.api.settings.update({ obsModeEnabled: false });
-      } else {
-        const status = await obsApi.start();
-        setObsStatus(status);
-        // 시작 성공 후에만 영속화 (실패 시 obsModeEnabled=true 잔류 방지)
-        await window.api.settings.update({ obsModeEnabled: true });
-      }
+      const status = next ? await obsApi.start() : await obsApi.stop();
+      setObsStatus(status);
+      await window.api.settings.update({ obsModeEnabled: next });
     } catch (error) {
       console.error('Failed to toggle OBS mode', error);
+      setObsStatus((prev) => ({ ...prev, running: !next }));
       showAlert?.(
-        obsStatus.running
-          ? t('settings.obsStopFailed')
-          : t('settings.obsStartFailed'),
+        next ? t('settings.obsStartFailed') : t('settings.obsStopFailed'),
       );
     } finally {
-      setObsLoading(false);
+      obsTogglingRef.current = false;
     }
   };
 
   const handleObsCopyUrl = async (): Promise<void> => {
     const tokenParam = obsStatus.token ? `?token=${obsStatus.token}` : '';
-    const url = `http://localhost:${obsStatus.port}${tokenParam}`;
+    const host = obsStatus.localIp || 'localhost';
+    const url = `http://${host}:${obsStatus.port}${tokenParam}`;
     try {
       await navigator.clipboard.writeText(url);
       showAlert?.(t('settings.obsCopied'));
@@ -608,14 +601,20 @@ const Settings = ({
     }
   };
 
-  const handleObsRegenerateToken = async (): Promise<void> => {
-    setTokenRegenModalOpen(false);
-    try {
-      const status = await obsApi.regenerateToken();
-      setObsStatus(status);
-    } catch (error) {
-      console.error('Failed to regenerate OBS token', error);
-    }
+  const handleObsRegenerateToken = (): void => {
+    showConfirm(
+      t('settings.obsTokenRegenMessage'),
+      async () => {
+        try {
+          const status = await obsApi.regenerateToken();
+          setObsStatus(status);
+        } catch (error) {
+          console.error('Failed to regenerate OBS token', error);
+        }
+      },
+      undefined,
+      t('settings.obsTokenRegenConfirm'),
+    );
   };
 
   const handleDeveloperModeToggle = async (): Promise<void> => {
@@ -894,22 +893,31 @@ const Settings = ({
                   >
                     {t('settings.pluginManageLabel')}
                   </p>
-                  <div className="flex flex-row gap-[8px]">
+                  <div className="flex flex-row gap-[6px]">
                     <button
                       onClick={handleReloadPlugins}
                       disabled={!canReloadPlugins || isReloadingPlugins}
                       className={
-                        actionButtonClass(
-                          canReloadPlugins && !isReloadingPlugins,
-                        ) + ' transition-none'
+                        'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-none ' +
+                        (canReloadPlugins && !isReloadingPlugins
+                          ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
+                          : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
                       }
                       style={
                         isReloadingPlugins
                           ? { opacity: 0.65, pointerEvents: 'none' }
                           : undefined
                       }
+                      title={t('settings.reloadPlugins')}
                     >
-                      {t('settings.reloadPlugins')}
+                      <ResetIcon
+                        className={
+                          'w-[13px] h-[13px] -scale-x-100 ' +
+                          (canReloadPlugins && !isReloadingPlugins
+                            ? '[&_path]:fill-[#DBDEE8]'
+                            : '[&_path]:fill-[#44464E]')
+                        }
+                      />
                     </button>
                     <button
                       onClick={handleOpenPluginModal}
@@ -922,13 +930,13 @@ const Settings = ({
               </div>
             </div>
             {/* OBS 모드 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <div
+              className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]"
+              onMouseEnter={() => setHoveredKey('obsMode')}
+              onMouseLeave={() => setHoveredKey(null)}
+            >
               <div
-                className={`flex flex-row justify-between items-center h-[40px] ${
-                  obsLoading
-                    ? 'pointer-events-none opacity-50'
-                    : 'cursor-pointer'
-                }`}
+                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleObsToggle}
               >
                 <p className="text-style-3 text-[#FFFFFF]">
@@ -948,11 +956,33 @@ const Settings = ({
                 >
                   {obsStatus.running
                     ? obsStatus.clientCount > 0
-                      ? `${t('settings.obsRunning')} · ${t('settings.obsClients', { count: obsStatus.clientCount })}`
+                      ? `${t('settings.obsRunning')} · ${t(
+                          'settings.obsClients',
+                          { count: obsStatus.clientCount },
+                        )}`
                       : t('settings.obsRunning')
                     : t('settings.obsStopped')}
                 </p>
                 <div className="flex items-center gap-[6px]">
+                  <button
+                    onClick={handleObsRegenerateToken}
+                    disabled={!obsStatus.running}
+                    className={
+                      'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-colors ' +
+                      (obsStatus.running
+                        ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
+                        : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
+                    }
+                  >
+                    <ResetIcon
+                      className={
+                        'w-[13px] h-[13px] -scale-x-100 ' +
+                        (obsStatus.running
+                          ? '[&_path]:fill-[#DBDEE8]'
+                          : '[&_path]:fill-[#44464E]')
+                      }
+                    />
+                  </button>
                   <button
                     onClick={handleObsCopyUrl}
                     disabled={!obsStatus.running}
@@ -960,27 +990,7 @@ const Settings = ({
                   >
                     {t('settings.obsCopyUrl')}
                   </button>
-                  <button
-                    onClick={() => setTokenRegenModalOpen(true)}
-                    disabled={!obsStatus.running}
-                    className={actionButtonClass(obsStatus.running)}
-                  >
-                    {t('settings.obsRegenToken')}
-                  </button>
                 </div>
-              </div>
-              <div
-                className={`flex flex-col gap-[2px] pb-[8px] pt-[2px] ${
-                  !obsStatus.running ? 'opacity-40' : ''
-                }`}
-                role="status"
-              >
-                <p className="text-style-2 text-[#8B8D97] leading-[1.4]">
-                  {t('settings.obsGuide')}
-                </p>
-                <p className="text-style-2 text-[#F59E0B] leading-[1.4]">
-                  {t('settings.obsOverlayHidden')}
-                </p>
               </div>
             </div>
             {/* 기타 설정 */}
@@ -1090,6 +1100,14 @@ const Settings = ({
               </span>
             </div>
           </div>
+        ) : hoveredKey === 'obsMode' ? (
+          <div className="relative w-full h-full">
+            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
+              <span className="mb-[15px] text-white text-[15px] font-medium">
+                {t('settings.obsGuide')}
+              </span>
+            </div>
+          </div>
         ) : (
           <FlaskIcon />
         )}
@@ -1130,12 +1148,6 @@ const Settings = ({
           onSave={handleSaveShortcuts}
         />
       )}
-      <ObsTokenRegenModal
-        isOpen={isTokenRegenModalOpen}
-        onClose={() => setTokenRegenModalOpen(false)}
-        onConfirm={handleObsRegenerateToken}
-        t={t}
-      />
     </div>
   );
 };

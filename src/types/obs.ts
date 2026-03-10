@@ -34,4 +34,5 @@ export interface ObsStatus {
   port: number;
   clientCount: number;
   token?: string;
+  localIp?: string;
 }
