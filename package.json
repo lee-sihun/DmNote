@@ -24,6 +24,9 @@
     "//": "버전 업데이트: patch(1.4.0->1.4.1), minor(1.4.0->1.5.0), major(1.4.0->2.0.0)",
     "sync-version": "node scripts/sync-version.js",
     "version": "npm run sync-version && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml README.md docs/readme_en.md docs/readme_zh-cn.md",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "contributors:add": "all-contributors add",
     "contributors:generate": "all-contributors generate"
   },
@@ -51,6 +54,7 @@
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
     "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.0.18",
     "all-contributors-cli": "^6.26.1",
     "autoprefixer": "^10.4.20",
     "babel-plugin-react-compiler": "^1.0.0",
@@ -60,6 +64,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "jsdom": "^28.1.0",
     "postcss": "^8.4.49",
     "rollup-plugin-analyzer": "^4.0.0",
     "rollup-plugin-visualizer": "^5.12.0",
@@ -67,7 +72,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.1.5",
-    "vite-plugin-svgr": "^4.5.0"
+    "vite-plugin-svgr": "^4.5.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.1",
