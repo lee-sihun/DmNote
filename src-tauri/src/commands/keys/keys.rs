@@ -69,6 +69,11 @@ pub fn positions_get(state: State<'_, AppState>) -> CmdResult<KeyPositions> {
 }
 
 #[tauri::command]
+pub fn keys_get_counters(state: State<'_, AppState>) -> CmdResult<KeyCounters> {
+    Ok(state.snapshot_key_counters())
+}
+
+#[tauri::command]
 pub fn keys_update(
     state: State<'_, AppState>,
     app: AppHandle,

@@ -104,6 +104,15 @@ const reset = await dmn.keys.resetAll();
 
 ## 카운터
 
+### getCounters()
+
+현재 누적 키 카운터 스냅샷을 조회합니다.
+
+```javascript
+const counters = await dmn.keys.getCounters();
+console.log("4key 카운터:", counters["4key"]);
+```
+
 ### setCounters(counters)
 
 모든 키의 카운트를 일괄 설정합니다.

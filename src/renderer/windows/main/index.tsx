@@ -5,6 +5,8 @@ import App from './App';
 import { I18nProvider } from '@contexts/I18nContext';
 import '@styles/global.css';
 
+window.__dmn_window_type = 'main';
+
 const container = document.getElementById('root');
 if (!container) throw new Error('Root container not found');
 

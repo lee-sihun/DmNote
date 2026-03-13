@@ -49,6 +49,17 @@ const unsub = dmn.keys.onRawInput(({ device, label, state }) => {
 
 ## Counter Events
 
+### `dmn.keys.getCounters(): Promise<KeyCounters>`
+
+Returns the current cumulative key counter snapshot.
+
+```typescript
+type KeyCounters = Record<string, Record<string, number>>;
+
+const counters = await dmn.keys.getCounters();
+console.log(counters["4key"]);
+```
+
 ### `dmn.keys.onCounterChanged(callback): Unsubscribe`
 
 <Callout type="warning">Overlay window only.</Callout>

@@ -58,6 +58,7 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
 export function useAppBootstrap() {
   useEffect(() => {
     let disposed = false;
+    const isOverlayWindow = window.__dmn_window_type === 'overlay';
     // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
     const counterDelayTimers = new Map<
       string,
@@ -297,9 +298,6 @@ export function useAppBootstrap() {
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));
       }),
-      window.api.keys.onCounterChanged(({ mode, key, count }) => {
-        scheduleCounterUpdate(mode, key, count);
-      }),
       window.api.keys.onCountersChanged((snapshot) => {
         clearCounterDelayTimers();
         if (getUndoRedoInProgress()) return;
@@ -389,6 +387,14 @@ export function useAppBootstrap() {
         }
       }),
     ];
+
+    if (isOverlayWindow) {
+      unsubscribers.push(
+        window.api.keys.onCounterChanged(({ mode, key, count }) => {
+          scheduleCounterUpdate(mode, key, count);
+        }),
+      );
+    }
 
     const handleWindowFocus = () => {
       refreshCursorSettings().catch(() => {});

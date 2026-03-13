@@ -94,8 +94,6 @@ export function useKeyManager() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
-  const statPositions = useStatItemStore((state) => state.positions);
-  const graphPositions = useGraphItemStore((state) => state.positions);
   const setKeyMappings = useKeyStore((state) => state.setKeyMappings);
   const setPositions = useKeyStore((state) => state.setPositions);
   const setLocalUpdateInProgress = useKeyStore(
@@ -788,14 +786,17 @@ export function useKeyManager() {
   ) => {
     setUndoRedoInProgress(true);
     try {
+      const currentKeyState = useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const targetState = action({
-        keyMappings,
-        positions,
-        statPositions,
-        graphPositions,
+      const targetState = await action({
+        keyMappings: currentKeyState.keyMappings,
+        positions: currentKeyState.positions,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
         pluginElements: currentPluginElements,
         layerGroups: currentLayerGroups,
       });

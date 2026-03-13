@@ -129,8 +129,12 @@ SettingToolProps) => {
     }
   };
 
-  const captureHistorySnapshot = () => {
+  const captureHistorySnapshot = async () => {
     const keyState = useKeyStore.getState();
+    const keyCounters = await window.api.keys
+      .getCounters()
+      .catch(() => getCounterSnapshot());
+
     return {
       keyMappings: keyState.keyMappings,
       positions: keyState.positions,
@@ -138,7 +142,7 @@ SettingToolProps) => {
       graphPositions: useGraphItemStore.getState().positions,
       pluginElements: usePluginDisplayElementStore.getState().elements,
       layerGroups: useLayerGroupStore.getState().layerGroups,
-      keyCounters: getCounterSnapshot(),
+      keyCounters,
       customTabs: keyState.customTabs,
       selectedKeyType: keyState.selectedKeyType,
     };
@@ -146,7 +150,7 @@ SettingToolProps) => {
 
   const handlePresetLoad = async () => {
     try {
-      const before = captureHistorySnapshot();
+      const before = await captureHistorySnapshot();
       const result = await window.api.presets.load();
       if (result?.success) {
         pushHistoryState({
@@ -205,7 +209,7 @@ SettingToolProps) => {
 
   const handlePresetLoadTab = async () => {
     try {
-      const before = captureHistorySnapshot();
+      const before = await captureHistorySnapshot();
       const result = await window.api.presets.loadTab();
       if (result?.success) {
         pushHistoryState({

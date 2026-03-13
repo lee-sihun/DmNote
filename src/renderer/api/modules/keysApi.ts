@@ -23,6 +23,7 @@ import type {
 
 export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),
+  getCounters: () => invoke<KeyCounters>('keys_get_counters'),
   update: (mappings: KeyMappings) =>
     invoke<KeyMappings>('keys_update', { mappings }),
   getPositions: () => invoke<KeyPositions>('positions_get'),

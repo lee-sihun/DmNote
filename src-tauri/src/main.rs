@@ -189,6 +189,7 @@ fn main() {
             commands::editor::note_tab::note_tab_clear,
             // 키 입력/설정
             commands::keys::keys::keys_get,
+            commands::keys::keys::keys_get_counters,
             commands::keys::keys::positions_get,
             commands::keys::keys::keys_update,
             commands::keys::keys::positions_update,

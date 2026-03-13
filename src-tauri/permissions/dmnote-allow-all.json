@@ -53,6 +53,7 @@
           "key_sound_set_volume",
           "key_sound_unload_soundpack",
           "keys_get",
+          "keys_get_counters",
           "keys_reset_all",
           "keys_reset_counters",
           "keys_reset_counters_mode",

@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { I18nProvider } from '@contexts/I18nContext';
 import '@styles/global.css';
 
+window.__dmn_window_type = 'overlay';
+
 async function bootstrap() {
   try {
     const { default: App } = await import('./App');
