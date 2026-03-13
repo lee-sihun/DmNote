@@ -16,7 +16,7 @@ import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
-import { getCounterSnapshot } from '@stores/signals/keyCounterSignals';
+import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { obsApi } from '@api/modules/obsApi';
 
 interface SettingToolProps {
@@ -133,7 +133,7 @@ SettingToolProps) => {
     const keyState = useKeyStore.getState();
     const keyCounters = await window.api.keys
       .getCounters()
-      .catch(() => getCounterSnapshot());
+      .catch(() => getCounterCacheSnapshot());
 
     return {
       keyMappings: keyState.keyMappings,

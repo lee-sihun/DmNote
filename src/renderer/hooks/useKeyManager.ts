@@ -792,7 +792,7 @@ export function useKeyManager() {
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
-      const targetState = await action({
+      const targetState = action({
         keyMappings: currentKeyState.keyMappings,
         positions: currentKeyState.positions,
         statPositions: currentStatPositions,

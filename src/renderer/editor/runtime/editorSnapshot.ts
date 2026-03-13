@@ -9,6 +9,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
+import { applyCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 // ----------------------------------------------------------------------------
@@ -109,7 +110,10 @@ export function applyRestoredStateToStores(state: RestoredState): void {
     useLayerGroupStore.getState().setLayerGroups(state.layerGroups);
   }
   if (state.keyCounters) {
-    applyCounterSnapshot(state.keyCounters);
+    applyCounterCacheSnapshot(state.keyCounters);
+    if (window.__dmn_window_type === 'overlay') {
+      applyCounterSnapshot(state.keyCounters);
+    }
   }
   useKeyStore.getState().setCustomTabs(state.customTabs);
   useKeyStore.setState({ selectedKeyType: state.selectedKeyType });

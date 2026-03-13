@@ -12,6 +12,10 @@ import {
   applyCounterSnapshot,
   setKeyCounter,
 } from '@stores/signals/keyCounterSignals';
+import {
+  applyCounterCacheSnapshot,
+  setCachedKeyCounter,
+} from '@stores/signals/keyCounterCache';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import type {
   SettingsDiff,
@@ -231,7 +235,10 @@ export function useAppBootstrap() {
         ...state,
         positions: bootstrap.graphPositions ?? {},
       }));
-      applyCounterSnapshot(bootstrap.keyCounters);
+      applyCounterCacheSnapshot(bootstrap.keyCounters);
+      if (isOverlayWindow) {
+        applyCounterSnapshot(bootstrap.keyCounters);
+      }
 
       // 레이어 그룹 로드
       window.api.layerGroups
@@ -300,8 +307,11 @@ export function useAppBootstrap() {
       }),
       window.api.keys.onCountersChanged((snapshot) => {
         clearCounterDelayTimers();
+        applyCounterCacheSnapshot(snapshot);
         if (getUndoRedoInProgress()) return;
-        applyCounterSnapshot(snapshot);
+        if (isOverlayWindow) {
+          applyCounterSnapshot(snapshot);
+        }
       }),
       window.api.keys.customTabs.onChanged(
         ({ customTabs, selectedKeyType }) => {
@@ -392,6 +402,12 @@ export function useAppBootstrap() {
       unsubscribers.push(
         window.api.keys.onCounterChanged(({ mode, key, count }) => {
           scheduleCounterUpdate(mode, key, count);
+        }),
+      );
+    } else {
+      unsubscribers.push(
+        window.api.keys.onCounterChanged(({ mode, key, count }) => {
+          setCachedKeyCounter(mode, key, count);
         }),
       );
     }
