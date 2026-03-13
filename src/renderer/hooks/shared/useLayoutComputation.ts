@@ -180,8 +180,8 @@ export function computeLayout(input: LayoutInput) {
         noteAlign === 'left'
           ? 0
           : noteAlign === 'right'
-            ? keyWidth - desiredNoteWidth
-            : (keyWidth - desiredNoteWidth) / 2;
+          ? keyWidth - desiredNoteWidth
+          : (keyWidth - desiredNoteWidth) / 2;
 
       return {
         trackKey: key,

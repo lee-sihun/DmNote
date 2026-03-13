@@ -1037,8 +1037,18 @@ impl AppState {
                                     }
                                 }
                                 if !emitted {
-                                    if let Err(err) = app_handle.emit("keys:state", &payload) {
+                                    if app_state.is_obs_mode_active() {
+                                        app_state.obs_bridge.broadcast_tauri_event(
+                                            "keys:state".to_string(),
+                                            payload.clone(),
+                                        );
+                                        emitted = true;
+                                    } else if let Err(err) =
+                                        app_handle.emit("keys:state", &payload)
+                                    {
                                         error!("failed to emit keys:state (fallback): {err}");
+                                    } else {
+                                        emitted = true;
                                     }
                                 }
                             }

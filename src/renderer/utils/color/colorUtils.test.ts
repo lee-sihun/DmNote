@@ -10,7 +10,9 @@ import {
 
 describe('isGradientColor', () => {
   it('gradient 객체를 감지', () => {
-    expect(isGradientColor({ type: 'gradient', top: '#fff', bottom: '#000' })).toBe(true);
+    expect(
+      isGradientColor({ type: 'gradient', top: '#fff', bottom: '#000' }),
+    ).toBe(true);
   });
 
   it('일반 문자열은 false', () => {
@@ -39,7 +41,9 @@ describe('normalizeColorInput', () => {
   });
 
   it('gradient 객체에서 top 색상 추출', () => {
-    expect(normalizeColorInput({ type: 'gradient', top: '#abc', bottom: '#def' })).toBe('#abc');
+    expect(
+      normalizeColorInput({ type: 'gradient', top: '#abc', bottom: '#def' }),
+    ).toBe('#abc');
   });
 });
 

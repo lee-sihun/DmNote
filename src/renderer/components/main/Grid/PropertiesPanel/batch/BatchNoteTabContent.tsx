@@ -141,9 +141,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
               value: 'right',
             },
           ]}
-          value={
-            getMixedValue((pos) => pos.noteAlignment, 'center').value
-          }
+          value={getMixedValue((pos) => pos.noteAlignment, 'center').value}
           onChange={(value) =>
             handleBatchStyleChangeComplete(
               'noteAlignment',
