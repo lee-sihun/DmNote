@@ -13,3 +13,20 @@ src-tauri/webview2-fixed-runtime/*
 
 .mcp.json
 mcp.json
+
+# --- C# / Visual Studio (UWP) ---
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+*.dbmdl
+*.jfm
+AppPackages/
+BundleArtifacts/
+*.appxupload
+*.msixupload
+*.appxbundle
+*.msixbundle
+*.pfx
+Package.StoreAssociation.xml
