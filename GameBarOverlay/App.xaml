@@ -1,7 +1,9 @@
-﻿<Application
+<Application
     x:Class="GameBarOverlay.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:GameBarOverlay">
-
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    <Application.Resources>
+        <muxc:XamlControlsResources />
+    </Application.Resources>
 </Application>

@@ -4,7 +4,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="GameBarOverlay.csproj">
+  <Project Path="GameBarOverlay.csproj" Id="591b01bf-71b2-4e7a-9ad2-97bf8ec4c490">
     <Platform Solution="*|arm64" Project="arm64" />
     <Platform Solution="*|x64" Project="x64" />
     <Platform Solution="*|x86" Project="x86" />

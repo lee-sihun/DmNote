@@ -1,84 +1,126 @@
-﻿using System;
+using System;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
+using Microsoft.Gaming.XboxGameBar;
 
 namespace GameBarOverlay
 {
-    /// <summary>
-    /// Provides application-specific behavior to supplement the default <see cref="Application"/> class.
-    /// </summary>
     public sealed partial class App : Application
     {
-        /// <summary>
-        /// Initializes the singleton application object. This is the first line of authored code
-        /// executed, and as such is the logical equivalent of main() or WinMain().
-        /// </summary>
+        private XboxGameBarWidget widget;
+
         public App()
         {
+            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "00FFFFFF");
             InitializeComponent();
-
             Suspending += OnSuspending;
         }
 
-        /// <inheritdoc/>
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
-            // Do not repeat app initialization when the Window already has content,
-            // just ensure that the window is active.
-            if (Window.Current.Content is not Frame rootFrame)
+            if (e.PrelaunchActivated)
             {
-                // Create a Frame to act as the navigation context and navigate to the first page
-                rootFrame = new Frame();
-                rootFrame.NavigationFailed += OnNavigationFailed;
-
-                if (e.PreviousExecutionState == ApplicationExecutionState.Terminated)
-                {
-                    // TODO: Load state from previously suspended application
-                }
-
-                // Place the frame in the current Window
-                Window.Current.Content = rootFrame;
+                return;
             }
 
-            if (e.PrelaunchActivated == false)
+            var rootFrame = EnsureRootFrame();
+            if (rootFrame.Content == null)
             {
-                if (rootFrame.Content == null)
-                {
-                    // When the navigation stack isn't restored navigate to the first page, configuring
-                    // the new page by passing required information as a navigation parameter.
-                    rootFrame.Navigate(typeof(MainPage), e.Arguments);
-                }
-
-                // Ensure the current window is active
-                Window.Current.Activate();
+                rootFrame.Navigate(typeof(MainPage));
             }
+
+            Window.Current.Activate();
         }
 
-        /// <summary>
-        /// Invoked when Navigation to a certain page fails.
-        /// </summary>
-        /// <param name="sender">The Frame which failed navigation.</param>
-        /// <param name="e">Details about the navigation failure.</param>
+        protected override void OnActivated(IActivatedEventArgs e)
+        {
+            XboxGameBarWidgetActivatedEventArgs widgetArgs = null;
+            if (e.Kind == ActivationKind.Protocol)
+            {
+                var protocolArgs = e as IProtocolActivatedEventArgs;
+                if (
+                    protocolArgs != null
+                    && protocolArgs.Uri != null
+                    && string.Equals(
+                        protocolArgs.Uri.Scheme,
+                        "ms-gamebarwidget",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    widgetArgs = e as XboxGameBarWidgetActivatedEventArgs;
+                }
+            }
+
+            if (widgetArgs == null)
+            {
+                base.OnActivated(e);
+                return;
+            }
+
+            NavigateToWidgetShell(widgetArgs);
+        }
+
+        private void NavigateToWidgetShell(XboxGameBarWidgetActivatedEventArgs widgetArgs)
+        {
+            var rootFrame = EnsureRootFrame();
+            if (widgetArgs.IsLaunchActivation || widget == null)
+            {
+                widget = new XboxGameBarWidget(widgetArgs, Window.Current.CoreWindow, rootFrame);
+                Window.Current.Closed -= OnWidgetWindowClosed;
+                Window.Current.Closed += OnWidgetWindowClosed;
+            }
+
+            var page = rootFrame.Content as MainPage;
+            if (page == null)
+            {
+                rootFrame.Navigate(typeof(MainPage), widget);
+            }
+            else
+            {
+                page.AttachWidget(widget);
+            }
+
+            page = rootFrame.Content as MainPage;
+            if (page != null)
+            {
+                page.HandleActivation();
+            }
+
+            Window.Current.Activate();
+        }
+
+        private Frame EnsureRootFrame()
+        {
+            if (Window.Current.Content is Frame rootFrame)
+            {
+                return rootFrame;
+            }
+
+            rootFrame = new Frame();
+            rootFrame.NavigationFailed += OnNavigationFailed;
+            Window.Current.Content = rootFrame;
+            return rootFrame;
+        }
+
+        private void OnWidgetWindowClosed(object sender, Windows.UI.Core.CoreWindowEventArgs e)
+        {
+            widget = null;
+            Window.Current.Closed -= OnWidgetWindowClosed;
+        }
+
         private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
         {
             throw new Exception($"Failed to load page '{e.SourcePageType.FullName}'.");
         }
 
-        /// <summary>
-        /// Invoked when application execution is being suspended. Application state is saved
-        /// without knowing whether the application will be terminated or resumed with the contents
-        /// of memory still intact.
-        /// </summary>
-        /// <param name="sender">The source of the suspend request.</param>
-        /// <param name="e">Details about the suspend request.</param>
         private void OnSuspending(object sender, SuspendingEventArgs e)
         {
-            SuspendingDeferral deferral = e.SuspendingOperation.GetDeferral();
-
-            // TODO: Save application state and stop any background activity
+            var deferral = e.SuspendingOperation.GetDeferral();
+            widget = null;
             deferral.Complete();
         }
     }

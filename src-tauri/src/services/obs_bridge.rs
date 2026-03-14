@@ -19,6 +19,9 @@ use crate::models::obs::{
     make_envelope, HelloAckPayload, InvokeRequestPayload, ObsBroadcast, ObsEnvelope, ObsStatus,
 };
 
+/// 로컬 IP 조회 실패 시 Game Bar가 사용할 loopback fallback host
+const DEFAULT_LOOPBACK_HOST: &str = "127.0.0.1";
+
 /// OBS 클라이언트에서 실행 불가능한 커맨드 목록
 /// `|`로 끝나는 항목은 prefix 매칭 (예: "plugin:window|" → "plugin:window|*" 전부 차단)
 const DENIED_WS_COMMANDS: &[&str] = &[
@@ -400,19 +403,33 @@ impl ObsBridgeService {
             .next()
             .and_then(|line| line.split_whitespace().nth(1))
             .unwrap_or("/");
+        let route = path.split('?').next().unwrap_or(path);
+        let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
+
+        if route == "/gamebar" {
+            self.handle_gamebar_entry(stream).await;
+            return;
+        }
+
+        if route == "/gamebar/bootstrap.json" {
+            self.handle_gamebar_bootstrap(stream).await;
+            return;
+        }
 
         // dev 모드: Vite dev server로 리다이렉트
         let dev_url = self.dev_url.read().clone();
         if let Some(dev_base) = &dev_url {
-            let obs_path = if path == "/" || path.is_empty() {
-                "/obs/index.html"
+            let is_root_route = route == "/" || route.is_empty();
+            let redirect_path = if is_root_route {
+                if query.is_empty() {
+                    "/obs/index.html".to_string()
+                } else {
+                    format!("/obs/index.html?{query}")
+                }
+            } else if path.starts_with("/obs/") {
+                path.to_string()
             } else {
-                path
-            };
-            let redirect_path = if obs_path.starts_with("/obs/") {
-                obs_path.to_string()
-            } else {
-                format!("/obs{obs_path}")
+                format!("/obs{path}")
             };
             // WS 연결에 필요한 port/token을 query param으로 전달
             // (Vite dev server 포트 ≠ OBS bridge 포트)
@@ -437,10 +454,10 @@ impl ObsBridgeService {
         }
 
         // 경로 정규화: "/" → "obs/index.html"
-        let normalized = if path == "/" || path.is_empty() {
+        let normalized = if route == "/" || route.is_empty() {
             "obs/index.html"
         } else {
-            path.trim_start_matches('/')
+            route.trim_start_matches('/')
         };
 
         // 경로 탐색 공격 방지 (.., 절대경로, 드라이브 경로 거부)
@@ -488,6 +505,50 @@ impl ObsBridgeService {
         let _ = stream
             .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;
+    }
+
+    async fn handle_gamebar_entry(&self, stream: &mut TcpStream) {
+        let location = self.build_gamebar_target_url();
+        let response = format!(
+            "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+    }
+
+    async fn handle_gamebar_bootstrap(&self, stream: &mut TcpStream) {
+        let port = *self.port.read();
+        let token = self.session_token.read().clone();
+        let body = serde_json::json!({
+            "running": self.is_running(),
+            "port": port,
+            "token": token,
+            "url": self.build_gamebar_target_url(),
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+    }
+
+    /// Game Bar 셸이 최종적으로 열어야 할 오버레이 진입 URL 구성
+    fn build_gamebar_target_url(&self) -> String {
+        let port = *self.port.read();
+        let token = self.session_token.read().clone();
+        let host = self.resolve_gamebar_access_host();
+        format!("http://{host}:{port}/?host={host}&port={port}&token={token}")
+    }
+
+    /// Game Bar WebView가 접근할 host 결정
+    /// 우선 로컬 네트워크 IP를 사용하고, 실패 시 loopback으로 fallback
+    fn resolve_gamebar_access_host(&self) -> String {
+        local_ip_address::local_ip()
+            .ok()
+            .map(|ip| ip.to_string())
+            .filter(|host| !host.is_empty())
+            .unwrap_or_else(|| DEFAULT_LOOPBACK_HOST.to_string())
     }
 
     /// Tauri 임베딩 에셋 조회
