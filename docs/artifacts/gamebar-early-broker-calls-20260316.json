@@ -1,0 +1,291 @@
+{
+  "attached": true,
+  "events": [
+    {
+      "type": "context",
+      "hrCreate": 0,
+      "hrService": 0,
+      "hrFinal": 0,
+      "hrHidden1": 0,
+      "hrHidden2": 0,
+      "finalPtr": "0x1bcbc1969d8",
+      "hidden1": "0x1bcbc196968",
+      "hidden2": "0x1bcbc1966c8"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:6,hidden1:6",
+      "address": "0x7ffeeba37c20"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:7,hidden1:7",
+      "address": "0x7ffeeba37c30"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:8",
+      "address": "0x7ffeeba37c40"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:9",
+      "address": "0x7ffeeba37c50"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:10",
+      "address": "0x7ffeeba37c60"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:11",
+      "address": "0x7ffeeba37c70"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:12",
+      "address": "0x7ffeeba37c80"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:13",
+      "address": "0x7ffeeba37c90"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:14",
+      "address": "0x7ffeeba37ca0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:15",
+      "address": "0x7ffeeba37cb0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:16",
+      "address": "0x7ffeeba37cc0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:17",
+      "address": "0x7ffeeba37cd0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:18",
+      "address": "0x7ffeeba37ce0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:19",
+      "address": "0x7ffeeba37cf0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:20",
+      "address": "0x7ffeeba37d00"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:21,hidden2:21",
+      "address": "0x7ffeeba37d10"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:22",
+      "address": "0x7ffeeba37d20"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:23",
+      "address": "0x7ffeeba37d30"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:24",
+      "address": "0x7ffeeba37d40"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:25",
+      "address": "0x7ffeeba37d50"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:26",
+      "address": "0x7ffeeba37d60"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:27",
+      "address": "0x7ffeeba37d70"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:28",
+      "address": "0x7ffeeba37d80"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:29",
+      "address": "0x7ffeeba37d90"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:30",
+      "address": "0x7ffeeba37da0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:31",
+      "address": "0x7ffeeba37db0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:32",
+      "address": "0x7ffeeba37dc0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:33",
+      "address": "0x7ffeeba37dd0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:34",
+      "address": "0x7ffeeba37de0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:35",
+      "address": "0x7ffeeba37df0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:36",
+      "address": "0x7ffeeba37e00"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:37",
+      "address": "0x7ffeeba37e10"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:38",
+      "address": "0x7ffeeba37e20"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:39",
+      "address": "0x7ffeeba37e30"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:40",
+      "address": "0x7ffeeba37e40"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:41",
+      "address": "0x7ffeeba37e50"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:42",
+      "address": "0x7ffeeba37e60"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:43",
+      "address": "0x7ffeeba37e70"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:44",
+      "address": "0x7ffeeba37e80"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:45",
+      "address": "0x7ffeeba37e90"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:46",
+      "address": "0x7ffeeba37ea0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:47",
+      "address": "0x7ffeeba37eb0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:48",
+      "address": "0x7ffeeba37ec0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:49",
+      "address": "0x7ffeeba37ed0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:50",
+      "address": "0x7ffeeba37ee0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:51",
+      "address": "0x7ffeeba37ef0"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:52",
+      "address": "0x7ffeeba37f00"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:53",
+      "address": "0x7ffeeba37f10"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:54",
+      "address": "0x7ffeeba37f20"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:55",
+      "address": "0x7ffeeba37f30"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:56",
+      "address": "0x7ffeeba37f40"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:57",
+      "address": "0x7ffeeba37f50"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:58",
+      "address": "0x7ffeeba37f60"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:59",
+      "address": "0x7ffeeba37f70"
+    },
+    {
+      "type": "hook-install",
+      "labels": "final:60",
+      "address": "0x7ffeeba37f80"
+    }
+  ]
+}

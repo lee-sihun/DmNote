@@ -1,0 +1,260 @@
+﻿{
+    "analyzedAt":  "2026-03-15T17:17:11.8873176+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-external-hwnd-20260315-171701",
+    "probeWindows":  [
+                         {
+                             "capturedAt":  "2026-03-15T17:17:04.5660107+09:00",
+                             "processId":  28936,
+                             "title":  "GameBar External HWND Probe 20260315-171701 gamebarftserver",
+                             "hwnd":  "0x110782",
+                             "style":  "0x17010000",
+                             "exStyle":  "0x00050008",
+                             "visible":  true,
+                             "fullscreen":  true
+                         },
+                         {
+                             "capturedAt":  "2026-03-15T17:17:09.1540996+09:00",
+                             "processId":  10560,
+                             "title":  "GameBar External HWND Probe 20260315-171701 gamebar",
+                             "hwnd":  "0x1707C4",
+                             "style":  "0x17010000",
+                             "exStyle":  "0x00050008",
+                             "visible":  true,
+                             "fullscreen":  true
+                         }
+                     ],
+    "targetProcesses":  [
+                            "GameBarFTServer.exe",
+                            "GameBar.exe"
+                        ],
+    "runs":  [
+                 {
+                     "processName":  "GameBarFTServer.exe",
+                     "hwnd":  "0x110782",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:17:04.5660107+09:00",
+                                         "processId":  28936,
+                                         "title":  "GameBar External HWND Probe 20260315-171701 gamebarftserver",
+                                         "hwnd":  "0x110782",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "createWindowManagerHr":  "0x00000000",
+                     "rawBefore":  {
+                                       "label":  "before",
+                                       "hwnd":  "0x110782",
+                                       "isWindow":  true,
+                                       "bandKnown":  true,
+                                       "band":  1,
+                                       "style":  "0x17010000",
+                                       "exStyle":  "0x00050008",
+                                       "visible":  true
+                                   },
+                     "ftBefore":  {
+                                      "style":  {
+                                                    "hr":  "0x00000000",
+                                                    "value":  "0x17010000"
+                                                },
+                                      "exStyle":  {
+                                                      "hr":  "0x00000000",
+                                                      "value":  "0x00050008"
+                                                  }
+                                  },
+                     "showWindowHideHr":  "0x00000000",
+                     "rawAfterHide":  {
+                                          "label":  "afterHide",
+                                          "hwnd":  "0x110782",
+                                          "isWindow":  false,
+                                          "bandKnown":  false,
+                                          "band":  null,
+                                          "style":  "0x00000000",
+                                          "exStyle":  "0x00000000",
+                                          "visible":  false
+                                      },
+                     "showWindowShowHr":  "0x00000000",
+                     "rawAfterShow":  {
+                                          "label":  "afterShow",
+                                          "hwnd":  "0x110782",
+                                          "isWindow":  true,
+                                          "bandKnown":  true,
+                                          "band":  1,
+                                          "style":  "0x17010000",
+                                          "exStyle":  "0x00050008",
+                                          "visible":  true
+                                      },
+                     "enableClickThroughHr":  "0x00000000",
+                     "rawAfterEnableClickThrough":  {
+                                                        "label":  "afterEnableClickThrough",
+                                                        "hwnd":  "0x110782",
+                                                        "isWindow":  true,
+                                                        "bandKnown":  true,
+                                                        "band":  1,
+                                                        "style":  "0x17010000",
+                                                        "exStyle":  "0x000D0028",
+                                                        "visible":  true
+                                                    },
+                     "disableClickThroughHr":  "0x00000000",
+                     "rawAfterDisableClickThrough":  {
+                                                         "label":  "afterDisableClickThrough",
+                                                         "hwnd":  "0x110782",
+                                                         "isWindow":  true,
+                                                         "bandKnown":  true,
+                                                         "band":  1,
+                                                         "style":  "0x17010000",
+                                                         "exStyle":  "0x00050008",
+                                                         "visible":  true
+                                                     },
+                     "setWindowLongTransparentHr":  "0x00000000",
+                     "rawAfterSetTransparent":  {
+                                                    "label":  "afterSetTransparent",
+                                                    "hwnd":  "0x110782",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050028",
+                                                    "visible":  true
+                                                },
+                     "restoreWindowLongHr":  "0x00000000",
+                     "rawAfterRestoreExStyle":  {
+                                                    "label":  "afterRestoreExStyle",
+                                                    "hwnd":  "0x110782",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050008",
+                                                    "visible":  true
+                                                },
+                     "ftAfter":  {
+                                     "style":  {
+                                                   "hr":  "0x00000000",
+                                                   "value":  "0x17010000"
+                                               },
+                                     "exStyle":  {
+                                                     "hr":  "0x00000000",
+                                                     "value":  "0x00050008"
+                                                 },
+                                     "baselineExStyle":  "0x00050008"
+                                 },
+                     "exception":  null
+                 },
+                 {
+                     "processName":  "GameBar.exe",
+                     "hwnd":  "0x1707C4",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:17:09.1540996+09:00",
+                                         "processId":  10560,
+                                         "title":  "GameBar External HWND Probe 20260315-171701 gamebar",
+                                         "hwnd":  "0x1707C4",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "createWindowManagerHr":  "0x00000000",
+                     "rawBefore":  {
+                                       "label":  "before",
+                                       "hwnd":  "0x1707c4",
+                                       "isWindow":  true,
+                                       "bandKnown":  true,
+                                       "band":  1,
+                                       "style":  "0x17010000",
+                                       "exStyle":  "0x00050008",
+                                       "visible":  true
+                                   },
+                     "ftBefore":  {
+                                      "style":  {
+                                                    "hr":  "0x00000000",
+                                                    "value":  "0x17010000"
+                                                },
+                                      "exStyle":  {
+                                                      "hr":  "0x00000000",
+                                                      "value":  "0x00050008"
+                                                  }
+                                  },
+                     "showWindowHideHr":  "0x00000000",
+                     "rawAfterHide":  {
+                                          "label":  "afterHide",
+                                          "hwnd":  "0x1707c4",
+                                          "isWindow":  false,
+                                          "bandKnown":  false,
+                                          "band":  null,
+                                          "style":  "0x00000000",
+                                          "exStyle":  "0x00000000",
+                                          "visible":  false
+                                      },
+                     "showWindowShowHr":  "0x00000000",
+                     "rawAfterShow":  {
+                                          "label":  "afterShow",
+                                          "hwnd":  "0x1707c4",
+                                          "isWindow":  true,
+                                          "bandKnown":  true,
+                                          "band":  1,
+                                          "style":  "0x17010000",
+                                          "exStyle":  "0x00050008",
+                                          "visible":  true
+                                      },
+                     "enableClickThroughHr":  "0x00000000",
+                     "rawAfterEnableClickThrough":  {
+                                                        "label":  "afterEnableClickThrough",
+                                                        "hwnd":  "0x1707c4",
+                                                        "isWindow":  true,
+                                                        "bandKnown":  true,
+                                                        "band":  1,
+                                                        "style":  "0x17010000",
+                                                        "exStyle":  "0x000D0028",
+                                                        "visible":  true
+                                                    },
+                     "disableClickThroughHr":  "0x00000000",
+                     "rawAfterDisableClickThrough":  {
+                                                         "label":  "afterDisableClickThrough",
+                                                         "hwnd":  "0x1707c4",
+                                                         "isWindow":  true,
+                                                         "bandKnown":  true,
+                                                         "band":  1,
+                                                         "style":  "0x17010000",
+                                                         "exStyle":  "0x00050008",
+                                                         "visible":  true
+                                                     },
+                     "setWindowLongTransparentHr":  "0x00000000",
+                     "rawAfterSetTransparent":  {
+                                                    "label":  "afterSetTransparent",
+                                                    "hwnd":  "0x1707c4",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050028",
+                                                    "visible":  true
+                                                },
+                     "restoreWindowLongHr":  "0x00000000",
+                     "rawAfterRestoreExStyle":  {
+                                                    "label":  "afterRestoreExStyle",
+                                                    "hwnd":  "0x1707c4",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050008",
+                                                    "visible":  true
+                                                },
+                     "ftAfter":  {
+                                     "style":  {
+                                                   "hr":  "0x00000000",
+                                                   "value":  "0x17010000"
+                                               },
+                                     "exStyle":  {
+                                                     "hr":  "0x00000000",
+                                                     "value":  "0x00050008"
+                                                 },
+                                     "baselineExStyle":  "0x00050008"
+                                 },
+                     "exception":  null
+                 }
+             ]
+}

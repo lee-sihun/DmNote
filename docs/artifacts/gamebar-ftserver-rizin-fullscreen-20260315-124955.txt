@@ -1,0 +1,219 @@
+﻿captured_at=2026-03-15 12:50:01 +09:00
+binary_path=C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe
+target_functions=0x140002bb0,0x1400828f0
+
+[{"offset":5368720304,"name":"fcn.140002bb0","size":354,"is-pure":false,"realsz":354,"noreturn":false,"stackframe":152,"calltype":"ms","cost":129,"cc":11,"loops":3,"bits":64,"type":"fcn","nbbs":16,"edges":25,"ebbs":1,"signature":"fcn.140002bb0(uintmax_t arg2, int64_t arg3);","minbound":5368720304,"maxbound":5368720658,"callrefs":[{"from":5368720336,"to":5369414944,"type":"CALL"},{"from":5368720345,"to":5369414936,"type":"CALL"},{"from":5368720369,"to":5369414928,"type":"CALL"},{"from":5368720406,"to":5369416112,"type":"CALL"},{"from":5368720425,"to":5369414920,"type":"CALL"},{"from":5368720455,"to":5368776624,"type":"CALL"},{"from":5368720470,"to":5369237968,"type":"CALL"},{"from":5368720491,"to":5369414912,"type":"CALL"},{"from":5368720518,"to":5369417480,"type":"CALL"},{"from":5368720617,"to":5369223072,"type":"CALL"},{"from":5368720633,"to":5368720637,"type":"CODE"},{"from":5368720653,"to":5368720462,"type":"CODE"}],"datarefs":[{"from":5368720315,"to":5369929792,"type":"DATA"},{"from":5368720382,"to":5369434104,"type":"DATA"},{"from":5368720443,"to":5369435072,"type":"DATA"},{"from":5368720532,"to":5369439296,"type":"DATA"},{"from":5368720543,"to":5369929880,"type":"DATA"}],"codexrefs":[{"from":5368720633,"to":5368720637,"type":"CODE"},{"from":5368720653,"to":5368720462,"type":"CODE"},{"from":5368725607,"to":5368720304,"type":"CALL"},{"from":5369244301,"to":5368720304,"type":"CALL"}],"dataxrefs":[],"indegree":4,"outdegree":10,"nlocals":14,"nargs":2,"stackvars":[{"name":"bIgnoreCase","arg":false,"type":"BOOL","storage":{"type":"stack","stack":-120}},{"name":"var_70h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-112}},{"name":"var_68h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-104}},{"name":"var_60h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-96}},{"name":"lpRect","arg":false,"type":"LPRECT","storage":{"type":"stack","stack":-88}},{"name":"var_54h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-84}},{"name":"var_50h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-80}},{"name":"var_4ch","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-76}},{"name":"lpmi","arg":false,"type":"LPMONITORINFO","storage":{"type":"stack","stack":-72}},{"name":"var_44h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-68}},{"name":"var_40h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-64}},{"name":"var_3ch","arg":false,"type":"const char *","storage":{"type":"stack","stack":-60}},{"name":"var_20h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-32}},{"name":"var_8h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":8}}],"regvars":[{"name":"arg3","arg":true,"type":"int64_t","storage":{"type":"reg","reg":"r8"}},{"name":"arg2","arg":true,"type":"uintmax_t","storage":{"type":"reg","reg":"rdx"}}]}]
+[{"offset":5369243888,"name":"fcn.1400828f0","size":696,"is-pure":false,"realsz":691,"noreturn":false,"stackframe":168,"calltype":"ms","cost":253,"cc":27,"loops":1,"bits":64,"type":"fcn","nbbs":39,"edges":53,"ebbs":3,"signature":"fcn.1400828f0(int64_t arg1);","minbound":5369243888,"maxbound":5369244584,"callrefs":[{"from":5369243985,"to":5369243987,"type":"CODE"},{"from":5369243985,"to":5369243992,"type":"CODE"},{"from":5369243985,"to":5369244097,"type":"CODE"},{"from":5369243985,"to":5369244125,"type":"CODE"},{"from":5369243985,"to":5369244519,"type":"CODE"},{"from":5369243985,"to":5369244541,"type":"CODE"},{"from":5369243987,"to":5369244519,"type":"CODE"},{"from":5369244066,"to":5368722992,"type":"CALL"},{"from":5369244087,"to":5368774320,"type":"CALL"},{"from":5369244092,"to":5369244542,"type":"CODE"},{"from":5369244114,"to":5368743248,"type":"CALL"},{"from":5369244120,"to":5369244519,"type":"CODE"},{"from":5369244142,"to":5369416160,"type":"CALL"},{"from":5369244171,"to":5369416144,"type":"CALL"},{"from":5369244201,"to":5369223072,"type":"CALL"},{"from":5369244206,"to":5369244489,"type":"CODE"},{"from":5369244225,"to":5369414952,"type":"CALL"},{"from":5369244244,"to":5368720912,"type":"CALL"},{"from":5369244301,"to":5368720304,"type":"CALL"},{"from":5369244317,"to":5369244321,"type":"CODE"},{"from":5369244324,"to":5369416264,"type":"CALL"},{"from":5369244373,"to":5369223072,"type":"CALL"},{"from":5369244387,"to":5369416232,"type":"CALL"},{"from":5369244398,"to":5368777440,"type":"CALL"},{"from":5369244409,"to":5369238628,"type":"CALL"},{"from":5369244443,"to":5369247584,"type":"CALL"},{"from":5369244449,"to":5369244489,"type":"CODE"},{"from":5369244458,"to":5369223072,"type":"CALL"},{"from":5369244472,"to":5369416232,"type":"CALL"},{"from":5369244483,"to":5368777440,"type":"CALL"},{"from":5369244506,"to":5368743248,"type":"CALL"},{"from":5369244512,"to":5369244519,"type":"CODE"},{"from":5369244534,"to":5369238044,"type":"CALL"},{"from":5369244539,"to":5369244542,"type":"CODE"},{"from":5369244550,"to":5369237968,"type":"CALL"}],"datarefs":[{"from":5369243919,"to":5369929792,"type":"DATA"},{"from":5369243968,"to":5368709120,"type":"DATA"},{"from":5369244182,"to":5369442384,"type":"DATA"},{"from":5369244194,"to":5369929880,"type":"DATA"},{"from":5369244343,"to":5369929880,"type":"DATA"},{"from":5369244366,"to":5369442512,"type":"DATA"},{"from":5369244418,"to":5369247584,"type":"DATA"},{"from":5369244451,"to":5369442640,"type":"DATA"}],"codexrefs":[{"from":5368741749,"to":5369243888,"type":"CALL"},{"from":5369243985,"to":5369243987,"type":"CODE"},{"from":5369243985,"to":5369243992,"type":"CODE"},{"from":5369243985,"to":5369244097,"type":"CODE"},{"from":5369243985,"to":5369244125,"type":"CODE"},{"from":5369243985,"to":5369244519,"type":"CODE"},{"from":5369243985,"to":5369244541,"type":"CODE"},{"from":5369243987,"to":5369244519,"type":"CODE"},{"from":5369244092,"to":5369244542,"type":"CODE"},{"from":5369244120,"to":5369244519,"type":"CODE"},{"from":5369244206,"to":5369244489,"type":"CODE"},{"from":5369244317,"to":5369244321,"type":"CODE"},{"from":5369244449,"to":5369244489,"type":"CODE"},{"from":5369244512,"to":5369244519,"type":"CODE"},{"from":5369244539,"to":5369244542,"type":"CODE"}],"dataxrefs":[{"from":5368741721,"to":5369243888,"type":"DATA"}],"indegree":15,"outdegree":21,"nlocals":9,"nargs":1,"stackvars":[{"name":"var_88h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-136}},{"name":"var_80h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-128}},{"name":"var_78h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-120}},{"name":"var_70h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-112}},{"name":"var_68h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-104}},{"name":"var_58h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-88}},{"name":"var_50h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-80}},{"name":"var_30h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-48}},{"name":"var_28h","arg":false,"type":"int64_t","storage":{"type":"stack","stack":-40}}],"regvars":[{"name":"arg1","arg":true,"type":"int64_t","storage":{"type":"reg","reg":"rcx"}}]}]
+            [31m[31m; CALL XREF from fcn.1400036a0 @ [31m0x140004067[31m[0m
+            [31m[31m; CALL XREF from fcn.1400828f0 @ [31m0x140082a8d[31m[0m
+[36m┌[0m [31m[31mfcn.140002bb0[0m(uintmax_t arg2, int64_t arg3);
+[36m│[0m           [37m; arg uintmax_t arg2 @ rdx[0m
+[36m│[0m           [37m; arg int64_t arg3 @ r8[0m
+[36m│[0m           [37m; var BOOL bIgnoreCase @ stack - 0x78[0m
+[36m│[0m           [37m; var int64_t var_70h @ stack - 0x70[0m
+[36m│[0m           [37m; var int64_t var_68h @ stack - 0x68[0m
+[36m│[0m           [37m; var int64_t var_60h @ stack - 0x60[0m
+[36m│[0m           [37m; var LPRECT lpRect @ stack - 0x58[0m
+[36m│[0m           [37m; var int64_t var_54h @ stack - 0x54[0m
+[36m│[0m           [37m; var int64_t var_50h @ stack - 0x50[0m
+[36m│[0m           [37m; var int64_t var_4ch @ stack - 0x4c[0m
+[36m│[0m           [37m; var LPMONITORINFO lpmi @ stack - 0x48[0m
+[36m│[0m           [37m; var int64_t var_44h @ stack - 0x44[0m
+[36m│[0m           [37m; var int64_t var_40h @ stack - 0x40[0m
+[36m│[0m           [37m; var const char *var_3ch @ stack - 0x3c[0m
+[36m│[0m           [37m; var int64_t var_20h @ stack - 0x20[0m
+[36m│[0m           [37m; var int64_t var_8h @ stack + 0x8[0m
+[36m│[0m           [32m0x140002bb0[0m      [35mpush[0m[37m  [0m[36mrbx[0m[0m[0m
+[36m│[0m           [32m0x140002bb2[0m      [35mpush[0m[37m  [0m[36mrsi[0m[0m[0m
+[36m│[0m           [32m0x140002bb3[0m      [35mpush[0m[37m  [0m[36mrdi[0m[0m[0m
+[36m│[0m           [32m0x140002bb4[0m      [33msub[0m[37m   [0m[36mrsp[0m[37m, [0m[33m0x80[0m[0m[0m
+[36m│[0m           [32m0x140002bbb[0m      [37mmov[0m[37m   [0m[36mrax[0m[37m, [0m[37mqword[0m[37m [[0m[33mdata.14012a040[0m[37m][0m[0m[31m         ; [[31m0x14012a040[31m:8]=0x2b992ddfa232[31m ; "2\xa2\xdf-\x99+"[0m
+[36m│[0m           [32m0x140002bc2[0m      [36mxor[0m[37m   [0m[36mrax[0m[37m, [0m[36mrsp[0m[0m[0m
+[36m│[0m           [32m0x140002bc5[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m20h[0m[37m], [0m[36mrax[0m[0m[0m
+[36m│[0m           [32m0x140002bca[0m      [37mmov[0m[37m   [0m[36mrdi[0m[37m, [0m[36mr8[0m[0m[0m                             [34m; arg3[0m
+[36m│[0m           [32m0x140002bcd[0m      [37mmov[0m[37m   [0m[36mrsi[0m[37m, [0m[36mrdx[0m[0m[0m                            [34m; arg2[0m
+[36m│[0m           [32m0x140002bd0[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_GetDesktopWindow[0m[37m][0m[0m[31m ; [[31m0x1400ac520[31m:8]=0x12771c[0m[31m ; HWND GetDesktopWindow(void)[0m
+[36m│[0m           [32m0x140002bd6[0m      [37mmov[0m[37m   [0m[36mrbx[0m[37m, [0m[36mrax[0m[0m[0m
+[36m│[0m           [32m0x140002bd9[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_GetShellWindow[0m[37m][0m[0m[31m ; [[31m0x1400ac518[31m:8]=0x127730[31m ; "0w\U00000012"[0m[31m ; HWND GetShellWindow(void)[0m
+[36m│[0m           [32m0x140002bdf[0m      [36mtest[0m[37m  [0m[36mrsi[0m[37m, [0m[36mrsi[0m[0m[0m
+[36m│[0m       [36m┌[0m[36m─[0m[36m<[0m [32m0x140002be2[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140002be4[0m      [36mcmp[0m[37m   [0m[36mrsi[0m[37m, [0m[36mrbx[0m[0m[0m
+[36m│[0m      [36m┌[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002be7[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140002be9[0m      [36mcmp[0m[37m   [0m[36mrsi[0m[37m, [0m[36mrax[0m[0m[0m
+[36m│[0m     [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002bec[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140002bee[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; HWND hWnd[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140002bf1[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_IsWindowVisible[0m[37m][0m[0m[31m ; [[31m0x1400ac510[31m:8]=0x127742[31m ; "Bw\U00000012"[0m[31m ; BOOL IsWindowVisible(HWND hWnd)[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140002bf7[0m      [36mtest[0m[37m  [0m[36meax[0m[37m, [0m[36meax[0m[0m[0m
+[36m│[0m    [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002bf9[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002bfb[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m][0m[0m[0m                    [34m; LPCWCH lpString1[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002bfe[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [33mstr.explorer.exe[0m[0m[0m[31m                ; 0x1400b0ff8[31m ; u"explorer.exe"[0m [34m; LPCWCH lpString2[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c05[0m      [37mmov[0m[37m   [0m[36mr9d[0m[37m, [0m[33m0xffffffff[0m[0m[31m                     ; -1[0m [34m; int cchCount2[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c0b[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mbIgnoreCase[0m[37m], [0m[33m1[0m[0m[0m              [34m; BOOL bIgnoreCase[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c13[0m      [37mmov[0m[37m   [0m[36medx[0m[37m, [0m[36mr9d[0m[0m[0m                            [34m; int cchCount1[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c16[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.api_ms_win_core_string_l1_1_0.dll_CompareStringOrdinal[0m[37m][0m[0m[31m ; [[31m0x1400ac9b0[31m:8]=0x1261d2[0m[31m ; int CompareStringOrdinal(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase)[0m
+[36m│[0m    [36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c1c[0m      [36mcmp[0m[37m   [0m[36meax[0m[37m, [0m[33m2[0m[0m[31m                              ; 2[0m
+[36m│[0m   [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002c1f[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m   [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c21[0m      [37mlea[0m[37m   [0m[36mrdx[0m[37m, [[0m[37mlpRect[0m[37m][0m[0m[0m                       [34m; LPRECT lpRect[0m
+[36m│[0m   [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c26[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; HWND hWnd[0m
+[36m│[0m   [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c29[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_GetWindowRect[0m[37m][0m[0m[31m ; [[31m0x1400ac508[31m:8]=0x127754[31m ; "Tw\U00000012"[0m[31m ; BOOL GetWindowRect(HWND hWnd, LPRECT lpRect)[0m
+[36m│[0m   [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c2f[0m      [36mtest[0m[37m  [0m[36meax[0m[37m, [0m[36meax[0m[0m[0m
+[36m│[0m  [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002c31[0m      [32mjne[0m[37m   [0m[33m0x140002c66[0m[0m[0m
+[36m│[0m  [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c33[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m20h[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m
+[36m│[0m  [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c3b[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [33mstr.C:___w_1_s_Source_GameBarFTServer_AppTarget_AppTargetManagerFT.cpp[0m[0m[0m[31m ; 0x1400b13c0[31m ; "C:\__w\1\s\Source\GameBarFTServer\AppTarget\AppTargetManagerFT.cpp"[0m
+[36m│[0m  [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c42[0m      [37mmov[0m[37m   [0m[36medx[0m[37m, [0m[33m0x21d[0m[0m[31m                          ; 541[0m
+[36m│[0m  [36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m[36m│[0m   [32m0x140002c47[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m1400107b0[0m[0m[31m                       ; fcn.1400107b0[0m
+[36m│[0m [34m┌[0m[34m─[0m[36m└[0m[36m└[0m[36m└[0m[36m└[0m[36m└[0m[36m─[0m[36m>[0m [32m0x140002c4c[0m      [36mxor[0m[37m   [0m[36mal[0m[37m, [0m[36mal[0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m        [31m[31m; CODE XREF from fcn.140002bb0 @ [31m0x140002d0d[31m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m┌[0m[34m─[0m[34m>[0m [32m0x140002c4e[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m20h[0m[37m][0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c53[0m      [36mxor[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsp[0m[0m[0m                            [34m; PSRWLOCK arg1[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c56[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m1400811d0[0m[0m[31m                       ; fcn.1400811d0[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c5b[0m      [33madd[0m[37m   [0m[36mrsp[0m[37m, [0m[33m0x80[0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c62[0m      [1;95mpop[0m[37m   [0m[36mrdi[0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c63[0m      [1;95mpop[0m[37m   [0m[36mrsi[0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c64[0m      [1;95mpop[0m[37m   [0m[36mrbx[0m[0m[0m
+[36m│[0m [34m╎[0m[36m│[0m    [34m╎[0m   [32m0x140002c65[0m      [31mret[0m[0m
+[36m│[0m [34m╎[0m[36m└[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140002c66[0m      [36mxor[0m[37m   [0m[36medx[0m[37m, [0m[36medx[0m[0m[0m                            [34m; DWORD dwFlags[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c68[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; HWND hwnd[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c6b[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_MonitorFromWindow[0m[37m][0m[0m[31m ; [[31m0x1400ac500[31m:8]=0x127764[31m ; "dw\U00000012"[0m[31m ; HMONITOR MonitorFromWindow(HWND hwnd, DWORD dwFlags)[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c71[0m      [36mtest[0m[37m  [0m[36mrax[0m[37m, [0m[36mrax[0m[0m[0m
+[36m│[0m [34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m<[0m [32m0x140002c74[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c76[0m      [37mlea[0m[37m   [0m[36mrdx[0m[37m, [[0m[37mlpmi[0m[37m][0m[0m[0m                         [34m; LPMONITORINFO lpmi[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c7b[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mlpmi[0m[37m], [0m[33m0x28[0m[0m[31m                  ; '('
+[36m│[0m [34m╎[0m     [34m╎[0m   [31m                                                           ; [0x28:4]=-1[31m ; 40[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c83[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrax[0m[0m[0m                            [34m; HMONITOR hMonitor[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c86[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.api_ms_win_ntuser_sysparams_l1_1_0.dll_GetMonitorInfoW[0m[37m][0m[0m[31m ; [[31m0x1400acf08[31m:8]=0x12621e[0m[31m ; BOOL GetMonitorInfoW(HMONITOR hMonitor, LPMONITORINFO lpmi)[0m
+[36m│[0m [34m╎[0m     [34m╎[0m   [32m0x140002c8c[0m      [36mtest[0m[37m  [0m[36meax[0m[37m, [0m[36meax[0m[0m[0m
+[36m│[0m [34m└[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m─[0m[34m<[0m [32m0x140002c8e[0m      [32mje[0m[37m    [0m[33m0x140002c4c[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002c90[0m      [37mmov[0m[37m   [0m[36mebx[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m50h[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002c94[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [33mstr.IsWindowFullscreenOnMonitor:_hwnd__zu___monWidth__d___monHeight__d___winWidth__d___winHeight__d[0m[0m[0m[31m ; 0x1400b2440[31m ; u"IsWindowFullscreenOnMonitor: hwnd(%zu), monWidth(%d), monHeight(%d), winWidth(%d), winHeight(%d)"[0m [34m; int64_t arg_30h[0m
+[36m│[0m       [34m╎[0m   [32m0x140002c9b[0m      [37mmov[0m[37m   [0m[36medi[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m3ch[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002c9f[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [33mdata.14012a098[0m[0m[0m[31m                 ; 0x14012a098[0m [34m; int64_t arg3[0m
+[36m│[0m       [34m╎[0m   [32m0x140002ca6[0m      [33msub[0m[37m   [0m[36mebx[0m[37m, [0m[37mdword[0m[37m [[0m[37mlpRect[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002caa[0m      [37mmov[0m[37m   [0m[36mr9[0m[37m, [0m[36mrsi[0m[0m[0m                             [34m; int64_t arg_38h[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cad[0m      [33msub[0m[37m   [0m[36medi[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m44h[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cb1[0m      [37mmov[0m[37m   [0m[36medx[0m[37m, [0m[33m1[0m[0m[0m                              [34m; LPHANDLE arg4[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cb6[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m8h[0m[37m], [0m[36mrbp[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cbe[0m      [37mmov[0m[37m   [0m[36mebp[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m3ch[0m[37m [0m[37m+[0m[37m [0m[33m0x4[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cc2[0m      [33msub[0m[37m   [0m[36mebp[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m40h[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cc6[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m8h[0m[37m [0m[37m+[0m[37m [0m[33m0x18[0m[37m], [0m[36mr14[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cce[0m      [37mmov[0m[37m   [0m[36mr14d[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m4ch[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cd3[0m      [33msub[0m[37m   [0m[36mr14d[0m[37m, [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m54h[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cd8[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m60h[0m[37m], [0m[36mr14d[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cdd[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m68h[0m[37m], [0m[36mebx[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002ce1[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m70h[0m[37m], [0m[36mebp[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002ce5[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mbIgnoreCase[0m[37m], [0m[36medi[0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002ce9[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m14007d7a0[0m[0m[31m                       ; fcn.14007d7a0[0m
+[36m│[0m       [34m╎[0m   [32m0x140002cee[0m      [36mcmp[0m[37m   [0m[36medi[0m[37m, [0m[36mebx[0m[0m[0m
+[36m│[0m      [36m┌[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002cf0[0m      [32mjne[0m[37m   [0m[33m0x140002cfb[0m[0m[0m
+[36m│[0m      [36m│[0m[34m╎[0m   [32m0x140002cf2[0m      [36mcmp[0m[37m   [0m[36mebp[0m[37m, [0m[36mr14d[0m[0m[0m
+[36m│[0m     [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002cf5[0m      [32mjne[0m[37m   [0m[33m0x140002cfb[0m[0m[0m
+[36m│[0m     [36m│[0m[36m│[0m[34m╎[0m   [32m0x140002cf7[0m      [37mmov[0m[37m   [0m[36mal[0m[37m, [0m[33m1[0m[0m[0m
+[36m│[0m    [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140002cf9[0m      [32mjmp[0m[37m   [0m[33m0x140002cfd[0m[0m[0m
+[36m│[0m    [36m│[0m[36m└[0m[36m└[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140002cfb[0m      [36mxor[0m[37m   [0m[36mal[0m[37m, [0m[36mal[0m[0m[0m
+[36m│[0m    [36m│[0m  [34m╎[0m   [31m[31m; CODE XREF from fcn.140002bb0 @ [31m0x140002cf9[31m[0m
+[36m│[0m    [36m└[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140002cfd[0m      [37mmov[0m[37m   [0m[36mr14[0m[37m, [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m8h[0m[37m [0m[37m+[0m[37m [0m[33m0x18[0m[37m][0m[0m[0m
+[36m│[0m       [34m╎[0m   [32m0x140002d05[0m      [37mmov[0m[37m   [0m[36mrbp[0m[37m, [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m8h[0m[37m][0m[0m[0m
+[36m└[0m       [34m└[0m[34m─[0m[34m<[0m [32m0x140002d0d[0m      [32mjmp[0m[37m   [0m[33m0x140002c4e[0m[0m[0m
+[36m│[0m           [32m0x140082a20[0m      [33madd[0m[37m   [0m[37mbyte[0m[37m [[0m[36mrax[0m[37m], [0m[36mal[0m[0m[0m
+[36m│[0m           [32m0x140082a22[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [33mdata.14012a098[0m[0m[0m[31m                 ; 0x14012a098[0m [34m; int64_t arg3[0m
+[36m│[0m           [32m0x140082a29[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m14007d7a0[0m[0m[31m                       ; fcn.14007d7a0[0m
+[36m│[0m       [36m┌[0m[36m─[0m[36m<[0m [32m0x140082a2e[0m      [32mjmp[0m[37m   [0m[33m0x140082b49[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a33[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x40[0m[37m], [0m[33m0[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a3a[0m      [37mlea[0m[37m   [0m[36mrdx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x40[0m[37m][0m[0m[0m                   [34m; LPDWORD lpdwProcessId[0m
+[36m│[0m       [36m│[0m   [32m0x140082a3e[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mr12[0m[0m[0m                            [34m; int64_t arg2[0m
+[36m│[0m       [36m│[0m   [32m0x140082a41[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.USER32.dll_GetWindowThreadProcessId[0m[37m][0m[0m[31m ; [[31m0x1400ac528[31m:8]=0x127700[0m[31m ; DWORD GetWindowThreadProcessId(HWND hWnd, LPDWORD lpdwProcessId)[0m
+[36m│[0m       [36m│[0m   [32m0x140082a47[0m      [37mmov[0m[37m   [0m[36mr8d[0m[37m, [0m[37mdword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x40[0m[37m][0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a4b[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[37mvar[0m[37m_[0m[37m78h[0m[37m], [0m[36mr8d[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a50[0m      [37mlea[0m[37m   [0m[36mrdx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m                   [34m; int64_t arg3[0m
+[36m│[0m       [36m│[0m   [32m0x140082a54[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140002e10[0m[0m[31m                       ; fcn.140002e10[0m
+[36m│[0m       [36m│[0m   [32m0x140082a59[0m      [34mnop[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a5a[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a5e[0m      [37mmov[0m[37m   [0m[36mrax[0m[37m, [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x38[0m[37m][0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a62[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m50h[0m[37m], [0m[36mrax[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a67[0m      [36mcmp[0m[37m   [0m[36mrax[0m[37m, [0m[33m7[0m[0m[31m                              ; 7[0m
+[36m│[0m      [36m┌[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082a6b[0m      [32mjbe[0m[37m   [0m[33m0x140082a76[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082a6d[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082a71[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m68h[0m[37m], [0m[36mrcx[0m[0m[0m
+[36m│[0m      [36m└[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140082a76[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x50[0m[37m][0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a7a[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[36mr8[0m[37m], [0m[36mrcx[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a7d[0m      [37mmov[0m[37m   [0m[36mrax[0m[37m, [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x30[0m[37m][0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a81[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m58h[0m[37m], [0m[36mrax[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a86[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x58[0m[37m], [0m[36mrax[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082a8a[0m      [37mmov[0m[37m   [0m[36mrdx[0m[37m, [0m[36mr12[0m[0m[0m                            [34m; int64_t arg3[0m
+[36m│[0m       [36m│[0m   [32m0x140082a8d[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140002bb0[0m[0m[31m                       ; fcn.140002bb0[0m
+[36m│[0m       [36m│[0m   [32m0x140082a92[0m      [36mtest[0m[37m  [0m[36mal[0m[37m, [0m[36mal[0m[0m[0m
+[36m│[0m      [36m┌[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082a94[0m      [32mjne[0m[37m   [0m[33m0x140082a9f[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082a96[0m      [36mtest[0m[37m  [0m[36mr13b[0m[37m, [0m[36mr13b[0m[0m[0m
+[36m│[0m     [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082a99[0m      [32mjne[0m[37m   [0m[33m0x140082a9f[0m[0m[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140082a9b[0m      [36mxor[0m[37m   [0m[36mbl[0m[37m, [0m[36mbl[0m[0m[0m
+[36m│[0m    [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082a9d[0m      [32mjmp[0m[37m   [0m[33m0x140082aa1[0m[0m[0m
+[36m│[0m    [36m│[0m[36m└[0m[36m└[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140082a9f[0m      [37mmov[0m[37m   [0m[36mbl[0m[37m, [0m[33m1[0m[0m[0m
+[36m│[0m    [36m│[0m  [36m│[0m   [31m[31m; CODE XREF from fcn.1400828f0 @ [31m0x140082a9d[31m[0m
+[36m│[0m    [36m└[0m[36m─[0m[36m─[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140082aa1[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; PSRWLOCK SRWLock[0m
+[36m│[0m       [36m│[0m   [32m0x140082aa4[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.api_ms_win_core_synch_l1_1_0.dll_AcquireSRWLockExclusive[0m[37m][0m[0m[31m ; [[31m0x1400aca48[31m:8]=0x126196[0m[31m ; VOID AcquireSRWLockExclusive(PSRWLOCK SRWLock)[0m
+[36m│[0m       [36m│[0m   [32m0x140082aaa[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x48[0m[37m], [0m[36mrsi[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082aae[0m      [37mmovzx[0m[37m [0m[36mr9d[0m[37m, [0m[36mbl[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082ab2[0m      [37mmov[0m[37m   [0m[36medx[0m[37m, [0m[33m1[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082ab7[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [33mdata.14012a098[0m[0m[0m[31m                 ; 0x14012a098[0m
+[36m│[0m       [36m│[0m   [32m0x140082abe[0m      [36mcmp[0m[37m   [0m[37mbyte[0m[37m [[0m[36mr14[0m[37m [0m[37m+[0m[37m [0m[33m0x211[0m[37m], [0m[36mbl[0m[0m[0m
+[36m│[0m      [36m┌[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082ac5[0m      [32mje[0m[37m    [0m[33m0x140082b23[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082ac7[0m      [37mmov[0m[37m   [0m[37mbyte[0m[37m [[0m[36mr14[0m[37m [0m[37m+[0m[37m [0m[33m0x211[0m[37m], [0m[36mbl[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082ace[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [33mstr.UpdateIsFullscreenTargetData:_Returning_true._isFullscreen__u[0m[0m[0m[31m ; 0x1400b30d0[31m ; u"UpdateIsFullscreenTargetData: Returning true. isFullscreen(%u)"[0m [34m; int64_t arg_30h[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082ad5[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m14007d7a0[0m[0m[31m                       ; fcn.14007d7a0[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082ada[0m      [34mnop[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082adb[0m      [36mtest[0m[37m  [0m[36mrsi[0m[37m, [0m[36mrsi[0m[0m[0m
+[36m│[0m     [36m┌[0m[36m─[0m[36m─[0m[36m─[0m[36m<[0m [32m0x140082ade[0m      [32mje[0m[37m    [0m[33m0x140082aea[0m[0m[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140082ae0[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; PSRWLOCK SRWLock[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140082ae3[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.api_ms_win_core_synch_l1_1_0.dll_ReleaseSRWLockExclusive[0m[37m][0m[0m[31m ; [[31m0x1400aca28[31m:8]=0x12617c[31m ; "|a\U00000012"[0m[31m ; VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock)[0m
+[36m│[0m     [36m│[0m[36m│[0m[36m│[0m   [32m0x140082ae9[0m      [34mnop[0m[0m
+[36m│[0m     [36m└[0m[36m─[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140082aea[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m                   [34m; LPCWSTR arg1[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082aee[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140010ae0[0m[0m[31m                       ; fcn.140010ae0[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082af3[0m      [34mnop[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082af4[0m      [37mmov[0m[37m   [0m[36mecx[0m[37m, [0m[33m0x40[0m[0m[31m                           ; '@'[31m ; 64[0m [34m; int64_t arg1[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082af9[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140081464[0m[0m[31m                       ; fcn.140081464[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082afe[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[36mrax[0m[37m [0m[37m+[0m[37m [0m[33m0x38[0m[37m], [0m[36mr14[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b02[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [[0m[33mfcn.140083760[0m[37m][0m[0m[31m                ; 0x140083760[31m ; "H\x89\$\U00000010H\x89t$\U00000018H\x89|$ H\x89L$\bAVH\x83\xec`H\x8b\U00000005\xbfh\n"[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b09[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[36mrax[0m[37m], [0m[36mrcx[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b0c[0m      [37mmov[0m[37m   [0m[37mdword[0m[37m [[0m[36mrax[0m[37m [0m[37m+[0m[37m [0m[33m8[0m[37m], [0m[33m0x10002[0m[0m[31m            ; [0x10002:4]=-1[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b13[0m      [36mxor[0m[37m   [0m[36mecx[0m[37m, [0m[36mecx[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b15[0m      [37mmov[0m[37m   [0m[37mbyte[0m[37m [[0m[36mrax[0m[37m [0m[37m+[0m[37m [0m[33m0x30[0m[37m], [0m[36mcl[0m[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b18[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrax[0m[0m[0m                            [34m; int64_t arg1[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b1b[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140083760[0m[0m[31m                       ; fcn.140083760[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b20[0m      [34mnop[0m[0m
+[36m│[0m      [36m│[0m[36m│[0m   [32m0x140082b21[0m      [32mjmp[0m[37m   [0m[33m0x140082b49[0m[0m[0m
+[36m│[0m      [36m└[0m[36m─[0m[36m─[0m[36m>[0m [32m0x140082b23[0m      [37mlea[0m[37m   [0m[36mr8[0m[37m, [33mstr.UpdateIsFullscreenTargetData:_Returning_false._isFullscreen__u[0m[0m[0m[31m ; 0x1400b3150[31m ; u"UpdateIsFullscreenTargetData: Returning false. isFullscreen(%u)"[0m [34m; int64_t arg_30h[0m
+[36m│[0m       [36m│[0m   [32m0x140082b2a[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m14007d7a0[0m[0m[31m                       ; fcn.14007d7a0[0m
+[36m│[0m       [36m│[0m   [32m0x140082b2f[0m      [34mnop[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082b30[0m      [36mtest[0m[37m  [0m[36mrsi[0m[37m, [0m[36mrsi[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082b33[0m      [32mje[0m[37m    [0m[33m0x140082b3f[0m[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082b35[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsi[0m[0m[0m                            [34m; PSRWLOCK SRWLock[0m
+[36m│[0m       [36m│[0m   [32m0x140082b38[0m      [32mcall[0m[37m  [0m[37mqword[0m[37m [[0m[33msym.imp.api_ms_win_core_synch_l1_1_0.dll_ReleaseSRWLockExclusive[0m[37m][0m[0m[31m ; [[31m0x1400aca28[31m:8]=0x12617c[31m ; "|a\U00000012"[0m[31m ; VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock)[0m
+[36m│[0m       [36m│[0m   [32m0x140082b3e[0m      [34mnop[0m[0m
+[36m│[0m       [36m│[0m   [32m0x140082b3f[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x20[0m[37m][0m[0m[0m                   [34m; LPCWSTR arg1[0m
+[36m│[0m       [36m│[0m   [32m0x140082b43[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140010ae0[0m[0m[31m                       ; fcn.140010ae0[0m
+[36m│[0m       [36m│[0m   [32m0x140082b48[0m      [34mnop[0m[0m
+[36m│[0m       [36m│[0m   [31m[31m; CODE XREFS from fcn.1400828f0 @ [31m0x140082a2e[31m, 0x140082b21[31m[0m
+[36m│[0m       [36m└[0m[36m─[0m[36m>[0m [32m0x140082b49[0m      [37mlea[0m[37m   [0m[36mrcx[0m[37m, [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0x10[0m[37m][0m[0m[0m
+[36m│[0m           [32m0x140082b4d[0m      [37mmov[0m[37m   [0m[36mrax[0m[37m, [0m[37mqword[0m[37m [[0m[36mrcx[0m[37m][0m[0m[0m
+[36m│[0m           [32m0x140082b50[0m      [37mmov[0m[37m   [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m70h[0m[37m], [0m[36mrax[0m[0m[0m
+[36m│[0m           [32m0x140082b55[0m      [36mtest[0m[37m  [0m[36mrax[0m[37m, [0m[36mrax[0m[0m[0m
+[36m│[0m           [32m0x140082b58[0m      [32mje[0m[37m    [0m[33m0x140082b60[0m[0m[0m
+[36m│[0m           [32m0x140082b5a[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m140008550[0m[0m[31m                       ; fcn.140008550[0m
+[36m│[0m           [32m0x140082b5f[0m      [34mnop[0m[0m
+[36m│[0m           [32m0x140082b60[0m      [32mjmp[0m[37m   [0m[37mcase[0m[37m.[0m[33mswitch.0x140082951[0m[37m.[0m[37m_[0m[37m1[0m[0m[0m
+            [32m0x140082b62[0m      [37mmov[0m[37m   [0m[36mrdi[0m[37m, [0m[37mqword[0m[37m [[0m[36mrsp[0m[37m [0m[37m+[0m[37m [0m[33m0x28[0m[37m][0m[0m[0m
+[36m│[0m           [31m[31m; CODE XREFS from fcn.1400828f0 @ [31m0x140082951[31m, 0x140082953[31m, 0x1400829d8[31m, 0x140082b60[31m[0m
+[36m│[0m           [36m;-- case 0:                                                [31m; from 0x140082951[0m
+[36m│[0m           [32m0x140082b67[0m      [36mcmp[0m[37m   [0m[37mword[0m[37m [[0m[36mrdi[0m[37m [0m[37m+[0m[37m [0m[33m0xa[0m[37m], [0m[33m0[0m[0m[0m
+[36m│[0m           [32m0x140082b6c[0m      [32mje[0m[37m    [0m[33m0x140082b7e[0m[0m[0m
+[36m│[0m           [32m0x140082b6e[0m      [37mmov[0m[37m   [0m[36medx[0m[37m, [0m[33m0xb0[0m[0m[31m                           ; 176[0m
+[36m│[0m           [32m0x140082b73[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrdi[0m[0m[0m
+[36m│[0m           [32m0x140082b76[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m14008121c[0m[0m[31m                       ; fcn.14008121c[0m
+[36m│[0m           [32m0x140082b7b[0m      [32mjmp[0m[37m   [0m[33m0x140082b7e[0m[0m[0m
+[36m│[0m           [31m[31m; CODE XREF from fcn.1400828f0 @ [31m0x140082951[31m[0m
+[36m│[0m           [36m;-- default:                                               [31m; from 0x140082951[0m
+[36m│[0m           [32m0x140082b7d[0m      [1;91mint3[0m[0m
+[36m│[0m           [31m[31m; CODE XREFS from fcn.1400828f0 @ [31m0x1400829bc[31m, 0x140082b7b[31m[0m
+[36m│[0m           [32m0x140082b7e[0m      [37mmov[0m[37m   [0m[36mrcx[0m[37m, [0m[37mqword[0m[37m [[0m[37mvar[0m[37m_[0m[37m30h[0m[37m][0m[0m[0m
+[36m│[0m           [32m0x140082b83[0m      [36mxor[0m[37m   [0m[36mrcx[0m[37m, [0m[36mrsp[0m[0m[0m                            [34m; PSRWLOCK arg1[0m
+[36m│[0m           [32m0x140082b86[0m      [1;92mcall[0m[37m  [0m[37mfcn[0m[37m.[0m[33m1400811d0[0m[0m[31m                       ; fcn.1400811d0[0m

@@ -1,0 +1,423 @@
+{
+  "coinit_hr": "0x80010106",
+  "scenarios": [
+    {
+      "name": "baseline_only",
+      "actions": [],
+      "hr_create": "0x00000000",
+      "hr_service": "0x00000000",
+      "qi_final_hr": "0x00000000",
+      "qi_hidden1_hr": "0x00000000",
+      "qi_hidden2_hr": "0x00000000",
+      "timeline": [
+        {
+          "label": "baseline",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        }
+      ]
+    },
+    {
+      "name": "show_500ms",
+      "actions": [
+        "show",
+        "sleep:500"
+      ],
+      "hr_create": "0x00000000",
+      "hr_service": "0x00000000",
+      "qi_final_hr": "0x00000000",
+      "qi_hidden1_hr": "0x00000000",
+      "qi_hidden2_hr": "0x00000000",
+      "timeline": [
+        {
+          "label": "baseline",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "show",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_show",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "sleep:500",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_sleep:500",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        }
+      ]
+    },
+    {
+      "name": "show_2000ms",
+      "actions": [
+        "show",
+        "sleep:2000"
+      ],
+      "hr_create": "0x00000000",
+      "hr_service": "0x00000000",
+      "qi_final_hr": "0x00000000",
+      "qi_hidden1_hr": "0x00000000",
+      "qi_hidden2_hr": "0x00000000",
+      "timeline": [
+        {
+          "label": "baseline",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "show",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_show",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "sleep:2000",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_sleep:2000",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        }
+      ]
+    },
+    {
+      "name": "show_reset_500ms",
+      "actions": [
+        "show",
+        "reset",
+        "sleep:500"
+      ],
+      "hr_create": "0x00000000",
+      "hr_service": "0x00000000",
+      "qi_final_hr": "0x00000000",
+      "qi_hidden1_hr": "0x00000000",
+      "qi_hidden2_hr": "0x00000000",
+      "timeline": [
+        {
+          "label": "baseline",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "show",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_show",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "reset",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_reset",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "sleep:500",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_sleep:500",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        }
+      ]
+    },
+    {
+      "name": "show_hide_show_500ms",
+      "actions": [
+        "show",
+        "hide",
+        "show",
+        "sleep:500"
+      ],
+      "hr_create": "0x00000000",
+      "hr_service": "0x00000000",
+      "qi_final_hr": "0x00000000",
+      "qi_hidden1_hr": "0x00000000",
+      "qi_hidden2_hr": "0x00000000",
+      "timeline": [
+        {
+          "label": "baseline",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "show",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_show",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "hide",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_hide",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "show",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_show",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        },
+        {
+          "action": "sleep:500",
+          "hr": "0x00000000"
+        },
+        {
+          "label": "after_sleep:500",
+          "hidden1_slot6": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden1_slot7": {
+            "hr": "0x80070490",
+            "child": "0x0",
+            "child_info": null
+          },
+          "hidden2_slot6": {
+            "error": "Error: access violation accessing 0xffffffffffffffff"
+          },
+          "hidden2_slot21": {
+            "error": "Error: system error"
+          }
+        }
+      ]
+    }
+  ]
+}

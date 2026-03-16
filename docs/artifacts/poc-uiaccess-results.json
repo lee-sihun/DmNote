@@ -1,0 +1,55 @@
+﻿{
+    "steps":  [
+                  {
+                      "detail":  "Reusing existing cert: A0E9E800B1FB654D167E232DDE0D4D84D830502A",
+                      "step":  "cert_create",
+                      "status":  "OK"
+                  },
+                  {
+                      "detail":  "Already in LocalMachine\\Root",
+                      "step":  "cert_trust",
+                      "status":  "OK"
+                  },
+                  {
+                      "detail":  "Built: C:\\Program Files\\DmNotePoC\\UIAccessOverlay.exe",
+                      "step":  "compile",
+                      "status":  "OK"
+                  },
+                  {
+                      "detail":  "Status: Valid",
+                      "step":  "sign",
+                      "status":  "OK"
+                  },
+                  {
+                      "detail":  "overlayBand=2, visible=True",
+                      "step":  "run",
+                      "status":  "OK"
+                  },
+                  {
+                      "detail":  "overlayBand=1, visible=True",
+                      "step":  "control",
+                      "status":  "OK"
+                  }
+              ],
+    "uiaccess_result":  {
+                            "probeBand":  2,
+                            "overlayBand":  2,
+                            "overlayVisible":  true,
+                            "foregroundIsProbe":  true,
+                            "probeHwnd":  "0xB093E",
+                            "overlayHwnd":  "0x7D0656",
+                            "status":  "probeBand=2, overlayBand=2, overlayVisible=True, fgIsProbe=True"
+                        },
+    "hostname":  "DESKTOP-HO8UHQ7",
+    "isAdmin":  true,
+    "timestamp":  "2026-03-16T13:41:53.9158899+09:00",
+    "control_result":  {
+                           "probeBand":  1,
+                           "overlayBand":  1,
+                           "overlayVisible":  true,
+                           "foregroundIsProbe":  true,
+                           "probeHwnd":  "0xA0948",
+                           "overlayHwnd":  "0x7E0656",
+                           "status":  "probeBand=1, overlayBand=1, overlayVisible=True, fgIsProbe=True"
+                       }
+}

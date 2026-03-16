@@ -1,0 +1,17 @@
+.symfix
+.reload /f user32.dll
+.reload /f dxgi.dll
+.echo [GBTRACE] attached=GameBarFTServer.exe
+bu user32!EnumWindows ".echo [GBTRACE] func=user32!EnumWindows; |.; kb 6; g"
+bu user32!SetWinEventHook ".echo [GBTRACE] func=user32!SetWinEventHook; |.; r rcx; r rdx; r r8; r r9; dq @rsp L6; kb 6; g"
+bu user32!GetForegroundWindow ".echo [GBTRACE] func=user32!GetForegroundWindow; |.; kb 6; g"
+bu user32!GetWindowThreadProcessId ".echo [GBTRACE] func=user32!GetWindowThreadProcessId; |.; r rcx; r rdx; kb 6; g"
+bu user32!GetWindowRect ".echo [GBTRACE] func=user32!GetWindowRect; |.; r rcx; r rdx; kb 6; g"
+bu user32!MonitorFromWindow ".echo [GBTRACE] func=user32!MonitorFromWindow; |.; r rcx; r rdx; kb 6; g"
+bu user32!GetMonitorInfoW ".echo [GBTRACE] func=user32!GetMonitorInfoW; |.; r rcx; r rdx; kb 6; g"
+bu user32!QueryDisplayConfig ".echo [GBTRACE] func=user32!QueryDisplayConfig; |.; r rcx; r rdx; r r8; r r9; dq @rsp L6; kb 6; g"
+bu user32!SetWindowRgn ".echo [GBTRACE] func=user32!SetWindowRgn; |.; r rcx; r rdx; r r8; kb 6; g"
+bu user32!SetWindowLongPtrW ".echo [GBTRACE] func=user32!SetWindowLongPtrW; |.; r rcx; r rdx; r r8; kb 6; g"
+bu dxgi!CreateDXGIFactory1 ".echo [GBTRACE] func=dxgi!CreateDXGIFactory1; |.; r rcx; r rdx; kb 6; g"
+bu dxgi!CreateDXGIFactory2 ".echo [GBTRACE] func=dxgi!CreateDXGIFactory2; |.; r rcx; r rdx; r r8; kb 6; g"
+g

@@ -1,0 +1,43 @@
+﻿{
+    "coinit_hr":  "0x00000001",
+    "cocreate_hr":  "0x00000000",
+    "slot12":  "0x7FFEEBA37C80",
+    "matrix":  {
+                   "final-\u003efinal":  {
+                                             "hr":  "0x00000000",
+                                             "ptr":  "0x1DF493A42E8"
+                                         },
+                   "final-\u003ehidden1":  {
+                                               "hr":  "0x00000000",
+                                               "ptr":  "0x1DF493FD978"
+                                           },
+                   "final-\u003ehidden2":  {
+                                               "hr":  "0x00000000",
+                                               "ptr":  "0x1DF493FE178"
+                                           },
+                   "hidden1-\u003efinal":  {
+                                               "hr":  "0x80004001",
+                                               "ptr":  null
+                                           },
+                   "hidden1-\u003ehidden1":  {
+                                                 "hr":  "0x80004001",
+                                                 "ptr":  null
+                                             },
+                   "hidden1-\u003ehidden2":  {
+                                                 "hr":  "0x80004001",
+                                                 "ptr":  null
+                                             },
+                   "hidden2-\u003efinal":  {
+                                               "hr":  "0x80004001",
+                                               "ptr":  null
+                                           },
+                   "hidden2-\u003ehidden1":  {
+                                                 "hr":  "0x80004001",
+                                                 "ptr":  null
+                                             },
+                   "hidden2-\u003ehidden2":  {
+                                                 "hr":  "0x80004001",
+                                                 "ptr":  null
+                                             }
+               }
+}

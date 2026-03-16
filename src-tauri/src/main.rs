@@ -69,6 +69,9 @@ fn main() {
         eprintln!("Failed to initialize logging: {err}");
     }
 
+    #[cfg(target_os = "windows")]
+    log_webview2_environment_diagnostics();
+
     let context = tauri::generate_context!();
 
     tauri::Builder::default()
@@ -262,6 +265,60 @@ fn main() {
 }
 
 #[cfg(target_os = "windows")]
+fn log_webview2_environment_diagnostics() {
+    use std::env;
+
+    const ENV_KEYS: &[&str] = &[
+        "DMNOTE_WEBVIEW2_USE_SYSTEM",
+        "DMNOTE_WEBVIEW2_FIXED_RUNTIME_DIR",
+        "WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "WEBVIEW2_USER_DATA_FOLDER",
+        "WEBVIEW2_RELEASE_CHANNEL_PREFERENCE",
+    ];
+    const SUSPICIOUS_ARGUMENTS: &[&str] = &[
+        "edge-webview-no-dpi-workaround",
+        "embedded-browser-webview-dpi-awareness",
+        "force-device-scale-factor",
+        "high-dpi-support",
+        "force-text-scale",
+    ];
+
+    log::info!(
+        "[webview2-diag] compensating zoom snapshot={:.6}",
+        compute_compensating_zoom()
+    );
+
+    for key in ENV_KEYS {
+        match env::var(key) {
+            Ok(value) if !value.trim().is_empty() => {
+                log::info!("[webview2-diag] env {key}={value}");
+            }
+            _ => {
+                log::info!("[webview2-diag] env {key}=<unset>");
+            }
+        }
+    }
+
+    if let Ok(args) = env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS") {
+        let lowered = args.to_ascii_lowercase();
+        for token in SUSPICIOUS_ARGUMENTS {
+            if lowered.contains(token) {
+                log::warn!(
+                    "[webview2-diag] suspicious WebView2 browser argument detected: {token}"
+                );
+            }
+        }
+    }
+
+    if env::var_os("DMNOTE_WEBVIEW2_USE_SYSTEM").is_some() {
+        log::warn!(
+            "[webview2-diag] DMNOTE_WEBVIEW2_USE_SYSTEM is set; bundled fixed runtime override is disabled"
+        );
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn apply_webview2_additional_args(arg: &str) {
     use std::env;
     const KEY: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
@@ -341,7 +398,9 @@ fn setup_logging() -> Result<()> {
         LevelFilter::Info
     };
 
-    let _ = fern::Dispatch::new()
+    let log_path = resolve_log_file_path();
+
+    let mut dispatch = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
                 "[{level}][{target}] {message}",
@@ -351,9 +410,35 @@ fn setup_logging() -> Result<()> {
             ))
         })
         .level(level)
-        .chain(std::io::stdout())
-        .apply();
+        .chain(std::io::stdout());
+
+    if let Some(path) = log_path.as_ref() {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        dispatch = dispatch.chain(file);
+    }
+
+    dispatch.apply()?;
+
+    if let Some(path) = log_path {
+        log::info!("[logging] file output: {}", path.display());
+    }
+
     Ok(())
+}
+
+fn resolve_log_file_path() -> Option<std::path::PathBuf> {
+    dirs_next::data_local_dir().map(|dir| {
+        dir.join("com.dmnote.desktop")
+            .join("logs")
+            .join("dmnote.log")
+    })
 }
 
 fn configure_main_window(app: &tauri::AppHandle) {

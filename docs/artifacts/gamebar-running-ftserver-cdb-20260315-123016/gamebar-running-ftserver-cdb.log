@@ -1,0 +1,270 @@
+Opened log file 'C:\Users\esihun\AppData\Local\Temp\gbrftcdb-20260315-123016\g.log'
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.281 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 30
+
+Microsoft (R) Windows Debugger Version 10.0.26100.7705 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+*** wait with pending attach
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*
+Symbol search path is: srv*
+Executable search path is: 
+ModLoad: 00007ff6`af2f0000 00007ff6`af4a4000   C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe
+ModLoad: 00007ff8`41a40000 00007ff8`41ca7000   C:\WINDOWS\SYSTEM32\ntdll.dll
+ModLoad: 00007ff8`3fdb0000 00007ff8`3fe79000   C:\WINDOWS\System32\KERNEL32.DLL
+ModLoad: 00007ff8`3eb70000 00007ff8`3ef60000   C:\WINDOWS\System32\KERNELBASE.dll
+ModLoad: 00007ff8`41570000 00007ff8`419f6000   C:\WINDOWS\System32\SETUPAPI.dll
+ModLoad: 00007ff8`414a0000 00007ff8`41549000   C:\WINDOWS\System32\msvcrt.dll
+ModLoad: 00007ff8`22f00000 00007ff8`22f4e000   C:\WINDOWS\SYSTEM32\pdh.dll
+ModLoad: 00007ff8`412d0000 00007ff8`41495000   C:\WINDOWS\System32\user32.dll
+ModLoad: 00007ff8`3f0f0000 00007ff8`3f23b000   C:\WINDOWS\System32\ucrtbase.dll
+ModLoad: 00007ff8`3f470000 00007ff8`3f497000   C:\WINDOWS\System32\win32u.dll
+ModLoad: 00007ff8`410d0000 00007ff8`411e8000   C:\WINDOWS\System32\RPCRT4.dll
+ModLoad: 00007ff8`412a0000 00007ff8`412cb000   C:\WINDOWS\System32\GDI32.dll
+ModLoad: 00007ff8`3b760000 00007ff8`3b885000   C:\WINDOWS\SYSTEM32\CoreMessaging.dll
+ModLoad: 00007ff8`3c070000 00007ff8`3c1ae000   C:\WINDOWS\SYSTEM32\dxgi.dll
+ModLoad: 00007ff8`40460000 00007ff8`40514000   C:\WINDOWS\System32\advapi32.dll
+ModLoad: 00007ff8`3f690000 00007ff8`3f7c8000   C:\WINDOWS\System32\gdi32full.dll
+ModLoad: 00007ff8`3f240000 00007ff8`3f2e3000   C:\WINDOWS\System32\msvcp_win.dll
+ModLoad: 00007ff8`3fef0000 00007ff8`3ff96000   C:\WINDOWS\System32\sechost.dll
+ModLoad: 00007ff8`3ffa0000 00007ff8`40325000   C:\WINDOWS\System32\combase.dll
+ModLoad: 00007ff8`40520000 00007ff8`40c6d000   C:\WINDOWS\System32\SHELL32.dll
+ModLoad: 00007ff8`3d8f0000 00007ff8`3d90b000   C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+ModLoad: 00007ff8`3f2f0000 00007ff8`3f463000   C:\WINDOWS\System32\wintypes.dll
+ModLoad: 00007ff8`3c790000 00007ff8`3cff0000   C:\WINDOWS\SYSTEM32\windows.storage.dll
+ModLoad: 00007ff8`3e9d0000 00007ff8`3ea2e000   C:\WINDOWS\SYSTEM32\powrprof.dll
+ModLoad: 00007ff8`3fcb0000 00007ff8`3fd90000   C:\WINDOWS\System32\OLEAUT32.dll
+ModLoad: 00007ff8`2a9e0000 00007ff8`2aa57000   C:\WINDOWS\SYSTEM32\tdh.dll
+ModLoad: 00007ff8`3e6f0000 00007ff8`3e747000   C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+ModLoad: 00007fff`cf9b0000 00007fff`cfa3d000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00.uwpdesktop_14.0.33728.0_x64__8wekyb3d8bbwe\MSVCP140.dll
+ModLoad: 00007fff`d70a0000 00007fff`d70ac000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00.uwpdesktop_14.0.33728.0_x64__8wekyb3d8bbwe\VCRUNTIME140_1.dll
+ModLoad: 00007fff`cfa40000 00007fff`cfa5e000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00.uwpdesktop_14.0.33728.0_x64__8wekyb3d8bbwe\VCRUNTIME140.dll
+ModLoad: 00007ff8`403c0000 00007ff8`403ef000   C:\WINDOWS\System32\IMM32.DLL
+ModLoad: 00007ff8`3bf00000 00007ff8`3bf6a000   C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+ModLoad: 00007ff8`29710000 00007ff8`2972a000   C:\WINDOWS\SYSTEM32\windows.staterepositorycore.dll
+ModLoad: 00007ff8`3f560000 00007ff8`3f5f9000   C:\WINDOWS\System32\bcryptPrimitives.dll
+ModLoad: 00007ff8`3e9b0000 00007ff8`3e9c4000   C:\WINDOWS\SYSTEM32\UMPDC.dll
+ModLoad: 00007ff8`41020000 00007ff8`410c8000   C:\WINDOWS\System32\clbcatq.dll
+ModLoad: 00007ff8`3fbb0000 00007ff8`3fca5000   C:\WINDOWS\System32\SHCORE.dll
+ModLoad: 00007ff8`40e30000 00007ff8`40e9a000   C:\WINDOWS\System32\shlwapi.dll
+ModLoad: 00007ff8`3ea90000 00007ff8`3eab9000   C:\WINDOWS\SYSTEM32\profapi.dll
+ModLoad: 00007fff`f9780000 00007fff`f97e0000   C:\Windows\System32\Windows.Storage.ApplicationData.dll
+ModLoad: 00007ff8`33220000 00007ff8`33458000   C:\Windows\System32\twinapi.appcore.dll
+ModLoad: 00007ff8`40c80000 00007ff8`40e20000   C:\WINDOWS\System32\ole32.dll
+ModLoad: 00007ff8`397a0000 00007ff8`398ad000   C:\WINDOWS\SYSTEM32\PROPSYS.dll
+ModLoad: 00007fff`d0a70000 00007fff`d0a9f000   C:\WINDOWS\system32\mssprxy.dll
+ModLoad: 00007ff8`0aa00000 00007ff8`0aac2000   C:\Windows\System32\Windows.FileExplorer.Common.dll
+ModLoad: 00007ff8`1c8e0000 00007ff8`1c9a4000   C:\Windows\System32\Windows.StateRepositoryPS.dll
+ModLoad: 00007ff8`26ba0000 00007ff8`26bf0000   C:\WINDOWS\SYSTEM32\windows.staterepositoryclient.dll
+ModLoad: 00007ff8`3bd50000 00007ff8`3bdff000   C:\WINDOWS\system32\uxtheme.dll
+ModLoad: 00007ff8`3f7d0000 00007ff8`3f931000   C:\WINDOWS\System32\MSCTF.dll
+ModLoad: 00007ff8`3ea60000 00007ff8`3ea86000   C:\WINDOWS\SYSTEM32\bcrypt.dll
+ModLoad: 00007ff8`27b40000 00007ff8`27b79000   C:\WINDOWS\SYSTEM32\rometadata.dll
+ModLoad: 00007ff8`1a910000 00007ff8`1a9cd000   C:\Windows\System32\OneCoreCommonProxyStub.dll
+ModLoad: 00007ff8`06ef0000 00007ff8`06f06000   C:\Windows\System32\threadpoolwinrt.dll
+ModLoad: 00007fff`f99b0000 00007fff`f9a30000   C:\Windows\System32\ActXPrxy.dll
+ModLoad: 00007ff8`3beb0000 00007ff8`3befd000   C:\WINDOWS\SYSTEM32\dxcore.dll
+ModLoad: 00007ff8`3c380000 00007ff8`3c394000   C:\WINDOWS\SYSTEM32\resourcepolicyclient.dll
+(302c.6208): Break instruction exception - code 80000003 (first chance)
+ntdll!DbgBreakPoint:
+00007ff8`41b65900 cc              int     3
+0:015> .symfix
+0:015> .reload /f user32.dll
+0:015> .reload /f dxgi.dll
+0:015> .echo [GBTRACE] attached=GameBarFTServer.exe
+[GBTRACE] attached=GameBarFTServer.exe
+0:015> bu user32!EnumWindows ".echo [GBTRACE] func=user32!EnumWindows; |.; kb 6; g"
+0:015> bu user32!SetWinEventHook ".echo [GBTRACE] func=user32!SetWinEventHook; |.; r rcx; r rdx; r r8; r r9; dq @rsp L6; kb 6; g"
+0:015> bu user32!GetForegroundWindow ".echo [GBTRACE] func=user32!GetForegroundWindow; |.; kb 6; g"
+0:015> bu user32!GetWindowThreadProcessId ".echo [GBTRACE] func=user32!GetWindowThreadProcessId; |.; r rcx; r rdx; kb 6; g"
+0:015> bu user32!GetWindowRect ".echo [GBTRACE] func=user32!GetWindowRect; |.; r rcx; r rdx; kb 6; g"
+0:015> bu user32!MonitorFromWindow ".echo [GBTRACE] func=user32!MonitorFromWindow; |.; r rcx; r rdx; kb 6; g"
+0:015> bu user32!GetMonitorInfoW ".echo [GBTRACE] func=user32!GetMonitorInfoW; |.; r rcx; r rdx; kb 6; g"
+0:015> bu user32!QueryDisplayConfig ".echo [GBTRACE] func=user32!QueryDisplayConfig; |.; r rcx; r rdx; r r8; r r9; dq @rsp L6; kb 6; g"
+0:015> bu user32!SetWindowRgn ".echo [GBTRACE] func=user32!SetWindowRgn; |.; r rcx; r rdx; r r8; kb 6; g"
+0:015> bu user32!SetWindowLongPtrW ".echo [GBTRACE] func=user32!SetWindowLongPtrW; |.; r rcx; r rdx; r r8; kb 6; g"
+0:015> bu dxgi!CreateDXGIFactory1 ".echo [GBTRACE] func=dxgi!CreateDXGIFactory1; |.; r rcx; r rdx; kb 6; g"
+0:015> bu dxgi!CreateDXGIFactory2 ".echo [GBTRACE] func=dxgi!CreateDXGIFactory2; |.; r rcx; r rdx; r r8; kb 6; g"
+0:015> g
+[GBTRACE] func=user32!GetWindowThreadProcessId
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=00000201cf16bda0
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af372a47     : 00000201`cf000000 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : user32!GetWindowThreadProcessId
+00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a47
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+00007ff8`41a7c34c     : 00000000`00000000 00000000`00000000 000004f0`fffffb30 000004d0`fffffb30 : KERNEL32!BaseThreadInitThunk+0x17
+[GBTRACE] func=user32!GetWindowThreadProcessId
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=00000201cf1f8ba0
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af372a47     : 00000201`cf18a000 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : user32!GetWindowThreadProcessId
+00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a47
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+00007ff8`41a7c34c     : 00000000`00000000 00000000`00000000 000004f0`fffffb30 000004d0`fffffb30 : KERNEL32!BaseThreadInitThunk+0x17
+[GBTRACE] func=user32!GetWindowRect
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=00000091586ff780
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c2f     : 00000000`0001000c 00000000`001a05a2 00000201`cf16bdb0 00000201`cf162750 : user32!GetWindowRect
+00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c2f
+00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+[GBTRACE] func=user32!MonitorFromWindow
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=0000000000000000
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c71     : 00000000`0001000c 00000000`001a05a2 00000000`0001000c 00000201`cf162750 : user32!MonitorFromWindow
+00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c71
+00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+[GBTRACE] func=user32!GetMonitorInfoW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=0000000000010001
+rdx=00000091586ff790
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c8c     : 00000000`0001000c 00000000`0001000c 00000000`001a05a2 00000201`cf16bdb0 : user32!GetMonitorInfoW
+00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c8c
+00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+[GBTRACE] func=user32!GetWindowRect
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=00000091588ff5a0
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c2f     : 00000000`0001000c 00000000`001a05a2 00000201`cf1f8bb0 00000201`cf162750 : user32!GetWindowRect
+00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c2f
+00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+[GBTRACE] func=user32!MonitorFromWindow
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001a05a2
+rdx=0000000000000000
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c71     : 00000000`0001000c 00000000`001a05a2 00000000`0001000c 00000201`cf162750 : user32!MonitorFromWindow
+00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c71
+00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+[GBTRACE] func=user32!GetMonitorInfoW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=0000000000010001
+rdx=00000091588ff5b0
+RetAddr               : Args to Child                                                           : Call Site
+00007ff6`af2f2c8c     : 00000000`0001000c 00000000`0001000c 00000000`001a05a2 00000201`cf1f8bb0 : user32!GetMonitorInfoW
+00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c8c
+00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92
+00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0
+00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819
+(302c.5644): Windows Runtime Originate Error - code 40080201 (first chance)
+(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)
+(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)
+(302c.8b0): C++ EH exception - code e06d7363 (first chance)
+(302c.8b0): C++ EH exception - code e06d7363 (first chance)
+C:\__w\1\s\Source\GameBarFTServer\Utilities\ThirdPartyLauncherDataProvider.cpp(247)\GameBarFTServer.exe!00007FF6AF3926F7: (caller: 00007FF6AF3883EA) LogHr(2) tid(8b0) 8007023E {응용 프로그램 오류}
+예외 %s (0x    Msg:[Failed to access library directory C:\Program Files (x86)\Steam\steamapps\ -- std::exception: directory_iterator::directory_iterator: The system cannot find the path specified.: "C:\Program Files (x86)\Steam\steaModLoad: 00007ff8`03720000 00007ff8`03c7e000   C:\WINDOWS\system32\windowsudk.shellcommon.dll
+ModLoad: 00007ff8`32a90000 00007ff8`330d4000   C:\Windows\System32\OneCoreUAPCommonProxyStub.dll
+ModLoad: 00007ff8`3df20000 00007ff8`3df4b000   C:\WINDOWS\SYSTEM32\USERENV.dll
+(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)
+(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)
+[GBTRACE] func=user32!SetWindowLongPtrW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001b094a
+rdx=00000000fffffffe
+r8=ffffffffffffffff
+RetAddr               : Args to Child                                                           : Call Site
+00007ff8`3bd5d71a     : 00000000`00000000 00000000`00000083 00000000`00000000 00007ff8`3bd563d6 : user32!SetWindowLongPtrW
+00007ff8`3bd608f9     : 00000000`00000000 00000000`00000000 00000000`00000000 00000091`58bfeec8 : uxtheme!CThemeWnd::Reject+0xc6
+00007ff8`3bd5faca     : 00000201`cf9020e0 00000000`00000000 00000000`00000000 00000201`cf9020e0 : uxtheme!CThemeWnd::Attach+0x71
+00007ff8`3bd5f171     : 00000000`00000000 00007ff8`41ab314f 00000000`00000000 00000091`58bff3f0 : uxtheme!_ThemeDefWindowProc+0x94a
+00007ff8`412e5a8a     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : uxtheme!ThemeDefWindowProcW+0x11
+00007ff8`400d8ca6     : 00000000`00000000 00000000`00000001 00000000`001b094a 00000000`00000000 : user32!DefWindowProcW+0xca
+[GBTRACE] func=user32!SetWindowLongPtrW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=00000000001b094a
+rdx=00000000fffffffc
+r8=00007ff840110340
+RetAddr               : Args to Child                                                           : Call Site
+00007ff8`400dac09     : 00000201`cf177690 00007ff8`3ce87698 00000201`cf177690 00000201`cfa3f970 : user32!SetWindowLongPtrW
+00007ff8`40031960     : 00000201`cf177690 00000201`cfa3f970 00000091`58bffb90 00000201`cfa3f970 : combase!OXIDEntry::StartServer+0x45
+00007ff8`400317c1     : 00000201`cf177690 00000000`00000000 00000201`cf000000 00000000`00000038 : combase!CComApartment::StartServer+0x60
+00007ff8`3fffa243     : 00000201`cfa062d0 00000000`00000001 00000201`00000038 00000000`00000000 : combase!InitChannelIfNecessary+0x91
+00007ff8`400783b8     : 00000201`d1f40008 00000201`cfa3de80 00000201`cfa3f9e0 00021480`fffe9c86 : combase!CoMarshalInterface+0xd3
+00007ff8`400782c7     : 00000201`cfa3f9e0 00000201`cfa3de80 00000201`00000002 00000201`cfa3f970 : combase!wCoMarshalInterThreadInterfaceInStream+0x84
+ModLoad: 00007ff8`203b0000 00007ff8`20476000   C:\WINDOWS\System32\StructuredQuery.dll
+ModLoad: 00007ff8`21880000 00007ff8`21b1e000   C:\WINDOWS\System32\icu.dll
+[GBTRACE] func=user32!SetWindowLongPtrW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=0000000000110954
+rdx=00000000fffffffe
+r8=ffffffffffffffff
+RetAddr               : Args to Child                                                           : Call Site
+00007ff8`3bd5d71a     : 00000000`00000000 00000000`00000083 00000000`00000000 00007ff8`3bd563d6 : user32!SetWindowLongPtrW
+00007ff8`3bd608f9     : 00000000`00000000 00000000`00000000 00000000`00000000 00000091`58dfd4b8 : uxtheme!CThemeWnd::Reject+0xc6
+00007ff8`3bd5faca     : 00000201`cf9020e0 00000000`00000000 00000000`00000000 00000201`cf9020e0 : uxtheme!CThemeWnd::Attach+0x71
+00007ff8`3bd5f171     : 00000000`00000000 00007ff8`41ab314f 00000000`00000000 00000091`58dfd9e0 : uxtheme!_ThemeDefWindowProc+0x94a
+00007ff8`412e5a8a     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : uxtheme!ThemeDefWindowProcW+0x11
+00007ff8`400d8ca6     : 00000000`00000000 00000000`00000001 00000000`00110954 00000000`00000000 : user32!DefWindowProcW+0xca
+[GBTRACE] func=user32!SetWindowLongPtrW
+.  0	id: 302c	attach	name: C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe
+rcx=0000000000110954
+rdx=00000000fffffffc
+r8=00007ff840110340
+RetAddr               : Args to Child                                                           : Call Site
+00007ff8`400dac09     : 00000201`cf177850 00000000`00000020 00000201`cf177850 00000201`cfa0a108 : user32!SetWindowLongPtrW
+00007ff8`40031960     : 00000201`cf177850 00000201`cfa0a108 00000091`58dfe100 00000201`cfa0a108 : combase!OXIDEntry::StartServer+0x45
+00007ff8`400317c1     : 00000201`cf177850 00007ff8`41a44d46 00000201`cfa0a130 00007ff8`3c918b4e : combase!CComApartment::StartServer+0x60
+00007ff8`3ffff73f     : 00000201`cfa06c10 00000201`cfa0a108 00000091`58dfe100 00007ff8`3c85921b : combase!InitChannelIfNecessary+0x91
+00007ff8`3ffffdc4     : 00007ff8`402d3bc0 00000201`cfa0a108 00007ff8`3ce97918 00000201`00000001 : combase!CGIPTable::RegisterInterfaceInGlobalHlp+0x6b

@@ -1,0 +1,1094 @@
+﻿{
+    "analyzed_at":  "2026-03-15 10:07:32 +09:00",
+    "duration_seconds":  3,
+    "include_dxgi":  true,
+    "include_xaml":  true,
+    "idle_etl":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-logman-idle-20260315-100620.etl",
+    "launch_etl":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-logman-launch-20260315-100620.etl",
+    "idle_summary":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-logman-idle-summary-20260315-100620.json",
+    "launch_summary":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-logman-launch-summary-20260315-100620.json",
+    "top_positive_deltas":  [
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  45,
+                                    "task":  32,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  2140,
+                                    "delta":  2132
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  44,
+                                    "task":  32,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  2140,
+                                    "delta":  2132
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  25,
+                                    "task":  17,
+                                    "opcode":  0,
+                                    "idle_count":  8,
+                                    "launch_count":  2140,
+                                    "delta":  2132
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  388,
+                                    "task":  286,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  1605,
+                                    "delta":  1605
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  297,
+                                    "task":  195,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  1303,
+                                    "delta":  1303
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  38,
+                                    "task":  28,
+                                    "opcode":  0,
+                                    "idle_count":  16,
+                                    "launch_count":  1128,
+                                    "delta":  1112
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  555,
+                                    "task":  368,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  634,
+                                    "delta":  634
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  556,
+                                    "task":  368,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  634,
+                                    "delta":  634
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  55,
+                                    "task":  34,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  266,
+                                    "delta":  266
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  1,
+                                    "task":  1,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  258,
+                                    "delta":  258
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  133,
+                                    "task":  81,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  205,
+                                    "delta":  205
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  61,
+                                    "task":  40,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  201,
+                                    "delta":  201
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  541,
+                                    "task":  361,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  163,
+                                    "delta":  163
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  540,
+                                    "task":  361,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  163,
+                                    "delta":  163
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  561,
+                                    "task":  371,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  158,
+                                    "delta":  158
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  562,
+                                    "task":  371,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  158,
+                                    "delta":  158
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  213,
+                                    "task":  121,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  99,
+                                    "delta":  99
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  583,
+                                    "task":  384,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  96,
+                                    "delta":  96
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  303,
+                                    "task":  200,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  94,
+                                    "delta":  94
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  538,
+                                    "task":  360,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  88,
+                                    "delta":  88
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  539,
+                                    "task":  360,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  88,
+                                    "delta":  88
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  570,
+                                    "task":  375,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  83,
+                                    "delta":  83
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  569,
+                                    "task":  375,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  83,
+                                    "delta":  83
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  328,
+                                    "task":  217,
+                                    "opcode":  2,
+                                    "idle_count":  30,
+                                    "launch_count":  106,
+                                    "delta":  76
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  327,
+                                    "task":  217,
+                                    "opcode":  1,
+                                    "idle_count":  30,
+                                    "launch_count":  106,
+                                    "delta":  76
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  6,
+                                    "task":  39,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  75,
+                                    "delta":  75
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  5,
+                                    "task":  39,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  75,
+                                    "delta":  75
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  48,
+                                    "task":  12,
+                                    "opcode":  2,
+                                    "idle_count":  0,
+                                    "launch_count":  73,
+                                    "delta":  73
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  47,
+                                    "task":  12,
+                                    "opcode":  1,
+                                    "idle_count":  0,
+                                    "launch_count":  73,
+                                    "delta":  73
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  0,
+                                    "task":  0,
+                                    "opcode":  0,
+                                    "idle_count":  91,
+                                    "launch_count":  159,
+                                    "delta":  68
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  446,
+                                    "task":  306,
+                                    "opcode":  0,
+                                    "idle_count":  9,
+                                    "launch_count":  75,
+                                    "delta":  66
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  145,
+                                    "task":  63,
+                                    "opcode":  2,
+                                    "idle_count":  15,
+                                    "launch_count":  74,
+                                    "delta":  59
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  144,
+                                    "task":  63,
+                                    "opcode":  1,
+                                    "idle_count":  15,
+                                    "launch_count":  74,
+                                    "delta":  59
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  323,
+                                    "task":  236,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  57,
+                                    "delta":  57
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  115,
+                                    "task":  66,
+                                    "opcode":  1,
+                                    "idle_count":  22,
+                                    "launch_count":  76,
+                                    "delta":  54
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  243,
+                                    "task":  149,
+                                    "opcode":  0,
+                                    "idle_count":  22,
+                                    "launch_count":  76,
+                                    "delta":  54
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  116,
+                                    "task":  66,
+                                    "opcode":  2,
+                                    "idle_count":  22,
+                                    "launch_count":  76,
+                                    "delta":  54
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  120,
+                                    "task":  69,
+                                    "opcode":  1,
+                                    "idle_count":  15,
+                                    "launch_count":  67,
+                                    "delta":  52
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  121,
+                                    "task":  69,
+                                    "opcode":  2,
+                                    "idle_count":  15,
+                                    "launch_count":  66,
+                                    "delta":  51
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  138,
+                                    "task":  60,
+                                    "opcode":  1,
+                                    "idle_count":  200,
+                                    "launch_count":  250,
+                                    "delta":  50
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  139,
+                                    "task":  60,
+                                    "opcode":  2,
+                                    "idle_count":  200,
+                                    "launch_count":  250,
+                                    "delta":  50
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  30,
+                                    "task":  22,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  50,
+                                    "delta":  50
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DirectComposition",
+                                    "event_id":  48,
+                                    "task":  35,
+                                    "opcode":  0,
+                                    "idle_count":  0,
+                                    "launch_count":  47,
+                                    "delta":  47
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  68,
+                                    "task":  39,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  66,
+                                    "task":  39,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  7,
+                                    "task":  9,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  9,
+                                    "task":  10,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  79,
+                                    "task":  2,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  65,
+                                    "task":  38,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  195,
+                                    "task":  126,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  43,
+                                    "task":  29,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  451,
+                                    "task":  340,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  45,
+                                    "task":  29,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  387,
+                                    "task":  285,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  14,
+                                    "task":  12,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  194,
+                                    "task":  126,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  371,
+                                    "task":  272,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  316,
+                                    "task":  231,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  63,
+                                    "task":  38,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  6,
+                                    "task":  9,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                }
+                            ],
+    "top_negative_deltas":  [
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  329,
+                                    "task":  218,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  330,
+                                    "task":  218,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  100,
+                                    "task":  52,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  102,
+                                    "task":  52,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  94,
+                                    "task":  49,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  93,
+                                    "task":  49,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  0,
+                                    "delta":  -8
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  318,
+                                    "task":  232,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  196,
+                                    "task":  127,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  192,
+                                    "task":  125,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  193,
+                                    "task":  125,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  314,
+                                    "task":  229,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  315,
+                                    "task":  230,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  15,
+                                    "task":  13,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  317,
+                                    "task":  232,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  311,
+                                    "task":  226,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  313,
+                                    "task":  228,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  112,
+                                    "task":  67,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  113,
+                                    "task":  67,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  12,
+                                    "task":  11,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  57,
+                                    "task":  35,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  8,
+                                    "task":  10,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  80,
+                                    "task":  2,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  44,
+                                    "task":  29,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  58,
+                                    "task":  35,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  16,
+                                    "task":  13,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  13,
+                                    "task":  12,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  0,
+                                    "delta":  -3
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  178,
+                                    "task":  80,
+                                    "opcode":  1,
+                                    "idle_count":  185,
+                                    "launch_count":  215,
+                                    "delta":  30
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  179,
+                                    "task":  80,
+                                    "opcode":  2,
+                                    "idle_count":  185,
+                                    "launch_count":  215,
+                                    "delta":  30
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  42,
+                                    "task":  9,
+                                    "opcode":  1,
+                                    "idle_count":  188,
+                                    "launch_count":  219,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-DXGI",
+                                    "event_id":  43,
+                                    "task":  9,
+                                    "opcode":  2,
+                                    "idle_count":  188,
+                                    "launch_count":  219,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  209,
+                                    "task":  137,
+                                    "opcode":  2,
+                                    "idle_count":  450,
+                                    "launch_count":  481,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  208,
+                                    "task":  137,
+                                    "opcode":  1,
+                                    "idle_count":  450,
+                                    "launch_count":  481,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  211,
+                                    "task":  138,
+                                    "opcode":  2,
+                                    "idle_count":  450,
+                                    "launch_count":  481,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  210,
+                                    "task":  138,
+                                    "opcode":  1,
+                                    "idle_count":  450,
+                                    "launch_count":  481,
+                                    "delta":  31
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  63,
+                                    "task":  22,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  60,
+                                    "task":  36,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  65,
+                                    "task":  22,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  64,
+                                    "task":  22,
+                                    "opcode":  0,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  111,
+                                    "task":  64,
+                                    "opcode":  2,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  59,
+                                    "task":  36,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  110,
+                                    "task":  64,
+                                    "opcode":  1,
+                                    "idle_count":  8,
+                                    "launch_count":  48,
+                                    "delta":  40
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-XAML",
+                                    "event_id":  26,
+                                    "task":  31,
+                                    "opcode":  0,
+                                    "idle_count":  8,
+                                    "launch_count":  49,
+                                    "delta":  41
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  65,
+                                    "task":  38,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  66,
+                                    "task":  39,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  68,
+                                    "task":  39,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  9,
+                                    "task":  10,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  79,
+                                    "task":  2,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  7,
+                                    "task":  9,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  43,
+                                    "task":  29,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  14,
+                                    "task":  12,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  194,
+                                    "task":  126,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  10,
+                                    "task":  11,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  316,
+                                    "task":  231,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  195,
+                                    "task":  126,
+                                    "opcode":  2,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  387,
+                                    "task":  285,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  371,
+                                    "task":  272,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  54,
+                                    "task":  34,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  63,
+                                    "task":  38,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  6,
+                                    "task":  9,
+                                    "opcode":  1,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                },
+                                {
+                                    "provider":  "Microsoft-Windows-Dwm-Core",
+                                    "event_id":  451,
+                                    "task":  340,
+                                    "opcode":  0,
+                                    "idle_count":  3,
+                                    "launch_count":  47,
+                                    "delta":  44
+                                }
+                            ]
+}

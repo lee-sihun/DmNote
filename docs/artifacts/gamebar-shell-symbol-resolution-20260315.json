@@ -1,0 +1,81 @@
+{
+  "generated_at": "2026-03-15 19:52:11 +09:00",
+  "modules": [
+    {
+      "module": "twinui.pcshell.dll",
+      "base": "0x7ffdabce0000",
+      "symbols": [
+        {
+          "address": "0x7ffdabd3e8fe",
+          "symbol": "FrameWrapper::PrepareFrameForDestroy+0x1e"
+        },
+        {
+          "address": "0x7ffdabd3e7f4",
+          "symbol": "FrameFactory::DestroyFrameWithWrapper+0x24"
+        },
+        {
+          "address": "0x7ffdabe2b68a",
+          "symbol": "IViewWrapper/IViewEventArgs delegate invoke helper+0x1a"
+        }
+      ]
+    },
+    {
+      "module": "twinui.dll",
+      "base": "0x7ffda59b0000",
+      "symbols": [
+        {
+          "address": "0x7ffda5a00af0",
+          "symbol": "CEdgeUiInput::Position+0x170"
+        },
+        {
+          "address": "0x7ffda59c2bbd",
+          "symbol": "CEdgeUiManager::_LayoutEdgeUiInputs+0x1e5"
+        }
+      ]
+    },
+    {
+      "module": "Taskbar.dll",
+      "base": "0x7ffda76b0000",
+      "symbols": [
+        {
+          "address": "0x7ffda76cf307",
+          "symbol": "_IsValidWindowForShellHookMessage+0x33"
+        },
+        {
+          "address": "0x7ffda76cef9e",
+          "symbol": "CTaskBand::_HandleShellHook+0x72"
+        },
+        {
+          "address": "0x7ffda76e049b",
+          "symbol": "CTaskBand::v_WndProc+0xd0b"
+        },
+        {
+          "address": "0x7ffda76df58e",
+          "symbol": "CImpWndProc::s_WndProc+0x8e"
+        }
+      ]
+    },
+    {
+      "module": "ApplicationFrame.dll",
+      "base": "0x7ffda48e0000",
+      "symbols": [
+        {
+          "address": "0x7ffda48f1428",
+          "symbol": "CApplicationFrame::v_WndProc+0x168"
+        },
+        {
+          "address": "0x7ffda490cf03",
+          "symbol": "CWRLImpWndProc<CApplicationFrame>::s_WndProcBase+0xa3"
+        },
+        {
+          "address": "0x7ffda490d79d",
+          "symbol": "CWRLImpWndProc<CTitleBar>::s_WndProcBase+0x17d"
+        },
+        {
+          "address": "0x7ffda4910014",
+          "symbol": "<lambda_221dacdd06ccd66cd3dfa12ab74b7670>::operator()+0x74"
+        }
+      ]
+    }
+  ]
+}

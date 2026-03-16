@@ -1,0 +1,270 @@
+Opened log file 'C:\Users\esihun\Desktop\workfile\DmNote\docs\artifacts\gamebar-broker-show-cdb-20260315-185338\gamebar.log'
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.031 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 30
+
+Microsoft (R) Windows Debugger Version 10.0.26100.7705 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+*** wait with pending attach
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script successfully loaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*
+Symbol search path is: srv*
+Executable search path is: 
+ModLoad: 00007ff7`06b20000 00007ff7`07a17000   C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GameBar.exe
+ModLoad: 00007ff8`41a40000 00007ff8`41ca7000   C:\WINDOWS\SYSTEM32\ntdll.dll
+ModLoad: 00007ff8`3fdb0000 00007ff8`3fe79000   C:\WINDOWS\System32\KERNEL32.DLL
+ModLoad: 00007ff8`3eb70000 00007ff8`3ef60000   C:\WINDOWS\System32\KERNELBASE.dll
+ModLoad: 00007ff8`412d0000 00007ff8`41495000   C:\WINDOWS\System32\USER32.dll
+ModLoad: 00007fff`dcc20000 00007fff`dcc6c000   C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\GamingTelemetryNuGet.dll
+ModLoad: 00007ff8`3f470000 00007ff8`3f497000   C:\WINDOWS\System32\win32u.dll
+ModLoad: 00007ff8`410d0000 00007ff8`411e8000   C:\WINDOWS\System32\RPCRT4.dll
+ModLoad: 00007ff8`3ffa0000 00007ff8`40325000   C:\WINDOWS\System32\combase.dll
+ModLoad: 00007ff8`412a0000 00007ff8`412cb000   C:\WINDOWS\System32\GDI32.dll
+ModLoad: 00007ff8`3f0f0000 00007ff8`3f23b000   C:\WINDOWS\System32\ucrtbase.dll
+ModLoad: 00007ff8`3f690000 00007ff8`3f7c8000   C:\WINDOWS\System32\gdi32full.dll
+ModLoad: 00007ff8`40460000 00007ff8`40514000   C:\WINDOWS\System32\ADVAPI32.dll
+ModLoad: 00007ff8`3f240000 00007ff8`3f2e3000   C:\WINDOWS\System32\msvcp_win.dll
+ModLoad: 00007ff8`414a0000 00007ff8`41549000   C:\WINDOWS\System32\msvcrt.dll
+ModLoad: 00007ff8`40e30000 00007ff8`40e9a000   C:\WINDOWS\System32\SHLWAPI.dll
+ModLoad: 00007ff8`3fef0000 00007ff8`3ff96000   C:\WINDOWS\System32\sechost.dll
+ModLoad: 00007ff8`3fcb0000 00007ff8`3fd90000   C:\WINDOWS\System32\OLEAUT32.dll
+ModLoad: 00007ff8`40c80000 00007ff8`40e20000   C:\WINDOWS\System32\ole32.dll
+ModLoad: 00007ff8`3d8f0000 00007ff8`3d90b000   C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+ModLoad: 00007ff8`38420000 00007ff8`3843b000   C:\WINDOWS\SYSTEM32\wkscli.dll
+ModLoad: 00007ff8`3c070000 00007ff8`3c1ae000   C:\WINDOWS\SYSTEM32\dxgi.dll
+ModLoad: 00007fff`fb840000 00007fff`fb863000   C:\WINDOWS\SYSTEM32\d3d12.dll
+ModLoad: 00007fff`dbb80000 00007fff`dbbd2000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00_14.0.33519.0_x64__8wekyb3d8bbwe\vccorlib140_app.DLL
+ModLoad: 00007ff8`0afd0000 00007ff8`0b05c000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00_14.0.33519.0_x64__8wekyb3d8bbwe\MSVCP140_APP.dll
+ModLoad: 00007ff8`27430000 00007ff8`2743c000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00_14.0.33519.0_x64__8wekyb3d8bbwe\VCRUNTIME140_1_APP.dll
+ModLoad: 00007ff8`27410000 00007ff8`2742d000   C:\Program Files\WindowsApps\microsoft.vclibs.140.00_14.0.33519.0_x64__8wekyb3d8bbwe\VCRUNTIME140_APP.dll
+ModLoad: 00007ff8`403c0000 00007ff8`403ef000   C:\WINDOWS\System32\IMM32.DLL
+ModLoad: 00007ff8`3bf00000 00007ff8`3bf6a000   C:\WINDOWS\SYSTEM32\directxdatabasehelper.dll
+ModLoad: 00007ff8`3f560000 00007ff8`3f5f9000   C:\WINDOWS\System32\bcryptPrimitives.dll
+ModLoad: 00007ff8`3f2f0000 00007ff8`3f463000   C:\WINDOWS\System32\WinTypes.dll
+ModLoad: 00007ff8`02270000 00007ff8`03380000   C:\Windows\System32\Windows.UI.Xaml.dll
+ModLoad: 00007ff8`23910000 00007ff8`23bda000   C:\WINDOWS\SYSTEM32\iertutil.dll
+ModLoad: 00007ff8`3d2f0000 00007ff8`3d2fd000   C:\WINDOWS\SYSTEM32\netutils.dll
+ModLoad: 00007ff8`237d0000 00007ff8`237f9000   C:\WINDOWS\SYSTEM32\srvcli.dll
+ModLoad: 00007ff8`0a820000 00007ff8`0a8bb000   C:\Windows\System32\Windows.Web.dll
+ModLoad: 00007ff8`23fd0000 00007ff8`240ef000   C:\Windows\System32\MrmCoreR.dll
+ModLoad: 00007ff8`3fbb0000 00007ff8`3fca5000   C:\WINDOWS\System32\shcore.dll
+ModLoad: 00007ff8`26ba0000 00007ff8`26bf0000   C:\WINDOWS\SYSTEM32\windows.staterepositoryclient.dll
+ModLoad: 00007ff8`29710000 00007ff8`2972a000   C:\WINDOWS\SYSTEM32\windows.staterepositorycore.dll
+ModLoad: 00007ff8`3ea90000 00007ff8`3eab9000   C:\WINDOWS\SYSTEM32\profapi.dll
+ModLoad: 00007ff8`26860000 00007ff8`269b8000   C:\Windows\System32\Windows.UI.dll
+ModLoad: 00007ff8`06870000 00007ff8`068a4000   C:\WINDOWS\SYSTEM32\bcp47mrm.dll
+ModLoad: 00007ff8`3bd50000 00007ff8`3bdff000   C:\WINDOWS\system32\uxtheme.dll
+ModLoad: 00007ff8`33220000 00007ff8`33458000   C:\Windows\System32\twinapi.appcore.dll
+ModLoad: 00007ff8`241a0000 00007ff8`24338000   C:\Windows\System32\Windows.Globalization.dll
+ModLoad: 00007ff8`29110000 00007ff8`2916e000   C:\WINDOWS\SYSTEM32\Bcp47Langs.dll
+ModLoad: 00007ff8`3b760000 00007ff8`3b885000   C:\WINDOWS\SYSTEM32\CoreMessaging.dll
+ModLoad: 00007ff8`32a90000 00007ff8`330d4000   C:\Windows\System32\OneCoreUAPCommonProxyStub.dll
+ModLoad: 00007ff8`21e90000 00007ff8`22075000   C:\WINDOWS\SYSTEM32\urlmon.dll
+ModLoad: 00007ff8`3c790000 00007ff8`3cff0000   C:\WINDOWS\SYSTEM32\windows.storage.dll
+ModLoad: 00007ff8`3beb0000 00007ff8`3befd000   C:\WINDOWS\SYSTEM32\dxcore.dll
+ModLoad: 00007ff8`3ae70000 00007ff8`3b0d7000   C:\WINDOWS\SYSTEM32\d3d11.dll
+ModLoad: 00007ff8`38150000 00007ff8`38214000   C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_4c65b5296c2450a7\nvldumdx.dll
+ModLoad: 00007ff8`38910000 00007ff8`3891b000   C:\WINDOWS\SYSTEM32\VERSION.dll
+ModLoad: 00007ff8`3e1b0000 00007ff8`3e1c3000   C:\WINDOWS\SYSTEM32\msasn1.dll
+ModLoad: 00007fff`b9c60000 00007fff`ba1fa000   C:\Program Files\WindowsApps\microsoft.ui.xaml.2.8_8.2501.31001.0_x64__8wekyb3d8bbwe\Microsoft.UI.Xaml.dll
+ModLoad: 00007ff8`3a820000 00007ff8`3ae63000   C:\WINDOWS\SYSTEM32\d2d1.dll
+ModLoad: 00007ff8`38110000 00007ff8`3814b000   C:\WINDOWS\SYSTEM32\cryptnet.dll
+ModLoad: 00007ff8`3ef70000 00007ff8`3f0e7000   C:\WINDOWS\System32\CRYPT32.dll
+ModLoad: 00007fff`c2540000 00007fff`c2736000   C:\Windows\ShellExperiences\NetworkUX.dll
+ModLoad: 00007ff8`04960000 00007ff8`049be000   C:\WINDOWS\SYSTEM32\wincorlib.DLL
+ModLoad: 00007ff8`38cb0000 00007ff8`38cd2000   C:\WINDOWS\SYSTEM32\MobileNetworking.dll
+ModLoad: 00007ff8`3e140000 00007ff8`3e14c000   C:\WINDOWS\SYSTEM32\cryptbase.dll
+ModLoad: 00007fff`f9780000 00007fff`f97e0000   C:\Windows\System32\Windows.Storage.ApplicationData.dll
+ModLoad: 00007ff8`3e220000 00007ff8`3e28b000   C:\WINDOWS\SYSTEM32\wldp.dll
+ModLoad: 00007ff8`397a0000 00007ff8`398ad000   C:\WINDOWS\SYSTEM32\PROPSYS.dll
+ModLoad: 00007ff8`37ee0000 00007ff8`3805c000   C:\WINDOWS\SYSTEM32\drvstore.dll
+ModLoad: 00007ff8`0ac20000 00007ff8`0ada1000   C:\Windows\System32\Windows.System.Launcher.dll
+ModLoad: 00007ff8`3e6c0000 00007ff8`3e6ed000   C:\WINDOWS\SYSTEM32\devobj.dll
+ModLoad: 00007ff8`3e6f0000 00007ff8`3e747000   C:\WINDOWS\SYSTEM32\cfgmgr32.dll
+ModLoad: 00007ff8`3f600000 00007ff8`3f684000   C:\WINDOWS\System32\wintrust.dll
+ModLoad: 00007fff`d8270000 00007fff`d82a4000   C:\Windows\System32\WinRtTracing.dll
+ModLoad: 00007ff8`411f0000 00007ff8`41210000   C:\WINDOWS\System32\imagehlp.dll
+ModLoad: 00007ff8`00f50000 00007ff8`01279000   C:\WINDOWS\SYSTEM32\Windows.UI.Xaml.Controls.dll
+ModLoad: 00007ff8`1c2d0000 00007ff8`1c3a4000   C:\Windows\System32\Windows.ApplicationModel.dll
+ModLoad: 00007ff8`03720000 00007ff8`03c7e000   C:\WINDOWS\system32\windowsudk.shellcommon.dll
+ModLoad: 00007ff8`3f7d0000 00007ff8`3f931000   C:\WINDOWS\System32\msctf.dll
+ModLoad: 00007ff8`06f90000 00007ff8`070c7000   C:\Windows\System32\Windows.Security.Authentication.Web.Core.dll
+ModLoad: 00007fff`fb4e0000 00007fff`fb4ff000   C:\WINDOWS\SYSTEM32\gamemode.dll
+ModLoad: 00007ff8`09f70000 00007ff8`09f8f000   C:\Windows\System32\Windows.Shell.ServiceHostBuilder.dll
+ModLoad: 00007fff`dbb20000 00007fff`dbb7a000   C:\Program Files\WindowsApps\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\Xbox.Experimentation.dll
+ModLoad: 00007ff8`06ed0000 00007ff8`06ee4000   C:\WINDOWS\system32\execmodelproxy.dll
+ModLoad: 00007ff8`1a910000 00007ff8`1a9cd000   C:\Windows\System32\OneCoreCommonProxyStub.dll
+ModLoad: 00007ff8`1e1c0000 00007ff8`1e1f5000   C:\Windows\System32\bcastdvr.proxy.dll
+ModLoad: 00007ff8`38620000 00007ff8`38903000   C:\WINDOWS\system32\CoreUIComponents.dll
+ModLoad: 00007ff8`3c340000 00007ff8`3c376000   C:\WINDOWS\SYSTEM32\RMCLIENT.dll
+ModLoad: 00007ff8`06f30000 00007ff8`06f7f000   C:\Windows\System32\vaultcli.dll
+ModLoad: 00007ff8`28f20000 00007ff8`29102000   C:\Windows\System32\InputHost.dll
+ModLoad: 00007ff8`064b0000 00007ff8`06591000   C:\Windows\System32\UiaManager.dll
+ModLoad: 00007ff8`38260000 00007ff8`38416000   C:\WINDOWS\SYSTEM32\WindowManagementAPI.dll
+ModLoad: 00007ff8`24680000 00007ff8`247ec000   C:\WINDOWS\SYSTEM32\windows.ui.core.textinput.dll
+ModLoad: 00007ff8`3e150000 00007ff8`3e16b000   C:\WINDOWS\SYSTEM32\CRYPTSP.dll
+ModLoad: 00007ff8`29750000 00007ff8`298a1000   C:\WINDOWS\SYSTEM32\TextInputFramework.dll
+ModLoad: 00007ff8`3d850000 00007ff8`3d88b000   C:\WINDOWS\system32\rsaenh.dll
+ModLoad: 00007ff8`020c0000 00007ff8`0220d000   C:\Windows\System32\Windows.UI.Immersive.dll
+ModLoad: 00007fff`feda0000 00007fff`fedfa000   C:\WINDOWS\system32\DataExchange.dll
+ModLoad: 00007ff8`3ea60000 00007ff8`3ea86000   C:\WINDOWS\SYSTEM32\bcrypt.dll
+ModLoad: 00007ff8`33f40000 00007ff8`37cd3000   C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_4c65b5296c2450a7\nvgpucomp64.dll
+ModLoad: 00007ff8`40520000 00007ff8`40c6d000   C:\WINDOWS\System32\SHELL32.dll
+ModLoad: 00007ff8`334a0000 00007ff8`3357e000   C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_4c65b5296c2450a7\NvMemMapStoragex.dll
+ModLoad: 00007ff8`3e9d0000 00007ff8`3ea2e000   C:\WINDOWS\SYSTEM32\POWRPROF.dll
+ModLoad: 00007ff8`33460000 00007ff8`33495000   C:\WINDOWS\SYSTEM32\WINMM.dll
+ModLoad: 00007ff8`3e9b0000 00007ff8`3e9c4000   C:\WINDOWS\SYSTEM32\UMPDC.dll
+ModLoad: 00007ff8`2ccf0000 00007ff8`32524000   C:\WINDOWS\System32\DriverStore\FileRepository\nvmdi.inf_amd64_4c65b5296c2450a7\nvwgf2umx.dll
+ModLoad: 00007ff8`3df20000 00007ff8`3df4b000   C:\WINDOWS\SYSTEM32\USERENV.dll
+ModLoad: 00007ff8`3d260000 00007ff8`3d291000   C:\WINDOWS\SYSTEM32\profext.dll
+ModLoad: 00007ff8`27b40000 00007ff8`27b79000   C:\WINDOWS\SYSTEM32\rometadata.dll
+ModLoad: 00007ff8`3a5b0000 00007ff8`3a81b000   C:\WINDOWS\SYSTEM32\dwrite.dll
+ModLoad: 00007fff`f99b0000 00007fff`f9a30000   C:\Windows\System32\ActXPrxy.dll
+ModLoad: 00007ff8`008a0000 00007ff8`00953000   C:\WINDOWS\SYSTEM32\TextShaping.dll
+ModLoad: 00007ff8`07110000 00007ff8`071d4000   C:\Windows\System32\Windows.Networking.Connectivity.dll
+ModLoad: 00007ff8`20e30000 00007ff8`20f40000   C:\Windows\System32\SystemSettings.DataModel.dll
+ModLoad: 00007ff8`28a20000 00007ff8`28ab1000   C:\Windows\System32\Windows.Graphics.dll
+ModLoad: 00007ff8`3b0e0000 00007ff8`3b30a000   C:\Windows\System32\dcomp.dll
+ModLoad: 00007ff8`39df0000 00007ff8`39e09000   C:\WINDOWS\SYSTEM32\Microsoft.Internal.WarpPal.dll
+ModLoad: 00007ff8`01c90000 00007ff8`01ca5000   C:\WINDOWS\SYSTEM32\windows.globalization.fontgroups.dll
+ModLoad: 00007ff8`07b30000 00007ff8`07b3b000   C:\WINDOWS\SYSTEM32\fontgroupsoverride.dll
+ModLoad: 00007fff`feae0000 00007fff`feaf6000   C:\Windows\System32\Windows.System.Profile.SystemId.dll
+ModLoad: 00007fff`f6cf0000 00007fff`f6d28000   C:\WINDOWS\SYSTEM32\CLIPC.dll
+ModLoad: 00007fff`f5ec0000 00007fff`f5f1d000   C:\Windows\System32\CryptoWinRT.dll
+ModLoad: 00007fff`f6e50000 00007fff`f6fa3000   C:\Windows\System32\Windows.Web.Http.dll
+ModLoad: 00007fff`bcf70000 00007fff`bd1f2000   C:\Windows\System32\Windows.ApplicationModel.Store.dll
+ModLoad: 00007ff8`24340000 00007ff8`245c9000   C:\WINDOWS\SYSTEM32\WININET.dll
+ModLoad: 00007ff8`007a0000 00007ff8`00843000   C:\WINDOWS\system32\directmanipulation.dll
+ModLoad: 00007ff8`3dba0000 00007ff8`3dbe9000   C:\WINDOWS\SYSTEM32\SspiCli.dll
+ModLoad: 00007ff8`41220000 00007ff8`41294000   C:\WINDOWS\System32\WS2_32.dll
+ModLoad: 00007ff8`1e120000 00007ff8`1e138000   C:\WINDOWS\SYSTEM32\ondemandconnroutehelper.dll
+ModLoad: 00007ff8`384f0000 00007ff8`3860e000   C:\WINDOWS\SYSTEM32\WINHTTP.dll
+ModLoad: 00007ff8`3de80000 00007ff8`3deeb000   C:\WINDOWS\system32\mswsock.dll
+ModLoad: 00007ff8`3d160000 00007ff8`3d21d000   C:\WINDOWS\SYSTEM32\firewallapi.dll
+ModLoad: 00007ff8`3d110000 00007ff8`3d15c000   C:\WINDOWS\SYSTEM32\fwbase.dll
+ModLoad: 00007ff8`3d300000 00007ff8`3d333000   C:\WINDOWS\SYSTEM32\IPHLPAPI.DLL
+ModLoad: 00007ff8`33580000 00007ff8`33660000   C:\Windows\System32\Windows.Gaming.Input.dll
+ModLoad: 00007ff8`3be10000 00007ff8`3be1f000   C:\WINDOWS\SYSTEM32\WINNSI.DLL
+ModLoad: 00007fff`f46b0000 00007fff`f4700000   C:\Windows\System32\Windows.Energy.dll
+ModLoad: 00007ff8`3fe80000 00007ff8`3fe8a000   C:\WINDOWS\System32\NSI.dll
+ModLoad: 00007ff8`3e8d0000 00007ff8`3e8da000   C:\WINDOWS\SYSTEM32\DPAPI.DLL
+ModLoad: 00007fff`fc8a0000 00007fff`fc8b8000   C:\Windows\System32\ffbroker.dll
+ModLoad: 00007ff8`3d390000 00007ff8`3d4b6000   C:\WINDOWS\SYSTEM32\DNSAPI.dll
+ModLoad: 00007ff8`33850000 00007ff8`3385b000   C:\Windows\System32\rasadhlp.dll
+ModLoad: 00007ff8`37e50000 00007ff8`37ed6000   C:\WINDOWS\System32\fwpuclnt.dll
+ModLoad: 00007fff`c64f0000 00007fff`c67ed000   C:\Windows\System32\InstallService.dll
+ModLoad: 00007ff8`233f0000 00007ff8`23411000   C:\WINDOWS\SYSTEM32\MPR.dll
+ModLoad: 00007ff8`014b0000 00007ff8`015e6000   C:\WINDOWS\SYSTEM32\Windows.UI.Xaml.Phone.dll
+ModLoad: 00007fff`f6dd0000 00007fff`f6e4b000   C:\Windows\System32\wosc.dll
+ModLoad: 00007ff8`3a2a0000 00007ff8`3a354000   C:\WINDOWS\SYSTEM32\policymanager.dll
+ModLoad: 00007ff8`39d50000 00007ff8`39de1000   C:\WINDOWS\SYSTEM32\msvcp110_win.dll
+ModLoad: 00007ff8`3d720000 00007ff8`3d7e9000   C:\WINDOWS\system32\schannel.DLL
+ModLoad: 00007ff8`3a360000 00007ff8`3a59f000   C:\Windows\System32\windowscodecs.dll
+ModLoad: 00007fff`ff380000 00007fff`ff3dd000   C:\WINDOWS\SYSTEM32\wuceffects.dll
+ModLoad: 00007ff8`009c0000 00007ff8`00f20000   C:\Windows\System32\StartTileData.dll
+ModLoad: 00007ff8`26710000 00007ff8`2679e000   C:\WINDOWS\SYSTEM32\MDMRegistration.DLL
+ModLoad: 00007ff8`3e360000 00007ff8`3e390000   C:\WINDOWS\SYSTEM32\ncrypt.dll
+ModLoad: 00007ff8`3e310000 00007ff8`3e34f000   C:\WINDOWS\SYSTEM32\NTASN1.dll
+ModLoad: 00007ff8`399d0000 00007ff8`399e7000   C:\WINDOWS\SYSTEM32\usermgrcli.dll
+ModLoad: 00007ff8`06ef0000 00007ff8`06f06000   C:\Windows\System32\threadpoolwinrt.dll
+ModLoad: 00007ff8`06200000 00007ff8`0622d000   C:\WINDOWS\system32\ncryptsslp.dll
+ModLoad: 00007fff`d9bd0000 00007fff`d9c47000   C:\Windows\System32\BcastDVRClient.dll
+ModLoad: 00007fff`b8030000 00007fff`b803f000   C:\WINDOWS\SYSTEM32\SystemEventsBrokerClient.dll
+ModLoad: 00007ff8`33740000 00007ff8`3379f000   C:\Windows\System32\usermgrproxy.dll
+ModLoad: 00007ff8`26fd0000 00007ff8`272a7000   C:\Windows\System32\Windows.CloudStore.dll
+ModLoad: 00007fff`d68a0000 00007fff`d6b68000   C:\Windows\System32\certenroll.dll
+ModLoad: 00007fff`d66f0000 00007fff`d67ce000   C:\WINDOWS\SYSTEM32\certca.dll
+ModLoad: 00007ff8`04240000 00007ff8`04330000   C:\Windows\System32\Windows.CloudStore.Schema.Shell.dll
+ModLoad: 00007ff8`05320000 00007ff8`053d6000   C:\Windows\System32\appresolver.dll
+ModLoad: 00007fff`d7410000 00007fff`d7454000   C:\WINDOWS\system32\mlang.dll
+ModLoad: 00007ff8`05530000 00007ff8`055d2000   C:\Windows\System32\TileDataRepository.dll
+ModLoad: 00007ff8`29d50000 00007ff8`2a25e000   C:\WINDOWS\SYSTEM32\Windows.StateRepository.dll
+ModLoad: 00007ff8`298b0000 00007ff8`29977000   C:\WINDOWS\SYSTEM32\StateRepository.Core.dll
+ModLoad: 00007ff8`1c8e0000 00007ff8`1c9a4000   C:\Windows\System32\Windows.StateRepositoryPS.dll
+ModLoad: 00007ff8`38d80000 00007ff8`38eef000   C:\Windows\System32\AppXDeploymentClient.dll
+ModLoad: 00007ff8`06e80000 00007ff8`06ea3000   C:\Windows\System32\Windows.StateRepositoryBroker.dll
+ModLoad: 00007ff8`3be70000 00007ff8`3be82000   C:\WINDOWS\SYSTEM32\pfclient.dll
+ModLoad: 00007ff8`3d0a0000 00007ff8`3d0cd000   C:\WINDOWS\SYSTEM32\slc.dll
+ModLoad: 00007fff`f6bb0000 00007fff`f6ce4000   C:\Windows\System32\ShellCommonCommonProxyStub.dll
+ModLoad: 00007ff8`269e0000 00007ff8`26a1c000   C:\WINDOWS\SYSTEM32\omadmapi.dll
+ModLoad: 00007ff8`02230000 00007ff8`02260000   C:\Windows\System32\Windows.Management.Workplace.dll
+ModLoad: 00007fff`fe2c0000 00007fff`fe365000   C:\WINDOWS\SYSTEM32\PhotoMetadataHandler.dll
+ModLoad: 00007fff`de280000 00007fff`de2fb000   C:\Windows\System32\RTMediaFrame.dll
+ModLoad: 00007ff8`21880000 00007ff8`21b1e000   C:\WINDOWS\SYSTEM32\icu.dll
+(7424.72f8): Break instruction exception - code 80000003 (first chance)
+ntdll!DbgBreakPoint:
+00007ff8`41b65900 cc              int     3
+0:062> bp GameBar+0xad6a0 ".echo [GB] BrokerShow; r rcx; kb 10; g"
+0:062> bp GameBar+0x6cfc50 ".echo [GB] UpdateWindowRegionForPinnedOnlyAsync; r rcx; kb 10; g"
+0:062> bp GameBar+0x25bc60 ".echo [GB] SetAppFrameHwnd; r rcx; kb 10; g"
+0:062> bu user32!GetAncestor ".echo [GB] user32!GetAncestor; r rcx; r rdx; kb 10; g"
+Couldn't resolve error at 'user32!GetAncestor ".echo [GB] user32!GetAncestor; r rcx; r rdx; kb 10; g"'
+0:062> bu user32!GetWindowRect ".echo [GB] user32!GetWindowRect; r rcx; kb 10; g"
+0:062> bu user32!SetWindowLongW ".echo [GB] user32!SetWindowLongW; r rcx; r rdx; kb 10; g"
+0:062> g
+(7424.c9c): Windows Runtime Originate Error - code 40080201 (first chance)
+(7424.2d0c): Windows Runtime Originate Error - code 40080201 (first chance)
+(7424.2d0c): Windows Runtime Originate Error - code 40080201 (first chance)
+(7424.7514): Unknown exception - code 00000005 (first chance)
+ info: request: Microsoft.WindowsStore CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US (Windows::ApplicationModel::Store::Preview::InstallControl::AppInstallManagerImpl::IsStoreBlockedByPolicyAsync) [] 
+onecoreuap\net\netprofiles\winrt\networkinformation\lib\handlemanager.cpp(433)\Windows.Networking.Connectivity.dll!00007FF80711B375: (caller: 00007FF8071306D5) LogHr(31) tid(7514) 80070005 액세스가 거부되 info: result: Microsoft.WindowsStore, CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US, blocked = false (0x00000000) (Windows::ApplicationModel::Store::Preview::InstallControl::AppInstallManagerImpl::IsStoreBlockedByPolicyAsync::<lambda_d9bf8b68302812716b7c08f0a9ddd916>::operator ()) [] 
+(7424.2d0c): Windows Runtime Originate Error - code 40080201 (first chance)
+ info: request: productId = 9MV0B5HZVK9Z, skuId = , CV = VVhvEieDb0GqraBV.0 (Windows::ApplicationModel::Store::Preview::InstallControl::AppInstallManagerImpl::_GetIsApplicableForUserAsync) [] 
+ModLoad: 00007ff8`09720000 00007ff8`0993e000   C:\WINDOWS\SYSTEM32\MFPlat.DLL
+ModLoad: 00007ff8`26810000 00007ff8`26855000   C:\WINDOWS\SYSTEM32\RTWorkQ.DLL
+ModLoad: 00007ff8`3da20000 00007ff8`3da56000   C:\WINDOWS\SYSTEM32\ntmarta.dll
+[GB] user32!SetWindowLongW
+rcx=00000000000502f8
+rdx=0000000000000018
+RetAddr               : Args to Child                                                           : Call Site
+00007ff8`0232968d     : 00000000`000502f8 00000123`4c176b50 00000000`00000270 00000123`4cb54440 : USER32!SetWindowLongW
+00007ff8`0232953b     : 00000000`00050201 00000000`000502f8 00000000`000502f8 00000000`80000012 : Windows_UI_Xaml!CJupiterWindow::CoreWindowSubclassProc+0x11d
+00007ff8`412e81d6     : 00000000`00000000 00000007`a89ff570 00000000`00000001 00000000`00000000 : Windows_UI_Xaml!CJupiterWindow::StaticCoreWindowSubclassProc+0x4b
+00007ff8`412e5d2d     : 00000007`a89ff4e0 00007ff8`023294f0 00000000`000502f8 00000000`00000000 : USER32!UserCallWinProcCheckWow+0x356
+00007ff8`2686a4e2     : 00000007`a89ff4e0 00000000`00000000 00007ff8`2699d030 00000000`00000000 : USER32!DispatchMessageWorker+0x1dd
+00007ff8`2686a140     : 00000000`00000000 00000007`00000000 00000007`a89ff630 00000007`a89ff631 : Windows_UI!Windows::UI::Core::CDispatcher::ProcessMessage+0x122
+00007ff8`26869464     : 00000123`4c506fc0 00000123`4c506fc0 00000123`00001cff 00007ff8`00000006 : Windows_UI!Windows::UI::Core::CDispatcher::WaitAndProcessMessagesInternal+0xb0
+00007ff8`028e86d2     : 00002603`f72e1684 00000000`00000000 00000123`4c1921f0 00007ff8`3342f0c8 : Windows_UI!Windows::UI::Core::CDispatcher::ProcessEvents+0x124
+00007ff8`0292e91a     : 00000123`4c506fc0 00000123`4c15ea80 00000007`a89ff969 00007ff8`26869dbe : Windows_UI_Xaml!CJupiterWindow::RunCoreWindowMessageLoop+0x42
+00007ff8`0292e9ac     : 00000000`00000001 00007ff8`332b077e 0000b762`403ae277 00007ff8`332266ba : Windows_UI_Xaml!CJupiterControl::RunMessageLoop+0x2e
+00007ff8`332b0df5     : 00000123`4c15eb40 00000123`4c191760 00000000`80004005 00007ff8`333e2590 : Windows_UI_Xaml!DirectUI::DXamlCore::RunMessageLoop+0x24
+00007ff8`332265a7     : 00000123`00000004 00000123`00000005 00000123`4c159cb0 00000000`80004005 : twinapi_appcore!Windows::ApplicationModel::Core::CoreApplicationView::Run+0x35
+00007ff8`3fbf805a     : 00000123`4c15ea40 00000123`4c159cb0 00000000`00000000 00000000`80004005 : twinapi_appcore!<lambda_42789f15e44e28e8f1176a4d3f326103>::operator()+0xa7
+00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : shcore!_WrapperThreadProc+0x15a
+00007ff8`41a7c34c     : 00000000`00000000 00000000`00000000 000004f0`fffffb30 000004d0`fffffb30 : KERNEL32!BaseThreadInitThunk+0x17
+00000000`00000000     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!RtlUserThreadStart+0x2c
+USER32!SetWindowLongW:
+00007ff8`4131c9d0 48895c2408      mov     qword ptr [rsp+8],rbx ss:00000007`a89ff1d0=00000000000502f8

@@ -1,0 +1,203 @@
+﻿{
+    "coinit_hr":  "0x00000001",
+    "faces":  {
+                  "final":  {
+                                "source_name":  "final",
+                                "source_ptr":  "0x216F9D04218",
+                                "qi_map":  {
+                                               "30dad006-cf4a-45e0-aec1-2195d76fd9c0":  {
+                                                                                            "hr":  "0x00000000",
+                                                                                            "ptr_nonzero":  true
+                                                                                        },
+                                               "5eac68f9-e031-4c66-b4ea-5ab6aff979c8":  {
+                                                                                            "hr":  "0x00000000",
+                                                                                            "ptr_nonzero":  true
+                                                                                        },
+                                               "d6332df0-dbfb-575e-93f1-c7bff0693913":  {
+                                                                                            "hr":  "0x00000000",
+                                                                                            "ptr_nonzero":  true
+                                                                                        },
+                                               "9f8edc08-cbcc-59b7-8dee-a299deb75fc1":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "ab758746-5c5d-5738-9439-3e85dade945c":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "b4b868ab-eef2-5bf5-8992-fbbef2582d2d":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "9f45f4ae-912a-53ec-b31d-01b39be7b957":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "c8f91eef-ea1b-5aee-ad42-66842218d157":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "9302a129-7433-42a0-9cb8-5da5964f2756":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "c343e0c0-9666-444b-898f-cc498c7e521a":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "8f352570-5bb7-4d72-921f-6fb3f2611c71":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "65476df8-27e5-47be-9aae-29b9921dcb70":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "054da1f8-65a1-4805-9902-ca6561227524":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "a8c66395-6ae3-4a53-8547-992bd899d74d":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        },
+                                               "e85a41cb-d4e3-4e1d-9348-a584f1623a36":  {
+                                                                                            "hr":  "0x80004002",
+                                                                                            "ptr_nonzero":  false
+                                                                                        }
+                                           }
+                            },
+                  "hidden1":  {
+                                  "source_name":  "hidden1",
+                                  "source_ptr":  "0x216F9D03F18",
+                                  "qi_map":  {
+                                                 "30dad006-cf4a-45e0-aec1-2195d76fd9c0":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "5eac68f9-e031-4c66-b4ea-5ab6aff979c8":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "d6332df0-dbfb-575e-93f1-c7bff0693913":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "9f8edc08-cbcc-59b7-8dee-a299deb75fc1":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "ab758746-5c5d-5738-9439-3e85dade945c":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "b4b868ab-eef2-5bf5-8992-fbbef2582d2d":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "9f45f4ae-912a-53ec-b31d-01b39be7b957":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "c8f91eef-ea1b-5aee-ad42-66842218d157":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "9302a129-7433-42a0-9cb8-5da5964f2756":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "c343e0c0-9666-444b-898f-cc498c7e521a":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "8f352570-5bb7-4d72-921f-6fb3f2611c71":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "65476df8-27e5-47be-9aae-29b9921dcb70":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "054da1f8-65a1-4805-9902-ca6561227524":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "a8c66395-6ae3-4a53-8547-992bd899d74d":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "e85a41cb-d4e3-4e1d-9348-a584f1623a36":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          }
+                                             }
+                              },
+                  "hidden2":  {
+                                  "source_name":  "hidden2",
+                                  "source_ptr":  "0x216F9CB27B8",
+                                  "qi_map":  {
+                                                 "30dad006-cf4a-45e0-aec1-2195d76fd9c0":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "5eac68f9-e031-4c66-b4ea-5ab6aff979c8":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "d6332df0-dbfb-575e-93f1-c7bff0693913":  {
+                                                                                              "hr":  "0x00000000",
+                                                                                              "ptr_nonzero":  true
+                                                                                          },
+                                                 "9f8edc08-cbcc-59b7-8dee-a299deb75fc1":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "ab758746-5c5d-5738-9439-3e85dade945c":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "b4b868ab-eef2-5bf5-8992-fbbef2582d2d":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "9f45f4ae-912a-53ec-b31d-01b39be7b957":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "c8f91eef-ea1b-5aee-ad42-66842218d157":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "9302a129-7433-42a0-9cb8-5da5964f2756":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "c343e0c0-9666-444b-898f-cc498c7e521a":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "8f352570-5bb7-4d72-921f-6fb3f2611c71":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "65476df8-27e5-47be-9aae-29b9921dcb70":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "054da1f8-65a1-4805-9902-ca6561227524":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "a8c66395-6ae3-4a53-8547-992bd899d74d":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          },
+                                                 "e85a41cb-d4e3-4e1d-9348-a584f1623a36":  {
+                                                                                              "hr":  "0x80004002",
+                                                                                              "ptr_nonzero":  false
+                                                                                          }
+                                             }
+                              }
+              }
+}

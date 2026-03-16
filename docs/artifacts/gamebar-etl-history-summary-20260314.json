@@ -1,0 +1,620 @@
+﻿{
+    "analyzed_at":  "2026-03-14 20:24:02 +09:00",
+    "etl_files":  [
+                      {
+                          "name":  "GameBar_20260314111901_Sh.etl",
+                          "full_name":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314111901_Sh.etl",
+                          "last_write_time":  "\/Date(1773487141286)\/",
+                          "length":  60165
+                      },
+                      {
+                          "name":  "GameBar_20260314110706_Sh.etl",
+                          "full_name":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314110706_Sh.etl",
+                          "last_write_time":  "\/Date(1773486426217)\/",
+                          "length":  60477
+                      },
+                      {
+                          "name":  "GameBar_20260314105046_Sh.etl",
+                          "full_name":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314105046_Sh.etl",
+                          "last_write_time":  "\/Date(1773485445714)\/",
+                          "length":  55062
+                      },
+                      {
+                          "name":  "GameBar_20260314104436_Sh.etl",
+                          "full_name":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314104436_Sh.etl",
+                          "last_write_time":  "\/Date(1773485075886)\/",
+                          "length":  52927
+                      },
+                      {
+                          "name":  "GameBar_20260314103737_Sh.etl",
+                          "full_name":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314103737_Sh.etl",
+                          "last_write_time":  "\/Date(1773484657593)\/",
+                          "length":  59889
+                      }
+                  ],
+    "per_file":  [
+                     {
+                         "etl_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314111901_Sh.etl",
+                         "logging_channel_events":  1223,
+                         "top_tags":  [
+                                          {
+                                              "tag":  "WB",
+                                              "count":  311
+                                          },
+                                          {
+                                              "tag":  "PC",
+                                              "count":  131
+                                          },
+                                          {
+                                              "tag":  "HPVM",
+                                              "count":  128
+                                          },
+                                          {
+                                              "tag":  "SC",
+                                              "count":  100
+                                          },
+                                          {
+                                              "tag":  "WM",
+                                              "count":  91
+                                          },
+                                          {
+                                              "tag":  "PROF",
+                                              "count":  47
+                                          },
+                                          {
+                                              "tag":  "ATM",
+                                              "count":  41
+                                          },
+                                          {
+                                              "tag":  "HP",
+                                              "count":  30
+                                          },
+                                          {
+                                              "tag":  "CS",
+                                              "count":  28
+                                          },
+                                          {
+                                              "tag":  "IDM",
+                                              "count":  27
+                                          }
+                                      ],
+                         "top_patterns":  [
+                                              {
+                                                  "key":  "widgets",
+                                                  "count":  560
+                                              },
+                                              {
+                                                  "key":  "launcher",
+                                                  "count":  304
+                                              },
+                                              {
+                                                  "key":  "windowing",
+                                                  "count":  115
+                                              },
+                                              {
+                                                  "key":  "target_tracking",
+                                                  "count":  63
+                                              },
+                                              {
+                                                  "key":  "full_trust",
+                                                  "count":  46
+                                              },
+                                              {
+                                                  "key":  "input_focus",
+                                                  "count":  19
+                                              },
+                                              {
+                                                  "key":  "broker",
+                                                  "count":  15
+                                              },
+                                              {
+                                                  "key":  "fullscreen",
+                                                  "count":  8
+                                              }
+                                          ]
+                     },
+                     {
+                         "etl_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314110706_Sh.etl",
+                         "logging_channel_events":  1253,
+                         "top_tags":  [
+                                          {
+                                              "tag":  "WB",
+                                              "count":  309
+                                          },
+                                          {
+                                              "tag":  "PC",
+                                              "count":  151
+                                          },
+                                          {
+                                              "tag":  "HPVM",
+                                              "count":  128
+                                          },
+                                          {
+                                              "tag":  "WM",
+                                              "count":  95
+                                          },
+                                          {
+                                              "tag":  "SC",
+                                              "count":  90
+                                          },
+                                          {
+                                              "tag":  "PROF",
+                                              "count":  47
+                                          },
+                                          {
+                                              "tag":  "ATM",
+                                              "count":  41
+                                          },
+                                          {
+                                              "tag":  "BCS",
+                                              "count":  33
+                                          },
+                                          {
+                                              "tag":  "IDM",
+                                              "count":  30
+                                          },
+                                          {
+                                              "tag":  "CS",
+                                              "count":  28
+                                          }
+                                      ],
+                         "top_patterns":  [
+                                              {
+                                                  "key":  "widgets",
+                                                  "count":  561
+                                              },
+                                              {
+                                                  "key":  "launcher",
+                                                  "count":  305
+                                              },
+                                              {
+                                                  "key":  "windowing",
+                                                  "count":  103
+                                              },
+                                              {
+                                                  "key":  "target_tracking",
+                                                  "count":  63
+                                              },
+                                              {
+                                                  "key":  "full_trust",
+                                                  "count":  46
+                                              },
+                                              {
+                                                  "key":  "input_focus",
+                                                  "count":  20
+                                              },
+                                              {
+                                                  "key":  "broker",
+                                                  "count":  13
+                                              },
+                                              {
+                                                  "key":  "fullscreen",
+                                                  "count":  8
+                                              }
+                                          ]
+                     },
+                     {
+                         "etl_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314105046_Sh.etl",
+                         "logging_channel_events":  1110,
+                         "top_tags":  [
+                                          {
+                                              "tag":  "WB",
+                                              "count":  292
+                                          },
+                                          {
+                                              "tag":  "HPVM",
+                                              "count":  128
+                                          },
+                                          {
+                                              "tag":  "PC",
+                                              "count":  122
+                                          },
+                                          {
+                                              "tag":  "WM",
+                                              "count":  93
+                                          },
+                                          {
+                                              "tag":  "SC",
+                                              "count":  90
+                                          },
+                                          {
+                                              "tag":  "PROF",
+                                              "count":  47
+                                          },
+                                          {
+                                              "tag":  "ATM",
+                                              "count":  41
+                                          },
+                                          {
+                                              "tag":  "IDM",
+                                              "count":  27
+                                          },
+                                          {
+                                              "tag":  "HP",
+                                              "count":  24
+                                          },
+                                          {
+                                              "tag":  "BCS",
+                                              "count":  22
+                                          }
+                                      ],
+                         "top_patterns":  [
+                                              {
+                                                  "key":  "widgets",
+                                                  "count":  536
+                                              },
+                                              {
+                                                  "key":  "launcher",
+                                                  "count":  287
+                                              },
+                                              {
+                                                  "key":  "windowing",
+                                                  "count":  97
+                                              },
+                                              {
+                                                  "key":  "target_tracking",
+                                                  "count":  63
+                                              },
+                                              {
+                                                  "key":  "full_trust",
+                                                  "count":  46
+                                              },
+                                              {
+                                                  "key":  "input_focus",
+                                                  "count":  19
+                                              },
+                                              {
+                                                  "key":  "broker",
+                                                  "count":  13
+                                              },
+                                              {
+                                                  "key":  "fullscreen",
+                                                  "count":  8
+                                              }
+                                          ]
+                     },
+                     {
+                         "etl_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314104436_Sh.etl",
+                         "logging_channel_events":  1083,
+                         "top_tags":  [
+                                          {
+                                              "tag":  "WB",
+                                              "count":  292
+                                          },
+                                          {
+                                              "tag":  "HPVM",
+                                              "count":  128
+                                          },
+                                          {
+                                              "tag":  "PC",
+                                              "count":  110
+                                          },
+                                          {
+                                              "tag":  "WM",
+                                              "count":  91
+                                          },
+                                          {
+                                              "tag":  "SC",
+                                              "count":  90
+                                          },
+                                          {
+                                              "tag":  "PROF",
+                                              "count":  47
+                                          },
+                                          {
+                                              "tag":  "ATM",
+                                              "count":  41
+                                          },
+                                          {
+                                              "tag":  "IDM",
+                                              "count":  27
+                                          },
+                                          {
+                                              "tag":  "HP",
+                                              "count":  24
+                                          },
+                                          {
+                                              "tag":  "SETTINGS_KBSHORTCUTS",
+                                              "count":  20
+                                          }
+                                      ],
+                         "top_patterns":  [
+                                              {
+                                                  "key":  "widgets",
+                                                  "count":  534
+                                              },
+                                              {
+                                                  "key":  "launcher",
+                                                  "count":  284
+                                              },
+                                              {
+                                                  "key":  "windowing",
+                                                  "count":  97
+                                              },
+                                              {
+                                                  "key":  "target_tracking",
+                                                  "count":  63
+                                              },
+                                              {
+                                                  "key":  "full_trust",
+                                                  "count":  46
+                                              },
+                                              {
+                                                  "key":  "input_focus",
+                                                  "count":  19
+                                              },
+                                              {
+                                                  "key":  "broker",
+                                                  "count":  13
+                                              },
+                                              {
+                                                  "key":  "fullscreen",
+                                                  "count":  8
+                                              }
+                                          ]
+                     },
+                     {
+                         "etl_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\LocalState\\DiagOutputDir\\GameBar_20260314103737_Sh.etl",
+                         "logging_channel_events":  1208,
+                         "top_tags":  [
+                                          {
+                                              "tag":  "WB",
+                                              "count":  309
+                                          },
+                                          {
+                                              "tag":  "HPVM",
+                                              "count":  128
+                                          },
+                                          {
+                                              "tag":  "PC",
+                                              "count":  127
+                                          },
+                                          {
+                                              "tag":  "WM",
+                                              "count":  91
+                                          },
+                                          {
+                                              "tag":  "SC",
+                                              "count":  90
+                                          },
+                                          {
+                                              "tag":  "PROF",
+                                              "count":  47
+                                          },
+                                          {
+                                              "tag":  "ATM",
+                                              "count":  41
+                                          },
+                                          {
+                                              "tag":  "IDM",
+                                              "count":  30
+                                          },
+                                          {
+                                              "tag":  "CS",
+                                              "count":  28
+                                          },
+                                          {
+                                              "tag":  "BCATD",
+                                              "count":  27
+                                          }
+                                      ],
+                         "top_patterns":  [
+                                              {
+                                                  "key":  "widgets",
+                                                  "count":  557
+                                              },
+                                              {
+                                                  "key":  "launcher",
+                                                  "count":  303
+                                              },
+                                              {
+                                                  "key":  "windowing",
+                                                  "count":  103
+                                              },
+                                              {
+                                                  "key":  "target_tracking",
+                                                  "count":  63
+                                              },
+                                              {
+                                                  "key":  "full_trust",
+                                                  "count":  46
+                                              },
+                                              {
+                                                  "key":  "input_focus",
+                                                  "count":  20
+                                              },
+                                              {
+                                                  "key":  "broker",
+                                                  "count":  13
+                                              },
+                                              {
+                                                  "key":  "fullscreen",
+                                                  "count":  8
+                                              }
+                                          ]
+                     }
+                 ],
+    "aggregate_tags":  [
+                           {
+                               "tag":  "WB",
+                               "total_count":  1513,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "PC",
+                               "total_count":  641,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "HPVM",
+                               "total_count":  640,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "WM",
+                               "total_count":  461,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "SC",
+                               "total_count":  460,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "PROF",
+                               "total_count":  235,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "ATM",
+                               "total_count":  205,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "IDM",
+                               "total_count":  141,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "BCS",
+                               "total_count":  126,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "HP",
+                               "total_count":  126,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "SETTINGS",
+                               "total_count":  114,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "SETTINGS_KBSHORTCUTS",
+                               "total_count":  100,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "CS",
+                               "total_count":  98,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "WW",
+                               "total_count":  93,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "BCATD",
+                               "total_count":  73,
+                               "files_seen":  3
+                           },
+                           {
+                               "tag":  "WpcTLM",
+                               "total_count":  65,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "DS",
+                               "total_count":  55,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "CSW",
+                               "total_count":  52,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "FGM",
+                               "total_count":  50,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "KGL_OS",
+                               "total_count":  44,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "KGL",
+                               "total_count":  43,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "WIL",
+                               "total_count":  41,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "TPLDS",
+                               "total_count":  40,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "VIEWCHROME",
+                               "total_count":  36,
+                               "files_seen":  5
+                           },
+                           {
+                               "tag":  "RFM",
+                               "total_count":  30,
+                               "files_seen":  5
+                           }
+                       ],
+    "aggregate_patterns":  [
+                               {
+                                   "key":  "widgets",
+                                   "total_count":  2748,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "launcher",
+                                   "total_count":  1483,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "windowing",
+                                   "total_count":  515,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "target_tracking",
+                                   "total_count":  315,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "full_trust",
+                                   "total_count":  230,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "input_focus",
+                                   "total_count":  97,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "broker",
+                                   "total_count":  67,
+                                   "files_seen":  5
+                               },
+                               {
+                                   "key":  "fullscreen",
+                                   "total_count":  40,
+                                   "files_seen":  5
+                               }
+                           ],
+    "representative_samples":  [
+                                   {
+                                       "tag":  "PC",
+                                       "sample_message":  "[661C]:[PC] OnInitializeAsync: Called"
+                                   },
+                                   {
+                                       "tag":  "ATM",
+                                       "sample_message":  "[618C]:[ATM] OnInitializeAsync: Called"
+                                   },
+                                   {
+                                       "tag":  "PROF",
+                                       "sample_message":  "[618C]:[PROF] InitializeAsync: Called"
+                                   }
+                               ]
+}

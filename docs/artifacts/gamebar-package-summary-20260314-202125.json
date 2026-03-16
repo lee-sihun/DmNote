@@ -1,0 +1,497 @@
+﻿{
+    "analyzed_at":  "2026-03-14 20:22:34 +09:00",
+    "package":  {
+                    "full_name":  "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                    "install_location":  "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                    "architecture":  "X64",
+                    "version":  "7.325.10021.0",
+                    "identity_name":  "Microsoft.XboxGamingOverlay",
+                    "publisher":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                    "executable":  "GameBar.exe",
+                    "entry_point":  "GameBar.App",
+                    "display_name":  "Game Bar",
+                    "publisher_display_name":  "Microsoft Corporation"
+                },
+    "dependencies":  [
+                         {
+                             "element":  "TargetDeviceFamily",
+                             "name":  "Windows.Universal",
+                             "min_version":  "10.0.19041.0",
+                             "max_version_tested":  "10.0.26396.0",
+                             "publisher":  ""
+                         },
+                         {
+                             "element":  "PackageDependency",
+                             "name":  "Microsoft.VCLibs.140.00.UWPDesktop",
+                             "min_version":  "14.0.33728.0",
+                             "max_version_tested":  "",
+                             "publisher":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+                         },
+                         {
+                             "element":  "PackageDependency",
+                             "name":  "Microsoft.UI.Xaml.2.8",
+                             "min_version":  "8.2310.30001.0",
+                             "max_version_tested":  "",
+                             "publisher":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+                         },
+                         {
+                             "element":  "PackageDependency",
+                             "name":  "Microsoft.VCLibs.140.00",
+                             "min_version":  "14.0.33519.0",
+                             "max_version_tested":  "",
+                             "publisher":  "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+                         }
+                     ],
+    "protocols":  [
+                      {
+                          "name":  "ms-gamingoverlay"
+                      },
+                      {
+                          "name":  "ms-gamebar"
+                      }
+                  ],
+    "com_servers":  [
+                        {
+                            "executable":  "GameBarFTServer.exe",
+                            "launch_permission":  "O:PSG:BUD:(A;;11;;;WD)(A;;11;;;S-1-15-2-1714399563-1326177402-2048222277-143663168-2151391019-765408921-4098702777)S:(ML;;NX;;;LW)",
+                            "classes":  [
+                                            {
+                                                "id":  "FD06603A-2BDF-4BB1-B7DF-5DC68F353601",
+                                                "display_name":  "GbftComFactory"
+                                            }
+                                        ]
+                        }
+                    ],
+    "app_execution_aliases":  [
+                                  {
+                                      "executable":  "GameBarElevatedFT.exe",
+                                      "entry_point":  "Windows.FullTrustApplication",
+                                      "aliases":  [
+                                                      "GameBarElevatedFT_Alias.exe"
+                                                  ]
+                                  }
+                              ],
+    "app_extension_hosts":  [
+                                {
+                                    "name":  "microsoft.gameBarUIExtension"
+                                }
+                            ],
+    "proxy_stubs":  [
+                        {
+                            "class_id":  "00000355-0000-0000-C000-000000000046",
+                            "path":  "Microsoft.Gaming.XboxGameBar.winmd",
+                            "interface_count":  27,
+                            "widget_host_interfaces":  [
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarAppTargetInfo",
+                                                               "interface_id":  "D7689E93-5587-47D1-A42E-78D16B2FA807"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarAppTargetInfo2",
+                                                               "interface_id":  "68930F3C-2FDF-44D3-A052-A417EA54CD98"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost",
+                                                               "interface_id":  "5D12BC93-212B-4B9F-9091-76B73BF56525"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost2",
+                                                               "interface_id":  "28717C8B-D8E8-47A8-AF47-A1D5263BAE9B"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost3",
+                                                               "interface_id":  "3F5A3F12-C1E4-4942-B80D-3117BC948E29"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost4",
+                                                               "interface_id":  "FA696D9E-2501-4B01-B26F-4BB85344740F"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost5",
+                                                               "interface_id":  "A6C878CC-2B08-4B94-B1C3-222C6A913F3C"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost6",
+                                                               "interface_id":  "CE6F0D73-C44F-4BBD-9652-A0FC52C37A34"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost7",
+                                                               "interface_id":  "B7D246E1-F61B-43A2-9120-25D9AC31BB17"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost8",
+                                                               "interface_id":  "0E4A1F7C-3D5B-4E8C-8F2A-6D9A0B2E5F7C"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetHost9",
+                                                               "interface_id":  "BC40A15A-6961-4D04-A9CD-34680A0F5ACD"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate",
+                                                               "interface_id":  "22ABA97F-FB0F-4439-9BDD-2C67B2D5AA8F"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate2",
+                                                               "interface_id":  "B2F7DB8C-7540-48DA-9B46-4E60CE0D9DEB"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate3",
+                                                               "interface_id":  "4FB89FB6-7CB8-489D-8408-2269E6C733A1"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate4",
+                                                               "interface_id":  "5638D65A-3733-48CC-90E5-984688D62786"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate5",
+                                                               "interface_id":  "73B9289B-812C-4FA4-979B-180770DC92B3"
+                                                           },
+                                                           {
+                                                               "name":  "Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarWidgetPrivate6",
+                                                               "interface_id":  "687766A8-6A24-4691-ADDC-88AA57582B47"
+                                                           }
+                                                       ]
+                        }
+                    ],
+    "inprocess_servers":  [
+                              {
+                                  "path":  "Microsoft.Graphics.Canvas.dll",
+                                  "activatable_class_count":  99,
+                                  "sample_classes":  [
+                                                         "Microsoft.Graphics.Canvas.CanvasDevice",
+                                                         "Microsoft.Graphics.Canvas.Effects.GaussianBlurEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.EffectTransferTable3D",
+                                                         "Microsoft.Graphics.Canvas.Effects.ScaleEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.SaturationEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.SpotDiffuseEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.LinearTransferEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.BrightnessEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.DisplacementMapEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.ArithmeticCompositeEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.BorderEffect",
+                                                         "Microsoft.Graphics.Canvas.Effects.Transform3DEffect"
+                                                     ]
+                              },
+                              {
+                                  "path":  "Microsoft.Web.WebView2.Core.dll",
+                                  "activatable_class_count":  6,
+                                  "sample_classes":  [
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2CustomSchemeRegistration",
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2CompositionController",
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2Controller",
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions",
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2ControllerWindowReference",
+                                                         "Microsoft.Web.WebView2.Core.CoreWebView2Environment"
+                                                     ]
+                              },
+                              {
+                                  "path":  "Xbox.Experimentation.dll",
+                                  "activatable_class_count":  1,
+                                  "sample_classes":  [
+                                                         "Xbox.Experimentation.ExperimentationManager"
+                                                     ]
+                              }
+                          ],
+    "capabilities":  [
+                         {
+                             "element":  "Capability",
+                             "name":  "internetClient"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "internetClientServer"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "privateNetworkClientServer"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "videosLibrary"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "picturesLibrary"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "globalMediaControl"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "activitySystem"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "allowElevation"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appBroadcast"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appBroadcastServices"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appBroadcastSettings"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appCaptureServices"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appCaptureSettings"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "appDiagnostics"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "backgroundMediaRecording"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "extendedExecutionUnconstrained"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "gameBarServices"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "gameList"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "packageQuery"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "packageManagement"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "slapiQueryLicenseValue"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "runFullTrust"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "unvirtualizedResources"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "cloudStore"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "packageContents"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "previewStore"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "shellExperience"
+                         },
+                         {
+                             "element":  "Capability",
+                             "name":  "storeAppInstall"
+                         },
+                         {
+                             "element":  "DeviceCapability",
+                             "name":  "microphone"
+                         },
+                         {
+                             "element":  "DeviceCapability",
+                             "name":  "webcam"
+                         }
+                     ],
+    "build_metadata":  [
+                           {
+                               "name":  "cl.exe",
+                               "version":  "19.44.35216.0"
+                           },
+                           {
+                               "name":  "VisualStudio",
+                               "version":  "17.0"
+                           },
+                           {
+                               "name":  "OperatingSystem",
+                               "version":  "10.0.20348.3932 (WinBuild.160101.0800)"
+                           },
+                           {
+                               "name":  "Microsoft.Build.AppxPackage.dll",
+                               "version":  "17.14.40534.58744"
+                           },
+                           {
+                               "name":  "ProjectGUID",
+                               "version":  ""
+                           },
+                           {
+                               "name":  "OptimizingToolset",
+                               "version":  ""
+                           },
+                           {
+                               "name":  "TargetRuntime",
+                               "version":  ""
+                           },
+                           {
+                               "name":  "Microsoft.Windows.UI.Xaml.Build.Tasks.dll",
+                               "version":  "0.0.0.0"
+                           },
+                           {
+                               "name":  "MakePri.exe",
+                               "version":  "10.0.26396.1000 (WinBuild.160101.0800)"
+                           }
+                       ],
+    "package_files":  [
+                          {
+                              "name":  "AppxBlockMap.xml",
+                              "is_directory":  false,
+                              "length":  43821
+                          },
+                          {
+                              "name":  "AppxManifest.xml",
+                              "is_directory":  false,
+                              "length":  24884
+                          },
+                          {
+                              "name":  "AppxMetadata",
+                              "is_directory":  true,
+                              "length":  null
+                          },
+                          {
+                              "name":  "AppxSignature.p7x",
+                              "is_directory":  false,
+                              "length":  12254
+                          },
+                          {
+                              "name":  "Assets",
+                              "is_directory":  true,
+                              "length":  null
+                          },
+                          {
+                              "name":  "GameBar.exe",
+                              "is_directory":  false,
+                              "length":  15667232
+                          },
+                          {
+                              "name":  "GameBar.winmd",
+                              "is_directory":  false,
+                              "length":  294944
+                          },
+                          {
+                              "name":  "GameBarElevatedFT.exe",
+                              "is_directory":  false,
+                              "length":  25120
+                          },
+                          {
+                              "name":  "GameBarFTServer.exe",
+                              "is_directory":  false,
+                              "length":  1762336
+                          },
+                          {
+                              "name":  "gamingtelemetrynuget.dll",
+                              "is_directory":  false,
+                              "length":  290848
+                          },
+                          {
+                              "name":  "KnownGameList.bin",
+                              "is_directory":  false,
+                              "length":  1075020
+                          },
+                          {
+                              "name":  "KnownGameListRS3.bin",
+                              "is_directory":  false,
+                              "length":  1075940
+                          },
+                          {
+                              "name":  "KnownGameListRS4.bin",
+                              "is_directory":  false,
+                              "length":  1075744
+                          },
+                          {
+                              "name":  "Microsoft.Gaming.XboxGameBar.Private.winmd",
+                              "is_directory":  false,
+                              "length":  20512
+                          },
+                          {
+                              "name":  "Microsoft.Gaming.XboxGameBar.winmd",
+                              "is_directory":  false,
+                              "length":  33312
+                          },
+                          {
+                              "name":  "Microsoft.Graphics.Canvas.dll",
+                              "is_directory":  false,
+                              "length":  1621072
+                          },
+                          {
+                              "name":  "Microsoft.Graphics.Canvas.winmd",
+                              "is_directory":  false,
+                              "length":  281672
+                          },
+                          {
+                              "name":  "Microsoft.UI.Xaml.winmd",
+                              "is_directory":  false,
+                              "length":  285696
+                          },
+                          {
+                              "name":  "Microsoft.Web.WebView2.Core.dll",
+                              "is_directory":  false,
+                              "length":  761888
+                          },
+                          {
+                              "name":  "Microsoft.Web.WebView2.Core.winmd",
+                              "is_directory":  false,
+                              "length":  130592
+                          },
+                          {
+                              "name":  "networkmanifest.xml",
+                              "is_directory":  false,
+                              "length":  2458
+                          },
+                          {
+                              "name":  "OneSettingsClientForwarder.dll",
+                              "is_directory":  false,
+                              "length":  47136
+                          },
+                          {
+                              "name":  "resources.pri",
+                              "is_directory":  false,
+                              "length":  1449056
+                          },
+                          {
+                              "name":  "sdl",
+                              "is_directory":  true,
+                              "length":  null
+                          },
+                          {
+                              "name":  "Xbox.Experimentation.dll",
+                              "is_directory":  false,
+                              "length":  365600
+                          },
+                          {
+                              "name":  "Xbox.Experimentation.winmd",
+                              "is_directory":  false,
+                              "length":  13872
+                          },
+                          {
+                              "name":  "XboxGameBarFT.winmd",
+                              "is_directory":  false,
+                              "length":  37936
+                          },
+                          {
+                              "name":  "XboxLib.winmd",
+                              "is_directory":  false,
+                              "length":  11808
+                          }
+                      ]
+}

@@ -1,0 +1,56 @@
+{
+  "capturedAt": "2026-03-16T12:25:18",
+  "processName": "Notepad.exe",
+  "result": {
+    "processName": null,
+    "processId": 10108,
+    "packageFullName": {
+      "hr": "0x00000000",
+      "value": "Microsoft.WindowsNotepad_11.2508.38.0_x64__8wekyb3d8bbwe"
+    },
+    "roInitializeHr": "0x00000000",
+    "coCreateIUnknownHr": "0x00000000",
+    "coCreateIUnknownPointer": "0x1c93ec9bed0",
+    "queryInterfaceActivationFactoryHr": "0x00000000",
+    "queryInterfaceActivationFactoryPointer": "0x1c933206c48",
+    "activateInstanceHr": "0x00000000",
+    "activateInstancePointer": "0x1c93320eea8",
+    "activatedRuntimeClass": {
+      "hr": "0x00000000",
+      "value": "XboxGameBarFT.GbftFactory"
+    },
+    "queryInterfaceIGbftFactoryHr": "0x8000000F",
+    "queryInterfaceIGbftFactoryPointer": "0x0",
+    "defaultInterfaceCreateWindowManagerException": "Error: system error\n    at <anonymous> (/script1.js:231)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+  },
+  "messages": [
+    {
+      "type": "send",
+      "payload": {
+        "type": "result",
+        "payload": {
+          "processName": null,
+          "processId": 10108,
+          "packageFullName": {
+            "hr": "0x00000000",
+            "value": "Microsoft.WindowsNotepad_11.2508.38.0_x64__8wekyb3d8bbwe"
+          },
+          "roInitializeHr": "0x00000000",
+          "coCreateIUnknownHr": "0x00000000",
+          "coCreateIUnknownPointer": "0x1c93ec9bed0",
+          "queryInterfaceActivationFactoryHr": "0x00000000",
+          "queryInterfaceActivationFactoryPointer": "0x1c933206c48",
+          "activateInstanceHr": "0x00000000",
+          "activateInstancePointer": "0x1c93320eea8",
+          "activatedRuntimeClass": {
+            "hr": "0x00000000",
+            "value": "XboxGameBarFT.GbftFactory"
+          },
+          "queryInterfaceIGbftFactoryHr": "0x8000000F",
+          "queryInterfaceIGbftFactoryPointer": "0x0",
+          "defaultInterfaceCreateWindowManagerException": "Error: system error\n    at <anonymous> (/script1.js:231)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+        }
+      }
+    }
+  ]
+}

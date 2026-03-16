@@ -1,0 +1,856 @@
+﻿{
+    "analyzed_at":  "2026-03-15 10:13:52 +09:00",
+    "etl_path":  "docs/artifacts/gamebar-logman-launch-20260315-100620.etl",
+    "process_ids":  [
+                        25552
+                    ],
+    "process_counts":  [
+                           {
+                               "process_id":  25552,
+                               "process_name":  null,
+                               "count":  5621
+                           }
+                       ],
+    "top_fields":  [
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Media.SolidColorBrush",
+                           "count":  244
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Style",
+                           "count":  89
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.Foundation.Double",
+                           "count":  64
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Color",
+                           "count":  58
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Media.FontFamily",
+                           "count":  37
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.DependencyObject",
+                           "count":  24
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Media.Animation.ExponentialEase",
+                           "count":  24
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.Button",
+                           "count":  20
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.Foundation.String",
+                           "count":  17
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.Foundation.Boolean",
+                           "count":  15
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.Grid",
+                           "count":  15
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Media.XamlCompositionBrushBase",
+                           "count":  14
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Media.LinearGradientBrush",
+                           "count":  10
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Thickness",
+                           "count":  10
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.Border",
+                           "count":  10
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.Controls.ControlTemplate",
+                           "count":  10
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.TextBlock",
+                           "count":  8
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarHCHighlightBrush",
+                           "count":  8
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.CornerRadius",
+                           "count":  8
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonForegroundBrushFocus",
+                           "count":  7
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ListView",
+                           "count":  6
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "HighContrastBorderThickness",
+                           "count":  6
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsFocusRectBorderBrush",
+                           "count":  5
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "HighContrastBorderBrush",
+                           "count":  5
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Name",
+                           "value":  "ContentPresenter",
+                           "count":  5
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.VisualStateManager",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "GameBar.XdsContentPresenter",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsListViewItemDefaultForegroundRest",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ToolTip",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "BrushToOpacityConverter",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonBackgroundBrushPress",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarFluentFont",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonBorderBrushPress",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonForegroundBrushPress",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsActionItemVisibleBackgroundPress",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarAllCornerRadiusRounded",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "FocusBorderThickness",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonForegroundBrushHover",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonBackgroundBrushHover",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "GameBar.GamebarButton",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.StackPanel",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsListViewItemDefaultForegroundHover",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Type",
+                           "value":  "Windows.UI.Xaml.DataTemplate",
+                           "count":  4
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonBackgroundBrushFocus",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarPressBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarResourcesCornerRadius",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GamebarTextForegroundFocusBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarHoverBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ScrollViewer",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Name",
+                           "value":  "HomeBar",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonBorderBrushHover",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsFocusThenCommonThenDisabledVisualStateCombinationManager",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsActionItemVisibleBackgroundFocus",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsActionItemVisibleBackgroundHover",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarIconMediumTextBlockStyle",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsFocusThenCommonVisualStateCombinationManager",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ItemsPresenter",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarIconExtraLargeTextBlockStyle",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarIconButtonForegroundFocusBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.Image",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "AttractModeFlashBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "AccentColorForegroundBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ContentControl",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "HighContrast",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "Light",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarFluentFont_Legacy",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "ClassName",
+                           "value":  "Windows.UI.Xaml.Controls.ListViewItem",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarAccentBackgroundBrush",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "HighContrastBackplate",
+                           "count":  3
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonForegroundDisabled",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "FocusRectMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "OverlayRectMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonBorderBrushPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewBorderBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTransientBackground",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMinWidth",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarSelectedBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipButtonPanelMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "MruButtonStyle",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarDisabledBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMaxWidth",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTitleForegroundBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonBackgroundDisabled",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipLeftButtonMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMinHeight",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMaxHeight",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "BoolInverseBoolConverter",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipRightButtonMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipSubtitleForegroundBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonBackgroundPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarDisabledBorderBrush",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "GameBarTertiaryTextOpacity",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "XdsStandardButtonForegroundBrushInactive",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "MruPlaceholderFontIconStyle",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonBorderBrushDisabled",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonForegroundPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTailPolygonMarginRight",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonForegroundDisabled",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMainContentPresentMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonBorderBrushDisabled",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonForegroundPressed",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonBackgroundPressed",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonBorderBrushPressed",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "ToggleButtonBackgroundCheckedPressed",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipAlternateCloseButtonBackgroundPressed",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TopCornerRadiusFilterConverter",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTailPolygonMarginLeft",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "BottomCornerRadiusFilterConverter",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTailPolygonMarginBottom",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTailPolygonMarginTop",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTitleStackPanelMarginWithHeaderCloseButton",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipMainContentAbsentMargin",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipTitleStackPanelMarginWithFooterCloseButton",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipIconPresenterMarginWithoutIcon",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TeachingTipIconPresenterMarginWithIcon",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewButtonBorderBrushPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewScrollButtonForegroundPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewScrollButtonBackgroundPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewScrollButtonBorderBrushPointerOver",
+                           "count":  2
+                       },
+                       {
+                           "process_id":  25552,
+                           "process_name":  null,
+                           "field":  "Key",
+                           "value":  "TabViewScrollButtonForegroundPressed",
+                           "count":  2
+                       }
+                   ]
+}

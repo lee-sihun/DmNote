@@ -1,0 +1,157 @@
+﻿{
+    "analyzedAt":  "2026-03-16T12:12:19.1308715+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-external-hwnd-20260316-121213",
+    "windowedProbe":  false,
+    "probeWindows":  [
+                         {
+                             "capturedAt":  "2026-03-16T12:12:16.5767511+09:00",
+                             "processId":  25032,
+                             "title":  "GameBar",
+                             "hwnd":  "0x3805F0",
+                             "style":  "0x17010000",
+                             "exStyle":  "0x00050008",
+                             "visible":  true,
+                             "fullscreen":  true
+                         }
+                     ],
+    "targetProcesses":  [
+                            "GameBar.exe"
+                        ],
+    "runs":  [
+                 {
+                     "processName":  "GameBar.exe",
+                     "hwnd":  "0x3805F0",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-16T12:12:16.5767511+09:00",
+                                         "processId":  25032,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x3805F0",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "createWindowManagerHr":  "0x00000000",
+                     "rawBefore":  {
+                                       "label":  "before",
+                                       "hwnd":  "0x3805f0",
+                                       "isWindow":  true,
+                                       "bandKnown":  true,
+                                       "band":  1,
+                                       "style":  "0x17010000",
+                                       "exStyle":  "0x00050008",
+                                       "visible":  true
+                                   },
+                     "ftBefore":  {
+                                      "style":  {
+                                                    "hr":  "0x00000000",
+                                                    "value":  "0x17010000"
+                                                },
+                                      "exStyle":  {
+                                                      "hr":  "0x00000000",
+                                                      "value":  "0x00050008"
+                                                  }
+                                  },
+                     "showWindowHideHr":  "0x00000000",
+                     "rawAfterHide":  {
+                                          "label":  "afterHide",
+                                          "hwnd":  "0x3805f0",
+                                          "isWindow":  false,
+                                          "bandKnown":  false,
+                                          "band":  null,
+                                          "style":  "0x00000000",
+                                          "exStyle":  "0x00000000",
+                                          "visible":  false
+                                      },
+                     "showWindowShowHr":  "0x00000000",
+                     "rawAfterShow":  {
+                                          "label":  "afterShow",
+                                          "hwnd":  "0x3805f0",
+                                          "isWindow":  true,
+                                          "bandKnown":  true,
+                                          "band":  1,
+                                          "style":  "0x17010000",
+                                          "exStyle":  "0x00050008",
+                                          "visible":  true
+                                      },
+                     "resetWindowRegionHr":  "0x00000000",
+                     "rawAfterResetWindowRegion":  {
+                                                       "label":  "afterResetWindowRegion",
+                                                       "hwnd":  "0x3805f0",
+                                                       "isWindow":  true,
+                                                       "bandKnown":  true,
+                                                       "band":  1,
+                                                       "style":  "0x17010000",
+                                                       "exStyle":  "0x00050008",
+                                                       "visible":  true
+                                                   },
+                     "enableClickThroughHr":  "0x00000000",
+                     "rawAfterEnableClickThrough":  {
+                                                        "label":  "afterEnableClickThrough",
+                                                        "hwnd":  "0x3805f0",
+                                                        "isWindow":  true,
+                                                        "bandKnown":  true,
+                                                        "band":  1,
+                                                        "style":  "0x17010000",
+                                                        "exStyle":  "0x000D0028",
+                                                        "visible":  true
+                                                    },
+                     "disableClickThroughHr":  "0x00000000",
+                     "rawAfterDisableClickThrough":  {
+                                                         "label":  "afterDisableClickThrough",
+                                                         "hwnd":  "0x3805f0",
+                                                         "isWindow":  true,
+                                                         "bandKnown":  true,
+                                                         "band":  1,
+                                                         "style":  "0x17010000",
+                                                         "exStyle":  "0x00050008",
+                                                         "visible":  true
+                                                     },
+                     "setWindowLongTransparentHr":  "0x00000000",
+                     "rawAfterSetTransparent":  {
+                                                    "label":  "afterSetTransparent",
+                                                    "hwnd":  "0x3805f0",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050028",
+                                                    "visible":  true
+                                                },
+                     "restoreWindowLongHr":  "0x00000000",
+                     "rawAfterRestoreExStyle":  {
+                                                    "label":  "afterRestoreExStyle",
+                                                    "hwnd":  "0x3805f0",
+                                                    "isWindow":  true,
+                                                    "bandKnown":  true,
+                                                    "band":  1,
+                                                    "style":  "0x17010000",
+                                                    "exStyle":  "0x00050008",
+                                                    "visible":  true
+                                                },
+                     "ftAfter":  {
+                                     "style":  {
+                                                   "hr":  "0x00000000",
+                                                   "value":  "0x17010000"
+                                               },
+                                     "exStyle":  {
+                                                     "hr":  "0x00000000",
+                                                     "value":  "0x00050008"
+                                                 },
+                                     "baselineExStyle":  "0x00050008"
+                                 },
+                     "apiTrace":  {
+                                      "counts":  {
+                                                     "CreateRectRgn":  0,
+                                                     "CombineRgn":  0,
+                                                     "SetWindowRgn":  0
+                                                 },
+                                      "samples":  [
+
+                                                  ]
+                                  },
+                     "exception":  null
+                 }
+             ]
+}

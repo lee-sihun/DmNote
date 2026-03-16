@@ -1,0 +1,181 @@
+﻿{
+    "isAdmin":  true,
+    "hostname":  "DESKTOP-HO8UHQ7",
+    "overlay_band_baseline":  1,
+    "timestamp":  "2026-03-16T13:32:32.9676851+09:00",
+    "overlay_hwnd":  "0x1F0970",
+    "probe_band_baseline":  1,
+    "probe_hwnd":  "0x1A099E",
+    "experiments":  [
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  2,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  3,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  4,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  5,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  6,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  7,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  8,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  9,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  10,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  11,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  12,
+                            "foregroundIsProbe":  true
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  13,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  14,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  15,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  16,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  17,
+                            "foregroundIsProbe":  false
+                        },
+                        {
+                            "actualBand":  1,
+                            "lastErrorHex":  "0x00000005",
+                            "bandChanged":  false,
+                            "setWindowBand_ok":  false,
+                            "lastError":  5,
+                            "overlayVisible":  true,
+                            "band":  18,
+                            "foregroundIsProbe":  false
+                        }
+                    ]
+}

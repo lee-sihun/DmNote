@@ -1,0 +1,304 @@
+{
+  "analyzed_at": "2026-03-16 09:52:16 +09:00",
+  "run_dir": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943",
+  "interfaces": [
+    "hidden1",
+    "hidden2"
+  ],
+  "slots": [
+    6,
+    7,
+    10,
+    39,
+    49,
+    51,
+    52
+  ],
+  "signatures": [
+    "noarg",
+    "outptr"
+  ],
+  "trace_gamebar": false,
+  "runs": [
+    {
+      "interface": "hidden1",
+      "slot": 6,
+      "signature": "noarg",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot6-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot6-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 6,
+      "signature": "outptr",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot6-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot6-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 7,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot7-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot7-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 7,
+      "signature": "outptr",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot7-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot7-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 10,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot10-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot10-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 10,
+      "signature": "outptr",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot10-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot10-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 39,
+      "signature": "noarg",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot39-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot39-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 39,
+      "signature": "outptr",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot39-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot39-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 49,
+      "signature": "noarg",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot49-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot49-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 49,
+      "signature": "outptr",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot49-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot49-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 51,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot51-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot51-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 51,
+      "signature": "outptr",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot51-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot51-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 52,
+      "signature": "noarg",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot52-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot52-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden1",
+      "slot": 52,
+      "signature": "outptr",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot52-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden1-slot52-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 6,
+      "signature": "noarg",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot6-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot6-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 6,
+      "signature": "outptr",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot6-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot6-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 7,
+      "signature": "noarg",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot7-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot7-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 7,
+      "signature": "outptr",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot7-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot7-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 10,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot10-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot10-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 10,
+      "signature": "outptr",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot10-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot10-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 39,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot39-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot39-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 39,
+      "signature": "outptr",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot39-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot39-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 49,
+      "signature": "noarg",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot49-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot49-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 49,
+      "signature": "outptr",
+      "exit_code": 1,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot49-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot49-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 51,
+      "signature": "noarg",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot51-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot51-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 51,
+      "signature": "outptr",
+      "exit_code": -1073741819,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot51-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot51-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 52,
+      "signature": "noarg",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot52-noarg.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot52-noarg.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    },
+    {
+      "interface": "hidden2",
+      "slot": 52,
+      "signature": "outptr",
+      "exit_code": 0,
+      "json_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot52-outptr.json",
+      "stderr_path": "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-hidden-slot-pass-20260316-094943\\hidden2-slot52-outptr.stderr.txt",
+      "trace_path": null,
+      "trace_stderr_path": null
+    }
+  ]
+}

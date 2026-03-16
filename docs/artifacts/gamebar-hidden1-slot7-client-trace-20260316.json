@@ -1,0 +1,6 @@
+{
+  "events": [],
+  "stdout": "{\n    \"interface_name\":  \"hidden1\",\n    \"interface_iid\":  \"5eac68f9-e031-4c66-b4ea-5ab6aff979c8\",\n    \"slot\":  7,\n    \"signature\":  \"outptr\",\n    \"bool_value\":  0,\n    \"pre_invoke_delay_ms\":  4000,\n    \"coinit_hr\":  \"0x00000001\",\n    \"query_interface_hr\":  \"0x00000000\",\n    \"iface_ptr\":  \"0x2539C75FB38\",\n    \"iface_vtbl\":  \"0x7FFEEBA7C3E0\",\n    \"iface_module\":  \"\\\\Device\\\\HarddiskVolume2\\\\Windows\\\\System32\\\\combase.dll\",\n    \"descriptor_ptr\":  \"0x7FFEA4968158\",\n    \"fn_ptr\":  \"0x7FFEEBA37C30\",\n    \"fn_module\":  \"\\\\Device\\\\HarddiskVolume2\\\\Windows\\\\System32\\\\combase.dll\",\n    \"invoke_hr\":  \"0x80040155\",\n    \"out_ptr\":  null\n}\n",
+  "stderr": "",
+  "returncode": 0
+}

@@ -1,0 +1,267 @@
+﻿{
+    "captured_at":  "2026-03-15 12:30:30 +09:00",
+    "log_path":  ".\\docs\\artifacts\\gamebar-running-ftserver-cdb-20260315-123016\\gamebar-running-ftserver-cdb.log",
+    "trace_counts":  [
+                         {
+                             "name":  "user32!SetWindowLongPtrW",
+                             "count":  4
+                         },
+                         {
+                             "name":  "user32!MonitorFromWindow",
+                             "count":  2
+                         },
+                         {
+                             "name":  "user32!GetMonitorInfoW",
+                             "count":  2
+                         },
+                         {
+                             "name":  "user32!GetWindowThreadProcessId",
+                             "count":  2
+                         },
+                         {
+                             "name":  "user32!GetWindowRect",
+                             "count":  2
+                         },
+                         {
+                             "name":  "attached=GameBarFTServer.exe",
+                             "count":  1
+                         }
+                     ],
+    "load_counts":  [
+
+                    ],
+    "sample_events":  [
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "attached=GameBarFTServer.exe",
+                              "body":  "attached=GameBarFTServer.exe",
+                              "block":  [
+                                            "[GBTRACE] attached=GameBarFTServer.exe"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetWindowThreadProcessId",
+                              "body":  "func=user32!GetWindowThreadProcessId",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetWindowThreadProcessId",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=00000201cf16bda0",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af372a47     : 00000201`cf000000 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : user32!GetWindowThreadProcessId",
+                                            "00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a47",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819",
+                                            "00007ff8`41a7c34c     : 00000000`00000000 00000000`00000000 000004f0`fffffb30 000004d0`fffffb30 : KERNEL32!BaseThreadInitThunk+0x17"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetWindowThreadProcessId",
+                              "body":  "func=user32!GetWindowThreadProcessId",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetWindowThreadProcessId",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=00000201cf1f8ba0",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af372a47     : 00000201`cf18a000 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : user32!GetWindowThreadProcessId",
+                                            "00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a47",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819",
+                                            "00007ff8`41a7c34c     : 00000000`00000000 00000000`00000000 000004f0`fffffb30 000004d0`fffffb30 : KERNEL32!BaseThreadInitThunk+0x17"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetWindowRect",
+                              "body":  "func=user32!GetWindowRect",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetWindowRect",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=00000091586ff780",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c2f     : 00000000`0001000c 00000000`001a05a2 00000201`cf16bdb0 00000201`cf162750 : user32!GetWindowRect",
+                                            "00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c2f",
+                                            "00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!MonitorFromWindow",
+                              "body":  "func=user32!MonitorFromWindow",
+                              "block":  [
+                                            "[GBTRACE] func=user32!MonitorFromWindow",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=0000000000000000",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c71     : 00000000`0001000c 00000000`001a05a2 00000000`0001000c 00000201`cf162750 : user32!MonitorFromWindow",
+                                            "00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c71",
+                                            "00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetMonitorInfoW",
+                              "body":  "func=user32!GetMonitorInfoW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetMonitorInfoW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=0000000000010001",
+                                            "rdx=00000091586ff790",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c8c     : 00000000`0001000c 00000000`0001000c 00000000`001a05a2 00000201`cf16bdb0 : user32!GetMonitorInfoW",
+                                            "00007ff6`af372a92     : 00000201`cf1519b0 00000201`cf1519b0 00000091`586ffa98 00000000`00000000 : GameBarFTServer+0x2c8c",
+                                            "00007ff6`af2ffea0     : 00000201`cf16bd60 00000201`cf1519b0 00000201`cf151a78 00000091`586ffa98 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000201`cf1b4650 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetWindowRect",
+                              "body":  "func=user32!GetWindowRect",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetWindowRect",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=00000091588ff5a0",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c2f     : 00000000`0001000c 00000000`001a05a2 00000201`cf1f8bb0 00000201`cf162750 : user32!GetWindowRect",
+                                            "00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c2f",
+                                            "00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!MonitorFromWindow",
+                              "body":  "func=user32!MonitorFromWindow",
+                              "block":  [
+                                            "[GBTRACE] func=user32!MonitorFromWindow",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001a05a2",
+                                            "rdx=0000000000000000",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c71     : 00000000`0001000c 00000000`001a05a2 00000000`0001000c 00000201`cf162750 : user32!MonitorFromWindow",
+                                            "00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c71",
+                                            "00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!GetMonitorInfoW",
+                              "body":  "func=user32!GetMonitorInfoW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!GetMonitorInfoW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=0000000000010001",
+                                            "rdx=00000091588ff5b0",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff6`af2f2c8c     : 00000000`0001000c 00000000`0001000c 00000000`001a05a2 00000201`cf1f8bb0 : user32!GetMonitorInfoW",
+                                            "00007ff6`af372a92     : 00000201`cf151aa0 00000201`cf151aa0 00000091`588ff8b8 00000000`00000000 : GameBarFTServer+0x2c8c",
+                                            "00007ff6`af2ffea0     : 00000201`cf1f8b60 00000201`cf151aa0 00000201`cf151b68 00000091`588ff8b8 : GameBarFTServer+0x82a92",
+                                            "00007ff8`41ac1edd     : 00007ff8`41abfb30 00000000`0000ffff 00000000`00000000 00007ff8`41ac1d90 : GameBarFTServer+0xfea0",
+                                            "00007ff8`41ad2a39     : 00000000`0000ffff 00000000`00000000 00000000`00000000 00007ff8`41abb150 : ntdll!TppSimplepExecuteCallback+0x14d",
+                                            "00007ff8`3fdde8d7     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : ntdll!TppWorkerThread+0x819",
+                                            "(302c.5644): Windows Runtime Originate Error - code 40080201 (first chance)",
+                                            "(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)",
+                                            "(302c.8b0): Windows Runtime Originate Error - code 40080201 (first chance)"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!SetWindowLongPtrW",
+                              "body":  "func=user32!SetWindowLongPtrW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!SetWindowLongPtrW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001b094a",
+                                            "rdx=00000000fffffffe",
+                                            "r8=ffffffffffffffff",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff8`3bd5d71a     : 00000000`00000000 00000000`00000083 00000000`00000000 00007ff8`3bd563d6 : user32!SetWindowLongPtrW",
+                                            "00007ff8`3bd608f9     : 00000000`00000000 00000000`00000000 00000000`00000000 00000091`58bfeec8 : uxtheme!CThemeWnd::Reject+0xc6",
+                                            "00007ff8`3bd5faca     : 00000201`cf9020e0 00000000`00000000 00000000`00000000 00000201`cf9020e0 : uxtheme!CThemeWnd::Attach+0x71",
+                                            "00007ff8`3bd5f171     : 00000000`00000000 00007ff8`41ab314f 00000000`00000000 00000091`58bff3f0 : uxtheme!_ThemeDefWindowProc+0x94a",
+                                            "00007ff8`412e5a8a     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : uxtheme!ThemeDefWindowProcW+0x11",
+                                            "00007ff8`400d8ca6     : 00000000`00000000 00000000`00000001 00000000`001b094a 00000000`00000000 : user32!DefWindowProcW+0xca"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!SetWindowLongPtrW",
+                              "body":  "func=user32!SetWindowLongPtrW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!SetWindowLongPtrW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=00000000001b094a",
+                                            "rdx=00000000fffffffc",
+                                            "r8=00007ff840110340",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff8`400dac09     : 00000201`cf177690 00007ff8`3ce87698 00000201`cf177690 00000201`cfa3f970 : user32!SetWindowLongPtrW",
+                                            "00007ff8`40031960     : 00000201`cf177690 00000201`cfa3f970 00000091`58bffb90 00000201`cfa3f970 : combase!OXIDEntry::StartServer+0x45",
+                                            "00007ff8`400317c1     : 00000201`cf177690 00000000`00000000 00000201`cf000000 00000000`00000038 : combase!CComApartment::StartServer+0x60",
+                                            "00007ff8`3fffa243     : 00000201`cfa062d0 00000000`00000001 00000201`00000038 00000000`00000000 : combase!InitChannelIfNecessary+0x91",
+                                            "00007ff8`400783b8     : 00000201`d1f40008 00000201`cfa3de80 00000201`cfa3f9e0 00021480`fffe9c86 : combase!CoMarshalInterface+0xd3",
+                                            "00007ff8`400782c7     : 00000201`cfa3f9e0 00000201`cfa3de80 00000201`00000002 00000201`cfa3f970 : combase!wCoMarshalInterThreadInterfaceInStream+0x84",
+                                            "ModLoad: 00007ff8`203b0000 00007ff8`20476000   C:\\WINDOWS\\System32\\StructuredQuery.dll",
+                                            "ModLoad: 00007ff8`21880000 00007ff8`21b1e000   C:\\WINDOWS\\System32\\icu.dll"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!SetWindowLongPtrW",
+                              "body":  "func=user32!SetWindowLongPtrW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!SetWindowLongPtrW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=0000000000110954",
+                                            "rdx=00000000fffffffe",
+                                            "r8=ffffffffffffffff",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff8`3bd5d71a     : 00000000`00000000 00000000`00000083 00000000`00000000 00007ff8`3bd563d6 : user32!SetWindowLongPtrW",
+                                            "00007ff8`3bd608f9     : 00000000`00000000 00000000`00000000 00000000`00000000 00000091`58dfd4b8 : uxtheme!CThemeWnd::Reject+0xc6",
+                                            "00007ff8`3bd5faca     : 00000201`cf9020e0 00000000`00000000 00000000`00000000 00000201`cf9020e0 : uxtheme!CThemeWnd::Attach+0x71",
+                                            "00007ff8`3bd5f171     : 00000000`00000000 00007ff8`41ab314f 00000000`00000000 00000091`58dfd9e0 : uxtheme!_ThemeDefWindowProc+0x94a",
+                                            "00007ff8`412e5a8a     : 00000000`00000000 00000000`00000000 00000000`00000000 00000000`00000000 : uxtheme!ThemeDefWindowProcW+0x11",
+                                            "00007ff8`400d8ca6     : 00000000`00000000 00000000`00000001 00000000`00110954 00000000`00000000 : user32!DefWindowProcW+0xca"
+                                        ]
+                          },
+                          {
+                              "kind":  "GBTRACE",
+                              "name":  "user32!SetWindowLongPtrW",
+                              "body":  "func=user32!SetWindowLongPtrW",
+                              "block":  [
+                                            "[GBTRACE] func=user32!SetWindowLongPtrW",
+                                            ".  0\tid: 302c\tattach\tname: C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe, PLM package: Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+                                            "rcx=0000000000110954",
+                                            "rdx=00000000fffffffc",
+                                            "r8=00007ff840110340",
+                                            "RetAddr               : Args to Child                                                           : Call Site",
+                                            "00007ff8`400dac09     : 00000201`cf177850 00000000`00000020 00000201`cf177850 00000201`cfa0a108 : user32!SetWindowLongPtrW",
+                                            "00007ff8`40031960     : 00000201`cf177850 00000201`cfa0a108 00000091`58dfe100 00000201`cfa0a108 : combase!OXIDEntry::StartServer+0x45",
+                                            "00007ff8`400317c1     : 00000201`cf177850 00007ff8`41a44d46 00000201`cfa0a130 00007ff8`3c918b4e : combase!CComApartment::StartServer+0x60",
+                                            "00007ff8`3ffff73f     : 00000201`cfa06c10 00000201`cfa0a108 00000091`58dfe100 00007ff8`3c85921b : combase!InitChannelIfNecessary+0x91",
+                                            "00007ff8`3ffffdc4     : 00007ff8`402d3bc0 00000201`cfa0a108 00007ff8`3ce97918 00000201`00000001 : combase!CGIPTable::RegisterInterfaceInGlobalHlp+0x6b"
+                                        ]
+                          }
+                      ]
+}

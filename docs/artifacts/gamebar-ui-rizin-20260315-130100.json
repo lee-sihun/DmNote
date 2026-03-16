@@ -1,0 +1,1196 @@
+﻿{
+    "analyzed_at":  "2026-03-15 12:58:06 +09:00",
+    "package":  "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+    "binary_path":  "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBar.exe",
+    "info":  {
+                 "arch":  "x86",
+                 "baddr":  5368709120,
+                 "binsz":  15667232,
+                 "bintype":  "pe",
+                 "bits":  64,
+                 "retguard":  false,
+                 "class":  "PE32+",
+                 "cmp.csum":  "0x00ef8f30",
+                 "compiled":  "Fri Oct  3 01:48:51 2025 UTC+9",
+                 "compiler":  "Linker 14.44",
+                 "dbg_file":  "C:\\__w\\1\\b\\Release\\x64\\GameBar\\GameBar.pdb",
+                 "endian":  "LE",
+                 "hdr.csum":  "0x00ef8f30",
+                 "guid":  "A50A82338E444A18B453B5369AA921D41",
+                 "laddr":  0,
+                 "lang":  "msvc",
+                 "machine":  "AMD 64",
+                 "maxopsz":  16,
+                 "minopsz":  1,
+                 "os":  "windows",
+                 "overlay":  false,
+                 "cc":  "ms",
+                 "pcalign":  1,
+                 "signed":  true,
+                 "subsys":  "Windows GUI",
+                 "stripped":  false,
+                 "crypto":  false,
+                 "havecode":  true,
+                 "va":  true,
+                 "sanitiz":  false,
+                 "static":  false,
+                 "linenum":  false,
+                 "lsyms":  false,
+                 "canary":  false,
+                 "PIE":  true,
+                 "RELROCS":  false,
+                 "NX":  true
+             },
+    "interesting_libraries":  [
+                                  "dxgi.dll"
+                              ],
+    "interesting_imports":  [
+                                {
+                                    "libname":  "api-ms-win-core-libraryloader-l1-2-0.dll",
+                                    "name":  "LoadLibraryExW",
+                                    "plt":  5377873584
+                                },
+                                {
+                                    "libname":  "api-ms-win-core-libraryloader-l1-2-0.dll",
+                                    "name":  "GetProcAddress",
+                                    "plt":  5377873600
+                                },
+                                {
+                                    "libname":  "api-ms-win-core-libraryloader-l2-1-0.dll",
+                                    "name":  "LoadPackagedLibrary",
+                                    "plt":  5377873648
+                                },
+                                {
+                                    "libname":  "api-ms-win-core-winrt-l1-1-0.dll",
+                                    "name":  "RoGetActivationFactory",
+                                    "plt":  5377874288
+                                },
+                                {
+                                    "libname":  "dxgi.dll",
+                                    "name":  "CreateDXGIFactory2",
+                                    "plt":  5377875072
+                                }
+                            ],
+    "interesting_strings":  [
+                                {
+                                    "vaddr":  5378027216,
+                                    "paddr":  9312976,
+                                    "length":  76,
+                                    "size":  154,
+                                    "string":  "Windows.Foundation.IReferenceArray`1\u003cWindows.UI.Xaml.Markup.XmlnsDefinition\u003e"
+                                },
+                                {
+                                    "vaddr":  5378029608,
+                                    "paddr":  9315368,
+                                    "length":  30,
+                                    "size":  62,
+                                    "string":  "Windows.UI.Xaml.Documents.Span"
+                                },
+                                {
+                                    "vaddr":  5378029904,
+                                    "paddr":  9315664,
+                                    "length":  27,
+                                    "size":  56,
+                                    "string":  "Windows.UI.Xaml.Application"
+                                },
+                                {
+                                    "vaddr":  5378029968,
+                                    "paddr":  9315728,
+                                    "length":  46,
+                                    "size":  94,
+                                    "string":  "Windows.UI.Xaml.UnhandledExceptionEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378030080,
+                                    "paddr":  9315840,
+                                    "length":  38,
+                                    "size":  78,
+                                    "string":  "Windows.UI.Xaml.SuspendingEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378031024,
+                                    "paddr":  9316784,
+                                    "length":  34,
+                                    "size":  70,
+                                    "string":  "Windows.UI.Xaml.DependencyProperty"
+                                },
+                                {
+                                    "vaddr":  5378031520,
+                                    "paddr":  9317280,
+                                    "length":  59,
+                                    "size":  120,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.GridLength\u003e"
+                                },
+                                {
+                                    "vaddr":  5378031640,
+                                    "paddr":  9317400,
+                                    "length":  26,
+                                    "size":  54,
+                                    "string":  "Windows.UI.Xaml.GridLength"
+                                },
+                                {
+                                    "vaddr":  5378031744,
+                                    "paddr":  9317504,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.GridLengthHelper"
+                                },
+                                {
+                                    "vaddr":  5378032096,
+                                    "paddr":  9317856,
+                                    "length":  59,
+                                    "size":  120,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.Visibility\u003e"
+                                },
+                                {
+                                    "vaddr":  5378032256,
+                                    "paddr":  9318016,
+                                    "length":  26,
+                                    "size":  54,
+                                    "string":  "Windows.UI.Xaml.Visibility"
+                                },
+                                {
+                                    "vaddr":  5378032640,
+                                    "paddr":  9318400,
+                                    "length":  58,
+                                    "size":  118,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.Thickness\u003e"
+                                },
+                                {
+                                    "vaddr":  5378032760,
+                                    "paddr":  9318520,
+                                    "length":  25,
+                                    "size":  52,
+                                    "string":  "Windows.UI.Xaml.Thickness"
+                                },
+                                {
+                                    "vaddr":  5378032848,
+                                    "paddr":  9318608,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "Windows.UI.Xaml.ThicknessHelper"
+                                },
+                                {
+                                    "vaddr":  5378071840,
+                                    "paddr":  9357600,
+                                    "length":  74,
+                                    "size":  150,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.Input.PointerEventHandler\u003e"
+                                },
+                                {
+                                    "vaddr":  5378073528,
+                                    "paddr":  9359288,
+                                    "length":  22,
+                                    "size":  46,
+                                    "string":  "InputDelegationManager"
+                                },
+                                {
+                                    "vaddr":  5378074736,
+                                    "paddr":  9360496,
+                                    "length":  123,
+                                    "size":  248,
+                                    "string":  "Windows.Foundation.TypedEventHandler`2\u003cWindows.UI.Xaml.Controls.Control, Windows.UI.Xaml.Controls.FocusDisengagedEventArgs\u003e"
+                                },
+                                {
+                                    "vaddr":  5378075024,
+                                    "paddr":  9360784,
+                                    "length":  120,
+                                    "size":  242,
+                                    "string":  "Windows.Foundation.TypedEventHandler`2\u003cWindows.UI.Xaml.Controls.Control, Windows.UI.Xaml.Controls.FocusEngagedEventArgs\u003e"
+                                },
+                                {
+                                    "vaddr":  5378075312,
+                                    "paddr":  9361072,
+                                    "length":  34,
+                                    "size":  70,
+                                    "string":  "Windows.UI.Xaml.RoutedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378075440,
+                                    "paddr":  9361200,
+                                    "length":  41,
+                                    "size":  84,
+                                    "string":  "Windows.UI.Xaml.Input.PointerEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378076016,
+                                    "paddr":  9361776,
+                                    "length":  53,
+                                    "size":  108,
+                                    "string":  "Windows.UI.Xaml.Automation.Peers.SliderAutomationPeer"
+                                },
+                                {
+                                    "vaddr":  5378076208,
+                                    "paddr":  9361968,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.Controls.Control"
+                                },
+                                {
+                                    "vaddr":  5378076280,
+                                    "paddr":  9362040,
+                                    "length":  25,
+                                    "size":  52,
+                                    "string":  "Windows.UI.Xaml.UIElement"
+                                },
+                                {
+                                    "vaddr":  5378076336,
+                                    "paddr":  9362096,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "Windows.UI.Xaml.Controls.Slider"
+                                },
+                                {
+                                    "vaddr":  5378076848,
+                                    "paddr":  9362608,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "Windows.UI.Xaml.Controls.Button"
+                                },
+                                {
+                                    "vaddr":  5378077024,
+                                    "paddr":  9362784,
+                                    "length":  39,
+                                    "size":  80,
+                                    "string":  "Windows.UI.Xaml.SizeChangedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378077136,
+                                    "paddr":  9362896,
+                                    "length":  48,
+                                    "size":  98,
+                                    "string":  "Windows.UI.Xaml.Controls.TextChangedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378077280,
+                                    "paddr":  9363040,
+                                    "length":  53,
+                                    "size":  108,
+                                    "string":  "Windows.UI.Xaml.DependencyPropertyChangedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378077456,
+                                    "paddr":  9363216,
+                                    "length":  34,
+                                    "size":  70,
+                                    "string":  "Windows.UI.Xaml.VisualStateManager"
+                                },
+                                {
+                                    "vaddr":  5378077528,
+                                    "paddr":  9363288,
+                                    "length":  28,
+                                    "size":  58,
+                                    "string":  "Windows.UI.Xaml.PropertyPath"
+                                },
+                                {
+                                    "vaddr":  5378077592,
+                                    "paddr":  9363352,
+                                    "length":  28,
+                                    "size":  58,
+                                    "string":  "Windows.UI.Xaml.Data.Binding"
+                                },
+                                {
+                                    "vaddr":  5378077664,
+                                    "paddr":  9363424,
+                                    "length":  49,
+                                    "size":  100,
+                                    "string":  "Windows.UI.Xaml.DependencyPropertyChangedCallback"
+                                },
+                                {
+                                    "vaddr":  5378077792,
+                                    "paddr":  9363552,
+                                    "length":  39,
+                                    "size":  80,
+                                    "string":  "Windows.UI.Xaml.PropertyChangedCallback"
+                                },
+                                {
+                                    "vaddr":  5378077888,
+                                    "paddr":  9363648,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.PropertyMetadata"
+                                },
+                                {
+                                    "vaddr":  5378078176,
+                                    "paddr":  9363936,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.FrameworkElement"
+                                },
+                                {
+                                    "vaddr":  5378078272,
+                                    "paddr":  9364032,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.Controls.TextBox"
+                                },
+                                {
+                                    "vaddr":  5378078632,
+                                    "paddr":  9364392,
+                                    "length":  27,
+                                    "size":  56,
+                                    "string":  "Windows.UI.Xaml.Media.Brush"
+                                },
+                                {
+                                    "vaddr":  5378078800,
+                                    "paddr":  9364560,
+                                    "length":  32,
+                                    "size":  66,
+                                    "string":  "Windows.UI.Xaml.DependencyObject"
+                                },
+                                {
+                                    "vaddr":  5378079696,
+                                    "paddr":  9365456,
+                                    "length":  41,
+                                    "size":  84,
+                                    "string":  "Windows.UI.Xaml.Controls.ContentPresenter"
+                                },
+                                {
+                                    "vaddr":  5378082544,
+                                    "paddr":  9368304,
+                                    "length":  36,
+                                    "size":  74,
+                                    "string":  "Windows.UI.Xaml.Controls.UserControl"
+                                },
+                                {
+                                    "vaddr":  5378083792,
+                                    "paddr":  9369552,
+                                    "length":  45,
+                                    "size":  92,
+                                    "string":  "Windows.UI.Xaml.Data.PropertyChangedEventArgs"
+                                },
+                                {
+                                    "vaddr":  5378087392,
+                                    "paddr":  9373152,
+                                    "length":  38,
+                                    "size":  78,
+                                    "string":  "Windows.UI.Xaml.Controls.ContentDialog"
+                                },
+                                {
+                                    "vaddr":  5378089696,
+                                    "paddr":  9375456,
+                                    "length":  48,
+                                    "size":  98,
+                                    "string":  "Windows.UI.Xaml.Data.PropertyChangedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378110160,
+                                    "paddr":  9395920,
+                                    "length":  45,
+                                    "size":  92,
+                                    "string":  "Windows.UI.Xaml.Controls.DataTemplateSelector"
+                                },
+                                {
+                                    "vaddr":  5378114576,
+                                    "paddr":  9400336,
+                                    "length":  41,
+                                    "size":  84,
+                                    "string":  "Windows.UI.Xaml.Media.Imaging.BitmapImage"
+                                },
+                                {
+                                    "vaddr":  5378119360,
+                                    "paddr":  9405120,
+                                    "length":  50,
+                                    "size":  102,
+                                    "string":  "Windows.UI.Xaml.Media.Imaging.SoftwareBitmapSource"
+                                },
+                                {
+                                    "vaddr":  5378119648,
+                                    "paddr":  9405408,
+                                    "length":  29,
+                                    "size":  60,
+                                    "string":  "Windows.UI.Xaml.Controls.Page"
+                                },
+                                {
+                                    "vaddr":  5378120736,
+                                    "paddr":  9406496,
+                                    "length":  114,
+                                    "size":  230,
+                                    "string":  "Windows.Foundation.TypedEventHandler`2\u003cWindows.UI.Xaml.UIElement, Windows.UI.Xaml.BringIntoViewRequestedEventArgs\u003e"
+                                },
+                                {
+                                    "vaddr":  5378121136,
+                                    "paddr":  9406896,
+                                    "length":  49,
+                                    "size":  100,
+                                    "string":  "Windows.UI.Xaml.Hosting.ElementCompositionPreview"
+                                },
+                                {
+                                    "vaddr":  5378121248,
+                                    "paddr":  9407008,
+                                    "length":  38,
+                                    "size":  78,
+                                    "string":  "Windows.UI.Xaml.Media.VisualTreeHelper"
+                                },
+                                {
+                                    "vaddr":  5378121344,
+                                    "paddr":  9407104,
+                                    "length":  46,
+                                    "size":  94,
+                                    "string":  "Windows.UI.Xaml.VisualStateChangedEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378121488,
+                                    "paddr":  9407248,
+                                    "length":  34,
+                                    "size":  70,
+                                    "string":  "Windows.UI.Xaml.Input.FocusManager"
+                                },
+                                {
+                                    "vaddr":  5378121600,
+                                    "paddr":  9407360,
+                                    "length":  37,
+                                    "size":  76,
+                                    "string":  "Windows.UI.Xaml.Controls.ScrollViewer"
+                                },
+                                {
+                                    "vaddr":  5378121728,
+                                    "paddr":  9407488,
+                                    "length":  22,
+                                    "size":  46,
+                                    "string":  "Windows.UI.Xaml.Window"
+                                },
+                                {
+                                    "vaddr":  5378122576,
+                                    "paddr":  9408336,
+                                    "length":  92,
+                                    "size":  186,
+                                    "string":  "Windows.Foundation.EventHandler`1\u003cWindows.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs\u003e"
+                                },
+                                {
+                                    "vaddr":  5378130480,
+                                    "paddr":  9416240,
+                                    "length":  37,
+                                    "size":  76,
+                                    "string":  "(%ws) HostedViewPosition::set(%f, %f)"
+                                },
+                                {
+                                    "vaddr":  5378130560,
+                                    "paddr":  9416320,
+                                    "length":  79,
+                                    "size":  160,
+                                    "string":  "(%ws) HostedViewSize::get(%f, %f), m_widgetTopOffset(%f), m_navBarIsFocused(%d)"
+                                },
+                                {
+                                    "vaddr":  5378131472,
+                                    "paddr":  9417232,
+                                    "length":  87,
+                                    "size":  176,
+                                    "string":  "(%ws) HostedViewSize::set calling WidgetWindow::Size/Position pos(%f, %f), size(%f, %f)"
+                                },
+                                {
+                                    "vaddr":  5378131840,
+                                    "paddr":  9417600,
+                                    "length":  70,
+                                    "size":  142,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.Input.KeyEventHandler\u003e"
+                                },
+                                {
+                                    "vaddr":  5378132096,
+                                    "paddr":  9417856,
+                                    "length":  37,
+                                    "size":  76,
+                                    "string":  "Windows.UI.Xaml.Input.KeyEventHandler"
+                                },
+                                {
+                                    "vaddr":  5378132528,
+                                    "paddr":  9418288,
+                                    "length":  52,
+                                    "size":  53,
+                                    "string":  "GameBar::ViewChromeBase::GetHostedViewRectForPinning"
+                                },
+                                {
+                                    "vaddr":  5378133008,
+                                    "paddr":  9418768,
+                                    "length":  51,
+                                    "size":  104,
+                                    "string":  "ViewChromeBase::GetHostedViewRectForPinning: Failed"
+                                },
+                                {
+                                    "vaddr":  5378154640,
+                                    "paddr":  9440400,
+                                    "length":  82,
+                                    "size":  166,
+                                    "string":  "Windows.Foundation.IAsyncOperation`1\u003cWindows.UI.Xaml.Controls.ContentDialogResult\u003e"
+                                },
+                                {
+                                    "vaddr":  5378154880,
+                                    "paddr":  9440640,
+                                    "length":  37,
+                                    "size":  76,
+                                    "string":  "Windows.UI.Xaml.Media.SolidColorBrush"
+                                },
+                                {
+                                    "vaddr":  5378161344,
+                                    "paddr":  9447104,
+                                    "length":  48,
+                                    "size":  98,
+                                    "string":  "Windows.UI.Xaml.Media.Imaging.RenderTargetBitmap"
+                                },
+                                {
+                                    "vaddr":  5378218320,
+                                    "paddr":  9504080,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "Windows.UI.Xaml.Controls.Canvas"
+                                },
+                                {
+                                    "vaddr":  5378218384,
+                                    "paddr":  9504144,
+                                    "length":  47,
+                                    "size":  96,
+                                    "string":  "Windows.UI.Xaml.Automation.AutomationProperties"
+                                },
+                                {
+                                    "vaddr":  5378219536,
+                                    "paddr":  9505296,
+                                    "length":  39,
+                                    "size":  80,
+                                    "string":  "Windows.UI.Xaml.Media.RectangleGeometry"
+                                },
+                                {
+                                    "vaddr":  5378220360,
+                                    "paddr":  9506120,
+                                    "length":  29,
+                                    "size":  60,
+                                    "string":  "Windows.UI.Xaml.Controls.Grid"
+                                },
+                                {
+                                    "vaddr":  5378220432,
+                                    "paddr":  9506192,
+                                    "length":  40,
+                                    "size":  82,
+                                    "string":  "Windows.UI.Xaml.Media.CompositeTransform"
+                                },
+                                {
+                                    "vaddr":  5378224320,
+                                    "paddr":  9510080,
+                                    "length":  88,
+                                    "size":  178,
+                                    "string":  "Windows.Foundation.Collections.IObservableVector`1\u003cWindows.UI.Xaml.Data.IValueConverter\u003e"
+                                },
+                                {
+                                    "vaddr":  5378224512,
+                                    "paddr":  9510272,
+                                    "length":  82,
+                                    "size":  166,
+                                    "string":  "Windows.Foundation.Collections.IVectorView`1\u003cWindows.UI.Xaml.Data.IValueConverter\u003e"
+                                },
+                                {
+                                    "vaddr":  5378224688,
+                                    "paddr":  9510448,
+                                    "length":  80,
+                                    "size":  162,
+                                    "string":  "Windows.Foundation.Collections.IIterator`1\u003cWindows.UI.Xaml.Data.IValueConverter\u003e"
+                                },
+                                {
+                                    "vaddr":  5378225168,
+                                    "paddr":  9510928,
+                                    "length":  74,
+                                    "size":  150,
+                                    "string":  "Windows.Foundation.IReferenceArray`1\u003cWindows.UI.Xaml.Data.IValueConverter\u003e"
+                                },
+                                {
+                                    "vaddr":  5378231280,
+                                    "paddr":  9517040,
+                                    "length":  74,
+                                    "size":  150,
+                                    "string":  "Windows.Foundation.Collections.IVector`1\u003cWindows.UI.Xaml.Documents.Inline\u003e"
+                                },
+                                {
+                                    "vaddr":  5378231632,
+                                    "paddr":  9517392,
+                                    "length":  21,
+                                    "size":  44,
+                                    "string":  "Windows.UI.Xaml.Style"
+                                },
+                                {
+                                    "vaddr":  5378232400,
+                                    "paddr":  9518160,
+                                    "length":  33,
+                                    "size":  68,
+                                    "string":  "Windows.UI.Xaml.Controls.ComboBox"
+                                },
+                                {
+                                    "vaddr":  5378232496,
+                                    "paddr":  9518256,
+                                    "length":  33,
+                                    "size":  68,
+                                    "string":  "Windows.UI.Xaml.Controls.CheckBox"
+                                },
+                                {
+                                    "vaddr":  5378232576,
+                                    "paddr":  9518336,
+                                    "length":  46,
+                                    "size":  94,
+                                    "string":  "Windows.UI.Xaml.Controls.Primitives.ButtonBase"
+                                },
+                                {
+                                    "vaddr":  5378232688,
+                                    "paddr":  9518448,
+                                    "length":  36,
+                                    "size":  74,
+                                    "string":  "Windows.UI.Xaml.Controls.RadioButton"
+                                },
+                                {
+                                    "vaddr":  5378232768,
+                                    "paddr":  9518528,
+                                    "length":  48,
+                                    "size":  98,
+                                    "string":  "Windows.UI.Xaml.Controls.Primitives.ToggleButton"
+                                },
+                                {
+                                    "vaddr":  5378232880,
+                                    "paddr":  9518640,
+                                    "length":  40,
+                                    "size":  82,
+                                    "string":  "Windows.UI.Xaml.Controls.HyperlinkButton"
+                                },
+                                {
+                                    "vaddr":  5378251568,
+                                    "paddr":  9537328,
+                                    "length":  68,
+                                    "size":  138,
+                                    "string":  "InitializeUIAsync: Calling m_inputDelegationManager-\u003eInitializeAsync"
+                                },
+                                {
+                                    "vaddr":  5378258672,
+                                    "paddr":  9544432,
+                                    "length":  63,
+                                    "size":  128,
+                                    "string":  "OnShutdownAsync: m_inputDelegationManager-\u003eShutdownAsync Failed"
+                                },
+                                {
+                                    "vaddr":  5378258800,
+                                    "paddr":  9544560,
+                                    "length":  66,
+                                    "size":  134,
+                                    "string":  "OnShutdownAsync: Calling m_inputDelegationManager-\u003eShutdownAsync()"
+                                },
+                                {
+                                    "vaddr":  5378306728,
+                                    "paddr":  9592488,
+                                    "length":  30,
+                                    "size":  62,
+                                    "string":  "GlobalClickThroughTransparency"
+                                },
+                                {
+                                    "vaddr":  5378327856,
+                                    "paddr":  9613616,
+                                    "length":  79,
+                                    "size":  160,
+                                    "string":  "Windows.Foundation.IAsyncOperation`1\u003cWindows.UI.Xaml.Media.Imaging.BitmapImage\u003e"
+                                },
+                                {
+                                    "vaddr":  5378333328,
+                                    "paddr":  9619088,
+                                    "length":  26,
+                                    "size":  54,
+                                    "string":  "Windows.GameBarUIExtension"
+                                },
+                                {
+                                    "vaddr":  5378343920,
+                                    "paddr":  9629680,
+                                    "length":  76,
+                                    "size":  77,
+                                    "string":  "winrt::GameBar::implementation::CuiWidgetAdapter::ClickThroughChangedHandler"
+                                },
+                                {
+                                    "vaddr":  5378351264,
+                                    "paddr":  9637024,
+                                    "length":  90,
+                                    "size":  182,
+                                    "string":  "Command_SetFocusForPinnedOnlyAsync: Our turn. Calling ShutdownInputDelegationInternalAsync"
+                                },
+                                {
+                                    "vaddr":  5378351984,
+                                    "paddr":  9637744,
+                                    "length":  57,
+                                    "size":  58,
+                                    "string":  "GameBar::InputDelegationManager::OnGameBarViewModeChanged"
+                                },
+                                {
+                                    "vaddr":  5378352048,
+                                    "paddr":  9637808,
+                                    "length":  58,
+                                    "size":  59,
+                                    "string":  "C:\\__w\\1\\s\\Source\\GameBar\\Input\\InputDelegationManager.cpp"
+                                },
+                                {
+                                    "vaddr":  5378353712,
+                                    "paddr":  9639472,
+                                    "length":  68,
+                                    "size":  69,
+                                    "string":  "GameBar::InputDelegationManager::HandleWinGForegroundTargetFseLaunch"
+                                },
+                                {
+                                    "vaddr":  5378355056,
+                                    "paddr":  9640816,
+                                    "length":  64,
+                                    "size":  65,
+                                    "string":  "GameBar::InputDelegationManager::GiveComponentFocusInternalAsync"
+                                },
+                                {
+                                    "vaddr":  5378358288,
+                                    "paddr":  9644048,
+                                    "length":  58,
+                                    "size":  59,
+                                    "string":  "GameBar::InputDelegationManager::FocusGameBarInternalAsync"
+                                },
+                                {
+                                    "vaddr":  5378358352,
+                                    "paddr":  9644112,
+                                    "length":  47,
+                                    "size":  96,
+                                    "string":  "ShutdownInputDelegationInternalAsync: Returning"
+                                },
+                                {
+                                    "vaddr":  5378358848,
+                                    "paddr":  9644608,
+                                    "length":  44,
+                                    "size":  90,
+                                    "string":  "ShutdownInputDelegationInternalAsync: Called"
+                                },
+                                {
+                                    "vaddr":  5378358944,
+                                    "paddr":  9644704,
+                                    "length":  86,
+                                    "size":  174,
+                                    "string":  "ShutdownInputDelegationInternalAsync: Set foreground back to game bar, then target app"
+                                },
+                                {
+                                    "vaddr":  5378359120,
+                                    "paddr":  9644880,
+                                    "length":  69,
+                                    "size":  70,
+                                    "string":  "GameBar::InputDelegationManager::ShutdownInputDelegationInternalAsync"
+                                },
+                                {
+                                    "vaddr":  5378359200,
+                                    "paddr":  9644960,
+                                    "length":  63,
+                                    "size":  128,
+                                    "string":  "ShutdownInputDelegationInternalAsync: Failed to SetForeground()"
+                                },
+                                {
+                                    "vaddr":  5378360400,
+                                    "paddr":  9646160,
+                                    "length":  104,
+                                    "size":  210,
+                                    "string":  "SetInputDelegationOnGameBarAsync: Waiting for delegation to complete. Timed out. Assume delegation false"
+                                },
+                                {
+                                    "vaddr":  5378360624,
+                                    "paddr":  9646384,
+                                    "length":  70,
+                                    "size":  142,
+                                    "string":  "SetInputDelegationOnGameBarAsync: InputDelegationActive(%d). Returning"
+                                },
+                                {
+                                    "vaddr":  5378361088,
+                                    "paddr":  9646848,
+                                    "length":  40,
+                                    "size":  82,
+                                    "string":  "SetInputDelegationOnGameBarAsync: Called"
+                                },
+                                {
+                                    "vaddr":  5378361184,
+                                    "paddr":  9646944,
+                                    "length":  51,
+                                    "size":  104,
+                                    "string":  "SetInputDelegationOnGameBarAsync: delegateInput: %d"
+                                },
+                                {
+                                    "vaddr":  5378361296,
+                                    "paddr":  9647056,
+                                    "length":  68,
+                                    "size":  138,
+                                    "string":  "SetInputDelegationOnGameBarAsync: Waiting for delegation to complete"
+                                },
+                                {
+                                    "vaddr":  5378361696,
+                                    "paddr":  9647456,
+                                    "length":  69,
+                                    "size":  70,
+                                    "string":  "GameBar::InputDelegationManager::RemoveFocusFromFocusedComponentAsync"
+                                },
+                                {
+                                    "vaddr":  5378363376,
+                                    "paddr":  9649136,
+                                    "length":  75,
+                                    "size":  76,
+                                    "string":  "GameBar::InputDelegationManager::Command_TakeForegroundDuringOperationAsync"
+                                },
+                                {
+                                    "vaddr":  5378364472,
+                                    "paddr":  9650232,
+                                    "length":  53,
+                                    "size":  54,
+                                    "string":  "GameBar::InputDelegationManager::HandleInputDelegated"
+                                },
+                                {
+                                    "vaddr":  5378364528,
+                                    "paddr":  9650288,
+                                    "length":  52,
+                                    "size":  53,
+                                    "string":  "GameBar::InputDelegationManager::OnInputFocusChanged"
+                                },
+                                {
+                                    "vaddr":  5378365504,
+                                    "paddr":  9651264,
+                                    "length":  65,
+                                    "size":  66,
+                                    "string":  "GameBar::InputDelegationManager::CheckForTargetWindowInForeground"
+                                },
+                                {
+                                    "vaddr":  5378365576,
+                                    "paddr":  9651336,
+                                    "length":  60,
+                                    "size":  61,
+                                    "string":  "GameBar::InputDelegationManager::CompleteForegroundOperation"
+                                },
+                                {
+                                    "vaddr":  5378366784,
+                                    "paddr":  9652544,
+                                    "length":  66,
+                                    "size":  67,
+                                    "string":  "GameBar::InputDelegationManager::RaiseInputDelegationActiveChanged"
+                                },
+                                {
+                                    "vaddr":  5378366864,
+                                    "paddr":  9652624,
+                                    "length":  40,
+                                    "size":  82,
+                                    "string":  "RaiseInputDelegationActiveChanged failed"
+                                },
+                                {
+                                    "vaddr":  5378366952,
+                                    "paddr":  9652712,
+                                    "length":  47,
+                                    "size":  48,
+                                    "string":  "GameBar::InputDelegationManager::AddTargetToGcs"
+                                },
+                                {
+                                    "vaddr":  5378377920,
+                                    "paddr":  9663680,
+                                    "length":  57,
+                                    "size":  116,
+                                    "string":  "OnInitializeAsync: Settings::IsClickThroughEnabled - [%d]"
+                                },
+                                {
+                                    "vaddr":  5378379728,
+                                    "paddr":  9665488,
+                                    "length":  68,
+                                    "size":  138,
+                                    "string":  "UiThreadWatcher: Hang Detected. Calling GamingOverlayBroker().Hide()"
+                                },
+                                {
+                                    "vaddr":  5378386880,
+                                    "paddr":  9672640,
+                                    "length":  33,
+                                    "size":  68,
+                                    "string":  "PinnedOnlyAsync: Set ClickThrough"
+                                },
+                                {
+                                    "vaddr":  5378396240,
+                                    "paddr":  9682000,
+                                    "length":  67,
+                                    "size":  136,
+                                    "string":  "ClearWindowRegion: GamingOverlayBroker().ResetWindowRegion() failed"
+                                },
+                                {
+                                    "vaddr":  5378397520,
+                                    "paddr":  9683280,
+                                    "length":  69,
+                                    "size":  140,
+                                    "string":  "ResetWindowRect: Called. Calling GamingOverlayBroker::ResetWindowRect"
+                                },
+                                {
+                                    "vaddr":  5378398944,
+                                    "paddr":  9684704,
+                                    "length":  73,
+                                    "size":  148,
+                                    "string":  "UpdateWindowRegionForPinnedOnlyAsync: GamingOverlayBroker().Show() failed"
+                                },
+                                {
+                                    "vaddr":  5378399104,
+                                    "paddr":  9684864,
+                                    "length":  74,
+                                    "size":  150,
+                                    "string":  "UpdateWindowRegionForPinnedOnlyAsync: Calling GamingOverlayBroker().Hide()"
+                                },
+                                {
+                                    "vaddr":  5378399264,
+                                    "paddr":  9685024,
+                                    "length":  73,
+                                    "size":  148,
+                                    "string":  "UpdateWindowRegionForPinnedOnlyAsync: GamingOverlayBroker().Hide() failed"
+                                },
+                                {
+                                    "vaddr":  5378399808,
+                                    "paddr":  9685568,
+                                    "length":  92,
+                                    "size":  186,
+                                    "string":  "UpdateWindowRegionForPinnedOnlyAsync: GamingOverlayBroker().SetCombinedWindowRegion() failed"
+                                },
+                                {
+                                    "vaddr":  5378400000,
+                                    "paddr":  9685760,
+                                    "length":  74,
+                                    "size":  150,
+                                    "string":  "UpdateWindowRegionForPinnedOnlyAsync: Calling GamingOverlayBroker().Show()"
+                                },
+                                {
+                                    "vaddr":  5378404128,
+                                    "paddr":  9689888,
+                                    "length":  83,
+                                    "size":  168,
+                                    "string":  "UpdateEmTargetDisplayToUse: Called. Calling GamingOverlayBroker::GetDisplayMonitors"
+                                },
+                                {
+                                    "vaddr":  5378404688,
+                                    "paddr":  9690448,
+                                    "length":  63,
+                                    "size":  128,
+                                    "string":  "OnProcessShutdownStarting: Calling GamingOverlayBroker().Hide()"
+                                },
+                                {
+                                    "vaddr":  5378404880,
+                                    "paddr":  9690640,
+                                    "length":  62,
+                                    "size":  126,
+                                    "string":  "OnProcessShutdownStarting: GamingOverlayBroker().Hide() failed"
+                                },
+                                {
+                                    "vaddr":  5378405632,
+                                    "paddr":  9691392,
+                                    "length":  44,
+                                    "size":  90,
+                                    "string":  "GameBar::ShellController::ToggleClickThrough"
+                                },
+                                {
+                                    "vaddr":  5378405840,
+                                    "paddr":  9691600,
+                                    "length":  30,
+                                    "size":  62,
+                                    "string":  "SetClickThrough: enabled(true)"
+                                },
+                                {
+                                    "vaddr":  5378405904,
+                                    "paddr":  9691664,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "SetClickThrough: enabled(false)"
+                                },
+                                {
+                                    "vaddr":  5378408160,
+                                    "paddr":  9693920,
+                                    "length":  61,
+                                    "size":  124,
+                                    "string":  "CtaDenyMode_PromptAsync: Calling GamingOverlayBroker().Hide()"
+                                },
+                                {
+                                    "vaddr":  5378408288,
+                                    "paddr":  9694048,
+                                    "length":  60,
+                                    "size":  122,
+                                    "string":  "CtaDenyMode_PromptAsync: GamingOverlayBroker().Hide() failed"
+                                },
+                                {
+                                    "vaddr":  5378408544,
+                                    "paddr":  9694304,
+                                    "length":  61,
+                                    "size":  124,
+                                    "string":  "CtaDenyMode_PromptAsync: Calling GamingOverlayBroker().Show()"
+                                },
+                                {
+                                    "vaddr":  5378408736,
+                                    "paddr":  9694496,
+                                    "length":  60,
+                                    "size":  122,
+                                    "string":  "CtaDenyMode_PromptAsync: GamingOverlayBroker().Show() failed"
+                                },
+                                {
+                                    "vaddr":  5378408864,
+                                    "paddr":  9694624,
+                                    "length":  70,
+                                    "size":  142,
+                                    "string":  "CtaDenyMode_PromptAsync: Calling GamingOverlayBroker().SetForeground()"
+                                },
+                                {
+                                    "vaddr":  5378410768,
+                                    "paddr":  9696528,
+                                    "length":  63,
+                                    "size":  128,
+                                    "string":  "TransitionToForegroundViewModeFromPinnedAsync: Set ClickThrough"
+                                },
+                                {
+                                    "vaddr":  5378411296,
+                                    "paddr":  9697056,
+                                    "length":  61,
+                                    "size":  124,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.ElementTheme\u003e"
+                                },
+                                {
+                                    "vaddr":  5378412400,
+                                    "paddr":  9698160,
+                                    "length":  83,
+                                    "size":  168,
+                                    "string":  "TransitionToForegroundViewModeFromPinnedAsync: Calling GamingOverlayBroker().Show()"
+                                },
+                                {
+                                    "vaddr":  5378412656,
+                                    "paddr":  9698416,
+                                    "length":  82,
+                                    "size":  166,
+                                    "string":  "TransitionToForegroundViewModeFromPinnedAsync: GamingOverlayBroker().Show() failed"
+                                },
+                                {
+                                    "vaddr":  5378413456,
+                                    "paddr":  9699216,
+                                    "length":  66,
+                                    "size":  134,
+                                    "string":  "Windows.Foundation.IAsyncOperation`1\u003cWindows.UI.Xaml.ElementTheme\u003e"
+                                },
+                                {
+                                    "vaddr":  5378413768,
+                                    "paddr":  9699528,
+                                    "length":  28,
+                                    "size":  58,
+                                    "string":  "Windows.UI.Xaml.ElementTheme"
+                                },
+                                {
+                                    "vaddr":  5378413912,
+                                    "paddr":  9699672,
+                                    "length":  26,
+                                    "size":  54,
+                                    "string":  "Windows.UI.Xaml.SizeHelper"
+                                },
+                                {
+                                    "vaddr":  5378414208,
+                                    "paddr":  9699968,
+                                    "length":  47,
+                                    "size":  96,
+                                    "string":  "Windows.UI.Xaml.Media.Animation.DoubleAnimation"
+                                },
+                                {
+                                    "vaddr":  5378414304,
+                                    "paddr":  9700064,
+                                    "length":  47,
+                                    "size":  96,
+                                    "string":  "Windows.UI.Xaml.Media.Animation.ExponentialEase"
+                                },
+                                {
+                                    "vaddr":  5378414432,
+                                    "paddr":  9700192,
+                                    "length":  42,
+                                    "size":  86,
+                                    "string":  "Windows.UI.Xaml.Media.Animation.Storyboard"
+                                },
+                                {
+                                    "vaddr":  5378414528,
+                                    "paddr":  9700288,
+                                    "length":  34,
+                                    "size":  70,
+                                    "string":  "Windows.UI.Xaml.ResourceDictionary"
+                                },
+                                {
+                                    "vaddr":  5378425584,
+                                    "paddr":  9711344,
+                                    "length":  63,
+                                    "size":  128,
+                                    "string":  "Windows.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer"
+                                },
+                                {
+                                    "vaddr":  5378425712,
+                                    "paddr":  9711472,
+                                    "length":  54,
+                                    "size":  110,
+                                    "string":  "Windows.UI.Xaml.Automation.Peers.AutomationControlType"
+                                },
+                                {
+                                    "vaddr":  5378425824,
+                                    "paddr":  9711584,
+                                    "length":  39,
+                                    "size":  80,
+                                    "string":  "Windows.UI.Xaml.Controls.ContentControl"
+                                },
+                                {
+                                    "vaddr":  5378428736,
+                                    "paddr":  9714496,
+                                    "length":  87,
+                                    "size":  176,
+                                    "string":  "Windows.Foundation.IReference`1\u003cWindows.UI.Xaml.Automation.Peers.AutomationControlType\u003e"
+                                },
+                                {
+                                    "vaddr":  5378434880,
+                                    "paddr":  9720640,
+                                    "length":  25,
+                                    "size":  52,
+                                    "string":  "GlobalClickThroughOpacity"
+                                },
+                                {
+                                    "vaddr":  5378434976,
+                                    "paddr":  9720736,
+                                    "length":  12,
+                                    "size":  26,
+                                    "string":  "ClickThrough"
+                                },
+                                {
+                                    "vaddr":  5378448000,
+                                    "paddr":  9733760,
+                                    "length":  55,
+                                    "size":  112,
+                                    "string":  "HostedViewSize::set calling WidgetWindow::Size/Position"
+                                },
+                                {
+                                    "vaddr":  5378448208,
+                                    "paddr":  9733968,
+                                    "length":  43,
+                                    "size":  88,
+                                    "string":  "**** ViewChrome_HostedViewSize W(%f), H(%f)"
+                                },
+                                {
+                                    "vaddr":  5378449072,
+                                    "paddr":  9734832,
+                                    "length":  55,
+                                    "size":  112,
+                                    "string":  "Windows.UI.Xaml.Automation.AutomationElementIdentifiers"
+                                },
+                                {
+                                    "vaddr":  5378466544,
+                                    "paddr":  9752304,
+                                    "length":  31,
+                                    "size":  64,
+                                    "string":  "Windows.UI.Xaml.DispatcherTimer"
+                                },
+                                {
+                                    "vaddr":  5378474064,
+                                    "paddr":  9759824,
+                                    "length":  73,
+                                    "size":  148,
+                                    "string":  "GetSavedHostedViewSize: ProfilesController::GetSize returned w(%f), h(%f)"
+                                },
+                                {
+                                    "vaddr":  5378474224,
+                                    "paddr":  9759984,
+                                    "length":  58,
+                                    "size":  118,
+                                    "string":  "SaveHostedViewSize Updating size-profile with w(%f), h(%f)"
+                                },
+                                {
+                                    "vaddr":  5378484256,
+                                    "paddr":  9770016,
+                                    "length":  94,
+                                    "size":  190,
+                                    "string":  "Windows.Foundation.AsyncOperationCompletedHandler`1\u003cWindows.UI.Xaml.Input.FocusMovementResult\u003e"
+                                },
+                                {
+                                    "vaddr":  5378490208,
+                                    "paddr":  9775968,
+                                    "length":  137,
+                                    "size":  276,
+                                    "string":  "Windows.Foundation.TypedEventHandler`2\u003cWindows.UI.Xaml.Controls.ListViewBase, Windows.UI.Xaml.Controls.ContainerContentChangingEventArgs\u003e"
+                                }
+                            ]
+}

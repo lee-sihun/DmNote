@@ -1,0 +1,38 @@
+﻿{
+    "analyzed_at":  "2026-03-16 12:58:54 +09:00",
+    "settings_path":  "C:\\Users\\esihun\\AppData\\Local\\Packages\\Microsoft.XboxGamingOverlay_8wekyb3d8bbwe\\Settings\\settings.dat",
+    "kgl_one_settings_uri":  "https://dlassets-ssl.xboxlive.com/public/content/kgl/Version/2658/kgl.2658.compressed",
+    "kgl_one_settings_version":  null,
+    "kgl_one_settings_hash":  null,
+    "open_widget_menu_count":  null,
+    "open_widget_store_count":  null,
+    "restricted_api_allow_list_raw":  "{\"RestrictedApiAllowList\":[\"Microsoft.TeamsXboxGameBarWidget_8wekyb3d8bbwe_App_TeamsWidget\",\"Microsoft.TeamsXboxGameBarWidget_8wekyb3d8bbwe_App_TeamsFeedbackWidget\",\"Microsoft.TeamsXboxGameBarWidgetBundled_8wekyb3d8bbwe_App_TeamsWidget\",\"62269AlexShats.CrosshairZoom_gghb1w55myjr2_App_CrosshairZoomWidget\"]}",
+    "restricted_api_allow_list":  [
+                                      "Microsoft.TeamsXboxGameBarWidget_8wekyb3d8bbwe_App_TeamsWidget",
+                                      "Microsoft.TeamsXboxGameBarWidget_8wekyb3d8bbwe_App_TeamsFeedbackWidget",
+                                      "Microsoft.TeamsXboxGameBarWidgetBundled_8wekyb3d8bbwe_App_TeamsWidget",
+                                      "62269AlexShats.CrosshairZoom_gghb1w55myjr2_App_CrosshairZoomWidget"
+                                  ],
+    "candidate_app_ids":  [
+                              {
+                                  "app_id":  "f60d6f7e-5a38-4fbe-bb53-37ed4ec7d424_ws4vteaf97a5e_App_DmNoteOverlay",
+                                  "present_in_settings":  false,
+                                  "present_in_allow_list":  false
+                              },
+                              {
+                                  "app_id":  "Microsoft.Edge.GameAssist_8wekyb3d8bbwe_App",
+                                  "present_in_settings":  false,
+                                  "present_in_allow_list":  false
+                              },
+                              {
+                                  "app_id":  "Microsoft.TeamsXboxGameBarWidget_8wekyb3d8bbwe_App_TeamsWidget",
+                                  "present_in_settings":  true,
+                                  "present_in_allow_list":  true
+                              },
+                              {
+                                  "app_id":  "62269AlexShats.CrosshairZoom_gghb1w55myjr2_App_CrosshairZoomWidget",
+                                  "present_in_settings":  true,
+                                  "present_in_allow_list":  true
+                              }
+                          ]
+}

@@ -1,0 +1,654 @@
+{
+  "capturedAt": "2026-03-15T15:48:18",
+  "processName": "GameBarFTServer.exe",
+  "result": {
+    "processName": null,
+    "processId": 28608,
+    "packageFullName": {
+      "hr": "0x00000000",
+      "value": "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe"
+    },
+    "roInitializeHr": "0x00000000",
+    "winrt": [
+      {
+        "className": "GameBar.CuiWidgetAdapter",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.WidgetControlHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.ForegroundWorkerHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.AppTargetHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.NotificationHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.GbftFactory",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.AppTargetManagerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.WindowManagerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.InputFocusTrackerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.GameConfigStoreFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      }
+    ],
+    "ftCom": [
+      {
+        "clsctx": 4,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x1d52da8e380",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x1d52da8e380",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x1d52da14710",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x1d52da14718",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x0",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1e0c28",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1e0c28"
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da144d8",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da144d8"
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da4a968",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da4a968"
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1b5a18",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1b5a18"
+          }
+        }
+      },
+      {
+        "clsctx": 5,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x1d52da8e1c0",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x1d52da8e1c0",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x1d52da144b0",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x1d52da144b8",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x0",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1e0c28",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1e0c28"
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da14538",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da14538"
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da4a968",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da4a968"
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1b5a18",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1b5a18"
+          }
+        }
+      },
+      {
+        "clsctx": 20,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x1d52da90200",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x1d52da90200",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x1d52da14690",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x1d52da14698",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x0",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1e0c28",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1e0c28"
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da14538",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da14538"
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da4a968",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da4a968"
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1b5a18",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1b5a18"
+          }
+        }
+      },
+      {
+        "clsctx": 21,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x1d52da90400",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x1d52da90400",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x1d52da14550",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x1d52da14558",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x0",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1e0c28",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1e0c28"
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da14898",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da14898"
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52da4a968",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52da4a968"
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x1d52d1b5a18",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x1d52d1b5a18"
+          }
+        }
+      }
+    ]
+  },
+  "messages": [
+    {
+      "type": "send",
+      "payload": {
+        "type": "result",
+        "payload": {
+          "processName": null,
+          "processId": 28608,
+          "packageFullName": {
+            "hr": "0x00000000",
+            "value": "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe"
+          },
+          "roInitializeHr": "0x00000000",
+          "winrt": [
+            {
+              "className": "GameBar.CuiWidgetAdapter",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.WidgetControlHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.ForegroundWorkerHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.AppTargetHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.NotificationHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.GbftFactory",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.AppTargetManagerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.WindowManagerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.InputFocusTrackerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.GameConfigStoreFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            }
+          ],
+          "ftCom": [
+            {
+              "clsctx": 4,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x1d52da8e380",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x1d52da8e380",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x1d52da14710",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x1d52da14718",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x0",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1e0c28",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1e0c28"
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da144d8",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da144d8"
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da4a968",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da4a968"
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1b5a18",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1b5a18"
+                }
+              }
+            },
+            {
+              "clsctx": 5,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x1d52da8e1c0",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x1d52da8e1c0",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x1d52da144b0",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x1d52da144b8",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x0",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1e0c28",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1e0c28"
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da14538",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da14538"
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da4a968",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da4a968"
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1b5a18",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1b5a18"
+                }
+              }
+            },
+            {
+              "clsctx": 20,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x1d52da90200",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x1d52da90200",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x1d52da14690",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x1d52da14698",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x0",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1e0c28",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1e0c28"
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da14538",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da14538"
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da4a968",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da4a968"
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1b5a18",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1b5a18"
+                }
+              }
+            },
+            {
+              "clsctx": 21,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x1d52da90400",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x1d52da90400",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x1d52da14550",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x1d52da14558",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x0",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1e0c28",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1e0c28"
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da14898",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da14898"
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52da4a968",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52da4a968"
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x1d52d1b5a18",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x1d52d1b5a18"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

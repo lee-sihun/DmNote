@@ -1,0 +1,37 @@
+﻿[
+    {
+        "Name":  "Microsoft.XboxGameOverlay",
+        "PackageFullName":  "Microsoft.XboxGameOverlay_1.54.4001.0_x64__8wekyb3d8bbwe",
+        "gameBarServices":  true,
+        "gameBarUIExtension":  false,
+        "GbftComFactory":  false
+    },
+    {
+        "Name":  "Microsoft.Edge.GameAssist",
+        "PackageFullName":  "Microsoft.Edge.GameAssist_1.0.3456.0_x64__8wekyb3d8bbwe",
+        "gameBarServices":  false,
+        "gameBarUIExtension":  true,
+        "GbftComFactory":  false
+    },
+    {
+        "Name":  "Microsoft.XboxGamingOverlay",
+        "PackageFullName":  "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+        "gameBarServices":  true,
+        "gameBarUIExtension":  true,
+        "GbftComFactory":  true
+    },
+    {
+        "Name":  "Microsoft.GamingApp",
+        "PackageFullName":  "Microsoft.GamingApp_2511.1001.12.0_x64__8wekyb3d8bbwe",
+        "gameBarServices":  false,
+        "gameBarUIExtension":  true,
+        "GbftComFactory":  false
+    },
+    {
+        "Name":  "f60d6f7e-5a38-4fbe-bb53-37ed4ec7d424",
+        "PackageFullName":  "f60d6f7e-5a38-4fbe-bb53-37ed4ec7d424_1.0.0.0_x64__ws4vteaf97a5e",
+        "gameBarServices":  false,
+        "gameBarUIExtension":  true,
+        "GbftComFactory":  false
+    }
+]

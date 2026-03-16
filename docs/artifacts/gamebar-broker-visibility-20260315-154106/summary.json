@@ -1,0 +1,301 @@
+﻿{
+    "analyzed_at":  "2026-03-15 15:41:22 +09:00",
+    "run_dir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-visibility-20260315-154106",
+    "before":  {
+                   "path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-visibility-20260315-154106\\uia-before.json",
+                   "root_count":  12,
+                   "visible_root_count":  8,
+                   "visible_roots":  [
+                                         {
+                                             "process_name":  "explorer",
+                                             "pid":  8752,
+                                             "class_name":  "ApplicationFrameWindow",
+                                             "title":  "",
+                                             "hwnd":  "0x16093C"
+                                         },
+                                         {
+                                             "process_name":  "ApplicationFrameHost",
+                                             "pid":  23008,
+                                             "class_name":  "ApplicationFrameWindow",
+                                             "title":  "",
+                                             "hwnd":  "0x290902"
+                                         },
+                                         {
+                                             "process_name":  "ApplicationFrameHost",
+                                             "pid":  23008,
+                                             "class_name":  "ApplicationFrameWindow",
+                                             "title":  "설정",
+                                             "hwnd":  "0x10072A"
+                                         },
+                                         {
+                                             "process_name":  "TextInputHost",
+                                             "pid":  8068,
+                                             "class_name":  "Windows.UI.Core.CoreWindow",
+                                             "title":  "Windows 입력 환경",
+                                             "hwnd":  "0x30342"
+                                         },
+                                         {
+                                             "process_name":  "explorer",
+                                             "pid":  8752,
+                                             "class_name":  "Progman",
+                                             "title":  "Program Manager",
+                                             "hwnd":  "0x20154"
+                                         },
+                                         {
+                                             "process_name":  "explorer",
+                                             "pid":  8752,
+                                             "class_name":  "Shell_TrayWnd",
+                                             "title":  "",
+                                             "hwnd":  "0x10144"
+                                         },
+                                         {
+                                             "process_name":  "explorer",
+                                             "pid":  8752,
+                                             "class_name":  "DummyDWMListenerWindow",
+                                             "title":  "",
+                                             "hwnd":  "0x101BE"
+                                         },
+                                         {
+                                             "process_name":  "explorer",
+                                             "pid":  8752,
+                                             "class_name":  "DummyDWMListenerWindow",
+                                             "title":  "",
+                                             "hwnd":  "0x101BA"
+                                         }
+                                     ]
+               },
+    "after_hide":  {
+                       "path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-visibility-20260315-154106\\uia-after-hide.json",
+                       "root_count":  12,
+                       "visible_root_count":  8,
+                       "visible_roots":  [
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x16093C"
+                                             },
+                                             {
+                                                 "process_name":  "ApplicationFrameHost",
+                                                 "pid":  23008,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x290902"
+                                             },
+                                             {
+                                                 "process_name":  "ApplicationFrameHost",
+                                                 "pid":  23008,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "설정",
+                                                 "hwnd":  "0x10072A"
+                                             },
+                                             {
+                                                 "process_name":  "TextInputHost",
+                                                 "pid":  8068,
+                                                 "class_name":  "Windows.UI.Core.CoreWindow",
+                                                 "title":  "Windows 입력 환경",
+                                                 "hwnd":  "0x30342"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "Progman",
+                                                 "title":  "Program Manager",
+                                                 "hwnd":  "0x20154"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "Shell_TrayWnd",
+                                                 "title":  "",
+                                                 "hwnd":  "0x10144"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "DummyDWMListenerWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x101BE"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "DummyDWMListenerWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x101BA"
+                                             }
+                                         ]
+                   },
+    "after_show":  {
+                       "path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-visibility-20260315-154106\\uia-after-show.json",
+                       "root_count":  12,
+                       "visible_root_count":  8,
+                       "visible_roots":  [
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x16093C"
+                                             },
+                                             {
+                                                 "process_name":  "ApplicationFrameHost",
+                                                 "pid":  23008,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x290902"
+                                             },
+                                             {
+                                                 "process_name":  "ApplicationFrameHost",
+                                                 "pid":  23008,
+                                                 "class_name":  "ApplicationFrameWindow",
+                                                 "title":  "설정",
+                                                 "hwnd":  "0x10072A"
+                                             },
+                                             {
+                                                 "process_name":  "TextInputHost",
+                                                 "pid":  8068,
+                                                 "class_name":  "Windows.UI.Core.CoreWindow",
+                                                 "title":  "Windows 입력 환경",
+                                                 "hwnd":  "0x30342"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "Progman",
+                                                 "title":  "Program Manager",
+                                                 "hwnd":  "0x20154"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "Shell_TrayWnd",
+                                                 "title":  "",
+                                                 "hwnd":  "0x10144"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "DummyDWMListenerWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x101BE"
+                                             },
+                                             {
+                                                 "process_name":  "explorer",
+                                                 "pid":  8752,
+                                                 "class_name":  "DummyDWMListenerWindow",
+                                                 "title":  "",
+                                                 "hwnd":  "0x101BA"
+                                             }
+                                         ]
+                   },
+    "hide_probe":  {
+                       "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+                       "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+                       "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                       "coinit_hr":  "0x00000001",
+                       "contexts":  {
+                                        "ctx_1":  {
+                                                      "hr":  "0x80040154",
+                                                      "ptr_nonzero":  false
+                                                  },
+                                        "ctx_4":  {
+                                                      "hr":  "0x00000000",
+                                                      "ptr_nonzero":  true
+                                                  },
+                                        "ctx_5":  {
+                                                      "hr":  "0x00000000",
+                                                      "ptr_nonzero":  true
+                                                  },
+                                        "ctx_16":  {
+                                                       "hr":  "0x80040154",
+                                                       "ptr_nonzero":  false
+                                                   },
+                                        "ctx_20":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                        "ctx_21":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   }
+                                    },
+                       "chain":  {
+                                     "primary_ptr":  "0x2CA65C4B5A8",
+                                     "primary_vtbl":  "0x7FF8402283E0",
+                                     "primary_slot12":  "0x7FF8401E7C80",
+                                     "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                     "service_ptr":  "0x2CA65C4BA28",
+                                     "final_ptr":  "0x2CA65C4BA28",
+                                     "final_vtbl":  "0x7FF84022C3E0",
+                                     "final_slot6":  "0x7FF8401E7C20",
+                                     "final_slot7":  "0x7FF8401E7C30",
+                                     "final_slot10":  "0x7FF8401E7C60",
+                                     "final_slot39":  "0x7FF8401E7E30",
+                                     "final_slot49":  "0x7FF8401E7ED0",
+                                     "final_slot51":  "0x7FF8401E7EF0",
+                                     "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                 },
+                       "selected_methods":  [
+                                                "hide"
+                                            ],
+                       "method_results":  {
+                                              "hide":  "0x00000000"
+                                          }
+                   },
+    "show_probe":  {
+                       "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+                       "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+                       "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                       "coinit_hr":  "0x00000001",
+                       "contexts":  {
+                                        "ctx_1":  {
+                                                      "hr":  "0x80040154",
+                                                      "ptr_nonzero":  false
+                                                  },
+                                        "ctx_4":  {
+                                                      "hr":  "0x00000000",
+                                                      "ptr_nonzero":  true
+                                                  },
+                                        "ctx_5":  {
+                                                      "hr":  "0x00000000",
+                                                      "ptr_nonzero":  true
+                                                  },
+                                        "ctx_16":  {
+                                                       "hr":  "0x80040154",
+                                                       "ptr_nonzero":  false
+                                                   },
+                                        "ctx_20":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                        "ctx_21":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   }
+                                    },
+                       "chain":  {
+                                     "primary_ptr":  "0x2CA6565A848",
+                                     "primary_vtbl":  "0x7FF8402283E0",
+                                     "primary_slot12":  "0x7FF8401E7C80",
+                                     "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                     "service_ptr":  "0x2CA655C17C8",
+                                     "final_ptr":  "0x2CA655C17C8",
+                                     "final_vtbl":  "0x7FF84022C3E0",
+                                     "final_slot6":  "0x7FF8401E7C20",
+                                     "final_slot7":  "0x7FF8401E7C30",
+                                     "final_slot10":  "0x7FF8401E7C60",
+                                     "final_slot39":  "0x7FF8401E7E30",
+                                     "final_slot49":  "0x7FF8401E7ED0",
+                                     "final_slot51":  "0x7FF8401E7EF0",
+                                     "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                 },
+                       "selected_methods":  [
+                                                "show"
+                                            ],
+                       "method_results":  {
+                                              "show":  "0x00000000"
+                                          }
+                   }
+}

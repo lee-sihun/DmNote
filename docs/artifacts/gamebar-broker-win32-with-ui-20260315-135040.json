@@ -1,0 +1,54 @@
+﻿{
+    "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+    "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+    "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+    "coinit_hr":  "0x00000001",
+    "contexts":  {
+                     "ctx_1":  {
+                                   "hr":  "0x80040154",
+                                   "ptr_nonzero":  false
+                               },
+                     "ctx_4":  {
+                                   "hr":  "0x00000000",
+                                   "ptr_nonzero":  true
+                               },
+                     "ctx_5":  {
+                                   "hr":  "0x00000000",
+                                   "ptr_nonzero":  true
+                               },
+                     "ctx_16":  {
+                                    "hr":  "0x80040154",
+                                    "ptr_nonzero":  false
+                                },
+                     "ctx_20":  {
+                                    "hr":  "0x00000000",
+                                    "ptr_nonzero":  true
+                                },
+                     "ctx_21":  {
+                                    "hr":  "0x00000000",
+                                    "ptr_nonzero":  true
+                                }
+                 },
+    "chain":  {
+                  "primary_ptr":  "0x28665D14918",
+                  "primary_vtbl":  "0x7FF8402283E0",
+                  "primary_slot12":  "0x7FF8401E7C80",
+                  "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                  "service_ptr":  "0x28665D14098",
+                  "final_ptr":  "0x28665D14098",
+                  "final_vtbl":  "0x7FF84022C3E0",
+                  "final_slot6":  "0x7FF8401E7C20",
+                  "final_slot7":  "0x7FF8401E7C30",
+                  "final_slot10":  "0x7FF8401E7C60",
+                  "final_slot39":  "0x7FF8401E7E30",
+                  "final_slot49":  "0x7FF8401E7ED0",
+                  "final_slot51":  "0x7FF8401E7EF0",
+                  "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+              },
+    "method_results":  {
+                           "show_slot6":  "0x00000000",
+                           "hide_slot7":  "0x00000000",
+                           "reset_window_rect_slot10":  "0x00000000",
+                           "set_click_through_false_slot51":  "0x00000000"
+                       }
+}

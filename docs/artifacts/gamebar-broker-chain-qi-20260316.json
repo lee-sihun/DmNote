@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-03-16 10:14:59 \u002B09:00",
+  "results": [
+    {
+      "iid": "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+      "hr": "0x00000000",
+      "ptr": "0x1AF31118508",
+      "descriptor_ptr": "0x7FFEA49D2000"
+    },
+    {
+      "iid": "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+      "hr": "0x00000000",
+      "ptr": "0x1AF31118008",
+      "descriptor_ptr": "0x7FFEA4968158"
+    },
+    {
+      "iid": "d6332df0-dbfb-575e-93f1-c7bff0693913",
+      "hr": "0x00000000",
+      "ptr": "0x1AF31117B08",
+      "descriptor_ptr": "0x7FFEA4968140"
+    },
+    {
+      "iid": "9302a129-7433-42a0-9cb8-5da5964f2756",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "c343e0c0-9666-444b-898f-cc498c7e521a",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "8f352570-5bb7-4d72-921f-6fb3f2611c71",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "65476df8-27e5-47be-9aae-29b9921dcb70",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "054da1f8-65a1-4805-9902-ca6561227524",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "a8c66395-6ae3-4a53-8547-992bd899d74d",
+      "hr": "0x80004002",
+      "ptr": null
+    },
+    {
+      "iid": "e85a41cb-d4e3-4e1d-9348-a584f1623a36",
+      "hr": "0x80004002",
+      "ptr": null
+    }
+  ]
+}

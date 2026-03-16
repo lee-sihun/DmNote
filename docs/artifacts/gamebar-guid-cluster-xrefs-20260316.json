@@ -1,0 +1,9 @@
+{
+  "binary": "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe\\GameBar.exe",
+  "image_base": "0x140000000",
+  "cluster_rva": "0x8f8f00",
+  "cluster_va": "0x1408f8f00",
+  "cluster_size": "0x60",
+  "hit_count": 0,
+  "hits": []
+}

@@ -1,0 +1,95 @@
+﻿{
+    "analyzedAt":  "2026-03-16T12:15:02.1316558+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-external-hwnd-20260316-121457",
+    "windowedProbe":  false,
+    "probeWindows":  [
+                         {
+                             "capturedAt":  "2026-03-16T12:15:00.4917022+09:00",
+                             "processId":  9692,
+                             "title":  "GameBar",
+                             "hwnd":  "0x18088C",
+                             "style":  "0x17010000",
+                             "exStyle":  "0x00050008",
+                             "visible":  true,
+                             "fullscreen":  true
+                         }
+                     ],
+    "targetProcesses":  [
+                            "GameBar.exe"
+                        ],
+    "runs":  [
+                 {
+                     "processName":  "GameBar.exe",
+                     "hwnd":  "0x18088C",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-16T12:15:00.4917022+09:00",
+                                         "processId":  9692,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x18088C",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  true,
+                     "createWindowManagerHr":  "0x00000000",
+                     "rawBefore":  {
+                                       "label":  "before",
+                                       "hwnd":  "0x18088c",
+                                       "isWindow":  true,
+                                       "bandKnown":  true,
+                                       "band":  1,
+                                       "style":  "0x17010000",
+                                       "exStyle":  "0x00050008",
+                                       "visible":  true
+                                   },
+                     "ftBefore":  {
+                                      "style":  {
+                                                    "hr":  "0x00000000",
+                                                    "value":  "0x17010000"
+                                                },
+                                      "exStyle":  {
+                                                      "hr":  "0x00000000",
+                                                      "value":  "0x00050008"
+                                                  }
+                                  },
+                     "showWindowHideHr":  null,
+                     "rawAfterHide":  null,
+                     "showWindowShowHr":  "0x00000000",
+                     "rawAfterShow":  {
+                                          "label":  "afterShow",
+                                          "hwnd":  "0x18088c",
+                                          "isWindow":  true,
+                                          "bandKnown":  true,
+                                          "band":  1,
+                                          "style":  "0x17010000",
+                                          "exStyle":  "0x00050008",
+                                          "visible":  true
+                                      },
+                     "setWindowRegion":  null,
+                     "rawAfterSetWindowRegion":  null,
+                     "resetWindowRegionHr":  null,
+                     "rawAfterResetWindowRegion":  null,
+                     "enableClickThroughHr":  null,
+                     "rawAfterEnableClickThrough":  null,
+                     "disableClickThroughHr":  null,
+                     "rawAfterDisableClickThrough":  null,
+                     "setWindowLongTransparentHr":  null,
+                     "rawAfterSetTransparent":  null,
+                     "restoreWindowLongHr":  null,
+                     "rawAfterRestoreExStyle":  null,
+                     "ftAfter":  null,
+                     "apiTrace":  {
+                                      "counts":  {
+                                                     "CreateRectRgn":  0,
+                                                     "CombineRgn":  0,
+                                                     "SetWindowRgn":  0
+                                                 },
+                                      "samples":  [
+
+                                                  ]
+                                  },
+                     "exception":  "Error: system error\n    at callWindowManagerSetRegion (/script1.js:455)\n    at \u003canonymous\u003e (/script1.js:501)\n    at apply (native)\n    at \u003canonymous\u003e (/frida/runtime/core.js:55)"
+                 }
+             ]
+}

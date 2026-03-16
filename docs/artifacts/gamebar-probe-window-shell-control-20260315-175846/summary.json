@@ -1,0 +1,454 @@
+﻿{
+    "analyzedAt":  "2026-03-15T17:58:55.7067155+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-probe-window-shell-control-20260315-175846",
+    "skipLaunchGameBar":  true,
+    "probeWindow":  {
+                        "capturedAt":  "2026-03-15T17:58:49.3579108+09:00",
+                        "processId":  24120,
+                        "title":  "GameBar",
+                        "hwnd":  "0x550736",
+                        "style":  "0x17010000",
+                        "exStyle":  "0x00050008",
+                        "visible":  true,
+                        "fullscreen":  true
+                    },
+    "traceProcesses":  [
+                           "explorer.exe"
+                       ],
+    "traceTargetsFound":  [
+                              {
+                                  "pid":  8752,
+                                  "name":  "explorer.exe"
+                              },
+                              {
+                                  "pid":  28220,
+                                  "name":  "explorer.exe"
+                              },
+                              {
+                                  "pid":  27460,
+                                  "name":  "explorer.exe"
+                              }
+                          ],
+    "traceHwndHits":  [
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowBand",
+                              "count":  21,
+                              "timestampMs":  1773565129303,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x3e6f810"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowBand",
+                              "count":  22,
+                              "timestampMs":  1773565129304,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x3e6f810"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowBand",
+                              "count":  23,
+                              "timestampMs":  1773565129304,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x3e6f810"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowBand",
+                              "count":  25,
+                              "timestampMs":  1773565129306,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x3e6f810"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetClassNameW",
+                              "count":  21,
+                              "timestampMs":  1773565129333,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4edf0"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x104"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetClassNameW",
+                              "count":  22,
+                              "timestampMs":  1773565129337,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4ede0"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x104"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetClassNameW",
+                              "count":  25,
+                              "timestampMs":  1773565129342,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4ddd0"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x104"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetClassNameW",
+                              "count":  26,
+                              "timestampMs":  1773565129347,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4ddc0"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x104"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetClassNameW",
+                              "count":  27,
+                              "timestampMs":  1773565129352,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4d890"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x104"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowRect",
+                              "count":  27,
+                              "timestampMs":  1773565129333,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4eb08"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!GetWindowRect",
+                              "count":  28,
+                              "timestampMs":  1773565129335,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x5a4eea0"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!MonitorFromWindow",
+                              "count":  16,
+                              "timestampMs":  1773565129318,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x0"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!MonitorFromWindow",
+                              "count":  17,
+                              "timestampMs":  1773565129319,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x0"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!MonitorFromWindow",
+                              "count":  21,
+                              "timestampMs":  1773565129335,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x0"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "user32.dll!MonitorFromWindow",
+                              "count":  25,
+                              "timestampMs":  1773565129343,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0x0"
+                                           }
+                                       ],
+                              "decoded":  null,
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          },
+                          {
+                              "pid":  8752,
+                              "processName":  "explorer.exe",
+                              "api":  "dwmapi.dll!DwmSetWindowAttribute",
+                              "count":  1,
+                              "timestampMs":  1773565129330,
+                              "args":  [
+                                           {
+                                               "index":  0,
+                                               "raw":  "0x550736"
+                                           },
+                                           {
+                                               "index":  1,
+                                               "raw":  "0xd"
+                                           },
+                                           {
+                                               "index":  2,
+                                               "raw":  "0x5a4ea80"
+                                           },
+                                           {
+                                               "index":  3,
+                                               "raw":  "0x4"
+                                           }
+                                       ],
+                              "decoded":  {
+                                              "attributeId":  13,
+                                              "attributeName":  "DWMWA_CLOAK",
+                                              "valueSize":  4,
+                                              "valueU32":  null,
+                                              "valueS32":  null
+                                          },
+                              "matchedArgs":  [
+                                                  {
+                                                      "index":  0,
+                                                      "raw":  "0x550736"
+                                                  }
+                                              ]
+                          }
+                      ],
+    "tracePath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-probe-window-shell-control-20260315-175846\\trace.json",
+    "traceStderrNonempty":  false
+}

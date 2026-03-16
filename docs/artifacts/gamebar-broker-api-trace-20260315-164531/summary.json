@@ -1,0 +1,515 @@
+﻿{
+    "analyzed_at":  "2026-03-15 16:46:44 +09:00",
+    "run_dir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531",
+    "methods":  [
+                    "hide",
+                    "show",
+                    "reset_window_rect",
+                    "set_click_through_true",
+                    "set_click_through_false"
+                ],
+    "duration_seconds":  6,
+    "wait_seconds":  5,
+    "process_groups":  [
+                           [
+                               "GameBar.exe",
+                               "explorer.exe",
+                               "ShellHost.exe",
+                               "ApplicationFrameHost.exe"
+                           ],
+                           [
+                               "StartMenuExperienceHost.exe",
+                               "Widgets.exe",
+                               "WidgetService.exe",
+                               "TextInputHost.exe"
+                           ]
+                       ],
+    "runs":  [
+                 {
+                     "group":  1,
+                     "process_names":  [
+                                           "GameBar.exe",
+                                           "explorer.exe",
+                                           "ShellHost.exe",
+                                           "ApplicationFrameHost.exe"
+                                       ],
+                     "method":  "hide",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-hide.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-hide.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  8752,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8816,
+                                                                  "name":  "ShellHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  23008,
+                                                                  "name":  "ApplicationFrameHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  28220,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  27460,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  13620,
+                                                                  "name":  "GameBar.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+                                                                      {
+                                                                          "pid":  8752,
+                                                                          "name":  "explorer.exe",
+                                                                          "call_counts":  {
+                                                                                              "dwmapi.dll!DwmSetWindowAttribute":  1
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      }
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  1,
+                     "process_names":  [
+                                           "GameBar.exe",
+                                           "explorer.exe",
+                                           "ShellHost.exe",
+                                           "ApplicationFrameHost.exe"
+                                       ],
+                     "method":  "show",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-show.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-show.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  8752,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8816,
+                                                                  "name":  "ShellHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  23008,
+                                                                  "name":  "ApplicationFrameHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  28220,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  27460,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  13620,
+                                                                  "name":  "GameBar.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+                                                                      {
+                                                                          "pid":  8752,
+                                                                          "name":  "explorer.exe",
+                                                                          "call_counts":  {
+                                                                                              "user32.dll!GetWindowRect":  4,
+                                                                                              "user32.dll!ShowWindow":  2,
+                                                                                              "user32.dll!GetWindowBand":  4,
+                                                                                              "user32.dll!GetWindowThreadProcessId":  4,
+                                                                                              "user32.dll!GetAncestor":  4,
+                                                                                              "dcomp.dll!DCompositionCreateSurfaceHandle":  4,
+                                                                                              "user32.dll!GetForegroundWindow":  3,
+                                                                                              "user32.dll!SetWindowPos":  4,
+                                                                                              "dwmapi.dll!DwmSetWindowAttribute":  4
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      },
+                                                                      {
+                                                                          "pid":  13620,
+                                                                          "name":  "GameBar.exe",
+                                                                          "call_counts":  {
+                                                                                              "user32.dll!SetWindowLongW":  4,
+                                                                                              "user32.dll!SetWindowLongPtrW":  4,
+                                                                                              "user32.dll!GetWindowRect":  2,
+                                                                                              "user32.dll!GetAncestor":  2,
+                                                                                              "user32.dll!GetWindowThreadProcessId":  1,
+                                                                                              "user32.dll!MonitorFromWindow":  2,
+                                                                                              "user32.dll!GetMonitorInfoW":  1
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      }
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  1,
+                     "process_names":  [
+                                           "GameBar.exe",
+                                           "explorer.exe",
+                                           "ShellHost.exe",
+                                           "ApplicationFrameHost.exe"
+                                       ],
+                     "method":  "reset_window_rect",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-reset_window_rect.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-reset_window_rect.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  8752,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8816,
+                                                                  "name":  "ShellHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  23008,
+                                                                  "name":  "ApplicationFrameHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  28220,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  27460,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  13620,
+                                                                  "name":  "GameBar.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+                                                                      {
+                                                                          "pid":  8752,
+                                                                          "name":  "explorer.exe",
+                                                                          "call_counts":  {
+                                                                                              "user32.dll!GetWindowRect":  1,
+                                                                                              "user32.dll!GetMonitorInfoW":  2,
+                                                                                              "user32.dll!GetWindowBand":  1,
+                                                                                              "user32.dll!MonitorFromWindow":  1
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      }
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  1,
+                     "process_names":  [
+                                           "GameBar.exe",
+                                           "explorer.exe",
+                                           "ShellHost.exe",
+                                           "ApplicationFrameHost.exe"
+                                       ],
+                     "method":  "set_click_through_true",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-set_click_through_true.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-set_click_through_true.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  8752,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8816,
+                                                                  "name":  "ShellHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  23008,
+                                                                  "name":  "ApplicationFrameHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  28220,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  27460,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  13620,
+                                                                  "name":  "GameBar.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+                                                                      {
+                                                                          "pid":  8752,
+                                                                          "name":  "explorer.exe",
+                                                                          "call_counts":  {
+                                                                                              "user32.dll!SetWindowLongW":  1,
+                                                                                              "user32.dll!GetWindowBand":  1,
+                                                                                              "user32.dll!GetForegroundWindow":  1,
+                                                                                              "user32.dll!GetWindowThreadProcessId":  1
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      }
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  1,
+                     "process_names":  [
+                                           "GameBar.exe",
+                                           "explorer.exe",
+                                           "ShellHost.exe",
+                                           "ApplicationFrameHost.exe"
+                                       ],
+                     "method":  "set_click_through_false",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-set_click_through_false.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group1-set_click_through_false.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  8752,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8816,
+                                                                  "name":  "ShellHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  23008,
+                                                                  "name":  "ApplicationFrameHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  28220,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  27460,
+                                                                  "name":  "explorer.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  13620,
+                                                                  "name":  "GameBar.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+                                                                      {
+                                                                          "pid":  8752,
+                                                                          "name":  "explorer.exe",
+                                                                          "call_counts":  {
+                                                                                              "user32.dll!SetWindowLongW":  1,
+                                                                                              "user32.dll!GetWindowBand":  1
+                                                                                          },
+                                                                          "attach_failures":  [
+
+                                                                                              ]
+                                                                      }
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  2,
+                     "process_names":  [
+                                           "StartMenuExperienceHost.exe",
+                                           "Widgets.exe",
+                                           "WidgetService.exe",
+                                           "TextInputHost.exe"
+                                       ],
+                     "method":  "hide",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-hide.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-hide.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  9468,
+                                                                  "name":  "StartMenuExperienceHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  11364,
+                                                                  "name":  "WidgetService.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8068,
+                                                                  "name":  "TextInputHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  22064,
+                                                                  "name":  "Widgets.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  2,
+                     "process_names":  [
+                                           "StartMenuExperienceHost.exe",
+                                           "Widgets.exe",
+                                           "WidgetService.exe",
+                                           "TextInputHost.exe"
+                                       ],
+                     "method":  "show",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-show.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-show.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  9468,
+                                                                  "name":  "StartMenuExperienceHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  11364,
+                                                                  "name":  "WidgetService.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8068,
+                                                                  "name":  "TextInputHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  22064,
+                                                                  "name":  "Widgets.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  2,
+                     "process_names":  [
+                                           "StartMenuExperienceHost.exe",
+                                           "Widgets.exe",
+                                           "WidgetService.exe",
+                                           "TextInputHost.exe"
+                                       ],
+                     "method":  "reset_window_rect",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-reset_window_rect.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-reset_window_rect.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  9468,
+                                                                  "name":  "StartMenuExperienceHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  11364,
+                                                                  "name":  "WidgetService.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8068,
+                                                                  "name":  "TextInputHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  22064,
+                                                                  "name":  "Widgets.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  2,
+                     "process_names":  [
+                                           "StartMenuExperienceHost.exe",
+                                           "Widgets.exe",
+                                           "WidgetService.exe",
+                                           "TextInputHost.exe"
+                                       ],
+                     "method":  "set_click_through_true",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-set_click_through_true.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-set_click_through_true.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  9468,
+                                                                  "name":  "StartMenuExperienceHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  11364,
+                                                                  "name":  "WidgetService.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8068,
+                                                                  "name":  "TextInputHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  22064,
+                                                                  "name":  "Widgets.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+
+                                                                  ]
+                                    }
+                 },
+                 {
+                     "group":  2,
+                     "process_names":  [
+                                           "StartMenuExperienceHost.exe",
+                                           "Widgets.exe",
+                                           "WidgetService.exe",
+                                           "TextInputHost.exe"
+                                       ],
+                     "method":  "set_click_through_false",
+                     "exit_code":  null,
+                     "json_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-set_click_through_false.json",
+                     "stderr_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-broker-api-trace-20260315-164531\\group2-set_click_through_false.stderr.txt",
+                     "stderr_nonempty":  false,
+                     "highlights":  {
+                                        "targets_found":  [
+                                                              {
+                                                                  "pid":  9468,
+                                                                  "name":  "StartMenuExperienceHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  11364,
+                                                                  "name":  "WidgetService.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  8068,
+                                                                  "name":  "TextInputHost.exe"
+                                                              },
+                                                              {
+                                                                  "pid":  22064,
+                                                                  "name":  "Widgets.exe"
+                                                              }
+                                                          ],
+                                        "interesting_processes":  [
+
+                                                                  ]
+                                    }
+                 }
+             ]
+}

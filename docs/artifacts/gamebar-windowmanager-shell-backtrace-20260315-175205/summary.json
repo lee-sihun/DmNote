@@ -1,0 +1,1422 @@
+﻿{
+    "analyzedAt":  "2026-03-15T17:52:33.5853007+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-backtrace-20260315-175205",
+    "windowManagerProcesses":  [
+                                   "GameBarFTServer.exe",
+                                   "GameBar.exe"
+                               ],
+    "traceProcesses":  [
+                           "explorer.exe",
+                           "GameBar.exe",
+                           "ShellHost.exe",
+                           "ApplicationFrameHost.exe"
+                       ],
+    "runs":  [
+                 {
+                     "windowManagerProcess":  "GameBarFTServer.exe",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:52:08.9695040+09:00",
+                                         "processId":  29872,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x2F0A2A",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "probePath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-backtrace-20260315-175205\\gamebarftserver-probe.json",
+                     "probeResult":  {
+                                         "processName":  null,
+                                         "processId":  23980,
+                                         "hwnd":  "0x2f0a2a",
+                                         "coInitializeHr":  "0x00000000",
+                                         "factory":  {
+                                                         "coCreateIUnknownHr":  "0x00000000",
+                                                         "queryInterfaceActivationFactoryHr":  "0x00000000",
+                                                         "activateInstanceHr":  "0x00000000",
+                                                         "queryInterfaceIGbftFactoryHr":  "0x00000000",
+                                                         "createWindowManagerHr":  "0x00000000",
+                                                         "windowManagerPointer":  "0x266c7a66e58"
+                                                     },
+                                         "rawBefore":  {
+                                                           "label":  "before",
+                                                           "hwnd":  "0x2f0a2a",
+                                                           "isWindow":  true,
+                                                           "bandKnown":  true,
+                                                           "band":  1,
+                                                           "style":  "0x17010000",
+                                                           "exStyle":  "0x00050008",
+                                                           "visible":  true
+                                                       },
+                                         "ftBefore":  {
+                                                          "style":  {
+                                                                        "hr":  "0x00000000",
+                                                                        "value":  "0x17010000"
+                                                                    },
+                                                          "exStyle":  {
+                                                                          "hr":  "0x00000000",
+                                                                          "value":  "0x00050008"
+                                                                      }
+                                                      },
+                                         "showWindowShowHr":  "0x00000000",
+                                         "rawAfterShow":  {
+                                                              "label":  "afterShow",
+                                                              "hwnd":  "0x2f0a2a",
+                                                              "isWindow":  true,
+                                                              "bandKnown":  true,
+                                                              "band":  1,
+                                                              "style":  "0x17010000",
+                                                              "exStyle":  "0x00050008",
+                                                              "visible":  true
+                                                          },
+                                         "enableClickThroughHr":  "0x00000000",
+                                         "rawAfterEnableClickThrough":  {
+                                                                            "label":  "afterEnableClickThrough",
+                                                                            "hwnd":  "0x2f0a2a",
+                                                                            "isWindow":  true,
+                                                                            "bandKnown":  true,
+                                                                            "band":  1,
+                                                                            "style":  "0x17010000",
+                                                                            "exStyle":  "0x000D0028",
+                                                                            "visible":  true
+                                                                        },
+                                         "disableClickThroughHr":  "0x00000000",
+                                         "rawAfterDisableClickThrough":  {
+                                                                             "label":  "afterDisableClickThrough",
+                                                                             "hwnd":  "0x2f0a2a",
+                                                                             "isWindow":  true,
+                                                                             "bandKnown":  true,
+                                                                             "band":  1,
+                                                                             "style":  "0x17010000",
+                                                                             "exStyle":  "0x00050008",
+                                                                             "visible":  true
+                                                                         },
+                                         "setWindowLongTransparentHr":  "0x00000000",
+                                         "rawAfterSetTransparent":  {
+                                                                        "label":  "afterSetTransparent",
+                                                                        "hwnd":  "0x2f0a2a",
+                                                                        "isWindow":  true,
+                                                                        "bandKnown":  true,
+                                                                        "band":  1,
+                                                                        "style":  "0x17010000",
+                                                                        "exStyle":  "0x00050028",
+                                                                        "visible":  true
+                                                                    },
+                                         "restoreWindowLongHr":  "0x00000000",
+                                         "rawAfterRestoreExStyle":  {
+                                                                        "label":  "afterRestoreExStyle",
+                                                                        "hwnd":  "0x2f0a2a",
+                                                                        "isWindow":  true,
+                                                                        "bandKnown":  true,
+                                                                        "band":  1,
+                                                                        "style":  "0x17010000",
+                                                                        "exStyle":  "0x00050008",
+                                                                        "visible":  true
+                                                                    },
+                                         "ftAfter":  {
+                                                         "style":  {
+                                                                       "hr":  "0x00000000",
+                                                                       "value":  "0x17010000"
+                                                                   },
+                                                         "exStyle":  {
+                                                                         "hr":  "0x00000000",
+                                                                         "value":  "0x00050008"
+                                                                     },
+                                                         "baselineExStyle":  "0x00050008"
+                                                     },
+                                         "showWindowHideHr":  "0x00000000",
+                                         "rawAfterHide":  {
+                                                              "label":  "afterHide",
+                                                              "hwnd":  "0x2f0a2a",
+                                                              "isWindow":  false,
+                                                              "bandKnown":  false,
+                                                              "band":  null,
+                                                              "style":  "0x00000000",
+                                                              "exStyle":  "0x00000000",
+                                                              "visible":  false
+                                                          }
+                                     },
+                     "tracePath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-backtrace-20260315-175205\\gamebarftserver-trace.json",
+                     "traceTargetsFound":  [
+                                               {
+                                                   "pid":  8752,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  8816,
+                                                   "name":  "ShellHost.exe"
+                                               },
+                                               {
+                                                   "pid":  23008,
+                                                   "name":  "ApplicationFrameHost.exe"
+                                               },
+                                               {
+                                                   "pid":  28220,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  27460,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  23876,
+                                                   "name":  "GameBar.exe"
+                                               }
+                                           ],
+                     "watchedHwndHits":  [
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowThreadProcessId",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564732606,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ec14"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  7,
+                                                 "timestampMs":  1773564733548,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  8,
+                                                 "timestampMs":  1773564733551,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  9,
+                                                 "timestampMs":  1773564733555,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  17,
+                                                 "timestampMs":  1773564733610,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4f0f0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ff804aff97c",
+                                                                   "0x7ff804b0005f",
+                                                                   "0x7ff804b1aaac",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "0x7ff804a7089d",
+                                                                   "0x7ff804a0acd4",
+                                                                   "0x7ff804a0a26d",
+                                                                   "0x7ff804a75c69",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetClassNameW",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564731965,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ee50"
+                                                              },
+                                                              {
+                                                                  "index":  2,
+                                                                  "raw":  "0x104"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ffffd440dbd",
+                                                                   "0x7ffffd4401d6",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetClassNameW",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564732615,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ee40"
+                                                              },
+                                                              {
+                                                                  "index":  2,
+                                                                  "raw":  "0x104"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ffffd43fadd",
+                                                                   "0x7ffffd440856",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowRect",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564732596,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4eb68"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllGetActivationFactory",
+                                                                   "0x7ffffd440e0e",
+                                                                   "0x7ffffd4401d6",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowRect",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564732611,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ef00"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllGetActivationFactory",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetAncestor",
+                                                 "count":  5,
+                                                 "timestampMs":  1773564732600,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetAncestor",
+                                                 "count":  6,
+                                                 "timestampMs":  1773564732605,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!MonitorFromWindow",
+                                                 "count":  1,
+                                                 "timestampMs":  1773564732609,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x2f0a2a"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW"
+                                                               ]
+                                             }
+                                         ],
+                     "dwmSetWindowAttributeHits":  [
+
+                                                   ],
+                     "traceStderrNonempty":  false
+                 },
+                 {
+                     "windowManagerProcess":  "GameBar.exe",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:52:21.9627792+09:00",
+                                         "processId":  25024,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x890606",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "probePath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-backtrace-20260315-175205\\gamebar-probe.json",
+                     "probeResult":  {
+                                         "processName":  null,
+                                         "processId":  23876,
+                                         "hwnd":  "0x890606",
+                                         "coInitializeHr":  "0x80010106",
+                                         "factory":  {
+                                                         "coCreateIUnknownHr":  "0x00000000",
+                                                         "queryInterfaceActivationFactoryHr":  "0x00000000",
+                                                         "activateInstanceHr":  "0x00000000",
+                                                         "queryInterfaceIGbftFactoryHr":  "0x00000000",
+                                                         "createWindowManagerHr":  "0x00000000",
+                                                         "windowManagerPointer":  "0x1e1c05adc18"
+                                                     },
+                                         "rawBefore":  {
+                                                           "label":  "before",
+                                                           "hwnd":  "0x890606",
+                                                           "isWindow":  true,
+                                                           "bandKnown":  true,
+                                                           "band":  1,
+                                                           "style":  "0x17010000",
+                                                           "exStyle":  "0x00050008",
+                                                           "visible":  true
+                                                       },
+                                         "ftBefore":  {
+                                                          "style":  {
+                                                                        "hr":  "0x00000000",
+                                                                        "value":  "0x17010000"
+                                                                    },
+                                                          "exStyle":  {
+                                                                          "hr":  "0x00000000",
+                                                                          "value":  "0x00050008"
+                                                                      }
+                                                      },
+                                         "showWindowShowHr":  "0x00000000",
+                                         "rawAfterShow":  {
+                                                              "label":  "afterShow",
+                                                              "hwnd":  "0x890606",
+                                                              "isWindow":  true,
+                                                              "bandKnown":  true,
+                                                              "band":  1,
+                                                              "style":  "0x17010000",
+                                                              "exStyle":  "0x00050008",
+                                                              "visible":  true
+                                                          },
+                                         "enableClickThroughHr":  "0x00000000",
+                                         "rawAfterEnableClickThrough":  {
+                                                                            "label":  "afterEnableClickThrough",
+                                                                            "hwnd":  "0x890606",
+                                                                            "isWindow":  true,
+                                                                            "bandKnown":  true,
+                                                                            "band":  1,
+                                                                            "style":  "0x17010000",
+                                                                            "exStyle":  "0x000D0028",
+                                                                            "visible":  true
+                                                                        },
+                                         "disableClickThroughHr":  "0x00000000",
+                                         "rawAfterDisableClickThrough":  {
+                                                                             "label":  "afterDisableClickThrough",
+                                                                             "hwnd":  "0x890606",
+                                                                             "isWindow":  true,
+                                                                             "bandKnown":  true,
+                                                                             "band":  1,
+                                                                             "style":  "0x17010000",
+                                                                             "exStyle":  "0x00050008",
+                                                                             "visible":  true
+                                                                         },
+                                         "setWindowLongTransparentHr":  "0x00000000",
+                                         "rawAfterSetTransparent":  {
+                                                                        "label":  "afterSetTransparent",
+                                                                        "hwnd":  "0x890606",
+                                                                        "isWindow":  true,
+                                                                        "bandKnown":  true,
+                                                                        "band":  1,
+                                                                        "style":  "0x17010000",
+                                                                        "exStyle":  "0x00050028",
+                                                                        "visible":  true
+                                                                    },
+                                         "restoreWindowLongHr":  "0x00000000",
+                                         "rawAfterRestoreExStyle":  {
+                                                                        "label":  "afterRestoreExStyle",
+                                                                        "hwnd":  "0x890606",
+                                                                        "isWindow":  true,
+                                                                        "bandKnown":  true,
+                                                                        "band":  1,
+                                                                        "style":  "0x17010000",
+                                                                        "exStyle":  "0x00050008",
+                                                                        "visible":  true
+                                                                    },
+                                         "ftAfter":  {
+                                                         "style":  {
+                                                                       "hr":  "0x00000000",
+                                                                       "value":  "0x17010000"
+                                                                   },
+                                                         "exStyle":  {
+                                                                         "hr":  "0x00000000",
+                                                                         "value":  "0x00050008"
+                                                                     },
+                                                         "baselineExStyle":  "0x00050008"
+                                                     },
+                                         "showWindowHideHr":  "0x00000000",
+                                         "rawAfterHide":  {
+                                                              "label":  "afterHide",
+                                                              "hwnd":  "0x890606",
+                                                              "isWindow":  false,
+                                                              "bandKnown":  false,
+                                                              "band":  null,
+                                                              "style":  "0x00000000",
+                                                              "exStyle":  "0x00000000",
+                                                              "visible":  false
+                                                          }
+                                     },
+                     "tracePath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-backtrace-20260315-175205\\gamebar-trace.json",
+                     "traceTargetsFound":  [
+                                               {
+                                                   "pid":  8752,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  8816,
+                                                   "name":  "ShellHost.exe"
+                                               },
+                                               {
+                                                   "pid":  23008,
+                                                   "name":  "ApplicationFrameHost.exe"
+                                               },
+                                               {
+                                                   "pid":  28220,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  27460,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  23876,
+                                                   "name":  "GameBar.exe"
+                                               }
+                                           ],
+                     "watchedHwndHits":  [
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  7,
+                                                 "timestampMs":  1773564746337,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  8,
+                                                 "timestampMs":  1773564746338,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  10,
+                                                 "timestampMs":  1773564746341,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3e6f810"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7fffff00f307",
+                                                                   "0x7fffff00ef9e",
+                                                                   "0x7fffff02049b",
+                                                                   "0x7fffff01f58e",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ff6078d99ac",
+                                                                   "0x7ff6078d873b",
+                                                                   "Explorer.EXE!Ordinal234",
+                                                                   "Explorer.EXE!BaseThreadInitThunk",
+                                                                   "Explorer.EXE!RtlUserThreadStart"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  17,
+                                                 "timestampMs":  1773564746414,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4f0f0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ff804aff97c",
+                                                                   "0x7ff804b0005f",
+                                                                   "0x7ff804b1aaac",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "0x7ff804a7089d",
+                                                                   "0x7ff804a0acd4",
+                                                                   "0x7ff804a0a26d",
+                                                                   "0x7ff804a75c69",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetClassNameW",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564744542,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ee50"
+                                                              },
+                                                              {
+                                                                  "index":  2,
+                                                                  "raw":  "0x104"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ffffd440dbd",
+                                                                   "0x7ffffd4401d6",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetClassNameW",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564744962,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ee40"
+                                                              },
+                                                              {
+                                                                  "index":  2,
+                                                                  "raw":  "0x104"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "0x7ffffd43fadd",
+                                                                   "0x7ffffd440856",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowRect",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564744946,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4eb68"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllGetActivationFactory",
+                                                                   "0x7ffffd440e0e",
+                                                                   "0x7ffffd4401d6",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW",
+                                                                   "Explorer.EXE!IsWindowUnicode",
+                                                                   "0x7ffffda93b8f",
+                                                                   "Explorer.EXE!DllGetClassObject"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowRect",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564744955,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ef00"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllGetActivationFactory",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetAncestor",
+                                                 "count":  5,
+                                                 "timestampMs":  1773564744948,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetAncestor",
+                                                 "count":  6,
+                                                 "timestampMs":  1773564744949,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x3"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!GetWindowThreadProcessId",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564744951,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5a4ec14"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!Ordinal80",
+                                                                   "0x7ffffd43caa1",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  8752,
+                                                 "processName":  "explorer.exe",
+                                                 "api":  "user32.dll!MonitorFromWindow",
+                                                 "count":  1,
+                                                 "timestampMs":  1773564744953,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "Explorer.EXE!EnumWindows",
+                                                                   "Explorer.EXE!DllCanUnloadNow",
+                                                                   "0x7ffffd440371",
+                                                                   "0x7ffffd44282d",
+                                                                   "0x7ffffd465633",
+                                                                   "0x7ffffd421eeb",
+                                                                   "0x7ffffd421a1b",
+                                                                   "0x7ffffd452487",
+                                                                   "0x7ffffd44c09a",
+                                                                   "0x7ffffd44c01c",
+                                                                   "Explorer.EXE!CallWindowProcW"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  1,
+                                                 "timestampMs":  1773564745309,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c5398250"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0x1e1c5175b40",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  2,
+                                                 "timestampMs":  1773564745645,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53aa6a0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  3,
+                                                 "timestampMs":  1773564745802,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53aa6a0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  4,
+                                                 "timestampMs":  1773564745958,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53aa6a0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  5,
+                                                 "timestampMs":  1773564746117,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53aa6a0"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  6,
+                                                 "timestampMs":  1773564746274,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53ab620"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!GetWindowBand",
+                                                 "count":  7,
+                                                 "timestampMs":  1773564746492,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x1e1c53cfc10"
+                                                              }
+                                                          ],
+                                                 "decoded":  null,
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "0xb",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination"
+                                                               ]
+                                             },
+                                             {
+                                                 "pid":  23876,
+                                                 "processName":  "GameBar.exe",
+                                                 "api":  "user32.dll!ShowWindow",
+                                                 "count":  1,
+                                                 "timestampMs":  1773564746275,
+                                                 "args":  [
+                                                              {
+                                                                  "index":  0,
+                                                                  "raw":  "0x890606"
+                                                              },
+                                                              {
+                                                                  "index":  1,
+                                                                  "raw":  "0x5"
+                                                              }
+                                                          ],
+                                                 "decoded":  {
+                                                                 "command":  5
+                                                             },
+                                                 "backtrace":  [
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_script_engine_unprepare_for_termination",
+                                                                   "GameBar.exe!frida_agent_value_take_emulated_agent_session"
+                                                               ]
+                                             }
+                                         ],
+                     "dwmSetWindowAttributeHits":  [
+
+                                                   ],
+                     "traceStderrNonempty":  false
+                 }
+             ]
+}

@@ -1,0 +1,6 @@
+bu user32!ShowWindow ".echo [EXP] user32!ShowWindow; r rcx; r rdx; kb 10; g"
+bu user32!SetWindowPos ".echo [EXP] user32!SetWindowPos; r rcx; kb 10; g"
+bu user32!GetWindowBand ".echo [EXP] user32!GetWindowBand; r rcx; kb 10; g"
+bu dcomp!DCompositionCreateSurfaceHandle ".echo [EXP] dcomp!DCompositionCreateSurfaceHandle; kb 10; g"
+bu dwmapi!DwmSetWindowAttribute ".echo [EXP] dwmapi!DwmSetWindowAttribute; r rcx; r rdx; kb 10; g"
+g

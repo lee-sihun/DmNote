@@ -1,0 +1,2111 @@
+﻿{
+    "analyzed_at":  "2026-03-15 10:07:31 +09:00",
+    "etl_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-logman-launch-20260315-100620.etl",
+    "total_events":  22649,
+    "process_names":  {
+                          "12392":  "GenshinImpact",
+                          "1952":  null,
+                          "25552":  "GameBar",
+                          "9928":  "Code",
+                          "1384":  "dwm",
+                          "4928":  "chrome",
+                          "8752":  "explorer",
+                          "14744":  "svchost",
+                          "26388":  "GameBarFTServer"
+                      },
+    "provider_counts":  [
+                            {
+                                "provider":  "Microsoft-Windows-DirectComposition",
+                                "count":  8274
+                            },
+                            {
+                                "provider":  "Microsoft-Windows-XAML",
+                                "count":  6776
+                            },
+                            {
+                                "provider":  "Microsoft-Windows-Dwm-Core",
+                                "count":  5971
+                            },
+                            {
+                                "provider":  "Microsoft-Windows-DXGI",
+                                "count":  1627
+                            },
+                            {
+                                "provider":  "",
+                                "count":  1
+                            }
+                        ],
+    "provider_process_counts":  [
+                                    {
+                                        "provider":  "Microsoft-Windows-DirectComposition",
+                                        "process_id":  1384,
+                                        "process_name":  "dwm",
+                                        "count":  7421
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-Dwm-Core",
+                                        "process_id":  1384,
+                                        "process_name":  "dwm",
+                                        "count":  5971
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-XAML",
+                                        "process_id":  25552,
+                                        "process_name":  "GameBar",
+                                        "count":  5621
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  12392,
+                                        "process_name":  "GenshinImpact",
+                                        "count":  1290
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-XAML",
+                                        "process_id":  8752,
+                                        "process_name":  "explorer",
+                                        "count":  1155
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DirectComposition",
+                                        "process_id":  25552,
+                                        "process_name":  "GameBar",
+                                        "count":  445
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DirectComposition",
+                                        "process_id":  8752,
+                                        "process_name":  "explorer",
+                                        "count":  408
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  25552,
+                                        "process_name":  "GameBar",
+                                        "count":  125
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  9928,
+                                        "process_name":  "Code",
+                                        "count":  96
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  4928,
+                                        "process_name":  "chrome",
+                                        "count":  52
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  8752,
+                                        "process_name":  "explorer",
+                                        "count":  32
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  14744,
+                                        "process_name":  "svchost",
+                                        "count":  24
+                                    },
+                                    {
+                                        "provider":  "Microsoft-Windows-DXGI",
+                                        "process_id":  26388,
+                                        "process_name":  "GameBarFTServer",
+                                        "count":  8
+                                    },
+                                    {
+                                        "provider":  "",
+                                        "process_id":  1952,
+                                        "process_name":  null,
+                                        "count":  1
+                                    }
+                                ],
+    "provider_event_counts":  [
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  44,
+                                      "task":  32,
+                                      "opcode":  1,
+                                      "count":  2140
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  25,
+                                      "task":  17,
+                                      "opcode":  0,
+                                      "count":  2140
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  45,
+                                      "task":  32,
+                                      "opcode":  2,
+                                      "count":  2140
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  388,
+                                      "task":  286,
+                                      "opcode":  0,
+                                      "count":  1605
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  297,
+                                      "task":  195,
+                                      "opcode":  0,
+                                      "count":  1303
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  38,
+                                      "task":  28,
+                                      "opcode":  0,
+                                      "count":  1128
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  556,
+                                      "task":  368,
+                                      "opcode":  2,
+                                      "count":  634
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  555,
+                                      "task":  368,
+                                      "opcode":  1,
+                                      "count":  634
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  209,
+                                      "task":  137,
+                                      "opcode":  2,
+                                      "count":  481
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  208,
+                                      "task":  137,
+                                      "opcode":  1,
+                                      "count":  481
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  210,
+                                      "task":  138,
+                                      "opcode":  1,
+                                      "count":  481
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  211,
+                                      "task":  138,
+                                      "opcode":  2,
+                                      "count":  481
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  55,
+                                      "task":  34,
+                                      "opcode":  0,
+                                      "count":  266
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  1,
+                                      "task":  1,
+                                      "opcode":  0,
+                                      "count":  258
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  138,
+                                      "task":  60,
+                                      "opcode":  1,
+                                      "count":  250
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  139,
+                                      "task":  60,
+                                      "opcode":  2,
+                                      "count":  250
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  42,
+                                      "task":  9,
+                                      "opcode":  1,
+                                      "count":  219
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  43,
+                                      "task":  9,
+                                      "opcode":  2,
+                                      "count":  219
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  179,
+                                      "task":  80,
+                                      "opcode":  2,
+                                      "count":  215
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  178,
+                                      "task":  80,
+                                      "opcode":  1,
+                                      "count":  215
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  133,
+                                      "task":  81,
+                                      "opcode":  0,
+                                      "count":  205
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  61,
+                                      "task":  40,
+                                      "opcode":  0,
+                                      "count":  201
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  541,
+                                      "task":  361,
+                                      "opcode":  2,
+                                      "count":  163
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  540,
+                                      "task":  361,
+                                      "opcode":  1,
+                                      "count":  163
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  0,
+                                      "task":  0,
+                                      "opcode":  0,
+                                      "count":  159
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  561,
+                                      "task":  371,
+                                      "opcode":  1,
+                                      "count":  158
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  562,
+                                      "task":  371,
+                                      "opcode":  2,
+                                      "count":  158
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  327,
+                                      "task":  217,
+                                      "opcode":  1,
+                                      "count":  106
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  328,
+                                      "task":  217,
+                                      "opcode":  2,
+                                      "count":  106
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  213,
+                                      "task":  121,
+                                      "opcode":  0,
+                                      "count":  99
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  583,
+                                      "task":  384,
+                                      "opcode":  0,
+                                      "count":  96
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  303,
+                                      "task":  200,
+                                      "opcode":  0,
+                                      "count":  94
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  538,
+                                      "task":  360,
+                                      "opcode":  1,
+                                      "count":  88
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  539,
+                                      "task":  360,
+                                      "opcode":  2,
+                                      "count":  88
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  569,
+                                      "task":  375,
+                                      "opcode":  1,
+                                      "count":  83
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  570,
+                                      "task":  375,
+                                      "opcode":  2,
+                                      "count":  83
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  115,
+                                      "task":  66,
+                                      "opcode":  1,
+                                      "count":  76
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  116,
+                                      "task":  66,
+                                      "opcode":  2,
+                                      "count":  76
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  243,
+                                      "task":  149,
+                                      "opcode":  0,
+                                      "count":  76
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  6,
+                                      "task":  39,
+                                      "opcode":  2,
+                                      "count":  75
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  5,
+                                      "task":  39,
+                                      "opcode":  1,
+                                      "count":  75
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  446,
+                                      "task":  306,
+                                      "opcode":  0,
+                                      "count":  75
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  144,
+                                      "task":  63,
+                                      "opcode":  1,
+                                      "count":  74
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DXGI",
+                                      "event_id":  145,
+                                      "task":  63,
+                                      "opcode":  2,
+                                      "count":  74
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  48,
+                                      "task":  12,
+                                      "opcode":  2,
+                                      "count":  73
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  47,
+                                      "task":  12,
+                                      "opcode":  1,
+                                      "count":  73
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  120,
+                                      "task":  69,
+                                      "opcode":  1,
+                                      "count":  67
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  121,
+                                      "task":  69,
+                                      "opcode":  2,
+                                      "count":  66
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  323,
+                                      "task":  236,
+                                      "opcode":  0,
+                                      "count":  57
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  30,
+                                      "task":  22,
+                                      "opcode":  0,
+                                      "count":  50
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  26,
+                                      "task":  31,
+                                      "opcode":  0,
+                                      "count":  49
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  63,
+                                      "task":  22,
+                                      "opcode":  1,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  65,
+                                      "task":  22,
+                                      "opcode":  2,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  64,
+                                      "task":  22,
+                                      "opcode":  0,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  111,
+                                      "task":  64,
+                                      "opcode":  2,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  110,
+                                      "task":  64,
+                                      "opcode":  1,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  59,
+                                      "task":  36,
+                                      "opcode":  1,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-XAML",
+                                      "event_id":  60,
+                                      "task":  36,
+                                      "opcode":  2,
+                                      "count":  48
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  64,
+                                      "task":  63,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  65,
+                                      "task":  38,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  63,
+                                      "task":  38,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  14,
+                                      "task":  12,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  66,
+                                      "task":  39,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  68,
+                                      "task":  39,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  194,
+                                      "task":  126,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  195,
+                                      "task":  126,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  56,
+                                      "task":  34,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  7,
+                                      "task":  9,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  10,
+                                      "task":  11,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  9,
+                                      "task":  10,
+                                      "opcode":  2,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  6,
+                                      "task":  9,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  371,
+                                      "task":  272,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-DirectComposition",
+                                      "event_id":  48,
+                                      "task":  35,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  451,
+                                      "task":  340,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  54,
+                                      "task":  34,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  79,
+                                      "task":  2,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  387,
+                                      "task":  285,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  316,
+                                      "task":  231,
+                                      "opcode":  0,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  43,
+                                      "task":  29,
+                                      "opcode":  1,
+                                      "count":  47
+                                  },
+                                  {
+                                      "provider":  "Microsoft-Windows-Dwm-Core",
+                                      "event_id":  45,
+                                      "task":  29,
+                                      "opcode":  2,
+                                      "count":  47
+                                  }
+                              ],
+    "provider_event_samples":  [
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  44,
+                                       "task":  32,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "Id",
+                                                           "value":  "3"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  25,
+                                       "task":  17,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "DeviceId",
+                                                               "value":  "3003274352320"
+                                                           },
+                                                           {
+                                                               "name":  "ChannelHandle",
+                                                               "value":  "1091771840"
+                                                           },
+                                                           {
+                                                               "name":  "LastCommittedBatchId",
+                                                               "value":  "292264"
+                                                           },
+                                                           {
+                                                               "name":  "LastConfirmedBatchId",
+                                                               "value":  "292264"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  45,
+                                       "task":  32,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "Id",
+                                                           "value":  "3"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  388,
+                                       "task":  286,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ProcessId",
+                                                               "value":  "940"
+                                                           },
+                                                           {
+                                                               "name":  "CommandId",
+                                                               "value":  "38"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  297,
+                                       "task":  195,
+                                       "opcode":  0,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ResourceDictionaryId",
+                                                               "value":  "1440342426032"
+                                                           },
+                                                           {
+                                                               "name":  "ResourceId",
+                                                               "value":  "1440342319424"
+                                                           },
+                                                           {
+                                                               "name":  "Key",
+                                                               "value":  "SystemColorActiveCaptionColor"
+                                                           },
+                                                           {
+                                                               "name":  "KeyIsType",
+                                                               "value":  "false"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  38,
+                                       "task":  28,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ChannelHandle",
+                                                               "value":  "3"
+                                                           },
+                                                           {
+                                                               "name":  "LastCommittedBatchId",
+                                                               "value":  "292264"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesTotalAllocated",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesInUseAllocated",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesInUseActual",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesPeakInUseActual",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesAllowed",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "poolsTotalAllocated",
+                                                               "value":  "851968"
+                                                           },
+                                                           {
+                                                               "name":  "poolsInUseAllocated",
+                                                               "value":  "851968"
+                                                           },
+                                                           {
+                                                               "name":  "poolsInUseActual",
+                                                               "value":  "37672"
+                                                           },
+                                                           {
+                                                               "name":  "poolsPeakInUseActual",
+                                                               "value":  "37672"
+                                                           },
+                                                           {
+                                                               "name":  "poolsAllowed",
+                                                               "value":  "918528"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesPendingRelease",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "poolsPendingRelease",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "largeSurfacesMaxStructuralWaste",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "poolsMaxStructuralWaste",
+                                                               "value":  "814296"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  556,
+                                       "task":  368,
+                                       "opcode":  2,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+                                                           "name":  "Type",
+                                                           "value":  "Windows.UI.Color"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  555,
+                                       "task":  368,
+                                       "opcode":  1,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  209,
+                                       "task":  137,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "X",
+                                                               "value":  "959"
+                                                           },
+                                                           {
+                                                               "name":  "Y",
+                                                               "value":  "540"
+                                                           },
+                                                           {
+                                                               "name":  "hWnd",
+                                                               "value":  "0x405d4"
+                                                           },
+                                                           {
+                                                               "name":  "inputSinkHandle",
+                                                               "value":  "0x0"
+                                                           },
+                                                           {
+                                                               "name":  "inputSinkLuid",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_11",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "_12",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_13",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_14",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_21",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_22",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "_23",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_24",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_31",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_32",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_33",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "_34",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_41",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_42",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_43",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "_44",
+                                                               "value":  "1"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  208,
+                                       "task":  137,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "X",
+                                                               "value":  "959"
+                                                           },
+                                                           {
+                                                               "name":  "Y",
+                                                               "value":  "540"
+                                                           },
+                                                           {
+                                                               "name":  "InputSpaceId",
+                                                               "value":  "18446744065119617024"
+                                                           },
+                                                           {
+                                                               "name":  "WorkspaceId",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  210,
+                                       "task":  138,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "X",
+                                                               "value":  "959"
+                                                           },
+                                                           {
+                                                               "name":  "Y",
+                                                               "value":  "540"
+                                                           },
+                                                           {
+                                                               "name":  "RootVisual",
+                                                               "value":  "0x2bb41bd78e0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  211,
+                                       "task":  138,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "X",
+                                                               "value":  "959"
+                                                           },
+                                                           {
+                                                               "name":  "Y",
+                                                               "value":  "540"
+                                                           },
+                                                           {
+                                                               "name":  "HitTestedVisual",
+                                                               "value":  "0x2bb4b0e34f0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  55,
+                                       "task":  34,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "pThis",
+                                                           "value":  "16"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  1,
+                                       "task":  1,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "channelHandle",
+                                                               "value":  "2"
+                                                           },
+                                                           {
+                                                               "name":  "resourceHandle",
+                                                               "value":  "257"
+                                                           },
+                                                           {
+                                                               "name":  "externalHandleAndChannel",
+                                                               "value":  "9223372045444710657"
+                                                           },
+                                                           {
+                                                               "name":  "resourceType",
+                                                               "value":  "190"
+                                                           },
+                                                           {
+                                                               "name":  "createShared",
+                                                               "value":  "false"
+                                                           },
+                                                           {
+                                                               "name":  "openShared",
+                                                               "value":  "false"
+                                                           },
+                                                           {
+                                                               "name":  "resourcePointer",
+                                                               "value":  "3003424442296"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  138,
+                                       "task":  60,
+                                       "opcode":  1,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "pThis",
+                                                               "value":  "0x1e0ee919cb0"
+                                                           },
+                                                           {
+                                                               "name":  "pDesc",
+                                                               "value":  "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  139,
+                                       "task":  60,
+                                       "opcode":  2,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  {
+                                                           "name":  "m_Ret",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  42,
+                                       "task":  9,
+                                       "opcode":  1,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "pIDXGISwapChain",
+                                                               "value":  "0x1e0edf0b090"
+                                                           },
+                                                           {
+                                                               "name":  "Flags",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "SyncInterval",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyRects",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "ScrollRects",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  43,
+                                       "task":  9,
+                                       "opcode":  2,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  {
+                                                           "name":  "Result",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  179,
+                                       "task":  80,
+                                       "opcode":  2,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  {
+                                                           "name":  "m_Ret",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  178,
+                                       "task":  80,
+                                       "opcode":  1,
+                                       "sample_process_id":  12392,
+                                       "sample_process_name":  "GenshinImpact",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "pThis",
+                                                               "value":  "0x1e0edf0b090"
+                                                           },
+                                                           {
+                                                               "name":  "SyncInterval",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "dwFlags",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  133,
+                                       "task":  81,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "channelHandle",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "resourceHandle",
+                                                               "value":  "186"
+                                                           },
+                                                           {
+                                                               "name":  "resourceInternalHandleAndChannel",
+                                                               "value":  "4294967482"
+                                                           },
+                                                           {
+                                                               "name":  "resourceType",
+                                                               "value":  "182"
+                                                           },
+                                                           {
+                                                               "name":  "resourcePointer",
+                                                               "value":  "3003444347984"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  61,
+                                       "task":  40,
+                                       "opcode":  0,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+                                                           "name":  "ElementId",
+                                                           "value":  "1440342171648"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  541,
+                                       "task":  361,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  540,
+                                       "task":  361,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+                                                           "name":  "ElementId",
+                                                           "value":  "289900080"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  0,
+                                       "task":  0,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  561,
+                                       "task":  371,
+                                       "opcode":  1,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  562,
+                                       "task":  371,
+                                       "opcode":  2,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  327,
+                                       "task":  217,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  328,
+                                       "task":  217,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  213,
+                                       "task":  121,
+                                       "opcode":  0,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ElementId",
+                                                               "value":  "1440527782512"
+                                                           },
+                                                           {
+                                                               "name":  "Name",
+                                                               "value":  "HomePanelRoot"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  583,
+                                       "task":  384,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "OldState",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "NewState",
+                                                               "value":  "1"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  303,
+                                       "task":  200,
+                                       "opcode":  0,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ElementId",
+                                                               "value":  "1440527640400"
+                                                           },
+                                                           {
+                                                               "name":  "StyleId",
+                                                               "value":  "1440527740032"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  538,
+                                       "task":  360,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+                                                           "name":  "ElementId",
+                                                           "value":  "289900080"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  539,
+                                       "task":  360,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  569,
+                                       "task":  375,
+                                       "opcode":  1,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  570,
+                                       "task":  375,
+                                       "opcode":  2,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  115,
+                                       "task":  66,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  116,
+                                       "task":  66,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  243,
+                                       "task":  149,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+                                                           "name":  "TimeToNextWorkInMilliseconds",
+                                                           "value":  "4294967295"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  6,
+                                       "task":  39,
+                                       "opcode":  2,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  5,
+                                       "task":  39,
+                                       "opcode":  1,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ElementId",
+                                                               "value":  "1440342171648"
+                                                           },
+                                                           {
+                                                               "name":  "ClassName",
+                                                               "value":  "Windows.UI.Xaml.RootVisual"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  446,
+                                       "task":  306,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "RequestInMS",
+                                                               "value":  "495"
+                                                           },
+                                                           {
+                                                               "name":  "NextTickIntervalInMS",
+                                                               "value":  "495"
+                                                           },
+                                                           {
+                                                               "name":  "Reason",
+                                                               "value":  "8"
+                                                           },
+                                                           {
+                                                               "name":  "TotalReasons",
+                                                               "value":  "8"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  144,
+                                       "task":  63,
+                                       "opcode":  1,
+                                       "sample_process_id":  9928,
+                                       "sample_process_name":  "Code",
+                                       "sample_data":  {
+                                                           "name":  "pThis",
+                                                           "value":  "0x21d7f102580"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DXGI",
+                                       "event_id":  145,
+                                       "task":  63,
+                                       "opcode":  2,
+                                       "sample_process_id":  9928,
+                                       "sample_process_name":  "Code",
+                                       "sample_data":  {
+                                                           "name":  "m_Ret",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  48,
+                                       "task":  12,
+                                       "opcode":  2,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ElementId",
+                                                               "value":  "1440527785776"
+                                                           },
+                                                           {
+                                                               "name":  "DesiredWidth",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "DesiredHeight",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  47,
+                                       "task":  12,
+                                       "opcode":  1,
+                                       "sample_process_id":  25552,
+                                       "sample_process_name":  "GameBar",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "ElementId",
+                                                               "value":  "1440342171648"
+                                                           },
+                                                           {
+                                                               "name":  "Width",
+                                                               "value":  "1920"
+                                                           },
+                                                           {
+                                                               "name":  "Height",
+                                                               "value":  "1080"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  120,
+                                       "task":  69,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  121,
+                                       "task":  69,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  323,
+                                       "task":  236,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "channelHandle",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "processId",
+                                                               "value":  "940"
+                                                           },
+                                                           {
+                                                               "name":  "numberOfBatchesProcessed",
+                                                               "value":  "6"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  30,
+                                       "task":  22,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "channelHandle",
+                                                               "value":  "1091771696"
+                                                           },
+                                                           {
+                                                               "name":  "resourceHandle",
+                                                               "value":  "259"
+                                                           },
+                                                           {
+                                                               "name":  "resourcePointer",
+                                                               "value":  "3003424442136"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  26,
+                                       "task":  31,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+                                                           "name":  "IsHighPriority",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  63,
+                                       "task":  22,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  65,
+                                       "task":  22,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  64,
+                                       "task":  22,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  111,
+                                       "task":  64,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  110,
+                                       "task":  64,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  59,
+                                       "task":  36,
+                                       "opcode":  1,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-XAML",
+                                       "event_id":  60,
+                                       "task":  36,
+                                       "opcode":  2,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  64,
+                                       "task":  63,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "hr",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "cTokenCount",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  65,
+                                       "task":  38,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "cTotalTokenCount",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "cIterationCount",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  63,
+                                       "task":  38,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  14,
+                                       "task":  12,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "fPresentNeeded",
+                                                           "value":  "1"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  66,
+                                       "task":  39,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  68,
+                                       "task":  39,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  194,
+                                       "task":  126,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  195,
+                                       "task":  126,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "cTotalTokenCount",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "cIterationCount",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  56,
+                                       "task":  34,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "pThis",
+                                                           "value":  "3003274014784"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  7,
+                                       "task":  9,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "fUseSleep",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "dwSleep",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  10,
+                                       "task":  11,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  9,
+                                       "task":  10,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "returnedWorkType",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "Work",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "SurfaceManager",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "DelayedComposition",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "Occlusion",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  6,
+                                       "task":  9,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  371,
+                                       "task":  272,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "Commands",
+                                                           "value":  "0"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-DirectComposition",
+                                       "event_id":  48,
+                                       "task":  35,
+                                       "opcode":  0,
+                                       "sample_process_id":  8752,
+                                       "sample_process_name":  "explorer",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "section",
+                                                               "value":  "666682320"
+                                                           },
+                                                           {
+                                                               "name":  "allocationSize",
+                                                               "value":  "408"
+                                                           },
+                                                           {
+                                                               "name":  "sectionSize",
+                                                               "value":  "16384"
+                                                           },
+                                                           {
+                                                               "name":  "heap",
+                                                               "value":  "true"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  451,
+                                       "task":  340,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "FrameId",
+                                                           "value":  "123916"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  54,
+                                       "task":  34,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+                                                           "name":  "pThis",
+                                                           "value":  "3003274014784"
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  79,
+                                       "task":  2,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  {
+
+                                                       }
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  387,
+                                       "task":  285,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "DirtyPropagatedCount",
+                                                               "value":  "4"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyPropagated",
+                                                               "value":  "940"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyPropagated",
+                                                               "value":  "1384"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyPropagated",
+                                                               "value":  "11180"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyPropagated",
+                                                               "value":  "9928"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyGeneratedCount",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "DirtyGenerated",
+                                                               "value":  "9928"
+                                                           },
+                                                           {
+                                                               "name":  "CompositorRenderedCount",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "CompositorRendered",
+                                                               "value":  ""
+                                                           },
+                                                           {
+                                                               "name":  "BatchesProcessedCount",
+                                                               "value":  "1"
+                                                           },
+                                                           {
+                                                               "name":  "BatchesProcessed",
+                                                               "value":  "1384"
+                                                           },
+                                                           {
+                                                               "name":  "KeyframeAnimationsCalculatedCount",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "KeyframeAnimationsCalculated",
+                                                               "value":  ""
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  316,
+                                       "task":  231,
+                                       "opcode":  0,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "WarpDrawListCachesInvalidated",
+                                                               "value":  "0"
+                                                           },
+                                                           {
+                                                               "name":  "WarpDrawListCachesUpdated",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  43,
+                                       "task":  29,
+                                       "opcode":  1,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "data",
+                                                               "value":  "3003288598864"
+                                                           },
+                                                           {
+                                                               "name":  "Id",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   },
+                                   {
+                                       "provider":  "Microsoft-Windows-Dwm-Core",
+                                       "event_id":  45,
+                                       "task":  29,
+                                       "opcode":  2,
+                                       "sample_process_id":  1384,
+                                       "sample_process_name":  "dwm",
+                                       "sample_data":  [
+                                                           {
+                                                               "name":  "data",
+                                                               "value":  "3003288598864"
+                                                           },
+                                                           {
+                                                               "name":  "Id",
+                                                               "value":  "0"
+                                                           }
+                                                       ]
+                                   }
+                               ]
+}

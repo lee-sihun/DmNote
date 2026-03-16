@@ -1,0 +1,129 @@
+﻿{
+    "ro_initialize_hr":  "0x80010106",
+    "results":  [
+                    {
+                        "class_name":  "GameBar.CuiWidgetAdapter",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "GameBar.WidgetControlHost",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "GameBar.ForegroundWorkerHost",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "GameBar.AppTargetHost",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "GameBar.NotificationHost",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Microsoft.Windows.Shell.GamingOverlayExperienceManager",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Windows.Internal.GamingOverlay.GameBarWindowControl",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "XboxGameBarFT.GbftFactory",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "XboxGameBarFT.AppTargetManagerFT",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "XboxGameBarFT.WindowManagerFT",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "XboxGameBarFT.InputFocusTrackerFT",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "XboxGameBarFT.GameConfigStoreFT",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Windows.Foundation.Collections.ValueSet",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x00000000",
+                        "factory_nonzero":  true,
+                        "factory_vtbl":  "0x7FFDE68B5D28",
+                        "activate_instance_ptr":  "0x7FFDE68321E0",
+                        "activate_instance_via_factory_hr":  "0x00000000",
+                        "factory_instance_nonzero":  true,
+                        "ro_activate_instance_hr":  "0x00000000",
+                        "ro_activate_instance_nonzero":  true
+                    },
+                    {
+                        "class_name":  "Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Microsoft.Web.WebView2.Core.CoreWebView2ControllerWindowReference",
+                        "windows_create_string_hr":  "0x00000000",
+                        "ro_get_activation_factory_hr":  "0x80040154",
+                        "factory_nonzero":  false,
+                        "ro_activate_instance_hr":  "0x80040154",
+                        "ro_activate_instance_nonzero":  false
+                    }
+                ]
+}

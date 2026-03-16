@@ -1,0 +1,211 @@
+﻿{
+    "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+    "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+    "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+    "related_iid":  "a3be5d0a-5420-50ee-a639-ff2ea687a270",
+    "coinit_hr":  "0x00000001",
+    "primary":  {
+                    "label":  "Primary",
+                    "ptr":  "0x258D87FF8E8",
+                    "vtbl":  "0x7FFDE8D383E0",
+                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                    "qi_iunknown_hr":  "0x00000000",
+                    "qi_iunknown_nonzero":  true,
+                    "qi_self_hr":  "0x00000000",
+                    "qi_self_nonzero":  true,
+                    "qi_iinspectable_hr":  "0x80004002",
+                    "qi_iinspectable_nonzero":  false
+                },
+    "service":  {
+                    "label":  "Service",
+                    "ptr":  "0x258D87FEEE8",
+                    "vtbl":  "0x7FFDE8D3C3E0",
+                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                    "qi_iunknown_hr":  "0x00000000",
+                    "qi_iunknown_nonzero":  true,
+                    "qi_self_hr":  "0x00000000",
+                    "qi_self_nonzero":  true,
+                    "qi_iinspectable_hr":  "0x00000000",
+                    "qi_iinspectable_nonzero":  true,
+                    "inspectable_vtbl":  "0x7FFDE8D383E0",
+                    "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                    "get_iids_hr":  "0x00000000",
+                    "get_iids_count":  4,
+                    "iids":  [
+                                 "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                 "00000038-0000-0000-c000-000000000046",
+                                 "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                 "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                             ],
+                    "get_runtime_class_name_hr":  "0x80004001",
+                    "get_trust_level_hr":  "0x80004001",
+                    "trust_level":  0
+                },
+    "final":  {
+                  "label":  "Final",
+                  "ptr":  "0x258D87FEEE8",
+                  "vtbl":  "0x7FFDE8D3C3E0",
+                  "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                  "qi_iunknown_hr":  "0x00000000",
+                  "qi_iunknown_nonzero":  true,
+                  "qi_self_hr":  "0x00000000",
+                  "qi_self_nonzero":  true,
+                  "qi_iinspectable_hr":  "0x00000000",
+                  "qi_iinspectable_nonzero":  true,
+                  "inspectable_vtbl":  "0x7FFDE8D383E0",
+                  "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                  "get_iids_hr":  "0x00000000",
+                  "get_iids_count":  4,
+                  "iids":  [
+                               "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                               "00000038-0000-0000-c000-000000000046",
+                               "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                               "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                           ],
+                  "get_runtime_class_name_hr":  "0x80004001",
+                  "get_trust_level_hr":  "0x80004001",
+                  "trust_level":  0
+              },
+    "related_interface_probes":  [
+                                     {
+                                         "label":  "PrimaryRelated",
+                                         "iid":  "a3be5d0a-5420-50ee-a639-ff2ea687a270",
+                                         "query_interface_hr":  "0x80004002",
+                                         "query_interface_nonzero":  false
+                                     },
+                                     {
+                                         "label":  "ServiceRelated",
+                                         "iid":  "a3be5d0a-5420-50ee-a639-ff2ea687a270",
+                                         "query_interface_hr":  "0x80004002",
+                                         "query_interface_nonzero":  false
+                                     },
+                                     {
+                                         "label":  "FinalRelated",
+                                         "iid":  "a3be5d0a-5420-50ee-a639-ff2ea687a270",
+                                         "query_interface_hr":  "0x80004002",
+                                         "query_interface_nonzero":  false
+                                     }
+                                 ],
+    "discovered_interfaces":  [
+                                  {
+                                      "iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                      "query_interface_hr":  "0x00000000",
+                                      "query_interface_nonzero":  true,
+                                      "inspection":  {
+                                                         "label":  "DiscoveredInterface",
+                                                         "ptr":  "0x258D87FEEE8",
+                                                         "vtbl":  "0x7FFDE8D3C3E0",
+                                                         "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "qi_iunknown_hr":  "0x00000000",
+                                                         "qi_iunknown_nonzero":  true,
+                                                         "qi_self_hr":  "0x00000000",
+                                                         "qi_self_nonzero":  true,
+                                                         "qi_iinspectable_hr":  "0x00000000",
+                                                         "qi_iinspectable_nonzero":  true,
+                                                         "inspectable_vtbl":  "0x7FFDE8D383E0",
+                                                         "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "get_iids_hr":  "0x00000000",
+                                                         "get_iids_count":  4,
+                                                         "iids":  [
+                                                                      "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                                                      "00000038-0000-0000-c000-000000000046",
+                                                                      "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                                                      "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                                                                  ],
+                                                         "get_runtime_class_name_hr":  "0x80004001",
+                                                         "get_trust_level_hr":  "0x80004001",
+                                                         "trust_level":  0
+                                                     }
+                                  },
+                                  {
+                                      "iid":  "00000038-0000-0000-c000-000000000046",
+                                      "query_interface_hr":  "0x00000000",
+                                      "query_interface_nonzero":  true,
+                                      "inspection":  {
+                                                         "label":  "DiscoveredInterface",
+                                                         "ptr":  "0x258D895FFB8",
+                                                         "vtbl":  "0x7FFDE8D383E0",
+                                                         "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "qi_iunknown_hr":  "0x00000000",
+                                                         "qi_iunknown_nonzero":  true,
+                                                         "qi_self_hr":  "0x00000000",
+                                                         "qi_self_nonzero":  true,
+                                                         "qi_iinspectable_hr":  "0x00000000",
+                                                         "qi_iinspectable_nonzero":  true,
+                                                         "inspectable_vtbl":  "0x7FFDE8D383E0",
+                                                         "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "get_iids_hr":  "0x00000000",
+                                                         "get_iids_count":  4,
+                                                         "iids":  [
+                                                                      "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                                                      "00000038-0000-0000-c000-000000000046",
+                                                                      "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                                                      "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                                                                  ],
+                                                         "get_runtime_class_name_hr":  "0x80004001",
+                                                         "get_trust_level_hr":  "0x80004001",
+                                                         "trust_level":  0
+                                                     }
+                                  },
+                                  {
+                                      "iid":  "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                      "query_interface_hr":  "0x00000000",
+                                      "query_interface_nonzero":  true,
+                                      "inspection":  {
+                                                         "label":  "DiscoveredInterface",
+                                                         "ptr":  "0x258D89600B8",
+                                                         "vtbl":  "0x7FFDE8D3C3E0",
+                                                         "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "qi_iunknown_hr":  "0x00000000",
+                                                         "qi_iunknown_nonzero":  true,
+                                                         "qi_self_hr":  "0x00000000",
+                                                         "qi_self_nonzero":  true,
+                                                         "qi_iinspectable_hr":  "0x00000000",
+                                                         "qi_iinspectable_nonzero":  true,
+                                                         "inspectable_vtbl":  "0x7FFDE8D383E0",
+                                                         "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "get_iids_hr":  "0x00000000",
+                                                         "get_iids_count":  4,
+                                                         "iids":  [
+                                                                      "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                                                      "00000038-0000-0000-c000-000000000046",
+                                                                      "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                                                      "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                                                                  ],
+                                                         "get_runtime_class_name_hr":  "0x80004001",
+                                                         "get_trust_level_hr":  "0x80004001",
+                                                         "trust_level":  0
+                                                     }
+                                  },
+                                  {
+                                      "iid":  "d6332df0-dbfb-575e-93f1-c7bff0693913",
+                                      "query_interface_hr":  "0x00000000",
+                                      "query_interface_nonzero":  true,
+                                      "inspection":  {
+                                                         "label":  "DiscoveredInterface",
+                                                         "ptr":  "0x258D89603B8",
+                                                         "vtbl":  "0x7FFDE8D3C3E0",
+                                                         "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "qi_iunknown_hr":  "0x00000000",
+                                                         "qi_iunknown_nonzero":  true,
+                                                         "qi_self_hr":  "0x00000000",
+                                                         "qi_self_nonzero":  true,
+                                                         "qi_iinspectable_hr":  "0x00000000",
+                                                         "qi_iinspectable_nonzero":  true,
+                                                         "inspectable_vtbl":  "0x7FFDE8D383E0",
+                                                         "inspectable_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                         "get_iids_hr":  "0x00000000",
+                                                         "get_iids_count":  4,
+                                                         "iids":  [
+                                                                      "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                                                                      "00000038-0000-0000-c000-000000000046",
+                                                                      "5eac68f9-e031-4c66-b4ea-5ab6aff979c8",
+                                                                      "d6332df0-dbfb-575e-93f1-c7bff0693913"
+                                                                  ],
+                                                         "get_runtime_class_name_hr":  "0x80004001",
+                                                         "get_trust_level_hr":  "0x80004001",
+                                                         "trust_level":  0
+                                                     }
+                                  }
+                              ]
+}

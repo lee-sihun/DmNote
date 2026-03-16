@@ -1,0 +1,900 @@
+﻿{
+    "collected_at":  "2026-03-15 13:10:38 +09:00",
+    "install_location":  "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe",
+    "winmdidl_path":  "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\winmdidl.exe",
+    "outputs":  [
+                    "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\winmdidl\\XboxGameBarFT.idl",
+                    "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\winmdidl\\Microsoft.Gaming.XboxGameBar.Private.idl",
+                    "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\winmdidl\\Microsoft.Gaming.XboxGameBar.idl",
+                    "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\winmdidl\\GameBar.idl"
+                ],
+    "xbox_gamebar_ft":  {
+                            "app_target_info":  [
+                                                    {
+                                                        "line":  34,
+                                                        "text":  "typedef struct AppTargetInfo AppTargetInfo;"
+                                                    },
+                                                    {
+                                                        "line":  354,
+                                                        "text":  "struct AppTargetInfo"
+                                                    },
+                                                    {
+                                                        "line":  356,
+                                                        "text":  "HSTRING AumId;"
+                                                    },
+                                                    {
+                                                        "line":  357,
+                                                        "text":  "HSTRING DisplayName;"
+                                                    },
+                                                    {
+                                                        "line":  358,
+                                                        "text":  "UINT64 Hwnd;"
+                                                    },
+                                                    {
+                                                        "line":  359,
+                                                        "text":  "UINT64 InputHwnd;"
+                                                    },
+                                                    {
+                                                        "line":  360,
+                                                        "text":  "HSTRING ImageName;"
+                                                    },
+                                                    {
+                                                        "line":  361,
+                                                        "text":  "HSTRING ImageNameFullPath;"
+                                                    },
+                                                    {
+                                                        "line":  362,
+                                                        "text":  "boolean IsFse;"
+                                                    },
+                                                    {
+                                                        "line":  363,
+                                                        "text":  "boolean IsFullscreen;"
+                                                    },
+                                                    {
+                                                        "line":  364,
+                                                        "text":  "boolean IsInputDelegationSupported;"
+                                                    },
+                                                    {
+                                                        "line":  365,
+                                                        "text":  "boolean IsPackaged;"
+                                                    },
+                                                    {
+                                                        "line":  366,
+                                                        "text":  "UINT32 ProcessId;"
+                                                    },
+                                                    {
+                                                        "line":  367,
+                                                        "text":  "UINT32 InputProcessId;"
+                                                    },
+                                                    {
+                                                        "line":  382,
+                                                        "text":  "HSTRING ImageName;"
+                                                    },
+                                                    {
+                                                        "line":  389,
+                                                        "text":  "UINT32 ProcessId;"
+                                                    },
+                                                    {
+                                                        "line":  391,
+                                                        "text":  "HSTRING ImageName;"
+                                                    },
+                                                    {
+                                                        "line":  433,
+                                                        "text":  "UINT64 Hwnd;"
+                                                    },
+                                                    {
+                                                        "line":  440,
+                                                        "text":  "UINT32 ProcessId;"
+                                                    },
+                                                    {
+                                                        "line":  441,
+                                                        "text":  "UINT64 HWnd;"
+                                                    },
+                                                    {
+                                                        "line":  461,
+                                                        "text":  "HSTRING ImageName;"
+                                                    }
+                                                ],
+                            "target_tracking":  [
+                                                    {
+                                                        "line":  64,
+                                                        "text":  "delegate AppTargetChangedDelegate;"
+                                                    },
+                                                    {
+                                                        "line":  72,
+                                                        "text":  "interface IAppTargetManagerFT;"
+                                                    },
+                                                    {
+                                                        "line":  499,
+                                                        "text":  "HRESULT AppTargetChangedDelegate();"
+                                                    },
+                                                    {
+                                                        "line":  519,
+                                                        "text":  "interface IAppTargetManagerFT : IInspectable"
+                                                    },
+                                                    {
+                                                        "line":  521,
+                                                        "text":  "HRESULT StartTargetTrackerAsync([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                                    },
+                                                    {
+                                                        "line":  522,
+                                                        "text":  "HRESULT StopTargetTrackerAsync([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                                    },
+                                                    {
+                                                        "line":  523,
+                                                        "text":  "HRESULT RefreshCurrentTargetAsync([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                                    },
+                                                    {
+                                                        "line":  524,
+                                                        "text":  "HRESULT Target([out] [retval] XboxGameBarFT.AppTargetInfo* result);"
+                                                    },
+                                                    {
+                                                        "line":  525,
+                                                        "text":  "[eventadd] HRESULT TargetChanged([in] XboxGameBarFT.AppTargetChangedDelegate* handler, [out] [retval] EventRegistrationToken* token);"
+                                                    },
+                                                    {
+                                                        "line":  526,
+                                                        "text":  "[eventremove] HRESULT TargetChanged([in] EventRegistrationToken token);"
+                                                    }
+                                                ],
+                            "factory":  [
+                                            {
+                                                "line":  100,
+                                                "text":  "interface IGbftFactory;"
+                                            },
+                                            {
+                                                "line":  699,
+                                                "text":  "interface IGbftFactory : IInspectable"
+                                            },
+                                            {
+                                                "line":  702,
+                                                "text":  "HRESULT CreateAppTargetManagerFT([out] [retval] XboxGameBarFT.AppTargetManagerFT** result);"
+                                            },
+                                            {
+                                                "line":  706,
+                                                "text":  "HRESULT CreateWindowManagerFT([out] [retval] XboxGameBarFT.WindowManagerFT** result);"
+                                            },
+                                            {
+                                                "line":  708,
+                                                "text":  "HRESULT CreateThirdPartyLauncherDataProvider([out] [retval] XboxGameBarFT.ThirdPartyLauncherDataProvider** result);"
+                                            },
+                                            {
+                                                "line":  709,
+                                                "text":  "HRESULT CreatePresentMonFpsMonitor([out] [retval] XboxGameBarFT.PresentMonFpsMonitor** result);"
+                                            },
+                                            {
+                                                "line":  710,
+                                                "text":  "HRESULT CreateGfxPerfFpsMonitor([out] [retval] XboxGameBarFT.GfxPerfFpsMonitor** result);"
+                                            },
+                                            {
+                                                "line":  711,
+                                                "text":  "HRESULT CreateGameConfigStoreFT([out] [retval] XboxGameBarFT.GameConfigStoreFT** result);"
+                                            },
+                                            {
+                                                "line":  719,
+                                                "text":  "HRESULT CreateHamDependencyFT([in] UINT32 hostPid, [in] UINT32 targetPid, [out] [retval] XboxGameBarFT.HamDependencyFT** result);"
+                                            },
+                                            {
+                                                "line":  720,
+                                                "text":  "HRESULT CreateInputFocusTrackerFT([out] [retval] XboxGameBarFT.InputFocusTrackerFT** result);"
+                                            },
+                                            {
+                                                "line":  721,
+                                                "text":  "HRESULT CreateWinUserFT([out] [retval] XboxGameBarFT.WinUserFT** result);"
+                                            },
+                                            {
+                                                "line":  722,
+                                                "text":  "HRESULT CreateMonitorUtils([out] [retval] XboxGameBarFT.MonitorUtilsFT** result);"
+                                            },
+                                            {
+                                                "line":  723,
+                                                "text":  "HRESULT CreateRegistryWatcherFT([in] XboxGameBarFT.RegRootKey rootKey, [in] HSTRING subKeyPath, [in] boolean isRecursive, [out] [retval] XboxGameBarFT.RegistryWatcherFT** result);"
+                                            }
+                                        ],
+                            "window_manager":  [
+                                                   {
+                                                       "line":  132,
+                                                       "text":  "interface IWindowManagerFT;"
+                                                   },
+                                                   {
+                                                       "line":  879,
+                                                       "text":  "interface IWindowManagerFT : IInspectable"
+                                                   },
+                                                   {
+                                                       "line":  881,
+                                                       "text":  "HRESULT EnableClickThrough([in] UINT64 appFrameHwnd);"
+                                                   },
+                                                   {
+                                                       "line":  882,
+                                                       "text":  "HRESULT DisableClickThrough([in] UINT64 appFrameHwnd);"
+                                                   },
+                                                   {
+                                                       "line":  883,
+                                                       "text":  "HRESULT GetWindowLong([in] UINT64 appFrameHwnd, [in] INT32 index, [out] [retval] INT32* result);"
+                                                   },
+                                                   {
+                                                       "line":  884,
+                                                       "text":  "HRESULT SetWindowLong([in] UINT64 appFrameHwnd, [in] INT32 index, [in] INT32 newLong);"
+                                                   },
+                                                   {
+                                                       "line":  885,
+                                                       "text":  "HRESULT SetWindowRegion([in] UINT64 appFrameHwnd, [in] Windows.Foundation.Collections.IVectorView\u003cWindows.Foundation.Rect\u003e* rects);"
+                                                   },
+                                                   {
+                                                       "line":  886,
+                                                       "text":  "HRESULT ClearWindowRegion([in] UINT64 appFrameHwnd);"
+                                                   },
+                                                   {
+                                                       "line":  887,
+                                                       "text":  "HRESULT ShowWindow([in] UINT64 appFrameHwnd, [in] INT32 cmdShow);"
+                                                   }
+                                               ],
+                            "input_focus":  [
+                                                {
+                                                    "line":  24,
+                                                    "text":  "typedef enum InputFocusEventSource InputFocusEventSource;"
+                                                },
+                                                {
+                                                    "line":  50,
+                                                    "text":  "typedef struct InputFocusInfo InputFocusInfo;"
+                                                },
+                                                {
+                                                    "line":  68,
+                                                    "text":  "delegate InputFocusChangedDelegate;"
+                                                },
+                                                {
+                                                    "line":  110,
+                                                    "text":  "interface IInputFocusTrackerFT;"
+                                                },
+                                                {
+                                                    "line":  431,
+                                                    "text":  "struct InputFocusInfo"
+                                                },
+                                                {
+                                                    "line":  434,
+                                                    "text":  "XboxGameBarFT.InputFocusEventSource EventSource;"
+                                                },
+                                                {
+                                                    "line":  509,
+                                                    "text":  "HRESULT InputFocusChangedDelegate([in] XboxGameBarFT.InputFocusInfo inputFocusInfo);"
+                                                },
+                                                {
+                                                    "line":  763,
+                                                    "text":  "interface IInputFocusTrackerFT : IInspectable"
+                                                },
+                                                {
+                                                    "line":  765,
+                                                    "text":  "HRESULT StartAsync([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                                },
+                                                {
+                                                    "line":  766,
+                                                    "text":  "HRESULT StopAsync([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                                },
+                                                {
+                                                    "line":  767,
+                                                    "text":  "HRESULT GetLatestInputFocusEvent([out] [retval] XboxGameBarFT.InputFocusInfo* result);"
+                                                },
+                                                {
+                                                    "line":  768,
+                                                    "text":  "[eventadd] HRESULT InputFocusChanged([in] XboxGameBarFT.InputFocusChangedDelegate* handler, [out] [retval] EventRegistrationToken* token);"
+                                                },
+                                                {
+                                                    "line":  769,
+                                                    "text":  "[eventremove] HRESULT InputFocusChanged([in] EventRegistrationToken token);"
+                                                }
+                                            ],
+                            "launcher_and_game_config":  [
+                                                             {
+                                                                 "line":  98,
+                                                                 "text":  "interface IGameConfigStoreFT;"
+                                                             },
+                                                             {
+                                                                 "line":  126,
+                                                                 "text":  "interface IThirdPartyLauncherDataProvider;"
+                                                             },
+                                                             {
+                                                                 "line":  684,
+                                                                 "text":  "interface IGameConfigStoreFT : IInspectable"
+                                                             },
+                                                             {
+                                                                 "line":  686,
+                                                                 "text":  "HRESULT AddEntryForHwnd([in] UINT64 hwnd, [out] [retval] boolean* result);"
+                                                             },
+                                                             {
+                                                                 "line":  687,
+                                                                 "text":  "HRESULT EntryExistsByUserForHwnd([in] UINT64 hwnd, [out] [retval] boolean* result);"
+                                                             },
+                                                             {
+                                                                 "line":  689,
+                                                                 "text":  "HRESULT EntryExistsForHwnd([in] UINT64 hwnd, [out] [retval] boolean* result);"
+                                                             },
+                                                             {
+                                                                 "line":  691,
+                                                                 "text":  "HRESULT GetGcsIdForHwnd([in] UINT64 hwnd, [out] [retval] Windows.Foundation.IReference\u003cGUID\u003e** result);"
+                                                             },
+                                                             {
+                                                                 "line":  693,
+                                                                 "text":  "HRESULT RemoveEntryForHwnd([in] UINT64 hwnd, [out] [retval] boolean* result);"
+                                                             },
+                                                             {
+                                                                 "line":  848,
+                                                                 "text":  "interface IThirdPartyLauncherDataProvider : IInspectable"
+                                                             },
+                                                             {
+                                                                 "line":  850,
+                                                                 "text":  "HRESULT GetSteamLauncherInfoAsync([in] HSTRING exePath, [out] [retval] Windows.Foundation.IAsyncOperation\u003cWindows.Foundation.IReference\u003cXboxGameBarFT.SteamLauncherInfo\u003e*\u003e** operation);"
+                                                             },
+                                                             {
+                                                                 "line":  851,
+                                                                 "text":  "HRESULT GetEpicProductMapAsync([out] [retval] Windows.Foundation.IAsyncOperation\u003cWindows.Foundation.Collections.IMapView\u003cHSTRING, HSTRING\u003e*\u003e** operation);"
+                                                             },
+                                                             {
+                                                                 "line":  852,
+                                                                 "text":  "HRESULT GetEAGamesAsync([out] [retval] Windows.Foundation.IAsyncOperation\u003cWindows.Foundation.Collections.IVectorView\u003cXboxGameBarFT.EAGameInfo\u003e*\u003e** operation);"
+                                                             }
+                                                         ]
+                        },
+    "private_sdk":  {
+                        "widget_host":  [
+                                            {
+                                                "line":  50,
+                                                "text":  "interface IXboxGameBarWidgetHost;"
+                                            },
+                                            {
+                                                "line":  52,
+                                                "text":  "interface IXboxGameBarWidgetHost2;"
+                                            },
+                                            {
+                                                "line":  54,
+                                                "text":  "interface IXboxGameBarWidgetHost3;"
+                                            },
+                                            {
+                                                "line":  56,
+                                                "text":  "interface IXboxGameBarWidgetHost4;"
+                                            },
+                                            {
+                                                "line":  58,
+                                                "text":  "interface IXboxGameBarWidgetHost5;"
+                                            },
+                                            {
+                                                "line":  60,
+                                                "text":  "interface IXboxGameBarWidgetHost6;"
+                                            },
+                                            {
+                                                "line":  62,
+                                                "text":  "interface IXboxGameBarWidgetHost7;"
+                                            },
+                                            {
+                                                "line":  64,
+                                                "text":  "interface IXboxGameBarWidgetHost8;"
+                                            },
+                                            {
+                                                "line":  66,
+                                                "text":  "interface IXboxGameBarWidgetHost9;"
+                                            },
+                                            {
+                                                "line":  234,
+                                                "text":  "interface IXboxGameBarWidgetHost : IInspectable"
+                                            },
+                                            {
+                                                "line":  241,
+                                                "text":  "HRESULT GetGameBarDisplayMode([out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarDisplayMode* result);"
+                                            },
+                                            {
+                                                "line":  252,
+                                                "text":  "HRESULT GetWindowState([out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetWindowState* result);"
+                                            },
+                                            {
+                                                "line":  267,
+                                                "text":  "interface IXboxGameBarWidgetHost2 : IInspectable"
+                                            },
+                                            {
+                                                "line":  274,
+                                                "text":  "interface IXboxGameBarWidgetHost3 : IInspectable"
+                                            },
+                                            {
+                                                "line":  281,
+                                                "text":  "interface IXboxGameBarWidgetHost4 : IInspectable"
+                                            },
+                                            {
+                                                "line":  288,
+                                                "text":  "interface IXboxGameBarWidgetHost5 : IInspectable"
+                                            },
+                                            {
+                                                "line":  295,
+                                                "text":  "interface IXboxGameBarWidgetHost6 : IInspectable"
+                                            },
+                                            {
+                                                "line":  298,
+                                                "text":  "HRESULT GetAppTargetHost([out] [retval] Microsoft.Gaming.XboxGameBar.Private.IXboxGameBarAppTargetHost** result);"
+                                            },
+                                            {
+                                                "line":  301,
+                                                "text":  "HRESULT GetWindowBounds([out] [retval] Windows.Foundation.Rect* result);"
+                                            },
+                                            {
+                                                "line":  308,
+                                                "text":  "interface IXboxGameBarWidgetHost7 : IInspectable"
+                                            },
+                                            {
+                                                "line":  315,
+                                                "text":  "interface IXboxGameBarWidgetHost8 : IInspectable"
+                                            },
+                                            {
+                                                "line":  323,
+                                                "text":  "interface IXboxGameBarWidgetHost9 : IInspectable"
+                                            },
+                                            {
+                                                "line":  365,
+                                                "text":  "HRESULT SetGameBarDisplayMode([in] Microsoft.Gaming.XboxGameBar.XboxGameBarDisplayMode value);"
+                                            },
+                                            {
+                                                "line":  370,
+                                                "text":  "HRESULT SetWindowState([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetWindowState value);"
+                                            },
+                                            {
+                                                "line":  371,
+                                                "text":  "HRESULT WaitForCompositionTargetRendered([out] [retval] Windows.Foundation.IAsyncAction** operation);"
+                                            },
+                                            {
+                                                "line":  394,
+                                                "text":  "HRESULT SetWindowBounds([in] Windows.Foundation.Rect value);"
+                                            }
+                                        ],
+                        "widget_private":  [
+                                               {
+                                                   "line":  72,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate;"
+                                               },
+                                               {
+                                                   "line":  74,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate2;"
+                                               },
+                                               {
+                                                   "line":  76,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate3;"
+                                               },
+                                               {
+                                                   "line":  78,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate4;"
+                                               },
+                                               {
+                                                   "line":  80,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate5;"
+                                               },
+                                               {
+                                                   "line":  82,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate6;"
+                                               },
+                                               {
+                                                   "line":  358,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate : IInspectable"
+                                               },
+                                               {
+                                                   "line":  364,
+                                                   "text":  "HRESULT SetClickThroughEnabled([in] boolean value);"
+                                               },
+                                               {
+                                                   "line":  366,
+                                                   "text":  "HRESULT SetInputDelegation([in] UINT32 pid, [in] boolean enable, [in] Windows.UI.Xaml.Input.FocusNavigationDirection focusNavigationDirection);"
+                                               },
+                                               {
+                                                   "line":  369,
+                                                   "text":  "HRESULT SetRequestedTheme([in] Windows.UI.Xaml.ElementTheme value);"
+                                               },
+                                               {
+                                                   "line":  376,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate2 : IInspectable"
+                                               },
+                                               {
+                                                   "line":  378,
+                                                   "text":  "HRESULT SetRequestedOpacity([in] DOUBLE value);"
+                                               },
+                                               {
+                                                   "line":  379,
+                                                   "text":  "HRESULT EnableInputDelegation([in] UINT32 pid, [in] boolean restoreFocus, [in] Windows.UI.Xaml.Input.FocusNavigationDirection focusNavigationDirection);"
+                                               },
+                                               {
+                                                   "line":  380,
+                                                   "text":  "HRESULT DisableInputDelegation();"
+                                               },
+                                               {
+                                                   "line":  385,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate3 : IInspectable"
+                                               },
+                                               {
+                                                   "line":  392,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate4 : IInspectable"
+                                               },
+                                               {
+                                                   "line":  399,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate5 : IInspectable"
+                                               },
+                                               {
+                                                   "line":  406,
+                                                   "text":  "interface IXboxGameBarWidgetPrivate6 : IInspectable"
+                                               },
+                                               {
+                                                   "line":  408,
+                                                   "text":  "HRESULT RaiseBackButtonClickedEvent();"
+                                               }
+                                           ]
+                    },
+    "public_sdk":  {
+                       "widget":  [
+                                      {
+                                          "line":  46,
+                                          "text":  "interface IXboxGameBarWidget;"
+                                      },
+                                      {
+                                          "line":  48,
+                                          "text":  "interface IXboxGameBarWidgetActivatedEventArgs;"
+                                      },
+                                      {
+                                          "line":  50,
+                                          "text":  "interface IXboxGameBarWidgetActivity;"
+                                      },
+                                      {
+                                          "line":  52,
+                                          "text":  "interface IXboxGameBarWidgetActivityFactory;"
+                                      },
+                                      {
+                                          "line":  54,
+                                          "text":  "interface IXboxGameBarWidgetActivityStatics;"
+                                      },
+                                      {
+                                          "line":  56,
+                                          "text":  "interface IXboxGameBarWidgetCloseRequestedEventArgs;"
+                                      },
+                                      {
+                                          "line":  58,
+                                          "text":  "interface IXboxGameBarWidgetControl;"
+                                      },
+                                      {
+                                          "line":  60,
+                                          "text":  "interface IXboxGameBarWidgetControlFactory;"
+                                      },
+                                      {
+                                          "line":  62,
+                                          "text":  "interface IXboxGameBarWidgetFactory;"
+                                      },
+                                      {
+                                          "line":  64,
+                                          "text":  "interface IXboxGameBarWidgetNotification;"
+                                      },
+                                      {
+                                          "line":  66,
+                                          "text":  "interface IXboxGameBarWidgetNotificationBuilder;"
+                                      },
+                                      {
+                                          "line":  68,
+                                          "text":  "interface IXboxGameBarWidgetNotificationBuilderFactory;"
+                                      },
+                                      {
+                                          "line":  70,
+                                          "text":  "interface IXboxGameBarWidgetNotificationManager;"
+                                      },
+                                      {
+                                          "line":  72,
+                                          "text":  "interface IXboxGameBarWidgetNotificationManagerFactory;"
+                                      },
+                                      {
+                                          "line":  80,
+                                          "text":  "runtimeclass XboxGameBarWidget;"
+                                      },
+                                      {
+                                          "line":  82,
+                                          "text":  "runtimeclass XboxGameBarWidgetActivatedEventArgs;"
+                                      },
+                                      {
+                                          "line":  84,
+                                          "text":  "runtimeclass XboxGameBarWidgetActivity;"
+                                      },
+                                      {
+                                          "line":  86,
+                                          "text":  "runtimeclass XboxGameBarWidgetCloseRequestedEventArgs;"
+                                      },
+                                      {
+                                          "line":  88,
+                                          "text":  "runtimeclass XboxGameBarWidgetControl;"
+                                      },
+                                      {
+                                          "line":  90,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotification;"
+                                      },
+                                      {
+                                          "line":  92,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotificationBuilder;"
+                                      },
+                                      {
+                                          "line":  94,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotificationManager;"
+                                      },
+                                      {
+                                          "line":  165,
+                                          "text":  "SuppressedForFullScreenExclusive = 3,"
+                                      },
+                                      {
+                                          "line":  236,
+                                          "text":  "interface IXboxGameBarWidget : IInspectable"
+                                      },
+                                      {
+                                          "line":  246,
+                                          "text":  "[eventadd] HRESULT GameBarDisplayModeChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarWidget*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                      },
+                                      {
+                                          "line":  247,
+                                          "text":  "[eventremove] HRESULT GameBarDisplayModeChanged([in] EventRegistrationToken token);"
+                                      },
+                                      {
+                                          "line":  251,
+                                          "text":  "[propget] HRESULT RequestedOpacity([out] [retval] DOUBLE* value);"
+                                      },
+                                      {
+                                          "line":  252,
+                                          "text":  "[eventadd] HRESULT RequestedOpacityChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarWidget*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                      },
+                                      {
+                                          "line":  253,
+                                          "text":  "[eventremove] HRESULT RequestedOpacityChanged([in] EventRegistrationToken token);"
+                                      },
+                                      {
+                                          "line":  265,
+                                          "text":  "[eventadd] HRESULT WindowStateChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarWidget*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                      },
+                                      {
+                                          "line":  266,
+                                          "text":  "[eventremove] HRESULT WindowStateChanged([in] EventRegistrationToken token);"
+                                      },
+                                      {
+                                          "line":  268,
+                                          "text":  "[eventadd] HRESULT WindowBoundsChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarWidget*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                      },
+                                      {
+                                          "line":  269,
+                                          "text":  "[eventremove] HRESULT WindowBoundsChanged([in] EventRegistrationToken token);"
+                                      },
+                                      {
+                                          "line":  275,
+                                          "text":  "[propget] HRESULT HorizontalResizeSupported([out] [retval] boolean* value);"
+                                      },
+                                      {
+                                          "line":  276,
+                                          "text":  "[propput] HRESULT HorizontalResizeSupported([in] boolean value);"
+                                      },
+                                      {
+                                          "line":  277,
+                                          "text":  "[propget] HRESULT MaxWindowSize([out] [retval] Windows.Foundation.Size* value);"
+                                      },
+                                      {
+                                          "line":  278,
+                                          "text":  "[propput] HRESULT MaxWindowSize([in] Windows.Foundation.Size value);"
+                                      },
+                                      {
+                                          "line":  279,
+                                          "text":  "[propget] HRESULT MinWindowSize([out] [retval] Windows.Foundation.Size* value);"
+                                      },
+                                      {
+                                          "line":  280,
+                                          "text":  "[propput] HRESULT MinWindowSize([in] Windows.Foundation.Size value);"
+                                      },
+                                      {
+                                          "line":  306,
+                                          "text":  "interface IXboxGameBarWidgetActivatedEventArgs : IInspectable"
+                                      },
+                                      {
+                                          "line":  315,
+                                          "text":  "interface IXboxGameBarWidgetActivity : IInspectable"
+                                      },
+                                      {
+                                          "line":  325,
+                                          "text":  "interface IXboxGameBarWidgetActivityFactory : IInspectable"
+                                      },
+                                      {
+                                          "line":  333,
+                                          "text":  "interface IXboxGameBarWidgetActivityStatics : IInspectable"
+                                      },
+                                      {
+                                          "line":  342,
+                                          "text":  "interface IXboxGameBarWidgetCloseRequestedEventArgs : IInspectable"
+                                      },
+                                      {
+                                          "line":  352,
+                                          "text":  "interface IXboxGameBarWidgetControl : IInspectable"
+                                      },
+                                      {
+                                          "line":  372,
+                                          "text":  "interface IXboxGameBarWidgetControlFactory : IInspectable"
+                                      },
+                                      {
+                                          "line":  380,
+                                          "text":  "interface IXboxGameBarWidgetFactory : IInspectable"
+                                      },
+                                      {
+                                          "line":  388,
+                                          "text":  "interface IXboxGameBarWidgetNotification : IInspectable"
+                                      },
+                                      {
+                                          "line":  395,
+                                          "text":  "interface IXboxGameBarWidgetNotificationBuilder : IInspectable"
+                                      },
+                                      {
+                                          "line":  412,
+                                          "text":  "interface IXboxGameBarWidgetNotificationBuilderFactory : IInspectable"
+                                      },
+                                      {
+                                          "line":  420,
+                                          "text":  "interface IXboxGameBarWidgetNotificationManager : IInspectable"
+                                      },
+                                      {
+                                          "line":  432,
+                                          "text":  "interface IXboxGameBarWidgetNotificationManagerFactory : IInspectable"
+                                      },
+                                      {
+                                          "line":  466,
+                                          "text":  "runtimeclass XboxGameBarWidget"
+                                      },
+                                      {
+                                          "line":  473,
+                                          "text":  "runtimeclass XboxGameBarWidgetActivatedEventArgs"
+                                      },
+                                      {
+                                          "line":  487,
+                                          "text":  "runtimeclass XboxGameBarWidgetActivity"
+                                      },
+                                      {
+                                          "line":  494,
+                                          "text":  "runtimeclass XboxGameBarWidgetCloseRequestedEventArgs"
+                                      },
+                                      {
+                                          "line":  503,
+                                          "text":  "runtimeclass XboxGameBarWidgetControl"
+                                      },
+                                      {
+                                          "line":  510,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotification"
+                                      },
+                                      {
+                                          "line":  519,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotificationBuilder"
+                                      },
+                                      {
+                                          "line":  528,
+                                          "text":  "runtimeclass XboxGameBarWidgetNotificationManager"
+                                      }
+                                  ],
+                       "app_target":  [
+                                          {
+                                              "line":  38,
+                                              "text":  "interface IXboxGameBarAppTargetTracker;"
+                                          },
+                                          {
+                                              "line":  40,
+                                              "text":  "interface IXboxGameBarAppTargetTrackerFactory;"
+                                          },
+                                          {
+                                              "line":  76,
+                                              "text":  "runtimeclass XboxGameBarAppTargetTracker;"
+                                          },
+                                          {
+                                              "line":  197,
+                                              "text":  "interface IXboxGameBarAppTargetTracker : IInspectable"
+                                          },
+                                          {
+                                              "line":  199,
+                                              "text":  "HRESULT GetTarget([out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarAppTarget** result);"
+                                          },
+                                          {
+                                              "line":  201,
+                                              "text":  "[eventadd] HRESULT SettingChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarAppTargetTracker*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                          },
+                                          {
+                                              "line":  202,
+                                              "text":  "[eventremove] HRESULT SettingChanged([in] EventRegistrationToken token);"
+                                          },
+                                          {
+                                              "line":  203,
+                                              "text":  "[eventadd] HRESULT TargetChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarAppTargetTracker*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                          },
+                                          {
+                                              "line":  204,
+                                              "text":  "[eventremove] HRESULT TargetChanged([in] EventRegistrationToken token);"
+                                          },
+                                          {
+                                              "line":  210,
+                                              "text":  "interface IXboxGameBarAppTargetTrackerFactory : IInspectable"
+                                          },
+                                          {
+                                              "line":  212,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget* widget, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarAppTargetTracker** value);"
+                                          },
+                                          {
+                                              "line":  230,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget* widget, [in] Microsoft.Gaming.XboxGameBar.ForegroundWorkHandler* handler, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarForegroundWorker** value);"
+                                          },
+                                          {
+                                              "line":  327,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget* widget, [in] HSTRING activityId, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetActivity** value);"
+                                          },
+                                          {
+                                              "line":  374,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget* widget, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetControl** value);"
+                                          },
+                                          {
+                                              "line":  382,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetActivatedEventArgs* args, [in] Windows.UI.Core.CoreWindow* coreWindow, [in] Windows.UI.Xaml.Controls.Frame* frame, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget** value);"
+                                          },
+                                          {
+                                              "line":  414,
+                                              "text":  "HRESULT CreateInstance([in] HSTRING title, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationBuilder** value);"
+                                          },
+                                          {
+                                              "line":  425,
+                                              "text":  "[eventadd] HRESULT SettingChanged([in] Windows.Foundation.TypedEventHandler\u003cMicrosoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationManager*, IInspectable*\u003e* handler, [out] [retval] EventRegistrationToken* token);"
+                                          },
+                                          {
+                                              "line":  426,
+                                              "text":  "[eventremove] HRESULT SettingChanged([in] EventRegistrationToken token);"
+                                          },
+                                          {
+                                              "line":  434,
+                                              "text":  "HRESULT CreateInstance([in] Microsoft.Gaming.XboxGameBar.XboxGameBarWidget* widget, [out] [retval] Microsoft.Gaming.XboxGameBar.XboxGameBarWidgetNotificationManager** value);"
+                                          },
+                                          {
+                                              "line":  448,
+                                              "text":  "runtimeclass XboxGameBarAppTargetTracker"
+                                          }
+                                      ]
+                   },
+    "gamebar_package":  {
+                            "broker":  {
+
+                                       },
+                            "input_delegation":  [
+                                                     {
+                                                         "line":  73,
+                                                         "text":  "typedef enum InputDelegationManagerCommandKind InputDelegationManagerCommandKind;"
+                                                     },
+                                                     {
+                                                         "line":  1479,
+                                                         "text":  "enum InputDelegationManagerCommandKind"
+                                                     }
+                                                 ],
+                            "hosted_view":  [
+                                                {
+                                                    "line":  1866,
+                                                    "text":  "HRESULT GetDesiredInitialHostedViewSize([in] Windows.Foundation.Size canvasSize, [out] [retval] Windows.Foundation.Size* __returnValue);"
+                                                },
+                                                {
+                                                    "line":  4883,
+                                                    "text":  "HRESULT GetDesiredInitialHostedViewSize([in] Windows.Foundation.Size canvasSize, [out] [retval] Windows.Foundation.Size* __returnValue);"
+                                                },
+                                                {
+                                                    "line":  5154,
+                                                    "text":  "[propget] HRESULT HostedView([out] [retval] Windows.UI.Xaml.Controls.UserControl** __returnValue);"
+                                                }
+                                            ],
+                            "click_through":  [
+                                                  {
+                                                      "line":  3429,
+                                                      "text":  "[propget] HRESULT IsClickThroughEnabled([out] [retval] boolean* __returnValue);"
+                                                  },
+                                                  {
+                                                      "line":  3445,
+                                                      "text":  "HRESULT ClickThroughToggleClicked();"
+                                                  },
+                                                  {
+                                                      "line":  4715,
+                                                      "text":  "[propget] HRESULT ClickThroughWidgetTransparency([out] [retval] DOUBLE* __returnValue);"
+                                                  },
+                                                  {
+                                                      "line":  4716,
+                                                      "text":  "[propput] HRESULT ClickThroughWidgetTransparency([in] DOUBLE __param0);"
+                                                  },
+                                                  {
+                                                      "line":  4719,
+                                                      "text":  "[propget] HRESULT ClickThroughWidgetOpacity([out] [retval] DOUBLE* __returnValue);"
+                                                  }
+                                              ]
+                        }
+}

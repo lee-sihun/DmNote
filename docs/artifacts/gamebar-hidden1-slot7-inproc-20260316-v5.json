@@ -1,0 +1,17 @@
+[
+  {
+    "coinit_hr": "0x80010106",
+    "cocreate_hr": "0x00000000",
+    "primary": "0x21c4eeeee58",
+    "slot12": "0x7ffeeba37c80",
+    "slot12_module": "combase.dll",
+    "query_service_hr": "0x00000000",
+    "service": "0x21c4eeeed78",
+    "hidden1_qi_hr": "0x00000000",
+    "hidden1": "0x21c4eeeec28",
+    "hidden1_slot7": "0x7ffeeba37c30",
+    "hidden1_slot7_module": "combase.dll",
+    "hidden1_slot7_hr": "0x80070490",
+    "child": "0x0"
+  }
+]

@@ -1,0 +1,223 @@
+﻿{
+    "coinit_hr":  "0x00000001",
+    "factory_clsid":  "fd06603a-2bdf-4bb1-b7df-5dc68f353601",
+    "factory_iid":  "6bfba441-f863-58cf-9604-0ae9049ef42a",
+    "contexts":  [
+                     {
+                         "clsctx":  4,
+                         "co_create_instance_iunknown_hr":  "0x00000000",
+                         "co_create_instance_iunknown_nonzero":  true,
+                         "co_create_instance_factory_hr":  "0x80004002",
+                         "co_create_instance_factory_nonzero":  false,
+                         "unknown_object":  {
+                                                "label":  "IUnknownRoot",
+                                                "ptr":  "0x1AF4A63A9E0",
+                                                "vtbl":  "0x7FF840230408",
+                                                "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                            },
+                         "query_interface_inspectable_hr":  "0x00000000",
+                         "query_interface_inspectable_nonzero":  true,
+                         "inspectable_object":  {
+                                                    "label":  "IInspectable",
+                                                    "ptr":  "0x1AF4A54B688",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x80004001",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "query_interface_activation_factory_hr":  "0x00000000",
+                         "query_interface_activation_factory_nonzero":  true,
+                         "activation_factory_object":  {
+                                                           "label":  "IActivationFactory",
+                                                           "ptr":  "0x1AF4A54B588",
+                                                           "vtbl":  "0x7FF84022C3E0",
+                                                           "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                           "get_runtime_class_name_ptr":  "0x7FF8401BFD20",
+                                                           "get_runtime_class_name_hr":  "0x80004001",
+                                                           "query_interface_hr":  "0x00000000",
+                                                           "query_interface_nonzero":  true
+                                                       },
+                         "activate_instance_hr":  "0x00000000",
+                         "activate_instance_nonzero":  true,
+                         "activated_instance":  {
+                                                    "label":  "ActivatedGbftFactory",
+                                                    "ptr":  "0x1AF4A54B488",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x00000000",
+                                                    "runtime_class_name":  "XboxGameBarFT.GbftFactory",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "activated_query_interface_factory_hr":  "0x80073D54",
+                         "activated_query_interface_factory_nonzero":  false,
+                         "query_interface_factory_hr":  "0x80004002",
+                         "query_interface_factory_nonzero":  false
+                     },
+                     {
+                         "clsctx":  5,
+                         "co_create_instance_iunknown_hr":  "0x00000000",
+                         "co_create_instance_iunknown_nonzero":  true,
+                         "co_create_instance_factory_hr":  "0x80004002",
+                         "co_create_instance_factory_nonzero":  false,
+                         "unknown_object":  {
+                                                "label":  "IUnknownRoot",
+                                                "ptr":  "0x1AF4A63A9E0",
+                                                "vtbl":  "0x7FF840230408",
+                                                "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                            },
+                         "query_interface_inspectable_hr":  "0x00000000",
+                         "query_interface_inspectable_nonzero":  true,
+                         "inspectable_object":  {
+                                                    "label":  "IInspectable",
+                                                    "ptr":  "0x1AF4A54B808",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x80004001",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "query_interface_activation_factory_hr":  "0x00000000",
+                         "query_interface_activation_factory_nonzero":  true,
+                         "activation_factory_object":  {
+                                                           "label":  "IActivationFactory",
+                                                           "ptr":  "0x1AF4A54B608",
+                                                           "vtbl":  "0x7FF84022C3E0",
+                                                           "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                           "get_runtime_class_name_ptr":  "0x7FF8401BFD20",
+                                                           "get_runtime_class_name_hr":  "0x80004001",
+                                                           "query_interface_hr":  "0x00000000",
+                                                           "query_interface_nonzero":  true
+                                                       },
+                         "activate_instance_hr":  "0x00000000",
+                         "activate_instance_nonzero":  true,
+                         "activated_instance":  {
+                                                    "label":  "ActivatedGbftFactory",
+                                                    "ptr":  "0x1AF4A51EB08",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x00000000",
+                                                    "runtime_class_name":  "XboxGameBarFT.GbftFactory",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "activated_query_interface_factory_hr":  "0x80073D54",
+                         "activated_query_interface_factory_nonzero":  false,
+                         "query_interface_factory_hr":  "0x80004002",
+                         "query_interface_factory_nonzero":  false
+                     },
+                     {
+                         "clsctx":  20,
+                         "co_create_instance_iunknown_hr":  "0x00000000",
+                         "co_create_instance_iunknown_nonzero":  true,
+                         "co_create_instance_factory_hr":  "0x80004002",
+                         "co_create_instance_factory_nonzero":  false,
+                         "unknown_object":  {
+                                                "label":  "IUnknownRoot",
+                                                "ptr":  "0x1AF4A63A640",
+                                                "vtbl":  "0x7FF840230408",
+                                                "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                            },
+                         "query_interface_inspectable_hr":  "0x00000000",
+                         "query_interface_inspectable_nonzero":  true,
+                         "inspectable_object":  {
+                                                    "label":  "IInspectable",
+                                                    "ptr":  "0x1AF4A51E808",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x80004001",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "query_interface_activation_factory_hr":  "0x00000000",
+                         "query_interface_activation_factory_nonzero":  true,
+                         "activation_factory_object":  {
+                                                           "label":  "IActivationFactory",
+                                                           "ptr":  "0x1AF4A51E888",
+                                                           "vtbl":  "0x7FF84022C3E0",
+                                                           "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                           "get_runtime_class_name_ptr":  "0x7FF8401BFD20",
+                                                           "get_runtime_class_name_hr":  "0x80004001",
+                                                           "query_interface_hr":  "0x00000000",
+                                                           "query_interface_nonzero":  true
+                                                       },
+                         "activate_instance_hr":  "0x00000000",
+                         "activate_instance_nonzero":  true,
+                         "activated_instance":  {
+                                                    "label":  "ActivatedGbftFactory",
+                                                    "ptr":  "0x1AF4A51EA08",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x00000000",
+                                                    "runtime_class_name":  "XboxGameBarFT.GbftFactory",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "activated_query_interface_factory_hr":  "0x80073D54",
+                         "activated_query_interface_factory_nonzero":  false,
+                         "query_interface_factory_hr":  "0x80004002",
+                         "query_interface_factory_nonzero":  false
+                     },
+                     {
+                         "clsctx":  21,
+                         "co_create_instance_iunknown_hr":  "0x00000000",
+                         "co_create_instance_iunknown_nonzero":  true,
+                         "co_create_instance_factory_hr":  "0x80004002",
+                         "co_create_instance_factory_nonzero":  false,
+                         "unknown_object":  {
+                                                "label":  "IUnknownRoot",
+                                                "ptr":  "0x1AF4A63A640",
+                                                "vtbl":  "0x7FF840230408",
+                                                "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                            },
+                         "query_interface_inspectable_hr":  "0x00000000",
+                         "query_interface_inspectable_nonzero":  true,
+                         "inspectable_object":  {
+                                                    "label":  "IInspectable",
+                                                    "ptr":  "0x1AF4A51F388",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x80004001",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "query_interface_activation_factory_hr":  "0x00000000",
+                         "query_interface_activation_factory_nonzero":  true,
+                         "activation_factory_object":  {
+                                                           "label":  "IActivationFactory",
+                                                           "ptr":  "0x1AF4A51E508",
+                                                           "vtbl":  "0x7FF84022C3E0",
+                                                           "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                           "get_runtime_class_name_ptr":  "0x7FF8401BFD20",
+                                                           "get_runtime_class_name_hr":  "0x80004001",
+                                                           "query_interface_hr":  "0x00000000",
+                                                           "query_interface_nonzero":  true
+                                                       },
+                         "activate_instance_hr":  "0x00000000",
+                         "activate_instance_nonzero":  true,
+                         "activated_instance":  {
+                                                    "label":  "ActivatedGbftFactory",
+                                                    "ptr":  "0x1AF4A51EB88",
+                                                    "vtbl":  "0x7FF8402283E0",
+                                                    "module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                                    "get_runtime_class_name_ptr":  "0x7FF8401E7C00",
+                                                    "get_runtime_class_name_hr":  "0x00000000",
+                                                    "runtime_class_name":  "XboxGameBarFT.GbftFactory",
+                                                    "query_interface_hr":  "0x00000000",
+                                                    "query_interface_nonzero":  true
+                                                },
+                         "activated_query_interface_factory_hr":  "0x80073D54",
+                         "activated_query_interface_factory_nonzero":  false,
+                         "query_interface_factory_hr":  "0x80004002",
+                         "query_interface_factory_nonzero":  false
+                     }
+                 ]
+}

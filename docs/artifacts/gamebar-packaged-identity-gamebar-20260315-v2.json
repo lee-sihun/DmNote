@@ -1,0 +1,1086 @@
+{
+  "capturedAt": "2026-03-15T20:31:26",
+  "processName": "GameBar.exe",
+  "result": {
+    "processName": null,
+    "processId": 15536,
+    "packageFullName": {
+      "hr": "0x00000000",
+      "value": "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe"
+    },
+    "roInitializeHr": "0x00000001",
+    "winrt": [
+      {
+        "className": "GameBar.CuiWidgetAdapter",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.WidgetControlHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.ForegroundWorkerHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.AppTargetHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "GameBar.NotificationHost",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "Microsoft.Windows.Shell.GamingOverlayExperienceManager",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "Windows.Internal.GamingOverlay.GameBarWindowControl",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.GbftFactory",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.AppTargetManagerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.WindowManagerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.InputFocusTrackerFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      },
+      {
+        "className": "XboxGameBarFT.GameConfigStoreFT",
+        "windowsCreateStringHr": "0x00000000",
+        "roGetActivationFactoryHr": "0x80040154",
+        "factoryPointer": "0x0",
+        "roActivateInstanceHr": "0x80040154",
+        "roActivateInstancePointer": "0x0"
+      }
+    ],
+    "ftCom": [
+      {
+        "clsctx": 4,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x21a7f01d720",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x21a8021e4a8",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x21a8021f0e8",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x21a8021eeb8",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x1718",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be65a8",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be65a8",
+            "probe": {
+              "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x21a8021fe08",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a8021fe08",
+            "probe": {
+              "desktopStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "desktopExStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00000000"
+              },
+              "shellStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "shellExStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00200080"
+              }
+            }
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be5188",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be5188",
+            "probe": {
+              "desktopEntry": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "hr": "0x00000000",
+                "exists": false
+              },
+              "shellEntry": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "hr": "0x00000000",
+                "exists": false
+              }
+            }
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78bdd858",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78bdd858",
+            "probe": {
+              "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          }
+        }
+      },
+      {
+        "clsctx": 5,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x21a7f01eeb0",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x21a80220c08",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x21a80220b98",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x21a80220968",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x171C",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be65a8",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be65a8",
+            "probe": {
+              "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x21a80221998",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a80221998",
+            "probe": {
+              "desktopStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "desktopExStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00000000"
+              },
+              "shellStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "shellExStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00200080"
+              }
+            }
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be5188",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be5188",
+            "probe": {
+              "desktopEntry": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "hr": "0x00000000",
+                "exists": false
+              },
+              "shellEntry": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "hr": "\u001cS\u0000\u0000\u0000\u0000\u0000\u000000\u0000actor£\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000ÿ~\u001a\u0002\u000b\u0000¸\u0000è~\u001a\u0002\u0000\u0000\u0019\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u001cS\u0002\u0000\u0000ÀQ#\u001a\u0002\u000b\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000p-#\u001a\u0002\u000b\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000`«!\u001a\u0002\u000b\u0000\u0000è~\u001a\u0002\u0000\u0000 ^#\u001a\u0002\u000b\u00002\u0000\u0000\u0000\u0000\u0000\u0000\u0000 Z#\u001a\u0002\u000b\u00008\u0001è~\u001a\u0002\u0000\u0000°-#\u001a\u0002\u000b\u0000\u0000\u0000\u0000\u0000\u0003\u0000\u0000\u0000 S#\u001a\u0002\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000íNX`C\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000Ði#\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00000x21a80221998\u0000\u0000\u0000\u0003\u0000\u0000\u0000yteArray (/s3\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0007\u0000\u0000\u0000X\u0001è~\u0000\u0000\u0000\u0000  \u0000\u0000\u0000\u00000x1000c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00003\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\n\u0000\u0000\u0000ø\u0000è~\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00000x00000000\u0000~\u001a\u0002\u0000\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000@¯!\u001a\u0002\u0000\u0000P#\u001a\u0002\u0000\u0000 \u0000\u0000\u0000\u0000\u0000\u0000\u0000B\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000\u0000\u0000\u0000\u001c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u001c\u0000\u0000\u0000\u00000x21a80223918\u0000\u0000\u0000\u0004\u0000\u0000\u001cW\u0002\u0000\u0000\u0000\u0000\u0000\u001cV\u0002\u0000\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000Ð#\u001a\u0002\u0000\u0000@#\u001a\u0002\u0000\u0000 \u0000\u0000\u0000\u0000\u0000\u0000\u00002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\n\u0000\u0000\u0000¸\u0000è~\u0000\u0000\u0000\u0000f#\u0000\u0000\u0000\u00000x00000000\u0000\u0000\u0000\u0000\u0000\u0000C\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+                "exists": false
+              }
+            }
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78bdd858",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78bdd858",
+            "probe": {
+              "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          }
+        }
+      },
+      {
+        "clsctx": 20,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x21a7f01d550",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x21a80221998",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x21a802216f8",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x21a802215a8",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0xEA8",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be65a8",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be65a8",
+            "probe": {
+              "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x21a80222b88",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a80222b88",
+            "probe": {
+              "desktopStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "desktopExStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00000000"
+              },
+              "shellStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "shellExStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00200080"
+              }
+            }
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be5188",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be5188",
+            "probe": {
+              "desktopEntry": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "hr": "0x00000000",
+                "exists": false
+              },
+              "shellEntry": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "hr": "0x00000000",
+                "exists": false
+              }
+            }
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78bdd858",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78bdd858",
+            "probe": {
+              "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          }
+        }
+      },
+      {
+        "clsctx": 21,
+        "coCreateIUnknownHr": "0x00000000",
+        "coCreateIUnknownPointer": "0x21a7f0209e0",
+        "queryInterfaceActivationFactoryHr": "0x00000000",
+        "queryInterfaceActivationFactoryPointer": "0x21a80223758",
+        "activateInstanceHr": "0x00000000",
+        "activateInstancePointer": "0x21a802239f8",
+        "runtimeClassHr": "0x00000000",
+        "runtimeClass": "XboxGameBarFT.GbftFactory",
+        "queryInterfaceIGbftFactoryHr": "0x00000000",
+        "queryInterfaceIGbftFactoryPointer": "0x21a80223058",
+        "gbftFactory": {
+          "processHandleHr": "0x00000000",
+          "processHandleLow": "0x16D8",
+          "appTargetManager": {
+            "label": "IAppTargetManagerFT",
+            "slotIndex": 7,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be65a8",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be65a8",
+            "probe": {
+              "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          },
+          "windowManager": {
+            "label": "IWindowManagerFT",
+            "slotIndex": 11,
+            "createHr": "0x00000000",
+            "pointer": "0x21a80223918",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a80223918",
+            "probe": {
+              "desktopStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "desktopExStyle": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00000000"
+              },
+              "shellStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -16,
+                "hr": "0x00000000",
+                "value": "0x96000000"
+              },
+              "shellExStyle": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "index": -20,
+                "hr": "0x00000000",
+                "value": "0x00200080"
+              }
+            }
+          },
+          "gameConfigStore": {
+            "label": "IGameConfigStoreFT",
+            "slotIndex": 16,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78be5188",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78be5188",
+            "probe": {
+              "desktopEntry": {
+                "target": "desktop",
+                "hwnd": "0x1000c",
+                "hr": "0x00000000",
+                "exists": false
+              },
+              "shellEntry": {
+                "target": "shell",
+                "hwnd": "0x203c4",
+                "hr": "0x00000000",
+                "exists": false
+              }
+            }
+          },
+          "inputFocusTracker": {
+            "label": "IInputFocusTrackerFT",
+            "slotIndex": 25,
+            "createHr": "0x00000000",
+            "pointer": "0x21a78bdd858",
+            "runtimeClassHr": "0x00000000",
+            "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+            "queryInterfaceHr": "0x00000000",
+            "queryInterfacePointer": "0x21a78bdd858",
+            "probe": {
+              "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "messages": [
+    {
+      "type": "send",
+      "payload": {
+        "type": "result",
+        "payload": {
+          "processName": null,
+          "processId": 15536,
+          "packageFullName": {
+            "hr": "0x00000000",
+            "value": "Microsoft.XboxGamingOverlay_7.325.10021.0_x64__8wekyb3d8bbwe"
+          },
+          "roInitializeHr": "0x00000001",
+          "winrt": [
+            {
+              "className": "GameBar.CuiWidgetAdapter",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.WidgetControlHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.ForegroundWorkerHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.AppTargetHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "GameBar.NotificationHost",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "Microsoft.Windows.Shell.GamingOverlayExperienceManager",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "Windows.Internal.GamingOverlay.GameBarWindowControl",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.GbftFactory",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.AppTargetManagerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.WindowManagerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.InputFocusTrackerFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            },
+            {
+              "className": "XboxGameBarFT.GameConfigStoreFT",
+              "windowsCreateStringHr": "0x00000000",
+              "roGetActivationFactoryHr": "0x80040154",
+              "factoryPointer": "0x0",
+              "roActivateInstanceHr": "0x80040154",
+              "roActivateInstancePointer": "0x0"
+            }
+          ],
+          "ftCom": [
+            {
+              "clsctx": 4,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x21a7f01d720",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x21a8021e4a8",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x21a8021f0e8",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x21a8021eeb8",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x1718",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be65a8",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be65a8",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a8021fe08",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a8021fe08",
+                  "probe": {
+                    "desktopStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "desktopExStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00000000"
+                    },
+                    "shellStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "shellExStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00200080"
+                    }
+                  }
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be5188",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be5188",
+                  "probe": {
+                    "desktopEntry": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "hr": "0x00000000",
+                      "exists": false
+                    },
+                    "shellEntry": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "hr": "0x00000000",
+                      "exists": false
+                    }
+                  }
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78bdd858",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78bdd858",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                }
+              }
+            },
+            {
+              "clsctx": 5,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x21a7f01eeb0",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x21a80220c08",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x21a80220b98",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x21a80220968",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x171C",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be65a8",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be65a8",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a80221998",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a80221998",
+                  "probe": {
+                    "desktopStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "desktopExStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00000000"
+                    },
+                    "shellStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "shellExStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00200080"
+                    }
+                  }
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be5188",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be5188",
+                  "probe": {
+                    "desktopEntry": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "hr": "0x00000000",
+                      "exists": false
+                    },
+                    "shellEntry": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "hr": "\u001cS\u0000\u0000\u0000\u0000\u0000\u000000\u0000actor£\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000ÿ~\u001a\u0002\u000b\u0000¸\u0000è~\u001a\u0002\u0000\u0000\u0019\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0000\u001cS\u0002\u0000\u0000ÀQ#\u001a\u0002\u000b\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000p-#\u001a\u0002\u000b\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000`«!\u001a\u0002\u000b\u0000\u0000è~\u001a\u0002\u0000\u0000 ^#\u001a\u0002\u000b\u00002\u0000\u0000\u0000\u0000\u0000\u0000\u0000 Z#\u001a\u0002\u000b\u00008\u0001è~\u001a\u0002\u0000\u0000°-#\u001a\u0002\u000b\u0000\u0000\u0000\u0000\u0000\u0003\u0000\u0000\u0000 S#\u001a\u0002\b\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000íNX`C\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000Ði#\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00000x21a80221998\u0000\u0000\u0000\u0003\u0000\u0000\u0000yteArray (/s3\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0007\u0000\u0000\u0000X\u0001è~\u0000\u0000\u0000\u0000  \u0000\u0000\u0000\u00000x1000c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00003\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\n\u0000\u0000\u0000ø\u0000è~\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00000x00000000\u0000~\u001a\u0002\u0000\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000@¯!\u001a\u0002\u0000\u0000P#\u001a\u0002\u0000\u0000 \u0000\u0000\u0000\u0000\u0000\u0000\u0000B\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000\u0000\u0000\u0000\u001c\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u001c\u0000\u0000\u0000\u00000x21a80223918\u0000\u0000\u0000\u0004\u0000\u0000\u001cW\u0002\u0000\u0000\u0000\u0000\u0000\u001cV\u0002\u0000\u0000!\u0000\u0000\u0000\u0000\u0000\u0000\u0000Ð#\u001a\u0002\u0000\u0000@#\u001a\u0002\u0000\u0000 \u0000\u0000\u0000\u0000\u0000\u0000\u00002\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\n\u0000\u0000\u0000¸\u0000è~\u0000\u0000\u0000\u0000f#\u0000\u0000\u0000\u00000x00000000\u0000\u0000\u0000\u0000\u0000\u0000C\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0000\r\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+                      "exists": false
+                    }
+                  }
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78bdd858",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78bdd858",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                }
+              }
+            },
+            {
+              "clsctx": 20,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x21a7f01d550",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x21a80221998",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x21a802216f8",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x21a802215a8",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0xEA8",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be65a8",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be65a8",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a80222b88",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a80222b88",
+                  "probe": {
+                    "desktopStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "desktopExStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00000000"
+                    },
+                    "shellStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "shellExStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00200080"
+                    }
+                  }
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be5188",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be5188",
+                  "probe": {
+                    "desktopEntry": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "hr": "0x00000000",
+                      "exists": false
+                    },
+                    "shellEntry": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "hr": "0x00000000",
+                      "exists": false
+                    }
+                  }
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78bdd858",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78bdd858",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                }
+              }
+            },
+            {
+              "clsctx": 21,
+              "coCreateIUnknownHr": "0x00000000",
+              "coCreateIUnknownPointer": "0x21a7f0209e0",
+              "queryInterfaceActivationFactoryHr": "0x00000000",
+              "queryInterfaceActivationFactoryPointer": "0x21a80223758",
+              "activateInstanceHr": "0x00000000",
+              "activateInstancePointer": "0x21a802239f8",
+              "runtimeClassHr": "0x00000000",
+              "runtimeClass": "XboxGameBarFT.GbftFactory",
+              "queryInterfaceIGbftFactoryHr": "0x00000000",
+              "queryInterfaceIGbftFactoryPointer": "0x21a80223058",
+              "gbftFactory": {
+                "processHandleHr": "0x00000000",
+                "processHandleLow": "0x16D8",
+                "appTargetManager": {
+                  "label": "IAppTargetManagerFT",
+                  "slotIndex": 7,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be65a8",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.AppTargetManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be65a8",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0x3300000020\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:206)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeAppTargetManager (/script1.js:366)\n    at probeFtObject (/script1.js:384)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:404)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                },
+                "windowManager": {
+                  "label": "IWindowManagerFT",
+                  "slotIndex": 11,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a80223918",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.WindowManagerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a80223918",
+                  "probe": {
+                    "desktopStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "desktopExStyle": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00000000"
+                    },
+                    "shellStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -16,
+                      "hr": "0x00000000",
+                      "value": "0x96000000"
+                    },
+                    "shellExStyle": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "index": -20,
+                      "hr": "0x00000000",
+                      "value": "0x00200080"
+                    }
+                  }
+                },
+                "gameConfigStore": {
+                  "label": "IGameConfigStoreFT",
+                  "slotIndex": 16,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78be5188",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.GameConfigStoreFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78be5188",
+                  "probe": {
+                    "desktopEntry": {
+                      "target": "desktop",
+                      "hwnd": "0x1000c",
+                      "hr": "0x00000000",
+                      "exists": false
+                    },
+                    "shellEntry": {
+                      "target": "shell",
+                      "hwnd": "0x203c4",
+                      "hr": "0x00000000",
+                      "exists": false
+                    }
+                  }
+                },
+                "inputFocusTracker": {
+                  "label": "IInputFocusTrackerFT",
+                  "slotIndex": 25,
+                  "createHr": "0x00000000",
+                  "pointer": "0x21a78bdd858",
+                  "runtimeClassHr": "0x00000000",
+                  "runtimeClass": "XboxGameBarFT.InputFocusTrackerFT",
+                  "queryInterfaceHr": "0x00000000",
+                  "queryInterfacePointer": "0x21a78bdd858",
+                  "probe": {
+                    "exception": "Error: access violation accessing 0xc0474\n    at readPointer (/script1.js:28)\n    at getRuntimeClassName (/script1.js:205)\n    at inspectInspectablePointer (/script1.js:262)\n    at probeInputFocusTracker (/script1.js:344)\n    at probeFtObject (/script1.js:381)\n    at createObjectFromFactory (/script1.js:249)\n    at probeGbftFactory (/script1.js:407)\n    at probeFtComContext (/script1.js:527)\n    at <anonymous> (/script1.js:562)\n    at apply (native)\n    at <anonymous> (/frida/runtime/core.js:55)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

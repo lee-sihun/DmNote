@@ -1,0 +1,16 @@
+﻿{
+    "captured_at":  "2026-03-15 12:30:30 +09:00",
+    "ftserver_pid":  12332,
+    "launch_gamebar":  true,
+    "launch_fullscreen_probe":  true,
+    "launch_probe_before_gamebar":  true,
+    "probe_duration_seconds":  8,
+    "attach_duration_seconds":  8,
+    "log_file":  ".\\docs\\artifacts\\gamebar-running-ftserver-cdb-20260315-123016\\gamebar-running-ftserver-cdb.log",
+    "cmd_file":  ".\\docs\\artifacts\\gamebar-running-ftserver-cdb-20260315-123016\\gamebar-running-ftserver-cdb.cmds.txt",
+    "summary_file":  ".\\docs\\artifacts\\gamebar-running-ftserver-cdb-20260315-123016\\gamebar-running-ftserver-cdb-summary.json",
+    "summarize_exit_code":  0,
+    "stimuli":  [
+
+                ]
+}

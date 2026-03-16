@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "type": "context",
+      "hrCreate": 0,
+      "hrService": 0,
+      "hrHidden1": 0,
+      "hrHidden2": 0,
+      "hidden1": "0x1f78be49818",
+      "hidden2": "0x1f78be498f8"
+    },
+    {
+      "type": "hook-install",
+      "name": "hidden1_slot6",
+      "address": "0x7ffeeba37c20"
+    },
+    {
+      "type": "hook-install",
+      "name": "hidden1_slot7",
+      "address": "0x7ffeeba37c30"
+    },
+    {
+      "type": "hook-install",
+      "name": "hidden2_slot21",
+      "address": "0x7ffeeba37d10"
+    }
+  ]
+}

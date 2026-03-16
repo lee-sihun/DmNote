@@ -1,0 +1,7 @@
+bp GameBar+0xad6a0 ".echo [GB] BrokerShow; r rcx; kb 10; g"
+bp GameBar+0x6cfc50 ".echo [GB] UpdateWindowRegionForPinnedOnlyAsync; r rcx; kb 10; g"
+bp GameBar+0x25bc60 ".echo [GB] SetAppFrameHwnd; r rcx; kb 10; g"
+bu user32!GetAncestor ".echo [GB] user32!GetAncestor; r rcx; r rdx; kb 10; g"
+bu user32!GetWindowRect ".echo [GB] user32!GetWindowRect; r rcx; kb 10; g"
+bu user32!SetWindowLongW ".echo [GB] user32!SetWindowLongW; r rcx; r rdx; kb 10; g"
+g

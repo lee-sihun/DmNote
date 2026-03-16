@@ -1,0 +1,216 @@
+﻿{
+    "isAdmin":  true,
+    "timestamp":  "2026-03-16T13:35:15.0392876+09:00",
+    "hostname":  "DESKTOP-HO8UHQ7",
+    "experiments":  [
+                        {
+                            "createInBand_err":  "0x00000000",
+                            "actualBandEx":  1,
+                            "createInBandEx_err":  "0x00000000",
+                            "createInBand_hwnd":  "0xC09CC",
+                            "band":  0,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  true,
+                            "actualBand":  1,
+                            "createInBandEx_ok":  true
+                        },
+                        {
+                            "createInBand_err":  "0x00000000",
+                            "actualBandEx":  1,
+                            "createInBandEx_err":  "0x00000000",
+                            "createInBand_hwnd":  "0x210970",
+                            "band":  1,
+                            "bandMatchesRequest":  true,
+                            "createInBand_ok":  true,
+                            "actualBand":  1,
+                            "createInBandEx_ok":  true
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  2,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  3,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  4,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  5,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  6,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  7,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  8,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  9,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  10,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  11,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  12,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  13,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  14,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000057",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000057",
+                            "createInBand_hwnd":  null,
+                            "band":  15,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  16,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  17,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        },
+                        {
+                            "createInBand_err":  "0x00000005",
+                            "actualBandEx":  0,
+                            "createInBandEx_err":  "0x00000005",
+                            "createInBand_hwnd":  null,
+                            "band":  18,
+                            "bandMatchesRequest":  false,
+                            "createInBand_ok":  false,
+                            "actualBand":  0,
+                            "createInBandEx_ok":  false
+                        }
+                    ]
+}

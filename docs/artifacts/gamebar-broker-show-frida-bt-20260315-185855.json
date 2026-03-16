@@ -1,0 +1,2425 @@
+{
+  "captured_at": "2026-03-15 18:59:00 +0900",
+  "launch_gamebar": false,
+  "trigger_after_attach": false,
+  "spawn_gating": false,
+  "spawn_gating_supported": true,
+  "duration": 6,
+  "wait_seconds": 5,
+  "targets_requested": [
+    "explorer.exe",
+    "GameBar.exe"
+  ],
+  "targets_found": [
+    {
+      "pid": 28220,
+      "name": "explorer.exe"
+    },
+    {
+      "pid": 27460,
+      "name": "explorer.exe"
+    },
+    {
+      "pid": 17092,
+      "name": "explorer.exe"
+    },
+    {
+      "pid": 22656,
+      "name": "explorer.exe"
+    },
+    {
+      "pid": 29460,
+      "name": "GameBar.exe"
+    }
+  ],
+  "spawn_events": [],
+  "processes": [
+    {
+      "pid": 28220,
+      "name": "explorer.exe",
+      "hooked": [
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "EnumWindows",
+          "address": "0x7ff841312290"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowExW",
+          "address": "0x7ff8412f82f0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBand",
+          "address": "0x7ff8412f9c00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBandEx",
+          "address": "0x7ff8412f9ca0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetAncestor",
+          "address": "0x7ff841343d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowRect",
+          "address": "0x7ff8412df980"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowThreadProcessId",
+          "address": "0x7ff8413127d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetForegroundWindow",
+          "address": "0x7ff841367170"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetClassNameW",
+          "address": "0x7ff84131c440"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowTextW",
+          "address": "0x7ff8412e3fa0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "MonitorFromWindow",
+          "address": "0x7ff8412dfe70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetMonitorInfoW",
+          "address": "0x7ff841311b60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "QueryDisplayConfig",
+          "address": "0x7ff841313a80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "ShowWindow",
+          "address": "0x7ff841344d50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowPos",
+          "address": "0x7ff841344c90"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowRgn",
+          "address": "0x7ff841329be0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongW",
+          "address": "0x7ff84131c9d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongPtrW",
+          "address": "0x7ff8412eb520"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWinEventHook",
+          "address": "0x7ff841324540"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetParent",
+          "address": "0x7ff84132c120"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowBand",
+          "address": "0x7ff841344c30"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowBand",
+          "address": "0x7ff84131df10"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmSetWindowAttribute",
+          "address": "0x7ff83c2f1d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmpDxGetWindowSharedSurface",
+          "address": "0x7ff83c2f4580"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory1",
+          "address": "0x7ff83c0bdc60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory2",
+          "address": "0x7ff83c0c2b50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice",
+          "address": "0x7ff83b1cbea0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice2",
+          "address": "0x7ff83b1c2780"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice3",
+          "address": "0x7ff83b1bec80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateSurfaceHandle",
+          "address": "0x7ff83b19cb00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "coremessaging.dll",
+          "function": "CreateDispatcherQueueController",
+          "address": "0x7ff83b7c8dd0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernel32.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83fde3c70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83eba6020"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "ntdll.dll",
+          "function": "LdrGetProcedureAddress",
+          "address": "0x7ff841a7acf0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadLibraryExW",
+          "address": "0x7ff83eb829e0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadPackagedLibrary",
+          "address": "0x7ff83ec8a6f0"
+        }
+      ],
+      "missing": [],
+      "call_counts": {},
+      "samples": {},
+      "messages": []
+    },
+    {
+      "pid": 27460,
+      "name": "explorer.exe",
+      "hooked": [
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "EnumWindows",
+          "address": "0x7ff841312290"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowExW",
+          "address": "0x7ff8412f82f0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBand",
+          "address": "0x7ff8412f9c00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBandEx",
+          "address": "0x7ff8412f9ca0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetAncestor",
+          "address": "0x7ff841343d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowRect",
+          "address": "0x7ff8412df980"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowThreadProcessId",
+          "address": "0x7ff8413127d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetForegroundWindow",
+          "address": "0x7ff841367170"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetClassNameW",
+          "address": "0x7ff84131c440"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowTextW",
+          "address": "0x7ff8412e3fa0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "MonitorFromWindow",
+          "address": "0x7ff8412dfe70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetMonitorInfoW",
+          "address": "0x7ff841311b60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "QueryDisplayConfig",
+          "address": "0x7ff841313a80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "ShowWindow",
+          "address": "0x7ff841344d50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowPos",
+          "address": "0x7ff841344c90"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowRgn",
+          "address": "0x7ff841329be0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongW",
+          "address": "0x7ff84131c9d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongPtrW",
+          "address": "0x7ff8412eb520"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWinEventHook",
+          "address": "0x7ff841324540"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetParent",
+          "address": "0x7ff84132c120"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowBand",
+          "address": "0x7ff841344c30"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowBand",
+          "address": "0x7ff84131df10"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmSetWindowAttribute",
+          "address": "0x7ff83c2f1d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmpDxGetWindowSharedSurface",
+          "address": "0x7ff83c2f4580"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory1",
+          "address": "0x7ff83c0bdc60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory2",
+          "address": "0x7ff83c0c2b50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice",
+          "address": "0x7ff83b1cbea0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice2",
+          "address": "0x7ff83b1c2780"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice3",
+          "address": "0x7ff83b1bec80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateSurfaceHandle",
+          "address": "0x7ff83b19cb00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "coremessaging.dll",
+          "function": "CreateDispatcherQueueController",
+          "address": "0x7ff83b7c8dd0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernel32.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83fde3c70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83eba6020"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "ntdll.dll",
+          "function": "LdrGetProcedureAddress",
+          "address": "0x7ff841a7acf0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadLibraryExW",
+          "address": "0x7ff83eb829e0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadPackagedLibrary",
+          "address": "0x7ff83ec8a6f0"
+        }
+      ],
+      "missing": [],
+      "call_counts": {},
+      "samples": {},
+      "messages": []
+    },
+    {
+      "pid": 17092,
+      "name": "explorer.exe",
+      "hooked": [
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "EnumWindows",
+          "address": "0x7ff841312290"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowExW",
+          "address": "0x7ff8412f82f0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBand",
+          "address": "0x7ff8412f9c00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBandEx",
+          "address": "0x7ff8412f9ca0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetAncestor",
+          "address": "0x7ff841343d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowRect",
+          "address": "0x7ff8412df980"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowThreadProcessId",
+          "address": "0x7ff8413127d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetForegroundWindow",
+          "address": "0x7ff841367170"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetClassNameW",
+          "address": "0x7ff84131c440"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowTextW",
+          "address": "0x7ff8412e3fa0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "MonitorFromWindow",
+          "address": "0x7ff8412dfe70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetMonitorInfoW",
+          "address": "0x7ff841311b60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "QueryDisplayConfig",
+          "address": "0x7ff841313a80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "ShowWindow",
+          "address": "0x7ff841344d50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowPos",
+          "address": "0x7ff841344c90"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowRgn",
+          "address": "0x7ff841329be0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongW",
+          "address": "0x7ff84131c9d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongPtrW",
+          "address": "0x7ff8412eb520"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWinEventHook",
+          "address": "0x7ff841324540"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetParent",
+          "address": "0x7ff84132c120"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowBand",
+          "address": "0x7ff841344c30"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowBand",
+          "address": "0x7ff84131df10"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmSetWindowAttribute",
+          "address": "0x7ff83c2f1d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmpDxGetWindowSharedSurface",
+          "address": "0x7ff83c2f4580"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory1",
+          "address": "0x7ff83c0bdc60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory2",
+          "address": "0x7ff83c0c2b50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice",
+          "address": "0x7ff83b1cbea0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice2",
+          "address": "0x7ff83b1c2780"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice3",
+          "address": "0x7ff83b1bec80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateSurfaceHandle",
+          "address": "0x7ff83b19cb00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "coremessaging.dll",
+          "function": "CreateDispatcherQueueController",
+          "address": "0x7ff83b7c8dd0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernel32.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83fde3c70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83eba6020"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "ntdll.dll",
+          "function": "LdrGetProcedureAddress",
+          "address": "0x7ff841a7acf0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadLibraryExW",
+          "address": "0x7ff83eb829e0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadPackagedLibrary",
+          "address": "0x7ff83ec8a6f0"
+        }
+      ],
+      "missing": [],
+      "call_counts": {},
+      "samples": {},
+      "messages": []
+    },
+    {
+      "pid": 22656,
+      "name": "explorer.exe",
+      "hooked": [
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "EnumWindows",
+          "address": "0x7ff841312290"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowExW",
+          "address": "0x7ff8412f82f0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBand",
+          "address": "0x7ff8412f9c00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBandEx",
+          "address": "0x7ff8412f9ca0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetAncestor",
+          "address": "0x7ff841343d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowRect",
+          "address": "0x7ff8412df980"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowThreadProcessId",
+          "address": "0x7ff8413127d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetForegroundWindow",
+          "address": "0x7ff841367170"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetClassNameW",
+          "address": "0x7ff84131c440"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowTextW",
+          "address": "0x7ff8412e3fa0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "MonitorFromWindow",
+          "address": "0x7ff8412dfe70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetMonitorInfoW",
+          "address": "0x7ff841311b60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "QueryDisplayConfig",
+          "address": "0x7ff841313a80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "ShowWindow",
+          "address": "0x7ff841344d50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowPos",
+          "address": "0x7ff841344c90"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowRgn",
+          "address": "0x7ff841329be0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongW",
+          "address": "0x7ff84131c9d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongPtrW",
+          "address": "0x7ff8412eb520"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWinEventHook",
+          "address": "0x7ff841324540"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetParent",
+          "address": "0x7ff84132c120"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "SetWindowBand",
+          "address": "0x7ff841344c30"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "user32.dll",
+          "function": "GetWindowBand",
+          "address": "0x7ff84131df10"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmSetWindowAttribute",
+          "address": "0x7ff83c2f1d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmpDxGetWindowSharedSurface",
+          "address": "0x7ff83c2f4580"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory1",
+          "address": "0x7ff83c0bdc60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory2",
+          "address": "0x7ff83c0c2b50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice",
+          "address": "0x7ff83b1cbea0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice2",
+          "address": "0x7ff83b1c2780"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice3",
+          "address": "0x7ff83b1bec80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateSurfaceHandle",
+          "address": "0x7ff83b19cb00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "coremessaging.dll",
+          "function": "CreateDispatcherQueueController",
+          "address": "0x7ff83b7c8dd0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernel32.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83fde3c70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83eba6020"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "ntdll.dll",
+          "function": "LdrGetProcedureAddress",
+          "address": "0x7ff841a7acf0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadLibraryExW",
+          "address": "0x7ff83eb829e0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "explorer.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadPackagedLibrary",
+          "address": "0x7ff83ec8a6f0"
+        }
+      ],
+      "missing": [],
+      "call_counts": {
+        "user32.dll!GetWindowRect": 4,
+        "user32.dll!GetWindowBand": 4,
+        "user32.dll!ShowWindow": 4,
+        "dwmapi.dll!DwmSetWindowAttribute": 1,
+        "user32.dll!GetAncestor": 1,
+        "user32.dll!GetWindowThreadProcessId": 4,
+        "user32.dll!SetWindowLongPtrW": 4
+      },
+      "samples": {
+        "user32.dll!GetWindowRect": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowRect",
+            "count": 1,
+            "timestamp_ms": 1773568742258,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x2405c4",
+                "hwnd_info": {
+                  "hwnd": "0x2405c4",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x67ee610"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7ffffd460af0",
+              "0x7ffffd422bbd",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowRect",
+            "count": 2,
+            "timestamp_ms": 1773568742747,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0xc05e4",
+                "hwnd_info": {
+                  "hwnd": "0xc05e4",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x67ee610"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7ffffd460af0",
+              "0x7ffffd422bbd",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowRect",
+            "count": 3,
+            "timestamp_ms": 1773568742749,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x503ea",
+                "hwnd_info": {
+                  "hwnd": "0x503ea",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x67ee610"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7ffffd460af0",
+              "0x7ffffd422bbd",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowRect",
+            "count": 4,
+            "timestamp_ms": 1773568742752,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x403ec",
+                "hwnd_info": {
+                  "hwnd": "0x403ec",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x67ee610"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7ffffd460af0",
+              "0x7ffffd422bbd",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          }
+        ],
+        "user32.dll!GetWindowBand": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowBand",
+            "count": 1,
+            "timestamp_ms": 1773568742745,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0xb0078",
+                "hwnd_info": {
+                  "hwnd": "0xb0078",
+                  "exists": false
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x436f330"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7fffff00f307",
+              "0x7fffff00ef9e",
+              "0x7fffff02049b",
+              "0x7fffff01f58e",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ff6078d99ac",
+              "0x7ff6078d873b",
+              "Explorer.EXE!Ordinal234",
+              "Explorer.EXE!BaseThreadInitThunk",
+              "Explorer.EXE!RtlUserThreadStart"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowBand",
+            "count": 2,
+            "timestamp_ms": 1773568742746,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0xb0078",
+                "hwnd_info": {
+                  "hwnd": "0xb0078",
+                  "exists": false
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x436f330"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7fffff00f307",
+              "0x7fffff00ef9e",
+              "0x7fffff02049b",
+              "0x7fffff01f58e",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ff6078d99ac",
+              "0x7ff6078d873b",
+              "Explorer.EXE!Ordinal234",
+              "Explorer.EXE!BaseThreadInitThunk",
+              "Explorer.EXE!RtlUserThreadStart"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowBand",
+            "count": 3,
+            "timestamp_ms": 1773568742751,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0xb0078",
+                "hwnd_info": {
+                  "hwnd": "0xb0078",
+                  "exists": false
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x436f330"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7fffff00f307",
+              "0x7fffff00ef9e",
+              "0x7fffff02049b",
+              "0x7fffff01f58e",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ff6078d99ac",
+              "0x7ff6078d873b",
+              "Explorer.EXE!Ordinal234",
+              "Explorer.EXE!BaseThreadInitThunk",
+              "Explorer.EXE!RtlUserThreadStart"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowBand",
+            "count": 4,
+            "timestamp_ms": 1773568742789,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 0,
+                  "processId": null,
+                  "visible": false
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x436f330"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7fffff00f307",
+              "0x7fffff00ef9e",
+              "0x7fffff02049b",
+              "0x7fffff01f58e",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ff6078d99ac",
+              "0x7ff6078d873b",
+              "Explorer.EXE!Ordinal234",
+              "Explorer.EXE!BaseThreadInitThunk",
+              "Explorer.EXE!RtlUserThreadStart"
+            ]
+          }
+        ],
+        "user32.dll!ShowWindow": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "ShowWindow",
+            "count": 1,
+            "timestamp_ms": 1773568742754,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x7c0998",
+                "hwnd_info": {
+                  "hwnd": "0x7c0998",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": true,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "decoded": {
+              "command": 0
+            },
+            "backtrace": [
+              "0x7ffffd4233ba",
+              "0x7ffffd422bd8",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "ShowWindow",
+            "count": 2,
+            "timestamp_ms": 1773568742757,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x50306",
+                "hwnd_info": {
+                  "hwnd": "0x50306",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": true,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "decoded": {
+              "command": 0
+            },
+            "backtrace": [
+              "0x7ffffd4233ba",
+              "0x7ffffd422bd8",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "ShowWindow",
+            "count": 3,
+            "timestamp_ms": 1773568742768,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x7c0998",
+                "hwnd_info": {
+                  "hwnd": "0x7c0998",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x4"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "decoded": {
+              "command": 4
+            },
+            "backtrace": [
+              "0x7ffffd4233ba",
+              "0x7ffffd422bd8",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "ShowWindow",
+            "count": 4,
+            "timestamp_ms": 1773568742772,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x50306",
+                "hwnd_info": {
+                  "hwnd": "0x50306",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 22556,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x4"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "decoded": {
+              "command": 4
+            },
+            "backtrace": [
+              "0x7ffffd4233ba",
+              "0x7ffffd422bd8",
+              "Explorer.EXE!DllCanUnloadNow",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoCreateInstance",
+              "Explorer.EXE!CoGetContextToken",
+              "Explorer.EXE!CoQueryProxyBlanket"
+            ]
+          }
+        ],
+        "dwmapi.dll!DwmSetWindowAttribute": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "dwmapi.dll",
+            "function": "DwmSetWindowAttribute",
+            "count": 1,
+            "timestamp_ms": 1773568742760,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": true,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0xd"
+              },
+              {
+                "index": 2,
+                "raw": "0x67ee500"
+              },
+              {
+                "index": 3,
+                "raw": "0x4"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "decoded": {
+              "attributeId": 13,
+              "attributeName": "DWMWA_CLOAK",
+              "valueSize": 4,
+              "valueU32": null,
+              "valueS32": null
+            },
+            "backtrace": [
+              "Explorer.EXE!DllGetClassObject",
+              "Explorer.EXE!DllGetClassObject",
+              "0x7ff804a2e8fe",
+              "0x7ff804a2e7f4",
+              "Explorer.EXE!DllGetActivationFactory",
+              "Explorer.EXE!DllGetActivationFactory",
+              "Explorer.EXE!DllGetActivationFactory",
+              "0x7ff804b1b68a",
+              "Explorer.EXE!NdrServerCallNdr64",
+              "Explorer.EXE!Ndr64AsyncServerCall64",
+              "Explorer.EXE!NdrStubCall3",
+              "Explorer.EXE!CStdStubBuffer_Invoke"
+            ]
+          }
+        ],
+        "user32.dll!GetAncestor": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetAncestor",
+            "count": 1,
+            "timestamp_ms": 1773568742766,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x2"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!Ordinal251",
+              "Explorer.EXE!Ordinal251",
+              "Explorer.EXE!Ordinal1",
+              "Explorer.EXE!Ordinal1",
+              "Explorer.EXE!Ordinal253",
+              "Explorer.EXE!PostMessageW",
+              "Explorer.EXE!EnumDisplayDevicesW",
+              "Explorer.EXE!KiUserCallbackDispatcher",
+              "Explorer.EXE!NtUserDestroyWindow",
+              "0x7ffffb9b1cee",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW"
+            ]
+          }
+        ],
+        "user32.dll!GetWindowThreadProcessId": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowThreadProcessId",
+            "count": 1,
+            "timestamp_ms": 1773568742770,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x11fed80"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!Ordinal6",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!GetWindowDpiAwarenessContext",
+              "Explorer.EXE!KiUserCallbackDispatcher",
+              "Explorer.EXE!NtUserDestroyWindow",
+              "0x7ffffb9b1cee"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowThreadProcessId",
+            "count": 2,
+            "timestamp_ms": 1773568742775,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x11fec68"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!PsmRegisterAppStateChangeNotification",
+              "Explorer.EXE!Ordinal9",
+              "Explorer.EXE!Ordinal6",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!GetWindowDpiAwarenessContext",
+              "Explorer.EXE!KiUserCallbackDispatcher"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowThreadProcessId",
+            "count": 3,
+            "timestamp_ms": 1773568742780,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x11fec30"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!Ordinal10",
+              "Explorer.EXE!PsmRegisterAppStateChangeNotification",
+              "Explorer.EXE!Ordinal9",
+              "Explorer.EXE!Ordinal6",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!GetWindowDpiAwarenessContext"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "GetWindowThreadProcessId",
+            "count": 4,
+            "timestamp_ms": 1773568742782,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x11feaf8"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!PsmRegisterAppStateChangeNotification",
+              "Explorer.EXE!Ordinal10",
+              "Explorer.EXE!Ordinal10",
+              "Explorer.EXE!Ordinal10",
+              "Explorer.EXE!PsmRegisterAppStateChangeNotification",
+              "Explorer.EXE!Ordinal9",
+              "Explorer.EXE!Ordinal6",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03"
+            ]
+          }
+        ],
+        "user32.dll!SetWindowLongPtrW": [
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "SetWindowLongPtrW",
+            "count": 1,
+            "timestamp_ms": 1773568742778,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0xffffffd8"
+              },
+              {
+                "index": 2,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!Ordinal2536",
+              "Explorer.EXE!Ordinal2536",
+              "Explorer.EXE!PsmRegisterAppStateChangeNotification",
+              "Explorer.EXE!Ordinal9",
+              "Explorer.EXE!Ordinal6",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "SetWindowLongPtrW",
+            "count": 2,
+            "timestamp_ms": 1773568742784,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x130124",
+                "hwnd_info": {
+                  "hwnd": "0x130124",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0xffffffd8"
+              },
+              {
+                "index": 2,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!Ordinal2536",
+              "Explorer.EXE!Ordinal2536",
+              "Explorer.EXE!GetIconInfoExW",
+              "Explorer.EXE!GetSystemMetrics",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9b1428",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!GetWindowDpiAwarenessContext",
+              "Explorer.EXE!KiUserCallbackDispatcher",
+              "Explorer.EXE!NtUserDestroyWindow"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "SetWindowLongPtrW",
+            "count": 3,
+            "timestamp_ms": 1773568742786,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0xa03b4",
+                "hwnd_info": {
+                  "hwnd": "0xa03b4",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0xfffffffe"
+              },
+              {
+                "index": 2,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "Explorer.EXE!OpenThemeData",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!SetWindowsHookExAW",
+              "Explorer.EXE!KiUserCallbackDispatcher",
+              "Explorer.EXE!NtUserDestroyWindow",
+              "0x7ffffb9b1cee",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9d0014",
+              "Explorer.EXE!Ordinal234"
+            ]
+          },
+          {
+            "type": "call",
+            "process_name": "explorer.exe",
+            "module": "user32.dll",
+            "function": "SetWindowLongPtrW",
+            "count": 4,
+            "timestamp_ms": 1773568742787,
+            "args": [
+              {
+                "index": 0,
+                "raw": "0x21071e",
+                "hwnd_info": {
+                  "hwnd": "0x21071e",
+                  "exists": true,
+                  "className": null,
+                  "threadId": 23840,
+                  "processId": null,
+                  "visible": false,
+                  "rect": {
+                    "left": null,
+                    "top": null,
+                    "right": null,
+                    "bottom": null
+                  },
+                  "band": null
+                }
+              },
+              {
+                "index": 1,
+                "raw": "0x0"
+              },
+              {
+                "index": 2,
+                "raw": "0x0"
+              }
+            ],
+            "watched_hwnd_match": false,
+            "backtrace": [
+              "0x7ffffb9cd79d",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!SendMessageW",
+              "Explorer.EXE!SetWindowsHookExAW",
+              "Explorer.EXE!KiUserCallbackDispatcher",
+              "Explorer.EXE!NtUserDestroyWindow",
+              "0x7ffffb9b1cee",
+              "0x7ffffb9ccf03",
+              "Explorer.EXE!CallWindowProcW",
+              "Explorer.EXE!IsWindowUnicode",
+              "0x7ffffb9d0014",
+              "Explorer.EXE!Ordinal234"
+            ]
+          }
+        ]
+      },
+      "messages": []
+    },
+    {
+      "pid": 29460,
+      "name": "GameBar.exe",
+      "hooked": [
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "EnumWindows",
+          "address": "0x7ff841312290"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowExW",
+          "address": "0x7ff8412f82f0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBand",
+          "address": "0x7ff8412f9c00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "CreateWindowInBandEx",
+          "address": "0x7ff8412f9ca0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetAncestor",
+          "address": "0x7ff841343d80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetWindowRect",
+          "address": "0x7ff8412df980"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetWindowThreadProcessId",
+          "address": "0x7ff8413127d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetForegroundWindow",
+          "address": "0x7ff841367170"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetClassNameW",
+          "address": "0x7ff84131c440"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetWindowTextW",
+          "address": "0x7ff8412e3fa0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "MonitorFromWindow",
+          "address": "0x7ff8412dfe70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetMonitorInfoW",
+          "address": "0x7ff841311b60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "QueryDisplayConfig",
+          "address": "0x7ff841313a80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "ShowWindow",
+          "address": "0x7ff841344d50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWindowPos",
+          "address": "0x7ff841344c90"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWindowRgn",
+          "address": "0x7ff841329be0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongW",
+          "address": "0x7ff84131c9d0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWindowLongPtrW",
+          "address": "0x7ff8412eb520"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWinEventHook",
+          "address": "0x7ff841324540"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetParent",
+          "address": "0x7ff84132c120"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "SetWindowBand",
+          "address": "0x7ff841344c30"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "user32.dll",
+          "function": "GetWindowBand",
+          "address": "0x7ff84131df10"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory1",
+          "address": "0x7ff83c0bdc60"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dxgi.dll",
+          "function": "CreateDXGIFactory2",
+          "address": "0x7ff83c0c2b50"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice",
+          "address": "0x7ff83b1cbea0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice2",
+          "address": "0x7ff83b1c2780"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateDevice3",
+          "address": "0x7ff83b1bec80"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "dcomp.dll",
+          "function": "DCompositionCreateSurfaceHandle",
+          "address": "0x7ff83b19cb00"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "coremessaging.dll",
+          "function": "CreateDispatcherQueueController",
+          "address": "0x7ff83b7c8dd0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "kernel32.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83fde3c70"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "kernelbase.dll",
+          "function": "GetProcAddress",
+          "address": "0x7ff83eba6020"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "ntdll.dll",
+          "function": "LdrGetProcedureAddress",
+          "address": "0x7ff841a7acf0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadLibraryExW",
+          "address": "0x7ff83eb829e0"
+        },
+        {
+          "type": "hooked",
+          "process_name": "GameBar.exe",
+          "module": "kernelbase.dll",
+          "function": "LoadPackagedLibrary",
+          "address": "0x7ff83ec8a6f0"
+        }
+      ],
+      "missing": [
+        {
+          "type": "missing",
+          "process_name": "GameBar.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmSetWindowAttribute"
+        },
+        {
+          "type": "missing",
+          "process_name": "GameBar.exe",
+          "module": "dwmapi.dll",
+          "function": "DwmpDxGetWindowSharedSurface"
+        }
+      ],
+      "call_counts": {},
+      "samples": {},
+      "messages": []
+    }
+  ]
+}

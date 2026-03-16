@@ -1,0 +1,454 @@
+﻿{
+    "analyzedAt":  "2026-03-15T18:00:00.9115658+09:00",
+    "runDir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-correlation-20260315-175939",
+    "windowManagerProcesses":  [
+                                   "GameBarFTServer.exe",
+                                   "GameBar.exe"
+                               ],
+    "traceProcesses":  [
+                           "explorer.exe",
+                           "GameBar.exe",
+                           "ShellHost.exe",
+                           "ApplicationFrameHost.exe"
+                       ],
+    "runs":  [
+                 {
+                     "windowManagerProcess":  "GameBarFTServer.exe",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:59:47.2427695+09:00",
+                                         "processId":  29068,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x4D0A3E",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "windowManagerSummaryPath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-external-hwnd-20260315-175944\\summary.json",
+                     "windowManagerResult":  {
+                                                 "processName":  "GameBarFTServer.exe",
+                                                 "hwnd":  "0x4D0A3E",
+                                                 "probeWindow":  {
+                                                                     "capturedAt":  "2026-03-15T17:59:47.2427695+09:00",
+                                                                     "processId":  29068,
+                                                                     "title":  "GameBar",
+                                                                     "hwnd":  "0x4D0A3E",
+                                                                     "style":  "0x17010000",
+                                                                     "exStyle":  "0x00050008",
+                                                                     "visible":  true,
+                                                                     "fullscreen":  true
+                                                                 },
+                                                 "probeWindowProcessAliveBeforeCleanup":  false,
+                                                 "createWindowManagerHr":  "0x00000000",
+                                                 "rawBefore":  {
+                                                                   "label":  "before",
+                                                                   "hwnd":  "0x4d0a3e",
+                                                                   "isWindow":  true,
+                                                                   "bandKnown":  true,
+                                                                   "band":  1,
+                                                                   "style":  "0x17010000",
+                                                                   "exStyle":  "0x00050008",
+                                                                   "visible":  true
+                                                               },
+                                                 "ftBefore":  {
+                                                                  "style":  {
+                                                                                "hr":  "0x00000000",
+                                                                                "value":  "0x17010000"
+                                                                            },
+                                                                  "exStyle":  {
+                                                                                  "hr":  "0x00000000",
+                                                                                  "value":  "0x00050008"
+                                                                              }
+                                                              },
+                                                 "showWindowHideHr":  "0x00000000",
+                                                 "rawAfterHide":  {
+                                                                      "label":  "afterHide",
+                                                                      "hwnd":  "0x4d0a3e",
+                                                                      "isWindow":  false,
+                                                                      "bandKnown":  false,
+                                                                      "band":  null,
+                                                                      "style":  "0x00000000",
+                                                                      "exStyle":  "0x00000000",
+                                                                      "visible":  false
+                                                                  },
+                                                 "showWindowShowHr":  "0x00000000",
+                                                 "rawAfterShow":  {
+                                                                      "label":  "afterShow",
+                                                                      "hwnd":  "0x4d0a3e",
+                                                                      "isWindow":  true,
+                                                                      "bandKnown":  true,
+                                                                      "band":  1,
+                                                                      "style":  "0x17010000",
+                                                                      "exStyle":  "0x00050008",
+                                                                      "visible":  true
+                                                                  },
+                                                 "enableClickThroughHr":  "0x00000000",
+                                                 "rawAfterEnableClickThrough":  {
+                                                                                    "label":  "afterEnableClickThrough",
+                                                                                    "hwnd":  "0x4d0a3e",
+                                                                                    "isWindow":  true,
+                                                                                    "bandKnown":  true,
+                                                                                    "band":  1,
+                                                                                    "style":  "0x17010000",
+                                                                                    "exStyle":  "0x000D0028",
+                                                                                    "visible":  true
+                                                                                },
+                                                 "disableClickThroughHr":  "0x00000000",
+                                                 "rawAfterDisableClickThrough":  {
+                                                                                     "label":  "afterDisableClickThrough",
+                                                                                     "hwnd":  "0x4d0a3e",
+                                                                                     "isWindow":  true,
+                                                                                     "bandKnown":  true,
+                                                                                     "band":  1,
+                                                                                     "style":  "0x17010000",
+                                                                                     "exStyle":  "0x00050008",
+                                                                                     "visible":  true
+                                                                                 },
+                                                 "setWindowLongTransparentHr":  "0x00000000",
+                                                 "rawAfterSetTransparent":  {
+                                                                                "label":  "afterSetTransparent",
+                                                                                "hwnd":  "0x4d0a3e",
+                                                                                "isWindow":  true,
+                                                                                "bandKnown":  true,
+                                                                                "band":  1,
+                                                                                "style":  "0x17010000",
+                                                                                "exStyle":  "0x00050028",
+                                                                                "visible":  true
+                                                                            },
+                                                 "restoreWindowLongHr":  "0x00000000",
+                                                 "rawAfterRestoreExStyle":  {
+                                                                                "label":  "afterRestoreExStyle",
+                                                                                "hwnd":  "0x4d0a3e",
+                                                                                "isWindow":  true,
+                                                                                "bandKnown":  true,
+                                                                                "band":  1,
+                                                                                "style":  "0x17010000",
+                                                                                "exStyle":  "0x00050008",
+                                                                                "visible":  true
+                                                                            },
+                                                 "ftAfter":  {
+                                                                 "style":  {
+                                                                               "hr":  "0x00000000",
+                                                                               "value":  "0x17010000"
+                                                                           },
+                                                                 "exStyle":  {
+                                                                                 "hr":  "0x00000000",
+                                                                                 "value":  "0x00050008"
+                                                                             },
+                                                                 "baselineExStyle":  "0x00050008"
+                                                             },
+                                                 "exception":  null
+                                             },
+                     "traceTargetsFound":  [
+                                               {
+                                                   "pid":  8752,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  8816,
+                                                   "name":  "ShellHost.exe"
+                                               },
+                                               {
+                                                   "pid":  23008,
+                                                   "name":  "ApplicationFrameHost.exe"
+                                               },
+                                               {
+                                                   "pid":  28220,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  27460,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  29556,
+                                                   "name":  "GameBar.exe"
+                                               }
+                                           ],
+                     "traceHwndHits":  [
+                                           {
+                                               "pid":  8752,
+                                               "processName":  "explorer.exe",
+                                               "api":  "dwmapi.dll!DwmSetWindowAttribute",
+                                               "count":  1,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x4d0a3e"
+                                                                   }
+                                                               ]
+                                           }
+                                       ],
+                     "traceStderrNonempty":  false,
+                     "traceJsonPath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-correlation-20260315-175939\\gamebarftserver-trace.json"
+                 },
+                 {
+                     "windowManagerProcess":  "GameBar.exe",
+                     "probeWindow":  {
+                                         "capturedAt":  "2026-03-15T17:59:56.6348414+09:00",
+                                         "processId":  30372,
+                                         "title":  "GameBar",
+                                         "hwnd":  "0x5907BA",
+                                         "style":  "0x17010000",
+                                         "exStyle":  "0x00050008",
+                                         "visible":  true,
+                                         "fullscreen":  true
+                                     },
+                     "probeWindowProcessAliveBeforeCleanup":  false,
+                     "windowManagerSummaryPath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-external-hwnd-20260315-175953\\summary.json",
+                     "windowManagerResult":  {
+                                                 "processName":  "GameBar.exe",
+                                                 "hwnd":  "0x5907BA",
+                                                 "probeWindow":  {
+                                                                     "capturedAt":  "2026-03-15T17:59:56.6348414+09:00",
+                                                                     "processId":  30372,
+                                                                     "title":  "GameBar",
+                                                                     "hwnd":  "0x5907BA",
+                                                                     "style":  "0x17010000",
+                                                                     "exStyle":  "0x00050008",
+                                                                     "visible":  true,
+                                                                     "fullscreen":  true
+                                                                 },
+                                                 "probeWindowProcessAliveBeforeCleanup":  false,
+                                                 "createWindowManagerHr":  "0x00000000",
+                                                 "rawBefore":  {
+                                                                   "label":  "before",
+                                                                   "hwnd":  "0x5907ba",
+                                                                   "isWindow":  true,
+                                                                   "bandKnown":  true,
+                                                                   "band":  1,
+                                                                   "style":  "0x17010000",
+                                                                   "exStyle":  "0x00050008",
+                                                                   "visible":  true
+                                                               },
+                                                 "ftBefore":  {
+                                                                  "style":  {
+                                                                                "hr":  "0x00000000",
+                                                                                "value":  "0x17010000"
+                                                                            },
+                                                                  "exStyle":  {
+                                                                                  "hr":  "0x00000000",
+                                                                                  "value":  "0x00050008"
+                                                                              }
+                                                              },
+                                                 "showWindowHideHr":  "0x00000000",
+                                                 "rawAfterHide":  {
+                                                                      "label":  "afterHide",
+                                                                      "hwnd":  "0x5907ba",
+                                                                      "isWindow":  false,
+                                                                      "bandKnown":  false,
+                                                                      "band":  null,
+                                                                      "style":  "0x00000000",
+                                                                      "exStyle":  "0x00000000",
+                                                                      "visible":  false
+                                                                  },
+                                                 "showWindowShowHr":  "0x00000000",
+                                                 "rawAfterShow":  {
+                                                                      "label":  "afterShow",
+                                                                      "hwnd":  "0x5907ba",
+                                                                      "isWindow":  true,
+                                                                      "bandKnown":  true,
+                                                                      "band":  1,
+                                                                      "style":  "0x17010000",
+                                                                      "exStyle":  "0x00050008",
+                                                                      "visible":  true
+                                                                  },
+                                                 "enableClickThroughHr":  "0x00000000",
+                                                 "rawAfterEnableClickThrough":  {
+                                                                                    "label":  "afterEnableClickThrough",
+                                                                                    "hwnd":  "0x5907ba",
+                                                                                    "isWindow":  true,
+                                                                                    "bandKnown":  true,
+                                                                                    "band":  1,
+                                                                                    "style":  "0x17010000",
+                                                                                    "exStyle":  "0x000D0028",
+                                                                                    "visible":  true
+                                                                                },
+                                                 "disableClickThroughHr":  "0x00000000",
+                                                 "rawAfterDisableClickThrough":  {
+                                                                                     "label":  "afterDisableClickThrough",
+                                                                                     "hwnd":  "0x5907ba",
+                                                                                     "isWindow":  true,
+                                                                                     "bandKnown":  true,
+                                                                                     "band":  1,
+                                                                                     "style":  "0x17010000",
+                                                                                     "exStyle":  "0x00050008",
+                                                                                     "visible":  true
+                                                                                 },
+                                                 "setWindowLongTransparentHr":  "0x00000000",
+                                                 "rawAfterSetTransparent":  {
+                                                                                "label":  "afterSetTransparent",
+                                                                                "hwnd":  "0x5907ba",
+                                                                                "isWindow":  true,
+                                                                                "bandKnown":  true,
+                                                                                "band":  1,
+                                                                                "style":  "0x17010000",
+                                                                                "exStyle":  "0x00050028",
+                                                                                "visible":  true
+                                                                            },
+                                                 "restoreWindowLongHr":  "0x00000000",
+                                                 "rawAfterRestoreExStyle":  {
+                                                                                "label":  "afterRestoreExStyle",
+                                                                                "hwnd":  "0x5907ba",
+                                                                                "isWindow":  true,
+                                                                                "bandKnown":  true,
+                                                                                "band":  1,
+                                                                                "style":  "0x17010000",
+                                                                                "exStyle":  "0x00050008",
+                                                                                "visible":  true
+                                                                            },
+                                                 "ftAfter":  {
+                                                                 "style":  {
+                                                                               "hr":  "0x00000000",
+                                                                               "value":  "0x17010000"
+                                                                           },
+                                                                 "exStyle":  {
+                                                                                 "hr":  "0x00000000",
+                                                                                 "value":  "0x00050008"
+                                                                             },
+                                                                 "baselineExStyle":  "0x00050008"
+                                                             },
+                                                 "exception":  null
+                                             },
+                     "traceTargetsFound":  [
+                                               {
+                                                   "pid":  8752,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  8816,
+                                                   "name":  "ShellHost.exe"
+                                               },
+                                               {
+                                                   "pid":  23008,
+                                                   "name":  "ApplicationFrameHost.exe"
+                                               },
+                                               {
+                                                   "pid":  28220,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  27460,
+                                                   "name":  "explorer.exe"
+                                               },
+                                               {
+                                                   "pid":  29556,
+                                                   "name":  "GameBar.exe"
+                                               }
+                                           ],
+                     "traceHwndHits":  [
+                                           {
+                                               "pid":  8752,
+                                               "processName":  "explorer.exe",
+                                               "api":  "dwmapi.dll!DwmSetWindowAttribute",
+                                               "count":  1,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  1,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  2,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  3,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  4,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  5,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  6,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!GetWindowBand",
+                                               "count":  7,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           },
+                                           {
+                                               "pid":  29556,
+                                               "processName":  "GameBar.exe",
+                                               "api":  "user32.dll!ShowWindow",
+                                               "count":  1,
+                                               "matchedArgs":  [
+                                                                   {
+                                                                       "index":  0,
+                                                                       "raw":  "0x5907ba"
+                                                                   }
+                                                               ]
+                                           }
+                                       ],
+                     "traceStderrNonempty":  false,
+                     "traceJsonPath":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-windowmanager-shell-correlation-20260315-175939\\gamebar-trace.json"
+                 }
+             ]
+}

@@ -1,0 +1,999 @@
+﻿{
+    "analyzed_at":  "2026-03-16 11:52:18 +09:00",
+    "run_dir":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-region-branch-20260316-115207",
+    "trace_path":  "C:\\Users\\esihun\\Desktop\\workfile\\DmNote\\docs\\artifacts\\gamebar-region-branch-20260316-115207\\trace.json",
+    "enter_counts":  {
+                         "Broker_Hide":  14,
+                         "UpdateWindowRegionForPinnedOnlyAsync":  45,
+                         "SetAppFrameHwnd":  1,
+                         "WindowManagerRegionPath_B":  15
+                     },
+    "first_events":  [
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "SetAppFrameHwnd",
+                                             "address":  "0x7ff6a5ebbc60",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240adeaec70",
+                                             "arg1":  "0x7ff6a5c60000",
+                                             "arg2":  "0x1"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240ad105420",
+                                             "arg1":  "0x240ad1053b8",
+                                             "arg2":  "0x260",
+                                             "state":  {
+                                                           "self":  "0x240ad105420",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240ad105420",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240ad105420",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad105420",
+                                             "arg1":  "0x240ad105420",
+                                             "arg2":  "0x178ccc0f17",
+                                             "state":  {
+                                                           "self":  "0x240ad105420",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240ad105548",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  15032,
+                                             "arg0":  "0x240adf3c900",
+                                             "arg1":  "0x240adf3c898",
+                                             "arg2":  "0x10",
+                                             "state":  {
+                                                           "self":  "0x240adf3c900",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240adf3c900",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240adf3c900",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240adf3c900",
+                                             "arg1":  "0x240adf3c900",
+                                             "arg2":  "0x178cdea0a9",
+                                             "state":  {
+                                                           "self":  "0x240adf3c900",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730400",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240adf3ca28",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  20908,
+                                             "arg0":  "0x240b84b7e00",
+                                             "arg1":  "0x240b84b7d98",
+                                             "arg2":  "0x10",
+                                             "state":  {
+                                                           "self":  "0x240b84b7e00",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b84b7e00",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b84b7e00",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  13900,
+                                             "arg0":  "0x240b84b7e00",
+                                             "arg1":  "0x240b84b7e00",
+                                             "arg2":  "0x178ce9c801",
+                                             "state":  {
+                                                           "self":  "0x240b84b7e00",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  13900,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac7304c0",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  13900,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b84b7f28",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240b80d2e10",
+                                             "arg1":  "0x240b80d2da8",
+                                             "arg2":  "0x260",
+                                             "state":  {
+                                                           "self":  "0x240b80d2e10",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b80d2e10",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b80d2e10",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240b80d2e10",
+                                             "arg1":  "0x240b80d2e10",
+                                             "arg2":  "0x178cead8c9",
+                                             "state":  {
+                                                           "self":  "0x240b80d2e10",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730940",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b80d2f38",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  14348,
+                                             "arg0":  "0x240b89c10c0",
+                                             "arg1":  "0x240b89c1058",
+                                             "arg2":  "0x240b89c1000",
+                                             "state":  {
+                                                           "self":  "0x240b89c10c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b89c10c0",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b89c10c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240b89c10c0",
+                                             "arg1":  "0x240b89c10c0",
+                                             "arg2":  "0x178ceb4d97",
+                                             "state":  {
+                                                           "self":  "0x240b89c10c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730400",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b89c11e8",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  14348,
+                                             "arg0":  "0x240b89c3de0",
+                                             "arg1":  "0x240b89c3d78",
+                                             "arg2":  "0x240b89c1000",
+                                             "state":  {
+                                                           "self":  "0x240b89c3de0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b89c3de0",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b89c3de0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240b89c3de0",
+                                             "arg1":  "0x240b89c3de0",
+                                             "arg2":  "0x178ceb9b81",
+                                             "state":  {
+                                                           "self":  "0x240b89c3de0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730940",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  26840,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b89c3f08",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  14348,
+                                             "arg0":  "0x240b8bc89c0",
+                                             "arg1":  "0x240b8bc8958",
+                                             "arg2":  "0x240b8bc5000",
+                                             "state":  {
+                                                           "self":  "0x240b8bc89c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b8bc89c0",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b8bc89c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  20908,
+                                             "arg0":  "0x240b8bc89c0",
+                                             "arg1":  "0x240b8bc89c0",
+                                             "arg2":  "0x178ceefc9b",
+                                             "state":  {
+                                                           "self":  "0x240b8bc89c0",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  20908,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730980",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  20908,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b8bc8ae8",
+                                             "arg2":  "0x0"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240b8bc6160",
+                                             "arg1":  "0x240b8bc60f8",
+                                             "arg2":  "0x240b8bc5000",
+                                             "state":  {
+                                                           "self":  "0x240b8bc6160",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  24840,
+                                             "arg0":  "0x240b8bc6160",
+                                             "arg1":  "0x0",
+                                             "arg2":  "0x1",
+                                             "state":  {
+                                                           "self":  "0x240b8bc6160",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "UpdateWindowRegionForPinnedOnlyAsync",
+                                             "address":  "0x7ff6a632fc50",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240b8bc6160",
+                                             "arg1":  "0x240b8bc6160",
+                                             "arg2":  "0x178cef7179",
+                                             "state":  {
+                                                           "self":  "0x240b8bc6160",
+                                                           "qword_30":  null,
+                                                           "qword_38":  null,
+                                                           "qword_40":  null,
+                                                           "qword_48":  null,
+                                                           "qword_50":  null,
+                                                           "qword_58":  null,
+                                                           "qword_60":  null,
+                                                           "qword_68":  null,
+                                                           "qword_70":  null,
+                                                           "qword_90":  null,
+                                                           "qword_98":  null,
+                                                           "qword_1c8":  null,
+                                                           "qword_1d0":  null
+                                                       }
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "Broker_Hide",
+                                             "address":  "0x7ff6a5d0d6f0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad170d10",
+                                             "arg1":  "0x240ac730400",
+                                             "arg2":  "0x7ffffffffffffffc"
+                                         }
+                         },
+                         {
+                             "kind":  "enter",
+                             "payload":  {
+                                             "name":  "WindowManagerRegionPath_B",
+                                             "address":  "0x7ff6a5e319d0",
+                                             "thread_id":  3304,
+                                             "arg0":  "0x240ad1c45c0",
+                                             "arg1":  "0x240b8bc6288",
+                                             "arg2":  "0x0"
+                                         }
+                         }
+                     ],
+    "broker_show":  {
+                        "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+                        "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+                        "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                        "coinit_hr":  "0x00000001",
+                        "contexts":  {
+                                         "ctx_1":  {
+                                                       "hr":  "0x80040154",
+                                                       "ptr_nonzero":  false
+                                                   },
+                                         "ctx_4":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                         "ctx_5":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                         "ctx_16":  {
+                                                        "hr":  "0x80040154",
+                                                        "ptr_nonzero":  false
+                                                    },
+                                         "ctx_20":  {
+                                                        "hr":  "0x00000000",
+                                                        "ptr_nonzero":  true
+                                                    },
+                                         "ctx_21":  {
+                                                        "hr":  "0x00000000",
+                                                        "ptr_nonzero":  true
+                                                    }
+                                     },
+                        "chain":  {
+                                      "primary_ptr":  "0x1F3F8C71168",
+                                      "primary_vtbl":  "0x7FFEEBA783E0",
+                                      "primary_slot12":  "0x7FFEEBA37C80",
+                                      "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                      "service_ptr":  "0x1F3F8C70F68",
+                                      "final_ptr":  "0x1F3F8C70F68",
+                                      "final_vtbl":  "0x7FFEEBA7C3E0",
+                                      "final_slot6":  "0x7FFEEBA37C20",
+                                      "final_slot7":  "0x7FFEEBA37C30",
+                                      "final_slot10":  "0x7FFEEBA37C60",
+                                      "final_slot39":  "0x7FFEEBA37E30",
+                                      "final_slot49":  "0x7FFEEBA37ED0",
+                                      "final_slot51":  "0x7FFEEBA37EF0",
+                                      "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                  },
+                        "selected_methods":  [
+                                                 "show"
+                                             ],
+                        "method_results":  {
+                                               "show":  "0x00000000"
+                                           }
+                    },
+    "broker_hide":  {
+                        "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+                        "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+                        "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                        "coinit_hr":  "0x00000001",
+                        "contexts":  {
+                                         "ctx_1":  {
+                                                       "hr":  "0x80040154",
+                                                       "ptr_nonzero":  false
+                                                   },
+                                         "ctx_4":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                         "ctx_5":  {
+                                                       "hr":  "0x00000000",
+                                                       "ptr_nonzero":  true
+                                                   },
+                                         "ctx_16":  {
+                                                        "hr":  "0x80040154",
+                                                        "ptr_nonzero":  false
+                                                    },
+                                         "ctx_20":  {
+                                                        "hr":  "0x00000000",
+                                                        "ptr_nonzero":  true
+                                                    },
+                                         "ctx_21":  {
+                                                        "hr":  "0x00000000",
+                                                        "ptr_nonzero":  true
+                                                    }
+                                     },
+                        "chain":  {
+                                      "primary_ptr":  "0x1F3F8DDFAB8",
+                                      "primary_vtbl":  "0x7FFEEBA783E0",
+                                      "primary_slot12":  "0x7FFEEBA37C80",
+                                      "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                      "service_ptr":  "0x1F3F8DDFD38",
+                                      "final_ptr":  "0x1F3F8DDFD38",
+                                      "final_vtbl":  "0x7FFEEBA7C3E0",
+                                      "final_slot6":  "0x7FFEEBA37C20",
+                                      "final_slot7":  "0x7FFEEBA37C30",
+                                      "final_slot10":  "0x7FFEEBA37C60",
+                                      "final_slot39":  "0x7FFEEBA37E30",
+                                      "final_slot49":  "0x7FFEEBA37ED0",
+                                      "final_slot51":  "0x7FFEEBA37EF0",
+                                      "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                  },
+                        "selected_methods":  [
+                                                 "hide"
+                                             ],
+                        "method_results":  {
+                                               "hide":  "0x00000000"
+                                           }
+                    },
+    "broker_show_again":  {
+                              "clsid":  "59614133-bfb4-4906-90af-c44f15167f1a",
+                              "primary_iid":  "9767060c-9476-42e2-8f7b-2f10fd13765c",
+                              "final_iid":  "30dad006-cf4a-45e0-aec1-2195d76fd9c0",
+                              "coinit_hr":  "0x00000001",
+                              "contexts":  {
+                                               "ctx_1":  {
+                                                             "hr":  "0x80040154",
+                                                             "ptr_nonzero":  false
+                                                         },
+                                               "ctx_4":  {
+                                                             "hr":  "0x00000000",
+                                                             "ptr_nonzero":  true
+                                                         },
+                                               "ctx_5":  {
+                                                             "hr":  "0x00000000",
+                                                             "ptr_nonzero":  true
+                                                         },
+                                               "ctx_16":  {
+                                                              "hr":  "0x80040154",
+                                                              "ptr_nonzero":  false
+                                                          },
+                                               "ctx_20":  {
+                                                              "hr":  "0x00000000",
+                                                              "ptr_nonzero":  true
+                                                          },
+                                               "ctx_21":  {
+                                                              "hr":  "0x00000000",
+                                                              "ptr_nonzero":  true
+                                                          }
+                                           },
+                              "chain":  {
+                                            "primary_ptr":  "0x1F3F8DE07B8",
+                                            "primary_vtbl":  "0x7FFEEBA783E0",
+                                            "primary_slot12":  "0x7FFEEBA37C80",
+                                            "primary_slot12_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll",
+                                            "service_ptr":  "0x1F3F8DE04B8",
+                                            "final_ptr":  "0x1F3F8DE04B8",
+                                            "final_vtbl":  "0x7FFEEBA7C3E0",
+                                            "final_slot6":  "0x7FFEEBA37C20",
+                                            "final_slot7":  "0x7FFEEBA37C30",
+                                            "final_slot10":  "0x7FFEEBA37C60",
+                                            "final_slot39":  "0x7FFEEBA37E30",
+                                            "final_slot49":  "0x7FFEEBA37ED0",
+                                            "final_slot51":  "0x7FFEEBA37EF0",
+                                            "final_proxy_module":  "\\Device\\HarddiskVolume2\\Windows\\System32\\combase.dll"
+                                        },
+                              "selected_methods":  [
+                                                       "show"
+                                                   ],
+                              "method_results":  {
+                                                     "show":  "0x00000000"
+                                                 }
+                          }
+}

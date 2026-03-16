@@ -1,0 +1,26 @@
+﻿{
+    "ro_initialize_hr":  "0x80010106",
+    "module_nonzero":  true,
+    "module_ptr":  "0x7FFDABCE0000",
+    "dll_get_activation_factory_ptr":  "0x7FFDABF10050",
+    "results":  [
+                    {
+                        "class_name":  "Microsoft.Windows.Shell.GamingOverlayExperienceManager",
+                        "windows_create_string_hr":  "0x00000000",
+                        "dll_get_activation_factory_hr":  "0x80040111",
+                        "factory_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Windows.Internal.GamingOverlay.GameBarWindowControl",
+                        "windows_create_string_hr":  "0x00000000",
+                        "dll_get_activation_factory_hr":  "0x80040111",
+                        "factory_nonzero":  false
+                    },
+                    {
+                        "class_name":  "Windows.Internal.Shell.Taskbar.TaskbarFrame",
+                        "windows_create_string_hr":  "0x00000000",
+                        "dll_get_activation_factory_hr":  "0x80040111",
+                        "factory_nonzero":  false
+                    }
+                ]
+}
