@@ -63,7 +63,7 @@ const SubMenu = ({
     // 서브메뉴의 대략적인 높이 추정
     const separatorCount = items.filter((i) => i.type === 'separator').length;
     const itemCount = items.length - separatorCount;
-    const estimatedHeight = itemCount * 28 + separatorCount * 9 + 10;
+    const estimatedHeight = itemCount * 24 + separatorCount * 9 + 10;
     const estimatedWidth = 160;
 
     // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
@@ -90,7 +90,7 @@ const SubMenu = ({
     };
   })();
 
-  const itemHeight = 28;
+  const itemHeight = 24;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const effectiveMax = maxVisibleItems ?? normalItemCount;
@@ -259,14 +259,14 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[140px] h-[28px] px-[6px] rounded-[5px] flex items-center gap-[4px] ${
+        className={`w-full min-w-[120px] h-[24px] px-[6px] rounded-[5px] flex items-center gap-[4px] ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-button-hover active:bg-button-active cursor-pointer'
         }`}
       >
         {/* 좌측 체크 영역 (고정 너비) */}
-        <span className="w-[18px] flex-shrink-0 flex items-center justify-center">
+        <span className="w-[16px] flex-shrink-0 flex items-center justify-center">
           {hasCheck && item.checked && (
             <svg
               width="12"
@@ -296,7 +296,7 @@ const MenuItemRow = ({
         </span>
 
         {/* 우측 서브메뉴 화살표 영역 (고정 너비) */}
-        <span className="w-[18px] flex-shrink-0 flex items-center justify-center">
+        <span className="w-[16px] flex-shrink-0 flex items-center justify-center">
           {hasChildren && (
             <svg
               width="7"
@@ -350,7 +350,7 @@ const ListPopup = ({
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산
-  const itemHeight = 28;
+  const itemHeight = 24;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const needsScroll =
