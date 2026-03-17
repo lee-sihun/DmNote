@@ -424,6 +424,7 @@
   },
   "gridSettings": {
     "gridSnapSize": "그리드 스냅 크기",
+    "overlayPadding": "오버레이 여백",
     "alignmentGuides": "정렬 가이드",
     "spacingGuides": "간격 일치 가이드",
     "sizeMatchGuides": "크기 일치 가이드",

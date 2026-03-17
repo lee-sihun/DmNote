@@ -30,8 +30,6 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
-const PADDING = 30;
-
 type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
 
 export default function App() {
@@ -143,6 +141,9 @@ export default function App() {
     tabNoteOverrides?.[selectedKeyType],
   );
   const noteEffect = useSettingsStore((state) => state.noteEffect);
+  const overlayPadding = useSettingsStore(
+    (state) => state.gridSettings.overlayPadding ?? 30,
+  );
   const overlayAnchor = useSettingsStore((state) => state.overlayResizeAnchor);
   const keyCounterEnabled = useSettingsStore(
     (state) => state.keyCounterEnabled,
@@ -504,6 +505,7 @@ export default function App() {
     noteSettings,
     selectedKeyType,
     pluginElements,
+    overlayPadding,
   });
 
   useEffect(() => {
@@ -526,9 +528,9 @@ export default function App() {
     const keyAreaWidth = bounds.maxX - bounds.minX;
     const keyAreaHeight = bounds.maxY - bounds.minY;
     const extraTop = trackHeight;
-    const totalWidth = keyAreaWidth + PADDING * 2;
-    const totalHeight = keyAreaHeight + PADDING * 2 + extraTop;
-    const contentTopOffset = extraTop + PADDING;
+    const totalWidth = keyAreaWidth + overlayPadding * 2;
+    const totalHeight = keyAreaHeight + overlayPadding * 2 + extraTop;
+    const contentTopOffset = extraTop + overlayPadding;
     const currentMinX = bounds.minX;
     const currentMinY = bounds.minY;
 
@@ -581,7 +583,7 @@ export default function App() {
       .catch((error) => {
         console.error('Failed to resize overlay window', error);
       });
-  }, [bounds, trackHeight, overlayAnchor]);
+  }, [bounds, trackHeight, overlayAnchor, overlayPadding]);
 
   return (
     <OverlayScene

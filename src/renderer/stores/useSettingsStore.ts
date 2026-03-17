@@ -20,6 +20,7 @@ export interface GridSettings {
   sizeMatchGuides: boolean;
   minimapEnabled: boolean;
   gridSnapSize: number; // 그리드 스냅 크기 (1-10px)
+  overlayPadding: number; // 오버레이 여백 (0-30px)
 }
 
 interface SettingsState {

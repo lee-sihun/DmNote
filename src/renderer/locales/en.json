@@ -423,6 +423,7 @@
   },
   "gridSettings": {
     "gridSnapSize": "Grid Snap Size",
+    "overlayPadding": "Overlay Padding",
     "alignmentGuides": "Alignment Guides",
     "spacingGuides": "Spacing Guides",
     "sizeMatchGuides": "Size Match Guides",

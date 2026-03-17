@@ -55,6 +55,18 @@ const GridTabContent: React.FC = () => {
         />
       </PropertyRow>
 
+      {/* 오버레이 여백 */}
+      <PropertyRow label={t('gridSettings.overlayPadding')}>
+        <NumberInput
+          value={gridSettings.overlayPadding}
+          onChange={(val) => handleSettingChange('overlayPadding', val)}
+          min={0}
+          max={30}
+          suffix="px"
+          width="54px"
+        />
+      </PropertyRow>
+
       <SectionDivider />
 
       {/* 미니맵 */}

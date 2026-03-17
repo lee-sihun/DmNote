@@ -8,8 +8,6 @@ import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 
-const PADDING = 30;
-
 interface PluginElement {
   hidden?: boolean;
   tabId?: string;
@@ -31,6 +29,7 @@ interface LayoutInput {
   noteSettings: NoteSettings;
   selectedKeyType?: string;
   pluginElements?: PluginElement[];
+  overlayPadding?: number;
 }
 
 interface Bounds {
@@ -50,6 +49,7 @@ export function computeLayout(input: LayoutInput) {
     noteSettings,
     selectedKeyType,
     pluginElements,
+    overlayPadding: PADDING = 30,
   } = input;
 
   // bounds 계산

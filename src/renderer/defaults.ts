@@ -46,7 +46,7 @@ export function getDefaultNoteSettings(): NoteSettings {
 
 export function getDefaultGridSettings(): GridSettings {
   return _defaults?.settings.gridSettings
-    ? { ..._defaults.settings.gridSettings }
+    ? { ...FALLBACK_GRID_SETTINGS(), ..._defaults.settings.gridSettings }
     : FALLBACK_GRID_SETTINGS();
 }
 
@@ -141,6 +141,7 @@ function FALLBACK_GRID_SETTINGS(): GridSettings {
     sizeMatchGuides: true,
     minimapEnabled: true,
     gridSnapSize: 5,
+    overlayPadding: 30,
   };
 }
 

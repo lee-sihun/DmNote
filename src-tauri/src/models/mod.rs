@@ -1104,6 +1104,9 @@ pub struct GridSettings {
     /// 그리드 스냅 크기 (1-10px)
     #[serde(default = "default_grid_snap_size")]
     pub grid_snap_size: u32,
+    /// 오버레이 여백 (0-30px)
+    #[serde(default = "default_overlay_padding")]
+    pub overlay_padding: u32,
 }
 
 fn default_true() -> bool {
@@ -1122,6 +1125,10 @@ fn default_grid_snap_size() -> u32 {
     5
 }
 
+fn default_overlay_padding() -> u32 {
+    30
+}
+
 impl Default for GridSettings {
     fn default() -> Self {
         Self {
@@ -1130,6 +1137,7 @@ impl Default for GridSettings {
             size_match_guides: true,
             minimap_enabled: true,
             grid_snap_size: default_grid_snap_size(),
+            overlay_padding: default_overlay_padding(),
         }
     }
 }

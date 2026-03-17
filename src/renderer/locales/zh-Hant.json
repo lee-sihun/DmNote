@@ -424,6 +424,7 @@
   },
   "gridSettings": {
     "gridSnapSize": "網格吸附大小",
+    "overlayPadding": "疊加層邊距",
     "alignmentGuides": "對齊參考線",
     "spacingGuides": "間距參考線",
     "sizeMatchGuides": "尺寸匹配參考線",

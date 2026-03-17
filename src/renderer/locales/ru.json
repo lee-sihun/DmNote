@@ -423,6 +423,7 @@
   },
   "gridSettings": {
     "gridSnapSize": "Шаг сетки",
+    "overlayPadding": "Отступ оверлея",
     "alignmentGuides": "Направляющие",
     "spacingGuides": "Направл. отступов",
     "sizeMatchGuides": "Совпадение размеров",
