@@ -1880,11 +1880,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           : typeof schemaValue.default === 'number'
           ? schemaValue.default
           : 0;
+        // step 값에서 소수 자릿수 자동 추론
+        const stepStr = schemaValue.step != null ? String(schemaValue.step) : '';
+        const dotIdx = stepStr.indexOf('.');
+        const hasDecimal = dotIdx !== -1;
+        const decimalScale = hasDecimal ? stepStr.length - dotIdx - 1 : 0;
         control = (
           <NumberInput
             value={normalizedValue}
             min={schemaValue.min}
             max={schemaValue.max}
+            allowDecimal={hasDecimal}
+            decimalScale={decimalScale}
             onChange={(nextValue) => onChange(key, nextValue)}
             width={getPluginInputWidth('number', rawValue)}
           />

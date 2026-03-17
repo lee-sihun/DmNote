@@ -280,12 +280,17 @@ dmn.plugin.defineElement({
     /* 비활성 / 에러 */
     if (!active) {
       const msg = state.error ? `${t("error")}: ${state.error}` : t("idle");
+      // idle 상태는 배경 투명도와 무관하게 항상 보이도록
+      const idleWrap =
+        "position:relative;width:100%;height:100%;overflow:hidden;" +
+        "background:rgba(0,0,0,0.35);" +
+        "border-radius:8px;box-sizing:border-box;";
       return html`
         <div
-          style="${wrap}display:flex;align-items:center;justify-content:center;"
+          style="${idleWrap}display:flex;align-items:center;justify-content:center;"
         >
           <span
-            style="color:rgba(255,255,255,0.45);font-size:12px;text-align:center;padding:16px;user-select:none;"
+            style="color:rgba(255,255,255,0.6);font-size:13px;text-align:center;padding:16px;user-select:none;"
           >
             ${msg}
           </span>
@@ -492,16 +497,20 @@ dmn.plugin.defineElement({
       analyser.getByteFrequencyData(data);
 
       const count = s.barCount;
-      const slice = Math.max(1, Math.floor(bufLen / count));
       const bars = [];
 
+      // 로그 스케일 주파수 매핑: 저음 영역을 넓게, 고음 영역을 좁게
       for (let i = 0; i < count; i++) {
+        const logStart = Math.pow(i / count, 2) * bufLen;
+        const logEnd = Math.pow((i + 1) / count, 2) * bufLen;
+        const from = Math.floor(logStart);
+        const to = Math.max(from + 1, Math.floor(logEnd));
+
         let sum = 0;
-        const start = i * slice;
-        for (let j = 0; j < slice && start + j < bufLen; j++) {
-          sum += data[start + j];
+        for (let j = from; j < to && j < bufLen; j++) {
+          sum += data[j];
         }
-        const avg = sum / slice;
+        const avg = sum / (to - from);
         bars.push(Math.min(100, (avg / 255) * 100 * s.sensitivity));
       }
 
