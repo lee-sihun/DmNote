@@ -333,25 +333,31 @@ const ResizeHandles = ({
         newHeight = Math.max(MIN_SIZE, snap(newHeight));
       }
 
-      // 위치 계산 (크기/비율 확정 후 앵커 기준으로 재계산)
+      // 위치 계산 (앵커 엣지 보존: 드래그하지 않은 쪽은 고정)
       let newX = startBounds!.x;
       let newY = startBounds!.y;
 
       if (handle!.dx === -1) {
-        newX = startBounds!.x + (startBounds!.width - newWidth);
+        // 좌측 핸들: 우측 엣지가 앵커 — 위치 스냅 후 width를 앵커에서 역산
+        const rightAnchor = startBounds!.x + startBounds!.width;
+        newX = snap(rightAnchor - newWidth);
+        newWidth = rightAnchor - newX;
       } else if (handle!.dx === 0) {
+        // 비례 유지 시 중앙 정렬 (스냅 없이 앵커 보존)
         newX = startBounds!.x + (startBounds!.width - newWidth) / 2;
       }
+      // dx === 1: newX = startBounds.x (좌측 앵커 유지)
 
       if (handle!.dy === -1) {
-        newY = startBounds!.y + (startBounds!.height - newHeight);
+        // 상단 핸들: 하단 엣지가 앵커 — 위치 스냅 후 height를 앵커에서 역산
+        const bottomAnchor = startBounds!.y + startBounds!.height;
+        newY = snap(bottomAnchor - newHeight);
+        newHeight = bottomAnchor - newY;
       } else if (handle!.dy === 0) {
+        // 비례 유지 시 중앙 정렬 (스냅 없이 앵커 보존)
         newY = startBounds!.y + (startBounds!.height - newHeight) / 2;
       }
-
-      // 위치는 항상 스냅 적용
-      newX = snap(newX);
-      newY = snap(newY);
+      // dy === 1: newY = startBounds.y (상단 앵커 유지)
 
       onResize?.({
         x: newX,
