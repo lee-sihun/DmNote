@@ -58,9 +58,11 @@ export interface OptionalNumberInputProps {
   onBlur?: () => void;
   min?: number;
   max?: number;
+  prefix?: string;
   suffix?: string;
   width?: string;
   placeholder?: string;
+  allowNegative?: boolean;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }

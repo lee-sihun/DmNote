@@ -17,6 +17,7 @@ const vertexShader = `
   attribute vec3 noteGlow; // x: glow size, y: glow opacity top (0-1), z: glow opacity bottom (0-1)
   attribute vec3 noteGlowColorTop;
   attribute vec3 noteGlowColorBottom;
+  attribute vec4 noteBorder; // x: width, yzw: RGB color
   attribute float trackIndex;
 
   uniform mat4 projectionMatrix;
@@ -36,11 +37,9 @@ const vertexShader = `
   varying vec2 vGlowOpacity;
   varying vec3 vGlowColorTop;
   varying vec3 vGlowColorBottom;
+  varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vTrackTopY;
   varying float vTrackBottomY;
-  varying float vReverse;
-  varying float vNoteTopY;
-  varying float vNoteBottomY;
 
   void main() {
     float startTime = noteInfo.x;
@@ -130,11 +129,9 @@ const vertexShader = `
     vGlowOpacity = vec2(glowOpacityTop, glowOpacityBottom);
     vGlowColorTop = noteGlowColorTop;
     vGlowColorBottom = noteGlowColorBottom;
+    vBorder = noteBorder;
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
-    vReverse = uReverse;
-    vNoteTopY = noteTopY;
-    vNoteBottomY = noteBottomY;
   }
 `;
 
@@ -155,10 +152,9 @@ const fragmentShader = `
   varying vec2 vGlowOpacity;
   varying vec3 vGlowColorTop;
   varying vec3 vGlowColorBottom;
+  varying vec4 vBorder; // x: width, yzw: RGB color
   varying float vTrackTopY;
   varying float vTrackBottomY;
-  varying float vNoteTopY;
-  varying float vNoteBottomY;
 
   void main() {
     // gl_FragCoord는 고해상도 디스플레이(DPR > 1, 예: macOS Retina)에서 물리 픽셀 단위.
@@ -175,10 +171,48 @@ const fragmentShader = `
 
     float r = clamp(vRadius, 0.0, min(vHalfSize.x, vHalfSize.y));
     vec2 q = abs(vLocalPos) - (vHalfSize - vec2(r));
-    float dist = length(max(q, 0.0)) - r;
+    float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     float aa = 1.0;
-    float bodyMask = clamp(1.0 - dist / aa, 0.0, 1.0);
-    float bodyAlpha = baseColor.a * bodyMask;
+
+    // 테두리 디코딩: width에 side mode 인코딩됨 (0~20=all, 100~120=vertical, 200~220=horizontal)
+    float encodedWidth = vBorder.x;
+    vec3 borderColor = vBorder.yzw;
+    float sideMode = 0.0;
+    float bw = encodedWidth;
+    if (encodedWidth >= 150.0) {
+      sideMode = 2.0;
+      bw = encodedWidth - 200.0;
+    } else if (encodedWidth >= 50.0) {
+      sideMode = 1.0;
+      bw = encodedWidth - 100.0;
+    }
+
+    float outerMask = clamp(1.0 - dist / aa, 0.0, 1.0);
+    float innerMask;
+    if (bw > 0.0) {
+      if (sideMode == 0.0) {
+        // 전체: 기존 SDF 기반 축소
+        float innerDist = dist + bw;
+        innerMask = clamp(1.0 - innerDist / aa, 0.0, 1.0);
+      } else {
+        // 축별 테두리: 선택된 축의 edge distance 기반
+        float edgeDist;
+        if (sideMode == 1.0) {
+          // 수직 (좌우 테두리)
+          edgeDist = vHalfSize.x - abs(vLocalPos.x);
+        } else {
+          // 수평 (상하 테두리)
+          edgeDist = vHalfSize.y - abs(vLocalPos.y);
+        }
+        float borderZone = clamp((bw - edgeDist) / aa, 0.0, 1.0);
+        innerMask = outerMask * (1.0 - borderZone);
+      }
+    } else {
+      innerMask = outerMask;
+    }
+    float borderMask = outerMask - innerMask;
+    float bodyAlpha = baseColor.a * innerMask;
+    float borderAlpha = baseColor.a * borderMask;
 
     float glowAlpha = 0.0;
     if (vGlowSize > 0.0) {
@@ -198,10 +232,12 @@ const fragmentShader = `
       fadeMask = min(fadeMask, clamp((1.0 - trackRelativeY) / bottomFadeRatio, 0.0, 1.0));
     }
     bodyAlpha *= fadeMask;
+    borderAlpha *= fadeMask;
     glowAlpha *= fadeMask;
 
-    float outAlpha = clamp(bodyAlpha + glowAlpha, 0.0, 1.0);
-    vec3 outColor = baseColor.rgb * bodyAlpha + glowColor * glowAlpha;
+    float outAlpha = clamp(bodyAlpha + borderAlpha + glowAlpha, 0.0, 1.0);
+    vec3 borderContrib = borderAlpha > 0.0 ? borderColor * borderAlpha : vec3(0.0);
+    vec3 outColor = baseColor.rgb * bodyAlpha + borderContrib + glowColor * glowAlpha;
     gl_FragColor = vec4(outColor, outAlpha);
   }
 `;
@@ -226,6 +262,7 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteGlow',
   'noteGlowColorTop',
   'noteGlowColorBottom',
+  'noteBorder',
   'trackIndex',
 ]);
 
@@ -315,6 +352,7 @@ interface NoteBuffer {
   noteGlow: Float32Array;
   noteGlowColorTop: Float32Array;
   noteGlowColorBottom: Float32Array;
+  noteBorder: Float32Array;
   trackIndex: Float32Array;
 }
 
@@ -450,6 +488,12 @@ export function WebGLTracksOGL({
       instanced: 1,
       size: 3,
       data: noteBuffer.noteGlowColorBottom,
+      usage: gl.DYNAMIC_DRAW,
+    });
+    geometry.addAttribute('noteBorder', {
+      instanced: 1,
+      size: 4,
+      data: noteBuffer.noteBorder,
       usage: gl.DYNAMIC_DRAW,
     });
     geometry.addAttribute('trackIndex', {

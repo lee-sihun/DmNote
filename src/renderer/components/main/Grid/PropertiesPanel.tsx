@@ -306,6 +306,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 일괄 편집용 컬러 버튼 refs
   const batchNoteColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchGlowColorButtonRef = useRef<HTMLButtonElement>(null);
+  const batchBorderColorButtonRef = useRef<HTMLButtonElement>(null);
   const batchCounterFillButtonRef = useRef<HTMLButtonElement>(null);
   const batchCounterStrokeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -617,7 +618,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   });
 
   // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
+  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
@@ -626,6 +627,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [batchLocalColors, setBatchLocalColors] = useState<{
     noteColor: NoteColor;
     glowColor: NoteColor;
+    borderColor: string;
     fillIdle: string;
     fillActive: string;
     strokeIdle: string;
@@ -633,6 +635,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }>({
     noteColor: '#FFFFFF',
     glowColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
     strokeIdle: '#000000',
@@ -1962,6 +1965,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const batchColorPickerInteractiveRefs = [
     batchNoteColorButtonRef,
     batchGlowColorButtonRef,
+    batchBorderColorButtonRef,
     batchCounterFillButtonRef,
     batchCounterStrokeButtonRef,
   ];
@@ -1971,8 +1975,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (target && target !== batchPickerFor) {
       const keysData = getSelectedKeysData();
       const keyOnly = getSelectedKeyOnlyPositions();
+      const isNoteTabPicker =
+        target === 'noteColor' ||
+        target === 'glowColor' ||
+        target === 'borderColor';
       const firstPos =
-        (target === 'noteColor' || target === 'glowColor') && keyOnly.length > 0
+        isNoteTabPicker && keyOnly.length > 0
           ? keyOnly[0].position
           : keysData[0]?.position;
       if (firstPos) {
@@ -2002,6 +2010,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             }
             return typeof gc === 'string' ? gc : '#FFFFFF';
           })(),
+          borderColor: firstPos.noteBorderColor ?? '#FFFFFF',
           fillIdle: counterSettings.fill.idle,
           fillActive: counterSettings.fill.active,
           strokeIdle: counterSettings.stroke.idle,
@@ -2028,6 +2037,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return batchLocalColors.noteColor;
       case 'glowColor':
         return batchLocalColors.glowColor;
+      case 'borderColor':
+        return batchLocalColors.borderColor;
       case 'fill':
         return batchCounterColorState === 'active'
           ? batchLocalColors.fillActive
@@ -2047,6 +2058,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return batchNoteColorButtonRef;
       case 'glowColor':
         return batchGlowColorButtonRef;
+      case 'borderColor':
+        return batchBorderColorButtonRef;
       case 'fill':
         return batchCounterFillButtonRef;
       case 'stroke':
@@ -2063,6 +2076,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setBatchLocalColors((prev) => ({
         ...prev,
         [batchPickerFor]: newColor,
+      }));
+    } else if (batchPickerFor === 'borderColor') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        borderColor: solidColor,
       }));
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
@@ -2117,6 +2136,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         ...prev,
         [batchPickerFor]: newColor,
       }));
+    } else if (batchPickerFor === 'borderColor') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      setBatchLocalColors((prev) => ({
+        ...prev,
+        borderColor: solidColor,
+      }));
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
       const key =
@@ -2151,6 +2176,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleBatchGlowColorChangeCompleteKeysOnly(newColor);
       } else {
         handleBatchGlowColorChangeComplete(newColor);
+      }
+    } else if (batchPickerFor === 'borderColor') {
+      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
+      } else {
+        handleBatchStyleChangeComplete('noteBorderColor', solidColor);
       }
     } else if (batchPickerFor === 'fill') {
       const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
@@ -2309,6 +2341,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         batchThumbRefFor={batchThumbRefFor}
         batchNoteColorButtonRef={batchNoteColorButtonRef}
         batchGlowColorButtonRef={batchGlowColorButtonRef}
+        batchBorderColorButtonRef={batchBorderColorButtonRef}
         batchCounterFillButtonRef={batchCounterFillButtonRef}
         batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
         batchImageButtonRef={batchImageButtonRef}

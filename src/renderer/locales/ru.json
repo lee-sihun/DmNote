@@ -155,7 +155,15 @@
     "noteAlignment": "Выравнивание ноты",
     "noteAlignLeft": "Слева",
     "noteAlignCenter": "По центру",
-    "noteAlignRight": "Справа"
+    "noteAlignRight": "Справа",
+    "noteOffset": "Смещение",
+    "noteOffsetX": "Смещение X",
+    "noteOffsetY": "Смещение Y",
+    "noteBorderWidth": "Толщина рамки",
+    "noteBorderColor": "Цвет обводки",
+    "borderSideAll": "Все",
+    "borderSideVertical": "Вертикально",
+    "borderSideHorizontal": "Горизонтально"
   },
   "imagePicker": {
     "idle": "Покой",

@@ -155,7 +155,15 @@
     "noteAlignment": "Note Alignment",
     "noteAlignLeft": "Left",
     "noteAlignCenter": "Center",
-    "noteAlignRight": "Right"
+    "noteAlignRight": "Right",
+    "noteOffset": "Offset",
+    "noteOffsetX": "Offset X",
+    "noteOffsetY": "Offset Y",
+    "noteBorderWidth": "Border Width",
+    "noteBorderColor": "Border Color",
+    "borderSideAll": "All",
+    "borderSideVertical": "Vertical",
+    "borderSideHorizontal": "Horizontal"
   },
   "imagePicker": {
     "idle": "Idle",

@@ -155,7 +155,15 @@
     "noteAlignment": "鍵雨對齊",
     "noteAlignLeft": "靠左",
     "noteAlignCenter": "置中",
-    "noteAlignRight": "靠右"
+    "noteAlignRight": "靠右",
+    "noteOffset": "偏移",
+    "noteOffsetX": "偏移 X",
+    "noteOffsetY": "偏移 Y",
+    "noteBorderWidth": "邊框寬度",
+    "noteBorderColor": "邊框顏色",
+    "borderSideAll": "全部",
+    "borderSideVertical": "垂直",
+    "borderSideHorizontal": "水平"
   },
   "imagePicker": {
     "idle": "閒置",

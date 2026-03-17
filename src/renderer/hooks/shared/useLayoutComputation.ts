@@ -72,6 +72,33 @@ export function computeLayout(input: LayoutInput) {
       ys.push(pos.dy);
       widths.push(pos.dx + pos.width);
       heights.push(pos.dy + pos.height);
+
+      // 노트 오프셋에 의한 트랙 영역 확장 반영
+      const userOffsetX = pos.noteOffsetX ?? 0;
+      const userOffsetY = pos.noteOffsetY ?? 0;
+      if (userOffsetX !== 0) {
+        const keyWidth = pos.width;
+        const desiredNoteWidth =
+          typeof pos.noteWidth === 'number' && Number.isFinite(pos.noteWidth)
+            ? Math.max(1, Math.round(pos.noteWidth))
+            : keyWidth;
+        const noteAlign = pos.noteAlignment ?? 'center';
+        const alignOff =
+          noteAlign === 'left'
+            ? 0
+            : noteAlign === 'right'
+            ? keyWidth - desiredNoteWidth
+            : (keyWidth - desiredNoteWidth) / 2;
+        const noteLeft = pos.dx + alignOff + userOffsetX;
+        const noteRight = noteLeft + desiredNoteWidth;
+        xs.push(noteLeft);
+        widths.push(noteRight);
+      }
+      if (userOffsetY > 0) {
+        heights.push(pos.dy + pos.height + userOffsetY);
+      } else if (userOffsetY < 0) {
+        ys.push(pos.dy + userOffsetY);
+      }
     });
 
     currentStatPositions.forEach((pos) => {
@@ -176,20 +203,22 @@ export function computeLayout(input: LayoutInput) {
           ? Math.max(1, Math.round(position.noteWidth))
           : keyWidth;
       const noteAlign = position.noteAlignment ?? 'center';
-      const noteOffsetX =
+      const noteAlignOffsetX =
         noteAlign === 'left'
           ? 0
           : noteAlign === 'right'
           ? keyWidth - desiredNoteWidth
           : (keyWidth - desiredNoteWidth) / 2;
+      const userOffsetX = position.noteOffsetX ?? 0;
+      const userOffsetY = position.noteOffsetY ?? 0;
 
       return {
         trackKey: key,
         trackIndex: position.zIndex ?? index,
         position: {
           ...position,
-          dx: position.dx + noteOffsetX,
-          dy: trackStartY,
+          dx: position.dx + noteAlignOffsetX + userOffsetX,
+          dy: trackStartY + userOffsetY,
         },
         width: desiredNoteWidth,
         height: trackHeight,
@@ -207,6 +236,9 @@ export function computeLayout(input: LayoutInput) {
         noteGlowColor: position.noteGlowColor ?? position.noteColor,
         flowSpeed: noteSettings?.speed ?? DEFAULT_NOTE_SETTINGS.speed,
         borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
+        noteBorderWidth: position.noteBorderWidth ?? 0,
+        noteBorderColor: position.noteBorderColor,
+        noteBorderSide: position.noteBorderSide ?? 'all',
       };
     })
     .filter(Boolean);

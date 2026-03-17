@@ -17,6 +17,21 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
 
+// rgba(...) 또는 hex 문자열에서 #RRGGBB 추출
+const toHexColor = (color: string): string => {
+  if (color.startsWith('#') && color.length >= 7) return color.slice(0, 7);
+  const match = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (match) {
+    const r = Math.min(255, Number(match[1]));
+    const g = Math.min(255, Number(match[2]));
+    const b = Math.min(255, Number(match[3]));
+    return `#${r.toString(16).padStart(2, '0')}${g
+      .toString(16)
+      .padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+  }
+  return DEFAULT_NOTE_COLOR;
+};
+
 // 색상 모드 상수
 const COLOR_MODES = {
   solid: 'solid',
@@ -43,13 +58,14 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   const { noteEffect: _noteEffect } = useSettingsStore();
 
   // 통합 피커 상태 (카운터 탭 패턴)
-  type PickerTarget = 'note' | 'glow' | null;
+  type PickerTarget = 'note' | 'glow' | 'border' | null;
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = !!pickerFor;
 
   // 컬러 버튼 refs
   const noteColorButtonRef = useRef<HTMLButtonElement>(null);
   const glowColorButtonRef = useRef<HTMLButtonElement>(null);
+  const borderColorButtonRef = useRef<HTMLButtonElement>(null);
 
   // 노트 색상 상태 (원본 모달과 동일한 패턴)
   const [noteColorMode, setNoteColorMode] = useState<ColorMode>(() => {
@@ -253,7 +269,21 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     pickerFor,
   ]);
 
-  const interactiveRefs = [noteColorButtonRef, glowColorButtonRef];
+  // 테두리 색상 상태
+  const [borderColor, setBorderColor] = useState<string>(
+    () => keyPosition.noteBorderColor ?? '#FFFFFF',
+  );
+
+  useEffect(() => {
+    if (pickerFor === 'border') return;
+    setBorderColor(keyPosition.noteBorderColor ?? '#FFFFFF');
+  }, [keyPosition.noteBorderColor, pickerFor]);
+
+  const interactiveRefs = [
+    noteColorButtonRef,
+    glowColorButtonRef,
+    borderColorButtonRef,
+  ];
 
   // 노트 색상 헬퍼 함수 (내부 상태 기반으로 실시간 반영)
   const getNoteColorDisplay = () => {
@@ -392,7 +422,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   })();
 
   // 피커 토글 (같은 타겟이면 닫고, 다른 타겟이면 바로 전환)
-  const handlePickerToggle = (target: 'note' | 'glow') => {
+  const handlePickerToggle = (target: 'note' | 'glow' | 'border') => {
     setPickerFor((prev) => (prev === target ? null : target));
   };
 
@@ -440,6 +470,28 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
       <SectionDivider />
 
+      {/* 오프셋 */}
+      <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
+        <OptionalNumberInput
+          value={keyPosition.noteOffsetX || undefined}
+          onChange={(value) => handleStyleChangeComplete('noteOffsetX', value)}
+          prefix="X"
+          allowNegative
+          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
+          placeholder="0"
+        />
+        <OptionalNumberInput
+          value={keyPosition.noteOffsetY || undefined}
+          onChange={(value) => handleStyleChangeComplete('noteOffsetY', value)}
+          prefix="Y"
+          allowNegative
+          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
+          placeholder="0"
+        />
+      </PropertyRow>
+
       {/* 노트 넓이 */}
       <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
         <OptionalNumberInput
@@ -478,6 +530,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         />
       </PropertyRow>
 
+      <SectionDivider />
+
       {/* 노트 색상 */}
       <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
         <button
@@ -490,6 +544,119 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               : 'border-[#3A3943] hover:border-[#505058]'
           }`}
           style={getNoteColorDisplay().style}
+        />
+      </PropertyRow>
+
+      {/* 노트 테두리 색상 + 방향 */}
+      <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
+        <div className="flex items-center gap-[4px]">
+          <button
+            ref={borderColorButtonRef}
+            type="button"
+            onClick={() => handlePickerToggle('border')}
+            className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'border'
+                ? 'border-[#459BF8]'
+                : 'border-[#3A3943] hover:border-[#505058]'
+            }`}
+            style={{ backgroundColor: borderColor }}
+          />
+          <Dropdown
+            iconTrigger={
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                {(keyPosition.noteBorderSide ?? 'all') === 'all' && (
+                  <rect
+                    x="1.5"
+                    y="1.5"
+                    width="10"
+                    height="10"
+                    rx="1.5"
+                    stroke="#DBDEE8"
+                    strokeWidth="1.5"
+                  />
+                )}
+                {(keyPosition.noteBorderSide ?? 'all') === 'vertical' && (
+                  <>
+                    <line
+                      x1="1.5"
+                      y1="1"
+                      x2="1.5"
+                      y2="12"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="11.5"
+                      y1="1"
+                      x2="11.5"
+                      y2="12"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
+                {(keyPosition.noteBorderSide ?? 'all') === 'horizontal' && (
+                  <>
+                    <line
+                      x1="1"
+                      y1="1.5"
+                      x2="12"
+                      y2="1.5"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="1"
+                      y1="11.5"
+                      x2="12"
+                      y2="11.5"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
+              </svg>
+            }
+            align="right"
+            options={[
+              { label: t('keySetting.borderSideAll') || '전체', value: 'all' },
+              {
+                label: t('keySetting.borderSideVertical') || '수직',
+                value: 'vertical',
+              },
+              {
+                label: t('keySetting.borderSideHorizontal') || '수평',
+                value: 'horizontal',
+              },
+            ]}
+            value={keyPosition.noteBorderSide ?? 'all'}
+            onChange={(value) =>
+              handleStyleChangeComplete(
+                'noteBorderSide',
+                value as 'all' | 'vertical' | 'horizontal',
+              )
+            }
+          />
+        </div>
+      </PropertyRow>
+
+      {/* 노트 테두리 두께 */}
+      <PropertyRow label={t('keySetting.noteBorderWidth') || '테두리 두께'}>
+        <NumberInput
+          value={
+            keyPosition.noteBorderWidth ??
+            NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default
+          }
+          onChange={(value) =>
+            handleStyleChangeComplete('noteBorderWidth', value)
+          }
+          suffix="px"
+          min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
         />
       </PropertyRow>
 
@@ -557,139 +724,165 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
         <ColorPicker
           open={pickerOpen}
           referenceRef={
-            pickerFor === 'note' ? noteColorButtonRef : glowColorButtonRef
+            pickerFor === 'note'
+              ? noteColorButtonRef
+              : pickerFor === 'glow'
+              ? glowColorButtonRef
+              : borderColorButtonRef
           }
           panelElement={panelElement}
-          color={pickerFor === 'note' ? notePickerColor : glowPickerColor}
-          onColorChange={(c: NoteColor) => handleColorChange(pickerFor, c)}
-          onColorChangeComplete={(c: NoteColor) =>
-            handleColorChangeComplete(pickerFor, c)
+          color={
+            pickerFor === 'note'
+              ? notePickerColor
+              : pickerFor === 'glow'
+              ? glowPickerColor
+              : borderColor
           }
+          onColorChange={(c: NoteColor) => {
+            if (pickerFor === 'border') {
+              const hex = toHexColor(typeof c === 'string' ? c : '#FFFFFF');
+              setBorderColor(hex);
+              return;
+            }
+            handleColorChange(pickerFor, c);
+          }}
+          onColorChangeComplete={(c: NoteColor) => {
+            if (pickerFor === 'border') {
+              const hex = toHexColor(typeof c === 'string' ? c : '#FFFFFF');
+              setBorderColor(hex);
+              onKeyPreview?.(keyIndex, { noteBorderColor: hex });
+              onKeyUpdate({ index: keyIndex, noteBorderColor: hex });
+              return;
+            }
+            handleColorChangeComplete(pickerFor, c);
+          }}
           onClose={() => setPickerFor(null)}
           interactiveRefs={interactiveRefs}
-          solidOnly={false}
-          opacityPercent={
-            pickerFor === 'note'
-              ? noteColorMode === COLOR_MODES.gradient
-                ? { top: localNoteOpacityTop, bottom: localNoteOpacityBottom }
-                : localNoteOpacity
-              : glowColorMode === COLOR_MODES.gradient
-              ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
-              : localGlowOpacity
-          }
-          onOpacityPercentChange={(
-            value: number,
-            target: 'solid' | 'top' | 'bottom',
-          ) => {
-            if (pickerFor === 'note') {
-              if (target === 'solid') {
-                setLocalNoteOpacity(value);
-                setLocalNoteOpacityTop(value);
+          solidOnly={pickerFor === 'border'}
+          {...(pickerFor !== 'border' && {
+            opacityPercent:
+              pickerFor === 'note'
+                ? noteColorMode === COLOR_MODES.gradient
+                  ? { top: localNoteOpacityTop, bottom: localNoteOpacityBottom }
+                  : localNoteOpacity
+                : glowColorMode === COLOR_MODES.gradient
+                ? { top: localGlowOpacityTop, bottom: localGlowOpacityBottom }
+                : localGlowOpacity,
+            onOpacityPercentChange: (
+              value: number,
+              target: 'solid' | 'top' | 'bottom',
+            ) => {
+              if (pickerFor === 'note') {
+                if (target === 'solid') {
+                  setLocalNoteOpacity(value);
+                  setLocalNoteOpacityTop(value);
+                  setLocalNoteOpacityBottom(value);
+                  return;
+                }
+                if (target === 'top') {
+                  setLocalNoteOpacityTop(value);
+                  setLocalNoteOpacity(
+                    Math.round((value + localNoteOpacityBottom) / 2),
+                  );
+                  return;
+                }
                 setLocalNoteOpacityBottom(value);
-                return;
-              }
-              if (target === 'top') {
-                setLocalNoteOpacityTop(value);
                 setLocalNoteOpacity(
-                  Math.round((value + localNoteOpacityBottom) / 2),
+                  Math.round((localNoteOpacityTop + value) / 2),
                 );
                 return;
               }
-              setLocalNoteOpacityBottom(value);
-              setLocalNoteOpacity(
-                Math.round((localNoteOpacityTop + value) / 2),
-              );
-              return;
-            }
 
-            if (target === 'solid') {
-              setLocalGlowOpacity(value);
-              setLocalGlowOpacityTop(value);
-              setLocalGlowOpacityBottom(value);
-              return;
-            }
-            if (target === 'top') {
-              setLocalGlowOpacityTop(value);
-              setLocalGlowOpacity(
-                Math.round((value + localGlowOpacityBottom) / 2),
-              );
-              return;
-            }
-            setLocalGlowOpacityBottom(value);
-            setLocalGlowOpacity(Math.round((localGlowOpacityTop + value) / 2));
-          }}
-          onOpacityPercentChangeComplete={(
-            value: number,
-            target: 'solid' | 'top' | 'bottom',
-          ) => {
-            if (pickerFor === 'note') {
               if (target === 'solid') {
-                setLocalNoteOpacity(value);
-                setLocalNoteOpacityTop(value);
-                setLocalNoteOpacityBottom(value);
+                setLocalGlowOpacity(value);
+                setLocalGlowOpacityTop(value);
+                setLocalGlowOpacityBottom(value);
+                return;
+              }
+              if (target === 'top') {
+                setLocalGlowOpacityTop(value);
+                setLocalGlowOpacity(
+                  Math.round((value + localGlowOpacityBottom) / 2),
+                );
+                return;
+              }
+              setLocalGlowOpacityBottom(value);
+              setLocalGlowOpacity(
+                Math.round((localGlowOpacityTop + value) / 2),
+              );
+            },
+            onOpacityPercentChangeComplete: (
+              value: number,
+              target: 'solid' | 'top' | 'bottom',
+            ) => {
+              if (pickerFor === 'note') {
+                if (target === 'solid') {
+                  setLocalNoteOpacity(value);
+                  setLocalNoteOpacityTop(value);
+                  setLocalNoteOpacityBottom(value);
+                  const payload = {
+                    noteOpacity: value,
+                    noteOpacityTop: value,
+                    noteOpacityBottom: value,
+                  };
+                  onKeyPreview?.(keyIndex, payload);
+                  onKeyUpdate({ index: keyIndex, ...payload });
+                  return;
+                }
+
+                const nextTop = target === 'top' ? value : localNoteOpacityTop;
+                const nextBottom =
+                  target === 'bottom' ? value : localNoteOpacityBottom;
+                const nextBase = Math.round((nextTop + nextBottom) / 2);
+                setLocalNoteOpacity(nextBase);
+                if (target === 'top') setLocalNoteOpacityTop(value);
+                else setLocalNoteOpacityBottom(value);
+
                 const payload = {
-                  noteOpacity: value,
-                  noteOpacityTop: value,
-                  noteOpacityBottom: value,
+                  noteOpacity: nextBase,
+                  noteOpacityTop: nextTop,
+                  noteOpacityBottom: nextBottom,
                 };
                 onKeyPreview?.(keyIndex, payload);
                 onKeyUpdate({ index: keyIndex, ...payload });
                 return;
               }
 
-              const nextTop = target === 'top' ? value : localNoteOpacityTop;
+              if (target === 'solid') {
+                setLocalGlowOpacity(value);
+                setLocalGlowOpacityTop(value);
+                setLocalGlowOpacityBottom(value);
+                const payload = {
+                  noteGlowOpacity: value,
+                  noteGlowOpacityTop: value,
+                  noteGlowOpacityBottom: value,
+                };
+                onKeyPreview?.(keyIndex, payload);
+                onKeyUpdate({ index: keyIndex, ...payload });
+                return;
+              }
+
+              const nextTop = target === 'top' ? value : localGlowOpacityTop;
               const nextBottom =
-                target === 'bottom' ? value : localNoteOpacityBottom;
+                target === 'bottom' ? value : localGlowOpacityBottom;
               const nextBase = Math.round((nextTop + nextBottom) / 2);
-              setLocalNoteOpacity(nextBase);
-              if (target === 'top') setLocalNoteOpacityTop(value);
-              else setLocalNoteOpacityBottom(value);
+              setLocalGlowOpacity(nextBase);
+              if (target === 'top') setLocalGlowOpacityTop(value);
+              else setLocalGlowOpacityBottom(value);
 
               const payload = {
-                noteOpacity: nextBase,
-                noteOpacityTop: nextTop,
-                noteOpacityBottom: nextBottom,
+                noteGlowOpacity: nextBase,
+                noteGlowOpacityTop: nextTop,
+                noteGlowOpacityBottom: nextBottom,
               };
               onKeyPreview?.(keyIndex, payload);
               onKeyUpdate({ index: keyIndex, ...payload });
-              return;
-            }
-
-            if (target === 'solid') {
-              setLocalGlowOpacity(value);
-              setLocalGlowOpacityTop(value);
-              setLocalGlowOpacityBottom(value);
-              const payload = {
-                noteGlowOpacity: value,
-                noteGlowOpacityTop: value,
-                noteGlowOpacityBottom: value,
-              };
-              onKeyPreview?.(keyIndex, payload);
-              onKeyUpdate({ index: keyIndex, ...payload });
-              return;
-            }
-
-            const nextTop = target === 'top' ? value : localGlowOpacityTop;
-            const nextBottom =
-              target === 'bottom' ? value : localGlowOpacityBottom;
-            const nextBase = Math.round((nextTop + nextBottom) / 2);
-            setLocalGlowOpacity(nextBase);
-            if (target === 'top') setLocalGlowOpacityTop(value);
-            else setLocalGlowOpacityBottom(value);
-
-            const payload = {
-              noteGlowOpacity: nextBase,
-              noteGlowOpacityTop: nextTop,
-              noteGlowOpacityBottom: nextBottom,
-            };
-            onKeyPreview?.(keyIndex, payload);
-            onKeyUpdate({ index: keyIndex, ...payload });
-          }}
-          opacityPercentLabel={
-            pickerFor === 'note'
-              ? t('keySetting.noteOpacity') || '노트 투명도'
-              : t('keySetting.noteGlowOpacity') || '글로우 투명도'
-          }
+            },
+            opacityPercentLabel:
+              pickerFor === 'note'
+                ? t('keySetting.noteOpacity') || '노트 투명도'
+                : t('keySetting.noteGlowOpacity') || '글로우 투명도',
+          })}
         />
       )}
     </>

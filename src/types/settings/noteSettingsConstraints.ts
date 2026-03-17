@@ -59,6 +59,21 @@ export const NOTE_SETTINGS_CONSTRAINTS = {
     max: 500,
     default: 50,
   },
+  noteOffsetX: {
+    min: -500,
+    max: 500,
+    default: 0,
+  },
+  noteOffsetY: {
+    min: -500,
+    max: 500,
+    default: 0,
+  },
+  noteBorderWidth: {
+    min: 0,
+    max: 20,
+    default: 0,
+  },
 } as const;
 
 /**

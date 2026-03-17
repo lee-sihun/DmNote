@@ -13,6 +13,10 @@ interface DropdownProps {
   disabled?: boolean;
   /** true일 경우 드롭다운이 부모 컨테이너의 전체 너비를 차지함 */
   fullWidth?: boolean;
+  /** 아이콘 트리거 모드: 설정 시 버튼이 아이콘으로 표시됨 */
+  iconTrigger?: React.ReactNode;
+  /** 메뉴 수평 정렬 (기본: left) */
+  align?: 'left' | 'center' | 'right';
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -22,6 +26,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   placeholder = '선택',
   disabled = false,
   fullWidth = false,
+  iconTrigger,
+  align = 'left',
 }) => {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -67,44 +73,66 @@ const Dropdown: React.FC<DropdownProps> = ({
       ref={ref}
       className={`relative ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
     >
-      <button
-        ref={buttonRef}
-        type="button"
-        className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
-          fullWidth ? 'w-full' : ''
-        }`}
-        onClick={() => setOpen((prev) => !prev)}
-        disabled={disabled}
-      >
-        <span
-          className={`truncate leading-[23px] ${
-            !selected ? 'text-[#DBDEE8]' : ''
+      {iconTrigger ? (
+        <button
+          ref={buttonRef}
+          type="button"
+          className={`flex items-center justify-center w-[23px] h-[23px] rounded-[7px] border-[1px] cursor-pointer transition-colors ${
+            open
+              ? 'border-[#459BF8] bg-[#2A2A31]'
+              : 'border-[#3A3943] bg-[#2A2A31] hover:border-[#505058]'
           }`}
+          onClick={() => setOpen((prev) => !prev)}
+          disabled={disabled}
         >
-          {selected ? selected.label : placeholder}
-        </span>
-        <svg
-          width="8"
-          height="5"
-          viewBox="0 0 14 8"
-          fill="none"
-          className={`ml-[5px] transition-transform duration-200 ${
-            open ? 'rotate-180' : 'rotate-0'
+          {iconTrigger}
+        </button>
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
+            fullWidth ? 'w-full' : ''
           }`}
+          onClick={() => setOpen((prev) => !prev)}
+          disabled={disabled}
         >
-          <path
-            d="M1 1L7 7L13 1"
-            stroke="#DBDEE8"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+          <span
+            className={`truncate leading-[23px] ${
+              !selected ? 'text-[#DBDEE8]' : ''
+            }`}
+          >
+            {selected ? selected.label : placeholder}
+          </span>
+          <svg
+            width="8"
+            height="5"
+            viewBox="0 0 14 8"
+            fill="none"
+            className={`ml-[5px] transition-transform duration-200 ${
+              open ? 'rotate-180' : 'rotate-0'
+            }`}
+          >
+            <path
+              d="M1 1L7 7L13 1"
+              stroke="#DBDEE8"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
       {open && (
         <div
-          className={`absolute left-0 flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${
-            fullWidth ? 'right-0' : ''
+          className={`absolute flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${
+            fullWidth
+              ? 'left-0 right-0'
+              : align === 'right'
+              ? 'right-0'
+              : align === 'center'
+              ? 'left-1/2 -translate-x-1/2'
+              : 'left-0'
           } ${openUpward ? 'bottom-[25px]' : 'top-[25px]'}`}
         >
           {options.length === 0 ? (

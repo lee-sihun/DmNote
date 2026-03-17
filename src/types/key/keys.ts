@@ -269,6 +269,30 @@ export const keyPositionSchema = z.object({
   noteGlowOpacityBottom: z.number().int().min(0).max(100).optional(),
   noteGlowColor: noteColorSchema.optional(),
   noteAutoYCorrection: z.boolean().optional().default(true),
+  // 노트 오프셋 (기본 정렬에 추가 보정값, px)
+  noteOffsetX: z
+    .number()
+    .finite()
+    .min(NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min)
+    .max(NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max)
+    .optional(),
+  noteOffsetY: z
+    .number()
+    .finite()
+    .min(NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min)
+    .max(NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max)
+    .optional(),
+  // 노트 테두리
+  noteBorderWidth: z
+    .number()
+    .min(NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min)
+    .max(NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max)
+    .optional(),
+  noteBorderColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .optional(),
+  noteBorderSide: z.enum(['all', 'vertical', 'horizontal']).optional(),
   className: z.string().optional().or(z.literal('')),
   zIndex: z.number().optional(),
   counter: z

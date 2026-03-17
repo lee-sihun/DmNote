@@ -61,7 +61,7 @@ const RenameIcon: React.FC = () => (
 // Mixed key-like + graph batch selection panel
 // ============================================================================
 
-type BatchPickerTarget = 'noteColor' | 'glowColor' | 'fill' | 'stroke' | null;
+type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
 
 type MixedValueResult<T> = { isMixed: boolean; value: T };
 type MixedValueGetter<P> = <T>(
@@ -79,6 +79,7 @@ interface KeyData {
 interface BatchLocalColors {
   noteColor: NoteColor;
   glowColor: NoteColor;
+  borderColor: string;
   fillIdle: string;
   fillActive: string;
   strokeIdle: string;
@@ -160,6 +161,7 @@ interface BatchKeyLikePanelProps {
   batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
+  batchBorderColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchCounterFillButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchCounterStrokeButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -243,6 +245,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   batchThumbRefFor,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
+  batchBorderColorButtonRef,
   batchCounterFillButtonRef,
   batchCounterStrokeButtonRef,
   batchImageButtonRef,
@@ -760,10 +763,16 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   onGlowColorPickerToggle={() =>
                     handleBatchPickerToggle('glowColor')
                   }
+                  onBorderColorPickerToggle={() =>
+                    handleBatchPickerToggle('borderColor')
+                  }
                   isNoteColorPickerOpen={batchPickerFor === 'noteColor'}
                   isGlowColorPickerOpen={batchPickerFor === 'glowColor'}
+                  isBorderColorPickerOpen={batchPickerFor === 'borderColor'}
                   batchNoteColorButtonRef={batchNoteColorButtonRef}
                   batchGlowColorButtonRef={batchGlowColorButtonRef}
+                  batchBorderColorButtonRef={batchBorderColorButtonRef}
+                  batchLocalColors={batchLocalColors}
                   t={t}
                 />
               </div>

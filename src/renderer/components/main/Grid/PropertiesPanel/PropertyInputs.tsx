@@ -295,9 +295,11 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   onBlur,
   min = 0,
   max = 9999,
+  prefix,
   suffix,
   width = '54px',
   placeholder,
+  allowNegative = false,
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
@@ -329,7 +331,6 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, isFocused, isMixed]);
 
-  // 숫자/백스페이스/삭제/방향키/탭/엔터/홈/엔드만 허용 (마이너스, 소수점 불가)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const allowedKeys = [
       'Backspace',
@@ -347,16 +348,23 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (allowedKeys.includes(e.key)) return;
     if (e.ctrlKey || e.metaKey) return;
     if (/^[0-9]$/.test(e.key)) return;
+    if (allowNegative && e.key === '-') return;
 
     e.preventDefault();
   };
 
+  const numericPattern = allowNegative ? /[^0-9-]/g : /[^0-9]/g;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value.replace(/[^0-9]/g, '');
+    const raw = e.target.value.replace(numericPattern, '');
+    // 마이너스는 맨 앞에만 허용
+    const newValue = allowNegative
+      ? (raw.startsWith('-') ? '-' : '') + raw.replace(/-/g, '')
+      : raw;
     setLocalValue(newValue);
     setHasUserInput(true);
 
-    if (newValue === '') {
+    if (newValue === '' || newValue === '-') {
       onChange(undefined);
       return;
     }
@@ -380,7 +388,9 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
-    const numericValue = localValue.replace(/[^0-9]/g, '');
+    const cleaned = allowNegative
+      ? localValue.replace(/[^0-9-]/g, '')
+      : localValue.replace(/[^0-9]/g, '');
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
@@ -390,7 +400,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       return;
     }
 
-    if (numericValue === '' || isNaN(Number(numericValue))) {
+    if (cleaned === '' || cleaned === '-' || isNaN(Number(cleaned))) {
       setLocalValue('');
       onChange(undefined);
       setHasUserInput(false);
@@ -398,7 +408,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       return;
     }
 
-    const numValue = Number(numericValue);
+    const numValue = Number(cleaned);
     const clamped = Math.min(Math.max(numValue, min), max);
     setLocalValue(getDisplayValue(clamped, false));
     onChange(clamped);
@@ -417,6 +427,38 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   const textClass = showMixedPlaceholder
     ? 'text-[#6B6D75] italic'
     : 'text-[#DBDEE8]';
+
+  if (prefix) {
+    return (
+      <div
+        className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        }`}
+        style={{ width }}
+      >
+        {!showMixedPlaceholder && (
+          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+            {prefix}
+          </span>
+        )}
+        <input
+          type="text"
+          inputMode="numeric"
+          value={localValue}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholder={effectivePlaceholder}
+          className={`absolute ${
+            !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
+          } top-[-1px] h-[23px] ${
+            !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
+          } bg-transparent text-style-4 ${textClass} ${placeholderClass} text-center`}
+        />
+      </div>
+    );
+  }
 
   if (hasSuffix) {
     return (

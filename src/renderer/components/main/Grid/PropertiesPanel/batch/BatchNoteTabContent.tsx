@@ -36,10 +36,14 @@ interface BatchNoteTabContentProps {
   // 컬러 피커 토글
   onNoteColorPickerToggle: () => void;
   onGlowColorPickerToggle: () => void;
+  onBorderColorPickerToggle: () => void;
   isNoteColorPickerOpen: boolean;
   isGlowColorPickerOpen: boolean;
+  isBorderColorPickerOpen: boolean;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement>;
+  batchBorderColorButtonRef: React.RefObject<HTMLButtonElement>;
+  batchLocalColors: { borderColor: string };
   // 번역
   t: (key: string) => string;
 }
@@ -51,10 +55,14 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   getBatchGlowColorDisplay,
   onNoteColorPickerToggle,
   onGlowColorPickerToggle,
+  onBorderColorPickerToggle,
   isNoteColorPickerOpen,
   isGlowColorPickerOpen,
+  isBorderColorPickerOpen,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
+  batchBorderColorButtonRef,
+  batchLocalColors,
   t,
 }) => {
   const { noteEffect: _noteEffect } = useSettingsStore();
@@ -105,11 +113,40 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
       <SectionDivider />
 
+      {/* 오프셋 */}
+      <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
+        <OptionalNumberInput
+          value={
+            getMixedValue((pos) => pos.noteOffsetX, 0).value || undefined
+          }
+          onChange={(value) =>
+            handleBatchStyleChangeComplete('noteOffsetX', value)
+          }
+          prefix="X"
+          allowNegative
+          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
+          placeholder="0"
+          isMixed={getMixedValue((pos) => pos.noteOffsetX, 0).isMixed}
+        />
+        <OptionalNumberInput
+          value={
+            getMixedValue((pos) => pos.noteOffsetY, 0).value || undefined
+          }
+          onChange={(value) =>
+            handleBatchStyleChangeComplete('noteOffsetY', value)
+          }
+          prefix="Y"
+          allowNegative
+          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
+          placeholder="0"
+          isMixed={getMixedValue((pos) => pos.noteOffsetY, 0).isMixed}
+        />
+      </PropertyRow>
+
       {/* 노트 넓이 */}
       <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
-        {noteWidthMixed.isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
         <OptionalNumberInput
           value={noteWidthMixed.value}
           onChange={(value) =>
@@ -118,14 +155,15 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={1}
           placeholder="Auto"
+          isMixed={noteWidthMixed.isMixed}
         />
       </PropertyRow>
 
       {/* 노트 정렬 */}
       <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
-        {getMixedValue((pos) => pos.noteAlignment, 'center').isMixed ? (
+        {getMixedValue((pos) => pos.noteAlignment, 'center').isMixed && (
           <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
+        )}
         <Dropdown
           options={[
             {
@@ -151,6 +189,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         />
       </PropertyRow>
 
+      <SectionDivider />
+
       {/* 노트 색상 */}
       <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
         <button
@@ -167,14 +207,142 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         />
       </PropertyRow>
 
+      {/* 테두리 색상 + 방향 */}
+      <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
+        <div className="flex items-center gap-[4px]">
+          <button
+            ref={batchBorderColorButtonRef}
+            type="button"
+            onClick={onBorderColorPickerToggle}
+            className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              isBorderColorPickerOpen
+                ? 'border-[#459BF8]'
+                : 'border-[#3A3943] hover:border-[#505058]'
+            }`}
+            style={{
+              backgroundColor: getMixedValue(
+                (pos) => pos.noteBorderColor,
+                '#FFFFFF',
+              ).isMixed
+                ? undefined
+                : batchLocalColors.borderColor,
+            }}
+          />
+          <Dropdown
+            iconTrigger={
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                {getMixedValue((pos) => pos.noteBorderSide, 'all').value ===
+                  'all' && (
+                  <rect
+                    x="1.5"
+                    y="1.5"
+                    width="10"
+                    height="10"
+                    rx="1.5"
+                    stroke="#DBDEE8"
+                    strokeWidth="1.5"
+                  />
+                )}
+                {getMixedValue((pos) => pos.noteBorderSide, 'all').value ===
+                  'vertical' && (
+                  <>
+                    <line
+                      x1="1.5"
+                      y1="1"
+                      x2="1.5"
+                      y2="12"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="11.5"
+                      y1="1"
+                      x2="11.5"
+                      y2="12"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
+                {getMixedValue((pos) => pos.noteBorderSide, 'all').value ===
+                  'horizontal' && (
+                  <>
+                    <line
+                      x1="1"
+                      y1="1.5"
+                      x2="12"
+                      y2="1.5"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="1"
+                      y1="11.5"
+                      x2="12"
+                      y2="11.5"
+                      stroke="#DBDEE8"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </>
+                )}
+              </svg>
+            }
+            align="right"
+            options={[
+              {
+                label: t('keySetting.borderSideAll') || '전체',
+                value: 'all',
+              },
+              {
+                label: t('keySetting.borderSideVertical') || '수직',
+                value: 'vertical',
+              },
+              {
+                label: t('keySetting.borderSideHorizontal') || '수평',
+                value: 'horizontal',
+              },
+            ]}
+            value={getMixedValue((pos) => pos.noteBorderSide, 'all').value}
+            onChange={(value) =>
+              handleBatchStyleChangeComplete(
+                'noteBorderSide',
+                value as 'all' | 'vertical' | 'horizontal',
+              )
+            }
+          />
+        </div>
+      </PropertyRow>
+
+      {/* 테두리 두께 */}
+      <PropertyRow label={t('keySetting.noteBorderWidth') || '테두리 두께'}>
+        <NumberInput
+          value={
+            getMixedValue(
+              (pos) => pos.noteBorderWidth,
+              NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default,
+            ).value
+          }
+          onChange={(value) =>
+            handleBatchStyleChangeComplete('noteBorderWidth', value)
+          }
+          suffix="px"
+          min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
+          max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
+          isMixed={
+            getMixedValue(
+              (pos) => pos.noteBorderWidth,
+              NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default,
+            ).isMixed
+          }
+        />
+      </PropertyRow>
+
       {/* 노트 라운딩 */}
       <PropertyRow label={t('keySetting.noteBorderRadius') || '노트 라운딩'}>
-        {getMixedValue(
-          (pos) => pos.noteBorderRadius,
-          NOTE_SETTINGS_CONSTRAINTS.borderRadius.default,
-        ).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
         <NumberInput
           value={
             getMixedValue(
@@ -188,6 +356,12 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
           max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
+          isMixed={
+            getMixedValue(
+              (pos) => pos.noteBorderRadius,
+              NOTE_SETTINGS_CONSTRAINTS.borderRadius.default,
+            ).isMixed
+          }
         />
       </PropertyRow>
 
@@ -210,7 +384,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         />
       </div>
 
-      {/* 글로우 색상/크기/투명도 */}
+      {/* 글로우 색상 */}
       <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
         <button
           ref={batchGlowColorButtonRef}
@@ -226,10 +400,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         />
       </PropertyRow>
 
+      {/* 글로우 크기 */}
       <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
-        {getMixedValue((pos) => pos.noteGlowSize, 20).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
-        ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.noteGlowSize, 20).value}
           onChange={(value) =>
@@ -238,6 +410,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={0}
           max={50}
+          isMixed={getMixedValue((pos) => pos.noteGlowSize, 20).isMixed}
         />
       </PropertyRow>
     </>

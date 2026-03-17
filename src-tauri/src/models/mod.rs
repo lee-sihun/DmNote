@@ -209,6 +209,21 @@ pub struct KeyPosition {
     pub note_glow_color: Option<NoteColor>,
     #[serde(default = "default_note_auto_y_correction")]
     pub note_auto_y_correction: bool,
+    /// 노트 오프셋 X (px). 기본 정렬에 추가 보정값.
+    #[serde(default)]
+    pub note_offset_x: Option<f64>,
+    /// 노트 오프셋 Y (px). 기본 정렬에 추가 보정값.
+    #[serde(default)]
+    pub note_offset_y: Option<f64>,
+    /// 노트 테두리 굵기 (px). 0이면 테두리 없음.
+    #[serde(default)]
+    pub note_border_width: Option<f64>,
+    /// 노트 테두리 색상
+    #[serde(default)]
+    pub note_border_color: Option<String>,
+    /// 노트 테두리 방향 (all/vertical/horizontal)
+    #[serde(default)]
+    pub note_border_side: Option<String>,
     #[serde(default)]
     pub class_name: Option<String>,
     #[serde(default)]

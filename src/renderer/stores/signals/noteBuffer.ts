@@ -75,6 +75,9 @@ export type TrackLayoutInput = {
   noteGlowOpacityBottom?: number;
   noteGlowColor?: string | { type: string; top?: string; bottom?: string };
   borderRadius?: number;
+  noteBorderWidth?: number;
+  noteBorderColor?: string;
+  noteBorderSide?: 'all' | 'vertical' | 'horizontal';
 };
 
 type ResolvedTrackStyle = {
@@ -88,6 +91,8 @@ type ResolvedTrackStyle = {
   glowColorTop: readonly number[];
   glowColorBottom: readonly number[];
   borderRadius: number;
+  borderWidth: number;
+  borderColor: readonly number[];
 };
 
 type ResolvedTrackLayout = TrackLayoutInput & {
@@ -137,6 +142,15 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
     '#FFFFFF',
   );
 
+  const rawBorderWidth = layout.noteBorderWidth ?? 0;
+  const borderSide = layout.noteBorderSide ?? 'all';
+  // side mode를 width에 인코딩: 0~20=all, 100~120=vertical, 200~220=horizontal
+  const sideOffset =
+    borderSide === 'vertical' ? 100 : borderSide === 'horizontal' ? 200 : 0;
+  const borderWidth = rawBorderWidth + sideOffset;
+  const borderColorParsed = parseColor(layout.noteBorderColor ?? '#FFFFFF');
+  const borderColorSRGB = convertLinearToSRGB(borderColorParsed);
+
   return {
     ...layout,
     resolved: {
@@ -154,6 +168,8 @@ const resolveTrackLayout = (layout: TrackLayoutInput): ResolvedTrackLayout => {
       glowColorTop: convertLinearToSRGB(glowStops.top),
       glowColorBottom: convertLinearToSRGB(glowStops.bottom),
       borderRadius: layout.borderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
+      borderWidth,
+      borderColor: borderColorSRGB,
     },
   };
 };
@@ -170,6 +186,7 @@ export class NoteBuffer {
   readonly noteGlow: Float32Array;
   readonly noteGlowColorTop: Float32Array;
   readonly noteGlowColorBottom: Float32Array;
+  readonly noteBorder: Float32Array;
 
   private readonly noteIdByIndex: (string | null)[];
   private readonly trackKeyByIndex: (string | null)[];
@@ -189,6 +206,7 @@ export class NoteBuffer {
     this.noteGlow = new Float32Array(MAX_NOTES * 3);
     this.noteGlowColorTop = new Float32Array(MAX_NOTES * 3);
     this.noteGlowColorBottom = new Float32Array(MAX_NOTES * 3);
+    this.noteBorder = new Float32Array(MAX_NOTES * 4);
 
     this.noteIdByIndex = new Array<string | null>(MAX_NOTES).fill(null);
     this.trackKeyByIndex = new Array<string | null>(MAX_NOTES).fill(null);
@@ -238,6 +256,8 @@ export class NoteBuffer {
       glowColorTop,
       glowColorBottom,
       borderRadius,
+      borderWidth,
+      borderColor,
     } = layout.resolved;
     const trackIndex = layout.trackIndex;
 
@@ -296,6 +316,11 @@ export class NoteBuffer {
         insertIndex * 3,
         this.activeCount * 3,
       );
+      this.noteBorder.copyWithin(
+        (insertIndex + 1) * 4,
+        insertIndex * 4,
+        this.activeCount * 4,
+      );
 
       for (let i = this.activeCount; i > insertIndex; i -= 1) {
         const movedId = this.noteIdByIndex[i - 1];
@@ -343,6 +368,12 @@ export class NoteBuffer {
     this.noteGlowColorBottom[glowColorOffset] = glowColorBottom[0];
     this.noteGlowColorBottom[glowColorOffset + 1] = glowColorBottom[1];
     this.noteGlowColorBottom[glowColorOffset + 2] = glowColorBottom[2];
+
+    const borderOffset = insertIndex * 4;
+    this.noteBorder[borderOffset] = borderWidth;
+    this.noteBorder[borderOffset + 1] = borderColor[0];
+    this.noteBorder[borderOffset + 2] = borderColor[1];
+    this.noteBorder[borderOffset + 3] = borderColor[2];
 
     this.noteIdByIndex[insertIndex] = noteId;
     this.trackKeyByIndex[insertIndex] = trackKey;
@@ -395,6 +426,7 @@ export class NoteBuffer {
         nextIndex * 3,
         (last + 1) * 3,
       );
+      this.noteBorder.copyWithin(index * 4, nextIndex * 4, (last + 1) * 4);
 
       for (let i = index; i < last; i += 1) {
         const movedId = this.noteIdByIndex[i + 1];
@@ -428,6 +460,8 @@ export class NoteBuffer {
     const glowColorOffset = last * 3;
     this.noteGlowColorTop.fill(0, glowColorOffset, glowColorOffset + 3);
     this.noteGlowColorBottom.fill(0, glowColorOffset, glowColorOffset + 3);
+    const borderClearOffset = last * 4;
+    this.noteBorder.fill(0, borderClearOffset, borderClearOffset + 4);
 
     this.version += 1;
     return index;
@@ -486,6 +520,7 @@ export class NoteBuffer {
     this.noteGlow.fill(0, writeIndex * 3, previousCount * 3);
     this.noteGlowColorTop.fill(0, writeIndex * 3, previousCount * 3);
     this.noteGlowColorBottom.fill(0, writeIndex * 3, previousCount * 3);
+    this.noteBorder.fill(0, writeIndex * 4, previousCount * 4);
 
     this.activeCount = writeIndex;
     this.version += 1;
@@ -507,6 +542,7 @@ export class NoteBuffer {
     this.noteGlow.fill(0);
     this.noteGlowColorTop.fill(0);
     this.noteGlowColorBottom.fill(0);
+    this.noteBorder.fill(0);
   }
 
   private copySlot(from: number, to: number) {
@@ -554,6 +590,13 @@ export class NoteBuffer {
       this.noteGlowColorBottom[fromGlowColor + 1];
     this.noteGlowColorBottom[toGlowColor + 2] =
       this.noteGlowColorBottom[fromGlowColor + 2];
+
+    const fromBorder = from * 4;
+    const toBorder = to * 4;
+    this.noteBorder[toBorder] = this.noteBorder[fromBorder];
+    this.noteBorder[toBorder + 1] = this.noteBorder[fromBorder + 1];
+    this.noteBorder[toBorder + 2] = this.noteBorder[fromBorder + 2];
+    this.noteBorder[toBorder + 3] = this.noteBorder[fromBorder + 3];
   }
 }
 
