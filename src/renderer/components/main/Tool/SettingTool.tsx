@@ -161,6 +161,8 @@ SettingToolProps) => {
           pluginElements: before.pluginElements,
           layerGroups: before.layerGroups,
           keyCounters: before.keyCounters,
+          customTabs: before.customTabs,
+          selectedKeyType: before.selectedKeyType,
         });
       }
       showAlert?.(
@@ -220,6 +222,8 @@ SettingToolProps) => {
           pluginElements: before.pluginElements,
           layerGroups: before.layerGroups,
           keyCounters: before.keyCounters,
+          customTabs: before.customTabs,
+          selectedKeyType: before.selectedKeyType,
         });
       }
       showAlert?.(
