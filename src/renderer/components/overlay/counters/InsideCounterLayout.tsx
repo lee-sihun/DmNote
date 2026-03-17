@@ -55,7 +55,7 @@ const InsideCounterLayout = ({
   const nameElement = (
     <span
       key="label"
-      className="font-bold text-[14px] pointer-events-none select-none leading-none text-safe-inline"
+      className="font-bold text-[14px] pointer-events-none select-none leading-normal text-safe-inline"
       style={textStyle}
     >
       {labelText}

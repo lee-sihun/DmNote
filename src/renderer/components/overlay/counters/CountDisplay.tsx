@@ -147,7 +147,7 @@ const CountDisplay = ({
           textAlign: 'center',
           pointerEvents: 'none',
           userSelect: 'none',
-          lineHeight: 1,
+          lineHeight: 'normal',
           '--counter-color-default': fill.css,
           '--counter-stroke-color-default': stroke.css,
           '--counter-stroke-width-default': strokeWidth,
