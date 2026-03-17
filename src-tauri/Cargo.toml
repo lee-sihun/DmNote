@@ -33,7 +33,7 @@ gif = "0.13.3"
 gif-dispose = "5.0.1"
 sha2 = "0.10"
 webp-animation = "0.9.0"
-rodio = { version = "0.19", default-features = false }
+rodio = { git = "https://github.com/lee-sihun/rodio", rev = "7b771e15", default-features = false, features = ["playback"] }
 symphonia = { version = "0.5", default-features = false, features = ["ogg", "vorbis", "wav", "aiff", "mp3", "isomp4", "aac", "pcm", "adpcm", "flac", "alac"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
 tokio-tungstenite = "0.24"

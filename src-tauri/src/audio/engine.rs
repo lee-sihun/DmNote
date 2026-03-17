@@ -2,8 +2,10 @@ use std::{
     collections::HashMap,
     fs::File,
     io::ErrorKind,
+    num::NonZero,
     path::Path,
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc,
     },
@@ -16,7 +18,7 @@ use anyhow::{Context, Result};
 use log::debug;
 use log::warn;
 use parking_lot::RwLock;
-use rodio::{OutputStream, PlayError, Source};
+use rodio::{DeviceSinkBuilder, MixerDeviceSink, Source};
 use serde::{Deserialize, Serialize};
 use symphonia::{
     core::{
@@ -202,7 +204,7 @@ enum AudioCommand {
 
 #[derive(Debug, Clone)]
 struct CachedAudioClip {
-    samples: Arc<[i16]>,
+    samples: Arc<[f32]>,
     channels: u16,
     sample_rate: u32,
 }
@@ -356,7 +358,7 @@ fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRunt
     let mut soundpack = state.read().soundpack.clone();
     #[cfg(debug_assertions)]
     let mut latency_logging = state.read().status.latency_logging;
-    let mut stream_handler = OutputStream::try_default().ok();
+    let mut stream_handler = open_audio_sink();
     let mut file_cache: HashMap<String, Arc<CachedAudioClip>> = HashMap::new();
     #[cfg(debug_assertions)]
     let mut latency_summary = LatencySummary::default();
@@ -403,10 +405,6 @@ fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRunt
                 };
                 #[cfg(not(debug_assertions))]
                 let _ = (queued_at, trace);
-
-                if stream_handler.is_none() {
-                    stream_handler = OutputStream::try_default().ok();
-                }
 
                 #[cfg(debug_assertions)]
                 let play_started_at = latency_logging.then_some(Instant::now());
@@ -485,10 +483,6 @@ fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRunt
                 #[cfg(not(debug_assertions))]
                 let _ = clip_load_trace;
 
-                if stream_handler.is_none() {
-                    stream_handler = OutputStream::try_default().ok();
-                }
-
                 let final_volume = (volume * per_key_volume).clamp(0.0, 1.0);
                 let source =
                     AudioSource::new(clip.samples.clone(), clip.channels, clip.sample_rate);
@@ -545,33 +539,49 @@ fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRunt
     }
 }
 
+// sink별 에러 플래그를 분리하여 이전 sink의 콜백이 새 sink를 오염시키지 않도록 함
+struct StreamHandler {
+    sink: MixerDeviceSink,
+    error: Arc<AtomicBool>,
+}
+
+fn open_audio_sink() -> Option<StreamHandler> {
+    let error = Arc::new(AtomicBool::new(false));
+    let err_flag = Arc::clone(&error);
+
+    let sink = DeviceSinkBuilder::from_default_device()
+        .and_then(|builder| {
+            builder
+                .with_error_callback(move |err| {
+                    warn!("[KeySound] stream error: {err}");
+                    err_flag.store(true, Ordering::Release);
+                })
+                .open_sink_or_fallback()
+        })
+        .ok()?;
+
+    Some(StreamHandler { sink, error })
+}
+
 fn play_on_stream(
-    stream_handler: &mut Option<(OutputStream, rodio::OutputStreamHandle)>,
+    stream_handler: &mut Option<StreamHandler>,
     source: AudioSource,
     volume: f32,
 ) -> bool {
-    fn try_play(
-        handle: &rodio::OutputStreamHandle,
-        source: AudioSource,
-        volume: f32,
-    ) -> Result<(), PlayError> {
-        handle.play_raw(source.amplify(volume).convert_samples::<f32>())
+    // 장치 에러 또는 스트림 없음 → 재연결
+    if stream_handler
+        .as_ref()
+        .is_none_or(|h| h.error.load(Ordering::Acquire))
+    {
+        *stream_handler = open_audio_sink();
     }
 
     let Some(handler) = stream_handler.as_ref() else {
         return false;
     };
 
-    match try_play(&handler.1, source.clone(), volume) {
-        Ok(()) => true,
-        Err(PlayError::NoDevice) => {
-            *stream_handler = OutputStream::try_default().ok();
-            stream_handler
-                .as_ref()
-                .is_some_and(|h| try_play(&h.1, source, volume).is_ok())
-        }
-        Err(_) => false,
-    }
+    handler.sink.mixer().add(source.amplify(volume));
+    true
 }
 
 fn get_or_load_cached_clip(
@@ -653,7 +663,7 @@ fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
         .channels
         .map(|value| value.count() as u16);
     let mut sample_rate = track.codec_params.sample_rate;
-    let mut samples: Vec<i16> = Vec::new();
+    let mut samples: Vec<f32> = Vec::new();
 
     loop {
         let packet = match format.next_packet() {
@@ -688,7 +698,7 @@ fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
         sample_rate.get_or_insert(decoded.spec().rate);
 
         let mut sample_buffer =
-            SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
+            SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
         sample_buffer.copy_interleaved_ref(decoded);
         samples.extend_from_slice(sample_buffer.samples());
     }
@@ -709,8 +719,8 @@ fn decode_audio_file_clip(path: &str) -> Result<CachedAudioClip> {
 
 #[derive(Debug)]
 struct LoadedSoundpack {
-    segments: HashMap<String, Arc<[i16]>>,
-    fallback: Option<Arc<[i16]>>,
+    segments: HashMap<String, Arc<[f32]>>,
+    fallback: Option<Arc<[f32]>>,
     channels: u16,
     sample_rate: u32,
 }
@@ -726,7 +736,7 @@ impl LoadedSoundpack {
 
         let audio_path = soundpack_dir.join(&config.audio_file);
         let mut decoder = SoundDecoder::new(&audio_path)?;
-        let mut decoded_by_range: HashMap<(u64, u64), Arc<[i16]>> = HashMap::new();
+        let mut decoded_by_range: HashMap<(u64, u64), Arc<[f32]>> = HashMap::new();
         let mut segments = HashMap::new();
 
         for (label, [start_ms, duration_ms]) in config.defines {
@@ -735,7 +745,7 @@ impl LoadedSoundpack {
                 existing.clone()
             } else {
                 let decoded = decoder.get_samples_buf(start_ms, duration_ms)?;
-                let shared: Arc<[i16]> = Arc::from(decoded.into_boxed_slice());
+                let shared: Arc<[f32]> = Arc::from(decoded.into_boxed_slice());
                 decoded_by_range.insert(cache_key, shared.clone());
                 shared
             };
@@ -748,7 +758,7 @@ impl LoadedSoundpack {
                 Some(existing.clone())
             } else {
                 let decoded = decoder.get_samples_buf(start_ms, duration_ms)?;
-                let shared: Arc<[i16]> = Arc::from(decoded.into_boxed_slice());
+                let shared: Arc<[f32]> = Arc::from(decoded.into_boxed_slice());
                 decoded_by_range.insert(cache_key, shared.clone());
                 Some(shared)
             }
@@ -801,14 +811,14 @@ fn default_audio_file() -> String {
 
 #[derive(Clone, Debug)]
 struct AudioSource {
-    samples: Arc<[i16]>,
+    samples: Arc<[f32]>,
     channels: u16,
     sample_rate: u32,
     pos: usize,
 }
 
 impl AudioSource {
-    fn new(samples: Arc<[i16]>, channels: u16, sample_rate: u32) -> Self {
+    fn new(samples: Arc<[f32]>, channels: u16, sample_rate: u32) -> Self {
         Self {
             samples,
             channels,
@@ -819,7 +829,7 @@ impl AudioSource {
 }
 
 impl Iterator for AudioSource {
-    type Item = i16;
+    type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
         let value = self.samples.get(self.pos)?;
@@ -829,16 +839,16 @@ impl Iterator for AudioSource {
 }
 
 impl Source for AudioSource {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         None
     }
 
-    fn channels(&self) -> u16 {
-        self.channels
+    fn channels(&self) -> NonZero<u16> {
+        NonZero::new(self.channels).expect("channels must be > 0")
     }
 
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
+    fn sample_rate(&self) -> NonZero<u32> {
+        NonZero::new(self.sample_rate).expect("sample_rate must be > 0")
     }
 
     fn total_duration(&self) -> Option<Duration> {
@@ -906,7 +916,7 @@ impl SoundDecoder {
         })
     }
 
-    fn get_samples_buf(&mut self, start_ms: u64, duration_ms: u64) -> Result<Vec<i16>> {
+    fn get_samples_buf(&mut self, start_ms: u64, duration_ms: u64) -> Result<Vec<f32>> {
         self.format
             .seek(
                 SeekMode::Accurate,
@@ -936,7 +946,7 @@ impl SoundDecoder {
                 .decode(&packet)
                 .context("failed to decode audio packet")?;
             let mut sample_buffer =
-                SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
+                SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
             sample_buffer.copy_interleaved_ref(decoded);
             samples.extend_from_slice(sample_buffer.samples());
         }
