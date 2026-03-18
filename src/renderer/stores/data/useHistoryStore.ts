@@ -11,6 +11,26 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { LayerGroups } from '@src/types/layerGroups';
+import type {
+  NoteSettings,
+  TabNoteOverrides,
+} from '@src/types/settings/noteSettings';
+import type { FontSettings } from '@src/types/settings/fonts';
+import type { JsPlugin } from '@src/types/plugin/js';
+
+// 프리셋 로드 undo 시 복원할 설정 스냅샷
+export interface HistorySettingsSnapshot {
+  useCustomCSS: boolean;
+  customCSSContent: string;
+  customCSSPath: string | null;
+  useCustomJS: boolean;
+  jsPlugins: JsPlugin[];
+  fontSettings: FontSettings;
+  backgroundColor: string;
+  noteSettings: NoteSettings;
+  noteEffect: boolean;
+  tabNoteOverrides: TabNoteOverrides;
+}
 
 // 플러그인 요소의 히스토리 저장용 직렬화 타입 (함수 핸들러 제외)
 type SerializablePluginElement = Omit<
@@ -28,6 +48,7 @@ export interface HistoryState {
   keyCounters: KeyCounters;
   customTabs: CustomTab[];
   selectedKeyType: string;
+  settingsSnapshot?: HistorySettingsSnapshot;
 }
 
 export interface PushHistoryInput {
@@ -40,6 +61,7 @@ export interface PushHistoryInput {
   keyCounters?: KeyCounters;
   customTabs?: CustomTab[];
   selectedKeyType?: string;
+  settingsSnapshot?: HistorySettingsSnapshot;
 }
 
 interface CurrentStateInput {
@@ -97,6 +119,13 @@ function buildHistoryState(
     ('selectedKeyType' in input && input.selectedKeyType) ||
     keyState.selectedKeyType;
 
+  const settingsSnapshot =
+    'settingsSnapshot' in input && input.settingsSnapshot
+      ? (JSON.parse(
+          JSON.stringify(input.settingsSnapshot),
+        ) as HistorySettingsSnapshot)
+      : undefined;
+
   return {
     keyMappings: JSON.parse(JSON.stringify(input.keyMappings)),
     positions: JSON.parse(JSON.stringify(input.positions)),
@@ -114,6 +143,7 @@ function buildHistoryState(
         : getCounterCacheSnapshot(),
     customTabs: JSON.parse(JSON.stringify(tabs)),
     selectedKeyType,
+    settingsSnapshot,
   };
 }
 

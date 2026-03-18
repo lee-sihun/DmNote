@@ -8,6 +8,9 @@ import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
+import type { HistorySettingsSnapshot } from '@stores/data/useHistoryStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { applyCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
@@ -96,6 +99,7 @@ interface RestoredState {
   keyCounters?: import('@src/types/key/keys').KeyCounters;
   customTabs: import('@src/types/key/keys').CustomTab[];
   selectedKeyType: string;
+  settingsSnapshot?: HistorySettingsSnapshot;
 }
 
 /** 복원된 상태를 로컬 store에 반영 */
@@ -117,6 +121,24 @@ export function applyRestoredStateToStores(state: RestoredState): void {
   }
   useKeyStore.getState().setCustomTabs(state.customTabs);
   useKeyStore.setState({ selectedKeyType: state.selectedKeyType });
+
+  // 설정 스냅샷 복원 (프리셋 로드 undo 전용)
+  if (state.settingsSnapshot) {
+    const snap = state.settingsSnapshot;
+    useSettingsStore.getState().merge({
+      useCustomCSS: snap.useCustomCSS,
+      customCSSContent: snap.customCSSContent,
+      customCSSPath: snap.customCSSPath,
+      useCustomJS: snap.useCustomJS,
+      jsPlugins: snap.jsPlugins,
+      backgroundColor: snap.backgroundColor,
+      noteSettings: snap.noteSettings,
+      noteEffect: snap.noteEffect,
+      tabNoteOverrides: snap.tabNoteOverrides,
+    });
+    useFontStore.getState().setAll(snap.fontSettings.customFonts);
+    syncFontCSS();
+  }
 }
 
 /** 복원된 플러그인 요소를 store에 반영하고 오버레이에 동기화 */
@@ -209,5 +231,58 @@ export async function persistRestoredState(
     });
   } catch {
     /* 무시 */
+  }
+
+  // 설정 스냅샷 백엔드 동기화 (프리셋 로드 undo 전용)
+  if (state.settingsSnapshot) {
+    const snap = state.settingsSnapshot;
+
+    // CSS 복원 (병렬)
+    const cssRestore = Promise.all([
+      window.api.css.setContent(snap.customCSSContent).catch((e) => {
+        console.error('Failed to restore CSS content', e);
+      }),
+      window.api.css.toggle(snap.useCustomCSS).catch((e) => {
+        console.error('Failed to restore CSS toggle', e);
+      }),
+    ]);
+
+    // 설정 복원 → JS 토글 → JS 리로드 (순차)
+    const jsRestore = window.api.settings
+      .update({
+        backgroundColor: snap.backgroundColor,
+        noteSettings: snap.noteSettings,
+        noteEffect: snap.noteEffect,
+        fontSettings: snap.fontSettings,
+        customJS: { plugins: snap.jsPlugins },
+      })
+      .then(() => window.api.js.toggle(snap.useCustomJS))
+      .then(() => (snap.useCustomJS ? window.api.js.reload() : undefined))
+      .catch((e) => {
+        console.error('Failed to restore settings/JS', e);
+      });
+
+    // tabNoteOverrides 복원
+    const currentTabOverrides = await window.api.noteTab.getAll().catch(
+      () => ({}) as import('@src/types/settings/noteSettings').TabNoteOverrides,
+    );
+    const tabIds = new Set<string>([
+      ...Object.keys(snap.tabNoteOverrides),
+      ...Object.keys(currentTabOverrides),
+    ]);
+    const tabRestore = Promise.all(
+      Array.from(tabIds).map((tabId) => {
+        const snapSettings = snap.tabNoteOverrides[tabId];
+        return snapSettings !== undefined
+          ? window.api.noteTab.set(tabId, snapSettings).catch((e) => {
+              console.error('Failed to restore tab note', e);
+            })
+          : window.api.noteTab.clear(tabId).catch((e) => {
+              console.error('Failed to clear tab note', e);
+            });
+      }),
+    );
+
+    await Promise.all([cssRestore, jsRestore, tabRestore]);
   }
 }

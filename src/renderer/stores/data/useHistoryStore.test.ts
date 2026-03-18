@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useHistoryStore } from '@stores/data/useHistoryStore';
+import {
+  useHistoryStore,
+  type HistorySettingsSnapshot,
+} from '@stores/data/useHistoryStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import {
   applyCounterCacheSnapshot,
   setCachedKeyCounter,
 } from '@stores/signals/keyCounterCache';
-import { getDefaultCounterSettings } from '@src/renderer/defaults';
+import {
+  getDefaultCounterSettings,
+  getDefaultNoteSettings,
+} from '@src/renderer/defaults';
 import type {
   CustomTab,
   KeyCounters,
@@ -158,6 +164,51 @@ describe('useHistoryStore', () => {
     expect(past).toHaveLength(1);
     expect(past[0]?.keyMappings).toEqual(createMappings('A'));
     expect(past[0]?.keyCounters).toEqual({ '4key': { A: 4 } });
+  });
+
+  it('settingsSnapshot이 있으면 pushState에서 저장되고 undo에서 복원', () => {
+    const snap: HistorySettingsSnapshot = {
+      useCustomCSS: true,
+      customCSSContent: 'body { color: red; }',
+      customCSSPath: null,
+      useCustomJS: false,
+      jsPlugins: [],
+      fontSettings: { customFonts: [] },
+      backgroundColor: '#000000',
+      noteSettings: getDefaultNoteSettings(),
+      noteEffect: true,
+      tabNoteOverrides: { 'tab-custom': { speed: 10 } },
+    };
+
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+      settingsSnapshot: snap,
+    });
+
+    expect(useHistoryStore.getState().past[0]?.settingsSnapshot).toEqual(snap);
+
+    const restored = useHistoryStore.getState().undo({
+      keyMappings: createMappings('B'),
+      positions: createPositions(2),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(restored?.settingsSnapshot).toEqual(snap);
+  });
+
+  it('settingsSnapshot 없이 pushState하면 undefined', () => {
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(useHistoryStore.getState().past[0]?.settingsSnapshot).toBeUndefined();
   });
 
   it('명시적 keyCounters가 있으면 캐시 대신 그 값을 저장', () => {

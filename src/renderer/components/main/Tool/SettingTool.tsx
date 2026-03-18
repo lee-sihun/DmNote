@@ -18,6 +18,8 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { getCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import { obsApi } from '@api/modules/obsApi';
+import { useSettingsStore } from '@stores/useSettingsStore';
+import { useFontStore } from '@stores/useFontStore';
 
 interface SettingToolProps {
   isSettingsOpen?: boolean;
@@ -135,6 +137,9 @@ SettingToolProps) => {
       .getCounters()
       .catch(() => getCounterCacheSnapshot());
 
+    const settings = useSettingsStore.getState();
+    const fontState = useFontStore.getState();
+
     return {
       keyMappings: keyState.keyMappings,
       positions: keyState.positions,
@@ -145,6 +150,18 @@ SettingToolProps) => {
       keyCounters,
       customTabs: keyState.customTabs,
       selectedKeyType: keyState.selectedKeyType,
+      settingsSnapshot: {
+        useCustomCSS: settings.useCustomCSS,
+        customCSSContent: settings.customCSSContent,
+        customCSSPath: settings.customCSSPath,
+        useCustomJS: settings.useCustomJS,
+        jsPlugins: settings.jsPlugins,
+        fontSettings: { customFonts: fontState.customFonts },
+        backgroundColor: settings.backgroundColor,
+        noteSettings: settings.noteSettings,
+        noteEffect: settings.noteEffect,
+        tabNoteOverrides: settings.tabNoteOverrides,
+      },
     };
   };
 
