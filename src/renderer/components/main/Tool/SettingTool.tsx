@@ -180,6 +180,7 @@ SettingToolProps) => {
           keyCounters: before.keyCounters,
           customTabs: before.customTabs,
           selectedKeyType: before.selectedKeyType,
+          settingsSnapshot: before.settingsSnapshot,
         });
       }
       showAlert?.(
@@ -241,6 +242,7 @@ SettingToolProps) => {
           keyCounters: before.keyCounters,
           customTabs: before.customTabs,
           selectedKeyType: before.selectedKeyType,
+          settingsSnapshot: before.settingsSnapshot,
         });
       }
       showAlert?.(

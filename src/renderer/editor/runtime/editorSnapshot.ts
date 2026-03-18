@@ -237,34 +237,41 @@ export async function persistRestoredState(
   if (state.settingsSnapshot) {
     const snap = state.settingsSnapshot;
 
-    // CSS 복원 (병렬)
-    const cssRestore = Promise.all([
-      window.api.css.setContent(snap.customCSSContent).catch((e) => {
-        console.error('Failed to restore CSS content', e);
-      }),
-      window.api.css.toggle(snap.useCustomCSS).catch((e) => {
-        console.error('Failed to restore CSS toggle', e);
-      }),
-    ]);
-
-    // 설정 복원 → JS 토글 → JS 리로드 (순차)
-    const jsRestore = window.api.settings
+    // 설정 전체 persist (CSS path/content, JS plugins 포함) 먼저 완료
+    await window.api.settings
       .update({
         backgroundColor: snap.backgroundColor,
         noteSettings: snap.noteSettings,
         noteEffect: snap.noteEffect,
         fontSettings: snap.fontSettings,
+        customCSS: { content: snap.customCSSContent, path: snap.customCSSPath },
         customJS: { plugins: snap.jsPlugins },
       })
-      .then(() => window.api.js.toggle(snap.useCustomJS))
-      .then(() => (snap.useCustomJS ? window.api.js.reload() : undefined))
       .catch((e) => {
-        console.error('Failed to restore settings/JS', e);
+        console.error('Failed to restore settings', e);
       });
 
-    // tabNoteOverrides 복원
-    const currentTabOverrides = await window.api.noteTab.getAll().catch(
-      () => ({}) as import('@src/types/settings/noteSettings').TabNoteOverrides,
+    // CSS 이벤트 발생 (css:content + css:use)
+    const cssEvents = Promise.all([
+      window.api.css.setContent(snap.customCSSContent).catch((e) => {
+        console.error('Failed to emit CSS content', e);
+      }),
+      window.api.css.toggle(snap.useCustomCSS).catch((e) => {
+        console.error('Failed to toggle CSS', e);
+      }),
+    ]);
+
+    // JS 토글 → JS 리로드
+    const jsEvents = window.api.js
+      .toggle(snap.useCustomJS)
+      .then(() => (snap.useCustomJS ? window.api.js.reload() : undefined))
+      .catch((e) => {
+        console.error('Failed to restore JS', e);
+      });
+
+    // tabNoteOverrides 복원 (getAll 실패 시 store 값을 fallback으로 사용)
+    const currentTabOverrides = await window.api.noteTab.getAll().catch(() =>
+      useSettingsStore.getState().tabNoteOverrides,
     );
     const tabIds = new Set<string>([
       ...Object.keys(snap.tabNoteOverrides),
@@ -283,6 +290,6 @@ export async function persistRestoredState(
       }),
     );
 
-    await Promise.all([cssRestore, jsRestore, tabRestore]);
+    await Promise.all([cssEvents, jsEvents, tabRestore]);
   }
 }
