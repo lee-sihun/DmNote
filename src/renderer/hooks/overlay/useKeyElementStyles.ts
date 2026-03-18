@@ -190,7 +190,6 @@ export function computeKeyElementStyles({
 
   const textStyle: React.CSSProperties = {
     willChange: 'auto',
-    contain: 'layout style paint',
     fontSize: fontSize ? `${fontSize}px` : undefined,
     fontFamily: fontFamily
       ? `"${fontFamily}", "SUIT-Regular", sans-serif`

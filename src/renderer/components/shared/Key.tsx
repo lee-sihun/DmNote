@@ -509,7 +509,6 @@ const DraggableKey = React.memo(
 
     const textStyle = {
       willChange: 'auto',
-      contain: 'layout style paint',
       color:
         useInline && fontColor
           ? fontColor
