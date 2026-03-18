@@ -6,6 +6,7 @@
 
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { useSettingsStore } from '@stores/useSettingsStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import type { KeyPosition } from '@src/types/key/keys';
 import type {
@@ -66,6 +67,9 @@ export function useGridContextMenu({
   t,
   noteEffect,
 }: UseGridContextMenuParams): UseGridContextMenuReturn {
+  // 전역 CSS 활성화 여부
+  const useCustomCSS = useSettingsStore((state) => state.useCustomCSS);
+
   // 플러그인 메뉴 아이템
   const pluginKeyMenuItems = usePluginMenuStore((state) => state.keyMenuItems);
   const pluginGridMenuItems = usePluginMenuStore(
@@ -177,7 +181,7 @@ export function useGridContextMenu({
       { id: 'addGraph', label: t('contextMenu.addGraph') },
     ];
     const bottomBaseItems: MenuItem[] = [
-      { id: 'tabCss', label: t('contextMenu.tabCssSetting') },
+      { id: 'tabCss', label: t('contextMenu.tabCssSetting'), disabled: !useCustomCSS },
       {
         id: 'tabNote',
         label: t('contextMenu.tabNoteSetting'),
