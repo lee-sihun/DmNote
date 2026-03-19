@@ -294,6 +294,25 @@ const markInstancedAttributesDirty = (
   markAttributesDirty(geometry, keys);
 };
 
+// OGL은 needsUpdate 시 gl.bufferSubData(0, attr.data)를 호출하므로
+// attr.data를 activeCount 범위 subarray로 교체하면 업로드 바이트를 줄일 수 있음
+const updateAttributeSubranges = (
+  geometry: Geometry,
+  noteBuffer: NoteBuffer,
+  activeCount: number,
+  keys: Iterable<string>,
+): void => {
+  if (activeCount <= 0) return;
+  const attrs = geometry.attributes;
+  for (const key of keys) {
+    const attr = attrs[key];
+    const source = (noteBuffer as unknown as Record<string, unknown>)[key];
+    if (attr && source instanceof Float32Array) {
+      attr.data = source.subarray(0, activeCount * attr.size);
+    }
+  }
+};
+
 interface PendingUpdate {
   dirtyKeys: Set<string>;
   dirtySinceFrame: boolean;
@@ -585,11 +604,20 @@ export function WebGLTracksOGL({
       if (pendingUpdateRef.current.dirtySinceFrame) {
         const geometryTarget = geometryRef.current;
         if (geometryTarget) {
+          const uploadCount =
+            pendingUpdateRef.current.instancedCount ?? noteBuffer.activeCount;
           if (pendingUpdateRef.current.instancedCount != null) {
             geometryTarget.instancedCount =
               pendingUpdateRef.current.instancedCount;
           }
           if (pendingUpdateRef.current.dirtyKeys.size > 0) {
+            // 활성 범위만 GPU 업로드되도록 attr.data를 subarray로 교체
+            updateAttributeSubranges(
+              geometryTarget,
+              noteBuffer,
+              uploadCount,
+              pendingUpdateRef.current.dirtyKeys,
+            );
             markAttributesDirty(
               geometryTarget,
               pendingUpdateRef.current.dirtyKeys,
@@ -651,6 +679,14 @@ export function WebGLTracksOGL({
         case 'cleanup':
         case 'clear':
           // cleanup/clear는 즉시 처리 (빈도가 낮음)
+          if (noteBuffer.activeCount > 0) {
+            updateAttributeSubranges(
+              geometryTarget,
+              noteBuffer,
+              noteBuffer.activeCount,
+              INSTANCED_ATTRIBUTE_KEYS,
+            );
+          }
           markInstancedAttributesDirty(geometryTarget, noteBuffer.activeCount);
           pendingUpdateRef.current.dirtyKeys.clear();
           pendingUpdateRef.current.dirtySinceFrame = false;

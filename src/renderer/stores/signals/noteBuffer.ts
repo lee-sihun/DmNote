@@ -192,6 +192,8 @@ export class NoteBuffer {
   private readonly trackKeyByIndex: (string | null)[];
   private readonly indexByNoteId: Map<string, number>;
   private trackLayouts: Map<string, ResolvedTrackLayout>;
+  // allocate() 시프트 후 Map이 오래된 첫 인덱스. Infinity = Map 최신 상태
+  private dirtyIndexStart: number;
 
   activeCount: number;
   version: number;
@@ -215,6 +217,17 @@ export class NoteBuffer {
 
     this.activeCount = 0;
     this.version = 0;
+    this.dirtyIndexStart = Infinity;
+  }
+
+  // allocate() 시프트로 오염된 Map 항목을 한 번에 재구축
+  private ensureIndexMapFresh(): void {
+    if (this.dirtyIndexStart >= this.activeCount) return;
+    for (let i = this.dirtyIndexStart; i < this.activeCount; i++) {
+      const id = this.noteIdByIndex[i];
+      if (id) this.indexByNoteId.set(id, i);
+    }
+    this.dirtyIndexStart = Infinity;
   }
 
   updateTrackLayouts(tracks: TrackLayoutInput[]) {
@@ -323,13 +336,13 @@ export class NoteBuffer {
       );
 
       for (let i = this.activeCount; i > insertIndex; i -= 1) {
-        const movedId = this.noteIdByIndex[i - 1];
-        const movedTrackKey = this.trackKeyByIndex[i - 1];
-        this.noteIdByIndex[i] = movedId;
-        this.trackKeyByIndex[i] = movedTrackKey;
-        if (movedId) {
-          this.indexByNoteId.set(movedId, i);
-        }
+        this.noteIdByIndex[i] = this.noteIdByIndex[i - 1];
+        this.trackKeyByIndex[i] = this.trackKeyByIndex[i - 1];
+      }
+      // insertIndex+1부터 Map 항목이 오염됨 — 다음 조회 전에 일괄 재구축
+      const shiftStart = insertIndex + 1;
+      if (shiftStart < this.dirtyIndexStart) {
+        this.dirtyIndexStart = shiftStart;
       }
     }
 
@@ -383,6 +396,7 @@ export class NoteBuffer {
   }
 
   finalize(noteId: string, endTime: number) {
+    this.ensureIndexMapFresh();
     const index = this.indexByNoteId.get(noteId);
     if (index === undefined) {
       return -1;
@@ -393,6 +407,7 @@ export class NoteBuffer {
   }
 
   release(noteId: string) {
+    this.ensureIndexMapFresh();
     const index = this.indexByNoteId.get(noteId);
     if (index === undefined) {
       return -1;
@@ -468,6 +483,7 @@ export class NoteBuffer {
   }
 
   releaseBatch(noteIds: readonly string[]) {
+    this.ensureIndexMapFresh();
     if (this.activeCount === 0 || noteIds.length === 0) {
       return 0;
     }
@@ -530,6 +546,7 @@ export class NoteBuffer {
   clear() {
     this.activeCount = 0;
     this.version += 1;
+    this.dirtyIndexStart = Infinity;
     this.indexByNoteId.clear();
     this.noteIdByIndex.fill(null);
     this.trackKeyByIndex.fill(null);
