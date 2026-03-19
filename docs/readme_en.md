@@ -17,7 +17,7 @@
   [![GitHub license](https://img.shields.io/github/license/lee-sihun/DmNote.svg?logo=github)](https://github.com/lee-sihun/DmNote/blob/master/LICENSE)
 </div>
 
-https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
+https://github.com/user-attachments/assets/d2d638b4-5867-4a3e-8710-0fa843eaf236
 
 ## 🌟 Overview
 
