@@ -47,6 +47,8 @@ const PREVIEW_SOURCES: Record<string, string> = {
     'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/plugin.webm',
   resizeAnchor:
     'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/resize.webm',
+  obsMode:
+    'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/obs.webm',
 };
 
 interface SettingsProps {
@@ -1096,15 +1098,7 @@ const Settings = ({
             />
             <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
               <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t(`settings.${hoveredKey}Desc`)}
-              </span>
-            </div>
-          </div>
-        ) : hoveredKey === 'obsMode' ? (
-          <div className="relative w-full h-full">
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
-              <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t('settings.obsGuide')}
+                {t(hoveredKey === 'obsMode' ? 'settings.obsGuide' : `settings.${hoveredKey}Desc`)}
               </span>
             </div>
           </div>
