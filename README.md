@@ -1,5 +1,3 @@
-<meta name="google-site-verification" content="tw5pjIDYKCrq1QKYBrD5iyV7DXIM4rsHN9d11WlJFe4" />
-
 **한국어** | [English](docs/readme_en.md) | [中文](docs/readme_zh-cn.md)
 
 <div align="center">
@@ -23,11 +21,14 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 ## 🌟 개요
 
-**DM Note**는 DJMAX RESPECT V에서 사용하기 위해 만들어진 키뷰어 프로그램입니다. Tauri와 React로 구축 되었으며 간편한 설정으로 스트리밍이나 플레이 영상 제작 시 키 입력을 시각적으로 보여줄 수 있습니다. 현재는 공식적으로 Windows 10/11, macOS 환경만 지원하고 있습니다. 만약 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해보는걸 추천합니다.
-
-**이 프로그램은 스트리밍이나 플레이 영상 제작 등에 자유롭게 사용 가능합니다.** 
+**DM Note**는 DJMAX RESPECT V에서 사용하기 위해 만들어진 키뷰어 프로그램입니다. 다른 게임에서도 자유롭게 사용할 수 있으며 간편한 설정으로 스트리밍이나 플레이 영상 제작 시 키 입력을 시각적으로 보여줄 수 있습니다. 현재는 공식적으로 Windows 10/11, macOS 환경만 지원하고 있습니다. 만약 리눅스 환경이라면 [커뮤니티 포크 버전](https://github.com/northernorca/DmNote)을 사용해보는걸 추천합니다.
 
 [DM NOTE v1.5.2 다운로드](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
+
+## 🖼️ 스크린샷
+
+<img src="docs/assets/image.png" alt="Screenshot" width="700">
+<img src="docs/assets/IMG_1005.gif" alt="Note Effect" width="700">
 
 ## ✨ 주요 기능
 
@@ -40,40 +41,64 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 - 그리드 기반 키 편집
 - 이미지 할당 지원
-- 커스텀 CSS 지원
+
+### 🌧️ 노트 효과 (Raining Effect) 커스터마이징
+
+- 노트 효과 스타일 커스터마이징
+- 트랙 속도, 높이 및 리버스 모드 지원
+
+### 🔢 키 카운터
+
+- 키별 입력 횟수 표시
+- 카운터 위치, 색상 및 스타일 커스터마이징
+
+### 📊 입력 통계
+
+- KPS, AVG, MAX, TOTAL 통계 표시
+- KPS 그래프 시각화
+- 통계 요소 및 그래프 스타일 커스터마이징
+
+### 🎵 키음 기능
+
+- 키 입력 시 사운드 효과 재생
+- 사운드 파일 사용자 지정 지원
+
+### 🖼️ 오버레이 및 창 관리
+
+- 창 위치 고정 & 항상 위에 표시
+- 리사이즈 기준점 선택
+
+### 🖥️ OBS 모드
+
+- OBS 브라우저 소스와 호환되는 모드
+
+### 🧩 사용자 정의 CSS 및 플러그인 지원
+
+- 사용자 정의 CSS로 완전히 커스터마이징 가능한 프로그램 인터페이스와 오버레이 스타일
+- 커스텀 플러그인 기능 지원
 
 ### 💾 프리셋 및 설정 관리
 
 - 사용자 설정 자동 저장
 - 프리셋 저장/불러오기
 
-### 🖼️ 오버레이 및 창 관리
+### ⚙️ 기타 설정
 
-- 창 위치 고정
-- 항상 위에 표시
-- 리사이즈 기준점 선택
+- 다국어 인터페이스 지원 (한글, 영어, 중국어 간체/번체, 러시아어)
+- 주요 기능 단축키 설정 지원
+- 설정 초기화 및 자동 업데이트
 
-### 🌧️ 노트 효과 (Raining Effect) 커스터마이징
+## 📝 참고사항
 
-- 노트 효과 색상, 투명도, 라운딩, 속도, 높이 조절
-- 리버스 기능
-
-### 🔢 키 카운터
-
-- 키별 입력 횟수 실시간 표시
-- 카운터 위치, 색상 및 스타일 커스터마이징
-- 커스텀 CSS 지원
-
-### 📊 입력 통계
-
-- KPS, AVG, MAX, TOTAL 통계 제공
-- 통계 요소 스타일 커스터마이징
-
-### ⚙️ 그래픽 및 설정
-
-- 다국어 인터페이스 지원 (한글, 영어, 중국어 (간체, 번체), 러시아어)
-- 그래픽 렌더링 옵션
-- 설정 초기화
+- **이 프로그램은 스트리밍이나 플레이 영상 제작 등에 자유롭게 사용 가능합니다.**
+- [macOS 설치 및 권한 설정 가이드](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide.md)
+- 프로그램 기본 설정은 `%appdata%/com.dmnote.desktop` 폴더에 저장됩니다.
+- 오버레이를 실시간으로 직접 확인할 필요가 없고 스트리밍이나 플레이 영상 제작 등에 사용한다면 기본적으로 **OBS 모드** 사용을 권장합니다. 이는 일반 오버레이 모드보다 게임 프레임에 대한 악영향을 줄일 수 있습니다.
+- 만약 게임용 컴퓨터와 스트리밍/녹화용 컴퓨터가 분리되어 있는 환경이라면 게임용 컴퓨터에서 DM Note를 실행하고 스트리밍/녹화용 컴퓨터에서 OBS 브라우저 소스로 연결하여 사용하는 것을 추천합니다. 이 경우 키뷰어로 인해 발생하는 게임 프레임 저하 문제를 거의 완전히 해결할 수 있습니다.
+- **항상 위에 표시** 기능을 활성화해도 일부 게임의 전체화면에서는 오버레이가 게임에 가려집니다. 이 경우 테두리 없는 창 모드를 사용해주세요.
+- 공식 플러그인과 CSS 예제 파일은 `assets.zip` 파일에 포함되어 있습니다.
+- **신뢰할 수 없는 플러그인은 절대 불러오지 마세요.** 비공식적인 플러그인을 사용할 때는 ChatGPT 등의 도구를 사용하여 해당 플러그인이 안전한지 반드시 확인 후 사용하세요.
+- 클래스명 할당 시 선택자는 제외하고 이름만 입력하세요. (`blue` ✅, `.blue` ❌)
 
 ## 🚀 개발
 
@@ -85,26 +110,6 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 - **입력 감지**: Raw Input API (Windows), 전역 입력 이벤트 (macOS)
 - **패키지 매니저**: npm
 
-### 폴더 구조
-
-```
-DmNote/
-├─ src/                          # 프론트엔드
-│  ├─ renderer/                  # React 렌더러
-│  │  ├─ components/             # UI 컴포넌트
-│  │  ├─ hooks/                  # 상태/동기화 훅
-│  │  ├─ stores/                 # Zustand 스토어
-│  │  ├─ windows/                # 렌더러 윈도우 (main/overlay)
-│  │  ├─ styles/                 # 전역/공통 스타일
-│  │  └─ assets/                 # 정적 리소스
-│  └─ types/                     # 공유 타입/스키마
-├─ src-tauri/                    # Tauri 백엔드
-│  └─ src/                       # 커맨드, 서비스
-├─ package.json                  # 프로젝트 의존성 및 실행 스크립트
-├─ tsconfig.json                 # TypeScript 설정
-└─ vite.config.ts                # Vite 설정
-```
-
 ### 기본 설치 및 실행
 
 터미널에서 다음 명령어를 순서대로 입력하세요.
@@ -115,31 +120,6 @@ cd DmNote
 npm install
 npm run tauri:dev
 ```
-
-## 🖼️ 스크린샷
-
-<!--img src="docs/assets/2025-08-29_12-07-12.webp" alt="Note Effect" width="700"-->
-
-<img src="docs/assets/IMG_1005.gif" alt="Note Effect" width="700">
-
-<!--img src="docs/assets/1.webp" alt="키뷰어 데모 1" width="700"-->
-
-<img src="docs/assets/2025-09-20_11-55-17.gif" alt="키뷰어 데모 2" width="700">
-
-<!--img src="docs/assets/IMG_1008.gif" alt="키뷰어 데모 3" width="700"-->
-
-<img src="docs/assets/2025-09-20_11-57-38.gif" alt="키뷰어 데모 4" width="700">
-
-## 📝 참고사항
-
-- 일부 게임의 전체화면 모드에서는 정상 동작하지 않습니다. 이 경우 테두리 없는 창 모드를 사용해주세요.
-- 그래픽 문제 발생 시 설정에서 렌더링 옵션을 변경해주세요.
-- OBS 윈도우 캡쳐로 크로마키 없이 배경을 투명하게 불러올 수 있습니다.
-- 게임 화면 위에 표시할 경우, **항상 위에 표시**로 배치한 뒤 **오버레이 창 고정**을 활성화해주세요.
-- 커스텀 CSS 예제 파일은 `assets` 폴더에 있습니다.
-- 클래스명 할당 시 선택자는 제외하고 이름만 입력해주세요.(`blue` -> o, `.blue` -> x)
-- 프로그램 기본 설정은 `%appdata%/com.dmnote.desktop` 폴더의 `store.json`에 저장됩니다.
-- [macOS 설치 및 권한 설정 가이드](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide.md)
 
 ## 🤝 기여하기
 

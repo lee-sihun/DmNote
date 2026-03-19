@@ -1,6 +1,4 @@
-<meta name="google-site-verification" content="tw5pjIDYKCrq1QKYBrD5iyV7DXIM4rsHN9d11WlJFe4" />
-
-[한국어](../README.md) | [English](docs/readme_en.md) | **中文**
+[한국어](../README.md) | [English](readme_en.md) | **中文**
 
 <div align="center">
   <img src="../src-tauri/icons/icon.ico" alt="dmnote Logo" width="120" height="120">
@@ -23,11 +21,14 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 ## 🌟 概述
 
-**DM Note** 是一款专为配合 DJMAX RESPECT V 使用而创建的按键显示程序. 基于 Tauri 和 React 构建, 它允许您通过简单设置, 在直播或游戏视频创作时可视化显示按键输入. 目前, 它仅官方支持 Windows 10/11 和 macOS 环境. 如果您使用的是 Linux, 我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote).
-
-**本程序可自由用于直播或游戏视频制作等场景.**
+**DM Note** 是一款专为 DJMAX RESPECT V 优化的按键显示程序，也可以自由用于其他游戏。通过简单设置，您可以在直播或游戏视频创作时可视化显示按键输入。目前仅官方支持 Windows 10/11 和 macOS 环境。如果您使用的是 Linux，我们推荐尝试 [社区分支版本](https://github.com/northernorca/DmNote)。
 
 [前往下载 DM NOTE v1.5.2](https://github.com/lee-sihun/DmNote/releases/download/1.5.2/DM.NOTE.v.1.5.2.zip)
+
+## 🖼️ 截图
+
+<img src="assets/image.png" alt="Screenshot" width="700">
+<img src="assets/IMG_1005.gif" alt="Note Effect" width="700">
 
 ## ✨ 功能特性
 
@@ -38,42 +39,54 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 
 ### 🎨 按键样式 自定义
 
-- 基于 网格 的按键编辑
+- 基于网格的按键编辑
 - 支持图片分配
-- 自定义 CSS 支持
 
-### 💾 预设 与 设置管理
+### 🌧️ 音符键雨自定义
 
-- 自动保存 用户设置
-- 保存/加载 预设
-
-### 🖼️ 覆盖层 与 窗口管理
-
-- 锁定 悬浮窗 位置
-- 始终置顶
-- 选择调整锚点大小
-
-### 🌧️ 音符键雨 (你没看过冰与火之舞?) 自定义
-
-- 调整音符键雨的颜色、不透明度、圆角、速度和高度
-- 反向键雨
+- 音符键雨样式自定义
+- 轨道速度、高度及反转模式支持
 
 ### 🔢 按键计数器
 
-- 实时显示 每个按键的输入次数
+- 显示每个按键的输入次数
 - 自定义计数器位置、颜色和样式
-- 自定义 CSS 支持
 
 ### 📊 输入统计
 
-- 提供 KPS、AVG、MAX、TOTAL 统计数据
-- 自定义统计元素样式
+- KPS、AVG、MAX、TOTAL 统计显示
+- KPS 图表可视化
+- 统计元素及图表样式自定义
 
-### ⚙️ 图层 与 设置
+### 🎵 按键音效
 
-- 多语言界面支持 (韩文、英文、中文 (简体、繁体)、俄语)
-- 图层渲染选项
-- 重置设置
+- 按键输入时播放音效
+- 支持自定义音效文件
+
+### 🖼️ 覆盖层 与 窗口管理
+
+- 锁定窗口位置 & 始终置顶
+- 选择调整锚点大小
+
+### 🖥️ OBS 模式
+
+- 兼容 OBS 浏览器源
+
+### 🧩 自定义 CSS 与插件支持
+
+- 通过自定义 CSS 完全自定义程序界面和覆盖层样式
+- 支持自定义插件
+
+### 💾 预设 与 设置管理
+
+- 自动保存用户设置
+- 保存/加载预设
+
+### ⚙️ 其他设置
+
+- 多语言界面支持（韩文、英文、中文简体/繁体、俄语）
+- 快捷键设置支持
+- 重置设置及自动更新
 
 ## 🚀 开发
 
@@ -84,26 +97,6 @@ https://github.com/user-attachments/assets/20fb118d-3982-4925-9004-9ce0936590c2
 - **样式**: Tailwind CSS 3
 - **输入检测**: Raw Input API (Windows), 全局输入事件 (macOS)
 - **包管理器**: npm
-
-### 文件夹 结构
-
-```
-DmNote/
-├─ src/                          # 前端
-│  ├─ renderer/                  # React 渲染器
-│  │  ├─ components/             # UI 组件
-│  │  ├─ hooks/                  # 状态/同步钩子
-│  │  ├─ stores/                 # Zustand 状态库
-│  │  ├─ windows/                # 渲染器窗口 (main/overlay)
-│  │  ├─ styles/                 # 全局/通用样式
-│  │  └─ assets/                 # 静态资源
-│  └─ types/                     # 共享类型/模型
-├─ src-tauri/                    # Tauri 后端
-│  └─ src/                       # 命令、服务
-├─ package.json                  # 项目依赖项 和 运行脚本
-├─ tsconfig.json                 # TypeScript 配置
-└─ vite.config.ts                # Vite 配置
-```
 
 ### 基本安装 与 运行
 
@@ -116,34 +109,21 @@ npm install
 npm run tauri:dev
 ```
 
-## 🖼️ 截图
+## � 注意事项
 
-<!--img src="assets/2025-08-29_12-07-12.webp" alt="Note Effect" width="700"-->
-
-<img src="assets/IMG_1005.gif" alt="Note Effect" width="700">
-
-<!--img src="assets/1.webp" alt="Key Viewer Demo 1" width="700"-->
-
-<img src="assets/2025-09-20_11-55-17.gif" alt="Key Viewer Demo 2" width="700">
-
-<!--img src="assets/IMG_1008.gif" alt="Key Viewer Demo 3" width="700"-->
-
-<img src="assets/2025-09-20_11-57-38.gif" alt="Key Viewer Demo 4" width="700">
-
-## 📝 注意事项
-
-- 部分游戏的全屏模式下可能无法正常运行, 此情况请使用无边框窗口模式.
-- 若出现图形显示问题, 请在设置中更改渲染选项.
-- 可通过 OBS窗口捕获 功能录制透明背景画面, 无需使用色度键.
-- 在游戏屏幕上显示时, 将其 **置于最顶层** 并启用 **锁定叠加窗口**.
-- 自定义 CSS 示例文件位于 `assets` 文件夹中.
-- 分配类名时, 只输入名称, 不输入选择器 (例如, `blue` -> o, `.blue` -> x).
-- 程序默认设置保存在 `store.json` 文件夹的文件 `%appdata%/com.dmnote.desktop` 中.
+- **本程序可自由用于直播或游戏视频制作等场景。**
 - [macOS 安装与权限设置指南](https://github.com/DmNote-App/DmNote/blob/master/docs/mac_guide_zh-cn.md)
+- 程序默认设置保存在 `%appdata%/com.dmnote.desktop` 文件夹中。
+- 如果您不需要实时查看覆盖层，且用于直播或游戏视频制作，默认推荐使用 **OBS 模式**。这可以减少对游戏帧率的负面影响。
+- 如果游戏电脑和直播/录制电脑是分开的，建议在游戏电脑上运行 DM Note，在直播/录制电脑上通过 OBS 浏览器源连接。这样可以几乎完全解决因按键显示器导致的游戏帧率下降问题。
+- 即使启用了 **始终置顶** 功能，部分游戏的全屏模式下覆盖层可能会被游戏遮挡。此时请使用无边框窗口模式。
+- 官方插件和 CSS 示例文件包含在 `assets.zip` 文件中。
+- **请勿加载不受信任的插件。** 使用非官方插件时，请使用 ChatGPT 等工具确认其安全性后再使用。
+- 分配类名时，只输入名称，不输入选择器（`blue` ✅，`.blue` ❌）
 
 ## 🤝 贡献指南
 
-我们欢迎各位的贡献！详情请查阅 [贡献指南](CONTRIBUTING.md)
+我们欢迎各位的贡献！详情请查阅 [贡献指南](../CONTRIBUTING.md)
 
 ### ✨ 贡献者
 
@@ -176,11 +156,3 @@ npm run tauri:dev
 ## ❤️ 特别致谢!
 
 - [tauri-apps/tauri](https://github.com/tauri-apps/tauri)
-
-<!--
-## 🔜 计划更新 内容
-
-- 按键输入次数、输入速度可视化
-- 同步输入间隔（毫秒）显示
-- 输入数据统计分析功能
- -->
