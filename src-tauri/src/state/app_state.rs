@@ -1181,7 +1181,7 @@ impl AppState {
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
-            .visible(true)
+            .visible(snapshot.overlay_visible)
             .inner_size(bounds.width, bounds.height)
             .position(bounds.x, bounds.y)
             .shadow(false)
@@ -1223,8 +1223,12 @@ impl AppState {
 
         window.set_ignore_cursor_events(snapshot.overlay_locked)?;
         window.set_always_on_top(snapshot.always_on_top)?;
+        // show_overlay_window 내부에서 호출하므로, visible일 때만 적용
+        // hidden 상태에서 호출 시 orderFrontRegardless가 윈도우를 강제 표시함
         #[cfg(target_os = "macos")]
-        apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
+        if snapshot.overlay_visible {
+            apply_macos_overlay_fullscreen_behavior(&window, snapshot.always_on_top);
+        }
         let _ = window.set_maximizable(false);
 
         self.overlay_force_close.store(false, Ordering::SeqCst);
@@ -1248,8 +1252,7 @@ impl AppState {
         // 모든 플랫폼별 설정(WS_EX_NOACTIVATE 등)이 완료된 후,
         // store의 overlay_visible 상태에 따라 조건부 표시
         if snapshot.overlay_visible {
-            // .visible(true)로 이미 표시된 상태
-            // SW_SHOWNOACTIVATE 재표시로 포커스 미탈취 보장
+            // SW_SHOWNOACTIVATE 표시로 포커스 미탈취 보장
             show_overlay_window(&window, snapshot.always_on_top)?;
             *self.overlay_visible.write() = true;
         } else {
@@ -1852,8 +1855,18 @@ fn hide_overlay_window(window: &WebviewWindow) -> Result<()> {
 }
 
 /// macOS 전체화면 Space에서도 오버레이가 보이도록 NSWindow 동작을 보정
+/// 어떤 스레드에서 호출되든 안전하게 메인 스레드에서 AppKit API를 실행
 #[cfg(target_os = "macos")]
 fn apply_macos_overlay_fullscreen_behavior(window: &WebviewWindow, always_on_top: bool) {
+    let app = window.app_handle().clone();
+    let window = window.clone();
+    let _ = app.run_on_main_thread(move || {
+        apply_macos_overlay_fullscreen_behavior_inner(&window, always_on_top);
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_overlay_fullscreen_behavior_inner(window: &WebviewWindow, always_on_top: bool) {
     use objc::{msg_send, sel, sel_impl};
 
     match window.ns_window() {
