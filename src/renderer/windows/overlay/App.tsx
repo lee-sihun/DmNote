@@ -363,6 +363,7 @@ export default function App() {
     subscribe,
     handleKeyDown,
     handleKeyUp,
+    finalizeAllActive,
     noteBuffer,
     updateTrackLayouts,
   } = useNoteSystem({
@@ -397,6 +398,12 @@ export default function App() {
   useEffect(() => {
     setLayoutVersion((value) => value + 1);
   }, [trackHeight]);
+
+  // 탭 전환 시 진행 중인 모든 노트 강제 완료
+  useEffect(() => {
+    finalizeAllActive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKeyType]);
 
   useEffect(() => {
     // 키 딜레이 적용된 신호 업데이트

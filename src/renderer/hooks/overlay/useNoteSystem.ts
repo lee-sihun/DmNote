@@ -57,6 +57,7 @@ interface UseNoteSystemReturn {
   subscribe: (callback: NoteSubscriber) => () => void;
   handleKeyDown: (keyName: string) => void;
   handleKeyUp: (keyName: string) => void;
+  finalizeAllActive: () => void;
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
 }
@@ -619,11 +620,43 @@ export function useNoteSystem({
   const effectiveHandleKeyDown = noteEffect ? handleKeyDown : noOpHandler;
   const effectiveHandleKeyUp = noteEffect ? handleKeyUp : noOpHandler;
 
+  // 탭 전환 시 진행 중인 모든 노트 강제 완료
+  const finalizeAllActiveRef = useRef<() => void>(() => {});
+  finalizeAllActiveRef.current = (): void => {
+    for (const [keyName, stateList] of activeNotes.current.entries()) {
+      if (!Array.isArray(stateList)) continue;
+      for (const state of stateList) {
+        if (state?.startTimer) {
+          clearTimeout(state.startTimer);
+          state.startTimer = null;
+        }
+        if (state?.finalizeTimer) {
+          clearTimeout(state.finalizeTimer);
+          if (state.noteId) {
+            finalizeTimersRef.current.delete(state.noteId);
+          }
+          state.finalizeTimer = null;
+        }
+        if (state?.created && state?.noteId) {
+          const forcedEndTime = Math.max(
+            performance.now(),
+            state.startTime ?? 0,
+            state.releaseTime ?? 0,
+          );
+          finalizeNote(keyName, state.noteId, forcedEndTime);
+        }
+      }
+    }
+    activeNotes.current.clear();
+  };
+  const finalizeAllActive = (): void => finalizeAllActiveRef.current();
+
   return {
     notesRef,
     subscribe,
     handleKeyDown: effectiveHandleKeyDown,
     handleKeyUp: effectiveHandleKeyUp,
+    finalizeAllActive,
     noteBuffer: noteBufferRef.current,
     updateTrackLayouts: (layouts: TrackLayoutInput[]) =>
       noteBufferRef.current.updateTrackLayouts(layouts),
