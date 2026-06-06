@@ -979,7 +979,7 @@ fn play_on_stream(
         return false;
     };
 
-    handler.sink.mixer().add(source.amplify(volume));
+    handler.sink.mixer().add(source.with_gain(volume));
     true
 }
 
@@ -1213,7 +1213,21 @@ struct AudioSource {
     samples: Arc<[f32]>,
     channels: u16,
     sample_rate: u32,
+    gain: f32,
     pos: usize,
+}
+
+/// 천장(1.0) 근처에서 부드럽게 수렴시키는 소프트 리미터
+/// knee 미만은 그대로 통과(일반 볼륨 무영향), 초과분만 1.0으로 압축
+fn soft_limit_sample(x: f32) -> f32 {
+    const KNEE: f32 = 0.95;
+    let mag = x.abs();
+    if mag <= KNEE {
+        return x;
+    }
+    let over = (mag - KNEE) / (1.0 - KNEE);
+    let limited = KNEE + (1.0 - KNEE) * over.tanh();
+    limited.copysign(x)
 }
 
 impl AudioSource {
@@ -1222,8 +1236,14 @@ impl AudioSource {
             samples,
             channels,
             sample_rate,
+            gain: 1.0,
             pos: 0,
         }
+    }
+
+    fn with_gain(mut self, gain: f32) -> Self {
+        self.gain = gain;
+        self
     }
 }
 
@@ -1233,7 +1253,7 @@ impl Iterator for AudioSource {
     fn next(&mut self) -> Option<Self::Item> {
         let value = self.samples.get(self.pos)?;
         self.pos += 1;
-        Some(*value)
+        Some(soft_limit_sample(*value * self.gain))
     }
 }
 
