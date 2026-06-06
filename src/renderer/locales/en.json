@@ -21,6 +21,8 @@
     "noPlugins": "No plugins loaded yet",
     "removePlugin": "Remove plugin",
     "resizeAnchor": "Resize Anchor",
+    "keySoundOutput": "Key Sound Output",
+    "keySoundOutputDefault": "Default Output Device",
     "topLeft": "Top-Left",
     "bottomLeft": "Bottom-Left",
     "topRight": "Top-Right",

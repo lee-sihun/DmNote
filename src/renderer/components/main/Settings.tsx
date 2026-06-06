@@ -28,6 +28,11 @@ import type {
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { KeyCounters } from '@src/types/key/keys';
 import { obsApi } from '@api/modules/obsApi';
+import { keySoundOutputApi } from '@api/modules/resourceApi';
+import type {
+  KeySoundOutputBackend,
+  KeySoundOutputState,
+} from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
 
@@ -137,6 +142,43 @@ const Settings = ({
     clientCount: 0,
   });
   const obsTogglingRef = useRef(false);
+
+  // 키음 출력 백엔드 (기본 장치 / ASIO)
+  const [keySoundOutput, setKeySoundOutput] =
+    useState<KeySoundOutputState | null>(null);
+  const [asioDrivers, setAsioDrivers] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [devices, state] = await Promise.all([
+          keySoundOutputApi.listDevices(),
+          keySoundOutputApi.getState(),
+        ]);
+        if (cancelled) return;
+        setAsioDrivers(devices.asio);
+        setKeySoundOutput(state);
+      } catch (error) {
+        console.error('Failed to load key sound output state', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleKeySoundOutputChange = async (val: string) => {
+    const backend: KeySoundOutputBackend = val.startsWith('asio:')
+      ? { kind: 'asio', driverName: val.slice('asio:'.length) }
+      : { kind: 'defaultDevice' };
+    try {
+      const next = await keySoundOutputApi.setBackend(backend);
+      setKeySoundOutput(next);
+    } catch (error) {
+      console.error('Failed to set key sound output backend', error);
+    }
+  };
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -825,6 +867,46 @@ const Settings = ({
                 />
               </div>
             </div>
+            {/* 키음 출력 설정 */}
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey('keySoundOutput')}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
+                <p className="text-style-3 text-[#FFFFFF]">
+                  {t('settings.keySoundOutput') || '키음 출력 장치'}
+                </p>
+                <Dropdown
+                  options={[
+                    {
+                      value: 'defaultDevice',
+                      label:
+                        t('settings.keySoundOutputDefault') || '기본 출력 장치',
+                    },
+                    ...asioDrivers.map((name) => ({
+                      value: `asio:${name}`,
+                      label: `ASIO: ${name}`,
+                    })),
+                  ]}
+                  value={
+                    keySoundOutput?.requested.kind === 'asio'
+                      ? `asio:${keySoundOutput.requested.driverName}`
+                      : 'defaultDevice'
+                  }
+                  onChange={handleKeySoundOutputChange}
+                  placeholder={
+                    t('settings.keySoundOutputDefault') || '기본 출력 장치'
+                  }
+                  align="right"
+                />
+              </div>
+              {keySoundOutput?.error && (
+                <p className="text-[12px] leading-[16px] pb-[8px] text-[#E5A23C]">
+                  {keySoundOutput.error}
+                </p>
+              )}
+            </div>
             {/* 커스텀 CSS & JS 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div
@@ -1098,7 +1180,11 @@ const Settings = ({
             />
             <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
               <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t(hoveredKey === 'obsMode' ? 'settings.obsGuide' : `settings.${hoveredKey}Desc`)}
+                {t(
+                  hoveredKey === 'obsMode'
+                    ? 'settings.obsGuide'
+                    : `settings.${hoveredKey}Desc`,
+                )}
               </span>
             </div>
           </div>

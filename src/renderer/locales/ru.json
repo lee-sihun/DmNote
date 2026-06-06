@@ -21,6 +21,8 @@
     "noPlugins": "Нет плагинов",
     "removePlugin": "Удалить плагин",
     "resizeAnchor": "Точка привязки",
+    "keySoundOutput": "Вывод звука клавиш",
+    "keySoundOutputDefault": "Устройство по умолчанию",
     "topLeft": "Верх-лево",
     "bottomLeft": "Низ-лево",
     "topRight": "Верх-право",

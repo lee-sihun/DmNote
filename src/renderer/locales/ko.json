@@ -21,6 +21,8 @@
     "noPlugins": "불러온 플러그인이 없습니다",
     "removePlugin": "플러그인 삭제",
     "resizeAnchor": "리사이즈 기준점",
+    "keySoundOutput": "키음 출력 장치",
+    "keySoundOutputDefault": "기본 출력 장치",
     "topLeft": "좌상단",
     "bottomLeft": "좌하단",
     "topRight": "우상단",

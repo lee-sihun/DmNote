@@ -4,6 +4,9 @@ version = "1.6.0"
 edition = "2021"
 default-run = "dm-note"
 
+[features]
+asio-backend = ["dep:cpal"]
+
 [build-dependencies]
 tauri-build = { version = "2.4.1", features = [] }
 walkdir = "2.5"
@@ -40,6 +43,7 @@ tokio-tungstenite = "0.24"
 futures-util = "0.3"
 local-ip-address = "0.6.10"
 [target."cfg(windows)".dependencies]
+cpal = { version = "0.17.3", optional = true, default-features = false, features = ["asio"] }
 windows = { version = "0.61.3", features = [
 	"Win32_Foundation",
 	"Win32_UI_WindowsAndMessaging",

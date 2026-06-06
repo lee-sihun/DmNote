@@ -21,6 +21,8 @@
     "noPlugins": "尚未加载任何插件",
     "removePlugin": "移除插件",
     "resizeAnchor": "调整锚点大小",
+    "keySoundOutput": "按键音输出设备",
+    "keySoundOutputDefault": "默认输出设备",
     "topLeft": "左上",
     "bottomLeft": "左下",
     "topRight": "右上",
