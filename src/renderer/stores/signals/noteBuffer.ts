@@ -1,4 +1,5 @@
 import { DEFAULT_NOTE_BORDER_RADIUS } from '@constants/overlayDefaults';
+import { toRgbHexColor } from '@utils/color/colorUtils';
 
 const MAX_NOTES = 2048;
 
@@ -19,7 +20,8 @@ const linearToSRGB = (c: number) => {
 };
 
 const parseColor = (hex: string) => {
-  const color = hex.replace('#', '');
+  // rgba(...)/3·8자리 hex 등 어떤 입력이든 #RRGGBB로 정규화 — NaN 방어 (이슈 #73)
+  const color = toRgbHexColor(hex).slice(1);
   const r = parseInt(color.substring(0, 2), 16);
   const g = parseInt(color.substring(2, 4), 16);
   const b = parseInt(color.substring(4, 6), 16);

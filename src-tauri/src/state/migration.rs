@@ -27,7 +27,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
     let (state, needs_persist) = match serde_json::from_str::<AppStoreData>(&content) {
         Ok(data) => {
-            let needs_persist = data.font_settings.custom_fonts.iter().any(|font| {
+            let needs_font_persist = data.font_settings.custom_fonts.iter().any(|font| {
                 font.font_type == FontType::Local
                     && font
                         .css_content
@@ -35,7 +35,12 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
                         .map(|c| !c.trim().is_empty())
                         .unwrap_or(false)
             });
-            (normalize_state(data), needs_persist)
+            // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
+            let needs_border_color_fix = has_convertible_note_border_color(&data);
+            (
+                normalize_state(data),
+                needs_font_persist || needs_border_color_fix,
+            )
         }
         // 레거시/비정상 store 파일 복구 후 정규화 상태 저장
         Err(_) => (repair_legacy_state(&content), true),
@@ -270,6 +275,42 @@ fn migrate_image_reference_to_app_data(images_dir: &Path, image_ref: &mut Option
     }
 }
 
+/// `rgba(r, g, b, a)` 문자열을 `#RRGGBB`로 변환. rgba 형식이 아니거나 파싱 실패 시 None
+fn rgba_to_hex(color: &str) -> Option<String> {
+    let inner = color.trim().strip_prefix("rgba(")?.strip_suffix(')')?;
+    let mut parts = inner.split(',');
+    let r: u8 = parts.next()?.trim().parse().ok()?;
+    let g: u8 = parts.next()?.trim().parse().ok()?;
+    let b: u8 = parts.next()?.trim().parse().ok()?;
+    Some(format!("#{r:02X}{g:02X}{b:02X}"))
+}
+
+/// noteBorderColor가 변환 가능한 rgba면 #RRGGBB로 교체 (그 외 입력은 그대로)
+fn migrate_note_border_color(color: &mut Option<String>) {
+    if let Some(hex) = color.as_deref().and_then(rgba_to_hex) {
+        *color = Some(hex);
+    }
+}
+
+/// store에 #RRGGBB로 변환 가능한 rgba noteBorderColor가 남아 있는지 (디스크 영속 판단용)
+fn has_convertible_note_border_color(data: &AppStoreData) -> bool {
+    let convertible = |color: &Option<String>| color.as_deref().and_then(rgba_to_hex).is_some();
+    data.key_positions
+        .values()
+        .flatten()
+        .any(|pos| convertible(&pos.note_border_color))
+        || data
+            .stat_positions
+            .values()
+            .flatten()
+            .any(|stat| convertible(&stat.position.note_border_color))
+        || data
+            .graph_positions
+            .values()
+            .flatten()
+            .any(|graph| convertible(&graph.position.note_border_color))
+}
+
 /// store 데이터 정규화 및 레거시 마이그레이션 적용
 pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     if data.keys.is_empty() {
@@ -290,6 +331,24 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
             for pos in positions.iter_mut() {
                 pos.note_border_radius = Some(legacy_border_radius);
             }
+        }
+    }
+
+    // 마이그레이션: noteBorderColor에 잘못 저장된 rgba(...) → #RRGGBB 복구 (이슈 #73)
+    // 배치 편집 경로가 정규화 없이 rgba 문자열을 저장해 오버레이에서 초록색으로 깨짐
+    for positions in data.key_positions.values_mut() {
+        for pos in positions.iter_mut() {
+            migrate_note_border_color(&mut pos.note_border_color);
+        }
+    }
+    for positions in data.stat_positions.values_mut() {
+        for stat in positions.iter_mut() {
+            migrate_note_border_color(&mut stat.position.note_border_color);
+        }
+    }
+    for positions in data.graph_positions.values_mut() {
+        for graph in positions.iter_mut() {
+            migrate_note_border_color(&mut graph.position.note_border_color);
         }
     }
 
@@ -599,4 +658,28 @@ struct LegacyOverlayBounds {
 struct LegacyOverlayPosition {
     x: f64,
     y: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rgba_to_hex;
+
+    #[test]
+    fn rgba_to_hex_converts_and_drops_alpha() {
+        assert_eq!(
+            rgba_to_hex("rgba(255, 0, 167, 1)").as_deref(),
+            Some("#FF00A7")
+        );
+        assert_eq!(
+            rgba_to_hex("rgba(18, 52, 86, 0)").as_deref(),
+            Some("#123456")
+        );
+    }
+
+    #[test]
+    fn rgba_to_hex_ignores_non_rgba() {
+        assert_eq!(rgba_to_hex("#FF00A7"), None);
+        assert_eq!(rgba_to_hex("garbage"), None);
+        assert_eq!(rgba_to_hex("rgba(300, 0, 0, 1)"), None); // u8 범위 초과
+    }
 }

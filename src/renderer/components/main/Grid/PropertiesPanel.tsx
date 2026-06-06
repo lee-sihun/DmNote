@@ -11,6 +11,7 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import { toRgbHexColor } from '@utils/color/colorUtils';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -2185,7 +2186,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleBatchGlowColorChangeComplete(newColor);
       }
     } else if (batchPickerFor === 'borderColor') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      // noteBorderColor는 #RRGGBB 계약 — 피커의 rgba(...) 출력을 hex로 정규화 (이슈 #73)
+      const solidColor = toRgbHexColor(
+        typeof newColor === 'string' ? newColor : undefined,
+      );
       if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
         handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
       } else {
