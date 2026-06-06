@@ -6,6 +6,7 @@ import {
   rgbToHsv,
   toColorObject,
   toCssRgba,
+  toRgbHexColor,
 } from './colorUtils';
 
 describe('isGradientColor', () => {
@@ -154,5 +155,42 @@ describe('toCssRgba', () => {
     const result = toCssRgba('rgba(100, 200, 50, 0.8)');
     expect(result.css).toBe('rgba(100, 200, 50, 0.8)');
     expect(result.alpha).toBe(0.8);
+  });
+});
+
+describe('toRgbHexColor', () => {
+  // 이슈 #73 회귀: rgba 문자열이 초록색으로 깨지지 않아야 함
+  it('rgba 문자열을 알파 버리고 #RRGGBB로 변환', () => {
+    expect(toRgbHexColor('rgba(255, 0, 167, 1)')).toBe('#FF00A7');
+    expect(toRgbHexColor('rgba(100, 200, 50, 0.8)')).toBe('#64C832');
+  });
+
+  it('알파 0이어도 RGB 유지', () => {
+    expect(toRgbHexColor('rgba(18, 52, 86, 0)')).toBe('#123456');
+  });
+
+  it('알파 없는 rgb()도 변환', () => {
+    expect(toRgbHexColor('rgb(255, 0, 167)')).toBe('#FF00A7');
+  });
+
+  it('#RRGGBB는 대문자로 그대로', () => {
+    expect(toRgbHexColor('#ff00a7')).toBe('#FF00A7');
+    expect(toRgbHexColor('#FF00A7')).toBe('#FF00A7');
+  });
+
+  it('3자리/8자리 hex도 #RRGGBB로 정규화 (알파 제거)', () => {
+    expect(toRgbHexColor('#f0a')).toBe('#FF00AA');
+    expect(toRgbHexColor('#FF00A7CC')).toBe('#FF00A7');
+  });
+
+  it('잘못된 입력/빈값/null은 fallback', () => {
+    expect(toRgbHexColor(null)).toBe('#FFFFFF');
+    expect(toRgbHexColor(undefined)).toBe('#FFFFFF');
+    expect(toRgbHexColor('')).toBe('#FFFFFF');
+    expect(toRgbHexColor('garbage')).toBe('#FFFFFF');
+  });
+
+  it('커스텀 fallback 지원', () => {
+    expect(toRgbHexColor(null, '#000000')).toBe('#000000');
   });
 });

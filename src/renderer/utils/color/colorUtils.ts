@@ -55,6 +55,28 @@ const normalizeColorInput = (
   return '#561ecb';
 };
 
+// 알파를 버리고 항상 대문자 #RRGGBB 반환. noteBorderColor처럼 hex 계약이 강제된 필드용
+const toRgbHexColor = (
+  value: string | null | undefined,
+  fallback = '#FFFFFF',
+): string => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    // rgb(...) / rgba(...) — 알파 버리고 0~255 클램프
+    const rgb = trimmed.match(
+      /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i,
+    );
+    if (rgb) {
+      const toHex = (n: string) =>
+        Math.min(255, Number(n)).toString(16).padStart(2, '0');
+      return `#${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}`.toUpperCase();
+    }
+    const parsed = parseHexColor(trimmed);
+    if (parsed) return parsed.hex;
+  }
+  return fallback;
+};
+
 const buildGradient = (topHex: string, bottomHex: string): GradientColor => ({
   type: 'gradient',
   top: topHex,
@@ -269,6 +291,7 @@ export {
   MODES,
   isGradientColor,
   normalizeColorInput,
+  toRgbHexColor,
   buildGradient,
   parseHexColor,
   rgbToHsv,

@@ -11,26 +11,11 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
-import { isGradientColor } from '@utils/color/colorUtils';
+import { isGradientColor, toRgbHexColor } from '@utils/color/colorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
 const DEFAULT_NOTE_COLOR = '#FFFFFF';
-
-// rgba(...) 또는 hex 문자열에서 #RRGGBB 추출
-const toHexColor = (color: string): string => {
-  if (color.startsWith('#') && color.length >= 7) return color.slice(0, 7);
-  const match = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (match) {
-    const r = Math.min(255, Number(match[1]));
-    const g = Math.min(255, Number(match[2]));
-    const b = Math.min(255, Number(match[3]));
-    return `#${r.toString(16).padStart(2, '0')}${g
-      .toString(16)
-      .padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
-  }
-  return DEFAULT_NOTE_COLOR;
-};
 
 // 색상 모드 상수
 const COLOR_MODES = {
@@ -740,7 +725,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           }
           onColorChange={(c: NoteColor) => {
             if (pickerFor === 'border') {
-              const hex = toHexColor(typeof c === 'string' ? c : '#FFFFFF');
+              const hex = toRgbHexColor(typeof c === 'string' ? c : undefined);
               setBorderColor(hex);
               return;
             }
@@ -748,7 +733,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           }}
           onColorChangeComplete={(c: NoteColor) => {
             if (pickerFor === 'border') {
-              const hex = toHexColor(typeof c === 'string' ? c : '#FFFFFF');
+              const hex = toRgbHexColor(typeof c === 'string' ? c : undefined);
               setBorderColor(hex);
               onKeyPreview?.(keyIndex, { noteBorderColor: hex });
               onKeyUpdate({ index: keyIndex, noteBorderColor: hex });
