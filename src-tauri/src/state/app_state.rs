@@ -1668,7 +1668,7 @@ impl AppState {
                 }
 
                 let volume_percent = position.sound_volume.unwrap_or(100.0);
-                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 1.0) as f32;
+                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 2.0) as f32;
                 return Some((trimmed_path.to_string(), per_key_volume));
             }
 

@@ -712,12 +712,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               onChange={(value) =>
                 handleStyleChangeComplete(
                   'soundVolume',
-                  Math.max(0, Math.min(100, value)),
+                  Math.max(0, Math.min(200, value)),
                 )
               }
               suffix="%"
               min={0}
-              max={100}
+              max={200}
             />
           </PropertyRow>
         </>

@@ -450,7 +450,7 @@ impl KeySoundEngine {
 
         let _ = self.sender.send(AudioCommand::PlayFile {
             path: trimmed.to_string(),
-            per_key_volume: per_key_volume.clamp(0.0, 1.0),
+            per_key_volume: per_key_volume.clamp(0.0, 2.0),
             queued_at: Instant::now(),
             trace,
         });
@@ -610,7 +610,7 @@ fn audio_thread(receiver: Receiver<AudioCommand>, state: Arc<RwLock<KeySoundRunt
                 #[cfg(not(debug_assertions))]
                 let _ = clip_load_trace;
 
-                let final_volume = (volume * per_key_volume).clamp(0.0, 1.0);
+                let final_volume = (volume * per_key_volume).clamp(0.0, 2.0);
                 let source =
                     AudioSource::new(clip.samples.clone(), clip.channels, clip.sample_rate);
 
