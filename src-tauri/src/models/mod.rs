@@ -195,7 +195,7 @@ pub struct KeyPosition {
     /// 키 입력 시 재생할 로컬 사운드 파일 경로
     #[serde(default)]
     pub sound_path: Option<String>,
-    /// 키별 사운드 볼륨 (0~100, 기본값 100)
+    /// 키별 사운드 볼륨 (0~200, 기본값 100)
     #[serde(default)]
     pub sound_volume: Option<f64>,
     #[serde(default)]
