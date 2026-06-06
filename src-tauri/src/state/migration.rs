@@ -285,7 +285,7 @@ fn rgba_to_hex(color: &str) -> Option<String> {
     Some(format!("#{r:02X}{g:02X}{b:02X}"))
 }
 
-/// noteBorderColor가 변환 가능한 rgba면 #RRGGBB로 교체. 실제 변환 여부 반환
+/// noteBorderColor가 변환 가능한 rgba면 #RRGGBB로 교체 (그 외 입력은 그대로)
 fn migrate_note_border_color(color: &mut Option<String>) {
     if let Some(hex) = color.as_deref().and_then(rgba_to_hex) {
         *color = Some(hex);
