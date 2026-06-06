@@ -77,7 +77,7 @@ export const soundApi = {
 // 키음 출력 백엔드 (기본 장치 / ASIO)
 export type KeySoundOutputBackend =
   | { kind: 'defaultDevice' }
-  | { kind: 'asio'; driverName: string };
+  | { kind: 'asio'; driverName: string; bufferSize?: number | null };
 
 export interface KeySoundOutputDevices {
   defaultDevice: true;

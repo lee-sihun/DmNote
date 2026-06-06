@@ -56,6 +56,9 @@ const PREVIEW_SOURCES: Record<string, string> = {
     'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/obs.webm',
 };
 
+// ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
+const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
+
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
   showConfirm: (
@@ -177,6 +180,23 @@ const Settings = ({
       setKeySoundOutput(next);
     } catch (error) {
       console.error('Failed to set key sound output backend', error);
+    }
+  };
+
+  // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
+  const handleAsioBufferChange = async (val: string) => {
+    const requested = keySoundOutput?.requested;
+    if (requested?.kind !== 'asio') return;
+    const bufferSize = val === 'auto' ? null : Number(val);
+    try {
+      const next = await keySoundOutputApi.setBackend({
+        kind: 'asio',
+        driverName: requested.driverName,
+        bufferSize,
+      });
+      setKeySoundOutput(next);
+    } catch (error) {
+      console.error('Failed to set ASIO buffer size', error);
     }
   };
 
@@ -901,6 +921,42 @@ const Settings = ({
                   align="right"
                 />
               </div>
+              {keySoundOutput?.requested.kind === 'asio' && (
+                <div className="flex flex-row justify-between items-center h-[40px]">
+                  <p className="text-style-3 text-[#FFFFFF]">
+                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
+                  </p>
+                  <Dropdown
+                    options={[
+                      {
+                        value: 'auto',
+                        label: t('settings.keySoundOutputBufferAuto') || '자동',
+                      },
+                      ...ASIO_BUFFER_SIZES.map((size) => ({
+                        value: String(size),
+                        label: String(size),
+                      })),
+                    ]}
+                    value={
+                      keySoundOutput.requested.kind === 'asio' &&
+                      keySoundOutput.requested.bufferSize
+                        ? String(keySoundOutput.requested.bufferSize)
+                        : 'auto'
+                    }
+                    onChange={handleAsioBufferChange}
+                    placeholder={
+                      t('settings.keySoundOutputBufferAuto') || '자동'
+                    }
+                    align="right"
+                  />
+                </div>
+              )}
+              {keySoundOutput?.requested.kind === 'asio' && (
+                <p className="text-[12px] leading-[16px] pb-[8px] text-[#888888]">
+                  {t('settings.keySoundOutputBufferHint') ||
+                    '다른 ASIO 앱(게임)과 동시 사용 시, 그 앱과 같은 버퍼 크기로 맞추세요.'}
+                </p>
+              )}
               {keySoundOutput?.error && (
                 <p className="text-[12px] leading-[16px] pb-[8px] text-[#E5A23C]">
                   {keySoundOutput.error}

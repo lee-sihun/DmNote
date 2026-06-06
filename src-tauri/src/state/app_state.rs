@@ -1728,18 +1728,26 @@ impl Drop for AppState {
 fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundOutputBackend {
     match value {
         KeySoundOutputBackendPersist::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
-        KeySoundOutputBackendPersist::Asio { driver_name } => {
-            KeySoundOutputBackend::Asio { driver_name }
-        }
+        KeySoundOutputBackendPersist::Asio {
+            driver_name,
+            buffer_size,
+        } => KeySoundOutputBackend::Asio {
+            driver_name,
+            buffer_size,
+        },
     }
 }
 
 fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBackendPersist {
     match value {
         KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackendPersist::DefaultDevice,
-        KeySoundOutputBackend::Asio { driver_name } => {
-            KeySoundOutputBackendPersist::Asio { driver_name }
-        }
+        KeySoundOutputBackend::Asio {
+            driver_name,
+            buffer_size,
+        } => KeySoundOutputBackendPersist::Asio {
+            driver_name,
+            buffer_size,
+        },
     }
 }
 

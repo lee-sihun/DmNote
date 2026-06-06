@@ -103,7 +103,12 @@ impl Default for SoundLibraryEntry {
 )]
 pub enum KeySoundOutputBackendPersist {
     DefaultDevice,
-    Asio { driver_name: String },
+    Asio {
+        driver_name: String,
+        /// ASIO 버퍼 크기(프레임). None이면 자동. 기존 store 하위호환을 위해 default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        buffer_size: Option<u32>,
+    },
 }
 
 // 직렬화 형식:
