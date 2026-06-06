@@ -84,13 +84,13 @@ impl AppState {
         Self::sync_counters_with_keys_impl(&key_counters, &snapshot.keys);
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
         let active_keys = Arc::new(RwLock::new(HashSet::new()));
-        let key_sound = Arc::new(KeySoundEngine::new());
-        if let Some(backend) = snapshot.key_sound_output_backend.clone() {
-            let output_state = key_sound.set_output_backend(output_backend_from_persist(backend));
-            if let Some(error) = output_state.error.as_ref() {
-                warn!("[KeySound] failed to restore output backend: {error}");
-            }
-        }
+        // 저장된 출력 백엔드로 엔진을 처음부터 초기화 → "기본 장치 → ASIO" 전환 깜빡임 제거.
+        let initial_backend = snapshot
+            .key_sound_output_backend
+            .clone()
+            .map(output_backend_from_persist)
+            .unwrap_or_default();
+        let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
 
         Ok(Self {

@@ -58,6 +58,8 @@ const PREVIEW_SOURCES: Record<string, string> = {
 
 // ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
 const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
+// 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
+const DEFAULT_ASIO_BUFFER = 64;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -173,7 +175,12 @@ const Settings = ({
 
   const handleKeySoundOutputChange = async (val: string) => {
     const backend: KeySoundOutputBackend = val.startsWith('asio:')
-      ? { kind: 'asio', driverName: val.slice('asio:'.length) }
+      ? {
+          kind: 'asio',
+          driverName: val.slice('asio:'.length),
+          // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
+          bufferSize: DEFAULT_ASIO_BUFFER,
+        }
       : { kind: 'defaultDevice' };
     try {
       const next = await keySoundOutputApi.setBackend(backend);
@@ -187,12 +194,11 @@ const Settings = ({
   const handleAsioBufferChange = async (val: string) => {
     const requested = keySoundOutput?.requested;
     if (requested?.kind !== 'asio') return;
-    const bufferSize = val === 'auto' ? null : Number(val);
     try {
       const next = await keySoundOutputApi.setBackend({
         kind: 'asio',
         driverName: requested.driverName,
-        bufferSize,
+        bufferSize: Number(val),
       });
       setKeySoundOutput(next);
     } catch (error) {
@@ -927,26 +933,17 @@ const Settings = ({
                     {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
                   </p>
                   <Dropdown
-                    options={[
-                      {
-                        value: 'auto',
-                        label: t('settings.keySoundOutputBufferAuto') || '자동',
-                      },
-                      ...ASIO_BUFFER_SIZES.map((size) => ({
-                        value: String(size),
-                        label: String(size),
-                      })),
-                    ]}
-                    value={
-                      keySoundOutput.requested.kind === 'asio' &&
-                      keySoundOutput.requested.bufferSize
-                        ? String(keySoundOutput.requested.bufferSize)
-                        : 'auto'
-                    }
+                    options={ASIO_BUFFER_SIZES.map((size) => ({
+                      value: String(size),
+                      label: String(size),
+                    }))}
+                    value={String(
+                      (keySoundOutput.requested.kind === 'asio' &&
+                        keySoundOutput.requested.bufferSize) ||
+                        DEFAULT_ASIO_BUFFER,
+                    )}
                     onChange={handleAsioBufferChange}
-                    placeholder={
-                      t('settings.keySoundOutputBufferAuto') || '자동'
-                    }
+                    placeholder={String(DEFAULT_ASIO_BUFFER)}
                     align="right"
                   />
                 </div>

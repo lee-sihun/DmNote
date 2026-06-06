@@ -24,7 +24,6 @@
     "keySoundOutput": "按键音输出设备",
     "keySoundOutputDefault": "默认输出设备",
     "keySoundOutputBuffer": "ASIO 缓冲区大小",
-    "keySoundOutputBufferAuto": "自动",
     "keySoundOutputBufferHint": "与其他 ASIO 应用（游戏）同时使用时，请设置与该应用相同的缓冲区大小。",
     "topLeft": "左上",
     "bottomLeft": "左下",

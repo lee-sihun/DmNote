@@ -24,7 +24,6 @@
     "keySoundOutput": "키음 출력 장치",
     "keySoundOutputDefault": "기본 출력 장치",
     "keySoundOutputBuffer": "ASIO 버퍼 크기",
-    "keySoundOutputBufferAuto": "자동",
     "keySoundOutputBufferHint": "다른 ASIO 앱(게임)과 동시 사용 시, 그 앱과 같은 버퍼 크기로 맞추세요.",
     "topLeft": "좌상단",
     "bottomLeft": "좌하단",

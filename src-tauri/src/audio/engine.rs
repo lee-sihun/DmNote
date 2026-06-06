@@ -290,10 +290,22 @@ impl Default for KeySoundEngine {
 
 impl KeySoundEngine {
     pub fn new() -> Self {
+        Self::with_output_backend(KeySoundOutputBackend::DefaultDevice)
+    }
+
+    /// 초기 출력 백엔드를 지정해 생성. 오디오 스레드가 처음부터 이 백엔드로 스트림을 열어
+    /// "기본 장치 → ASIO" 전환에서 발생하던 깜빡임을 제거한다.
+    pub fn with_output_backend(backend: KeySoundOutputBackend) -> Self {
         let (sender, receiver) = mpsc::channel();
+        let output_state = KeySoundOutputState {
+            requested: backend.clone(),
+            effective: backend,
+            error: None,
+            asio_available: asio_backend_available(),
+        };
         let state = Arc::new(RwLock::new(KeySoundRuntimeState {
             status: KeySoundStatus::default(),
-            output_state: KeySoundOutputState::default(),
+            output_state,
             soundpack: None,
         }));
         let state_for_thread = state.clone();
@@ -827,12 +839,19 @@ fn open_asio_audio_sink(
     Err(AudioSinkOpenError::AsioUnavailableBuild)
 }
 
+/// ASIO 기본 버퍼 크기(프레임). 미지정 시 이 값으로 오픈 → 게임 기본값(최저)과 동일하게 맞춤.
+#[cfg(all(windows, feature = "asio-backend"))]
+const DEFAULT_ASIO_BUFFER_FRAMES: u32 = 64;
+
 #[cfg(all(windows, feature = "asio-backend"))]
 fn open_device_audio_sink(
     device: cpal::Device,
     buffer_size: Option<u32>,
 ) -> AudioSinkResult<StreamHandler> {
-    let buffer_size = buffer_size.filter(|frames| *frames > 0);
+    // 미지정(None)이면 기본 64로 오픈 (자동=드라이버 preferred는 게임과 어긋나 충돌하므로 사용 안 함).
+    let buffer_size = buffer_size
+        .filter(|frames| *frames > 0)
+        .or(Some(DEFAULT_ASIO_BUFFER_FRAMES));
 
     // 고정 버퍼 지정 시 그 값 그대로 오픈 → 다른 ASIO 앱(게임)과 버퍼를 맞춰 공존.
     // 드라이버가 해당 버퍼를 거부하면 자동 버퍼로 폴백.
