@@ -79,8 +79,14 @@ export type KeySoundOutputBackend =
   | { kind: 'defaultDevice' }
   | { kind: 'asio'; driverName: string; bufferSize?: number | null };
 
+export type KeySoundOutputErrorCode =
+  | 'asioUnavailableBuild'
+  | 'asioDeviceNotFound'
+  | 'asioOpenFailed'
+  | 'defaultOpenFailed';
+
 export interface KeySoundOutputDevices {
-  defaultDevice: true;
+  defaultDevice: boolean;
   asio: string[];
 }
 
@@ -88,6 +94,7 @@ export interface KeySoundOutputState {
   requested: KeySoundOutputBackend;
   effective: KeySoundOutputBackend;
   error: string | null;
+  errorCode: KeySoundOutputErrorCode | null;
   asioAvailable: boolean;
 }
 

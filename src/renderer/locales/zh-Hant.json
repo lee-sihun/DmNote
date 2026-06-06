@@ -24,6 +24,12 @@
     "keySoundOutput": "按鍵音輸出",
     "keySoundOutputDefault": "預設裝置",
     "keySoundOutputBuffer": "ASIO 緩衝區大小",
+    "keySoundOutputError": {
+      "asioUnavailableBuild": "此版本未包含 ASIO 支援。",
+      "asioDeviceNotFound": "找不到 ASIO 裝置。",
+      "asioOpenFailed": "無法開啟 ASIO 裝置，將使用預設輸出播放。",
+      "defaultOpenFailed": "無法開啟可用的輸出裝置。"
+    },
     "topLeft": "左上",
     "bottomLeft": "左下",
     "topRight": "右上",

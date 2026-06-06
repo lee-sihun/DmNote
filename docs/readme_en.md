@@ -109,6 +109,8 @@ npm install
 npm run tauri:dev
 ```
 
+To build ASIO output on Windows, set up LLVM (`LIBCLANG_PATH`) and the ASIO SDK (`CPAL_ASIO_DIR`), then use `npm run tauri:dev:asio` or `npm run tauri:build:asio`.
+
 ## � Notes
 
 - **This program is free to use for streaming or gameplay video production.**

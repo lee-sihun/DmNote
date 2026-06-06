@@ -21,7 +21,7 @@ use log::debug;
 use log::info;
 use log::warn;
 use parking_lot::RwLock;
-use rodio::{DeviceSinkBuilder, MixerDeviceSink, Source};
+use rodio::{cpal, DeviceSinkBuilder, MixerDeviceSink, Source};
 use serde::{Deserialize, Serialize};
 use symphonia::{
     core::{
@@ -189,8 +189,8 @@ pub enum KeySoundOutputBackend {
     DefaultDevice,
     Asio {
         driver_name: String,
-        /// ASIO 버퍼 크기(프레임). None이면 자동(드라이버 preferred).
-        /// 다른 ASIO 앱(게임)과 공존하려면 그 앱과 동일한 버퍼로 맞춰야 함.
+        /// ASIO 버퍼 크기(프레임). None이면 기본 64 고정
+        /// 다른 ASIO 앱(게임)과 공존하려면 그 앱과 동일한 버퍼로 맞춰야 함
         #[serde(default)]
         buffer_size: Option<u32>,
     },
@@ -217,6 +217,7 @@ pub struct KeySoundOutputState {
     pub requested: KeySoundOutputBackend,
     pub effective: KeySoundOutputBackend,
     pub error: Option<String>,
+    pub error_code: Option<String>,
     pub asio_available: bool,
 }
 
@@ -226,6 +227,7 @@ impl Default for KeySoundOutputState {
             requested: KeySoundOutputBackend::DefaultDevice,
             effective: KeySoundOutputBackend::DefaultDevice,
             error: None,
+            error_code: None,
             asio_available: asio_backend_available(),
         }
     }
@@ -298,9 +300,10 @@ impl KeySoundEngine {
     pub fn with_output_backend(backend: KeySoundOutputBackend) -> Self {
         let (sender, receiver) = mpsc::channel();
         let output_state = KeySoundOutputState {
-            requested: backend.clone(),
-            effective: backend,
+            requested: backend,
+            effective: KeySoundOutputBackend::DefaultDevice,
             error: None,
+            error_code: None,
             asio_available: asio_backend_available(),
         };
         let state = Arc::new(RwLock::new(KeySoundRuntimeState {
@@ -675,6 +678,11 @@ struct StreamHandler {
     error: Arc<AtomicBool>,
 }
 
+const ERROR_CODE_ASIO_UNAVAILABLE_BUILD: &str = "asioUnavailableBuild";
+const ERROR_CODE_ASIO_DEVICE_NOT_FOUND: &str = "asioDeviceNotFound";
+const ERROR_CODE_ASIO_OPEN_FAILED: &str = "asioOpenFailed";
+const ERROR_CODE_DEFAULT_OPEN_FAILED: &str = "defaultOpenFailed";
+
 #[derive(Debug)]
 enum AudioSinkOpenError {
     AsioUnavailableBuild,
@@ -688,8 +696,9 @@ type AudioSinkResult<T> = std::result::Result<T, AudioSinkOpenError>;
 impl fmt::Display for AudioSinkOpenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AsioUnavailableBuild => write!(f, "ASIO 미지원 빌드"),
-            Self::AsioDeviceNotFound => write!(f, "ASIO 장치를 찾을 수 없습니다"),
+            Self::AsioUnavailableBuild | Self::AsioDeviceNotFound => {
+                write!(f, "{}", audio_sink_error_message(self))
+            }
             Self::OpenFailed(err) => write!(f, "{err:#}"),
         }
     }
@@ -708,6 +717,21 @@ fn asio_backend_available() -> bool {
     cfg!(all(windows, feature = "asio-backend"))
 }
 
+fn stream_error_callback(
+    label: &'static str,
+) -> (
+    Arc<AtomicBool>,
+    impl FnMut(cpal::StreamError) + Send + Clone + 'static,
+) {
+    let error = Arc::new(AtomicBool::new(false));
+    let err_flag = Arc::clone(&error);
+    let callback = move |err| {
+        warn!("[KeySound] {label} error: {err}");
+        err_flag.store(true, Ordering::Release);
+    };
+    (error, callback)
+}
+
 fn switch_output_backend(
     backend: KeySoundOutputBackend,
     stream_handler: &mut Option<StreamHandler>,
@@ -722,6 +746,7 @@ fn switch_output_backend(
                 requested: requested.clone(),
                 effective: requested,
                 error: None,
+                error_code: None,
                 asio_available: asio_backend_available(),
             }
         }
@@ -731,19 +756,24 @@ fn switch_output_backend(
                 KeySoundOutputBackend::DefaultDevice => KeySoundOutputState {
                     requested: KeySoundOutputBackend::DefaultDevice,
                     effective: KeySoundOutputBackend::DefaultDevice,
-                    error: Some("기본 출력 장치를 열 수 없습니다".to_string()),
+                    error: Some(default_output_error_message(&err).to_string()),
+                    error_code: Some(ERROR_CODE_DEFAULT_OPEN_FAILED.to_string()),
                     asio_available: asio_backend_available(),
                 },
                 KeySoundOutputBackend::Asio {
                     driver_name,
                     buffer_size,
                 } => {
+                    let mut error = asio_output_error_message(&err).to_string();
+                    let mut error_code = asio_output_error_code(&err).to_string();
                     if let Err(default_err) = open_audio_sink(&KeySoundOutputBackend::DefaultDevice)
                         .map(|handler| {
                             *stream_handler = Some(handler);
                         })
                     {
                         warn!("[KeySound] failed to fallback to default output: {default_err}");
+                        error = format!("{error}; 기본 장치 폴백도 실패: {default_err}");
+                        error_code = ERROR_CODE_DEFAULT_OPEN_FAILED.to_string();
                     }
 
                     KeySoundOutputState {
@@ -752,7 +782,8 @@ fn switch_output_backend(
                             buffer_size,
                         },
                         effective: KeySoundOutputBackend::DefaultDevice,
-                        error: Some(asio_output_error_message(&err).to_string()),
+                        error: Some(error),
+                        error_code: Some(error_code),
                         asio_available: asio_backend_available(),
                     }
                 }
@@ -761,11 +792,30 @@ fn switch_output_backend(
     }
 }
 
-fn asio_output_error_message(err: &AudioSinkOpenError) -> &'static str {
+fn audio_sink_error_message(err: &AudioSinkOpenError) -> &'static str {
     match err {
         AudioSinkOpenError::AsioUnavailableBuild => "ASIO 미지원 빌드",
         AudioSinkOpenError::AsioDeviceNotFound => "ASIO 장치를 찾을 수 없습니다",
+        AudioSinkOpenError::OpenFailed(_) => "오디오 출력 장치를 열 수 없습니다",
+    }
+}
+
+fn default_output_error_message(_err: &AudioSinkOpenError) -> &'static str {
+    "기본 출력 장치를 열 수 없습니다"
+}
+
+fn asio_output_error_message(err: &AudioSinkOpenError) -> &'static str {
+    match err {
         AudioSinkOpenError::OpenFailed(_) => "ASIO 장치를 열 수 없어 기본 출력으로 재생합니다",
+        _ => audio_sink_error_message(err),
+    }
+}
+
+fn asio_output_error_code(err: &AudioSinkOpenError) -> &'static str {
+    match err {
+        AudioSinkOpenError::AsioUnavailableBuild => ERROR_CODE_ASIO_UNAVAILABLE_BUILD,
+        AudioSinkOpenError::AsioDeviceNotFound => ERROR_CODE_ASIO_DEVICE_NOT_FOUND,
+        AudioSinkOpenError::OpenFailed(_) => ERROR_CODE_ASIO_OPEN_FAILED,
     }
 }
 
@@ -780,16 +830,12 @@ fn open_audio_sink(backend: &KeySoundOutputBackend) -> AudioSinkResult<StreamHan
 }
 
 fn open_default_audio_sink() -> AudioSinkResult<StreamHandler> {
-    let error = Arc::new(AtomicBool::new(false));
-    let err_flag = Arc::clone(&error);
+    let (error, callback) = stream_error_callback("stream");
 
     let sink = DeviceSinkBuilder::from_default_device()
         .and_then(|builder| {
             builder
-                .with_error_callback(move |err| {
-                    warn!("[KeySound] stream error: {err}");
-                    err_flag.store(true, Ordering::Release);
-                })
+                .with_error_callback(callback)
                 .open_sink_or_fallback()
         })
         .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
@@ -817,7 +863,7 @@ fn open_asio_audio_sink(
 
     for device in devices {
         let name = match device.description() {
-            Ok(description) => description.name().to_string(),
+            Ok(description) => description.name().trim().to_string(),
             Err(err) => {
                 warn!("[KeySound] failed to read ASIO device name: {err}");
                 continue;
@@ -839,7 +885,7 @@ fn open_asio_audio_sink(
     Err(AudioSinkOpenError::AsioUnavailableBuild)
 }
 
-/// ASIO 기본 버퍼 크기(프레임). 미지정 시 이 값으로 오픈 → 게임 기본값(최저)과 동일하게 맞춤.
+/// ASIO 기본 버퍼 크기(프레임). 미지정 시 이 값으로 고정 오픈
 #[cfg(all(windows, feature = "asio-backend"))]
 const DEFAULT_ASIO_BUFFER_FRAMES: u32 = 64;
 
@@ -848,53 +894,33 @@ fn open_device_audio_sink(
     device: cpal::Device,
     buffer_size: Option<u32>,
 ) -> AudioSinkResult<StreamHandler> {
-    // 미지정(None)이면 기본 64로 오픈 (자동=드라이버 preferred는 게임과 어긋나 충돌하므로 사용 안 함).
-    let buffer_size = buffer_size
+    // 미지정(None)이면 기본 64로 오픈
+    let frames = buffer_size
         .filter(|frames| *frames > 0)
-        .or(Some(DEFAULT_ASIO_BUFFER_FRAMES));
+        .unwrap_or(DEFAULT_ASIO_BUFFER_FRAMES);
 
-    // 고정 버퍼 지정 시 그 값 그대로 오픈 → 다른 ASIO 앱(게임)과 버퍼를 맞춰 공존.
-    // 드라이버가 해당 버퍼를 거부하면 자동 버퍼로 폴백.
-    if let Some(frames) = buffer_size {
-        match try_open_asio_sink(device.clone(), Some(frames)) {
-            Ok(handler) => return Ok(handler),
-            Err(err) => {
-                warn!("[KeySound] ASIO 고정 버퍼({frames}) 오픈 실패, 자동 버퍼로 재시도: {err:?}")
-            }
-        }
-    }
-
-    try_open_asio_sink(device, None)
+    // 고정 버퍼 지정 시 그 값 그대로 오픈
+    try_open_asio_sink(device, frames)
 }
 
 #[cfg(all(windows, feature = "asio-backend"))]
-fn try_open_asio_sink(
-    device: cpal::Device,
-    buffer_size: Option<u32>,
-) -> AudioSinkResult<StreamHandler> {
-    let error = Arc::new(AtomicBool::new(false));
-    let err_flag = Arc::clone(&error);
+fn try_open_asio_sink(device: cpal::Device, buffer_size: u32) -> AudioSinkResult<StreamHandler> {
+    let (error, callback) = stream_error_callback("ASIO stream");
 
     let builder = DeviceSinkBuilder::from_device(device)
         .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?
-        .with_error_callback(move |err| {
-            warn!("[KeySound] ASIO stream error: {err}");
-            err_flag.store(true, Ordering::Release);
-        });
+        .with_error_callback(callback);
 
     // 샘플레이트는 드라이버 현재값(default_output_config)을 그대로 사용 → ASIOSetSampleRate 회피.
-    // 버퍼만 고정 지정 시 적용.
-    let sink = match buffer_size {
-        Some(frames) => builder
-            .with_buffer_size(cpal::BufferSize::Fixed(frames))
-            .open_stream(),
-        None => builder.open_sink_or_fallback(),
-    }
-    .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
+    // 버퍼는 명시 고정만 사용
+    let sink = builder
+        .with_buffer_size(cpal::BufferSize::Fixed(buffer_size))
+        .open_stream()
+        .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
 
     let config = sink.config();
     info!(
-        "[KeySound] ASIO 스트림 오픈: 요청 버퍼={:?}, 적용 sample_rate={}Hz, buffer={:?}",
+        "[KeySound] ASIO 스트림 오픈: 요청 버퍼={}, 적용 sample_rate={}Hz, buffer={:?}",
         buffer_size,
         config.sample_rate().get(),
         config.buffer_size()

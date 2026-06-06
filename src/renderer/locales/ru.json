@@ -24,6 +24,12 @@
     "keySoundOutput": "Звук клавиш",
     "keySoundOutputDefault": "По умолчанию",
     "keySoundOutputBuffer": "Размер буфера ASIO",
+    "keySoundOutputError": {
+      "asioUnavailableBuild": "Эта сборка не поддерживает ASIO.",
+      "asioDeviceNotFound": "Устройство ASIO не найдено.",
+      "asioOpenFailed": "Не удалось открыть устройство ASIO, используется вывод по умолчанию.",
+      "defaultOpenFailed": "Не удалось открыть доступное устройство вывода."
+    },
     "topLeft": "Верх-лево",
     "bottomLeft": "Низ-лево",
     "topRight": "Верх-право",

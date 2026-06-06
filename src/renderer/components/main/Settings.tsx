@@ -61,6 +61,13 @@ const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
 // 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
 const DEFAULT_ASIO_BUFFER = 64;
 
+const KEY_SOUND_OUTPUT_ERROR_KEYS: Record<string, string> = {
+  asioUnavailableBuild: 'settings.keySoundOutputError.asioUnavailableBuild',
+  asioDeviceNotFound: 'settings.keySoundOutputError.asioDeviceNotFound',
+  asioOpenFailed: 'settings.keySoundOutputError.asioOpenFailed',
+  defaultOpenFailed: 'settings.keySoundOutputError.defaultOpenFailed',
+};
+
 // 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
 // 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
 let cachedKeySoundOutput: KeySoundOutputState | null = null;
@@ -773,6 +780,30 @@ const Settings = ({
     i18n.changeLanguage(val as SupportedLocale);
   };
 
+  const requestedAsioDriver =
+    keySoundOutput?.requested.kind === 'asio'
+      ? keySoundOutput.requested.driverName
+      : null;
+  const visibleAsioDrivers =
+    requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
+      ? [...asioDrivers, requestedAsioDriver]
+      : asioDrivers;
+  const requestedAsioBuffer =
+    keySoundOutput?.requested.kind === 'asio'
+      ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
+      : DEFAULT_ASIO_BUFFER;
+  const visibleAsioBuffers = ASIO_BUFFER_SIZES.some(
+    (size) => size === requestedAsioBuffer,
+  )
+    ? ASIO_BUFFER_SIZES
+    : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
+  const keySoundOutputErrorKey =
+    keySoundOutput?.errorCode &&
+    KEY_SOUND_OUTPUT_ERROR_KEYS[keySoundOutput.errorCode];
+  const keySoundOutputError = keySoundOutputErrorKey
+    ? t(keySoundOutputErrorKey)
+    : keySoundOutput?.error;
+
   return (
     <div className="relative w-full h-full">
       <div
@@ -924,13 +955,22 @@ const Settings = ({
                           t('settings.keySoundOutputDefault') ||
                           '기본 재생 장치',
                       },
-                      ...asioDrivers.map((name) => ({
-                        value: `asio:${name}`,
-                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                        label: `ASIO: ${
-                          name.length > 16 ? `${name.slice(0, 16)}…` : name
-                        }`,
-                      })),
+                      ...visibleAsioDrivers.map((name) => {
+                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
+                        const failed =
+                          name === requestedAsioDriver && !!keySoundOutputError;
+                        return {
+                          value: `asio:${name}`,
+                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                          label: failed
+                            ? `⚠ ${keySoundOutputError}`
+                            : `ASIO: ${
+                                name.length > 16
+                                  ? `${name.slice(0, 16)}…`
+                                  : name
+                              }`,
+                        };
+                      }),
                     ]}
                     value={
                       keySoundOutput?.requested.kind === 'asio'
@@ -957,15 +997,11 @@ const Settings = ({
                   {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
                 </p>
                 <Dropdown
-                  options={ASIO_BUFFER_SIZES.map((size) => ({
+                  options={visibleAsioBuffers.map((size) => ({
                     value: String(size),
                     label: String(size),
                   }))}
-                  value={String(
-                    (keySoundOutput?.requested.kind === 'asio' &&
-                      keySoundOutput.requested.bufferSize) ||
-                      DEFAULT_ASIO_BUFFER,
-                  )}
+                  value={String(requestedAsioBuffer)}
                   onChange={handleAsioBufferChange}
                   placeholder={String(DEFAULT_ASIO_BUFFER)}
                   align="right"
@@ -973,11 +1009,6 @@ const Settings = ({
                   disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
               </div>
-              {keySoundOutput?.error && (
-                <p className="text-[12px] leading-[16px] pb-[8px] text-[#E5A23C]">
-                  {keySoundOutput.error}
-                </p>
-              )}
             </div>
             {/* 커스텀 CSS & JS 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">

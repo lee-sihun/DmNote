@@ -24,6 +24,12 @@
     "keySoundOutput": "Key Sound Output",
     "keySoundOutputDefault": "Default Device",
     "keySoundOutputBuffer": "ASIO Buffer Size",
+    "keySoundOutputError": {
+      "asioUnavailableBuild": "This build does not include ASIO support.",
+      "asioDeviceNotFound": "ASIO device not found.",
+      "asioOpenFailed": "Could not open the ASIO device, so playback uses the default output.",
+      "defaultOpenFailed": "No output device could be opened."
+    },
     "topLeft": "Top-Left",
     "bottomLeft": "Bottom-Left",
     "topRight": "Top-Right",
