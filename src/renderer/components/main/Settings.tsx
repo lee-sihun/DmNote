@@ -61,6 +61,11 @@ const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
 // 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
 const DEFAULT_ASIO_BUFFER = 64;
 
+// 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
+// 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
+let cachedKeySoundOutput: KeySoundOutputState | null = null;
+let cachedAsioDrivers: string[] = [];
+
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
   showConfirm: (
@@ -148,10 +153,15 @@ const Settings = ({
   });
   const obsTogglingRef = useRef(false);
 
-  // 키음 출력 백엔드 (기본 장치 / ASIO)
-  const [keySoundOutput, setKeySoundOutput] =
-    useState<KeySoundOutputState | null>(null);
-  const [asioDrivers, setAsioDrivers] = useState<string[]>([]);
+  // 키음 출력 백엔드 (기본 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
+  const [keySoundOutput, setKeySoundOutputRaw] =
+    useState<KeySoundOutputState | null>(cachedKeySoundOutput);
+  const [asioDrivers, setAsioDrivers] = useState<string[]>(cachedAsioDrivers);
+
+  const setKeySoundOutput = (state: KeySoundOutputState) => {
+    cachedKeySoundOutput = state;
+    setKeySoundOutputRaw(state);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +172,7 @@ const Settings = ({
           keySoundOutputApi.getState(),
         ]);
         if (cancelled) return;
+        cachedAsioDrivers = devices.asio;
         setAsioDrivers(devices.asio);
         setKeySoundOutput(state);
       } catch (error) {
@@ -890,6 +901,7 @@ const Settings = ({
                     }
                   }}
                   placeholder={t('settings.selectAnchor')}
+                  align="right"
                 />
               </div>
             </div>
@@ -900,60 +912,67 @@ const Settings = ({
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
-                  {t('settings.keySoundOutput') || '키음 출력 장치'}
+                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
+                  {t('settings.keySoundOutput') || '키 사운드 출력'}
                 </p>
-                <Dropdown
-                  options={[
-                    {
-                      value: 'defaultDevice',
-                      label:
-                        t('settings.keySoundOutputDefault') || '기본 출력 장치',
-                    },
-                    ...asioDrivers.map((name) => ({
-                      value: `asio:${name}`,
-                      label: `ASIO: ${name}`,
-                    })),
-                  ]}
-                  value={
-                    keySoundOutput?.requested.kind === 'asio'
-                      ? `asio:${keySoundOutput.requested.driverName}`
-                      : 'defaultDevice'
-                  }
-                  onChange={handleKeySoundOutputChange}
-                  placeholder={
-                    t('settings.keySoundOutputDefault') || '기본 출력 장치'
-                  }
-                  align="right"
-                />
-              </div>
-              {keySoundOutput?.requested.kind === 'asio' && (
-                <div className="flex flex-row justify-between items-center h-[40px]">
-                  <p className="text-style-3 text-[#FFFFFF]">
-                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                  </p>
+                <div className="shrink-0">
                   <Dropdown
-                    options={ASIO_BUFFER_SIZES.map((size) => ({
-                      value: String(size),
-                      label: String(size),
-                    }))}
-                    value={String(
-                      (keySoundOutput.requested.kind === 'asio' &&
-                        keySoundOutput.requested.bufferSize) ||
-                        DEFAULT_ASIO_BUFFER,
-                    )}
-                    onChange={handleAsioBufferChange}
-                    placeholder={String(DEFAULT_ASIO_BUFFER)}
+                    options={[
+                      {
+                        value: 'defaultDevice',
+                        label:
+                          t('settings.keySoundOutputDefault') ||
+                          '기본 재생 장치',
+                      },
+                      ...asioDrivers.map((name) => ({
+                        value: `asio:${name}`,
+                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                        label: `ASIO: ${
+                          name.length > 16 ? `${name.slice(0, 16)}…` : name
+                        }`,
+                      })),
+                    ]}
+                    value={
+                      keySoundOutput?.requested.kind === 'asio'
+                        ? `asio:${keySoundOutput.requested.driverName}`
+                        : 'defaultDevice'
+                    }
+                    onChange={handleKeySoundOutputChange}
+                    placeholder={
+                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
+                    }
                     align="right"
+                    widthClass="max-w-[160px]"
                   />
                 </div>
-              )}
-              {keySoundOutput?.requested.kind === 'asio' && (
-                <p className="text-[12px] leading-[16px] pb-[8px] text-[#888888]">
-                  {t('settings.keySoundOutputBufferHint') ||
-                    '다른 ASIO 앱(게임)과 동시 사용 시, 그 앱과 같은 버퍼 크기로 맞추세요.'}
+              </div>
+              <div className="flex flex-row justify-between items-center h-[40px]">
+                <p
+                  className={`text-style-3 ${
+                    keySoundOutput?.requested.kind === 'asio'
+                      ? 'text-[#FFFFFF]'
+                      : 'text-[#666666]'
+                  }`}
+                >
+                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
                 </p>
-              )}
+                <Dropdown
+                  options={ASIO_BUFFER_SIZES.map((size) => ({
+                    value: String(size),
+                    label: String(size),
+                  }))}
+                  value={String(
+                    (keySoundOutput?.requested.kind === 'asio' &&
+                      keySoundOutput.requested.bufferSize) ||
+                      DEFAULT_ASIO_BUFFER,
+                  )}
+                  onChange={handleAsioBufferChange}
+                  placeholder={String(DEFAULT_ASIO_BUFFER)}
+                  align="right"
+                  widthClass="w-[70px]"
+                  disabled={keySoundOutput?.requested.kind !== 'asio'}
+                />
+              </div>
               {keySoundOutput?.error && (
                 <p className="text-[12px] leading-[16px] pb-[8px] text-[#E5A23C]">
                   {keySoundOutput.error}
@@ -1141,6 +1160,7 @@ const Settings = ({
                   value={language}
                   onChange={handleLanguageChange}
                   placeholder={t('settings.selectLanguage')}
+                  align="right"
                 />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
@@ -1164,6 +1184,7 @@ const Settings = ({
                   onChange={handleAngleModeChangeSelect}
                   placeholder={t('settings.renderMode')}
                   disabled={isMacOS}
+                  align="right"
                 />
               </div>
               {!isMacOS && (
