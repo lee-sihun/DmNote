@@ -28,12 +28,15 @@ use super::store::AppStore;
 #[cfg(debug_assertions)]
 use crate::audio::KeySoundDispatchTrace;
 use crate::{
-    audio::{KeySoundEngine, KeySoundStatus},
+    audio::{
+        KeySoundEngine, KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState,
+        KeySoundStatus,
+    },
     keyboard::KeyboardManager,
     models::{
         overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
-        KeyCounterSettings, KeyCounters, KeyMappings, OverlayBounds, OverlayResizeAnchor,
-        SettingsDiff, SettingsState,
+        KeyCounterSettings, KeyCounters, KeyMappings, KeySoundOutputBackendPersist, OverlayBounds,
+        OverlayResizeAnchor, SettingsDiff, SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
@@ -81,7 +84,13 @@ impl AppState {
         Self::sync_counters_with_keys_impl(&key_counters, &snapshot.keys);
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
         let active_keys = Arc::new(RwLock::new(HashSet::new()));
-        let key_sound = Arc::new(KeySoundEngine::new());
+        // 저장된 출력 백엔드로 엔진을 처음부터 초기화 → "기본 장치 → ASIO" 전환 깜빡임 제거.
+        let initial_backend = snapshot
+            .key_sound_output_backend
+            .clone()
+            .map(output_backend_from_persist)
+            .unwrap_or_default();
+        let key_sound = Arc::new(KeySoundEngine::with_output_backend(initial_backend));
         let obs_bridge = Arc::new(ObsBridgeService::new(env!("CARGO_PKG_VERSION")));
 
         Ok(Self {
@@ -1593,6 +1602,28 @@ impl AppState {
         self.key_sound.set_latency_logging(enabled)
     }
 
+    pub fn key_sound_list_output_devices(&self) -> KeySoundOutputDevices {
+        self.key_sound.list_output_devices()
+    }
+
+    pub fn key_sound_set_output_backend(
+        &self,
+        backend: KeySoundOutputBackend,
+    ) -> KeySoundOutputState {
+        let output_state = self.key_sound.set_output_backend(backend);
+        let requested = output_state.requested.clone();
+        if let Err(err) = self.store.update(|state| {
+            state.key_sound_output_backend = Some(output_backend_to_persist(requested.clone()));
+        }) {
+            warn!("[KeySound] failed to persist output backend: {err}");
+        }
+        output_state
+    }
+
+    pub fn key_sound_get_output_state(&self) -> KeySoundOutputState {
+        self.key_sound.output_state()
+    }
+
     pub fn key_sound_latency_logging_available(&self) -> bool {
         self.key_sound.latency_logging_available()
     }
@@ -1637,7 +1668,7 @@ impl AppState {
                 }
 
                 let volume_percent = position.sound_volume.unwrap_or(100.0);
-                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 1.0) as f32;
+                let per_key_volume = (volume_percent / 100.0).clamp(0.0, 2.0) as f32;
                 return Some((trimmed_path.to_string(), per_key_volume));
             }
 
@@ -1691,6 +1722,32 @@ impl AppState {
 impl Drop for AppState {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+fn output_backend_from_persist(value: KeySoundOutputBackendPersist) -> KeySoundOutputBackend {
+    match value {
+        KeySoundOutputBackendPersist::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
+        KeySoundOutputBackendPersist::Asio {
+            driver_name,
+            buffer_size,
+        } => KeySoundOutputBackend::Asio {
+            driver_name,
+            buffer_size,
+        },
+    }
+}
+
+fn output_backend_to_persist(value: KeySoundOutputBackend) -> KeySoundOutputBackendPersist {
+    match value {
+        KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackendPersist::DefaultDevice,
+        KeySoundOutputBackend::Asio {
+            driver_name,
+            buffer_size,
+        } => KeySoundOutputBackendPersist::Asio {
+            driver_name,
+            buffer_size,
+        },
     }
 }
 

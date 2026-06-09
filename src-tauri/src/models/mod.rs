@@ -95,6 +95,22 @@ impl Default for SoundLibraryEntry {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum KeySoundOutputBackendPersist {
+    DefaultDevice,
+    Asio {
+        driver_name: String,
+        /// ASIO 버퍼 크기(프레임). None이면 엔진 기본값 사용
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        buffer_size: Option<u32>,
+    },
+}
+
 // 직렬화 형식:
 // - Solid: JSON 문자열 (예: "#FF00FF")
 // - Gradient: 명시적 type 필드를 포함한 객체 { type: "gradient", top, bottom }
@@ -179,7 +195,7 @@ pub struct KeyPosition {
     /// 키 입력 시 재생할 로컬 사운드 파일 경로
     #[serde(default)]
     pub sound_path: Option<String>,
-    /// 키별 사운드 볼륨 (0~100, 기본값 100)
+    /// 키별 사운드 볼륨 (0~200, 기본값 100)
     #[serde(default)]
     pub sound_volume: Option<f64>,
     #[serde(default)]
@@ -1261,6 +1277,8 @@ pub struct AppStoreData {
     /// 사운드 라이브러리 메타데이터 (키: 절대 경로, 값: 메타데이터)
     #[serde(default)]
     pub sound_library: HashMap<String, SoundLibraryEntry>,
+    #[serde(default)]
+    pub key_sound_output_backend: Option<KeySoundOutputBackendPersist>,
     /// OBS 모드 활성화 여부
     #[serde(default)]
     pub obs_mode_enabled: bool,
@@ -1320,6 +1338,7 @@ impl Default for AppStoreData {
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
             sound_library: HashMap::new(),
+            key_sound_output_backend: None,
             obs_mode_enabled: false,
             obs_port: default_obs_port(),
             obs_token: None,

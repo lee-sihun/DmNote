@@ -438,7 +438,7 @@ const SoundTrimModal = ({
 
     const ctx = createAudioContext();
     const gainNode = ctx.createGain();
-    gainNode.gain.value = clamp(previewVolume / 100, 0, 1);
+    gainNode.gain.value = clamp(previewVolume / 100, 0, 2);
     gainNode.connect(ctx.destination);
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;

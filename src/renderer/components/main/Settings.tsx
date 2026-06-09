@@ -28,6 +28,11 @@ import type {
 import type { JsPlugin } from '@src/types/plugin/js';
 import type { KeyCounters } from '@src/types/key/keys';
 import { obsApi } from '@api/modules/obsApi';
+import { keySoundOutputApi } from '@api/modules/resourceApi';
+import type {
+  KeySoundOutputBackend,
+  KeySoundOutputState,
+} from '@api/modules/resourceApi';
 import type { ObsStatus } from '@src/types/obs';
 import { DEFAULT_OBS_PORT } from '@src/types/obs';
 
@@ -50,6 +55,23 @@ const PREVIEW_SOURCES: Record<string, string> = {
   obsMode:
     'https://raw.githubusercontent.com/lee-sihun/DmNote/master/docs/assets/webm/obs.webm',
 };
+
+// ASIO 버퍼 크기 선택지(프레임). 게임 설정값과 맞춰야 ASIO 공존 가능.
+const ASIO_BUFFER_SIZES = [64, 128, 256, 512, 1024] as const;
+// 기본 버퍼 크기 (게임 기본값과 동일한 최저값)
+const DEFAULT_ASIO_BUFFER = 64;
+
+const KEY_SOUND_OUTPUT_ERROR_KEYS: Record<string, string> = {
+  asioUnavailableBuild: 'settings.keySoundOutputError.asioUnavailableBuild',
+  asioDeviceNotFound: 'settings.keySoundOutputError.asioDeviceNotFound',
+  asioOpenFailed: 'settings.keySoundOutputError.asioOpenFailed',
+  defaultOpenFailed: 'settings.keySoundOutputError.defaultOpenFailed',
+};
+
+// 설정 패널은 열 때마다 재마운트되므로, 마지막 출력 상태를 모듈에 캐시해
+// 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
+let cachedKeySoundOutput: KeySoundOutputState | null = null;
+let cachedAsioDrivers: string[] = [];
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -137,6 +159,70 @@ const Settings = ({
     clientCount: 0,
   });
   const obsTogglingRef = useRef(false);
+
+  // 키음 출력 백엔드 (기본 장치 / ASIO) — 캐시로 초기화해 재진입 깜빡임 방지
+  const [keySoundOutput, setKeySoundOutputRaw] =
+    useState<KeySoundOutputState | null>(cachedKeySoundOutput);
+  const [asioDrivers, setAsioDrivers] = useState<string[]>(cachedAsioDrivers);
+
+  const setKeySoundOutput = (state: KeySoundOutputState) => {
+    cachedKeySoundOutput = state;
+    setKeySoundOutputRaw(state);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [devices, state] = await Promise.all([
+          keySoundOutputApi.listDevices(),
+          keySoundOutputApi.getState(),
+        ]);
+        if (cancelled) return;
+        cachedAsioDrivers = devices.asio;
+        setAsioDrivers(devices.asio);
+        setKeySoundOutput(state);
+      } catch (error) {
+        console.error('Failed to load key sound output state', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleKeySoundOutputChange = async (val: string) => {
+    const backend: KeySoundOutputBackend = val.startsWith('asio:')
+      ? {
+          kind: 'asio',
+          driverName: val.slice('asio:'.length),
+          // ASIO 선택 시 기본 버퍼 64 (게임과 동일하게 맞춰야 공존 가능)
+          bufferSize: DEFAULT_ASIO_BUFFER,
+        }
+      : { kind: 'defaultDevice' };
+    try {
+      const next = await keySoundOutputApi.setBackend(backend);
+      setKeySoundOutput(next);
+    } catch (error) {
+      console.error('Failed to set key sound output backend', error);
+    }
+  };
+
+  // ASIO 버퍼 크기 변경 (게임과 동일 버퍼로 맞춰야 ASIO 공존 가능)
+  const handleAsioBufferChange = async (val: string) => {
+    const requested = keySoundOutput?.requested;
+    if (requested?.kind !== 'asio') return;
+    try {
+      const next = await keySoundOutputApi.setBackend({
+        kind: 'asio',
+        driverName: requested.driverName,
+        bufferSize: Number(val),
+      });
+      setKeySoundOutput(next);
+    } catch (error) {
+      console.error('Failed to set ASIO buffer size', error);
+    }
+  };
 
   // Lenis smooth scroll 적용 (전역 설정 사용)
   const { scrollContainerRef } = useLenis();
@@ -694,6 +780,30 @@ const Settings = ({
     i18n.changeLanguage(val as SupportedLocale);
   };
 
+  const requestedAsioDriver =
+    keySoundOutput?.requested.kind === 'asio'
+      ? keySoundOutput.requested.driverName
+      : null;
+  const visibleAsioDrivers =
+    requestedAsioDriver && !asioDrivers.includes(requestedAsioDriver)
+      ? [...asioDrivers, requestedAsioDriver]
+      : asioDrivers;
+  const requestedAsioBuffer =
+    keySoundOutput?.requested.kind === 'asio'
+      ? keySoundOutput.requested.bufferSize || DEFAULT_ASIO_BUFFER
+      : DEFAULT_ASIO_BUFFER;
+  const visibleAsioBuffers = ASIO_BUFFER_SIZES.some(
+    (size) => size === requestedAsioBuffer,
+  )
+    ? ASIO_BUFFER_SIZES
+    : [...ASIO_BUFFER_SIZES, requestedAsioBuffer].sort((a, b) => a - b);
+  const keySoundOutputErrorKey =
+    keySoundOutput?.errorCode &&
+    KEY_SOUND_OUTPUT_ERROR_KEYS[keySoundOutput.errorCode];
+  const keySoundOutputError = keySoundOutputErrorKey
+    ? t(keySoundOutputErrorKey)
+    : keySoundOutput?.error;
+
   return (
     <div className="relative w-full h-full">
       <div
@@ -822,6 +932,81 @@ const Settings = ({
                     }
                   }}
                   placeholder={t('settings.selectAnchor')}
+                  align="right"
+                />
+              </div>
+            </div>
+            {/* 키음 출력 설정 */}
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey('keySoundOutput')}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
+                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
+                  {t('settings.keySoundOutput') || '키 사운드 출력'}
+                </p>
+                <div className="shrink-0">
+                  <Dropdown
+                    options={[
+                      {
+                        value: 'defaultDevice',
+                        label:
+                          t('settings.keySoundOutputDefault') ||
+                          '기본 재생 장치',
+                      },
+                      ...visibleAsioDrivers.map((name) => {
+                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
+                        const failed =
+                          name === requestedAsioDriver && !!keySoundOutputError;
+                        return {
+                          value: `asio:${name}`,
+                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                          label: failed
+                            ? `⚠ ${keySoundOutputError}`
+                            : `ASIO: ${
+                                name.length > 16
+                                  ? `${name.slice(0, 16)}…`
+                                  : name
+                              }`,
+                        };
+                      }),
+                    ]}
+                    value={
+                      keySoundOutput?.requested.kind === 'asio'
+                        ? `asio:${keySoundOutput.requested.driverName}`
+                        : 'defaultDevice'
+                    }
+                    onChange={handleKeySoundOutputChange}
+                    placeholder={
+                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
+                    }
+                    align="right"
+                    widthClass="max-w-[160px]"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-row justify-between items-center h-[40px]">
+                <p
+                  className={`text-style-3 ${
+                    keySoundOutput?.requested.kind === 'asio'
+                      ? 'text-[#FFFFFF]'
+                      : 'text-[#666666]'
+                  }`}
+                >
+                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
+                </p>
+                <Dropdown
+                  options={visibleAsioBuffers.map((size) => ({
+                    value: String(size),
+                    label: String(size),
+                  }))}
+                  value={String(requestedAsioBuffer)}
+                  onChange={handleAsioBufferChange}
+                  placeholder={String(DEFAULT_ASIO_BUFFER)}
+                  align="right"
+                  widthClass="w-[70px]"
+                  disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
               </div>
             </div>
@@ -1006,6 +1191,7 @@ const Settings = ({
                   value={language}
                   onChange={handleLanguageChange}
                   placeholder={t('settings.selectLanguage')}
+                  align="right"
                 />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
@@ -1029,6 +1215,7 @@ const Settings = ({
                   onChange={handleAngleModeChangeSelect}
                   placeholder={t('settings.renderMode')}
                   disabled={isMacOS}
+                  align="right"
                 />
               </div>
               {!isMacOS && (
@@ -1098,7 +1285,11 @@ const Settings = ({
             />
             <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
               <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t(hoveredKey === 'obsMode' ? 'settings.obsGuide' : `settings.${hoveredKey}Desc`)}
+                {t(
+                  hoveredKey === 'obsMode'
+                    ? 'settings.obsGuide'
+                    : `settings.${hoveredKey}Desc`,
+                )}
               </span>
             </div>
           </div>

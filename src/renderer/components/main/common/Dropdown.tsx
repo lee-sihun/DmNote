@@ -17,6 +17,8 @@ interface DropdownProps {
   iconTrigger?: React.ReactNode;
   /** 메뉴 수평 정렬 (기본: left) */
   align?: 'left' | 'center' | 'right';
+  /** 트리거/메뉴 너비 고정용 Tailwind 클래스 (예: 'w-[160px]'). 길면 말줄임(...) 처리됨 */
+  widthClass?: string;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -28,6 +30,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   fullWidth = false,
   iconTrigger,
   align = 'left',
+  widthClass = '',
 }) => {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -93,7 +96,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           type="button"
           className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
             fullWidth ? 'w-full' : ''
-          }`}
+          } ${widthClass}`}
           onClick={() => setOpen((prev) => !prev)}
           disabled={disabled}
         >
@@ -133,7 +136,7 @@ const Dropdown: React.FC<DropdownProps> = ({
               : align === 'center'
               ? 'left-1/2 -translate-x-1/2'
               : 'left-0'
-          } ${openUpward ? 'bottom-[25px]' : 'top-[25px]'}`}
+          } ${widthClass} ${openUpward ? 'bottom-[25px]' : 'top-[25px]'}`}
         >
           {options.length === 0 ? (
             <div className="px-4 py-3 text-[#9AA0AA] text-[18px] font-medium">

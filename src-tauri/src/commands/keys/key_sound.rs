@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::{
-    audio::KeySoundStatus,
+    audio::{KeySoundOutputBackend, KeySoundOutputDevices, KeySoundOutputState, KeySoundStatus},
     errors::{CmdResult, CommandError},
     state::AppState,
 };
@@ -50,4 +50,24 @@ pub fn key_sound_set_latency_logging(
         ));
     }
     Ok(state.key_sound_set_latency_logging(enabled))
+}
+
+#[tauri::command]
+pub fn key_sound_list_output_devices(
+    state: State<'_, AppState>,
+) -> CmdResult<KeySoundOutputDevices> {
+    Ok(state.key_sound_list_output_devices())
+}
+
+#[tauri::command]
+pub fn key_sound_set_output_backend(
+    state: State<'_, AppState>,
+    backend: KeySoundOutputBackend,
+) -> CmdResult<KeySoundOutputState> {
+    Ok(state.key_sound_set_output_backend(backend))
+}
+
+#[tauri::command]
+pub fn key_sound_get_output_state(state: State<'_, AppState>) -> CmdResult<KeySoundOutputState> {
+    Ok(state.key_sound_get_output_state())
 }

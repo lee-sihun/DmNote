@@ -237,7 +237,7 @@ export const keyPositionSchema = z.object({
   inactiveImage: z.string().optional().or(z.literal('')),
   soundEnabled: z.boolean().optional(),
   soundPath: z.string().optional().or(z.literal('')),
-  soundVolume: z.number().min(0).max(100).optional(),
+  soundVolume: z.number().min(0).max(200).optional(),
   activeTransparent: z.boolean().optional(),
   idleTransparent: z.boolean().optional(),
   count: z.number().int().nonnegative(),

@@ -74,6 +74,38 @@ export const soundApi = {
     invoke('key_sound_set_latency_logging', { enabled }).then(() => undefined),
 };
 
+// 키음 출력 백엔드 (기본 장치 / ASIO)
+export type KeySoundOutputBackend =
+  | { kind: 'defaultDevice' }
+  | { kind: 'asio'; driverName: string; bufferSize?: number | null };
+
+export type KeySoundOutputErrorCode =
+  | 'asioUnavailableBuild'
+  | 'asioDeviceNotFound'
+  | 'asioOpenFailed'
+  | 'defaultOpenFailed';
+
+export interface KeySoundOutputDevices {
+  defaultDevice: boolean;
+  asio: string[];
+}
+
+export interface KeySoundOutputState {
+  requested: KeySoundOutputBackend;
+  effective: KeySoundOutputBackend;
+  error: string | null;
+  errorCode: KeySoundOutputErrorCode | null;
+  asioAvailable: boolean;
+}
+
+export const keySoundOutputApi = {
+  listDevices: () =>
+    invoke<KeySoundOutputDevices>('key_sound_list_output_devices'),
+  getState: () => invoke<KeySoundOutputState>('key_sound_get_output_state'),
+  setBackend: (backend: KeySoundOutputBackend) =>
+    invoke<KeySoundOutputState>('key_sound_set_output_backend', { backend }),
+};
+
 export const counterAnimationApi = {
   list: () =>
     invoke<import('@src/types/plugin/api').CounterAnimationListResponse>(
