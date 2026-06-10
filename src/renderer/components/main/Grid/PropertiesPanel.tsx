@@ -44,6 +44,7 @@ import {
   SingleKeyStatPanel,
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
+  BatchDialOnlyPanel,
   PluginSettingsPanelView,
   useBatchHandlers,
   usePanelScroll,
@@ -150,7 +151,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     (el) => el.type === 'key' || el.type === 'stat',
   );
   const selectedBatchStyleElements = selectedElements.filter(
-    (el) => el.type === 'key' || el.type === 'stat' || el.type === 'graph',
+    (el) =>
+      el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'dial',
   );
   const selectedPluginElements = selectedElements.filter(
     (el) => el.type === 'plugin',
@@ -285,6 +290,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
   const statPreviewHistorySavedRef = useRef(false);
   const graphPreviewHistorySavedRef = useRef(false);
+  const dialPreviewHistorySavedRef = useRef(false);
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
@@ -1387,17 +1393,20 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const list = current[mode] || [];
     if (!list[index]) return;
 
-    const currentPositions = useKeyStore.getState().positions;
-    const currentPluginElements =
-      usePluginDisplayElementStore.getState().elements;
-    const { keyMappings: km } = useKeyStore.getState();
-    pushHistoryState({
-      keyMappings: km,
-      positions: currentPositions,
-      statPositions: useStatItemStore.getState().positions,
-      graphPositions: useGraphItemStore.getState().positions,
-      pluginElements: currentPluginElements,
-    });
+    if (!dialPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
+    }
+    dialPreviewHistorySavedRef.current = false;
 
     const nextList = list.map((pos, i) =>
       i === index ? ({ ...pos, ...updates } as DialItemPosition) : pos,
@@ -1410,6 +1419,131 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .updatePositions(nextPositions)
       .catch((error) => {
         console.error('Failed to update dial item', error);
+      })
+      .finally(() => {
+        useDialItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDialPreview = (
+    index: number,
+    updates: Partial<DialItemPosition>,
+  ) => {
+    const mode = selectedKeyType;
+    const current = useDialItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    if (!dialPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
+      dialPreviewHistorySavedRef.current = true;
+    }
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as DialItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+    useDialItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleDialBatchPreview = (
+    updates: Array<{ index: number } & Partial<DialItemPosition>>,
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useDialItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<DialItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!dialPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
+      dialPreviewHistorySavedRef.current = true;
+    }
+
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as DialItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+    useDialItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleDialBatchUpdate = (
+    updates: Array<{ index: number } & Partial<DialItemPosition>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useDialItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<DialItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!options?.skipHistory && !dialPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
+    }
+    dialPreviewHistorySavedRef.current = false;
+
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as DialItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useDialItemStore.getState().setLocalUpdateInProgress(true);
+    useDialItemStore.getState().setPositions(nextPositions);
+    window.api.dialItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to batch update dial items', error);
       })
       .finally(() => {
         useDialItemStore.getState().setLocalUpdateInProgress(false);
@@ -1606,6 +1740,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .filter((data) => data.position !== undefined);
   };
 
+  const getSelectedDialsData = () => {
+    return selectedDialElements
+      .map((el) => {
+        const index = el.index!;
+        const position = dialItemPositions[selectedKeyType]?.[index];
+        const dialLabel = (position?.displayText || '').trim() || 'Dial';
+        const keyInfo = { globalKey: dialLabel, displayName: dialLabel };
+        return { index, position, keyCode: null, keyInfo };
+      })
+      .filter((data) => data.position !== undefined);
+  };
+
   const getSelectedBatchStyleData = () => {
     return selectedBatchStyleElements
       .map((el) => {
@@ -1622,6 +1768,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             (position?.displayText || '').trim() ||
             getStatTypeLabel(position?.statType ?? null);
           const keyInfo = { globalKey: statLabel, displayName: statLabel };
+          return { index, position, keyCode: null, keyInfo };
+        }
+        if (el.type === 'dial') {
+          const position = dialItemPositions[selectedKeyType]?.[index];
+          const dialLabel = (position?.displayText || '').trim() || 'Dial';
+          const keyInfo = { globalKey: dialLabel, displayName: dialLabel };
           return { index, position, keyCode: null, keyInfo };
         }
         const position = graphItemPositions[selectedKeyType]?.[index];
@@ -1679,6 +1831,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return getMixedValueGraphs((pos) => getter(pos), defaultValue);
   };
 
+  const getMixedValueDials = <T,>(
+    getter: (pos: DialItemPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const dialsData = getSelectedDialsData();
+    if (dialsData.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(dialsData[0].position!) ?? defaultValue;
+    const isMixed = dialsData.some((data) => {
+      const val = getter(data.position!) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
+  };
+
+  const getMixedValueDialsAsKey = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    return getMixedValueDials((pos) => getter(pos), defaultValue);
+  };
+
   const getMixedValueBatch = <T,>(
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
@@ -1721,7 +1899,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
-      type: 'key' | 'stat' | 'graph';
+      type: 'key' | 'stat' | 'graph' | 'dial';
       id: string;
       index?: number;
     }[],
@@ -1741,6 +1919,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onGraphBatchUpdate: handleGraphBatchUpdate,
     onGraphPreview: handleGraphPreview,
     onGraphBatchPreview: handleGraphBatchPreview,
+    dialPositions: dialItemPositions,
+    onDialUpdate: handleDialUpdate,
+    onDialBatchUpdate: handleDialBatchUpdate,
+    onDialPreview: handleDialPreview,
+    onDialBatchPreview: handleDialBatchPreview,
   });
 
   // NOTE 탭은 "키"에만 적용되어야 함
@@ -1849,6 +2032,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       { index: number } & Partial<GraphItemPosition>
     >;
     handleGraphBatchUpdate(batchUpdates);
+  };
+
+  const handleDialBatchSharedSetting = (updates: Partial<DialItemPosition>) => {
+    const batchUpdates = selectedDialElements
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, ...updates })) as Array<
+      { index: number } & Partial<DialItemPosition>
+    >;
+    handleDialBatchUpdate(batchUpdates);
   };
 
   const renderPluginSettingsForm = (
@@ -2346,11 +2538,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 다중 선택인 경우 (키/통계, 그래프 혼합 포함)
+  // 다중 선택인 경우 (키/통계 포함, 또는 그래프+다이얼 혼합)
   if (
     selectedBatchStyleElements.length > 1 &&
-    selectedKeyLikeElements.length > 0 &&
-    selectedPluginElements.length === 0
+    selectedPluginElements.length === 0 &&
+    (selectedKeyLikeElements.length > 0 ||
+      (selectedGraphElements.length > 0 && selectedDialElements.length > 0))
   ) {
     return (
       <BatchKeyLikePanel
@@ -2443,10 +2636,59 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
+  // 다중 선택인 경우 (다이얼 요소만)
+  if (
+    selectedDialElements.length > 1 &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    return (
+      <BatchDialOnlyPanel
+        setPanelElement={setPanelElement}
+        selectedDialElements={selectedDialElements}
+        selectedGroupInfo={selectedGroupInfo}
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
+        handleToggleMode={handleToggleMode}
+        handleTogglePanel={handleTogglePanel}
+        handleBatchAlign={handleBatchAlign}
+        handleBatchDistribute={handleBatchDistribute}
+        handleBatchSpacing={handleBatchSpacing}
+        handleBatchSpacingPreview={handleBatchSpacingPreview}
+        handleBatchSpacingCommit={handleBatchSpacingCommit}
+        getBatchSpacingValue={getBatchSpacingValue}
+        handleBatchResize={handleBatchResize}
+        handleBatchStyleChange={handleBatchStyleChange}
+        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+        handleDialBatchSharedSetting={handleDialBatchSharedSetting}
+        getMixedValueDials={getMixedValueDials}
+        getMixedValueDialsAsKey={getMixedValueDialsAsKey}
+        getSelectedDialsData={getSelectedDialsData}
+        batchScrollRefFor={batchScrollRefFor}
+        batchThumbRefFor={batchThumbRefFor}
+        batchImageButtonRef={batchImageButtonRef}
+        showBatchImagePicker={showBatchImagePicker}
+        setShowBatchImagePicker={setShowBatchImagePicker}
+        panelElement={panelElement}
+        useCustomCSS={useCustomCSS}
+        selectedKeyType={selectedKeyType}
+        t={t}
+      />
+    );
+  }
+
   // 다중 선택인 경우 (그래프 요소만)
   if (
     selectedGraphElements.length > 1 &&
     selectedKeyLikeElements.length === 0 &&
+    selectedDialElements.length === 0 &&
     selectedPluginElements.length === 0
   ) {
     return (

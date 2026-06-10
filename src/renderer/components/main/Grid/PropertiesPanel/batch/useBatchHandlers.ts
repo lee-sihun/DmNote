@@ -6,6 +6,7 @@ import type {
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { DialItemPosition } from '@src/types/key/dials';
 
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
 const DEFAULT_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
@@ -19,7 +20,7 @@ const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
 // 같은 축 시작점이 사실상 동일한 요소(같은 열/행)로 보는 허용 오차
 const PRIMARY_AXIS_STACK_EPSILON = 0.1;
 
-type KeyLikeType = 'key' | 'stat' | 'graph';
+type KeyLikeType = 'key' | 'stat' | 'graph' | 'dial';
 type AxisDirection = 'horizontal' | 'vertical';
 
 interface LayoutElement {
@@ -495,6 +496,16 @@ interface UseBatchHandlersProps {
   onGraphBatchPreview?: (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
   ) => void;
+  dialPositions?: Record<string, DialItemPosition[] | undefined>;
+  onDialUpdate?: (data: Partial<DialItemPosition> & { index: number }) => void;
+  onDialBatchUpdate?: (
+    updates: Array<{ index: number } & Partial<DialItemPosition>>,
+    options?: BatchCommitOptions,
+  ) => void;
+  onDialPreview?: (index: number, updates: Partial<DialItemPosition>) => void;
+  onDialBatchPreview?: (
+    updates: Array<{ index: number } & Partial<DialItemPosition>>,
+  ) => void;
 }
 
 export function useBatchHandlers({
@@ -515,6 +526,11 @@ export function useBatchHandlers({
   onGraphBatchUpdate,
   onGraphPreview,
   onGraphBatchPreview,
+  dialPositions,
+  onDialUpdate,
+  onDialBatchUpdate,
+  onDialPreview,
+  onDialBatchPreview,
 }: UseBatchHandlersProps) {
   const selectedKeys = selectedKeyLikeElements.filter(
     (el) => el.type === 'key',
@@ -525,10 +541,15 @@ export function useBatchHandlers({
   const selectedGraphs = selectedKeyLikeElements.filter(
     (el) => el.type === 'graph',
   );
+  const selectedDials = selectedKeyLikeElements.filter(
+    (el) => el.type === 'dial',
+  );
 
   const getKeyLikePosition = (type: KeyLikeType, index: number) => {
     if (type === 'key') return keyPositions[selectedKeyType]?.[index] ?? null;
     if (type === 'stat') return statPositions[selectedKeyType]?.[index] ?? null;
+    if (type === 'dial')
+      return dialPositions?.[selectedKeyType]?.[index] ?? null;
     return graphPositions?.[selectedKeyType]?.[index] ?? null;
   };
 
@@ -614,6 +635,36 @@ export function useBatchHandlers({
     }
   };
 
+  const dispatchDialUpdates = (
+    updates: Array<{ index: number } & Partial<DialItemPosition>>,
+    kind: 'preview' | 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onDialBatchPreview) {
+        onDialBatchPreview(updates);
+        return;
+      }
+      if (onDialPreview) {
+        updates.forEach(({ index, ...rest }) => onDialPreview(index, rest));
+        return;
+      }
+      if (onDialUpdate) {
+        updates.forEach((update) => onDialUpdate(update));
+      }
+      return;
+    }
+
+    if (onDialBatchUpdate) {
+      onDialBatchUpdate(updates, options);
+      return;
+    }
+    if (onDialUpdate) {
+      updates.forEach((update) => onDialUpdate(update));
+    }
+  };
+
   const getSelectedLayoutElements = (): LayoutElement[] => {
     return selectedKeyLikeElements
       .filter(
@@ -655,11 +706,17 @@ export function useBatchHandlers({
       .map(({ type: _t, ...rest }) => rest) as Array<
       { index: number } & Partial<GraphItemPosition>
     >;
+    const dialUpdates = updates
+      .filter((u) => u.type === 'dial')
+      .map(({ type: _t, ...rest }) => rest) as Array<
+      { index: number } & Partial<DialItemPosition>
+    >;
 
     if (kind === 'preview') {
       dispatchKeyUpdates(keyUpdates, 'preview');
       dispatchStatUpdates(statUpdates, 'preview');
       dispatchGraphUpdates(graphUpdates, 'preview');
+      dispatchDialUpdates(dialUpdates, 'preview');
       return;
     }
 
@@ -678,6 +735,12 @@ export function useBatchHandlers({
     }
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+    if (dialUpdates.length > 0) {
+      dispatchDialUpdates(dialUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }
@@ -708,6 +771,13 @@ export function useBatchHandlers({
       { index: number } & Partial<GraphItemPosition>
     >;
     dispatchGraphUpdates(graphUpdates, 'preview');
+
+    const dialUpdates = selectedDials
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<DialItemPosition>
+    >;
+    dispatchDialUpdates(dialUpdates, 'preview');
   };
 
   // 스타일 변경 완료 (저장)
@@ -832,6 +902,18 @@ export function useBatchHandlers({
     >;
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+
+    const dialUpdates = selectedDials
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<DialItemPosition>
+    >;
+    if (dialUpdates.length > 0) {
+      dispatchDialUpdates(dialUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }
@@ -1115,6 +1197,18 @@ export function useBatchHandlers({
     >;
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+
+    const dialUpdates = selectedDials
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+      { index: number } & Partial<DialItemPosition>
+    >;
+    if (dialUpdates.length > 0) {
+      dispatchDialUpdates(dialUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }

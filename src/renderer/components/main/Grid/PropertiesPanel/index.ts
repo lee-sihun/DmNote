@@ -41,6 +41,7 @@ export {
 export {
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
+  BatchDialOnlyPanel,
 } from './batch/BatchSelectionPanel';
 export { default as PluginSettingsPanelView } from './PluginSettingsPanelView';
 

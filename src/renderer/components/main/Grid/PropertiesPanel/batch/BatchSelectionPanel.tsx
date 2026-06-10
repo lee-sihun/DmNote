@@ -9,6 +9,7 @@ import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
+import type { DialItemPosition } from '@src/types/key/dials';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import {
   normalizeCounterSettings,
@@ -61,7 +62,13 @@ const RenameIcon: React.FC = () => (
 // Mixed key-like + graph batch selection panel
 // ============================================================================
 
-type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
+type BatchPickerTarget =
+  | 'noteColor'
+  | 'glowColor'
+  | 'borderColor'
+  | 'fill'
+  | 'stroke'
+  | null;
 
 type MixedValueResult<T> = { isMixed: boolean; value: T };
 type MixedValueGetter<P> = <T>(
@@ -1331,6 +1338,317 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           }}
           onActiveImageReset={() => {
             handleGraphBatchSharedSetting({ activeImage: '' });
+          }}
+          onClose={() => setShowBatchImagePicker(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// Dial-only batch selection panel
+// ============================================================================
+
+interface BatchDialOnlyPanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  selectedDialElements: SelectedElement[];
+  selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleToggleMode: () => void;
+  handleTogglePanel: () => void;
+  handleBatchAlign: (
+    direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
+  ) => void;
+  handleBatchDistribute: (direction: 'horizontal' | 'vertical') => void;
+  handleBatchSpacing: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  handleBatchSpacingPreview: (spacing: number) => void;
+  handleBatchSpacingCommit: (
+    spacing: number,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  getBatchSpacingValue: () => MixedValueResult<number>;
+  handleBatchResize: (dimension: 'width' | 'height', value: number) => void;
+  handleBatchStyleChange: (property: keyof KeyPosition, value: unknown) => void;
+  handleBatchStyleChangeComplete: (
+    property: keyof KeyPosition,
+    value: unknown,
+  ) => void;
+  handleDialBatchSharedSetting: (updates: Partial<DialItemPosition>) => void;
+  getMixedValueDials: MixedValueGetter<DialItemPosition>;
+  getMixedValueDialsAsKey: MixedValueGetter<KeyPosition>;
+  getSelectedDialsData: () => KeyData[];
+  batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
+  showBatchImagePicker: boolean;
+  setShowBatchImagePicker: (value: boolean) => void;
+  panelElement: HTMLDivElement | null;
+  useCustomCSS: boolean;
+  selectedKeyType: string;
+  t: (key: string) => string | undefined;
+}
+
+export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
+  setPanelElement,
+  selectedDialElements,
+  selectedGroupInfo,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleToggleMode,
+  handleTogglePanel,
+  handleBatchAlign,
+  handleBatchDistribute,
+  handleBatchSpacing,
+  handleBatchSpacingPreview,
+  handleBatchSpacingCommit,
+  getBatchSpacingValue,
+  handleBatchResize,
+  handleBatchStyleChange,
+  handleBatchStyleChangeComplete,
+  handleDialBatchSharedSetting,
+  getMixedValueDials,
+  getMixedValueDialsAsKey,
+  getSelectedDialsData,
+  batchScrollRefFor,
+  batchThumbRefFor,
+  batchImageButtonRef,
+  showBatchImagePicker,
+  setShowBatchImagePicker,
+  panelElement,
+  useCustomCSS,
+  t,
+}) => {
+  const sensitivityState = getMixedValueDials(
+    (pos) => Number(pos.sensitivity ?? 1.40625),
+    1.40625,
+  );
+  const reverseState = getMixedValueDials((pos) => pos.reverse ?? false, false);
+  const batchDialSpacing = getBatchSpacingValue();
+
+  return (
+    <div
+      ref={setPanelElement}
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+    >
+      <div className="flex-shrink-0 border-b border-[#3A3943]">
+        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+          <div className="flex items-center gap-[8px]">
+            {selectedGroupInfo ? (
+              isRenaming ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelledRef.current) {
+                      handleRenameCommit(renameValue);
+                    }
+                    renameCancelledRef.current = false;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleRenameCancel();
+                    }
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-[4px] min-w-0">
+                  <span
+                    className="text-[#DBDEE8] text-style-2 cursor-default truncate max-w-[110px]"
+                    onDoubleClick={handleRenameStart}
+                    title={selectedGroupInfo.name}
+                  >
+                    {selectedGroupInfo.name}
+                  </span>
+                  <button
+                    onClick={handleRenameStart}
+                    className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+                    title={t('contextMenu.rename') || 'Rename'}
+                  >
+                    <RenameIcon />
+                  </button>
+                </div>
+              )
+            ) : (
+              <span className="text-[#DBDEE8] text-style-2">
+                {t('propertiesPanel.multiSelection') || '다중 선택'}
+              </span>
+            )}
+            {!selectedGroupInfo && (
+              <span className="text-[#6B6D75] text-style-4">
+                ({selectedDialElements.length})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-[4px]">
+            <button
+              onClick={handleToggleMode}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            >
+              <ModeToggleIcon mode="layer" />
+            </button>
+            <button
+              onClick={handleTogglePanel}
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+            >
+              <SidebarToggleIcon isOpen={true} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={batchScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <div className="p-[12px] flex flex-col gap-[12px]">
+            <BatchStyleTabContent
+              selectedCount={selectedDialElements.length}
+              hideDisplayText
+              hideFontControls
+              showSoundControls={false}
+              afterSizeContent={
+                <>
+                  <PropertyRow
+                    label={t('propertiesPanel.dialSensitivity') || '민감도'}
+                  >
+                    {sensitivityState.isMixed ? (
+                      <span className="text-[#6B6D75] text-style-4 italic">
+                        Mixed
+                      </span>
+                    ) : null}
+                    <NumberInput
+                      value={sensitivityState.value}
+                      onChange={(value) =>
+                        handleDialBatchSharedSetting({
+                          sensitivity: Math.max(0, value),
+                        })
+                      }
+                      min={0}
+                      max={9999}
+                      allowDecimal
+                      decimalScale={3}
+                      isMixed={sensitivityState.isMixed}
+                    />
+                  </PropertyRow>
+
+                  <div className="flex justify-between items-center w-full h-[23px]">
+                    <p className="text-white text-style-2">
+                      {t('propertiesPanel.dialReverse') || '방향 반전'}
+                    </p>
+                    <div className="flex items-center gap-[6px]">
+                      {reverseState.isMixed ? (
+                        <span className="text-[#6B6D75] text-style-4 italic">
+                          Mixed
+                        </span>
+                      ) : null}
+                      <Checkbox
+                        checked={reverseState.value}
+                        onChange={() =>
+                          handleDialBatchSharedSetting({
+                            reverse: !reverseState.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </>
+              }
+              getMixedValue={getMixedValueDialsAsKey}
+              getSelectedKeysData={getSelectedDialsData}
+              handleBatchAlign={handleBatchAlign}
+              handleBatchDistribute={handleBatchDistribute}
+              handleBatchSpacing={handleBatchSpacing}
+              handleBatchSpacingPreview={handleBatchSpacingPreview}
+              handleBatchSpacingCommit={handleBatchSpacingCommit}
+              batchSpacing={batchDialSpacing}
+              handleBatchResize={handleBatchResize}
+              handleBatchStyleChange={handleBatchStyleChange}
+              handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+              showBatchImagePicker={showBatchImagePicker}
+              onToggleBatchImagePicker={() =>
+                setShowBatchImagePicker(!showBatchImagePicker)
+              }
+              batchImageButtonRef={batchImageButtonRef}
+              panelElement={panelElement}
+              useCustomCSS={useCustomCSS}
+              t={t}
+            />
+          </div>
+          <div className="properties-panel-overlay-bar">
+            <div
+              ref={batchThumbRefFor(TABS.STYLE)}
+              className="properties-panel-overlay-thumb"
+              style={{ display: 'none' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {showBatchImagePicker && batchImageButtonRef.current && (
+        <ImagePicker
+          open={showBatchImagePicker}
+          referenceRef={batchImageButtonRef}
+          panelElement={panelElement}
+          idleImage={
+            getMixedValueDials((pos) => pos.inactiveImage, '').isMixed
+              ? ''
+              : getMixedValueDials((pos) => pos.inactiveImage, '').value
+          }
+          activeImage={
+            getMixedValueDials((pos) => pos.activeImage, '').isMixed
+              ? ''
+              : getMixedValueDials((pos) => pos.activeImage, '').value
+          }
+          idleTransparent={
+            getMixedValueDials((pos) => pos.idleTransparent, false).value
+          }
+          activeTransparent={
+            getMixedValueDials((pos) => pos.activeTransparent, false).value
+          }
+          onIdleImageChange={(imageUrl: string) => {
+            handleDialBatchSharedSetting({ inactiveImage: imageUrl });
+          }}
+          onActiveImageChange={(imageUrl: string) => {
+            handleDialBatchSharedSetting({ activeImage: imageUrl });
+          }}
+          onIdleTransparentChange={(value: boolean) => {
+            handleDialBatchSharedSetting({ idleTransparent: value });
+          }}
+          onActiveTransparentChange={(value: boolean) => {
+            handleDialBatchSharedSetting({ activeTransparent: value });
+          }}
+          onIdleImageReset={() => {
+            handleDialBatchSharedSetting({ inactiveImage: '' });
+          }}
+          onActiveImageReset={() => {
+            handleDialBatchSharedSetting({ activeImage: '' });
           }}
           onClose={() => setShowBatchImagePicker(false)}
         />
