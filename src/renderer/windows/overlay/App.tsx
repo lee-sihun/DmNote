@@ -435,6 +435,11 @@ export default function App() {
       keyEventBus.initialize();
     });
 
+    // HID 축 이벤트 버스 초기화 (input:axis 구독 → axisSignals 누적)
+    import('@utils/core/axisEventBus').then(({ axisEventBus }) => {
+      axisEventBus.initialize();
+    });
+
     // 버스를 통해 키 이벤트 수신
     const unsubscribe = import('@utils/core/keyEventBus').then(
       ({ keyEventBus }) => {
