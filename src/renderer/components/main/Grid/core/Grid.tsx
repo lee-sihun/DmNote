@@ -61,6 +61,7 @@ import type {
 } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { DialItemPosition } from '@src/types/key/dials';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -1522,6 +1523,12 @@ const Grid = ({
           } else if (type === 'graph') {
             placeDuplicateGraph(
               duplicateState.position as GraphItemPosition,
+              snapped.x - width / 2,
+              snapped.y - height / 2,
+            );
+          } else if (type === 'dial') {
+            placeDuplicateDial(
+              duplicateState.position as DialItemPosition,
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
