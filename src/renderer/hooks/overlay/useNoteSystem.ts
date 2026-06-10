@@ -431,10 +431,15 @@ export function useNoteSystem({
       noteRef?.startTime ?? state.startTime ?? state.downTime ?? releaseTime;
     const clampedStart = Math.min(releaseTime, baselineStart);
     const holdDurationFromStart = Math.max(0, releaseTime - clampedStart);
+    // delayed mode: 시작 표시가 threshold만큼 지연되므로 실제 입력 유지 시간 기준으로 길이 계산 (종료도 동일하게 지연)
+    const physicalHoldMs =
+      state.useDelay && state.downTime != null
+        ? Math.max(0, releaseTime - state.downTime)
+        : holdDurationFromStart;
     const minLengthMs = computeMinLengthMs();
     const desiredDuration = forceMinLength
       ? minLengthMs
-      : Math.max(minLengthMs, holdDurationFromStart);
+      : Math.max(minLengthMs, physicalHoldMs);
     const safeDuration = Math.max(desiredDuration, 1);
     const targetEndTime = state.startTime + safeDuration;
 
