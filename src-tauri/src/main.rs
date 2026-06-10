@@ -229,6 +229,8 @@ fn main() {
             commands::layout::stat_items::stat_positions_update,
             commands::layout::graph_items::graph_positions_get,
             commands::layout::graph_items::graph_positions_update,
+            commands::layout::dial_items::dial_positions_get,
+            commands::layout::dial_items::dial_positions_update,
             commands::layout::font::font_load,
             commands::layout::overlay::overlay_get,
             commands::layout::overlay::overlay_set_visible,

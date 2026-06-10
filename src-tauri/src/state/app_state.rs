@@ -257,6 +257,7 @@ impl AppState {
             positions: state.key_positions.clone(),
             stat_positions: state.stat_positions.clone(),
             graph_positions: state.graph_positions.clone(),
+            dial_positions: state.dial_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
             current_mode: self.keyboard.current_mode(),
@@ -837,6 +838,22 @@ impl AppState {
                                         }
                                     }
                                 }
+                                continue;
+                            }
+
+                            // HID 축(노브) 메시지 → input:axis 이벤트 브로드캐스트
+                            // (버튼은 아래 HookMessage 경로로 기존 키 시각화 재사용)
+                            if let Ok(axis) =
+                                serde_json::from_str::<crate::ipc::HidAxisMessage>(s)
+                            {
+                                let _ = app_handle.emit(
+                                    "input:axis",
+                                    &json!({
+                                        "axisId": axis.axis_id,
+                                        "value": axis.value,
+                                        "full": axis.full,
+                                    }),
+                                );
                                 continue;
                             }
 

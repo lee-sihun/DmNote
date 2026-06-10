@@ -11,8 +11,8 @@ use tauri::path::PathResolver;
 use tauri::Runtime;
 
 use crate::models::{
-    AppStoreData, FontType, GraphPositions, KeyCounters, KeyMappings, KeyPositions, LayerGroups,
-    SettingsState, StatPositions,
+    AppStoreData, DialPositions, FontType, GraphPositions, KeyCounters, KeyMappings, KeyPositions,
+    LayerGroups, SettingsState, StatPositions,
 };
 
 use super::migration::{
@@ -143,6 +143,14 @@ impl AppStore {
         Ok(guard.graph_positions.clone())
     }
 
+    pub fn update_dial_positions(&self, positions: DialPositions) -> Result<DialPositions> {
+        let mut guard = self.state.write();
+        guard.dial_positions = positions.clone();
+        *guard = normalize_state(guard.clone());
+        self.persist_locked(&guard)?;
+        Ok(guard.dial_positions.clone())
+    }
+
     pub fn set_key_counters(&self, counters: KeyCounters) -> Result<KeyCounters> {
         let mut guard = self.state.write();
         guard.key_counters = counters.clone();
@@ -233,6 +241,9 @@ impl AppStore {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("graphPositions") {
+                reorder(v);
+            }
+            if let Some(v) = obj.get_mut("dialPositions") {
                 reorder(v);
             }
             if let Some(v) = obj.get_mut("keyCounters") {

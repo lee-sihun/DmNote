@@ -14,6 +14,10 @@ src-tauri/webview2-fixed-runtime/*
 .mcp.json
 mcp.json
 
+# HID 진단 로그 (테스트 산출물)
+hid-diagnostic.ndjson
+hid-diagnostic/
+
 # --- C# / Visual Studio (UWP) ---
 [Bb]in/
 [Oo]bj/
