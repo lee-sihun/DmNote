@@ -4,6 +4,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useDialItemStore } from '@stores/data/useDialItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -14,6 +15,7 @@ import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { DialItemPosition } from '@src/types/key/dials';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -38,6 +40,7 @@ import {
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
+  SingleDialPanel,
   SingleKeyStatPanel,
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
@@ -140,6 +143,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedGraphElements = selectedElements.filter(
     (el) => el.type === 'graph',
   );
+  const selectedDialElements = selectedElements.filter(
+    (el) => el.type === 'dial',
+  );
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === 'key' || el.type === 'stat',
   );
@@ -208,6 +214,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const singleGraphPosition: GraphItemPosition | null =
     singleGraphIndex !== null
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
+      : null;
+  const dialItemPositions = useDialItemStore((state) => state.positions);
+  const singleDialIndex =
+    selectedDialElements.length === 1 ? selectedDialElements[0].index : null;
+  const singleDialPosition: DialItemPosition | null =
+    singleDialIndex != null
+      ? dialItemPositions[selectedKeyType]?.[singleDialIndex] ?? null
       : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
@@ -618,7 +631,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   });
 
   // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
+  type BatchPickerTarget =
+    | 'noteColor'
+    | 'glowColor'
+    | 'borderColor'
+    | 'fill'
+    | 'stroke'
+    | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
@@ -1359,6 +1378,51 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
+  const handleDialUpdate = (
+    data: Partial<DialItemPosition> & { index: number },
+  ) => {
+    const { index, ...updates } = data;
+    const mode = selectedKeyType;
+    const current = useDialItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    const currentPositions = useKeyStore.getState().positions;
+    const currentPluginElements =
+      usePluginDisplayElementStore.getState().elements;
+    const { keyMappings: km } = useKeyStore.getState();
+    pushHistoryState({
+      keyMappings: km,
+      positions: currentPositions,
+      statPositions: useStatItemStore.getState().positions,
+      graphPositions: useGraphItemStore.getState().positions,
+      pluginElements: currentPluginElements,
+    });
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as DialItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useDialItemStore.getState().setLocalUpdateInProgress(true);
+    useDialItemStore.getState().setPositions(nextPositions);
+    window.api.dialItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to update dial item', error);
+      })
+      .finally(() => {
+        useDialItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   const handleGraphPreview = (
     index: number,
     updates: Partial<GraphItemPosition>,
@@ -1881,7 +1945,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ? schemaValue.default
           : 0;
         // step 값에서 소수 자릿수 자동 추론
-        const stepStr = schemaValue.step != null ? String(schemaValue.step) : '';
+        const stepStr =
+          schemaValue.step != null ? String(schemaValue.step) : '';
         const dotIdx = stepStr.indexOf('.');
         const hasDecimal = dotIdx !== -1;
         const decimalScale = hasDecimal ? stepStr.length - dotIdx - 1 : 0;
@@ -2459,6 +2524,29 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedPluginDefinition={selectedPluginDefinition}
         resolvedPluginSettings={resolvedPluginSettings}
         handlePluginSettingChange={handlePluginSettingChange}
+        t={t}
+      />
+    );
+  }
+
+  // 단일 다이얼 요소 선택인 경우
+  if (
+    selectedDialElements.length === 1 &&
+    !!singleDialPosition &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    return (
+      <SingleDialPanel
+        setPanelElement={setPanelElement}
+        singleDialPosition={singleDialPosition}
+        singleDialIndex={singleDialIndex!}
+        selectedKeyType={selectedKeyType}
+        handleDialUpdate={handleDialUpdate}
+        handleToggleMode={handleToggleMode}
+        handleTogglePanel={handleTogglePanel}
+        useCustomCSS={useCustomCSS}
         t={t}
       />
     );

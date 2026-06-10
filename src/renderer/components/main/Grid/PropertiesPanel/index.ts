@@ -35,6 +35,7 @@ export { default as LayerPanel } from './layer/LayerPanel';
 export {
   PluginSelectionPanel,
   SingleGraphPanel,
+  SingleDialPanel,
   SingleKeyStatPanel,
 } from './single/SingleSelectionPanel';
 export {
