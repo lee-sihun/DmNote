@@ -45,7 +45,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         .unwrap_or_else(|| default_positions().clone());
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
-    let dial_positions = preset.dial_positions.unwrap_or_default();
+    let mut dial_positions = preset.dial_positions.unwrap_or_default();
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -89,6 +89,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         &mut positions,
         &mut stat_positions,
         &mut graph_positions,
+        &mut dial_positions,
         preset.embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -256,6 +257,7 @@ pub fn preset_load_tab(
         &mut src_key_positions,
         &mut src_stat_positions,
         &mut src_graph_positions,
+        &mut src_dial_positions,
         embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -434,6 +436,7 @@ fn restore_preset_local_images(
     key_positions: &mut KeyPositions,
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
+    dial_positions: &mut DialPositions,
     embedded_local_images: Option<&[EmbeddedLocalImage]>,
 ) -> CmdResult<()> {
     let has_any_images = key_positions.values().any(|positions| {
@@ -450,6 +453,11 @@ fn restore_preset_local_images(
         positions.iter().any(|graph_position| {
             option_has_non_empty_text(&graph_position.position.active_image)
                 || option_has_non_empty_text(&graph_position.position.inactive_image)
+        })
+    }) || dial_positions.values().any(|positions| {
+        positions.iter().any(|dial_position| {
+            option_has_non_empty_text(&dial_position.position.active_image)
+                || option_has_non_empty_text(&dial_position.position.inactive_image)
         })
     });
 
@@ -515,6 +523,23 @@ fn restore_preset_local_images(
                 &embedded_map,
                 &mut restored_path_cache,
                 &mut graph_position.position.inactive_image,
+            )?;
+        }
+    }
+
+    for positions in dial_positions.values_mut() {
+        for dial_position in positions.iter_mut() {
+            restore_position_image_reference(
+                &images_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut dial_position.position.active_image,
+            )?;
+            restore_position_image_reference(
+                &images_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut dial_position.position.inactive_image,
             )?;
         }
     }

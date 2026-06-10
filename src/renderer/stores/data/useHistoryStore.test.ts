@@ -62,7 +62,6 @@ const createDials = (rotationDeg: number): DialItemPositions => ({
 
 const EMPTY_STATS: StatItemPositions = {};
 const EMPTY_GRAPHS: GraphItemPositions = {};
-const EMPTY_DIALS: DialItemPositions = {};
 const DEFAULT_TABS: CustomTab[] = [{ id: 'tab-1', name: 'Tab 1' }];
 
 const resetStores = () => {

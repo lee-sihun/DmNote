@@ -17,6 +17,7 @@ interface DialPosition {
   zIndex?: number;
   activeImage?: string;
   inactiveImage?: string;
+  idleTransparent?: boolean;
   imageFit?: string;
   idleImageFit?: string;
   backgroundColor?: string;
@@ -45,6 +46,7 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
     className,
     activeImage,
     inactiveImage,
+    idleTransparent = false,
     imageFit,
     idleImageFit,
     backgroundColor,
@@ -85,7 +87,9 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
           borderRadius: '50%',
           overflow: 'hidden',
           position: 'relative',
-          background: backgroundColor || 'rgba(17, 17, 20, 0.6)',
+          background: idleTransparent
+            ? 'transparent'
+            : backgroundColor || 'rgba(17, 17, 20, 0.6)',
           border:
             borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${

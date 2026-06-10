@@ -290,7 +290,7 @@ pub(super) fn run_raw_input() -> Result<()> {
         )?;
 
         // Raw Input 키보드 + 마우스 이벤트 등록 (비포커스 상태에서도 수신)
-        // HID(조이스틱/게임패드/멀티축) 추가 — HID 진단 로그용 (임시)
+        // HID(조이스틱/게임패드/멀티축) 추가 — 다이얼/버튼 입력 인식용
         let devices = [
             RAWINPUTDEVICE {
                 usUsagePage: 0x01,

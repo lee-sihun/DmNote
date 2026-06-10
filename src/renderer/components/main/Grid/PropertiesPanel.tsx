@@ -237,6 +237,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const keyModePositions = positions[selectedKeyType] || [];
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
+    const dialModePositions = dialItemPositions[selectedKeyType] || [];
 
     let groupId: string | undefined;
 
@@ -251,6 +252,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         typeof element.index === 'number'
       ) {
         currentGroupId = graphModePositions[element.index]?.groupId;
+      } else if (element.type === 'dial' && typeof element.index === 'number') {
+        currentGroupId = dialModePositions[element.index]?.groupId;
       } else {
         return null;
       }
@@ -268,7 +271,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const totalMembers =
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
       statModePositions.filter((pos) => pos?.groupId === groupId).length +
-      graphModePositions.filter((pos) => pos?.groupId === groupId).length;
+      graphModePositions.filter((pos) => pos?.groupId === groupId).length +
+      dialModePositions.filter((pos) => pos?.groupId === groupId).length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
