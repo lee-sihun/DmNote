@@ -1665,6 +1665,16 @@ const Grid = ({
               height: pos.height || 100,
             };
           }
+        } else if (el.type === 'dial' && el.index !== undefined) {
+          const pos = dialPositions?.[selectedKeyType]?.[el.index];
+          if (pos) {
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 80,
+              height: pos.height || 80,
+            };
+          }
         } else if (el.type === 'plugin') {
           const pluginEl = pluginElements.find((p) => p.fullId === el.id);
           if (pluginEl && pluginEl.measuredSize) {

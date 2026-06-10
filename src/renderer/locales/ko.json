@@ -213,7 +213,8 @@
     "resetCounters": "카운터 초기화",
     "addKey": "키",
     "addStat": "통계",
-    "addGraph": "그래프"
+    "addGraph": "그래프",
+    "addDial": "다이얼"
   },
   "preset": {
     "import": "불러오기",
@@ -248,6 +249,7 @@
 
     "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
     "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
+    "removeDial": "[{{name}}] 다이얼을 제거하시겠습니까?",
     "remove": "제거하기"
   },
   "tabs": {
@@ -294,6 +296,8 @@
     "deleteStat": "통계 삭제",
     "duplicateGraph": "그래프 복제",
     "deleteGraph": "그래프 삭제",
+    "duplicateDial": "다이얼 복제",
+    "deleteDial": "다이얼 삭제",
     "noteSetting": "노트 설정",
     "counterSetting": "카운터 설정",
     "counterReset": "카운터 초기화",
@@ -477,6 +481,12 @@
     "graphShapeLine": "선 그래프",
     "graphShapeBar": "바 그래프",
     "graphShowAverageLine": "평균선 표시",
+    "dialAxis": "HID 축",
+    "dialAxisUnset": "미지정",
+    "dialCapture": "노브 돌려서 감지",
+    "dialCapturing": "감지 중… 노브를 돌리세요",
+    "dialSensitivity": "민감도",
+    "dialReverse": "방향 반전",
     "graphSpeed": "그래프 속도",
     "graphColor": "그래프 색상",
     "graphAnimation": "그래프 모션",

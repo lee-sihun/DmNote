@@ -213,7 +213,8 @@
     "resetCounters": "Reset Counters",
     "addKey": "Key",
     "addStat": "Stat",
-    "addGraph": "Graph"
+    "addGraph": "Graph",
+    "addDial": "Dial"
   },
   "preset": {
     "import": "Import",
@@ -247,6 +248,7 @@
     "removeKey": "Remove key [{{name}}]?",
     "removeStat": "Remove stat [{{name}}]?",
     "removeGraph": "Remove graph [{{name}}]?",
+    "removeDial": "Remove dial [{{name}}]?",
     "remove": "Remove"
   },
   "tabs": {
@@ -293,6 +295,8 @@
     "deleteStat": "Delete Stat",
     "duplicateGraph": "Duplicate Graph",
     "deleteGraph": "Delete Graph",
+    "duplicateDial": "Duplicate Dial",
+    "deleteDial": "Delete Dial",
     "noteSetting": "Note Setting",
     "counterSetting": "Counter Setting",
     "counterReset": "Reset Counter",
@@ -476,6 +480,12 @@
     "graphShapeLine": "Line",
     "graphShapeBar": "Bar",
     "graphShowAverageLine": "Show Average Line",
+    "dialAxis": "HID Axis",
+    "dialAxisUnset": "Unset",
+    "dialCapture": "Detect by turning knob",
+    "dialCapturing": "Detecting… turn the knob",
+    "dialSensitivity": "Sensitivity",
+    "dialReverse": "Reverse Direction",
     "graphSpeed": "Graph Speed",
     "graphColor": "Graph Color",
     "graphAnimation": "Graph Motion",
