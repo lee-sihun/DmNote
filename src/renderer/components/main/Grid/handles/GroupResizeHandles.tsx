@@ -19,6 +19,7 @@ import {
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { DialItemPositions } from '@src/types/key/dials';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   isElementResizable,
@@ -58,6 +59,7 @@ interface GroupResizeHandlesProps {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  dialPositions: DialItemPositions;
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   zoom?: number;
@@ -220,6 +222,7 @@ const GroupResizeHandles = ({
   positions,
   statPositions,
   graphPositions,
+  dialPositions,
   selectedKeyType,
   pluginElements,
   zoom = 1,
@@ -248,6 +251,7 @@ const GroupResizeHandles = ({
     positions,
     statPositions,
     graphPositions,
+    dialPositions,
     selectedKeyType,
     pluginElements,
   );
@@ -260,6 +264,7 @@ const GroupResizeHandles = ({
       positions,
       statPositions,
       graphPositions,
+      dialPositions,
       selectedKeyType,
       pluginElements,
     ),
@@ -285,6 +290,7 @@ const GroupResizeHandles = ({
           positions,
           statPositions,
           graphPositions,
+          dialPositions,
           selectedKeyType,
           pluginElements,
         ),
@@ -297,6 +303,7 @@ const GroupResizeHandles = ({
           positions,
           statPositions,
           graphPositions,
+          dialPositions,
           selectedKeyType,
           pluginElements,
         ),
@@ -773,6 +780,7 @@ const GroupResizeHandles = ({
           positions,
           statPositions,
           graphPositions,
+          dialPositions,
           selectedKeyType,
           pluginElements,
         );

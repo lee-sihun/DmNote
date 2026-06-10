@@ -1626,6 +1626,7 @@ const Grid = ({
             positions,
             statPositions,
             graphPositions,
+            dialPositions,
             selectedKeyType,
             pluginElements,
           );
@@ -1802,6 +1803,7 @@ const Grid = ({
           positions={positions}
           statPositions={statPositions}
           graphPositions={graphPositions}
+          dialPositions={dialPositions}
           selectedKeyType={selectedKeyType}
           pluginElements={pluginElements}
           zoom={zoom}
@@ -2175,6 +2177,7 @@ const Grid = ({
           positions={positions[selectedKeyType] || []}
           statPositions={statPositions?.[selectedKeyType] || []}
           graphPositions={graphPositions?.[selectedKeyType] || []}
+          dialPositions={dialPositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}
