@@ -8,6 +8,7 @@ import {
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useDialItemStore } from '@stores/data/useDialItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
@@ -21,6 +22,7 @@ import {
   FolderIcon,
   ChevronIcon,
   KeyIcon,
+  DialIcon,
   PluginIcon,
   StatIcon,
   GraphIcon,
@@ -59,6 +61,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
+  const dialPositions = useDialItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -147,6 +150,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     keyMappings,
     statPositions,
     graphPositions,
+    dialPositions,
     pluginElements,
   });
 
@@ -718,6 +722,8 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       <StatIcon />
                     ) : item.type === 'graph' ? (
                       <GraphIcon />
+                    ) : item.type === 'dial' ? (
+                      <DialIcon />
                     ) : (
                       <PluginIcon />
                     )}

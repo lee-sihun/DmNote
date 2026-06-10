@@ -526,6 +526,7 @@ export function useGridSelection({
       keyPositions: useKeyStore.getState().positions,
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
+      dialPositions: useDialItemStore.getState().positions,
       layerGroups: useLayerGroupStore.getState().layerGroups,
     });
 
@@ -533,9 +534,11 @@ export function useGridSelection({
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
+      useDialItemStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(normalized.keyPositions);
       useStatItemStore.getState().setPositions(normalized.statPositions);
       useGraphItemStore.getState().setPositions(normalized.graphPositions);
+      useDialItemStore.getState().setPositions(normalized.dialPositions);
       if (normalized.groupsChanged) {
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
@@ -544,6 +547,7 @@ export function useGridSelection({
         await window.api.keys.updatePositions(normalized.keyPositions);
         await window.api.statItems.updatePositions(normalized.statPositions);
         await window.api.graphItems.updatePositions(normalized.graphPositions);
+        await window.api.dialItems.updatePositions(normalized.dialPositions);
         if (normalized.groupsChanged) {
           await window.api.layerGroups.update(normalized.layerGroups);
         }
@@ -553,6 +557,7 @@ export function useGridSelection({
         useKeyStore.getState().setLocalUpdateInProgress(false);
         useStatItemStore.getState().setLocalUpdateInProgress(false);
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
+        useDialItemStore.getState().setLocalUpdateInProgress(false);
       }
     }
   };
@@ -918,6 +923,7 @@ export function useGridSelection({
     const freshKeyPos = useKeyStore.getState().positions;
     const freshStatPos = useStatItemStore.getState().positions;
     const freshGraphPos = useGraphItemStore.getState().positions;
+    const freshDialPos = useDialItemStore.getState().positions;
     const freshPluginEls = usePluginDisplayElementStore.getState().elements;
 
     // 전체 레이어 목록 구성 (새로 push된 아이템 포함)
@@ -926,6 +932,7 @@ export function useGridSelection({
       freshKeyPos,
       freshStatPos,
       freshGraphPos,
+      freshDialPos,
       freshPluginEls,
     );
 
@@ -955,12 +962,14 @@ export function useGridSelection({
       freshKeyPos,
       freshStatPos,
       freshGraphPos,
+      freshDialPos,
     );
 
     // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
     useKeyStore.getState().setPositions(patch.keyPositions);
     useStatItemStore.getState().setPositions(patch.statPositions);
     useGraphItemStore.getState().setPositions(patch.graphPositions);
+    useDialItemStore.getState().setPositions(patch.dialPositions);
     for (const { fullId, zIndex } of patch.pluginUpdates) {
       usePluginDisplayElementStore
         .getState()
@@ -984,16 +993,19 @@ export function useGridSelection({
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useDialItemStore.getState().setLocalUpdateInProgress(true);
     try {
       await window.api.keys.updatePositions(patch.keyPositions);
       await window.api.statItems.updatePositions(patch.statPositions);
       await window.api.graphItems.updatePositions(patch.graphPositions);
+      await window.api.dialItems.updatePositions(patch.dialPositions);
     } catch (error) {
       console.error('Failed to sync zIndex after paste', error);
     } finally {
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      useDialItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     try {
@@ -1009,6 +1021,11 @@ export function useGridSelection({
     try {
       window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
         positions: patch.graphPositions,
+      });
+    } catch {}
+    try {
+      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        positions: patch.dialPositions,
       });
     } catch {}
     try {

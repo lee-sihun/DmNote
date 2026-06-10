@@ -7,6 +7,7 @@ import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { DialItemPositions } from '@src/types/key/dials';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
@@ -21,6 +22,7 @@ interface BuildLayerItemsParams {
   keyMappings: KeyMappings;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  dialPositions: DialItemPositions;
   pluginElements: PluginDisplayElementInternal[];
 }
 
@@ -30,6 +32,7 @@ export function buildLayerItems({
   keyMappings,
   statPositions,
   graphPositions,
+  dialPositions,
   pluginElements,
 }: BuildLayerItemsParams): LayerItem[] {
   const items: LayerItem[] = [];
@@ -90,6 +93,20 @@ export function buildLayerItems({
       id: `graph-${index}`,
       index,
       name: pos.layerName || defaultName,
+      zIndex: pos.zIndex ?? index,
+      hidden: !!pos.hidden,
+      groupId: pos.groupId,
+    });
+  });
+
+  // 다이얼 아이템
+  const currentDialPositions = dialPositions[selectedKeyType] || [];
+  currentDialPositions.forEach((pos, index) => {
+    items.push({
+      type: 'dial',
+      id: `dial-${index}`,
+      index,
+      name: pos.layerName || `Dial ${index + 1}`,
       zIndex: pos.zIndex ?? index,
       hidden: !!pos.hidden,
       groupId: pos.groupId,
