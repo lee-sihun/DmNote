@@ -6,6 +6,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useDialItemStore } from '@stores/data/useDialItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -17,6 +18,7 @@ import type {
   GraphItemPosition,
   GraphItemPositions,
 } from '@src/types/key/graphItems';
+import type { DialItemPosition, DialItemPositions } from '@src/types/key/dials';
 import type {
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -34,34 +36,55 @@ function collectAllZIndexes(mode: string) {
   const graphPos = useGraphItemStore.getState().positions[mode] || [];
   const graphZIndexes = graphPos.map((p, i) => p.zIndex ?? i);
 
+  const dialPos = useDialItemStore.getState().positions[mode] || [];
+  const dialZIndexes = dialPos.map((p, i) => p.zIndex ?? i);
+
   const pluginEls = usePluginDisplayElementStore.getState().elements;
   const pluginZIndexes = pluginEls
     .filter((el) => !el.tabId || el.tabId === mode)
     .map((el) => el.zIndex ?? 0);
 
-  return { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes };
+  return {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    dialZIndexes,
+    pluginZIndexes,
+  };
 }
 
 function getMaxZIndex(mode: string): number {
-  const { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes } =
-    collectAllZIndexes(mode);
+  const {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    dialZIndexes,
+    pluginZIndexes,
+  } = collectAllZIndexes(mode);
   return Math.max(
     0,
     ...keyZIndexes,
     ...statZIndexes,
     ...graphZIndexes,
+    ...dialZIndexes,
     ...pluginZIndexes,
   );
 }
 
 function getMinZIndex(mode: string): number {
-  const { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes } =
-    collectAllZIndexes(mode);
+  const {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    dialZIndexes,
+    pluginZIndexes,
+  } = collectAllZIndexes(mode);
   return Math.min(
     0,
     ...keyZIndexes,
     ...statZIndexes,
     ...graphZIndexes,
+    ...dialZIndexes,
     ...pluginZIndexes,
   );
 }
@@ -132,6 +155,30 @@ async function persistGraphPositions(
   }
 }
 
+// Dial positions persist 헬퍼
+async function persistDialPositions(
+  nextPositions: DialItemPositions,
+  errorMessage?: string,
+): Promise<void> {
+  const store = useDialItemStore.getState();
+  store.setLocalUpdateInProgress(true);
+  store.setPositions(nextPositions);
+  try {
+    await window.api.dialItems.updatePositions(nextPositions);
+  } catch (error) {
+    console.error(errorMessage || 'Failed to update dial items', error);
+  } finally {
+    store.setLocalUpdateInProgress(false);
+  }
+  try {
+    window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+      positions: nextPositions,
+    });
+  } catch {
+    /* 무시 */
+  }
+}
+
 export interface CanvasActions {
   // Stat 액션
   deleteStatAtIndex: (index: number) => void;
@@ -159,17 +206,35 @@ export interface CanvasActions {
     dx: number,
     dy: number,
   ) => void;
+  // Dial 액션
+  deleteDialAtIndex: (index: number) => void;
+  moveDialToFront: (index: number) => void;
+  moveDialToBack: (index: number) => void;
+  moveDialForward: (index: number) => Promise<void>;
+  moveDialBackward: (index: number) => Promise<void>;
+  addDialAtPosition: (dx: number, dy: number) => void;
+  beginDuplicateDial: (sourceIndex: number) => DuplicateState | null;
+  placeDuplicateDial: (
+    templatePosition: DialItemPosition,
+    dx: number,
+    dy: number,
+  ) => void;
   // persist 헬퍼 (Grid에서 직접 사용)
   persistStatPositions: typeof persistStatPositions;
   persistGraphPositions: typeof persistGraphPositions;
+  persistDialPositions: typeof persistDialPositions;
   pushHistorySnapshot: typeof pushHistorySnapshot;
 }
 
 export interface DuplicateState {
-  elementType: 'key' | 'stat' | 'graph';
+  elementType: 'key' | 'stat' | 'graph' | 'dial';
   sourceIndex: number;
   keyName: string;
-  position: KeyPosition | StatItemPosition | GraphItemPosition;
+  position:
+    | KeyPosition
+    | StatItemPosition
+    | GraphItemPosition
+    | DialItemPosition;
 }
 
 function getStatTypeLabel(type: string): string {
@@ -548,6 +613,162 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to add graph item');
   };
 
+  // 다이얼 히스토리 스냅샷 (현재 stat/graph 캡처)
+  const pushDialHistory = () =>
+    pushHistorySnapshot(
+      useStatItemStore.getState().positions,
+      useGraphItemStore.getState().positions,
+    );
+
+  const deleteDialAtIndex = (indexToDelete: number) => {
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[indexToDelete]) return;
+    pushDialHistory();
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
+    };
+    persistDialPositions(nextPositions, 'Failed to delete dial item');
+  };
+
+  const moveDialToFront = (index: number) => {
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[index]) return;
+    pushDialHistory();
+    const maxZ = getMaxZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: maxZ + 1 } : p,
+      ),
+    };
+    persistDialPositions(nextPositions, 'Failed to move dial item to front');
+  };
+
+  const moveDialForward = async (index: number) => {
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+    pushDialHistory();
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
+      ),
+    };
+    await persistDialPositions(
+      updatedPositions,
+      'Failed to move dial item forward',
+    );
+  };
+
+  const moveDialBackward = async (index: number) => {
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+    pushDialHistory();
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
+      ),
+    };
+    await persistDialPositions(
+      updatedPositions,
+      'Failed to move dial item backward',
+    );
+  };
+
+  const moveDialToBack = (index: number) => {
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[index]) return;
+    pushDialHistory();
+    const minZ = getMinZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: minZ - 1 } : p,
+      ),
+    };
+    persistDialPositions(nextPositions, 'Failed to move dial item to back');
+  };
+
+  const beginDuplicateDial = (sourceIndex: number): DuplicateState | null => {
+    const current = useDialItemStore.getState().positions;
+    const position = current?.[selectedKeyType]?.[sourceIndex] || null;
+    if (!position) return null;
+    return {
+      elementType: 'dial',
+      sourceIndex,
+      keyName: 'Dial',
+      position: { ...position },
+    };
+  };
+
+  const placeDuplicateDial = (
+    templatePosition: DialItemPosition,
+    dx: number,
+    dy: number,
+  ) => {
+    if (!templatePosition) return;
+    const current = useDialItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    pushDialHistory();
+    const maxZ = getMaxZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: [
+        ...tabPositions,
+        { ...templatePosition, dx, dy, zIndex: maxZ + 1 },
+      ],
+    };
+    persistDialPositions(nextPositions, 'Failed to duplicate dial item');
+  };
+
+  const addDialAtPosition = (dx: number, dy: number) => {
+    const current = useDialItemStore.getState().positions;
+    pushDialHistory();
+    const list = [...(current[selectedKeyType] || [])];
+    list.push({
+      axisId: '',
+      sensitivity: 1.40625,
+      reverse: false,
+      dx,
+      dy,
+      width: 80,
+      height: 80,
+      hidden: false,
+      activeImage: '',
+      inactiveImage: '',
+      activeTransparent: false,
+      idleTransparent: false,
+      count: 0,
+      noteColor: '#FFFFFF',
+      noteOpacity: 80,
+      noteAlignment: 'center',
+      noteEffectEnabled: false,
+      noteGlowEnabled: false,
+      noteGlowSize: 20,
+      noteGlowOpacity: 70,
+      noteGlowColor: '#FFFFFF',
+      noteAutoYCorrection: true,
+      className: '',
+      counter: createDefaultCounterSettings(),
+      backgroundColor: 'rgba(46, 46, 47, 0.9)',
+      borderColor: 'rgba(255, 255, 255, 0.85)',
+      borderWidth: 2,
+    });
+    const nextPositions = { ...current, [selectedKeyType]: list };
+    persistDialPositions(nextPositions, 'Failed to add dial item');
+  };
+
   return {
     deleteStatAtIndex,
     moveStatToFront,
@@ -565,8 +786,17 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     addGraphAtPosition,
     beginDuplicateGraph,
     placeDuplicateGraph,
+    deleteDialAtIndex,
+    moveDialToFront,
+    moveDialToBack,
+    moveDialForward,
+    moveDialBackward,
+    addDialAtPosition,
+    beginDuplicateDial,
+    placeDuplicateDial,
     persistStatPositions,
     persistGraphPositions,
+    persistDialPositions,
     pushHistorySnapshot,
   };
 }

@@ -10,7 +10,7 @@ import FloatingTooltip from '../Modal/FloatingTooltip';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
 interface ToolBarProps {
-  onAddItem: (type: 'key' | 'stat' | 'graph') => void;
+  onAddItem: (type: 'key' | 'stat' | 'graph' | 'dial') => void;
   onTogglePalette: () => void;
   isPaletteOpen: boolean;
   onResetCurrentMode: () => void;

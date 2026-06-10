@@ -8,6 +8,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useDialItemStore } from '@stores/data/useDialItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
@@ -30,6 +31,7 @@ import type {
   GraphItemPosition,
   GraphItemPositions,
 } from '@src/types/key/graphItems';
+import type { DialItemPosition, DialItemPositions } from '@src/types/key/dials';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   normalizeLayerGroupsForMode,
@@ -119,6 +121,21 @@ export function useGridSelection({
       });
     } catch (error) {
       console.error('Failed to broadcast graph positions to overlay', error);
+    }
+
+    // 다이얼 요소 위치 동기화
+    const currentDialPositions = useDialItemStore.getState().positions;
+    window.api.dialItems
+      .updatePositions(currentDialPositions)
+      .catch((error: Error) => {
+        console.error('Failed to sync dial positions to overlay', error);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        positions: currentDialPositions,
+      });
+    } catch (error) {
+      console.error('Failed to broadcast dial positions to overlay', error);
     }
 
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
@@ -258,6 +275,39 @@ export function useGridSelection({
       }
     }
 
+    // 다이얼 요소 배치 업데이트
+    const dialUpdates = selectedElements.filter(
+      (el) => el.type === 'dial' && el.index !== undefined,
+    );
+    if (dialUpdates.length > 0) {
+      const currentDialPositions = useDialItemStore.getState().positions;
+      const newDialPositions = { ...currentDialPositions };
+      const tabPositions = [...(newDialPositions[selectedKeyType] || [])];
+
+      dialUpdates.forEach((el) => {
+        if (el.index === undefined) return;
+        const currentPos = tabPositions[el.index];
+        if (currentPos) {
+          tabPositions[el.index] = {
+            ...currentPos,
+            dx: currentPos.dx + deltaX,
+            dy: currentPos.dy + deltaY,
+          };
+        }
+      });
+
+      newDialPositions[selectedKeyType] = tabPositions;
+      useDialItemStore.getState().setPositions(newDialPositions);
+
+      if (syncToOverlay) {
+        window.api.dialItems
+          .updatePositions(newDialPositions)
+          .catch((error: Error) => {
+            console.error('Failed to sync dial positions to overlay', error);
+          });
+      }
+    }
+
     // 플러그인 요소 배치 업데이트
     const pluginUpdates = selectedElements.filter((el) => el.type === 'plugin');
     if (pluginUpdates.length > 0) {
@@ -299,6 +349,10 @@ export function useGridSelection({
       .filter((el) => el.type === 'graph' && el.index !== undefined)
       .map((el) => el.index as number);
 
+    const dialsToDelete = selectedElements
+      .filter((el) => el.type === 'dial' && el.index !== undefined)
+      .map((el) => el.index as number);
+
     const pluginsToDelete = selectedElements
       .filter((el) => el.type === 'plugin')
       .map((el) => el.id);
@@ -308,6 +362,7 @@ export function useGridSelection({
       keysToDelete.length > 0 ||
       statsToDelete.length > 0 ||
       graphsToDelete.length > 0 ||
+      dialsToDelete.length > 0 ||
       pluginsToDelete.length > 0
     ) {
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
@@ -437,6 +492,35 @@ export function useGridSelection({
       }
     }
 
+    // 다이얼 요소 배치 삭제
+    if (dialsToDelete.length > 0) {
+      const current = useDialItemStore.getState().positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const deleteSet = new Set(dialsToDelete);
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
+      };
+
+      useDialItemStore.getState().setLocalUpdateInProgress(true);
+      useDialItemStore.getState().setPositions(updatedPositions);
+      try {
+        await window.api.dialItems.updatePositions(updatedPositions);
+      } catch (error) {
+        console.error('Failed to delete dial items', error);
+      } finally {
+        useDialItemStore.getState().setLocalUpdateInProgress(false);
+      }
+
+      try {
+        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+          positions: updatedPositions,
+        });
+      } catch {
+        // 무시
+      }
+    }
+
     const normalized = normalizeLayerGroupsForMode({
       mode: selectedKeyType,
       keyPositions: useKeyStore.getState().positions,
@@ -485,6 +569,8 @@ export function useGridSelection({
       useStatItemStore.getState().positions[selectedKeyType] || [];
     const currentGraphPositions =
       useGraphItemStore.getState().positions[selectedKeyType] || [];
+    const currentDialPositions =
+      useDialItemStore.getState().positions[selectedKeyType] || [];
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
@@ -514,6 +600,14 @@ export function useGridSelection({
         if (position) {
           clipboardItems.push({
             type: 'graph',
+            position: { ...position },
+          });
+        }
+      } else if (element.type === 'dial' && element.index !== undefined) {
+        const position = currentDialPositions[element.index];
+        if (position) {
+          clipboardItems.push({
+            type: 'dial',
             position: { ...position },
           });
         }
@@ -633,6 +727,7 @@ export function useGridSelection({
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
     const statsToAdd: { position: StatItemPosition }[] = [];
     const graphsToAdd: { position: GraphItemPosition }[] = [];
+    const dialsToAdd: { position: DialItemPosition }[] = [];
     const pluginsToAdd: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
 
     for (const item of currentClipboard) {
@@ -657,6 +752,15 @@ export function useGridSelection({
         });
       } else if (item.type === 'graph') {
         graphsToAdd.push({
+          position: {
+            ...item.position,
+            groupId: remapGroupId(item.position.groupId),
+            dx: (item.position.dx || 0) + PASTE_OFFSET,
+            dy: (item.position.dy || 0) + PASTE_OFFSET,
+          },
+        });
+      } else if (item.type === 'dial') {
+        dialsToAdd.push({
           position: {
             ...item.position,
             groupId: remapGroupId(item.position.groupId),
@@ -754,6 +858,36 @@ export function useGridSelection({
         [selectedKeyType]: posArray,
       };
       useGraphItemStore.getState().setPositions(updatedPositions);
+    }
+
+    // 다이얼 요소 추가 (zIndex 레이어 재배치 대상 외 — 별도 영속/동기화)
+    if (dialsToAdd.length > 0) {
+      const current = useDialItemStore.getState().positions;
+      const posArray = [...(current[selectedKeyType] || [])];
+      const startIndex = posArray.length;
+
+      for (let i = 0; i < dialsToAdd.length; i++) {
+        posArray.push(dialsToAdd[i].position);
+        newSelectedElements.push({
+          type: 'dial',
+          id: `dial-${startIndex + i}`,
+          index: startIndex + i,
+        });
+      }
+
+      const updatedPositions: DialItemPositions = {
+        ...current,
+        [selectedKeyType]: posArray,
+      };
+      useDialItemStore.getState().setPositions(updatedPositions);
+      window.api.dialItems.updatePositions(updatedPositions).catch(() => {});
+      try {
+        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+          positions: updatedPositions,
+        });
+      } catch {
+        // 무시
+      }
     }
 
     // 플러그인 요소 추가

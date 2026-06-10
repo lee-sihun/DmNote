@@ -113,14 +113,14 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
             }}
           />
         ) : (
-          // 기본 원형 + 회전 인식용 니들
+          // 기본 원형 + 회전 인식용 중앙 일자 막대
           <div
             style={{
               position: 'absolute',
-              top: '6%',
+              top: '12%',
               left: '50%',
               width: '8%',
-              height: '42%',
+              height: '76%',
               transform: 'translateX(-50%)',
               background: borderColor || 'rgba(255, 255, 255, 0.85)',
               borderRadius: '4px',

@@ -48,6 +48,7 @@ interface UseGridContextMenuReturn {
   getKeyMenuItems: (contextIndex: number | null) => MenuItem[];
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
+  getDialMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ) => MenuItem[];
@@ -172,6 +173,13 @@ export function useGridContextMenu({
     { id: 'sendToBack', label: t('contextMenu.sendToBack') },
   ];
 
+  const getDialMenuItems = (_contextIndex: number | null): MenuItem[] => [
+    { id: 'delete', label: t('contextMenu.deleteDial') },
+    { id: 'duplicate', label: t('contextMenu.duplicateDial') },
+    { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+    { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+  ];
+
   const getGridMenuItems = (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ): MenuItem[] => {
@@ -181,7 +189,11 @@ export function useGridContextMenu({
       { id: 'addGraph', label: t('contextMenu.addGraph') },
     ];
     const bottomBaseItems: MenuItem[] = [
-      { id: 'tabCss', label: t('contextMenu.tabCssSetting'), disabled: !useCustomCSS },
+      {
+        id: 'tabCss',
+        label: t('contextMenu.tabCssSetting'),
+        disabled: !useCustomCSS,
+      },
       {
         id: 'tabNote',
         label: t('contextMenu.tabNoteSetting'),
@@ -238,6 +250,7 @@ export function useGridContextMenu({
     getKeyMenuItems,
     getStatMenuItems,
     getGraphMenuItems,
+    getDialMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
