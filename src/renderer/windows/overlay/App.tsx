@@ -18,6 +18,7 @@ import { useBuiltinStatsSubscription } from '@hooks/overlay/useBuiltinStatsSubsc
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useDialItemStore } from '@stores/data/useDialItemStore';
 import {
   setKeyActive as setKeyActiveSignal,
   resetAllKeySignals,
@@ -26,6 +27,7 @@ import { useSettingsStore } from '@stores/useSettingsStore';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { DialItemPosition } from '@src/types/key/dials';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
@@ -121,11 +123,27 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // 메인에서 bridge를 통한 dialPositions 동기화 수신
+  useEffect(() => {
+    const unsubscribe = window.api.bridge.on<{
+      positions: Record<string, DialItemPosition[]>;
+    }>('dialPositions:sync', (data) => {
+      if (data?.positions) {
+        useDialItemStore.setState((state) => ({
+          ...state,
+          positions: data.positions,
+        }));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const keyMappings = useKeyStore((state) => state.keyMappings);
   const positions = useKeyStore((state) => state.positions);
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
+  const dialPositions = useDialItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -500,12 +518,14 @@ export default function App() {
   const currentPositions = positions[selectedKeyType] ?? [];
   const currentStatPositions = statPositions[selectedKeyType] ?? [];
   const currentGraphPositions = graphPositions[selectedKeyType] ?? [];
+  const currentDialPositions = dialPositions[selectedKeyType] ?? [];
 
   const {
     bounds,
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
+    displayDialPositions,
     positionOffset,
     webglTracks,
   } = computeLayout({
@@ -513,6 +533,7 @@ export default function App() {
     currentPositions,
     currentStatPositions,
     currentGraphPositions,
+    currentDialPositions,
     trackHeight,
     noteSettings,
     selectedKeyType,
@@ -604,6 +625,7 @@ export default function App() {
       currentPositions={currentPositions}
       displayStatPositions={displayStatPositions}
       displayGraphPositions={displayGraphPositions}
+      displayDialPositions={displayDialPositions}
       selectedKeyType={selectedKeyType}
       noteEffect={noteEffect}
       noteSettings={noteSettings}

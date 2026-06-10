@@ -10,6 +10,7 @@ import {
 } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { DialItemPositions } from '@src/types/key/dials';
 import type { LayerGroups } from '@src/types/layerGroups';
 import {
   SettingsDiff,
@@ -258,6 +259,7 @@ export type PresetSnapshot = {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  dialPositions: DialItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: import('@src/types/settings/noteSettings').TabNoteOverrides;
@@ -788,6 +790,13 @@ export interface DMNoteAPI {
     updatePositions(positions: GraphItemPositions): Promise<GraphItemPositions>;
     onPositionsChanged(
       listener: (positions: GraphItemPositions) => void,
+    ): Unsubscribe;
+  };
+  dialItems: {
+    getPositions(): Promise<DialItemPositions>;
+    updatePositions(positions: DialItemPositions): Promise<DialItemPositions>;
+    onPositionsChanged(
+      listener: (positions: DialItemPositions) => void,
     ): Unsubscribe;
   };
   layerGroups: {

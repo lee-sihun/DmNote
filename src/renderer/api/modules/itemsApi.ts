@@ -3,6 +3,7 @@ import { subscribe } from './shared';
 
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { DialItemPositions } from '@src/types/key/dials';
 import type { LayerGroups } from '@src/types/layerGroups';
 
 export const statItemsApi = {
@@ -19,6 +20,14 @@ export const graphItemsApi = {
     invoke<GraphItemPositions>('graph_positions_update', { positions }),
   onPositionsChanged: (listener: (positions: GraphItemPositions) => void) =>
     subscribe<GraphItemPositions>('graphPositions:changed', listener),
+};
+
+export const dialItemsApi = {
+  getPositions: () => invoke<DialItemPositions>('dial_positions_get'),
+  updatePositions: (positions: DialItemPositions) =>
+    invoke<DialItemPositions>('dial_positions_update', { positions }),
+  onPositionsChanged: (listener: (positions: DialItemPositions) => void) =>
+    subscribe<DialItemPositions>('dialPositions:changed', listener),
 };
 
 export const layerGroupsApi = {

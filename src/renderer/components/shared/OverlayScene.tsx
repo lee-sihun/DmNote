@@ -5,6 +5,7 @@ import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
+import OverlayDialItemBase from '@components/overlay/counters/OverlayDialItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
@@ -63,6 +64,11 @@ interface OverlayGraphItemProps {
   position: Record<string, unknown>;
 }
 
+interface OverlayDialItemProps {
+  index?: number;
+  position: Record<string, unknown>;
+}
+
 const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
 const OverlayStatItem =
   StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
@@ -70,6 +76,8 @@ const OverlayStatCounterLayer =
   StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
 const OverlayGraphItem =
   OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
+const OverlayDialItem =
+  OverlayDialItemBase as React.ComponentType<OverlayDialItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -91,6 +99,7 @@ interface OverlaySceneProps {
   currentPositions: KeyPosition[];
   displayStatPositions: Record<string, unknown>[];
   displayGraphPositions: Record<string, unknown>[];
+  displayDialPositions: Record<string, unknown>[];
   selectedKeyType: string;
 
   // 노트 이펙트
@@ -120,6 +129,7 @@ const OverlayScene = ({
   currentPositions,
   displayStatPositions,
   displayGraphPositions,
+  displayDialPositions,
   selectedKeyType,
   noteEffect,
   noteSettings,
@@ -227,6 +237,20 @@ const OverlayScene = ({
             key={`graph-${selectedKeyType}-${index}`}
             index={index}
             position={graphPosition}
+          />
+        );
+      })}
+      {displayDialPositions.map((pos, index) => {
+        if (!pos || (pos as { hidden?: boolean }).hidden) return null;
+        const dialPosition = {
+          ...pos,
+          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+        };
+        return (
+          <OverlayDialItem
+            key={`dial-${selectedKeyType}-${index}`}
+            index={index}
+            position={dialPosition}
           />
         );
       })}
