@@ -976,6 +976,8 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
               }
               min={0}
               max={9999}
+              allowDecimal
+              decimalScale={3}
             />
           </PropertyRow>
 

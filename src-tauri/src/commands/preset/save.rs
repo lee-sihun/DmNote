@@ -11,8 +11,8 @@ use tauri::State;
 use crate::{
     errors::CmdResult,
     models::{
-        FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, StatPositions,
-        TabNoteOverrides,
+        DialPositions, FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions,
+        StatPositions, TabNoteOverrides,
     },
     state::AppState,
 };
@@ -60,6 +60,7 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
         key_positions: Some(key_positions),
         stat_positions: Some(stat_positions),
         graph_positions: Some(graph_positions),
+        dial_positions: Some(snapshot.dial_positions),
         background_color: Some(snapshot.background_color),
         note_settings: Some(snapshot.note_settings),
         note_effect: Some(snapshot.note_effect),
@@ -123,6 +124,10 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
     if let Some(positions) = snapshot.graph_positions.get(&tab_id) {
         tab_graph_positions.insert(tab_id.clone(), positions.clone());
     }
+    let mut tab_dial_positions: DialPositions = HashMap::new();
+    if let Some(positions) = snapshot.dial_positions.get(&tab_id) {
+        tab_dial_positions.insert(tab_id.clone(), positions.clone());
+    }
 
     let used_font_families = collect_used_font_families(
         &tab_key_positions,
@@ -180,6 +185,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         key_positions: Some(tab_key_positions),
         stat_positions: Some(tab_stat_positions),
         graph_positions: Some(tab_graph_positions),
+        dial_positions: Some(tab_dial_positions),
         background_color: None,
         note_settings: None,
         note_effect: None,
