@@ -238,6 +238,7 @@ export function computeLayout(input: LayoutInput) {
         borderRadius: position.noteBorderRadius ?? DEFAULT_NOTE_BORDER_RADIUS,
         noteBorderWidth: position.noteBorderWidth ?? 0,
         noteBorderColor: position.noteBorderColor,
+        noteBorderOpacity: position.noteBorderOpacity ?? 100,
         noteBorderSide: position.noteBorderSide ?? 'all',
       };
     })

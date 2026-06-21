@@ -120,9 +120,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
       {/* 오프셋 */}
       <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
         <OptionalNumberInput
-          value={
-            getMixedValue((pos) => pos.noteOffsetX, 0).value || undefined
-          }
+          value={getMixedValue((pos) => pos.noteOffsetX, 0).value || undefined}
           onChange={(value) =>
             handleBatchStyleChangeComplete('noteOffsetX', value)
           }
@@ -134,9 +132,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           isMixed={getMixedValue((pos) => pos.noteOffsetX, 0).isMixed}
         />
         <OptionalNumberInput
-          value={
-            getMixedValue((pos) => pos.noteOffsetY, 0).value || undefined
-          }
+          value={getMixedValue((pos) => pos.noteOffsetY, 0).value || undefined}
           onChange={(value) =>
             handleBatchStyleChangeComplete('noteOffsetY', value)
           }

@@ -18,6 +18,7 @@ const vertexShader = `
   attribute vec3 noteGlowColorTop;
   attribute vec3 noteGlowColorBottom;
   attribute vec4 noteBorder; // x: width, yzw: RGB color
+  attribute float noteBorderOpacity; // 0-1, 노트 배경 투명도와 독립
   attribute float trackIndex;
 
   uniform mat4 projectionMatrix;
@@ -38,6 +39,7 @@ const vertexShader = `
   varying vec3 vGlowColorTop;
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
+  varying float vBorderOpacity;
   varying float vTrackTopY;
   varying float vTrackBottomY;
 
@@ -130,6 +132,7 @@ const vertexShader = `
     vGlowColorTop = noteGlowColorTop;
     vGlowColorBottom = noteGlowColorBottom;
     vBorder = noteBorder;
+    vBorderOpacity = noteBorderOpacity;
     vTrackTopY = trackTopY;
     vTrackBottomY = trackBottomY;
   }
@@ -153,6 +156,7 @@ const fragmentShader = `
   varying vec3 vGlowColorTop;
   varying vec3 vGlowColorBottom;
   varying vec4 vBorder; // x: width, yzw: RGB color
+  varying float vBorderOpacity;
   varying float vTrackTopY;
   varying float vTrackBottomY;
 
@@ -212,7 +216,8 @@ const fragmentShader = `
     }
     float borderMask = outerMask - innerMask;
     float bodyAlpha = baseColor.a * innerMask;
-    float borderAlpha = baseColor.a * borderMask;
+    // 테두리 투명도는 노트 배경(baseColor.a)과 독립
+    float borderAlpha = vBorderOpacity * borderMask;
 
     float glowAlpha = 0.0;
     if (vGlowSize > 0.0) {
@@ -263,6 +268,7 @@ const INSTANCED_ATTRIBUTE_KEYS: readonly string[] = Object.freeze([
   'noteGlowColorTop',
   'noteGlowColorBottom',
   'noteBorder',
+  'noteBorderOpacity',
   'trackIndex',
 ]);
 
@@ -372,6 +378,7 @@ interface NoteBuffer {
   noteGlowColorTop: Float32Array;
   noteGlowColorBottom: Float32Array;
   noteBorder: Float32Array;
+  noteBorderOpacity: Float32Array;
   trackIndex: Float32Array;
 }
 
@@ -513,6 +520,12 @@ export function WebGLTracksOGL({
       instanced: 1,
       size: 4,
       data: noteBuffer.noteBorder,
+      usage: gl.DYNAMIC_DRAW,
+    });
+    geometry.addAttribute('noteBorderOpacity', {
+      instanced: 1,
+      size: 1,
+      data: noteBuffer.noteBorderOpacity,
       usage: gl.DYNAMIC_DRAW,
     });
     geometry.addAttribute('trackIndex', {

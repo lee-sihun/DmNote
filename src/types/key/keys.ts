@@ -292,6 +292,8 @@ export const keyPositionSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
+  // 테두리 투명도 (0~100, 없으면 100). 노트 배경 투명도와 독립
+  noteBorderOpacity: z.number().int().min(0).max(100).optional(),
   noteBorderSide: z.enum(['all', 'vertical', 'horizontal']).optional(),
   className: z.string().optional().or(z.literal('')),
   zIndex: z.number().optional(),

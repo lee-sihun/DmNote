@@ -11,7 +11,11 @@ import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
-import { toRgbHexColor } from '@utils/color/colorUtils';
+import {
+  toRgbHexColor,
+  parseAlphaPercent,
+  hexWithAlphaPercent,
+} from '@utils/color/colorUtils';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
@@ -619,7 +623,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   });
 
   // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
+  type BatchPickerTarget =
+    | 'noteColor'
+    | 'glowColor'
+    | 'borderColor'
+    | 'fill'
+    | 'stroke'
+    | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
@@ -629,6 +639,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     noteColor: NoteColor;
     glowColor: NoteColor;
     borderColor: string;
+    borderOpacity: number;
     fillIdle: string;
     fillActive: string;
     strokeIdle: string;
@@ -637,6 +648,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     noteColor: '#FFFFFF',
     glowColor: '#FFFFFF',
     borderColor: '#FFFFFF',
+    borderOpacity: 100,
     fillIdle: '#FFFFFF',
     fillActive: '#FFFFFF',
     strokeIdle: '#000000',
@@ -1893,7 +1905,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ? schemaValue.default
           : 0;
         // step 값에서 소수 자릿수 자동 추론
-        const stepStr = schemaValue.step != null ? String(schemaValue.step) : '';
+        const stepStr =
+          schemaValue.step != null ? String(schemaValue.step) : '';
         const dotIdx = stepStr.indexOf('.');
         const hasDecimal = dotIdx !== -1;
         const decimalScale = hasDecimal ? stepStr.length - dotIdx - 1 : 0;
@@ -2030,6 +2043,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             return typeof gc === 'string' ? gc : '#FFFFFF';
           })(),
           borderColor: firstPos.noteBorderColor ?? '#FFFFFF',
+          borderOpacity: firstPos.noteBorderOpacity ?? 100,
           fillIdle: counterSettings.fill.idle,
           fillActive: counterSettings.fill.active,
           strokeIdle: counterSettings.stroke.idle,
@@ -2057,7 +2071,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       case 'glowColor':
         return batchLocalColors.glowColor;
       case 'borderColor':
-        return batchLocalColors.borderColor;
+        return hexWithAlphaPercent(
+          batchLocalColors.borderColor,
+          batchLocalColors.borderOpacity,
+        );
       case 'fill':
         return batchCounterColorState === 'active'
           ? batchLocalColors.fillActive
@@ -2097,10 +2114,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         [batchPickerFor]: newColor,
       }));
     } else if (batchPickerFor === 'borderColor') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const raw = typeof newColor === 'string' ? newColor : undefined;
       setBatchLocalColors((prev) => ({
         ...prev,
-        borderColor: solidColor,
+        borderColor: toRgbHexColor(raw),
+        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
       }));
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
@@ -2145,14 +2163,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleBatchGlowColorChange(newColor);
       }
     } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 피커 출력을 hex로 정규화 후 라이브 preview
-      const solidColor = toRgbHexColor(
-        typeof newColor === 'string' ? newColor : undefined,
-      );
+      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화, 알파는 noteBorderOpacity로 분리
+      const raw = typeof newColor === 'string' ? newColor : undefined;
+      const solidColor = toRgbHexColor(raw);
+      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
       if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
         handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
+        handleBatchKeyOnlyStyleChange('noteBorderOpacity', opacity);
       } else {
         handleBatchStyleChange('noteBorderColor', solidColor);
+        handleBatchStyleChange('noteBorderOpacity', opacity);
       }
     }
   };
@@ -2166,10 +2186,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         [batchPickerFor]: newColor,
       }));
     } else if (batchPickerFor === 'borderColor') {
-      const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
+      const raw = typeof newColor === 'string' ? newColor : undefined;
       setBatchLocalColors((prev) => ({
         ...prev,
-        borderColor: solidColor,
+        borderColor: toRgbHexColor(raw),
+        borderOpacity: parseAlphaPercent(raw, prev.borderOpacity),
       }));
     } else if (batchPickerFor === 'fill') {
       const solidColor = typeof newColor === 'string' ? newColor : '#FFFFFF';
@@ -2207,14 +2228,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleBatchGlowColorChangeComplete(newColor);
       }
     } else if (batchPickerFor === 'borderColor') {
-      // noteBorderColor는 #RRGGBB 계약 — 피커의 rgba(...) 출력을 hex로 정규화 (이슈 #73)
-      const solidColor = toRgbHexColor(
-        typeof newColor === 'string' ? newColor : undefined,
-      );
+      // noteBorderColor는 #RRGGBB 계약 — 색은 hex로 정규화(이슈 #73), 알파는 noteBorderOpacity로 분리
+      const raw = typeof newColor === 'string' ? newColor : undefined;
+      const solidColor = toRgbHexColor(raw);
+      const opacity = parseAlphaPercent(raw, batchLocalColors.borderOpacity);
       if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
         handleBatchKeyOnlyStyleChangeComplete('noteBorderColor', solidColor);
+        handleBatchKeyOnlyStyleChangeComplete('noteBorderOpacity', opacity);
       } else {
         handleBatchStyleChangeComplete('noteBorderColor', solidColor);
+        handleBatchStyleChangeComplete('noteBorderOpacity', opacity);
       }
     } else if (batchPickerFor === 'fill') {
       const fillColor = typeof newColor === 'string' ? newColor : '#FFFFFF';

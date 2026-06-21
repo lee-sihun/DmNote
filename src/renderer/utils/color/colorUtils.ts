@@ -192,6 +192,28 @@ const parseRgbaString = (
   return { r, g, b, a };
 };
 
+// rgba(...)/8자리 hex에서 알파를 0~100 정수 퍼센트로 추출. 없으면 fallback
+const parseAlphaPercent = (
+  value: string | null | undefined,
+  fallback = 100,
+): number => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  const rgba = parseRgbaString(trimmed);
+  if (rgba) return Math.round(rgba.a * 100);
+  const hex8 = trimmed.match(/^#([0-9a-f]{6})([0-9a-f]{2})$/i);
+  if (hex8) return Math.round((parseInt(hex8[2], 16) / 255) * 100);
+  return fallback;
+};
+
+// #RRGGBB + 퍼센트 알파 → rgba(...) 문자열 (ColorPicker solidOnly 입력용)
+const hexWithAlphaPercent = (hex: string, percent: number): string => {
+  const parsed = parseHexColor(hex);
+  const a = clamp(percent / 100, 0, 1);
+  if (!parsed) return `rgba(255, 255, 255, ${a})`;
+  return `rgba(${parsed.rgb.r}, ${parsed.rgb.g}, ${parsed.rgb.b}, ${a})`;
+};
+
 const toColorObject = (
   value: string | Partial<ColorObject> | null | undefined,
 ): ColorObject | null => {
@@ -297,4 +319,6 @@ export {
   rgbToHsv,
   toColorObject,
   toCssRgba,
+  parseAlphaPercent,
+  hexWithAlphaPercent,
 };

@@ -61,7 +61,13 @@ const RenameIcon: React.FC = () => (
 // Mixed key-like + graph batch selection panel
 // ============================================================================
 
-type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
+type BatchPickerTarget =
+  | 'noteColor'
+  | 'glowColor'
+  | 'borderColor'
+  | 'fill'
+  | 'stroke'
+  | null;
 
 type MixedValueResult<T> = { isMixed: boolean; value: T };
 type MixedValueGetter<P> = <T>(
@@ -80,6 +86,7 @@ interface BatchLocalColors {
   noteColor: NoteColor;
   glowColor: NoteColor;
   borderColor: string;
+  borderOpacity: number;
   fillIdle: string;
   fillActive: string;
   strokeIdle: string;
@@ -409,10 +416,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
     const mixedFn =
       selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
-    const { isMixed, value } = mixedFn(
-      (pos) => pos.noteBorderColor,
-      '#FFFFFF',
-    );
+    const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
     if (isMixed)
       return {
         style: { backgroundColor: '#666' },
