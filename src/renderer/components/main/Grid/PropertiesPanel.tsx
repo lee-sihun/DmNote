@@ -1745,6 +1745,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     dispatchKeyOnlyBatchUpdates(updates, 'commit');
   };
 
+  const handleBatchKeyOnlyStyleChange = (
+    property: keyof KeyPosition,
+    value: KeyPosition[keyof KeyPosition],
+  ) => {
+    const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
+      index,
+      [property]: value,
+    })) as Array<{ index: number } & Partial<KeyPosition>>;
+    dispatchKeyOnlyBatchUpdates(updates, 'preview');
+  };
+
   const handleBatchNoteColorChangeKeysOnly = (value: NoteColor) => {
     const updates = getSelectedKeyOnlyPositions().map(({ index }) => ({
       index,
@@ -2132,6 +2143,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleBatchGlowColorChangeKeysOnly(newColor);
       } else {
         handleBatchGlowColorChange(newColor);
+      }
+    } else if (batchPickerFor === 'borderColor') {
+      // noteBorderColor는 #RRGGBB 계약 — 피커 출력을 hex로 정규화 후 라이브 preview
+      const solidColor = toRgbHexColor(
+        typeof newColor === 'string' ? newColor : undefined,
+      );
+      if (selectedKeyElements.length > 0 && selectedStatElements.length > 0) {
+        handleBatchKeyOnlyStyleChange('noteBorderColor', solidColor);
+      } else {
+        handleBatchStyleChange('noteBorderColor', solidColor);
       }
     }
   };

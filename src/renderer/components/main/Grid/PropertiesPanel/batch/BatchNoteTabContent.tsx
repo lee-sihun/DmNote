@@ -33,6 +33,11 @@ interface BatchNoteTabContentProps {
     label: string;
     isMixed: boolean;
   };
+  getBatchBorderColorDisplay: () => {
+    style: React.CSSProperties;
+    label: string;
+    isMixed: boolean;
+  };
   // 컬러 피커 토글
   onNoteColorPickerToggle: () => void;
   onGlowColorPickerToggle: () => void;
@@ -43,7 +48,6 @@ interface BatchNoteTabContentProps {
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement>;
   batchBorderColorButtonRef: React.RefObject<HTMLButtonElement>;
-  batchLocalColors: { borderColor: string };
   // 번역
   t: (key: string) => string;
 }
@@ -53,6 +57,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   handleBatchStyleChangeComplete,
   getBatchNoteColorDisplay,
   getBatchGlowColorDisplay,
+  getBatchBorderColorDisplay,
   onNoteColorPickerToggle,
   onGlowColorPickerToggle,
   onBorderColorPickerToggle,
@@ -62,7 +67,6 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
   batchBorderColorButtonRef,
-  batchLocalColors,
   t,
 }) => {
   const { noteEffect: _noteEffect } = useSettingsStore();
@@ -219,14 +223,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                 ? 'border-[#459BF8]'
                 : 'border-[#3A3943] hover:border-[#505058]'
             }`}
-            style={{
-              backgroundColor: getMixedValue(
-                (pos) => pos.noteBorderColor,
-                '#FFFFFF',
-              ).isMixed
-                ? undefined
-                : batchLocalColors.borderColor,
-            }}
+            style={getBatchBorderColorDisplay().style}
+            title={getBatchBorderColorDisplay().label}
           />
           <Dropdown
             iconTrigger={
