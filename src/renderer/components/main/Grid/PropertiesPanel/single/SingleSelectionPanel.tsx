@@ -748,11 +748,21 @@ interface SingleDialPanelProps {
   singleDialPosition: DialItemPosition;
   singleDialIndex: number;
   selectedKeyType: string;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
   handleDialUpdate: (
     data: Partial<DialItemPosition> & { index: number },
   ) => void;
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
+  singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   useCustomCSS: boolean;
   t: (key: string) => string;
 }
@@ -762,9 +772,19 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
   singleDialPosition,
   singleDialIndex,
   selectedKeyType,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
   handleDialUpdate,
   handleToggleMode,
   handleTogglePanel,
+  singleScrollRefFor,
+  singleThumbRefFor,
   useCustomCSS,
   t,
 }) => {
@@ -772,8 +792,6 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
   const imageButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
   const [classNameDraft, setClassNameDraft] = useState(
     singleDialPosition.className || '',
   );
@@ -823,17 +841,16 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
       <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
         {isRenaming ? (
           <input
+            ref={renameInputRef}
             type="text"
-            autoFocus
             className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
-              handleDialUpdate({
-                index: singleDialIndex,
-                layerName: renameValue,
-              });
-              setIsRenaming(false);
+              if (!renameCancelledRef.current) {
+                handleRenameCommit(renameValue);
+              }
+              renameCancelledRef.current = false;
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -841,7 +858,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
                 (e.target as HTMLInputElement).blur();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
-                setIsRenaming(false);
+                handleRenameCancel();
               }
             }}
           />
@@ -849,19 +866,13 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
           <div className="flex items-center gap-[4px] min-w-0">
             <span
               className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
-              onDoubleClick={() => {
-                setRenameValue(singleDialPosition.layerName || '');
-                setIsRenaming(true);
-              }}
+              onDoubleClick={handleRenameStart}
               title={dialTitle}
             >
               {dialTitle}
             </span>
             <button
-              onClick={() => {
-                setRenameValue(singleDialPosition.layerName || '');
-                setIsRenaming(true);
-              }}
+              onClick={handleRenameStart}
               className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
@@ -887,172 +898,191 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-[12px] flex flex-col gap-[12px]">
-          <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-            <NumberInput
-              value={Math.round(singleDialPosition.dx || 0)}
-              onChange={(value) =>
-                handleDialUpdate({ index: singleDialIndex, dx: value })
-              }
-              prefix="X"
-              min={-9999}
-              max={9999}
-            />
-            <NumberInput
-              value={Math.round(singleDialPosition.dy || 0)}
-              onChange={(value) =>
-                handleDialUpdate({ index: singleDialIndex, dy: value })
-              }
-              prefix="Y"
-              min={-9999}
-              max={9999}
-            />
-          </PropertyRow>
-
-          <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-            <NumberInput
-              value={Math.round(singleDialPosition.width || 80)}
-              onChange={(value) =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  width: Math.max(20, value),
-                })
-              }
-              prefix="W"
-              min={20}
-              max={9999}
-            />
-            <NumberInput
-              value={Math.round(singleDialPosition.height || 80)}
-              onChange={(value) =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  height: Math.max(20, value),
-                })
-              }
-              prefix="H"
-              min={20}
-              max={9999}
-            />
-          </PropertyRow>
-
-          <SectionDivider />
-
-          {/* HID 축 바인딩 */}
-          <div className="flex justify-between items-center w-full h-[23px]">
-            <p className="text-white text-style-2">
-              {t('propertiesPanel.dialAxis') || 'HID 축'}
-            </p>
-            <span
-              className="text-[#9CA0AA] text-style-4 truncate max-w-[110px]"
-              title={singleDialPosition.axisId || ''}
-            >
-              {axisLabel}
-            </span>
-          </div>
-          <button
-            type="button"
-            className={`w-full h-[28px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 transition-colors ${
-              capturing
-                ? 'border-[#459BF8] text-[#459BF8] bg-[#1A2436]'
-                : 'border-[#3A3943] text-[#DBDEE8] bg-[#2A2A30] hover:border-[#459BF8]'
-            }`}
-            onClick={() => setCapturing((v) => !v)}
-          >
-            {capturing
-              ? t('propertiesPanel.dialCapturing') || '감지 중… 노브를 돌리세요'
-              : t('propertiesPanel.dialCapture') || '노브 돌려서 감지'}
-          </button>
-
-          <PropertyRow label={t('propertiesPanel.dialSensitivity') || '민감도'}>
-            <NumberInput
-              value={Number(singleDialPosition.sensitivity ?? 1.40625)}
-              onChange={(value) =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  sensitivity: Math.max(0, value),
-                })
-              }
-              min={0}
-              max={9999}
-              allowDecimal
-              decimalScale={3}
-            />
-          </PropertyRow>
-
-          <div className="flex justify-between items-center w-full h-[23px]">
-            <p className="text-white text-style-2">
-              {t('propertiesPanel.dialReverse') || '방향 반전'}
-            </p>
-            <Checkbox
-              checked={singleDialPosition.reverse ?? false}
-              onChange={() =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  reverse: !(singleDialPosition.reverse ?? false),
-                })
-              }
-            />
-          </div>
-
-          <SectionDivider />
-
-          <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경'}>
-            <ColorInput
-              value={singleDialPosition.backgroundColor || 'rgba(46,46,47,0.9)'}
-              onChange={(value) =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  backgroundColor: value,
-                })
-              }
-            />
-          </PropertyRow>
-
-          <PropertyRow label={t('propertiesPanel.borderColor') || '테두리'}>
-            <ColorInput
-              value={singleDialPosition.borderColor || 'rgba(255,255,255,0.85)'}
-              onChange={(value) =>
-                handleDialUpdate({
-                  index: singleDialIndex,
-                  borderColor: value,
-                })
-              }
-            />
-          </PropertyRow>
-
-          <PropertyRow
-            label={t('propertiesPanel.customImage') || 'Custom Image'}
-          >
-            <button
-              ref={imageButtonRef}
-              type="button"
-              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-4`}
-              onClick={() => setShowImagePicker(!showImagePicker)}
-            >
-              {t('propertiesPanel.configure') || 'Configure'}
-            </button>
-          </PropertyRow>
-
-          {useCustomCSS && (
-            <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
-              <TextInput
-                value={classNameDraft}
-                onChange={setClassNameDraft}
-                onBlur={() =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
-                    className: classNameDraft || '',
-                  })
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={singleScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <div className="p-[12px] flex flex-col gap-[12px]">
+            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+              <NumberInput
+                value={Math.round(singleDialPosition.dx || 0)}
+                onChange={(value) =>
+                  handleDialUpdate({ index: singleDialIndex, dx: value })
                 }
-                placeholder="className"
-                width="90px"
+                prefix="X"
+                min={-9999}
+                max={9999}
+              />
+              <NumberInput
+                value={Math.round(singleDialPosition.dy || 0)}
+                onChange={(value) =>
+                  handleDialUpdate({ index: singleDialIndex, dy: value })
+                }
+                prefix="Y"
+                min={-9999}
+                max={9999}
               />
             </PropertyRow>
-          )}
+
+            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+              <NumberInput
+                value={Math.round(singleDialPosition.width || 80)}
+                onChange={(value) =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    width: Math.max(20, value),
+                  })
+                }
+                prefix="W"
+                min={20}
+                max={9999}
+              />
+              <NumberInput
+                value={Math.round(singleDialPosition.height || 80)}
+                onChange={(value) =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    height: Math.max(20, value),
+                  })
+                }
+                prefix="H"
+                min={20}
+                max={9999}
+              />
+            </PropertyRow>
+
+            <SectionDivider />
+
+            {/* HID 축 바인딩 */}
+            <div className="flex justify-between items-center w-full h-[23px]">
+              <p className="text-white text-style-2">
+                {t('propertiesPanel.dialAxis') || 'HID 축'}
+              </p>
+              <span
+                className="text-[#9CA0AA] text-style-4 truncate max-w-[110px]"
+                title={singleDialPosition.axisId || ''}
+              >
+                {axisLabel}
+              </span>
+            </div>
+            <button
+              type="button"
+              className={`w-full h-[28px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 transition-colors ${
+                capturing
+                  ? 'border-[#459BF8] text-[#459BF8] bg-[#1A2436]'
+                  : 'border-[#3A3943] text-[#DBDEE8] bg-[#2A2A30] hover:border-[#459BF8]'
+              }`}
+              onClick={() => setCapturing((v) => !v)}
+            >
+              {capturing
+                ? t('propertiesPanel.dialCapturing') ||
+                  '감지 중… 노브를 돌리세요'
+                : t('propertiesPanel.dialCapture') || '노브 돌려서 감지'}
+            </button>
+
+            <PropertyRow
+              label={t('propertiesPanel.dialSensitivity') || '민감도'}
+            >
+              <NumberInput
+                value={Number(singleDialPosition.sensitivity ?? 1.40625)}
+                onChange={(value) =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    sensitivity: Math.max(0, value),
+                  })
+                }
+                min={0}
+                max={9999}
+                allowDecimal
+                decimalScale={3}
+              />
+            </PropertyRow>
+
+            <div className="flex justify-between items-center w-full h-[23px]">
+              <p className="text-white text-style-2">
+                {t('propertiesPanel.dialReverse') || '방향 반전'}
+              </p>
+              <Checkbox
+                checked={singleDialPosition.reverse ?? false}
+                onChange={() =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    reverse: !(singleDialPosition.reverse ?? false),
+                  })
+                }
+              />
+            </div>
+
+            <SectionDivider />
+
+            <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경'}>
+              <ColorInput
+                value={
+                  singleDialPosition.backgroundColor || 'rgba(46,46,47,0.9)'
+                }
+                onChange={(value) =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    backgroundColor: value,
+                  })
+                }
+              />
+            </PropertyRow>
+
+            <PropertyRow label={t('propertiesPanel.borderColor') || '테두리'}>
+              <ColorInput
+                value={
+                  singleDialPosition.borderColor || 'rgba(255,255,255,0.85)'
+                }
+                onChange={(value) =>
+                  handleDialUpdate({
+                    index: singleDialIndex,
+                    borderColor: value,
+                  })
+                }
+              />
+            </PropertyRow>
+
+            <PropertyRow
+              label={t('propertiesPanel.customImage') || 'Custom Image'}
+            >
+              <button
+                ref={imageButtonRef}
+                type="button"
+                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                  showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
+                } text-[#DBDEE8] text-style-4`}
+                onClick={() => setShowImagePicker(!showImagePicker)}
+              >
+                {t('propertiesPanel.configure') || 'Configure'}
+              </button>
+            </PropertyRow>
+
+            {useCustomCSS && (
+              <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
+                <TextInput
+                  value={classNameDraft}
+                  onChange={setClassNameDraft}
+                  onBlur={() =>
+                    handleDialUpdate({
+                      index: singleDialIndex,
+                      className: classNameDraft || '',
+                    })
+                  }
+                  placeholder="className"
+                  width="90px"
+                />
+              </PropertyRow>
+            )}
+          </div>
+          <div className="properties-panel-overlay-bar">
+            <div
+              ref={singleThumbRefFor(TABS.STYLE)}
+              className="properties-panel-overlay-thumb"
+              style={{ display: 'none' }}
+            />
+          </div>
         </div>
       </div>
 

@@ -412,6 +412,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleKeyPosition) return singleKeyPosition.layerName || '';
     if (singleStatPosition) return singleStatPosition.layerName || '';
     if (singleGraphPosition) return singleGraphPosition.layerName || '';
+    if (singleDialPosition) return singleDialPosition.layerName || '';
     return '';
   };
 
@@ -427,6 +428,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleGraphPosition) {
       return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
     }
+    if (singleDialPosition) return 'Dial';
     return '';
   };
 
@@ -538,6 +540,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
+    } else if (singleDialIndex !== null && singleDialPosition) {
+      const mode = selectedKeyType;
+      const current = useDialItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list[singleDialIndex]) {
+        const nextList = list.map((pos, i) =>
+          i === singleDialIndex ? { ...pos, layerName: newLayerName } : pos,
+        );
+        const nextPositions = { ...current, [mode]: nextList };
+        useDialItemStore.getState().setLocalUpdateInProgress(true);
+        useDialItemStore.getState().setPositions(nextPositions);
+        try {
+          await window.api.dialItems.updatePositions(nextPositions);
+          window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+            positions: nextPositions,
+          });
+        } finally {
+          useDialItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
     }
   };
 
@@ -556,7 +578,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedGroupInfo ||
         singleKeyPosition ||
         singleStatPosition ||
-        singleGraphPosition
+        singleGraphPosition ||
+        singleDialPosition
       ) {
         setPanelMode('property');
         handleRenameStart();
@@ -568,6 +591,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKeyPosition,
     singleStatPosition,
     singleGraphPosition,
+    singleDialPosition,
   ]);
 
   // 선택이 변경되면 rename 모드 해제
@@ -2789,9 +2813,19 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         singleDialPosition={singleDialPosition}
         singleDialIndex={singleDialIndex!}
         selectedKeyType={selectedKeyType}
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
         handleDialUpdate={handleDialUpdate}
         handleToggleMode={handleToggleMode}
         handleTogglePanel={handleTogglePanel}
+        singleScrollRefFor={singleScrollRefFor}
+        singleThumbRefFor={singleThumbRefFor}
         useCustomCSS={useCustomCSS}
         t={t}
       />
