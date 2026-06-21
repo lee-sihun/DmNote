@@ -25,7 +25,13 @@ export type CustomTabsChangePayload = {
   customTabs: CustomTab[];
   selectedKeyType: string;
 };
-export type KeyStatePayload = { key: string; state: string; mode: string };
+export type KeyStatePayload = {
+  key: string;
+  state: string;
+  mode: string;
+  /** 입력 수신~emit 경과 시간(ms). performance.now() - eventAgeMs로 실제 입력 시각 복원 */
+  eventAgeMs?: number;
+};
 export type InputDevice = 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
 export type RawInputPayload = {
   device: InputDevice;

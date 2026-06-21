@@ -160,6 +160,9 @@ interface KeyStatePayload {
   key: string; // 키 코드 (예: "KeyD")
   state: string; // "DOWN" | "UP"
   mode: string; // 현재 모드
+  // 입력 수신~emit 경과 시간(ms).
+  // `performance.now() - eventAgeMs`로 실제 입력 시각 복원
+  eventAgeMs?: number;
 }
 ```
 

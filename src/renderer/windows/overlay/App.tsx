@@ -438,7 +438,7 @@ export default function App() {
     // 버스를 통해 키 이벤트 수신
     const unsubscribe = import('@utils/core/keyEventBus').then(
       ({ keyEventBus }) => {
-        return keyEventBus.subscribe(({ key, state }) => {
+        return keyEventBus.subscribe(({ key, state, eventAgeMs }) => {
           const isDown = state === 'DOWN';
           // 키 UI 업데이트 (딜레이 적용)
           updateKeySignalWithDelay(key, isDown);
@@ -453,10 +453,12 @@ export default function App() {
               keyPosition?.noteEffectEnabled !== false;
 
             if (keyNoteEffectEnabled) {
-              requestAnimationFrame(() => {
-                if (isDown) handleKeyDown(key);
-                else handleKeyUp(key);
-              });
+              // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
+              // requestAnimationFrame 래핑 시 노트 생성 시각이 프레임 경계로 양자화돼
+              // 주사율/OBS fps에 시간 해상도가 종속되던 문제 해결
+              const inputTime = performance.now() - (eventAgeMs ?? 0);
+              if (isDown) handleKeyDown(key, inputTime);
+              else handleKeyUp(key, inputTime);
             }
           }
         });

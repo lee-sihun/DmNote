@@ -7,6 +7,7 @@ type KeyStatePayload = {
   key: string;
   state: string;
   mode: string;
+  eventAgeMs?: number;
 };
 
 type KeyEventListener = (payload: KeyStatePayload) => void;

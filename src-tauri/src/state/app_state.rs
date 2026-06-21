@@ -849,6 +849,9 @@ impl AppState {
                                 continue;
                             }
 
+                            // 입력 수신 시각 — 노트 위치의 프레임 양자화 보정용 age 측정 기준
+                            let recv_at = Instant::now();
+
                             // 우선 형식: JSON 인코딩된 HookMessage (device 포함)
                             let parsed: Option<crate::ipc::HookMessage> =
                                 serde_json::from_str(s).ok();
@@ -1022,7 +1025,11 @@ impl AppState {
                                     }
                                 }
                             }
-                            let payload = json!({ "key": key_label, "state": state, "mode": mode });
+                            // 입력 수신~emit 사이 경과 시간(ms). 오버레이가
+                            // performance.now() - eventAgeMs로 실제 입력 시각을 복원해
+                            // 노트 시작 위치가 렌더 프레임 경계에 양자화되는 것을 방지
+                            let event_age_ms = recv_at.elapsed().as_secs_f64() * 1000.0;
+                            let payload = json!({ "key": key_label, "state": state, "mode": mode, "eventAgeMs": event_age_ms });
 
                             let mut emitted = false;
                             if let Some(overlay) = overlay_window.as_ref() {
