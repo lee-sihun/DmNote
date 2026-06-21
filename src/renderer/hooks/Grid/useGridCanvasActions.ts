@@ -742,8 +742,8 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       reverse: false,
       dx,
       dy,
-      width: 80,
-      height: 80,
+      width: 60,
+      height: 60,
       hidden: false,
       activeImage: '',
       inactiveImage: '',
@@ -762,8 +762,8 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       className: '',
       counter: createDefaultCounterSettings(),
       backgroundColor: 'rgba(46, 46, 47, 0.9)',
-      borderColor: 'rgba(255, 255, 255, 0.85)',
-      borderWidth: 2,
+      borderColor: 'rgba(113, 113, 113, 0.9)',
+      borderWidth: 3,
     });
     const nextPositions = { ...current, [selectedKeyType]: list };
     persistDialPositions(nextPositions, 'Failed to add dial item');

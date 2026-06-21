@@ -763,6 +763,7 @@ interface SingleDialPanelProps {
   handleTogglePanel: () => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
   t: (key: string) => string;
 }
@@ -785,6 +786,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
   handleTogglePanel,
   singleScrollRefFor,
   singleThumbRefFor,
+  panelElement,
   useCustomCSS,
   t,
 }) => {
@@ -904,6 +906,28 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
           className="properties-panel-overlay-viewport"
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
+            {/* HID 축 바인딩 (키 매핑과 동일한 라벨/버튼 구조) */}
+            <PropertyRow label={t('propertiesPanel.dialAxis') || 'HID 축'}>
+              <button
+                type="button"
+                onClick={() => setCapturing((v) => !v)}
+                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                  capturing ? 'border-[#459BF8]' : 'border-[#3A3943]'
+                } text-[#DBDEE8] text-style-2`}
+                title={singleDialPosition.axisId || ''}
+              >
+                <span className="truncate max-w-[120px]">
+                  {capturing
+                    ? t('propertiesPanel.dialCapturing') || '감지 중…'
+                    : singleDialPosition.axisId
+                    ? axisLabel
+                    : t('propertiesPanel.dialCapture') || '노브 돌려서 감지'}
+                </span>
+              </button>
+            </PropertyRow>
+
+            <SectionDivider />
+
             <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
               <NumberInput
                 value={Math.round(singleDialPosition.dx || 0)}
@@ -927,7 +951,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
 
             <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
               <NumberInput
-                value={Math.round(singleDialPosition.width || 80)}
+                value={Math.round(singleDialPosition.width || 60)}
                 onChange={(value) =>
                   handleDialUpdate({
                     index: singleDialIndex,
@@ -939,7 +963,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
                 max={9999}
               />
               <NumberInput
-                value={Math.round(singleDialPosition.height || 80)}
+                value={Math.round(singleDialPosition.height || 60)}
                 onChange={(value) =>
                   handleDialUpdate({
                     index: singleDialIndex,
@@ -953,33 +977,6 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             </PropertyRow>
 
             <SectionDivider />
-
-            {/* HID 축 바인딩 */}
-            <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-white text-style-2">
-                {t('propertiesPanel.dialAxis') || 'HID 축'}
-              </p>
-              <span
-                className="text-[#9CA0AA] text-style-4 truncate max-w-[110px]"
-                title={singleDialPosition.axisId || ''}
-              >
-                {axisLabel}
-              </span>
-            </div>
-            <button
-              type="button"
-              className={`w-full h-[28px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 transition-colors ${
-                capturing
-                  ? 'border-[#459BF8] text-[#459BF8] bg-[#1A2436]'
-                  : 'border-[#3A3943] text-[#DBDEE8] bg-[#2A2A30] hover:border-[#459BF8]'
-              }`}
-              onClick={() => setCapturing((v) => !v)}
-            >
-              {capturing
-                ? t('propertiesPanel.dialCapturing') ||
-                  '감지 중… 노브를 돌리세요'
-                : t('propertiesPanel.dialCapture') || '노브 돌려서 감지'}
-            </button>
 
             <PropertyRow
               label={t('propertiesPanel.dialSensitivity') || '민감도'}
@@ -1019,28 +1016,34 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경'}>
               <ColorInput
                 value={
-                  singleDialPosition.backgroundColor || 'rgba(46,46,47,0.9)'
+                  singleDialPosition.backgroundColor || 'rgba(46, 46, 47, 0.9)'
                 }
-                onChange={(value) =>
+                onChange={() => {}}
+                onChangeComplete={(value) =>
                   handleDialUpdate({
                     index: singleDialIndex,
                     backgroundColor: value,
                   })
                 }
+                colorId={`dial-bg-color-${selectedKeyType}-${singleDialIndex}`}
+                panelElement={panelElement}
               />
             </PropertyRow>
 
             <PropertyRow label={t('propertiesPanel.borderColor') || '테두리'}>
               <ColorInput
                 value={
-                  singleDialPosition.borderColor || 'rgba(255,255,255,0.85)'
+                  singleDialPosition.borderColor || 'rgba(113, 113, 113, 0.9)'
                 }
-                onChange={(value) =>
+                onChange={() => {}}
+                onChangeComplete={(value) =>
                   handleDialUpdate({
                     index: singleDialIndex,
                     borderColor: value,
                   })
                 }
+                colorId={`dial-border-color-${selectedKeyType}-${singleDialIndex}`}
+                panelElement={panelElement}
               />
             </PropertyRow>
 

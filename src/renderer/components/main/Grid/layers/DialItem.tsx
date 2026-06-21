@@ -85,8 +85,8 @@ const DialItem = ({
   const {
     dx = 0,
     dy = 0,
-    width = 80,
-    height = 80,
+    width = 60,
+    height = 60,
     className,
     backgroundColor,
     borderColor,
@@ -137,8 +137,8 @@ const DialItem = ({
     panX,
     panY,
     elementId: effectiveElementId,
-    elementWidth: width || 80,
-    elementHeight: height || 80,
+    elementWidth: width || 60,
+    elementHeight: height || 60,
     getOtherElements,
     disabled: isSelectionMode,
   });
@@ -158,8 +158,8 @@ const DialItem = ({
 
     const startDx = dx;
     const startDy = dy;
-    const currentWidth = width || 80;
-    const currentHeight = height || 80;
+    const currentWidth = width || 60;
+    const currentHeight = height || 60;
     const currentElementId = effectiveElementId;
 
     multiDragRef.current = {
@@ -438,13 +438,13 @@ const DialItem = ({
           borderRadius: '50%',
           overflow: 'hidden',
           position: 'relative',
-          background: backgroundColor || 'rgba(17, 17, 20, 0.6)',
+          background: backgroundColor || 'rgba(46, 46, 47, 0.9)',
           border:
             borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${
-                  borderColor || 'rgba(255, 255, 255, 0.25)'
+                  borderColor || 'rgba(113, 113, 113, 0.9)'
                 }`
-              : `1px solid ${borderColor || 'rgba(255, 255, 255, 0.25)'}`,
+              : `1px solid ${borderColor || 'rgba(113, 113, 113, 0.9)'}`,
           boxSizing: 'border-box',
         }}
       >

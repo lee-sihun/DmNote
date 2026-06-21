@@ -2826,6 +2826,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleTogglePanel={handleTogglePanel}
         singleScrollRefFor={singleScrollRefFor}
         singleThumbRefFor={singleThumbRefFor}
+        panelElement={panelElement}
         useCustomCSS={useCustomCSS}
         t={t}
       />

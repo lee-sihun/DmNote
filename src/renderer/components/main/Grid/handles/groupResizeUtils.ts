@@ -112,8 +112,8 @@ export function getElementBounds(
     return {
       x: pos.dx,
       y: pos.dy,
-      width: pos.width || 80,
-      height: pos.height || 80,
+      width: pos.width || 60,
+      height: pos.height || 60,
     };
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(

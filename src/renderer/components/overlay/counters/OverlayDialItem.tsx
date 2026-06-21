@@ -41,8 +41,8 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
     reverse = false,
     dx = 0,
     dy = 0,
-    width = 80,
-    height = 80,
+    width = 60,
+    height = 60,
     className,
     activeImage,
     inactiveImage,
@@ -89,11 +89,11 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
           position: 'relative',
           background: idleTransparent
             ? 'transparent'
-            : backgroundColor || 'rgba(17, 17, 20, 0.6)',
+            : backgroundColor || 'rgba(46, 46, 47, 0.9)',
           border:
             borderWidth && borderWidth > 0
               ? `${borderWidth}px solid ${
-                  borderColor || 'rgba(255, 255, 255, 0.25)'
+                  borderColor || 'rgba(113, 113, 113, 0.9)'
                 }`
               : undefined,
           boxSizing: 'border-box',

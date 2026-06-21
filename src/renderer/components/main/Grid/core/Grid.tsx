@@ -317,6 +317,7 @@ const Grid = ({
       positions,
       statPositions,
       graphPositions,
+      dialPositions,
       selectedKeyType,
       pluginElements,
       clientToGridCoords,
@@ -634,8 +635,6 @@ const Grid = ({
     const defaultSize =
       toolbarAddRequest.type === 'graph'
         ? { width: 120, height: 60 }
-        : toolbarAddRequest.type === 'dial'
-        ? { width: 80, height: 80 }
         : { width: 60, height: 60 };
     const targetPos = getViewportCenterSnappedPosition(
       defaultSize.width,
@@ -1679,8 +1678,8 @@ const Grid = ({
             bounds = {
               x: pos.dx,
               y: pos.dy,
-              width: pos.width || 80,
-              height: pos.height || 80,
+              width: pos.width || 60,
+              height: pos.height || 60,
             };
           }
         } else if (el.type === 'plugin') {
@@ -1760,6 +1759,17 @@ const Grid = ({
               height: pos.height || 100,
             };
             elementId = `graph-${el.index}`;
+          } else if (el.type === 'dial' && el.index !== undefined) {
+            const pos = dialPositions?.[selectedKeyType]?.[el.index];
+            if (!pos) return null;
+
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
+            };
+            elementId = `dial-${el.index}`;
           } else if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);

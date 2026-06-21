@@ -179,8 +179,8 @@ const GridMinimap = ({
       if (pos.hidden) return;
       const x = pos.dx || 0;
       const y = pos.dy || 0;
-      const w = pos.width || 80;
-      const h = pos.height || 80;
+      const w = pos.width || 60;
+      const h = pos.height || 60;
 
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
@@ -549,8 +549,8 @@ const GridMinimap = ({
             if (pos.hidden) return null;
             const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
             const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
-            const w = (pos.width || 80) * minimapScale;
-            const h = (pos.height || 80) * minimapScale;
+            const w = (pos.width || 60) * minimapScale;
+            const h = (pos.height || 60) * minimapScale;
 
             return (
               <rect

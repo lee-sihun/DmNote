@@ -97,8 +97,8 @@ export function useSmartGuidesElements() {
           calculateBounds(
             pos.dx,
             pos.dy,
-            pos.width || 80,
-            pos.height || 80,
+            pos.width || 60,
+            pos.height || 60,
             id,
           ),
         );
