@@ -187,6 +187,7 @@ export function useGridContextMenu({
       { id: 'add', label: t('contextMenu.addKey') },
       { id: 'addStat', label: t('contextMenu.addStat') },
       { id: 'addGraph', label: t('contextMenu.addGraph') },
+      { id: 'addDial', label: t('contextMenu.addDial') },
     ];
     const bottomBaseItems: MenuItem[] = [
       {

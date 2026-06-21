@@ -2150,6 +2150,8 @@ const Grid = ({
               addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'addGraph' && gridAddLocalPos) {
               addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            } else if (id === 'addDial' && gridAddLocalPos) {
+              addDialAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
             } else if (id === 'tabNote') {
