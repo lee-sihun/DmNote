@@ -6,7 +6,7 @@ import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
-import type { DialItemPosition } from '@src/types/key/dials';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import { axisEventBus } from '@utils/core/axisEventBus';
 import type {
   PluginSettingSchema,
@@ -740,13 +740,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 };
 
 // ============================================================================
-// Single Dial Selection Panel
+// Single Knob Selection Panel
 // ============================================================================
 
-interface SingleDialPanelProps {
+interface SingleKnobPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
-  singleDialPosition: DialItemPosition;
-  singleDialIndex: number;
+  singleKnobPosition: KnobItemPosition;
+  singleKnobIndex: number;
   selectedKeyType: string;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -756,8 +756,8 @@ interface SingleDialPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleDialUpdate: (
-    data: Partial<DialItemPosition> & { index: number },
+  handleKnobUpdate: (
+    data: Partial<KnobItemPosition> & { index: number },
   ) => void;
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
@@ -768,10 +768,10 @@ interface SingleDialPanelProps {
   t: (key: string) => string;
 }
 
-export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
+export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   setPanelElement,
-  singleDialPosition,
-  singleDialIndex,
+  singleKnobPosition,
+  singleKnobIndex,
   selectedKeyType,
   isRenaming,
   renameInputRef,
@@ -781,7 +781,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleDialUpdate,
+  handleKnobUpdate,
   handleToggleMode,
   handleTogglePanel,
   singleScrollRefFor,
@@ -795,12 +795,12 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [classNameDraft, setClassNameDraft] = useState(
-    singleDialPosition.className || '',
+    singleKnobPosition.className || '',
   );
 
   useEffect(() => {
-    setClassNameDraft(singleDialPosition.className || '');
-  }, [singleDialIndex, selectedKeyType, singleDialPosition.className]);
+    setClassNameDraft(singleKnobPosition.className || '');
+  }, [singleKnobIndex, selectedKeyType, singleKnobPosition.className]);
 
   // 회전 감지 바인딩: 노브를 돌리면 가장 많이 움직인 축을 자동 바인딩
   useEffect(() => {
@@ -814,7 +814,7 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
       counts.set(axisId, c);
       if (c >= 3) {
         bound = true;
-        handleDialUpdate({ index: singleDialIndex, axisId });
+        handleKnobUpdate({ index: singleKnobIndex, axisId });
         setCapturing(false);
       }
     });
@@ -823,17 +823,17 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
       unsub();
       window.clearTimeout(timer);
     };
-  }, [capturing, singleDialIndex, handleDialUpdate]);
+  }, [capturing, singleKnobIndex, handleKnobUpdate]);
 
   const setRef = (node: HTMLDivElement | null) => {
     panelRef.current = node;
     setPanelElement(node);
   };
 
-  const dialTitle = singleDialPosition.layerName || 'Dial';
-  const axisLabel = singleDialPosition.axisId
-    ? singleDialPosition.axisId.replace(/^HIDA:/, '')
-    : t('propertiesPanel.dialAxisUnset') || '미지정';
+  const knobTitle = singleKnobPosition.layerName || 'Knob';
+  const axisLabel = singleKnobPosition.axisId
+    ? singleKnobPosition.axisId.replace(/^HIDA:/, '')
+    : t('propertiesPanel.knobAxisUnset') || '미지정';
 
   return (
     <div
@@ -869,9 +869,9 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             <span
               className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
               onDoubleClick={handleRenameStart}
-              title={dialTitle}
+              title={knobTitle}
             >
-              {dialTitle}
+              {knobTitle}
             </span>
             <button
               onClick={handleRenameStart}
@@ -906,22 +906,22 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
           className="properties-panel-overlay-viewport"
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
-            {/* HID 축 바인딩 (키 매핑과 동일한 라벨/버튼 구조) */}
-            <PropertyRow label={t('propertiesPanel.dialAxis') || 'HID 축'}>
+            {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
+            <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
               <button
                 type="button"
                 onClick={() => setCapturing((v) => !v)}
                 className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
                   capturing ? 'border-[#459BF8]' : 'border-[#3A3943]'
                 } text-[#DBDEE8] text-style-2`}
-                title={singleDialPosition.axisId || ''}
+                title={singleKnobPosition.axisId || ''}
               >
                 <span className="truncate max-w-[120px]">
                   {capturing
-                    ? t('propertiesPanel.dialCapturing') || '감지 중…'
-                    : singleDialPosition.axisId
+                    ? t('propertiesPanel.knobCapturing') || '감지 중…'
+                    : singleKnobPosition.axisId
                     ? axisLabel
-                    : t('propertiesPanel.dialCapture') || '노브 돌려서 감지'}
+                    : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
                 </span>
               </button>
             </PropertyRow>
@@ -930,18 +930,18 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
 
             <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
               <NumberInput
-                value={Math.round(singleDialPosition.dx || 0)}
+                value={Math.round(singleKnobPosition.dx || 0)}
                 onChange={(value) =>
-                  handleDialUpdate({ index: singleDialIndex, dx: value })
+                  handleKnobUpdate({ index: singleKnobIndex, dx: value })
                 }
                 prefix="X"
                 min={-9999}
                 max={9999}
               />
               <NumberInput
-                value={Math.round(singleDialPosition.dy || 0)}
+                value={Math.round(singleKnobPosition.dy || 0)}
                 onChange={(value) =>
-                  handleDialUpdate({ index: singleDialIndex, dy: value })
+                  handleKnobUpdate({ index: singleKnobIndex, dy: value })
                 }
                 prefix="Y"
                 min={-9999}
@@ -951,10 +951,10 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
 
             <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
               <NumberInput
-                value={Math.round(singleDialPosition.width || 60)}
+                value={Math.round(singleKnobPosition.width || 60)}
                 onChange={(value) =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
                     width: Math.max(20, value),
                   })
                 }
@@ -963,10 +963,10 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
                 max={9999}
               />
               <NumberInput
-                value={Math.round(singleDialPosition.height || 60)}
+                value={Math.round(singleKnobPosition.height || 60)}
                 onChange={(value) =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
                     height: Math.max(20, value),
                   })
                 }
@@ -979,13 +979,13 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             <SectionDivider />
 
             <PropertyRow
-              label={t('propertiesPanel.dialSensitivity') || '민감도'}
+              label={t('propertiesPanel.knobSensitivity') || '민감도'}
             >
               <NumberInput
-                value={Number(singleDialPosition.sensitivity ?? 1.40625)}
+                value={Number(singleKnobPosition.sensitivity ?? 1.40625)}
                 onChange={(value) =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
                     sensitivity: Math.max(0, value),
                   })
                 }
@@ -998,14 +998,14 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
 
             <div className="flex justify-between items-center w-full h-[23px]">
               <p className="text-white text-style-2">
-                {t('propertiesPanel.dialReverse') || '방향 반전'}
+                {t('propertiesPanel.knobReverse') || '방향 반전'}
               </p>
               <Checkbox
-                checked={singleDialPosition.reverse ?? false}
+                checked={singleKnobPosition.reverse ?? false}
                 onChange={() =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
-                    reverse: !(singleDialPosition.reverse ?? false),
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    reverse: !(singleKnobPosition.reverse ?? false),
                   })
                 }
               />
@@ -1016,16 +1016,16 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경'}>
               <ColorInput
                 value={
-                  singleDialPosition.backgroundColor || 'rgba(46, 46, 47, 0.9)'
+                  singleKnobPosition.backgroundColor || 'rgba(46, 46, 47, 0.9)'
                 }
                 onChange={() => {}}
                 onChangeComplete={(value) =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
                     backgroundColor: value,
                   })
                 }
-                colorId={`dial-bg-color-${selectedKeyType}-${singleDialIndex}`}
+                colorId={`knob-bg-color-${selectedKeyType}-${singleKnobIndex}`}
                 panelElement={panelElement}
               />
             </PropertyRow>
@@ -1033,16 +1033,16 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
             <PropertyRow label={t('propertiesPanel.borderColor') || '테두리'}>
               <ColorInput
                 value={
-                  singleDialPosition.borderColor || 'rgba(113, 113, 113, 0.9)'
+                  singleKnobPosition.borderColor || 'rgba(113, 113, 113, 0.9)'
                 }
                 onChange={() => {}}
                 onChangeComplete={(value) =>
-                  handleDialUpdate({
-                    index: singleDialIndex,
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
                     borderColor: value,
                   })
                 }
-                colorId={`dial-border-color-${selectedKeyType}-${singleDialIndex}`}
+                colorId={`knob-border-color-${selectedKeyType}-${singleKnobIndex}`}
                 panelElement={panelElement}
               />
             </PropertyRow>
@@ -1068,8 +1068,8 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
                   value={classNameDraft}
                   onChange={setClassNameDraft}
                   onBlur={() =>
-                    handleDialUpdate({
-                      index: singleDialIndex,
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
                       className: classNameDraft || '',
                     })
                   }
@@ -1094,48 +1094,48 @@ export const SingleDialPanel: React.FC<SingleDialPanelProps> = ({
           open={showImagePicker}
           referenceRef={imageButtonRef}
           panelElement={panelRef.current}
-          idleImage={singleDialPosition.inactiveImage || ''}
-          activeImage={singleDialPosition.activeImage || ''}
+          idleImage={singleKnobPosition.inactiveImage || ''}
+          activeImage={singleKnobPosition.activeImage || ''}
           idleTransparent={false}
           activeTransparent={false}
           idleImageFit={
-            singleDialPosition.idleImageFit ||
-            singleDialPosition.imageFit ||
+            singleKnobPosition.idleImageFit ||
+            singleKnobPosition.imageFit ||
             'cover'
           }
           activeImageFit={
-            singleDialPosition.activeImageFit ||
-            singleDialPosition.imageFit ||
+            singleKnobPosition.activeImageFit ||
+            singleKnobPosition.imageFit ||
             'cover'
           }
           onIdleImageChange={(imageUrl: string) =>
-            handleDialUpdate({
-              index: singleDialIndex,
+            handleKnobUpdate({
+              index: singleKnobIndex,
               inactiveImage: imageUrl,
             })
           }
           onActiveImageChange={(imageUrl: string) =>
-            handleDialUpdate({ index: singleDialIndex, activeImage: imageUrl })
+            handleKnobUpdate({ index: singleKnobIndex, activeImage: imageUrl })
           }
           onIdleTransparentChange={() => {}}
           onActiveTransparentChange={() => {}}
           onIdleImageFitChange={(fit: string) =>
-            handleDialUpdate({
-              index: singleDialIndex,
+            handleKnobUpdate({
+              index: singleKnobIndex,
               idleImageFit: fit as ImageFit,
             })
           }
           onActiveImageFitChange={(fit: string) =>
-            handleDialUpdate({
-              index: singleDialIndex,
+            handleKnobUpdate({
+              index: singleKnobIndex,
               activeImageFit: fit as ImageFit,
             })
           }
           onIdleImageReset={() =>
-            handleDialUpdate({ index: singleDialIndex, inactiveImage: '' })
+            handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
           }
           onActiveImageReset={() =>
-            handleDialUpdate({ index: singleDialIndex, activeImage: '' })
+            handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
           }
           onClose={() => setShowImagePicker(false)}
         />

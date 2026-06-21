@@ -1,15 +1,15 @@
 import { create } from 'zustand';
-import type { DialItemPositions } from '@src/types/key/dials';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 
-interface DialItemStoreState {
-  positions: DialItemPositions;
+interface KnobItemStoreState {
+  positions: KnobItemPositions;
   isLocalUpdateInProgress: boolean;
-  setPositions: (positions: DialItemPositions) => void;
+  setPositions: (positions: KnobItemPositions) => void;
   setLocalUpdateInProgress: (value: boolean) => void;
 }
 
-export const useDialItemStore = create<DialItemStoreState>((set) => ({
-  positions: {} as DialItemPositions,
+export const useKnobItemStore = create<KnobItemStoreState>((set) => ({
+  positions: {} as KnobItemPositions,
   isLocalUpdateInProgress: false,
   setPositions: (positions) => set({ positions }),
   setLocalUpdateInProgress: (value) => set({ isLocalUpdateInProgress: value }),

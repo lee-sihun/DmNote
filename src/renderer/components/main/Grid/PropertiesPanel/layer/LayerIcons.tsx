@@ -116,7 +116,7 @@ export const GraphIcon: React.FC = () => (
   </svg>
 );
 
-export const DialIcon: React.FC = () => (
+export const KnobIcon: React.FC = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2" />
     <path

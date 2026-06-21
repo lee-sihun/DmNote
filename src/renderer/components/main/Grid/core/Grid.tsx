@@ -15,7 +15,7 @@ import ListPopup from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
@@ -31,7 +31,7 @@ import { isElementResizable } from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
-import DialItem from '../layers/DialItem';
+import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -61,7 +61,7 @@ import type {
 } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { DialItemPosition } from '@src/types/key/dials';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -71,7 +71,7 @@ import {
 
 type ToolbarAddRequest = {
   id: number;
-  type: 'key' | 'stat' | 'graph' | 'dial';
+  type: 'key' | 'stat' | 'graph' | 'knob';
 } | null;
 
 interface SelectedKeyInfo {
@@ -253,7 +253,7 @@ const Grid = ({
     getKeyMenuItems,
     getStatMenuItems,
     getGraphMenuItems,
-    getDialMenuItems,
+    getKnobMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
@@ -295,7 +295,7 @@ const Grid = ({
   // 내장 통계 요소(Stat Items) 위치 정보
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
-  const dialPositions = useDialItemStore((state) => state.positions);
+  const knobPositions = useKnobItemStore((state) => state.positions);
 
   // 선택 관련 로직 훅 사용
   const {
@@ -317,7 +317,7 @@ const Grid = ({
       positions,
       statPositions,
       graphPositions,
-      dialPositions,
+      knobPositions,
       selectedKeyType,
       pluginElements,
       clientToGridCoords,
@@ -356,8 +356,8 @@ const Grid = ({
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphForward(selected.index);
-    } else if (selected.type === 'dial') {
-      await moveDialForward(selected.index);
+    } else if (selected.type === 'knob') {
+      await moveKnobForward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -373,8 +373,8 @@ const Grid = ({
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphBackward(selected.index);
-    } else if (selected.type === 'dial') {
-      await moveDialBackward(selected.index);
+    } else if (selected.type === 'knob') {
+      await moveKnobBackward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -408,7 +408,7 @@ const Grid = ({
   const keyRefs = useRef<(HTMLElement | null)[]>([]);
   const statRefs = useRef<(HTMLElement | null)[]>([]);
   const graphRefs = useRef<(HTMLElement | null)[]>([]);
-  const dialRefs = useRef<(HTMLElement | null)[]>([]);
+  const knobRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(
     null,
@@ -431,8 +431,8 @@ const Grid = ({
         useStatItemStore.getState().positions[selectedKeyType] || [];
       const modeGraphPos =
         useGraphItemStore.getState().positions[selectedKeyType] || [];
-      const modeDialPos =
-        useDialItemStore.getState().positions[selectedKeyType] || [];
+      const modeKnobPos =
+        useKnobItemStore.getState().positions[selectedKeyType] || [];
 
       let anyInGroup = false;
       let allInSameGroup = true;
@@ -447,8 +447,8 @@ const Grid = ({
           gid = modeStatPos[el.index]?.groupId;
         } else if (el.type === 'graph' && el.index !== undefined) {
           gid = modeGraphPos[el.index]?.groupId;
-        } else if (el.type === 'dial' && el.index !== undefined) {
-          gid = modeDialPos[el.index]?.groupId;
+        } else if (el.type === 'knob' && el.index !== undefined) {
+          gid = modeKnobPos[el.index]?.groupId;
         }
         if (gid) anyInGroup = true;
         if (first) {
@@ -523,13 +523,13 @@ const Grid = ({
     moveGraphBackward,
     addGraphAtPosition,
     placeDuplicateGraph,
-    deleteDialAtIndex,
-    moveDialToFront,
-    moveDialToBack,
-    moveDialForward,
-    moveDialBackward,
-    addDialAtPosition,
-    placeDuplicateDial,
+    deleteKnobAtIndex,
+    moveKnobToFront,
+    moveKnobToBack,
+    moveKnobForward,
+    moveKnobBackward,
+    addKnobAtPosition,
+    placeDuplicateKnob,
   } = canvasActions;
 
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
@@ -547,8 +547,8 @@ const Grid = ({
     setDuplicateCursor(null);
   };
 
-  const beginDuplicateDial = (sourceIndex: number) => {
-    const result = canvasActions.beginDuplicateDial(sourceIndex);
+  const beginDuplicateKnob = (sourceIndex: number) => {
+    const result = canvasActions.beginDuplicateKnob(sourceIndex);
     if (!result) return;
     setDuplicateState(result);
     setDuplicateCursor(null);
@@ -571,8 +571,8 @@ const Grid = ({
         moveStatToFront(el.index);
       } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToFront(el.index);
-      } else if (el.type === 'dial' && el.index !== undefined) {
-        moveDialToFront(el.index);
+      } else if (el.type === 'knob' && el.index !== undefined) {
+        moveKnobToFront(el.index);
       } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().bringToFront(el.id);
       }
@@ -593,8 +593,8 @@ const Grid = ({
         moveStatToBack(el.index);
       } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToBack(el.index);
-      } else if (el.type === 'dial' && el.index !== undefined) {
-        moveDialToBack(el.index);
+      } else if (el.type === 'knob' && el.index !== undefined) {
+        moveKnobToBack(el.index);
       } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().sendToBack(el.id);
       }
@@ -647,8 +647,8 @@ const Grid = ({
         addStatAtPosition(targetPos.dx, targetPos.dy);
       } else if (toolbarAddRequest.type === 'graph') {
         addGraphAtPosition(targetPos.dx, targetPos.dy);
-      } else if (toolbarAddRequest.type === 'dial') {
-        addDialAtPosition(targetPos.dx, targetPos.dy);
+      } else if (toolbarAddRequest.type === 'knob') {
+        addKnobAtPosition(targetPos.dx, targetPos.dy);
       }
     }
 
@@ -707,7 +707,7 @@ const Grid = ({
 
   // 요소 클릭 시 그룹 멤버 자동 선택
   const selectElementWithGroup = (
-    type: 'key' | 'stat' | 'graph' | 'dial',
+    type: 'key' | 'stat' | 'graph' | 'knob',
     index: number,
   ) => {
     if (isContextOpen) {
@@ -731,7 +731,7 @@ const Grid = ({
           ?.groupId;
     } else {
       groupId =
-        useDialItemStore.getState().positions[selectedKeyType]?.[index]
+        useKnobItemStore.getState().positions[selectedKeyType]?.[index]
           ?.groupId;
     }
 
@@ -756,11 +756,11 @@ const Grid = ({
           toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
         }
       });
-      const dialPos =
-        useDialItemStore.getState().positions[selectedKeyType] || [];
-      dialPos.forEach((p, i) => {
-        if (p?.groupId === groupId && !(type === 'dial' && i === index)) {
-          toggleSelection({ type: 'dial', id: `dial-${i}`, index: i });
+      const knobPos =
+        useKnobItemStore.getState().positions[selectedKeyType] || [];
+      knobPos.forEach((p, i) => {
+        if (p?.groupId === groupId && !(type === 'knob' && i === index)) {
+          toggleSelection({ type: 'knob', id: `knob-${i}`, index: i });
         }
       });
     }
@@ -783,7 +783,7 @@ const Grid = ({
 
   // 요소 컨텍스트 메뉴 열기
   const openElementContextMenu = (
-    type: 'key' | 'stat' | 'graph' | 'dial',
+    type: 'key' | 'stat' | 'graph' | 'knob',
     index: number,
     clientX: number,
     clientY: number,
@@ -965,8 +965,8 @@ const Grid = ({
               }
             });
 
-            // 범위 내 다이얼 요소도 선택
-            (dialPositions?.[selectedKeyType] || []).forEach((pos, i) => {
+            // 범위 내 노브 요소도 선택
+            (knobPositions?.[selectedKeyType] || []).forEach((pos, i) => {
               if (!pos || pos.hidden) return;
               const elementBounds = {
                 x: pos.dx,
@@ -976,8 +976,8 @@ const Grid = ({
               };
               if (isElementInMarquee(elementBounds, rangeRect)) {
                 newSelectedElements.push({
-                  type: 'dial',
-                  id: `dial-${i}`,
+                  type: 'knob',
+                  id: `knob-${i}`,
                   index: i,
                 });
               }
@@ -1233,16 +1233,16 @@ const Grid = ({
     ));
   };
 
-  const renderDialItems = () => {
-    const items = dialPositions?.[selectedKeyType] || [];
+  const renderKnobItems = () => {
+    const items = knobPositions?.[selectedKeyType] || [];
     if (!items.length) return null;
 
-    const handleDialPositionChange = (
+    const handleKnobPositionChange = (
       index: number,
       dx: number,
       dy: number,
     ) => {
-      const current = useDialItemStore.getState().positions;
+      const current = useKnobItemStore.getState().positions;
       const tabPositions = current[selectedKeyType] || [];
       const prev = tabPositions[index];
       if (!prev) return;
@@ -1265,12 +1265,12 @@ const Grid = ({
       );
       const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
 
-      useDialItemStore.getState().setPositions(nextPositions);
-      window.api.dialItems.updatePositions(nextPositions).catch((error) => {
-        console.error('Failed to update dial item positions', error);
+      useKnobItemStore.getState().setPositions(nextPositions);
+      window.api.knobItems.updatePositions(nextPositions).catch((error) => {
+        console.error('Failed to update knob item positions', error);
       });
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: nextPositions,
         });
       } catch {
@@ -1279,24 +1279,24 @@ const Grid = ({
     };
 
     return items.map((position, index) => (
-      <DialItem
-        key={`dial-${selectedKeyType}-${index}`}
+      <KnobItem
+        key={`knob-${selectedKeyType}-${index}`}
         index={index}
-        elementId={`dial-${index}`}
+        elementId={`knob-${index}`}
         position={position}
-        onPositionChange={handleDialPositionChange}
+        onPositionChange={handleKnobPositionChange}
         zIndex={position.zIndex ?? index}
         onClick={() => {
-          selectElementWithGroup('dial', index);
+          selectElementWithGroup('knob', index);
         }}
         onCtrlClick={() => {
-          toggleSelection({ type: 'dial', id: `dial-${index}`, index });
+          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
         }}
         onShiftClick={() => {
-          toggleSelection({ type: 'dial', id: `dial-${index}`, index });
+          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
         }}
         isSelected={selectedElements.some(
-          (el) => el.type === 'dial' && el.index === index,
+          (el) => el.type === 'knob' && el.index === index,
         )}
         selectedElements={selectedElements}
         onMultiDrag={(deltaX, deltaY) =>
@@ -1307,18 +1307,18 @@ const Grid = ({
         activeTool={activeTool}
         onEraserClick={() => {
           showConfirm(
-            t('confirm.removeDial', { name: 'Dial' }),
-            () => deleteDialAtIndex(index),
+            t('confirm.removeKnob', { name: 'Knob' }),
+            () => deleteKnobAtIndex(index),
             t('confirm.remove'),
           );
         }}
         onContextMenu={(e) => {
           openElementContextMenu(
-            'dial',
+            'knob',
             index,
             e.clientX,
             e.clientY,
-            dialRefs.current[index] || null,
+            knobRefs.current[index] || null,
           );
         }}
         zoom={zoom}
@@ -1326,7 +1326,7 @@ const Grid = ({
         panY={panY}
         isViewportTransforming={isTransforming}
         setReferenceRef={(node) => {
-          dialRefs.current[index] = node;
+          knobRefs.current[index] = node;
         }}
       />
     ));
@@ -1525,9 +1525,9 @@ const Grid = ({
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
-          } else if (type === 'dial') {
-            placeDuplicateDial(
-              duplicateState.position as DialItemPosition,
+          } else if (type === 'knob') {
+            placeDuplicateKnob(
+              duplicateState.position as KnobItemPosition,
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
@@ -1559,7 +1559,7 @@ const Grid = ({
         {renderKeys()}
         {renderStatItems()}
         {renderGraphItems()}
-        {renderDialItems()}
+        {renderKnobItems()}
         {/* Outside 카운터 미리보기 레이어 */}
         {keyCounterEnabled && (
           <KeyCounterPreviewLayer
@@ -1632,7 +1632,7 @@ const Grid = ({
             positions,
             statPositions,
             graphPositions,
-            dialPositions,
+            knobPositions,
             selectedKeyType,
             pluginElements,
           );
@@ -1672,8 +1672,8 @@ const Grid = ({
               height: pos.height || 100,
             };
           }
-        } else if (el.type === 'dial' && el.index !== undefined) {
-          const pos = dialPositions?.[selectedKeyType]?.[el.index];
+        } else if (el.type === 'knob' && el.index !== undefined) {
+          const pos = knobPositions?.[selectedKeyType]?.[el.index];
           if (pos) {
             bounds = {
               x: pos.dx,
@@ -1759,8 +1759,8 @@ const Grid = ({
               height: pos.height || 100,
             };
             elementId = `graph-${el.index}`;
-          } else if (el.type === 'dial' && el.index !== undefined) {
-            const pos = dialPositions?.[selectedKeyType]?.[el.index];
+          } else if (el.type === 'knob' && el.index !== undefined) {
+            const pos = knobPositions?.[selectedKeyType]?.[el.index];
             if (!pos) return null;
 
             bounds = {
@@ -1769,7 +1769,7 @@ const Grid = ({
               width: pos.width || 60,
               height: pos.height || 60,
             };
-            elementId = `dial-${el.index}`;
+            elementId = `knob-${el.index}`;
           } else if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
@@ -1820,7 +1820,7 @@ const Grid = ({
           positions={positions}
           statPositions={statPositions}
           graphPositions={graphPositions}
-          dialPositions={dialPositions}
+          knobPositions={knobPositions}
           selectedKeyType={selectedKeyType}
           pluginElements={pluginElements}
           zoom={zoom}
@@ -1850,8 +1850,8 @@ const Grid = ({
               ? getStatMenuItems(contextIndex)
               : contextType === 'graph'
               ? getGraphMenuItems(contextIndex)
-              : contextType === 'dial'
-              ? getDialMenuItems(contextIndex)
+              : contextType === 'knob'
+              ? getKnobMenuItems(contextIndex)
               : getKeyMenuItems(contextIndex)
           }
           onSelect={async (id: string) => {
@@ -1936,19 +1936,19 @@ const Grid = ({
               return;
             }
 
-            if (contextType === 'dial') {
+            if (contextType === 'knob') {
               if (id === 'delete') {
                 showConfirm(
-                  t('confirm.removeDial', { name: 'Dial' }),
-                  () => deleteDialAtIndex(contextIndex),
+                  t('confirm.removeKnob', { name: 'Knob' }),
+                  () => deleteKnobAtIndex(contextIndex),
                   t('confirm.remove'),
                 );
               } else if (id === 'duplicate') {
-                beginDuplicateDial(contextIndex);
+                beginDuplicateKnob(contextIndex);
               } else if (id === 'bringToFront') {
-                moveDialToFront(contextIndex);
+                moveKnobToFront(contextIndex);
               } else if (id === 'sendToBack') {
-                moveDialToBack(contextIndex);
+                moveKnobToBack(contextIndex);
               }
 
               setIsContextOpen(false);
@@ -2160,8 +2160,8 @@ const Grid = ({
               addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'addGraph' && gridAddLocalPos) {
               addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
-            } else if (id === 'addDial' && gridAddLocalPos) {
-              addDialAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            } else if (id === 'addKnob' && gridAddLocalPos) {
+              addKnobAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
             } else if (id === 'tabNote') {
@@ -2196,7 +2196,7 @@ const Grid = ({
           positions={positions[selectedKeyType] || []}
           statPositions={statPositions?.[selectedKeyType] || []}
           graphPositions={graphPositions?.[selectedKeyType] || []}
-          dialPositions={dialPositions?.[selectedKeyType] || []}
+          knobPositions={knobPositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}

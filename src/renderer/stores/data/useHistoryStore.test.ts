@@ -20,8 +20,8 @@ import type {
 } from '@src/types/key/keys';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { StatItemPositions } from '@src/types/key/statItems';
-import type { DialItemPositions } from '@src/types/key/dials';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import type { KnobItemPositions } from '@src/types/key/knobs';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 
 const createMappings = (key: string): KeyMappings => ({
   '4key': [key],
@@ -49,7 +49,7 @@ const createPositions = (count: number): KeyPositions => ({
   ],
 });
 
-const createDials = (rotationDeg: number): DialItemPositions => ({
+const createKnobs = (rotationDeg: number): KnobItemPositions => ({
   '4key': [
     {
       ...createPositions(1)['4key'][0],
@@ -74,7 +74,7 @@ const resetStores = () => {
     isBootstrapped: true,
     isLocalUpdateInProgress: false,
   });
-  useDialItemStore.setState({ positions: {} });
+  useKnobItemStore.setState({ positions: {} });
   applyCounterCacheSnapshot({});
 };
 
@@ -245,22 +245,22 @@ describe('useHistoryStore', () => {
     );
   });
 
-  it('명시적 dialPositions가 있으면 그대로 저장', () => {
-    const dials = createDials(360);
+  it('명시적 knobPositions가 있으면 그대로 저장', () => {
+    const knobs = createKnobs(360);
 
     useHistoryStore.getState().pushState({
       keyMappings: createMappings('A'),
       positions: createPositions(1),
       statPositions: EMPTY_STATS,
       graphPositions: EMPTY_GRAPHS,
-      dialPositions: dials,
+      knobPositions: knobs,
     });
 
-    expect(useHistoryStore.getState().past[0]?.dialPositions).toEqual(dials);
+    expect(useHistoryStore.getState().past[0]?.knobPositions).toEqual(knobs);
   });
 
-  it('dialPositions 미제공 시 현재 dial store에서 자동 캡처', () => {
-    useDialItemStore.setState({ positions: createDials(180) });
+  it('knobPositions 미제공 시 현재 knob store에서 자동 캡처', () => {
+    useKnobItemStore.setState({ positions: createKnobs(180) });
 
     useHistoryStore.getState().pushState({
       keyMappings: createMappings('A'),
@@ -269,18 +269,18 @@ describe('useHistoryStore', () => {
       graphPositions: EMPTY_GRAPHS,
     });
 
-    expect(useHistoryStore.getState().past[0]?.dialPositions).toEqual(
-      createDials(180),
+    expect(useHistoryStore.getState().past[0]?.knobPositions).toEqual(
+      createKnobs(180),
     );
   });
 
-  it('undo는 이전 dialPositions 스냅샷을 반환하고 현재 dial을 future에 저장', () => {
+  it('undo는 이전 knobPositions 스냅샷을 반환하고 현재 knob을 future에 저장', () => {
     useHistoryStore.getState().pushState({
       keyMappings: createMappings('A'),
       positions: createPositions(1),
       statPositions: EMPTY_STATS,
       graphPositions: EMPTY_GRAPHS,
-      dialPositions: createDials(90),
+      knobPositions: createKnobs(90),
     });
 
     const restored = useHistoryStore.getState().undo({
@@ -288,12 +288,12 @@ describe('useHistoryStore', () => {
       positions: createPositions(1),
       statPositions: EMPTY_STATS,
       graphPositions: EMPTY_GRAPHS,
-      dialPositions: createDials(270),
+      knobPositions: createKnobs(270),
     });
 
-    expect(restored?.dialPositions).toEqual(createDials(90));
-    expect(useHistoryStore.getState().future[0]?.dialPositions).toEqual(
-      createDials(270),
+    expect(restored?.knobPositions).toEqual(createKnobs(90));
+    expect(useHistoryStore.getState().future[0]?.knobPositions).toEqual(
+      createKnobs(270),
     );
   });
 });

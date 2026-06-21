@@ -1,8 +1,8 @@
 import type { KeyPosition } from '@src/types/key/keys';
 
-// 회전(다이얼) 요소: KeyPosition 상속(위치/스타일/클래스/이미지) + 축 전용 필드.
+// 회전(노브) 요소: KeyPosition 상속(위치/스타일/클래스/이미지) + 축 전용 필드.
 // 노트/카운터/폰트 설정은 사용하지 않음.
-export type DialItemPosition = KeyPosition & {
+export type KnobItemPosition = KeyPosition & {
   /** 바인딩된 HID 축 식별자 "HIDA:vid:pid:usagePage:usage" */
   axisId: string;
   /** 노브 raw 1단위당 화면 회전 도수 */
@@ -11,4 +11,4 @@ export type DialItemPosition = KeyPosition & {
   reverse: boolean;
 };
 
-export type DialItemPositions = Record<string, DialItemPosition[]>;
+export type KnobItemPositions = Record<string, KnobItemPosition[]>;

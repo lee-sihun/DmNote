@@ -8,7 +8,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
@@ -31,7 +31,7 @@ import type {
   GraphItemPosition,
   GraphItemPositions,
 } from '@src/types/key/graphItems';
-import type { DialItemPosition, DialItemPositions } from '@src/types/key/dials';
+import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import {
   normalizeLayerGroupsForMode,
@@ -123,19 +123,19 @@ export function useGridSelection({
       console.error('Failed to broadcast graph positions to overlay', error);
     }
 
-    // 다이얼 요소 위치 동기화
-    const currentDialPositions = useDialItemStore.getState().positions;
-    window.api.dialItems
-      .updatePositions(currentDialPositions)
+    // 노브 요소 위치 동기화
+    const currentKnobPositions = useKnobItemStore.getState().positions;
+    window.api.knobItems
+      .updatePositions(currentKnobPositions)
       .catch((error: Error) => {
-        console.error('Failed to sync dial positions to overlay', error);
+        console.error('Failed to sync knob positions to overlay', error);
       });
     try {
-      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
-        positions: currentDialPositions,
+      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+        positions: currentKnobPositions,
       });
     } catch (error) {
-      console.error('Failed to broadcast dial positions to overlay', error);
+      console.error('Failed to broadcast knob positions to overlay', error);
     }
 
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
@@ -275,16 +275,16 @@ export function useGridSelection({
       }
     }
 
-    // 다이얼 요소 배치 업데이트
-    const dialUpdates = selectedElements.filter(
-      (el) => el.type === 'dial' && el.index !== undefined,
+    // 노브 요소 배치 업데이트
+    const knobUpdates = selectedElements.filter(
+      (el) => el.type === 'knob' && el.index !== undefined,
     );
-    if (dialUpdates.length > 0) {
-      const currentDialPositions = useDialItemStore.getState().positions;
-      const newDialPositions = { ...currentDialPositions };
-      const tabPositions = [...(newDialPositions[selectedKeyType] || [])];
+    if (knobUpdates.length > 0) {
+      const currentKnobPositions = useKnobItemStore.getState().positions;
+      const newKnobPositions = { ...currentKnobPositions };
+      const tabPositions = [...(newKnobPositions[selectedKeyType] || [])];
 
-      dialUpdates.forEach((el) => {
+      knobUpdates.forEach((el) => {
         if (el.index === undefined) return;
         const currentPos = tabPositions[el.index];
         if (currentPos) {
@@ -296,14 +296,14 @@ export function useGridSelection({
         }
       });
 
-      newDialPositions[selectedKeyType] = tabPositions;
-      useDialItemStore.getState().setPositions(newDialPositions);
+      newKnobPositions[selectedKeyType] = tabPositions;
+      useKnobItemStore.getState().setPositions(newKnobPositions);
 
       if (syncToOverlay) {
-        window.api.dialItems
-          .updatePositions(newDialPositions)
+        window.api.knobItems
+          .updatePositions(newKnobPositions)
           .catch((error: Error) => {
-            console.error('Failed to sync dial positions to overlay', error);
+            console.error('Failed to sync knob positions to overlay', error);
           });
       }
     }
@@ -349,8 +349,8 @@ export function useGridSelection({
       .filter((el) => el.type === 'graph' && el.index !== undefined)
       .map((el) => el.index as number);
 
-    const dialsToDelete = selectedElements
-      .filter((el) => el.type === 'dial' && el.index !== undefined)
+    const knobsToDelete = selectedElements
+      .filter((el) => el.type === 'knob' && el.index !== undefined)
       .map((el) => el.index as number);
 
     const pluginsToDelete = selectedElements
@@ -362,7 +362,7 @@ export function useGridSelection({
       keysToDelete.length > 0 ||
       statsToDelete.length > 0 ||
       graphsToDelete.length > 0 ||
-      dialsToDelete.length > 0 ||
+      knobsToDelete.length > 0 ||
       pluginsToDelete.length > 0
     ) {
       const { keyMappings: km, positions: pos } = useKeyStore.getState();
@@ -492,28 +492,28 @@ export function useGridSelection({
       }
     }
 
-    // 다이얼 요소 배치 삭제
-    if (dialsToDelete.length > 0) {
-      const current = useDialItemStore.getState().positions;
+    // 노브 요소 배치 삭제
+    if (knobsToDelete.length > 0) {
+      const current = useKnobItemStore.getState().positions;
       const tabPositions = current[selectedKeyType] || [];
-      const deleteSet = new Set(dialsToDelete);
+      const deleteSet = new Set(knobsToDelete);
       const updatedPositions = {
         ...current,
         [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
       };
 
-      useDialItemStore.getState().setLocalUpdateInProgress(true);
-      useDialItemStore.getState().setPositions(updatedPositions);
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.dialItems.updatePositions(updatedPositions);
+        await window.api.knobItems.updatePositions(updatedPositions);
       } catch (error) {
-        console.error('Failed to delete dial items', error);
+        console.error('Failed to delete knob items', error);
       } finally {
-        useDialItemStore.getState().setLocalUpdateInProgress(false);
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
 
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: updatedPositions,
         });
       } catch {
@@ -526,7 +526,7 @@ export function useGridSelection({
       keyPositions: useKeyStore.getState().positions,
       statPositions: useStatItemStore.getState().positions,
       graphPositions: useGraphItemStore.getState().positions,
-      dialPositions: useDialItemStore.getState().positions,
+      knobPositions: useKnobItemStore.getState().positions,
       layerGroups: useLayerGroupStore.getState().layerGroups,
     });
 
@@ -534,11 +534,11 @@ export function useGridSelection({
       useKeyStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useDialItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(normalized.keyPositions);
       useStatItemStore.getState().setPositions(normalized.statPositions);
       useGraphItemStore.getState().setPositions(normalized.graphPositions);
-      useDialItemStore.getState().setPositions(normalized.dialPositions);
+      useKnobItemStore.getState().setPositions(normalized.knobPositions);
       if (normalized.groupsChanged) {
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
@@ -547,7 +547,7 @@ export function useGridSelection({
         await window.api.keys.updatePositions(normalized.keyPositions);
         await window.api.statItems.updatePositions(normalized.statPositions);
         await window.api.graphItems.updatePositions(normalized.graphPositions);
-        await window.api.dialItems.updatePositions(normalized.dialPositions);
+        await window.api.knobItems.updatePositions(normalized.knobPositions);
         if (normalized.groupsChanged) {
           await window.api.layerGroups.update(normalized.layerGroups);
         }
@@ -557,7 +557,7 @@ export function useGridSelection({
         useKeyStore.getState().setLocalUpdateInProgress(false);
         useStatItemStore.getState().setLocalUpdateInProgress(false);
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        useDialItemStore.getState().setLocalUpdateInProgress(false);
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
     }
   };
@@ -574,8 +574,8 @@ export function useGridSelection({
       useStatItemStore.getState().positions[selectedKeyType] || [];
     const currentGraphPositions =
       useGraphItemStore.getState().positions[selectedKeyType] || [];
-    const currentDialPositions =
-      useDialItemStore.getState().positions[selectedKeyType] || [];
+    const currentKnobPositions =
+      useKnobItemStore.getState().positions[selectedKeyType] || [];
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
 
@@ -608,11 +608,11 @@ export function useGridSelection({
             position: { ...position },
           });
         }
-      } else if (element.type === 'dial' && element.index !== undefined) {
-        const position = currentDialPositions[element.index];
+      } else if (element.type === 'knob' && element.index !== undefined) {
+        const position = currentKnobPositions[element.index];
         if (position) {
           clipboardItems.push({
-            type: 'dial',
+            type: 'knob',
             position: { ...position },
           });
         }
@@ -732,7 +732,7 @@ export function useGridSelection({
     const keysToAdd: { keyCode: string; position: KeyPosition }[] = [];
     const statsToAdd: { position: StatItemPosition }[] = [];
     const graphsToAdd: { position: GraphItemPosition }[] = [];
-    const dialsToAdd: { position: DialItemPosition }[] = [];
+    const knobsToAdd: { position: KnobItemPosition }[] = [];
     const pluginsToAdd: Omit<PluginDisplayElementInternal, 'fullId'>[] = [];
 
     for (const item of currentClipboard) {
@@ -764,8 +764,8 @@ export function useGridSelection({
             dy: (item.position.dy || 0) + PASTE_OFFSET,
           },
         });
-      } else if (item.type === 'dial') {
-        dialsToAdd.push({
+      } else if (item.type === 'knob') {
+        knobsToAdd.push({
           position: {
             ...item.position,
             groupId: remapGroupId(item.position.groupId),
@@ -865,29 +865,29 @@ export function useGridSelection({
       useGraphItemStore.getState().setPositions(updatedPositions);
     }
 
-    // 다이얼 요소 추가 (zIndex 레이어 재배치 대상 외 — 별도 영속/동기화)
-    if (dialsToAdd.length > 0) {
-      const current = useDialItemStore.getState().positions;
+    // 노브 요소 추가 (zIndex 레이어 재배치 대상 외 — 별도 영속/동기화)
+    if (knobsToAdd.length > 0) {
+      const current = useKnobItemStore.getState().positions;
       const posArray = [...(current[selectedKeyType] || [])];
       const startIndex = posArray.length;
 
-      for (let i = 0; i < dialsToAdd.length; i++) {
-        posArray.push(dialsToAdd[i].position);
+      for (let i = 0; i < knobsToAdd.length; i++) {
+        posArray.push(knobsToAdd[i].position);
         newSelectedElements.push({
-          type: 'dial',
-          id: `dial-${startIndex + i}`,
+          type: 'knob',
+          id: `knob-${startIndex + i}`,
           index: startIndex + i,
         });
       }
 
-      const updatedPositions: DialItemPositions = {
+      const updatedPositions: KnobItemPositions = {
         ...current,
         [selectedKeyType]: posArray,
       };
-      useDialItemStore.getState().setPositions(updatedPositions);
-      window.api.dialItems.updatePositions(updatedPositions).catch(() => {});
+      useKnobItemStore.getState().setPositions(updatedPositions);
+      window.api.knobItems.updatePositions(updatedPositions).catch(() => {});
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: updatedPositions,
         });
       } catch {
@@ -923,7 +923,7 @@ export function useGridSelection({
     const freshKeyPos = useKeyStore.getState().positions;
     const freshStatPos = useStatItemStore.getState().positions;
     const freshGraphPos = useGraphItemStore.getState().positions;
-    const freshDialPos = useDialItemStore.getState().positions;
+    const freshKnobPos = useKnobItemStore.getState().positions;
     const freshPluginEls = usePluginDisplayElementStore.getState().elements;
 
     // 전체 레이어 목록 구성 (새로 push된 아이템 포함)
@@ -932,7 +932,7 @@ export function useGridSelection({
       freshKeyPos,
       freshStatPos,
       freshGraphPos,
-      freshDialPos,
+      freshKnobPos,
       freshPluginEls,
     );
 
@@ -962,14 +962,14 @@ export function useGridSelection({
       freshKeyPos,
       freshStatPos,
       freshGraphPos,
-      freshDialPos,
+      freshKnobPos,
     );
 
     // 스토어 업데이트 (동기 — 배칭으로 한 번에 렌더)
     useKeyStore.getState().setPositions(patch.keyPositions);
     useStatItemStore.getState().setPositions(patch.statPositions);
     useGraphItemStore.getState().setPositions(patch.graphPositions);
-    useDialItemStore.getState().setPositions(patch.dialPositions);
+    useKnobItemStore.getState().setPositions(patch.knobPositions);
     for (const { fullId, zIndex } of patch.pluginUpdates) {
       usePluginDisplayElementStore
         .getState()
@@ -993,19 +993,19 @@ export function useGridSelection({
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useDialItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
       await window.api.keys.updatePositions(patch.keyPositions);
       await window.api.statItems.updatePositions(patch.statPositions);
       await window.api.graphItems.updatePositions(patch.graphPositions);
-      await window.api.dialItems.updatePositions(patch.dialPositions);
+      await window.api.knobItems.updatePositions(patch.knobPositions);
     } catch (error) {
       console.error('Failed to sync zIndex after paste', error);
     } finally {
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useDialItemStore.getState().setLocalUpdateInProgress(false);
+      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     try {
@@ -1024,8 +1024,8 @@ export function useGridSelection({
       });
     } catch {}
     try {
-      window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
-        positions: patch.dialPositions,
+      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+        positions: patch.knobPositions,
       });
     } catch {}
     try {

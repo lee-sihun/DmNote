@@ -5,7 +5,7 @@ import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
-import OverlayDialItemBase from '@components/overlay/counters/OverlayDialItem';
+import OverlayKnobItemBase from '@components/overlay/counters/OverlayKnobItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
@@ -64,7 +64,7 @@ interface OverlayGraphItemProps {
   position: Record<string, unknown>;
 }
 
-interface OverlayDialItemProps {
+interface OverlayKnobItemProps {
   index?: number;
   position: Record<string, unknown>;
 }
@@ -76,8 +76,8 @@ const OverlayStatCounterLayer =
   StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
 const OverlayGraphItem =
   OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
-const OverlayDialItem =
-  OverlayDialItemBase as React.ComponentType<OverlayDialItemProps>;
+const OverlayKnobItem =
+  OverlayKnobItemBase as React.ComponentType<OverlayKnobItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -99,7 +99,7 @@ interface OverlaySceneProps {
   currentPositions: KeyPosition[];
   displayStatPositions: Record<string, unknown>[];
   displayGraphPositions: Record<string, unknown>[];
-  displayDialPositions: Record<string, unknown>[];
+  displayKnobPositions: Record<string, unknown>[];
   selectedKeyType: string;
 
   // 노트 이펙트
@@ -129,7 +129,7 @@ const OverlayScene = ({
   currentPositions,
   displayStatPositions,
   displayGraphPositions,
-  displayDialPositions,
+  displayKnobPositions,
   selectedKeyType,
   noteEffect,
   noteSettings,
@@ -240,17 +240,17 @@ const OverlayScene = ({
           />
         );
       })}
-      {displayDialPositions.map((pos, index) => {
+      {displayKnobPositions.map((pos, index) => {
         if (!pos || (pos as { hidden?: boolean }).hidden) return null;
-        const dialPosition = {
+        const knobPosition = {
           ...pos,
           zIndex: (pos as { zIndex?: number }).zIndex ?? index,
         };
         return (
-          <OverlayDialItem
-            key={`dial-${selectedKeyType}-${index}`}
+          <OverlayKnobItem
+            key={`knob-${selectedKeyType}-${index}`}
             index={index}
-            position={dialPosition}
+            position={knobPosition}
           />
         );
       })}

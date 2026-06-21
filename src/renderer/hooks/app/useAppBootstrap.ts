@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import {
@@ -236,9 +236,9 @@ export function useAppBootstrap() {
         ...state,
         positions: bootstrap.graphPositions ?? {},
       }));
-      useDialItemStore.setState((state) => ({
+      useKnobItemStore.setState((state) => ({
         ...state,
-        positions: bootstrap.dialPositions ?? {},
+        positions: bootstrap.knobPositions ?? {},
       }));
       applyCounterCacheSnapshot(bootstrap.keyCounters);
       if (isOverlayWindow) {
@@ -304,14 +304,14 @@ export function useAppBootstrap() {
           return;
         useGraphItemStore.setState((state) => ({ ...state, positions }));
       }),
-      window.api.dialItems.onPositionsChanged((positions) => {
+      window.api.knobItems.onPositionsChanged((positions) => {
         const isOverlayWindow = window.__dmn_window_type === 'overlay';
         if (
           !isOverlayWindow &&
-          useDialItemStore.getState().isLocalUpdateInProgress
+          useKnobItemStore.getState().isLocalUpdateInProgress
         )
           return;
-        useDialItemStore.setState((state) => ({ ...state, positions }));
+        useKnobItemStore.setState((state) => ({ ...state, positions }));
       }),
       window.api.layerGroups.onChanged((groups) => {
         useLayerGroupStore.getState().setLayerGroups(groups);
@@ -372,9 +372,9 @@ export function useAppBootstrap() {
           ...state,
           positions: snapshot.graphPositions,
         }));
-        useDialItemStore.setState((state) => ({
+        useKnobItemStore.setState((state) => ({
           ...state,
-          positions: snapshot.dialPositions ?? {},
+          positions: snapshot.knobPositions ?? {},
         }));
         useSettingsStore.setState({
           tabNoteOverrides: snapshot.tabNoteOverrides,

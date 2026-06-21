@@ -9,8 +9,8 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        CustomCssPatch, CustomJsPatch, DialPositions, FontType, GraphPositions, KeyMappings,
-        KeyPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
+        KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions,
     },
     state::AppState,
 };
@@ -45,7 +45,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         .unwrap_or_else(|| default_positions().clone());
     let mut stat_positions = preset.stat_positions.unwrap_or_default();
     let mut graph_positions = preset.graph_positions.unwrap_or_default();
-    let mut dial_positions = preset.dial_positions.unwrap_or_default();
+    let mut knob_positions = preset.knob_positions.unwrap_or_default();
     let custom_tabs = preset
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
@@ -89,7 +89,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         &mut positions,
         &mut stat_positions,
         &mut graph_positions,
-        &mut dial_positions,
+        &mut knob_positions,
         preset.embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -111,7 +111,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         store.key_positions = positions.clone();
         store.stat_positions = stat_positions.clone();
         store.graph_positions = graph_positions.clone();
-        store.dial_positions = dial_positions.clone();
+        store.knob_positions = knob_positions.clone();
         store.custom_tabs = custom_tabs.clone();
         store.selected_key_type = selected_key_type.clone();
         store.tab_note_overrides = tab_note_overrides.clone();
@@ -155,7 +155,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             positions,
             stat_positions,
             graph_positions,
-            dial_positions,
+            knob_positions,
             custom_tabs,
             selected_key_type,
             tab_note_overrides,
@@ -200,7 +200,7 @@ pub fn preset_load_tab(
         key_positions,
         stat_positions,
         graph_positions,
-        dial_positions,
+        knob_positions,
         selected_key_type,
         tab_note_overrides,
         embedded_local_images,
@@ -240,10 +240,10 @@ pub fn preset_load_tab(
         src_graph_positions.insert(current_tab_id.clone(), v.clone());
     }
 
-    let imported_dial_positions = dial_positions.unwrap_or_default();
-    let mut src_dial_positions: DialPositions = HashMap::new();
-    if let Some(v) = imported_dial_positions.get(&source_tab_id) {
-        src_dial_positions.insert(current_tab_id.clone(), v.clone());
+    let imported_knob_positions = knob_positions.unwrap_or_default();
+    let mut src_knob_positions: KnobPositions = HashMap::new();
+    if let Some(v) = imported_knob_positions.get(&source_tab_id) {
+        src_knob_positions.insert(current_tab_id.clone(), v.clone());
     }
 
     let mut imported_tab_note_overrides = tab_note_overrides.unwrap_or_default();
@@ -257,7 +257,7 @@ pub fn preset_load_tab(
         &mut src_key_positions,
         &mut src_stat_positions,
         &mut src_graph_positions,
-        &mut src_dial_positions,
+        &mut src_knob_positions,
         embedded_local_images.as_deref(),
     )?;
     restore_preset_local_sounds(
@@ -281,8 +281,8 @@ pub fn preset_load_tab(
     if let Some(v) = src_graph_positions.remove(&current_tab_id) {
         snapshot.graph_positions.insert(current_tab_id.clone(), v);
     }
-    if let Some(v) = src_dial_positions.remove(&current_tab_id) {
-        snapshot.dial_positions.insert(current_tab_id.clone(), v);
+    if let Some(v) = src_knob_positions.remove(&current_tab_id) {
+        snapshot.knob_positions.insert(current_tab_id.clone(), v);
     }
     let imported_override = imported_tab_note_overrides.get(&source_tab_id).cloned();
     if let Some(override_settings) = imported_override {
@@ -297,7 +297,7 @@ pub fn preset_load_tab(
     let full_positions = snapshot.key_positions.clone();
     let full_stat_positions = snapshot.stat_positions.clone();
     let full_graph_positions = snapshot.graph_positions.clone();
-    let full_dial_positions = snapshot.dial_positions.clone();
+    let full_knob_positions = snapshot.knob_positions.clone();
     let full_tab_note_overrides = snapshot.tab_note_overrides.clone();
 
     state.store.update(|store| {
@@ -305,7 +305,7 @@ pub fn preset_load_tab(
         store.key_positions = full_positions.clone();
         store.stat_positions = full_stat_positions.clone();
         store.graph_positions = full_graph_positions.clone();
-        store.dial_positions = full_dial_positions.clone();
+        store.knob_positions = full_knob_positions.clone();
         store.tab_note_overrides = full_tab_note_overrides.clone();
     })?;
 
@@ -315,7 +315,7 @@ pub fn preset_load_tab(
     app.emit("positions:changed", &full_positions)?;
     app.emit("statPositions:changed", &full_stat_positions)?;
     app.emit("graphPositions:changed", &full_graph_positions)?;
-    app.emit("dialPositions:changed", &full_dial_positions)?;
+    app.emit("knobPositions:changed", &full_knob_positions)?;
     app.emit("tabNote:changed_all", &full_tab_note_overrides)?;
 
     // OBS 브릿지: 탭 프리셋 로드 시 전체 스냅샷 재전송
@@ -436,7 +436,7 @@ fn restore_preset_local_images(
     key_positions: &mut KeyPositions,
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
-    dial_positions: &mut DialPositions,
+    knob_positions: &mut KnobPositions,
     embedded_local_images: Option<&[EmbeddedLocalImage]>,
 ) -> CmdResult<()> {
     let has_any_images = key_positions.values().any(|positions| {
@@ -454,10 +454,10 @@ fn restore_preset_local_images(
             option_has_non_empty_text(&graph_position.position.active_image)
                 || option_has_non_empty_text(&graph_position.position.inactive_image)
         })
-    }) || dial_positions.values().any(|positions| {
-        positions.iter().any(|dial_position| {
-            option_has_non_empty_text(&dial_position.position.active_image)
-                || option_has_non_empty_text(&dial_position.position.inactive_image)
+    }) || knob_positions.values().any(|positions| {
+        positions.iter().any(|knob_position| {
+            option_has_non_empty_text(&knob_position.position.active_image)
+                || option_has_non_empty_text(&knob_position.position.inactive_image)
         })
     });
 
@@ -527,19 +527,19 @@ fn restore_preset_local_images(
         }
     }
 
-    for positions in dial_positions.values_mut() {
-        for dial_position in positions.iter_mut() {
+    for positions in knob_positions.values_mut() {
+        for knob_position in positions.iter_mut() {
             restore_position_image_reference(
                 &images_dir,
                 &embedded_map,
                 &mut restored_path_cache,
-                &mut dial_position.position.active_image,
+                &mut knob_position.position.active_image,
             )?;
             restore_position_image_reference(
                 &images_dir,
                 &embedded_map,
                 &mut restored_path_cache,
-                &mut dial_position.position.inactive_image,
+                &mut knob_position.position.inactive_image,
             )?;
         }
     }

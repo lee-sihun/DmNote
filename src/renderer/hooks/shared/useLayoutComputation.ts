@@ -6,7 +6,7 @@ import { FALLBACK_POSITION } from '@components/shared/OverlayScene';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { DialItemPosition } from '@src/types/key/dials';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 
 interface PluginElement {
@@ -26,7 +26,7 @@ interface LayoutInput {
   currentPositions: KeyPosition[];
   currentStatPositions: StatItemPosition[];
   currentGraphPositions: GraphItemPosition[];
-  currentDialPositions: DialItemPosition[];
+  currentKnobPositions: KnobItemPosition[];
   trackHeight: number;
   noteSettings: NoteSettings;
   selectedKeyType?: string;
@@ -47,7 +47,7 @@ export function computeLayout(input: LayoutInput) {
     currentPositions,
     currentStatPositions,
     currentGraphPositions,
-    currentDialPositions,
+    currentKnobPositions,
     trackHeight,
     noteSettings,
     selectedKeyType,
@@ -61,7 +61,7 @@ export function computeLayout(input: LayoutInput) {
       currentPositions.length > 0 ||
       currentStatPositions.length > 0 ||
       currentGraphPositions.length > 0 ||
-      currentDialPositions.length > 0 ||
+      currentKnobPositions.length > 0 ||
       (pluginElements && pluginElements.length > 0);
     if (!hasContent) return null;
 
@@ -121,7 +121,7 @@ export function computeLayout(input: LayoutInput) {
       heights.push(pos.dy + (pos.height ?? 100));
     });
 
-    currentDialPositions.forEach((pos) => {
+    currentKnobPositions.forEach((pos) => {
       if (!pos || pos.hidden) return;
       xs.push(pos.dx);
       ys.push(pos.dy);
@@ -195,7 +195,7 @@ export function computeLayout(input: LayoutInput) {
   const displayPositions = applyOffset(currentPositions);
   const displayStatPositions = applyOffset(currentStatPositions);
   const displayGraphPositions = applyOffset(currentGraphPositions);
-  const displayDialPositions = applyOffset(currentDialPositions);
+  const displayKnobPositions = applyOffset(currentKnobPositions);
 
   const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
@@ -261,7 +261,7 @@ export function computeLayout(input: LayoutInput) {
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
-    displayDialPositions,
+    displayKnobPositions,
     positionOffset,
     topMostY,
     webglTracks,

@@ -214,7 +214,7 @@
     "addKey": "키",
     "addStat": "통계",
     "addGraph": "그래프",
-    "addDial": "다이얼"
+    "addKnob": "노브"
   },
   "preset": {
     "import": "불러오기",
@@ -249,7 +249,7 @@
 
     "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
     "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
-    "removeDial": "[{{name}}] 다이얼을 제거하시겠습니까?",
+    "removeKnob": "[{{name}}] 노브를 제거하시겠습니까?",
     "remove": "제거하기"
   },
   "tabs": {
@@ -296,8 +296,8 @@
     "deleteStat": "통계 삭제",
     "duplicateGraph": "그래프 복제",
     "deleteGraph": "그래프 삭제",
-    "duplicateDial": "다이얼 복제",
-    "deleteDial": "다이얼 삭제",
+    "duplicateKnob": "노브 복제",
+    "deleteKnob": "노브 삭제",
     "noteSetting": "노트 설정",
     "counterSetting": "카운터 설정",
     "counterReset": "카운터 초기화",
@@ -310,7 +310,7 @@
     "addKey": "키 추가",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",
-    "addDial": "다이얼 추가",
+    "addKnob": "노브 추가",
     "rename": "이름 변경",
     "quitApp": "프로그램 종료",
     "snapToEdge": "화면 모서리에 맞추기",
@@ -482,12 +482,12 @@
     "graphShapeLine": "선 그래프",
     "graphShapeBar": "바 그래프",
     "graphShowAverageLine": "평균선 표시",
-    "dialAxis": "HID 축",
-    "dialAxisUnset": "미지정",
-    "dialCapture": "노브 돌려서 감지",
-    "dialCapturing": "감지 중… 노브를 돌리세요",
-    "dialSensitivity": "민감도",
-    "dialReverse": "방향 반전",
+    "knobAxis": "노브 매핑",
+    "knobAxisUnset": "미지정",
+    "knobCapture": "클릭하여 설정",
+    "knobCapturing": "노브를 돌리세요",
+    "knobSensitivity": "민감도",
+    "knobReverse": "방향 반전",
     "graphSpeed": "그래프 속도",
     "graphColor": "그래프 색상",
     "graphAnimation": "그래프 모션",

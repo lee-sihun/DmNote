@@ -141,8 +141,12 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
       const rightEdgeAfter = result.x + result.width;
 
       console.log(`[현재 로직] 좌측 핸들 드래그:`);
-      console.log(`  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`);
-      console.log(`  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`);
+      console.log(
+        `  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`,
+      );
+      console.log(
+        `  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`,
+      );
       console.log(`  우측 엣지 이동량: ${rightEdgeAfter - rightEdgeBefore}px`);
 
       // 버그: 우측 엣지가 이동함
@@ -155,8 +159,12 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
       const rightEdgeAfter = result.x + result.width;
 
       console.log(`[수정 로직] 좌측 핸들 드래그:`);
-      console.log(`  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`);
-      console.log(`  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`);
+      console.log(
+        `  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`,
+      );
+      console.log(
+        `  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`,
+      );
       console.log(`  우측 엣지 이동량: ${rightEdgeAfter - rightEdgeBefore}px`);
 
       // 수정: 우측 엣지 정확히 보존
@@ -195,9 +203,15 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
       const bottomEdgeAfter = result.y + result.height;
 
       console.log(`[현재 로직] 상단 핸들 드래그:`);
-      console.log(`  시작: y=${startBounds.y}, h=${startBounds.height}, 하단=${bottomEdgeBefore}`);
-      console.log(`  결과: y=${result.y}, h=${result.height}, 하단=${bottomEdgeAfter}`);
-      console.log(`  하단 엣지 이동량: ${bottomEdgeAfter - bottomEdgeBefore}px`);
+      console.log(
+        `  시작: y=${startBounds.y}, h=${startBounds.height}, 하단=${bottomEdgeBefore}`,
+      );
+      console.log(
+        `  결과: y=${result.y}, h=${result.height}, 하단=${bottomEdgeAfter}`,
+      );
+      console.log(
+        `  하단 엣지 이동량: ${bottomEdgeAfter - bottomEdgeBefore}px`,
+      );
 
       // 버그: 하단 엣지가 이동함
       expect(bottomEdgeAfter).not.toBe(bottomEdgeBefore);
@@ -209,9 +223,15 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
       const bottomEdgeAfter = result.y + result.height;
 
       console.log(`[수정 로직] 상단 핸들 드래그:`);
-      console.log(`  시작: y=${startBounds.y}, h=${startBounds.height}, 하단=${bottomEdgeBefore}`);
-      console.log(`  결과: y=${result.y}, h=${result.height}, 하단=${bottomEdgeAfter}`);
-      console.log(`  하단 엣지 이동량: ${bottomEdgeAfter - bottomEdgeBefore}px`);
+      console.log(
+        `  시작: y=${startBounds.y}, h=${startBounds.height}, 하단=${bottomEdgeBefore}`,
+      );
+      console.log(
+        `  결과: y=${result.y}, h=${result.height}, 하단=${bottomEdgeAfter}`,
+      );
+      console.log(
+        `  하단 엣지 이동량: ${bottomEdgeAfter - bottomEdgeBefore}px`,
+      );
 
       // 수정: 하단 엣지 정확히 보존
       expect(bottomEdgeAfter).toBe(bottomEdgeBefore);
@@ -227,8 +247,12 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
       const rightEdgeAfter = result.x + result.width;
 
       console.log(`[그리드 정렬] 좌측 핸들 드래그:`);
-      console.log(`  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`);
-      console.log(`  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`);
+      console.log(
+        `  시작: x=${startBounds.x}, w=${startBounds.width}, 우측=${rightEdgeBefore}`,
+      );
+      console.log(
+        `  결과: x=${result.x}, w=${result.width}, 우측=${rightEdgeAfter}`,
+      );
 
       // 그리드 정렬된 경우 문제 없음
       expect(rightEdgeAfter).toBe(rightEdgeBefore);
@@ -250,7 +274,11 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
         const result = currentResizeLogic(startBounds, -1, 0, -10, 0, snapSize);
         const drift = result.x + result.width - rightAnchor;
         console.log(
-          `  [${startBounds.desc}] start=(${startBounds.x},${startBounds.width}) right=${rightAnchor} → result=(${result.x},${result.width}) right=${result.x + result.width} drift=${drift}px`,
+          `  [${startBounds.desc}] start=(${startBounds.x},${
+            startBounds.width
+          }) right=${rightAnchor} → result=(${result.x},${
+            result.width
+          }) right=${result.x + result.width} drift=${drift}px`,
         );
         // 대부분 drift가 발생
       },
@@ -263,7 +291,11 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
         const result = fixedResizeLogic(startBounds, -1, 0, -10, 0, snapSize);
         const drift = result.x + result.width - rightAnchor;
         console.log(
-          `  [${startBounds.desc}] start=(${startBounds.x},${startBounds.width}) right=${rightAnchor} → result=(${result.x},${result.width}) right=${result.x + result.width} drift=${drift}px`,
+          `  [${startBounds.desc}] start=(${startBounds.x},${
+            startBounds.width
+          }) right=${rightAnchor} → result=(${result.x},${
+            result.width
+          }) right=${result.x + result.width} drift=${drift}px`,
         );
         expect(drift).toBe(0);
       },
@@ -276,7 +308,9 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
     test('현재 로직: 하단 핸들(dy=1)만 드래그해도 X좌표 이동 (버그)', () => {
       const result = currentResizeLogic(startBounds, 0, 1, 0, 10, snapSize);
       console.log(
-        `[현재 로직] 하단 핸들: x=${startBounds.x} → ${result.x} (이동량: ${result.x - startBounds.x}px)`,
+        `[현재 로직] 하단 핸들: x=${startBounds.x} → ${result.x} (이동량: ${
+          result.x - startBounds.x
+        }px)`,
       );
 
       // 버그: 수직 리사이즈인데 X가 스냅되어 이동
@@ -286,7 +320,9 @@ describe('ResizeHandles 스냅 로직 - 앵커 엣지 보존 검증', () => {
     test('수정 로직: 하단 핸들(dy=1)만 드래그 시 X좌표 보존', () => {
       const result = fixedResizeLogic(startBounds, 0, 1, 0, 10, snapSize);
       console.log(
-        `[수정 로직] 하단 핸들: x=${startBounds.x} → ${result.x} (이동량: ${result.x - startBounds.x}px)`,
+        `[수정 로직] 하단 핸들: x=${startBounds.x} → ${result.x} (이동량: ${
+          result.x - startBounds.x
+        }px)`,
       );
 
       // 수정: X축 변경 없음

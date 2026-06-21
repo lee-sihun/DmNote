@@ -4,7 +4,7 @@ import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
 import { resolveImageSource } from '@utils/core/imageSource';
 
-interface DialPosition {
+interface KnobPosition {
   hidden?: boolean;
   axisId?: string;
   sensitivity?: number;
@@ -25,14 +25,14 @@ interface DialPosition {
   borderWidth?: number;
 }
 
-interface OverlayDialItemProps {
-  position: DialPosition;
+interface OverlayKnobItemProps {
+  position: KnobPosition;
   index?: number;
 }
 
 // HID 축(노브)에 바인딩되는 회전 요소. axisSignals의 누적 wrap-델타에
 // 민감도/방향을 적용해 회전. 입력 사이 보간은 CSS transition으로 처리.
-const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
+const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   useSignals();
 
   const {
@@ -136,4 +136,4 @@ const OverlayDialItem = ({ position, index = 0 }: OverlayDialItemProps) => {
   );
 };
 
-export default OverlayDialItem;
+export default OverlayKnobItem;

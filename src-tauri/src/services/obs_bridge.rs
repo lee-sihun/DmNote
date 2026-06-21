@@ -156,7 +156,7 @@ impl ObsBridgeService {
             "positions:changed",
             "statPositions:changed",
             "graphPositions:changed",
-            "dialPositions:changed",
+            "knobPositions:changed",
             "layerGroups:changed",
             "overlay:visibility",
             "overlay:lock",

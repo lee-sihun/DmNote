@@ -10,7 +10,7 @@ import {
 } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { DialItemPositions } from '@src/types/key/dials';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups } from '@src/types/layerGroups';
 import {
   SettingsDiff,
@@ -259,7 +259,7 @@ export type PresetSnapshot = {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   tabNoteOverrides: import('@src/types/settings/noteSettings').TabNoteOverrides;
@@ -580,7 +580,7 @@ export interface PluginSettingsInstance {
   get(): Record<string, unknown>;
   /** 설정값 변경 */
   set(updates: Record<string, unknown>): Promise<void>;
-  /** 설정 다이얼로그 열기 */
+  /** 설정 노브로그 열기 */
   open(): Promise<boolean>;
   /** 설정을 기본값으로 초기화 */
   reset(): Promise<void>;
@@ -792,11 +792,11 @@ export interface DMNoteAPI {
       listener: (positions: GraphItemPositions) => void,
     ): Unsubscribe;
   };
-  dialItems: {
-    getPositions(): Promise<DialItemPositions>;
-    updatePositions(positions: DialItemPositions): Promise<DialItemPositions>;
+  knobItems: {
+    getPositions(): Promise<KnobItemPositions>;
+    updatePositions(positions: KnobItemPositions): Promise<KnobItemPositions>;
     onPositionsChanged(
-      listener: (positions: DialItemPositions) => void,
+      listener: (positions: KnobItemPositions) => void,
     ): Unsubscribe;
   };
   layerGroups: {

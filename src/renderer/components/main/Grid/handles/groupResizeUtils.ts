@@ -7,7 +7,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { DialItemPositions } from '@src/types/key/dials';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { SelectableElementType } from '@stores/grid/useGridSelectionStore';
 
@@ -39,7 +39,7 @@ export function isElementResizable(
   _positions: KeyPositions,
   _statPositions: StatItemPositions,
   _graphPositions: GraphItemPositions,
-  _dialPositions: DialItemPositions,
+  _knobPositions: KnobItemPositions,
   _selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): boolean {
@@ -49,7 +49,7 @@ export function isElementResizable(
     return true;
   } else if (element.type === 'graph') {
     return true;
-  } else if (element.type === 'dial') {
+  } else if (element.type === 'knob') {
     return true;
   } else if (element.type === 'plugin') {
     const pluginEl = pluginElements.find(
@@ -75,7 +75,7 @@ export function getElementBounds(
   positions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): Bounds | null {
@@ -106,8 +106,8 @@ export function getElementBounds(
       width: pos.width || 200,
       height: pos.height || 100,
     };
-  } else if (element.type === 'dial' && element.index !== undefined) {
-    const pos = dialPositions?.[selectedKeyType]?.[element.index];
+  } else if (element.type === 'knob' && element.index !== undefined) {
+    const pos = knobPositions?.[selectedKeyType]?.[element.index];
     if (!pos) return null;
     return {
       x: pos.dx,
@@ -138,7 +138,7 @@ export function calculateGroupBounds(
   positions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): (Bounds & { elementBounds: ElementBounds[] }) | null {
@@ -156,7 +156,7 @@ export function calculateGroupBounds(
         positions,
         statPositions,
         graphPositions,
-        dialPositions,
+        knobPositions,
         selectedKeyType,
         pluginElements,
       )
@@ -169,7 +169,7 @@ export function calculateGroupBounds(
       positions,
       statPositions,
       graphPositions,
-      dialPositions,
+      knobPositions,
       selectedKeyType,
       pluginElements,
     );
@@ -202,7 +202,7 @@ export function getNonResizableElementIds(
   positions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
   selectedKeyType: string,
   pluginElements: PluginDisplayElementInternal[],
 ): string[] {
@@ -214,7 +214,7 @@ export function getNonResizableElementIds(
           positions,
           statPositions,
           graphPositions,
-          dialPositions,
+          knobPositions,
           selectedKeyType,
           pluginElements,
         ),

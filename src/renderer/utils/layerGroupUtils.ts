@@ -2,12 +2,12 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
-import type { DialItemPositions } from '@src/types/key/dials';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 type Groupable = SelectedElement & {
-  type: 'key' | 'stat' | 'graph' | 'dial';
+  type: 'key' | 'stat' | 'graph' | 'knob';
   index: number;
 };
 
@@ -16,7 +16,7 @@ function isGroupableElement(el: SelectedElement): el is Groupable {
     (el.type === 'key' ||
       el.type === 'stat' ||
       el.type === 'graph' ||
-      el.type === 'dial') &&
+      el.type === 'knob') &&
     typeof el.index === 'number'
   );
 }
@@ -27,7 +27,7 @@ function getElementGroupId(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
 ): string | undefined {
   if (element.type === 'key') {
     return keyPositions[mode]?.[element.index]?.groupId;
@@ -38,7 +38,7 @@ function getElementGroupId(
   if (element.type === 'graph') {
     return graphPositions[mode]?.[element.index]?.groupId;
   }
-  return dialPositions[mode]?.[element.index]?.groupId;
+  return knobPositions[mode]?.[element.index]?.groupId;
 }
 
 function escapeRegExp(value: string): string {
@@ -50,7 +50,7 @@ function collectModeGroupMemberCounts(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
 ): Map<string, number> {
   const counts = new Map<string, number>();
   const add = (groupId?: string) => {
@@ -61,7 +61,7 @@ function collectModeGroupMemberCounts(
   (keyPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (statPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (graphPositions[mode] || []).forEach((pos) => add(pos?.groupId));
-  (dialPositions[mode] || []).forEach((pos) => add(pos?.groupId));
+  (knobPositions[mode] || []).forEach((pos) => add(pos?.groupId));
 
   return counts;
 }
@@ -97,7 +97,7 @@ export function resolveSingleGroupIdFromSelection(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
 ): string | undefined {
   const groupIds = new Set<string>();
 
@@ -109,7 +109,7 @@ export function resolveSingleGroupIdFromSelection(
       keyPositions,
       statPositions,
       graphPositions,
-      dialPositions,
+      knobPositions,
     );
     if (groupId) {
       groupIds.add(groupId);
@@ -124,7 +124,7 @@ type ApplyGroupIdResult = {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   changed: boolean;
 };
 
@@ -134,7 +134,7 @@ export function applyGroupIdToSelectedElements(params: {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   targetGroupId: string | undefined;
 }): ApplyGroupIdResult {
   const {
@@ -143,18 +143,18 @@ export function applyGroupIdToSelectedElements(params: {
     keyPositions,
     statPositions,
     graphPositions,
-    dialPositions,
+    knobPositions,
     targetGroupId,
   } = params;
 
   const nextKeyPositions: KeyPositions = { ...keyPositions };
   const nextStatPositions: StatItemPositions = { ...statPositions };
   const nextGraphPositions: GraphItemPositions = { ...graphPositions };
-  const nextDialPositions: DialItemPositions = { ...dialPositions };
+  const nextKnobPositions: KnobItemPositions = { ...knobPositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
-  const nextDialMode = [...(dialPositions[mode] || [])];
+  const nextKnobMode = [...(knobPositions[mode] || [])];
 
   let changed = false;
 
@@ -185,9 +185,9 @@ export function applyGroupIdToSelectedElements(params: {
       return;
     }
 
-    const current = nextDialMode[element.index];
+    const current = nextKnobMode[element.index];
     if (!current || current.groupId === targetGroupId) return;
-    nextDialMode[element.index] = { ...current, groupId: targetGroupId };
+    nextKnobMode[element.index] = { ...current, groupId: targetGroupId };
     changed = true;
   });
 
@@ -195,14 +195,14 @@ export function applyGroupIdToSelectedElements(params: {
     nextKeyPositions[mode] = nextKeyMode;
     nextStatPositions[mode] = nextStatMode;
     nextGraphPositions[mode] = nextGraphMode;
-    nextDialPositions[mode] = nextDialMode;
+    nextKnobPositions[mode] = nextKnobMode;
   }
 
   return {
     keyPositions: changed ? nextKeyPositions : keyPositions,
     statPositions: changed ? nextStatPositions : statPositions,
     graphPositions: changed ? nextGraphPositions : graphPositions,
-    dialPositions: changed ? nextDialPositions : dialPositions,
+    knobPositions: changed ? nextKnobPositions : knobPositions,
     changed,
   };
 }
@@ -211,7 +211,7 @@ type NormalizeLayerGroupsResult = {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   layerGroups: LayerGroups;
   positionsChanged: boolean;
   groupsChanged: boolean;
@@ -223,7 +223,7 @@ export function normalizeLayerGroupsForMode(params: {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   layerGroups: LayerGroups;
 }): NormalizeLayerGroupsResult {
   const {
@@ -231,7 +231,7 @@ export function normalizeLayerGroupsForMode(params: {
     keyPositions,
     statPositions,
     graphPositions,
-    dialPositions,
+    knobPositions,
     layerGroups,
   } = params;
 
@@ -239,18 +239,18 @@ export function normalizeLayerGroupsForMode(params: {
   const nextKeyPositions: KeyPositions = { ...keyPositions };
   const nextStatPositions: StatItemPositions = { ...statPositions };
   const nextGraphPositions: GraphItemPositions = { ...graphPositions };
-  const nextDialPositions: DialItemPositions = { ...dialPositions };
+  const nextKnobPositions: KnobItemPositions = { ...knobPositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
-  const nextDialMode = [...(dialPositions[mode] || [])];
+  const nextKnobMode = [...(knobPositions[mode] || [])];
 
   const initialCounts = collectModeGroupMemberCounts(
     mode,
     keyPositions,
     statPositions,
     graphPositions,
-    dialPositions,
+    knobPositions,
   );
   const groupsToDissolve = new Set<string>();
 
@@ -286,9 +286,9 @@ export function normalizeLayerGroupsForMode(params: {
       nextGraphMode[index] = { ...pos, groupId: undefined };
       positionsChanged = true;
     });
-    nextDialMode.forEach((pos, index) => {
+    nextKnobMode.forEach((pos, index) => {
       if (!shouldClear(pos?.groupId)) return;
-      nextDialMode[index] = { ...pos, groupId: undefined };
+      nextKnobMode[index] = { ...pos, groupId: undefined };
       positionsChanged = true;
     });
   }
@@ -297,7 +297,7 @@ export function normalizeLayerGroupsForMode(params: {
     nextKeyPositions[mode] = nextKeyMode;
     nextStatPositions[mode] = nextStatMode;
     nextGraphPositions[mode] = nextGraphMode;
-    nextDialPositions[mode] = nextDialMode;
+    nextKnobPositions[mode] = nextKnobMode;
   }
 
   const finalCounts = collectModeGroupMemberCounts(
@@ -305,7 +305,7 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged ? nextKeyPositions : keyPositions,
     positionsChanged ? nextStatPositions : statPositions,
     positionsChanged ? nextGraphPositions : graphPositions,
-    positionsChanged ? nextDialPositions : dialPositions,
+    positionsChanged ? nextKnobPositions : knobPositions,
   );
   const nextModeGroups = currentModeGroups.filter(
     (group) => (finalCounts.get(group.id) || 0) >= 1,
@@ -326,7 +326,7 @@ export function normalizeLayerGroupsForMode(params: {
     keyPositions: positionsChanged ? nextKeyPositions : keyPositions,
     statPositions: positionsChanged ? nextStatPositions : statPositions,
     graphPositions: positionsChanged ? nextGraphPositions : graphPositions,
-    dialPositions: positionsChanged ? nextDialPositions : dialPositions,
+    knobPositions: positionsChanged ? nextKnobPositions : knobPositions,
     layerGroups: nextLayerGroups,
     positionsChanged,
     groupsChanged,
@@ -339,7 +339,7 @@ export function normalizeLayerGroupsForMode(params: {
 // ============================================================================
 
 export interface LayerItemForOrder {
-  type: 'key' | 'stat' | 'graph' | 'dial' | 'plugin';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
   id: string;
   index?: number;
   zIndex: number;
@@ -352,7 +352,7 @@ export function buildLayerItemsForMode(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
   pluginElements: PluginDisplayElementInternal[],
 ): LayerItemForOrder[] {
   const items: LayerItemForOrder[] = [];
@@ -387,10 +387,10 @@ export function buildLayerItemsForMode(
     });
   });
 
-  (dialPositions[mode] || []).forEach((pos, index) => {
+  (knobPositions[mode] || []).forEach((pos, index) => {
     items.push({
-      type: 'dial',
-      id: `dial-${index}`,
+      type: 'knob',
+      id: `knob-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
@@ -450,7 +450,7 @@ export interface ZIndexPatchResult {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
-  dialPositions: DialItemPositions;
+  knobPositions: KnobItemPositions;
   pluginUpdates: Array<{ fullId: string; zIndex: number }>;
 }
 
@@ -461,13 +461,13 @@ export function applyZIndexToLayerOrder(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
-  dialPositions: DialItemPositions,
+  knobPositions: KnobItemPositions,
 ): ZIndexPatchResult {
   const maxZIndex = orderedItems.length - 1;
   const keyMode = [...(keyPositions[mode] || [])];
   const statMode = [...(statPositions[mode] || [])];
   const graphMode = [...(graphPositions[mode] || [])];
-  const dialMode = [...(dialPositions[mode] || [])];
+  const knobMode = [...(knobPositions[mode] || [])];
   const pluginUpdates: Array<{ fullId: string; zIndex: number }> = [];
 
   orderedItems.forEach((item, idx) => {
@@ -491,11 +491,11 @@ export function applyZIndexToLayerOrder(
     ) {
       graphMode[item.index] = { ...graphMode[item.index], zIndex: z };
     } else if (
-      item.type === 'dial' &&
+      item.type === 'knob' &&
       item.index !== undefined &&
-      dialMode[item.index]
+      knobMode[item.index]
     ) {
-      dialMode[item.index] = { ...dialMode[item.index], zIndex: z };
+      knobMode[item.index] = { ...knobMode[item.index], zIndex: z };
     } else if (item.type === 'plugin') {
       pluginUpdates.push({ fullId: item.id, zIndex: z });
     }
@@ -505,7 +505,7 @@ export function applyZIndexToLayerOrder(
     keyPositions: { ...keyPositions, [mode]: keyMode },
     statPositions: { ...statPositions, [mode]: statMode },
     graphPositions: { ...graphPositions, [mode]: graphMode },
-    dialPositions: { ...dialPositions, [mode]: dialMode },
+    knobPositions: { ...knobPositions, [mode]: knobMode },
     pluginUpdates,
   };
 }

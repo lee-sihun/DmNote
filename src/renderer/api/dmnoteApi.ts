@@ -4,7 +4,7 @@ import { keysApi } from './modules/keysApi';
 import {
   statItemsApi,
   graphItemsApi,
-  dialItemsApi,
+  knobItemsApi,
   layerGroupsApi,
 } from './modules/itemsApi';
 import { overlayApi } from './modules/overlayApi';
@@ -36,7 +36,7 @@ const api: DMNoteAPI = {
   keys: keysApi,
   statItems: statItemsApi,
   graphItems: graphItemsApi,
-  dialItems: dialItemsApi,
+  knobItems: knobItemsApi,
   layerGroups: layerGroupsApi,
   overlay: overlayApi,
   css: cssApi,

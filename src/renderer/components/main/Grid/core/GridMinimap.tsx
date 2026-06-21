@@ -22,7 +22,7 @@ interface GridMinimapProps {
   positions: Position[];
   statPositions?: Position[];
   graphPositions?: Position[];
-  dialPositions?: Position[];
+  knobPositions?: Position[];
   zoom: number;
   panX: number;
   panY: number;
@@ -42,7 +42,7 @@ const GridMinimap = ({
   positions,
   statPositions = [],
   graphPositions = [],
-  dialPositions = [],
+  knobPositions = [],
   zoom,
   panX,
   panY,
@@ -121,7 +121,7 @@ const GridMinimap = ({
       positions.length === 0 &&
       statPositions.length === 0 &&
       graphPositions.length === 0 &&
-      dialPositions.length === 0 &&
+      knobPositions.length === 0 &&
       pluginPositions.length === 0
     ) {
       return { minX: 0, minY: 0, maxX: 100, maxY: 100 };
@@ -174,8 +174,8 @@ const GridMinimap = ({
       maxY = Math.max(maxY, y + h);
     });
 
-    // 다이얼 요소 bounds
-    dialPositions.forEach((pos) => {
+    // 노브 요소 bounds
+    knobPositions.forEach((pos) => {
       if (pos.hidden) return;
       const x = pos.dx || 0;
       const y = pos.dy || 0;
@@ -306,7 +306,7 @@ const GridMinimap = ({
     positions.length === 0 &&
     statPositions.length === 0 &&
     graphPositions.length === 0 &&
-    dialPositions.length === 0 &&
+    knobPositions.length === 0 &&
     pluginPositions.length === 0
   ) {
     return null;
@@ -544,8 +544,8 @@ const GridMinimap = ({
               />
             );
           })}
-          {/* 다이얼 요소 표시 */}
-          {dialPositions.map((pos, index) => {
+          {/* 노브 요소 표시 */}
+          {knobPositions.map((pos, index) => {
             if (pos.hidden) return null;
             const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
             const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
@@ -554,7 +554,7 @@ const GridMinimap = ({
 
             return (
               <rect
-                key={`dial-${index}`}
+                key={`knob-${index}`}
                 x={x}
                 y={y}
                 width={Math.max(w, 2)}

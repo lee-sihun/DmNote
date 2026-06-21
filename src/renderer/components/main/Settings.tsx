@@ -1098,7 +1098,11 @@ const Settings = ({
             />
             <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
               <span className="mb-[15px] text-white text-[15px] font-medium">
-                {t(hoveredKey === 'obsMode' ? 'settings.obsGuide' : `settings.${hoveredKey}Desc`)}
+                {t(
+                  hoveredKey === 'obsMode'
+                    ? 'settings.obsGuide'
+                    : `settings.${hoveredKey}Desc`,
+                )}
               </span>
             </div>
           </div>

@@ -11,7 +11,7 @@ import {
 } from '@utils/grid/smartGuides';
 import { resolveImageSource } from '@utils/core/imageSource';
 
-interface DialPosition {
+interface KnobPosition {
   hidden?: boolean;
   dx?: number;
   dy?: number;
@@ -34,10 +34,10 @@ interface SelectedElement {
   index?: number;
 }
 
-interface DialItemProps {
+interface KnobItemProps {
   index: number;
   elementId?: string;
-  position: DialPosition;
+  position: KnobPosition;
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
@@ -58,7 +58,7 @@ interface DialItemProps {
   isViewportTransforming?: boolean;
 }
 
-const DialItem = ({
+const KnobItem = ({
   index,
   elementId,
   position,
@@ -80,7 +80,7 @@ const DialItem = ({
   panY = 0,
   zIndex = 0,
   isViewportTransforming = false,
-}: DialItemProps) => {
+}: KnobItemProps) => {
   const macOS = isMac();
   const {
     dx = 0,
@@ -95,7 +95,7 @@ const DialItem = ({
     activeImage,
     idleImageFit,
     imageFit,
-  } = position ?? ({} as Partial<DialPosition>);
+  } = position ?? ({} as Partial<KnobPosition>);
 
   const { getOtherElements } = useSmartGuidesElements();
   const gridSnapSize = useSettingsStore(
@@ -114,7 +114,7 @@ const DialItem = ({
     lastSnappedDeltaX?: number;
     lastSnappedDeltaY?: number;
   }>({ isDragging: false, startX: 0, startY: 0 });
-  const effectiveElementId = elementId || `dial-${index}`;
+  const effectiveElementId = elementId || `knob-${index}`;
 
   const imageSrc =
     resolveImageSource(inactiveImage) ||
@@ -215,7 +215,7 @@ const DialItem = ({
             .map((sel) => {
               if (
                 sel.id === currentElementId ||
-                (sel.type === 'dial' && sel.index === index)
+                (sel.type === 'knob' && sel.index === index)
               ) {
                 return draggedBounds;
               }
@@ -480,4 +480,4 @@ const DialItem = ({
   );
 };
 
-export default DialItem;
+export default KnobItem;

@@ -11,7 +11,7 @@ use tauri::State;
 use crate::{
     errors::CmdResult,
     models::{
-        DialPositions, FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions,
+        FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
         StatPositions, TabNoteOverrides,
     },
     state::AppState,
@@ -46,12 +46,12 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
     );
     let (font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
-    let (key_positions, stat_positions, graph_positions, dial_positions, embedded_local_images) =
+    let (key_positions, stat_positions, graph_positions, knob_positions, embedded_local_images) =
         build_preset_image_payload(
             &snapshot.key_positions,
             &snapshot.stat_positions,
             &snapshot.graph_positions,
-            &snapshot.dial_positions,
+            &snapshot.knob_positions,
         )?;
     let (key_positions, stat_positions, graph_positions, embedded_local_sounds) =
         build_preset_sound_payload(&key_positions, &stat_positions, &graph_positions)?;
@@ -61,7 +61,7 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
         key_positions: Some(key_positions),
         stat_positions: Some(stat_positions),
         graph_positions: Some(graph_positions),
-        dial_positions: Some(dial_positions),
+        knob_positions: Some(knob_positions),
         background_color: Some(snapshot.background_color),
         note_settings: Some(snapshot.note_settings),
         note_effect: Some(snapshot.note_effect),
@@ -125,9 +125,9 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
     if let Some(positions) = snapshot.graph_positions.get(&tab_id) {
         tab_graph_positions.insert(tab_id.clone(), positions.clone());
     }
-    let mut tab_dial_positions: DialPositions = HashMap::new();
-    if let Some(positions) = snapshot.dial_positions.get(&tab_id) {
-        tab_dial_positions.insert(tab_id.clone(), positions.clone());
+    let mut tab_knob_positions: KnobPositions = HashMap::new();
+    if let Some(positions) = snapshot.knob_positions.get(&tab_id) {
+        tab_knob_positions.insert(tab_id.clone(), positions.clone());
     }
 
     let used_font_families = collect_used_font_families(
@@ -141,13 +141,13 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         tab_key_positions,
         tab_stat_positions,
         tab_graph_positions,
-        tab_dial_positions,
+        tab_knob_positions,
         embedded_local_images,
     ) = build_preset_image_payload(
         &tab_key_positions,
         &tab_stat_positions,
         &tab_graph_positions,
-        &tab_dial_positions,
+        &tab_knob_positions,
     )?;
     let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_sounds) =
         build_preset_sound_payload(
@@ -192,7 +192,7 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         key_positions: Some(tab_key_positions),
         stat_positions: Some(tab_stat_positions),
         graph_positions: Some(tab_graph_positions),
-        dial_positions: Some(tab_dial_positions),
+        knob_positions: Some(tab_knob_positions),
         background_color: None,
         note_settings: None,
         note_effect: None,
@@ -340,18 +340,18 @@ fn build_preset_image_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
-    dial_positions: &DialPositions,
+    knob_positions: &KnobPositions,
 ) -> CmdResult<(
     KeyPositions,
     StatPositions,
     GraphPositions,
-    DialPositions,
+    KnobPositions,
     Vec<EmbeddedLocalImage>,
 )> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
-    let mut exported_dial_positions = dial_positions.clone();
+    let mut exported_knob_positions = knob_positions.clone();
     let mut embedded_local_images = Vec::new();
     let mut path_to_image_id: HashMap<String, String> = HashMap::new();
 
@@ -400,15 +400,15 @@ fn build_preset_image_payload(
         }
     }
 
-    for positions in exported_dial_positions.values_mut() {
-        for dial_position in positions.iter_mut() {
+    for positions in exported_knob_positions.values_mut() {
+        for knob_position in positions.iter_mut() {
             rewrite_position_image_reference(
-                &mut dial_position.position.active_image,
+                &mut knob_position.position.active_image,
                 &mut embedded_local_images,
                 &mut path_to_image_id,
             )?;
             rewrite_position_image_reference(
-                &mut dial_position.position.inactive_image,
+                &mut knob_position.position.inactive_image,
                 &mut embedded_local_images,
                 &mut path_to_image_id,
             )?;
@@ -419,7 +419,7 @@ fn build_preset_image_payload(
         exported_key_positions,
         exported_stat_positions,
         exported_graph_positions,
-        exported_dial_positions,
+        exported_knob_positions,
         embedded_local_images,
     ))
 }

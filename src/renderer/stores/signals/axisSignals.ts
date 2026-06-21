@@ -1,7 +1,7 @@
 import { signal, type Signal } from '@preact/signals-react';
 
 // axisId -> Signal<number>: 누적 wrap 델타 합(축 raw 단위).
-// 각 DialItem이 이 값에 자신의 민감도/방향을 곱해 회전 각도로 사용.
+// 각 KnobItem이 이 값에 자신의 민감도/방향을 곱해 회전 각도로 사용.
 const axisSignals = new Map<string, Signal<number>>();
 
 export function getAxisSignal(axisId: string): Signal<number> {

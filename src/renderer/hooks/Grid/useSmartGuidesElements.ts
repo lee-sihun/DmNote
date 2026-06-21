@@ -5,7 +5,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { calculateBounds, type ElementBounds } from '@utils/grid/smartGuides';
 
@@ -17,7 +17,7 @@ export function useSmartGuidesElements() {
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
-  const dialPositions = useDialItemStore((state) => state.positions);
+  const knobPositions = useKnobItemStore((state) => state.positions);
   const pluginElements = usePluginDisplayElementStore(
     (state) => state.elements,
   );
@@ -87,11 +87,11 @@ export function useSmartGuidesElements() {
       }
     });
 
-    // 다이얼 요소 bounds
-    const dials = dialPositions[selectedKeyType] || [];
-    dials.forEach((pos, index) => {
+    // 노브 요소 bounds
+    const knobs = knobPositions[selectedKeyType] || [];
+    knobs.forEach((pos, index) => {
       if (!pos || pos.hidden) return;
-      const id = `dial-${index}`;
+      const id = `knob-${index}`;
       if (!excludeSet.has(id)) {
         bounds.push(
           calculateBounds(

@@ -7,7 +7,7 @@ import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
-import { useDialItemStore } from '@stores/data/useDialItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -201,8 +201,8 @@ export function useLayerActions({
       return;
     }
 
-    if (item.type === 'dial' && item.index !== undefined) {
-      const current = useDialItemStore.getState().positions;
+    if (item.type === 'knob' && item.index !== undefined) {
+      const current = useKnobItemStore.getState().positions;
       const currentPositions = current[selectedKeyType] || [];
       const target = currentPositions[item.index];
       if (!target) return;
@@ -215,17 +215,17 @@ export function useLayerActions({
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 
-      useDialItemStore.getState().setLocalUpdateInProgress(true);
-      useDialItemStore.getState().setPositions(updatedPositions);
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.dialItems.updatePositions(updatedPositions);
+        await window.api.knobItems.updatePositions(updatedPositions);
       } catch (error) {
-        console.error('Failed to toggle dial item visibility', error);
+        console.error('Failed to toggle knob item visibility', error);
       } finally {
-        useDialItemStore.getState().setLocalUpdateInProgress(false);
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: updatedPositions,
         });
       } catch {
@@ -346,14 +346,14 @@ export function useLayerActions({
       }
     }
 
-    // 다이얼 positions
-    const dialChildren = children.filter(
-      (c) => c.type === 'dial' && c.index !== undefined,
+    // 노브 positions
+    const knobChildren = children.filter(
+      (c) => c.type === 'knob' && c.index !== undefined,
     );
-    if (dialChildren.length > 0) {
-      const current = useDialItemStore.getState().positions;
+    if (knobChildren.length > 0) {
+      const current = useKnobItemStore.getState().positions;
       const modePositions = [...(current[selectedKeyType] || [])];
-      dialChildren.forEach((c) => {
+      knobChildren.forEach((c) => {
         if (c.index !== undefined && modePositions[c.index]) {
           modePositions[c.index] = {
             ...modePositions[c.index],
@@ -365,15 +365,15 @@ export function useLayerActions({
         ...current,
         [selectedKeyType]: modePositions,
       };
-      useDialItemStore.getState().setLocalUpdateInProgress(true);
-      useDialItemStore.getState().setPositions(updatedPositions);
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.dialItems.updatePositions(updatedPositions);
+        await window.api.knobItems.updatePositions(updatedPositions);
       } finally {
-        useDialItemStore.getState().setLocalUpdateInProgress(false);
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: updatedPositions,
         });
       } catch {
@@ -462,8 +462,8 @@ export function useLayerActions({
       } finally {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
-    } else if (item.type === 'dial' && item.index !== undefined) {
-      const current = useDialItemStore.getState().positions;
+    } else if (item.type === 'knob' && item.index !== undefined) {
+      const current = useKnobItemStore.getState().positions;
       const currentPositions = current[selectedKeyType] || [];
       const target = currentPositions[item.index];
       if (!target) return;
@@ -476,15 +476,15 @@ export function useLayerActions({
       };
       updatedPositions[selectedKeyType] = updatedModePositions;
 
-      useDialItemStore.getState().setLocalUpdateInProgress(true);
-      useDialItemStore.getState().setPositions(updatedPositions);
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
       try {
-        await window.api.dialItems.updatePositions(updatedPositions);
+        await window.api.knobItems.updatePositions(updatedPositions);
       } finally {
-        useDialItemStore.getState().setLocalUpdateInProgress(false);
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
       }
       try {
-        window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
           positions: updatedPositions,
         });
       } catch {
@@ -564,14 +564,14 @@ export function useLayerActions({
     const layerGroupsForNormalization =
       options?.layerGroupsForNormalization ?? storeLayerGroups;
 
-    const currentDialPositions = useDialItemStore.getState().positions;
+    const currentKnobPositions = useKnobItemStore.getState().positions;
     const grouped = applyGroupIdToSelectedElements({
       mode: selectedKeyType,
       selectedElements: selectedForUpdate,
       keyPositions: pos,
       statPositions: currentStatPositions,
       graphPositions: currentGraphPositions,
-      dialPositions: currentDialPositions,
+      knobPositions: currentKnobPositions,
       targetGroupId,
     });
 
@@ -580,7 +580,7 @@ export function useLayerActions({
       keyPositions: grouped.keyPositions,
       statPositions: grouped.statPositions,
       graphPositions: grouped.graphPositions,
-      dialPositions: grouped.dialPositions,
+      knobPositions: grouped.knobPositions,
       layerGroups: layerGroupsForNormalization,
     });
 
@@ -605,12 +605,12 @@ export function useLayerActions({
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useDialItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
 
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
     useGraphItemStore.getState().setPositions(normalized.graphPositions);
-    useDialItemStore.getState().setPositions(normalized.dialPositions);
+    useKnobItemStore.getState().setPositions(normalized.knobPositions);
 
     if (shouldPersistGroups) {
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
@@ -620,7 +620,7 @@ export function useLayerActions({
       await window.api.keys.updatePositions(normalized.keyPositions);
       await window.api.statItems.updatePositions(normalized.statPositions);
       await window.api.graphItems.updatePositions(normalized.graphPositions);
-      await window.api.dialItems.updatePositions(normalized.dialPositions);
+      await window.api.knobItems.updatePositions(normalized.knobPositions);
       if (shouldPersistGroups) {
         await window.api.layerGroups.update(normalized.layerGroups);
       }
@@ -628,7 +628,7 @@ export function useLayerActions({
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useDialItemStore.getState().setLocalUpdateInProgress(false);
+      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     return true;
@@ -703,8 +703,8 @@ export function useLayerActions({
         toggleSelection({ type: 'stat', id: item.id, index: item.index });
       } else if (item.type === 'graph' && item.index !== undefined) {
         toggleSelection({ type: 'graph', id: item.id, index: item.index });
-      } else if (item.type === 'dial' && item.index !== undefined) {
-        toggleSelection({ type: 'dial', id: item.id, index: item.index });
+      } else if (item.type === 'knob' && item.index !== undefined) {
+        toggleSelection({ type: 'knob', id: item.id, index: item.index });
       } else if (item.type === 'plugin') {
         toggleSelection({ type: 'plugin', id: item.id });
       }
@@ -801,7 +801,7 @@ export function useLayerActions({
       const keyPos = useKeyStore.getState().positions;
       const statPos = useStatItemStore.getState().positions;
       const graphPos = useGraphItemStore.getState().positions;
-      const dialPos = useDialItemStore.getState().positions;
+      const knobPos = useKnobItemStore.getState().positions;
 
       const singleGroupId = resolveSingleGroupIdFromSelection(
         selectedKeyType,
@@ -809,7 +809,7 @@ export function useLayerActions({
         keyPos,
         statPos,
         graphPos,
-        dialPos,
+        knobPos,
       );
 
       if (singleGroupId) {
@@ -870,8 +870,8 @@ export function useLayerActions({
         .filter((el) => el.type === 'graph' && el.index !== undefined)
         .map((el) => el.index as number);
 
-      const dialsToDelete = selectedElements
-        .filter((el) => el.type === 'dial' && el.index !== undefined)
+      const knobsToDelete = selectedElements
+        .filter((el) => el.type === 'knob' && el.index !== undefined)
         .map((el) => el.index as number);
 
       const pluginsToDelete = selectedElements
@@ -883,7 +883,7 @@ export function useLayerActions({
         keysToDelete.length > 0 ||
         statsToDelete.length > 0 ||
         graphsToDelete.length > 0 ||
-        dialsToDelete.length > 0 ||
+        knobsToDelete.length > 0 ||
         pluginsToDelete.length > 0
       ) {
         const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -995,11 +995,11 @@ export function useLayerActions({
         }
       }
 
-      // 다이얼 삭제
-      if (dialsToDelete.length > 0) {
-        const current = useDialItemStore.getState().positions;
+      // 노브 삭제
+      if (knobsToDelete.length > 0) {
+        const current = useKnobItemStore.getState().positions;
         const posArray = current[selectedKeyType] || [];
-        const deleteSet = new Set(dialsToDelete);
+        const deleteSet = new Set(knobsToDelete);
 
         const updatedPositions = {
           ...current,
@@ -1008,18 +1008,18 @@ export function useLayerActions({
           ),
         };
 
-        useDialItemStore.getState().setLocalUpdateInProgress(true);
-        useDialItemStore.getState().setPositions(updatedPositions);
+        useKnobItemStore.getState().setLocalUpdateInProgress(true);
+        useKnobItemStore.getState().setPositions(updatedPositions);
         try {
-          await window.api.dialItems.updatePositions(updatedPositions);
+          await window.api.knobItems.updatePositions(updatedPositions);
         } catch (error) {
-          console.error('Failed to delete dial items', error);
+          console.error('Failed to delete knob items', error);
         } finally {
-          useDialItemStore.getState().setLocalUpdateInProgress(false);
+          useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
 
         try {
-          window.api.bridge.sendTo('overlay', 'dialPositions:sync', {
+          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
             positions: updatedPositions,
           });
         } catch {
@@ -1043,7 +1043,7 @@ export function useLayerActions({
         keyPositions: useKeyStore.getState().positions,
         statPositions: useStatItemStore.getState().positions,
         graphPositions: useGraphItemStore.getState().positions,
-        dialPositions: useDialItemStore.getState().positions,
+        knobPositions: useKnobItemStore.getState().positions,
         layerGroups: useLayerGroupStore.getState().layerGroups,
       });
 
@@ -1051,11 +1051,11 @@ export function useLayerActions({
         useKeyStore.getState().setLocalUpdateInProgress(true);
         useStatItemStore.getState().setLocalUpdateInProgress(true);
         useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useDialItemStore.getState().setLocalUpdateInProgress(true);
+        useKnobItemStore.getState().setLocalUpdateInProgress(true);
         useKeyStore.getState().setPositions(normalized.keyPositions);
         useStatItemStore.getState().setPositions(normalized.statPositions);
         useGraphItemStore.getState().setPositions(normalized.graphPositions);
-        useDialItemStore.getState().setPositions(normalized.dialPositions);
+        useKnobItemStore.getState().setPositions(normalized.knobPositions);
         if (normalized.groupsChanged) {
           useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
         }
@@ -1065,7 +1065,7 @@ export function useLayerActions({
           await window.api.graphItems.updatePositions(
             normalized.graphPositions,
           );
-          await window.api.dialItems.updatePositions(normalized.dialPositions);
+          await window.api.knobItems.updatePositions(normalized.knobPositions);
           if (normalized.groupsChanged) {
             await window.api.layerGroups.update(normalized.layerGroups);
           }
@@ -1073,7 +1073,7 @@ export function useLayerActions({
           useKeyStore.getState().setLocalUpdateInProgress(false);
           useStatItemStore.getState().setLocalUpdateInProgress(false);
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
-          useDialItemStore.getState().setLocalUpdateInProgress(false);
+          useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
     }

@@ -9,7 +9,7 @@ import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
-import type { DialItemPosition } from '@src/types/key/dials';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import {
   normalizeCounterSettings,
@@ -1347,12 +1347,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
 };
 
 // ============================================================================
-// Dial-only batch selection panel
+// Knob-only batch selection panel
 // ============================================================================
 
-interface BatchDialOnlyPanelProps {
+interface BatchKnobOnlyPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
-  selectedDialElements: SelectedElement[];
+  selectedKnobElements: SelectedElement[];
   selectedGroupInfo: { id: string; name: string; memberCount: number } | null;
   isRenaming: boolean;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -1384,10 +1384,10 @@ interface BatchDialOnlyPanelProps {
     property: keyof KeyPosition,
     value: unknown,
   ) => void;
-  handleDialBatchSharedSetting: (updates: Partial<DialItemPosition>) => void;
-  getMixedValueDials: MixedValueGetter<DialItemPosition>;
-  getMixedValueDialsAsKey: MixedValueGetter<KeyPosition>;
-  getSelectedDialsData: () => KeyData[];
+  handleKnobBatchSharedSetting: (updates: Partial<KnobItemPosition>) => void;
+  getMixedValueKnobs: MixedValueGetter<KnobItemPosition>;
+  getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
+  getSelectedKnobsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -1399,9 +1399,9 @@ interface BatchDialOnlyPanelProps {
   t: (key: string) => string | undefined;
 }
 
-export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
+export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   setPanelElement,
-  selectedDialElements,
+  selectedKnobElements,
   selectedGroupInfo,
   isRenaming,
   renameInputRef,
@@ -1422,10 +1422,10 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
   handleBatchResize,
   handleBatchStyleChange,
   handleBatchStyleChangeComplete,
-  handleDialBatchSharedSetting,
-  getMixedValueDials,
-  getMixedValueDialsAsKey,
-  getSelectedDialsData,
+  handleKnobBatchSharedSetting,
+  getMixedValueKnobs,
+  getMixedValueKnobsAsKey,
+  getSelectedKnobsData,
   batchScrollRefFor,
   batchThumbRefFor,
   batchImageButtonRef,
@@ -1435,12 +1435,12 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
   useCustomCSS,
   t,
 }) => {
-  const sensitivityState = getMixedValueDials(
+  const sensitivityState = getMixedValueKnobs(
     (pos) => Number(pos.sensitivity ?? 1.40625),
     1.40625,
   );
-  const reverseState = getMixedValueDials((pos) => pos.reverse ?? false, false);
-  const batchDialSpacing = getBatchSpacingValue();
+  const reverseState = getMixedValueKnobs((pos) => pos.reverse ?? false, false);
+  const batchKnobSpacing = getBatchSpacingValue();
 
   return (
     <div
@@ -1499,7 +1499,7 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
             )}
             {!selectedGroupInfo && (
               <span className="text-[#6B6D75] text-style-4">
-                ({selectedDialElements.length})
+                ({selectedKnobElements.length})
               </span>
             )}
           </div>
@@ -1529,14 +1529,14 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
         >
           <div className="p-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
-              selectedCount={selectedDialElements.length}
+              selectedCount={selectedKnobElements.length}
               hideDisplayText
               hideFontControls
               showSoundControls={false}
               afterSizeContent={
                 <>
                   <PropertyRow
-                    label={t('propertiesPanel.dialSensitivity') || '민감도'}
+                    label={t('propertiesPanel.knobSensitivity') || '민감도'}
                   >
                     {sensitivityState.isMixed ? (
                       <span className="text-[#6B6D75] text-style-4 italic">
@@ -1546,7 +1546,7 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
                     <NumberInput
                       value={sensitivityState.value}
                       onChange={(value) =>
-                        handleDialBatchSharedSetting({
+                        handleKnobBatchSharedSetting({
                           sensitivity: Math.max(0, value),
                         })
                       }
@@ -1560,7 +1560,7 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
 
                   <div className="flex justify-between items-center w-full h-[23px]">
                     <p className="text-white text-style-2">
-                      {t('propertiesPanel.dialReverse') || '방향 반전'}
+                      {t('propertiesPanel.knobReverse') || '방향 반전'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {reverseState.isMixed ? (
@@ -1571,7 +1571,7 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
                       <Checkbox
                         checked={reverseState.value}
                         onChange={() =>
-                          handleDialBatchSharedSetting({
+                          handleKnobBatchSharedSetting({
                             reverse: !reverseState.value,
                           })
                         }
@@ -1580,14 +1580,14 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
                   </div>
                 </>
               }
-              getMixedValue={getMixedValueDialsAsKey}
-              getSelectedKeysData={getSelectedDialsData}
+              getMixedValue={getMixedValueKnobsAsKey}
+              getSelectedKeysData={getSelectedKnobsData}
               handleBatchAlign={handleBatchAlign}
               handleBatchDistribute={handleBatchDistribute}
               handleBatchSpacing={handleBatchSpacing}
               handleBatchSpacingPreview={handleBatchSpacingPreview}
               handleBatchSpacingCommit={handleBatchSpacingCommit}
-              batchSpacing={batchDialSpacing}
+              batchSpacing={batchKnobSpacing}
               handleBatchResize={handleBatchResize}
               handleBatchStyleChange={handleBatchStyleChange}
               handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
@@ -1617,38 +1617,38 @@ export const BatchDialOnlyPanel: React.FC<BatchDialOnlyPanelProps> = ({
           referenceRef={batchImageButtonRef}
           panelElement={panelElement}
           idleImage={
-            getMixedValueDials((pos) => pos.inactiveImage, '').isMixed
+            getMixedValueKnobs((pos) => pos.inactiveImage, '').isMixed
               ? ''
-              : getMixedValueDials((pos) => pos.inactiveImage, '').value
+              : getMixedValueKnobs((pos) => pos.inactiveImage, '').value
           }
           activeImage={
-            getMixedValueDials((pos) => pos.activeImage, '').isMixed
+            getMixedValueKnobs((pos) => pos.activeImage, '').isMixed
               ? ''
-              : getMixedValueDials((pos) => pos.activeImage, '').value
+              : getMixedValueKnobs((pos) => pos.activeImage, '').value
           }
           idleTransparent={
-            getMixedValueDials((pos) => pos.idleTransparent, false).value
+            getMixedValueKnobs((pos) => pos.idleTransparent, false).value
           }
           activeTransparent={
-            getMixedValueDials((pos) => pos.activeTransparent, false).value
+            getMixedValueKnobs((pos) => pos.activeTransparent, false).value
           }
           onIdleImageChange={(imageUrl: string) => {
-            handleDialBatchSharedSetting({ inactiveImage: imageUrl });
+            handleKnobBatchSharedSetting({ inactiveImage: imageUrl });
           }}
           onActiveImageChange={(imageUrl: string) => {
-            handleDialBatchSharedSetting({ activeImage: imageUrl });
+            handleKnobBatchSharedSetting({ activeImage: imageUrl });
           }}
           onIdleTransparentChange={(value: boolean) => {
-            handleDialBatchSharedSetting({ idleTransparent: value });
+            handleKnobBatchSharedSetting({ idleTransparent: value });
           }}
           onActiveTransparentChange={(value: boolean) => {
-            handleDialBatchSharedSetting({ activeTransparent: value });
+            handleKnobBatchSharedSetting({ activeTransparent: value });
           }}
           onIdleImageReset={() => {
-            handleDialBatchSharedSetting({ inactiveImage: '' });
+            handleKnobBatchSharedSetting({ inactiveImage: '' });
           }}
           onActiveImageReset={() => {
-            handleDialBatchSharedSetting({ activeImage: '' });
+            handleKnobBatchSharedSetting({ activeImage: '' });
           }}
           onClose={() => setShowBatchImagePicker(false)}
         />
