@@ -300,16 +300,61 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   width = '54px',
   placeholder,
   allowNegative = false,
+  allowDecimal = false,
+  decimalScale = 1,
   isMixed = false,
   mixedPlaceholder = 'Mixed',
 }) => {
   const hasSuffix = !!suffix;
+  const resolvedDecimalScale = allowDecimal
+    ? Math.max(0, Math.floor(decimalScale))
+    : 0;
+  const supportsDecimal = resolvedDecimalScale > 0;
+  const inputMode = supportsDecimal ? 'decimal' : 'numeric';
+
+  const normalizePrecision = (num: number): number => {
+    if (!supportsDecimal) return num;
+    return Number(num.toFixed(resolvedDecimalScale));
+  };
+
+  // 숫자/부호/소수점만 남기고, 부호는 맨 앞에 하나, 소수점도 하나만 유지
+  const sanitizeInput = (raw: string): string => {
+    const pattern = supportsDecimal
+      ? allowNegative
+        ? /[^0-9.-]/g
+        : /[^0-9.]/g
+      : allowNegative
+      ? /[^0-9-]/g
+      : /[^0-9]/g;
+    let sanitized = raw.replace(pattern, '');
+
+    if (allowNegative) {
+      const isNegative = sanitized.startsWith('-');
+      sanitized = sanitized.replace(/-/g, '');
+      if (isNegative) sanitized = `-${sanitized}`;
+    }
+
+    if (!supportsDecimal) return sanitized;
+
+    const sign = sanitized.startsWith('-') ? '-' : '';
+    const unsigned = sign ? sanitized.slice(1) : sanitized;
+    const dotIndex = unsigned.indexOf('.');
+    if (dotIndex === -1) return `${sign}${unsigned}`;
+
+    const integerPart = unsigned.slice(0, dotIndex);
+    const fractionalPart = unsigned
+      .slice(dotIndex + 1)
+      .replace(/\./g, '')
+      .slice(0, resolvedDecimalScale);
+    return `${sign}${integerPart}.${fractionalPart}`;
+  };
 
   const getDisplayValue = (val: number, focused: boolean): string => {
+    const normalized = normalizePrecision(val);
     if (hasSuffix && !focused) {
-      return `${val}${suffix}`;
+      return `${normalized}${suffix}`;
     }
-    return String(val);
+    return String(normalized);
   };
 
   const [localValue, setLocalValue] = useState<string>(() => {
@@ -349,23 +394,22 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (e.ctrlKey || e.metaKey) return;
     if (/^[0-9]$/.test(e.key)) return;
     if (allowNegative && e.key === '-') return;
+    if (supportsDecimal && (e.key === '.' || e.key === 'Decimal')) return;
 
     e.preventDefault();
   };
 
-  const numericPattern = allowNegative ? /[^0-9-]/g : /[^0-9]/g;
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(numericPattern, '');
-    // 마이너스는 맨 앞에만 허용
-    const newValue = allowNegative
-      ? (raw.startsWith('-') ? '-' : '') + raw.replace(/-/g, '')
-      : raw;
+    const newValue = sanitizeInput(e.target.value);
     setLocalValue(newValue);
     setHasUserInput(true);
 
-    if (newValue === '' || newValue === '-') {
+    // 빈 값만 unset, 부호·소수점만 남은 중간 상태는 commit하지 않고 입력 유지
+    if (newValue === '') {
       onChange(undefined);
+      return;
+    }
+    if (newValue === '-' || newValue === '.' || newValue === '-.') {
       return;
     }
 
@@ -373,7 +417,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     if (!Number.isFinite(numValue)) return;
 
     const clamped = Math.min(Math.max(numValue, min), max);
-    onChange(clamped);
+    onChange(normalizePrecision(clamped));
   };
 
   const handleFocus = () => {
@@ -388,9 +432,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
 
   const handleBlur = () => {
     setIsFocused(false);
-    const cleaned = allowNegative
-      ? localValue.replace(/[^0-9-]/g, '')
-      : localValue.replace(/[^0-9]/g, '');
+    const cleaned = sanitizeInput(localValue);
 
     // Mixed 상태에서 사용자 입력이 없었으면 Mixed 유지
     if (isMixed && !hasUserInput) {
@@ -400,7 +442,13 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       return;
     }
 
-    if (cleaned === '' || cleaned === '-' || isNaN(Number(cleaned))) {
+    if (
+      cleaned === '' ||
+      cleaned === '-' ||
+      cleaned === '.' ||
+      cleaned === '-.' ||
+      isNaN(Number(cleaned))
+    ) {
       setLocalValue('');
       onChange(undefined);
       setHasUserInput(false);
@@ -409,7 +457,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     }
 
     const numValue = Number(cleaned);
-    const clamped = Math.min(Math.max(numValue, min), max);
+    const clamped = normalizePrecision(Math.min(Math.max(numValue, min), max));
     setLocalValue(getDisplayValue(clamped, false));
     onChange(clamped);
     setHasUserInput(false);
@@ -443,7 +491,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         )}
         <input
           type="text"
-          inputMode="numeric"
+          inputMode={inputMode}
           value={localValue}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -464,7 +512,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     return (
       <input
         type="text"
-        inputMode="numeric"
+        inputMode={inputMode}
         value={localValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
@@ -482,7 +530,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   return (
     <input
       type="text"
-      inputMode="numeric"
+      inputMode={inputMode}
       value={localValue}
       onChange={handleChange}
       onKeyDown={handleKeyDown}

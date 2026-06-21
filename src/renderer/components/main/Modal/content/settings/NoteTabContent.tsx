@@ -222,17 +222,30 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
       }
     };
 
-    // 글로우 크기 핸들러
+    // 글로우 크기 핸들러 (소수 0.1 단위 허용)
+    const sanitizeGlowSize = (raw: string): string => {
+      const cleaned = raw.replace(/[^0-9.]/g, '');
+      const dotIndex = cleaned.indexOf('.');
+      if (dotIndex === -1) return cleaned;
+      return (
+        cleaned.slice(0, dotIndex + 1) +
+        cleaned
+          .slice(dotIndex + 1)
+          .replace(/\./g, '')
+          .slice(0, 1)
+      );
+    };
+
     const handleGlowSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value.replace(/[^0-9]/g, '');
+      const newValue = sanitizeGlowSize(e.target.value);
       setState((prev) => ({ ...prev, displayGlowSize: newValue }));
     };
 
     const handleGlowSizeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      const parsed = parseInt(e.target.value.replace(/[^0-9]/g, ''), 10);
+      const parsed = parseFloat(sanitizeGlowSize(e.target.value));
       const clamped = Number.isNaN(parsed)
         ? 20
-        : Math.min(Math.max(parsed, 0), 50);
+        : Number(Math.min(Math.max(parsed, 0), 50).toFixed(1));
       setState((prev) => ({
         ...prev,
         glowSize: clamped,
@@ -391,6 +404,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
             </p>
             <input
               type="text"
+              inputMode="decimal"
               disabled={!state.glowEnabled}
               value={state.displayGlowSize}
               onChange={handleGlowSizeChange}

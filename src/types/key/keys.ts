@@ -249,12 +249,11 @@ export const keyPositionSchema = z.object({
   // 노트 모서리 반경 (키별 설정, 없으면 기본값 사용)
   noteBorderRadius: z
     .number()
-    .int()
     .min(NOTE_SETTINGS_CONSTRAINTS.borderRadius.min)
     .max(NOTE_SETTINGS_CONSTRAINTS.borderRadius.max)
     .optional(),
   // 노트 넓이(px). 비어있으면 해당 키 width를 사용(자동)
-  noteWidth: z.number().int().positive().optional(),
+  noteWidth: z.number().positive().optional(),
   // 노트 정렬 (left/center/right). 기본값 center.
   noteAlignment: z
     .enum(['left', 'center', 'right'])
@@ -262,7 +261,7 @@ export const keyPositionSchema = z.object({
     .default('center'),
   noteEffectEnabled: z.boolean().optional().default(true),
   noteGlowEnabled: z.boolean().optional().default(false),
-  noteGlowSize: z.number().int().min(0).max(50).optional().default(20),
+  noteGlowSize: z.number().min(0).max(50).optional().default(20),
   noteGlowOpacity: z.number().int().min(0).max(100).optional().default(70),
   // 그라디언트용 글로우 투명도(Top/Bottom). 없으면 noteGlowOpacity를 사용.
   noteGlowOpacityTop: z.number().int().min(0).max(100).optional(),

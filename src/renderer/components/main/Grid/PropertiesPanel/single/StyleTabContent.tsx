@@ -526,6 +526,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           suffix="px"
           min={0}
           max={20}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
@@ -537,6 +539,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           suffix="px"
           min={0}
           max={100}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
@@ -595,6 +599,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           suffix="px"
           min={8}
           max={72}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
