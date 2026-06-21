@@ -329,7 +329,7 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
     if let Some(legacy_border_radius) = data.note_settings.border_radius.take() {
         for positions in data.key_positions.values_mut() {
             for pos in positions.iter_mut() {
-                pos.note_border_radius = Some(legacy_border_radius);
+                pos.note_border_radius = Some(legacy_border_radius as f64);
             }
         }
     }

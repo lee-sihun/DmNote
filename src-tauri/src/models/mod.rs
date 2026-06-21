@@ -206,10 +206,10 @@ pub struct KeyPosition {
     pub note_color: NoteColor,
     pub note_opacity: u32,
     #[serde(default)]
-    pub note_border_radius: Option<u32>,
+    pub note_border_radius: Option<f64>,
     /// 노트 넓이(px). None이면 키 width를 사용(자동).
     #[serde(default)]
-    pub note_width: Option<u32>,
+    pub note_width: Option<f64>,
     /// 노트 정렬 (left/center/right). 기본값 center.
     #[serde(default)]
     pub note_alignment: NoteAlignment,
@@ -218,7 +218,7 @@ pub struct KeyPosition {
     #[serde(default = "default_note_glow_enabled")]
     pub note_glow_enabled: bool,
     #[serde(default = "default_note_glow_size")]
-    pub note_glow_size: u32,
+    pub note_glow_size: f64,
     #[serde(default = "default_note_glow_opacity")]
     pub note_glow_opacity: u32,
     #[serde(default)]
@@ -760,8 +760,8 @@ fn default_note_effect_enabled() -> bool {
 fn default_note_glow_enabled() -> bool {
     false
 }
-fn default_note_glow_size() -> u32 {
-    20
+fn default_note_glow_size() -> f64 {
+    20.0
 }
 fn default_note_glow_opacity() -> u32 {
     70
