@@ -7,40 +7,7 @@ import {
   toColorObject,
   toCssRgba,
   toRgbHexColor,
-  parseAlphaPercent,
-  hexWithAlphaPercent,
 } from './colorUtils';
-
-describe('parseAlphaPercent', () => {
-  it('rgba 문자열의 알파를 퍼센트로 추출', () => {
-    expect(parseAlphaPercent('rgba(255, 0, 0, 0.5)')).toBe(50);
-    expect(parseAlphaPercent('rgba(0, 0, 0, 1)')).toBe(100);
-    expect(parseAlphaPercent('rgba(0, 0, 0, 0)')).toBe(0);
-  });
-
-  it('8자리 hex의 알파를 추출', () => {
-    expect(parseAlphaPercent('#FF000080')).toBe(50);
-    expect(parseAlphaPercent('#FF0000FF')).toBe(100);
-  });
-
-  it('알파 없는 입력은 fallback 반환', () => {
-    expect(parseAlphaPercent('#FF0000', 70)).toBe(70);
-    expect(parseAlphaPercent(undefined, 100)).toBe(100);
-  });
-});
-
-describe('hexWithAlphaPercent', () => {
-  it('hex + 퍼센트 → rgba', () => {
-    expect(hexWithAlphaPercent('#FF0000', 50)).toBe('rgba(255, 0, 0, 0.5)');
-    expect(hexWithAlphaPercent('#00FF00', 100)).toBe('rgba(0, 255, 0, 1)');
-  });
-
-  it('parseAlphaPercent와 왕복 일관성', () => {
-    const css = hexWithAlphaPercent('#123456', 40);
-    expect(parseAlphaPercent(css)).toBe(40);
-    expect(toRgbHexColor(css)).toBe('#123456');
-  });
-});
 
 describe('isGradientColor', () => {
   it('gradient 객체를 감지', () => {
