@@ -216,7 +216,7 @@ fn labels_from_key_name(name: &str) -> Vec<String> {
         }
     }
 
-    let numpad_prefixes = ["numpad", "num_pad"];
+    let numpad_prefixes = ["numpad", "num_pad", "kp"];
     for prefix in numpad_prefixes {
         if let Some(rest) = name_lower.strip_prefix(prefix) {
             if rest.len() == 1 && rest.chars().all(|c| c.is_ascii_digit()) {
@@ -224,11 +224,11 @@ fn labels_from_key_name(name: &str) -> Vec<String> {
                 return labels;
             }
             let numpad_label = match rest {
-                "add" => Some("NUMPAD PLUS"),
-                "subtract" => Some("NUMPAD MINUS"),
+                "add" | "plus" => Some("NUMPAD PLUS"),
+                "subtract" | "minus" => Some("NUMPAD MINUS"),
                 "multiply" => Some("NUMPAD MULTIPLY"),
                 "divide" => Some("NUMPAD DIVIDE"),
-                "decimal" => Some("NUMPAD DELETE"),
+                "decimal" | "delete" => Some("NUMPAD DELETE"),
                 "enter" | "return" => Some("NUMPAD RETURN"),
                 _ => None,
             };
@@ -242,7 +242,45 @@ fn labels_from_key_name(name: &str) -> Vec<String> {
     labels
 }
 
+fn mac_virtual_keycode_labels(key: rdev::Key) -> Option<Vec<String>> {
+    let rdev::Key::Unknown(code) = key else {
+        return None;
+    };
+
+    let label = match code {
+        65 => "NUMPAD DELETE",
+        67 => "NUMPAD MULTIPLY",
+        69 => "NUMPAD PLUS",
+        71 => "NUM LOCK",
+        75 => "NUMPAD DIVIDE",
+        76 => "NUMPAD RETURN",
+        78 => "NUMPAD MINUS",
+        82 => "NUMPAD 0",
+        83 => "NUMPAD 1",
+        84 => "NUMPAD 2",
+        85 => "NUMPAD 3",
+        86 => "NUMPAD 4",
+        87 => "NUMPAD 5",
+        88 => "NUMPAD 6",
+        89 => "NUMPAD 7",
+        91 => "NUMPAD 8",
+        92 => "NUMPAD 9",
+        114 => "INS",
+        115 => "HOME",
+        116 => "PAGE UP",
+        117 => "DELETE",
+        119 => "END",
+        121 => "PAGE DOWN",
+        _ => return None,
+    };
+
+    Some(vec![label.to_string()])
+}
+
 fn mac_key_labels(key: rdev::Key, name_hint: Option<&str>) -> Vec<String> {
+    if let Some(labels) = mac_virtual_keycode_labels(key) {
+        return labels;
+    }
     if let Some(name) = name_hint {
         if let Some(labels) = labels_from_name_hint(name) {
             return labels;
