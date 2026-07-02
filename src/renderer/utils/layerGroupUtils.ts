@@ -2,17 +2,21 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups, LayerGroupDef } from '@src/types/layerGroups';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 
 type Groupable = SelectedElement & {
-  type: 'key' | 'stat' | 'graph';
+  type: 'key' | 'stat' | 'graph' | 'knob';
   index: number;
 };
 
 function isGroupableElement(el: SelectedElement): el is Groupable {
   return (
-    (el.type === 'key' || el.type === 'stat' || el.type === 'graph') &&
+    (el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'knob') &&
     typeof el.index === 'number'
   );
 }
@@ -23,6 +27,7 @@ function getElementGroupId(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
+  knobPositions: KnobItemPositions,
 ): string | undefined {
   if (element.type === 'key') {
     return keyPositions[mode]?.[element.index]?.groupId;
@@ -30,7 +35,10 @@ function getElementGroupId(
   if (element.type === 'stat') {
     return statPositions[mode]?.[element.index]?.groupId;
   }
-  return graphPositions[mode]?.[element.index]?.groupId;
+  if (element.type === 'graph') {
+    return graphPositions[mode]?.[element.index]?.groupId;
+  }
+  return knobPositions[mode]?.[element.index]?.groupId;
 }
 
 function escapeRegExp(value: string): string {
@@ -42,6 +50,7 @@ function collectModeGroupMemberCounts(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
+  knobPositions: KnobItemPositions,
 ): Map<string, number> {
   const counts = new Map<string, number>();
   const add = (groupId?: string) => {
@@ -52,6 +61,7 @@ function collectModeGroupMemberCounts(
   (keyPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (statPositions[mode] || []).forEach((pos) => add(pos?.groupId));
   (graphPositions[mode] || []).forEach((pos) => add(pos?.groupId));
+  (knobPositions[mode] || []).forEach((pos) => add(pos?.groupId));
 
   return counts;
 }
@@ -87,6 +97,7 @@ export function resolveSingleGroupIdFromSelection(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
+  knobPositions: KnobItemPositions,
 ): string | undefined {
   const groupIds = new Set<string>();
 
@@ -98,6 +109,7 @@ export function resolveSingleGroupIdFromSelection(
       keyPositions,
       statPositions,
       graphPositions,
+      knobPositions,
     );
     if (groupId) {
       groupIds.add(groupId);
@@ -112,6 +124,7 @@ type ApplyGroupIdResult = {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   changed: boolean;
 };
 
@@ -121,6 +134,7 @@ export function applyGroupIdToSelectedElements(params: {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   targetGroupId: string | undefined;
 }): ApplyGroupIdResult {
   const {
@@ -129,15 +143,18 @@ export function applyGroupIdToSelectedElements(params: {
     keyPositions,
     statPositions,
     graphPositions,
+    knobPositions,
     targetGroupId,
   } = params;
 
   const nextKeyPositions: KeyPositions = { ...keyPositions };
   const nextStatPositions: StatItemPositions = { ...statPositions };
   const nextGraphPositions: GraphItemPositions = { ...graphPositions };
+  const nextKnobPositions: KnobItemPositions = { ...knobPositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
+  const nextKnobMode = [...(knobPositions[mode] || [])];
 
   let changed = false;
 
@@ -160,9 +177,17 @@ export function applyGroupIdToSelectedElements(params: {
       return;
     }
 
-    const current = nextGraphMode[element.index];
+    if (element.type === 'graph') {
+      const current = nextGraphMode[element.index];
+      if (!current || current.groupId === targetGroupId) return;
+      nextGraphMode[element.index] = { ...current, groupId: targetGroupId };
+      changed = true;
+      return;
+    }
+
+    const current = nextKnobMode[element.index];
     if (!current || current.groupId === targetGroupId) return;
-    nextGraphMode[element.index] = { ...current, groupId: targetGroupId };
+    nextKnobMode[element.index] = { ...current, groupId: targetGroupId };
     changed = true;
   });
 
@@ -170,12 +195,14 @@ export function applyGroupIdToSelectedElements(params: {
     nextKeyPositions[mode] = nextKeyMode;
     nextStatPositions[mode] = nextStatMode;
     nextGraphPositions[mode] = nextGraphMode;
+    nextKnobPositions[mode] = nextKnobMode;
   }
 
   return {
     keyPositions: changed ? nextKeyPositions : keyPositions,
     statPositions: changed ? nextStatPositions : statPositions,
     graphPositions: changed ? nextGraphPositions : graphPositions,
+    knobPositions: changed ? nextKnobPositions : knobPositions,
     changed,
   };
 }
@@ -184,6 +211,7 @@ type NormalizeLayerGroupsResult = {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   layerGroups: LayerGroups;
   positionsChanged: boolean;
   groupsChanged: boolean;
@@ -195,24 +223,34 @@ export function normalizeLayerGroupsForMode(params: {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   layerGroups: LayerGroups;
 }): NormalizeLayerGroupsResult {
-  const { mode, keyPositions, statPositions, graphPositions, layerGroups } =
-    params;
+  const {
+    mode,
+    keyPositions,
+    statPositions,
+    graphPositions,
+    knobPositions,
+    layerGroups,
+  } = params;
 
   const currentModeGroups = layerGroups[mode] || [];
   const nextKeyPositions: KeyPositions = { ...keyPositions };
   const nextStatPositions: StatItemPositions = { ...statPositions };
   const nextGraphPositions: GraphItemPositions = { ...graphPositions };
+  const nextKnobPositions: KnobItemPositions = { ...knobPositions };
   const nextKeyMode = [...(keyPositions[mode] || [])];
   const nextStatMode = [...(statPositions[mode] || [])];
   const nextGraphMode = [...(graphPositions[mode] || [])];
+  const nextKnobMode = [...(knobPositions[mode] || [])];
 
   const initialCounts = collectModeGroupMemberCounts(
     mode,
     keyPositions,
     statPositions,
     graphPositions,
+    knobPositions,
   );
   const groupsToDissolve = new Set<string>();
 
@@ -248,12 +286,18 @@ export function normalizeLayerGroupsForMode(params: {
       nextGraphMode[index] = { ...pos, groupId: undefined };
       positionsChanged = true;
     });
+    nextKnobMode.forEach((pos, index) => {
+      if (!shouldClear(pos?.groupId)) return;
+      nextKnobMode[index] = { ...pos, groupId: undefined };
+      positionsChanged = true;
+    });
   }
 
   if (positionsChanged) {
     nextKeyPositions[mode] = nextKeyMode;
     nextStatPositions[mode] = nextStatMode;
     nextGraphPositions[mode] = nextGraphMode;
+    nextKnobPositions[mode] = nextKnobMode;
   }
 
   const finalCounts = collectModeGroupMemberCounts(
@@ -261,6 +305,7 @@ export function normalizeLayerGroupsForMode(params: {
     positionsChanged ? nextKeyPositions : keyPositions,
     positionsChanged ? nextStatPositions : statPositions,
     positionsChanged ? nextGraphPositions : graphPositions,
+    positionsChanged ? nextKnobPositions : knobPositions,
   );
   const nextModeGroups = currentModeGroups.filter(
     (group) => (finalCounts.get(group.id) || 0) >= 1,
@@ -281,6 +326,7 @@ export function normalizeLayerGroupsForMode(params: {
     keyPositions: positionsChanged ? nextKeyPositions : keyPositions,
     statPositions: positionsChanged ? nextStatPositions : statPositions,
     graphPositions: positionsChanged ? nextGraphPositions : graphPositions,
+    knobPositions: positionsChanged ? nextKnobPositions : knobPositions,
     layerGroups: nextLayerGroups,
     positionsChanged,
     groupsChanged,
@@ -293,19 +339,20 @@ export function normalizeLayerGroupsForMode(params: {
 // ============================================================================
 
 export interface LayerItemForOrder {
-  type: 'key' | 'stat' | 'graph' | 'plugin';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
   id: string;
   index?: number;
   zIndex: number;
   groupId?: string;
 }
 
-/** 4개 스토어에서 아이템을 수집하고 zIndex 내림차순 정렬 */
+/** 5개 스토어에서 아이템을 수집하고 zIndex 내림차순 정렬 */
 export function buildLayerItemsForMode(
   mode: string,
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
+  knobPositions: KnobItemPositions,
   pluginElements: PluginDisplayElementInternal[],
 ): LayerItemForOrder[] {
   const items: LayerItemForOrder[] = [];
@@ -334,6 +381,16 @@ export function buildLayerItemsForMode(
     items.push({
       type: 'graph',
       id: `graph-${index}`,
+      index,
+      zIndex: pos.zIndex ?? index,
+      groupId: pos.groupId,
+    });
+  });
+
+  (knobPositions[mode] || []).forEach((pos, index) => {
+    items.push({
+      type: 'knob',
+      id: `knob-${index}`,
       index,
       zIndex: pos.zIndex ?? index,
       groupId: pos.groupId,
@@ -393,6 +450,7 @@ export interface ZIndexPatchResult {
   keyPositions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   pluginUpdates: Array<{ fullId: string; zIndex: number }>;
 }
 
@@ -403,11 +461,13 @@ export function applyZIndexToLayerOrder(
   keyPositions: KeyPositions,
   statPositions: StatItemPositions,
   graphPositions: GraphItemPositions,
+  knobPositions: KnobItemPositions,
 ): ZIndexPatchResult {
   const maxZIndex = orderedItems.length - 1;
   const keyMode = [...(keyPositions[mode] || [])];
   const statMode = [...(statPositions[mode] || [])];
   const graphMode = [...(graphPositions[mode] || [])];
+  const knobMode = [...(knobPositions[mode] || [])];
   const pluginUpdates: Array<{ fullId: string; zIndex: number }> = [];
 
   orderedItems.forEach((item, idx) => {
@@ -430,6 +490,12 @@ export function applyZIndexToLayerOrder(
       graphMode[item.index]
     ) {
       graphMode[item.index] = { ...graphMode[item.index], zIndex: z };
+    } else if (
+      item.type === 'knob' &&
+      item.index !== undefined &&
+      knobMode[item.index]
+    ) {
+      knobMode[item.index] = { ...knobMode[item.index], zIndex: z };
     } else if (item.type === 'plugin') {
       pluginUpdates.push({ fullId: item.id, zIndex: z });
     }
@@ -439,6 +505,7 @@ export function applyZIndexToLayerOrder(
     keyPositions: { ...keyPositions, [mode]: keyMode },
     statPositions: { ...statPositions, [mode]: statMode },
     graphPositions: { ...graphPositions, [mode]: graphMode },
+    knobPositions: { ...knobPositions, [mode]: knobMode },
     pluginUpdates,
   };
 }

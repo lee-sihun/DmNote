@@ -6,6 +6,7 @@ import { FALLBACK_POSITION } from '@components/shared/OverlayScene';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { NoteSettings } from '@src/types/settings/noteSettings';
 
 interface PluginElement {
@@ -25,6 +26,7 @@ interface LayoutInput {
   currentPositions: KeyPosition[];
   currentStatPositions: StatItemPosition[];
   currentGraphPositions: GraphItemPosition[];
+  currentKnobPositions: KnobItemPosition[];
   trackHeight: number;
   noteSettings: NoteSettings;
   selectedKeyType?: string;
@@ -45,6 +47,7 @@ export function computeLayout(input: LayoutInput) {
     currentPositions,
     currentStatPositions,
     currentGraphPositions,
+    currentKnobPositions,
     trackHeight,
     noteSettings,
     selectedKeyType,
@@ -58,6 +61,7 @@ export function computeLayout(input: LayoutInput) {
       currentPositions.length > 0 ||
       currentStatPositions.length > 0 ||
       currentGraphPositions.length > 0 ||
+      currentKnobPositions.length > 0 ||
       (pluginElements && pluginElements.length > 0);
     if (!hasContent) return null;
 
@@ -115,6 +119,14 @@ export function computeLayout(input: LayoutInput) {
       ys.push(pos.dy);
       widths.push(pos.dx + (pos.width ?? 200));
       heights.push(pos.dy + (pos.height ?? 100));
+    });
+
+    currentKnobPositions.forEach((pos) => {
+      if (!pos || pos.hidden) return;
+      xs.push(pos.dx);
+      ys.push(pos.dy);
+      widths.push(pos.dx + (pos.width ?? 80));
+      heights.push(pos.dy + (pos.height ?? 80));
     });
 
     // 플러그인 요소 위치 (앵커 기반 계산 포함)
@@ -183,6 +195,7 @@ export function computeLayout(input: LayoutInput) {
   const displayPositions = applyOffset(currentPositions);
   const displayStatPositions = applyOffset(currentStatPositions);
   const displayGraphPositions = applyOffset(currentGraphPositions);
+  const displayKnobPositions = applyOffset(currentKnobPositions);
 
   const positionOffset = bounds ? { x: offsetX, y: offsetY } : { x: 0, y: 0 };
 
@@ -249,6 +262,7 @@ export function computeLayout(input: LayoutInput) {
     displayPositions,
     displayStatPositions,
     displayGraphPositions,
+    displayKnobPositions,
     positionOffset,
     topMostY,
     webglTracks,

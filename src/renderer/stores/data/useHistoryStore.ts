@@ -10,6 +10,8 @@ import type {
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type {
   NoteSettings,
@@ -43,6 +45,7 @@ export interface HistoryState {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   pluginElements?: SerializablePluginElement[];
   layerGroups?: LayerGroups;
   keyCounters: KeyCounters;
@@ -56,6 +59,7 @@ export interface PushHistoryInput {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions?: KnobItemPositions;
   pluginElements?: PluginDisplayElementInternal[];
   layerGroups?: LayerGroups;
   keyCounters?: KeyCounters;
@@ -69,6 +73,7 @@ interface CurrentStateInput {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions?: KnobItemPositions;
   pluginElements?: PluginDisplayElementInternal[];
   layerGroups?: LayerGroups;
 }
@@ -126,11 +131,18 @@ function buildHistoryState(
         ) as HistorySettingsSnapshot)
       : undefined;
 
+  // knobPositions: 명시적 제공 시 사용, 없으면 현재 store에서 자동 캡처
+  const knobPositions =
+    'knobPositions' in input && input.knobPositions
+      ? input.knobPositions
+      : useKnobItemStore.getState().positions;
+
   return {
     keyMappings: JSON.parse(JSON.stringify(input.keyMappings)),
     positions: JSON.parse(JSON.stringify(input.positions)),
     statPositions: JSON.parse(JSON.stringify(input.statPositions)),
     graphPositions: JSON.parse(JSON.stringify(input.graphPositions)),
+    knobPositions: JSON.parse(JSON.stringify(knobPositions)),
     pluginElements: input.pluginElements
       ? serializePluginElements(input.pluginElements)
       : undefined,

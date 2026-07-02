@@ -1,11 +1,13 @@
 /* eslint-disable react-hooks/refs */
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type {
   GraphItemPosition,
   GraphItemType,
 } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
+import { axisEventBus } from '@utils/core/axisEventBus';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -30,6 +32,7 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
@@ -731,6 +734,603 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             })
           }
           onClose={() => setShowGraphImagePicker(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// Single Knob Selection Panel
+// ============================================================================
+
+interface SingleKnobPanelProps {
+  setPanelElement: (el: HTMLDivElement | null) => void;
+  singleKnobPosition: KnobItemPosition;
+  singleKnobIndex: number;
+  selectedKeyType: string;
+  isRenaming: boolean;
+  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameCancelledRef: React.MutableRefObject<boolean>;
+  handleRenameCommit: (value: string) => void;
+  handleRenameCancel: () => void;
+  handleRenameStart: () => void;
+  handleKnobUpdate: (
+    data: Partial<KnobItemPosition> & { index: number },
+  ) => void;
+  handleToggleMode: () => void;
+  handleTogglePanel: () => void;
+  singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
+  panelElement: HTMLDivElement | null;
+  useCustomCSS: boolean;
+  t: (key: string) => string;
+}
+
+export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
+  setPanelElement,
+  singleKnobPosition,
+  singleKnobIndex,
+  selectedKeyType,
+  isRenaming,
+  renameInputRef,
+  renameValue,
+  setRenameValue,
+  renameCancelledRef,
+  handleRenameCommit,
+  handleRenameCancel,
+  handleRenameStart,
+  handleKnobUpdate,
+  handleToggleMode,
+  handleTogglePanel,
+  singleScrollRefFor,
+  singleThumbRefFor,
+  panelElement,
+  useCustomCSS,
+  t,
+}) => {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const imageButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [classNameDraft, setClassNameDraft] = useState(
+    singleKnobPosition.className || '',
+  );
+
+  useEffect(() => {
+    setClassNameDraft(singleKnobPosition.className || '');
+  }, [singleKnobIndex, selectedKeyType, singleKnobPosition.className]);
+
+  // 회전 감지 바인딩: 노브를 돌리면 가장 많이 움직인 축을 자동 바인딩
+  useEffect(() => {
+    if (!capturing) return;
+    axisEventBus.initialize();
+    const counts = new Map<string, number>();
+    let bound = false;
+    const unsub = axisEventBus.subscribe(({ axisId }) => {
+      if (bound) return;
+      const c = (counts.get(axisId) ?? 0) + 1;
+      counts.set(axisId, c);
+      if (c >= 3) {
+        bound = true;
+        handleKnobUpdate({ index: singleKnobIndex, axisId });
+        setCapturing(false);
+      }
+    });
+    const timer = window.setTimeout(() => setCapturing(false), 6000);
+    return () => {
+      unsub();
+      window.clearTimeout(timer);
+    };
+  }, [capturing, singleKnobIndex, handleKnobUpdate]);
+
+  const setRef = (node: HTMLDivElement | null) => {
+    panelRef.current = node;
+    setPanelElement(node);
+  };
+
+  const knobTitle = singleKnobPosition.layerName || 'Knob';
+  const axisLabel = singleKnobPosition.axisId
+    ? singleKnobPosition.axisId.replace(/^HIDA:/, '')
+    : t('propertiesPanel.knobAxisUnset') || '미지정';
+
+  // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
+  const DEFAULT_KNOB_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
+  const DEFAULT_KNOB_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
+  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
+
+  type KnobColorTarget = 'backgroundColor' | 'borderColor';
+  type KnobColorProperty =
+    | KnobColorTarget
+    | 'activeBackgroundColor'
+    | 'activeBorderColor';
+
+  const [pickerFor, setPickerFor] = useState<KnobColorTarget | null>(null);
+  const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
+  const bgColorBtnRef = useRef<HTMLButtonElement>(null);
+  const borderColorBtnRef = useRef<HTMLButtonElement>(null);
+
+  const [localColors, setLocalColors] = useState<
+    Record<KnobColorProperty, string>
+  >({
+    backgroundColor:
+      singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
+    activeBackgroundColor:
+      singleKnobPosition.activeBackgroundColor ||
+      singleKnobPosition.backgroundColor ||
+      DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+    borderColor: singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
+    activeBorderColor:
+      singleKnobPosition.activeBorderColor ||
+      singleKnobPosition.borderColor ||
+      DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+  });
+
+  // 피커가 닫혀있을 때만 외부 prop과 동기화
+  useEffect(() => {
+    if (!pickerFor) {
+      setLocalColors({
+        backgroundColor:
+          singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
+        activeBackgroundColor:
+          singleKnobPosition.activeBackgroundColor ||
+          singleKnobPosition.backgroundColor ||
+          DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+        borderColor:
+          singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
+        activeBorderColor:
+          singleKnobPosition.activeBorderColor ||
+          singleKnobPosition.borderColor ||
+          DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+      });
+    }
+  }, [
+    pickerFor,
+    singleKnobPosition.backgroundColor,
+    singleKnobPosition.activeBackgroundColor,
+    singleKnobPosition.borderColor,
+    singleKnobPosition.activeBorderColor,
+    DEFAULT_KNOB_BACKGROUND_COLOR,
+    DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+    DEFAULT_KNOB_BORDER_COLOR,
+    DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+  ]);
+
+  const resolveColorProperty = (target: KnobColorTarget): KnobColorProperty =>
+    colorState === 'active'
+      ? target === 'backgroundColor'
+        ? 'activeBackgroundColor'
+        : 'activeBorderColor'
+      : target;
+
+  const activeColorPropertyFor = (
+    target: KnobColorTarget,
+  ): 'activeBackgroundColor' | 'activeBorderColor' =>
+    target === 'backgroundColor'
+      ? 'activeBackgroundColor'
+      : 'activeBorderColor';
+
+  const isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
+  const colorValueFor = (target: KnobColorTarget): string =>
+    localColors[resolveColorProperty(target)];
+
+  const handleColorChange = (target: KnobColorTarget, color: string) => {
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  };
+
+  const handleColorChangeComplete = (
+    target: KnobColorTarget,
+    color: string,
+  ) => {
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+
+    const updates: Partial<KnobItemPosition> = {
+      [prop]: color,
+    } as Partial<KnobItemPosition>;
+
+    // idle 변경 시 active 값이 비어 있으면 현재 표시되던 active 값을 함께 저장
+    // (active가 idle로 덮이는 현상 방지 — 키 패널과 동일)
+    if (colorState !== 'active') {
+      const activeProp = activeColorPropertyFor(target);
+      const currentActive = singleKnobPosition[activeProp];
+      if (!isNonEmptyString(currentActive)) {
+        updates[activeProp] = localColors[activeProp];
+      }
+    }
+
+    handleKnobUpdate({ index: singleKnobIndex, ...updates });
+  };
+
+  const handlePickerToggle = (target: KnobColorTarget) => {
+    setPickerFor((prev) => (prev === target ? null : target));
+  };
+
+  // 라운딩 기본값: 미지정 시 원형(짧은 변의 절반)
+  const effectiveBorderRadius =
+    singleKnobPosition.borderRadius ??
+    Math.round(
+      Math.min(
+        singleKnobPosition.width || 60,
+        singleKnobPosition.height || 60,
+      ) / 2,
+    );
+
+  return (
+    <div
+      ref={setRef}
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+    >
+      <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className="text-[#DBDEE8] text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={() => {
+              if (!renameCancelledRef.current) {
+                handleRenameCommit(renameValue);
+              }
+              renameCancelledRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                handleRenameCancel();
+              }
+            }}
+          />
+        ) : (
+          <div className="flex items-center gap-[4px] min-w-0">
+            <span
+              className="text-[#DBDEE8] text-style-2 truncate max-w-[100px] cursor-default"
+              onDoubleClick={handleRenameStart}
+              title={knobTitle}
+            >
+              {knobTitle}
+            </span>
+            <button
+              onClick={handleRenameStart}
+              className="w-[18px] h-[18px] flex items-center justify-center text-[#6B6D75] hover:text-[#DBDEE8] hover:bg-[#2A2A30] rounded-[4px] transition-colors flex-shrink-0"
+              title={t('contextMenu.rename') || 'Rename'}
+            >
+              <RenameIcon />
+            </button>
+          </div>
+        )}
+        <div className="flex items-center gap-[4px]">
+          <button
+            onClick={handleToggleMode}
+            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+          >
+            <ModeToggleIcon mode="layer" />
+          </button>
+          <button
+            onClick={handleTogglePanel}
+            className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+            title={t('propertiesPanel.closePanel') || 'Close'}
+          >
+            <SidebarToggleIcon isOpen={true} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 properties-panel-overlay-scroll">
+        <div
+          ref={singleScrollRefFor(TABS.STYLE)}
+          className="properties-panel-overlay-viewport"
+        >
+          <div className="p-[12px] flex flex-col gap-[12px]">
+            {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
+            <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
+              <button
+                type="button"
+                onClick={() => setCapturing((v) => !v)}
+                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                  capturing ? 'border-[#459BF8]' : 'border-[#3A3943]'
+                } text-[#DBDEE8] text-style-2`}
+                title={singleKnobPosition.axisId || ''}
+              >
+                <span className="truncate max-w-[120px]">
+                  {capturing
+                    ? t('propertiesPanel.knobCapturing') || '감지 중…'
+                    : singleKnobPosition.axisId
+                    ? axisLabel
+                    : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
+                </span>
+              </button>
+            </PropertyRow>
+
+            <SectionDivider />
+
+            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+              <NumberInput
+                value={Math.round(singleKnobPosition.dx || 0)}
+                onChange={(value) =>
+                  handleKnobUpdate({ index: singleKnobIndex, dx: value })
+                }
+                prefix="X"
+                min={-9999}
+                max={9999}
+              />
+              <NumberInput
+                value={Math.round(singleKnobPosition.dy || 0)}
+                onChange={(value) =>
+                  handleKnobUpdate({ index: singleKnobIndex, dy: value })
+                }
+                prefix="Y"
+                min={-9999}
+                max={9999}
+              />
+            </PropertyRow>
+
+            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+              <NumberInput
+                value={Math.round(singleKnobPosition.width || 60)}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    width: Math.max(20, value),
+                  })
+                }
+                prefix="W"
+                min={20}
+                max={9999}
+              />
+              <NumberInput
+                value={Math.round(singleKnobPosition.height || 60)}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    height: Math.max(20, value),
+                  })
+                }
+                prefix="H"
+                min={20}
+                max={9999}
+              />
+            </PropertyRow>
+
+            <SectionDivider />
+
+            {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
+            <PropertyRow
+              label={t('propertiesPanel.knobSensitivity') || '민감도'}
+            >
+              <NumberInput
+                value={Number(singleKnobPosition.sensitivity ?? 1)}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    sensitivity: Math.max(0, value),
+                  })
+                }
+                suffix="×"
+                min={0}
+                max={100}
+                allowDecimal
+                decimalScale={2}
+              />
+            </PropertyRow>
+
+            <div className="flex justify-between items-center w-full h-[23px]">
+              <p className="text-white text-style-2">
+                {t('propertiesPanel.knobReverse') || '방향 반전'}
+              </p>
+              <Checkbox
+                checked={singleKnobPosition.reverse ?? false}
+                onChange={() =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    reverse: !(singleKnobPosition.reverse ?? false),
+                  })
+                }
+              />
+            </div>
+
+            <SectionDivider />
+
+            {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
+            <PropertyRow
+              label={t('propertiesPanel.backgroundColor') || '배경색'}
+            >
+              <button
+                ref={bgColorBtnRef}
+                type="button"
+                onClick={() => handlePickerToggle('backgroundColor')}
+                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                  pickerFor === 'backgroundColor'
+                    ? 'border-[#459BF8]'
+                    : 'border-[#3A3943] hover:border-[#505058]'
+                }`}
+                style={{ backgroundColor: colorValueFor('backgroundColor') }}
+              />
+            </PropertyRow>
+
+            {/* 테두리 색상 */}
+            <PropertyRow
+              label={t('propertiesPanel.borderColor') || '테두리 색상'}
+            >
+              <button
+                ref={borderColorBtnRef}
+                type="button"
+                onClick={() => handlePickerToggle('borderColor')}
+                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                  pickerFor === 'borderColor'
+                    ? 'border-[#459BF8]'
+                    : 'border-[#3A3943] hover:border-[#505058]'
+                }`}
+                style={{ backgroundColor: colorValueFor('borderColor') }}
+              />
+            </PropertyRow>
+
+            {/* 테두리 두께 */}
+            <PropertyRow
+              label={t('propertiesPanel.borderWidth') || '테두리 두께'}
+            >
+              <NumberInput
+                value={singleKnobPosition.borderWidth ?? 3}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    borderWidth: value,
+                  })
+                }
+                suffix="px"
+                min={0}
+                max={20}
+              />
+            </PropertyRow>
+
+            {/* 모서리 반경 (미지정 시 원형) */}
+            <PropertyRow
+              label={t('propertiesPanel.borderRadius') || '모서리 반경'}
+            >
+              <NumberInput
+                value={effectiveBorderRadius}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    borderRadius: value,
+                  })
+                }
+                suffix="px"
+                min={0}
+                max={999}
+              />
+            </PropertyRow>
+
+            <PropertyRow
+              label={t('propertiesPanel.customImage') || 'Custom Image'}
+            >
+              <button
+                ref={imageButtonRef}
+                type="button"
+                className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
+                  showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
+                } text-[#DBDEE8] text-style-4`}
+                onClick={() => setShowImagePicker(!showImagePicker)}
+              >
+                {t('propertiesPanel.configure') || 'Configure'}
+              </button>
+            </PropertyRow>
+
+            {useCustomCSS && (
+              <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
+                <TextInput
+                  value={classNameDraft}
+                  onChange={setClassNameDraft}
+                  onBlur={() =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      className: classNameDraft || '',
+                    })
+                  }
+                  placeholder="className"
+                  width="90px"
+                />
+              </PropertyRow>
+            )}
+          </div>
+          <div className="properties-panel-overlay-bar">
+            <div
+              ref={singleThumbRefFor(TABS.STYLE)}
+              className="properties-panel-overlay-thumb"
+              style={{ display: 'none' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {showImagePicker && imageButtonRef.current && (
+        <ImagePicker
+          open={showImagePicker}
+          referenceRef={imageButtonRef}
+          panelElement={panelRef.current}
+          idleImage={singleKnobPosition.inactiveImage || ''}
+          activeImage={singleKnobPosition.activeImage || ''}
+          idleTransparent={singleKnobPosition.idleTransparent ?? false}
+          activeTransparent={singleKnobPosition.activeTransparent ?? false}
+          idleImageFit={
+            singleKnobPosition.idleImageFit ||
+            singleKnobPosition.imageFit ||
+            'cover'
+          }
+          activeImageFit={
+            singleKnobPosition.activeImageFit ||
+            singleKnobPosition.imageFit ||
+            'cover'
+          }
+          onIdleImageChange={(imageUrl: string) =>
+            handleKnobUpdate({
+              index: singleKnobIndex,
+              inactiveImage: imageUrl,
+            })
+          }
+          onActiveImageChange={(imageUrl: string) =>
+            handleKnobUpdate({ index: singleKnobIndex, activeImage: imageUrl })
+          }
+          onIdleTransparentChange={(value: boolean) =>
+            handleKnobUpdate({ index: singleKnobIndex, idleTransparent: value })
+          }
+          onActiveTransparentChange={(value: boolean) =>
+            handleKnobUpdate({
+              index: singleKnobIndex,
+              activeTransparent: value,
+            })
+          }
+          onIdleImageFitChange={(fit: string) =>
+            handleKnobUpdate({
+              index: singleKnobIndex,
+              idleImageFit: fit as ImageFit,
+            })
+          }
+          onActiveImageFitChange={(fit: string) =>
+            handleKnobUpdate({
+              index: singleKnobIndex,
+              activeImageFit: fit as ImageFit,
+            })
+          }
+          onIdleImageReset={() =>
+            handleKnobUpdate({ index: singleKnobIndex, inactiveImage: '' })
+          }
+          onActiveImageReset={() =>
+            handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
+          }
+          onClose={() => setShowImagePicker(false)}
+        />
+      )}
+
+      {/* 대기/입력 색상 ColorPicker (키 패널과 동일한 stateMode 토글) */}
+      {pickerFor && (
+        <ColorPicker
+          open={!!pickerFor}
+          referenceRef={
+            pickerFor === 'backgroundColor' ? bgColorBtnRef : borderColorBtnRef
+          }
+          panelElement={panelElement}
+          color={colorValueFor(pickerFor)}
+          onColorChange={(c: string) => handleColorChange(pickerFor, c)}
+          onColorChangeComplete={(c: string) =>
+            handleColorChangeComplete(pickerFor, c)
+          }
+          onClose={() => setPickerFor(null)}
+          solidOnly={true}
+          stateMode={colorState}
+          onStateModeChange={setColorState}
+          interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
         />
       )}
     </div>

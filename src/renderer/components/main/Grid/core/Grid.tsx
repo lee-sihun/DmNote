@@ -15,6 +15,7 @@ import ListPopup from '../../Modal/ListPopup';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { useGridZoomPan } from '@hooks/Grid/useGridZoomPan';
@@ -30,6 +31,7 @@ import { isElementResizable } from '../handles/groupResizeUtils';
 import KeyCounterPreviewLayer from '../layers/KeyCounterPreviewLayer';
 import StatCounterLayer from '../layers/StatCounterLayer';
 import GraphItem from '../layers/GraphItem';
+import KnobItem from '../layers/KnobItem';
 import {
   useGridSelectionStore,
   isElementInMarquee,
@@ -59,6 +61,7 @@ import type {
 } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SaveData } from '@hooks/Modal/useUnifiedKeySettingState';
 import { resolveImageSource } from '@utils/core/imageSource';
 import {
@@ -66,7 +69,10 @@ import {
   ungroupSelectedElements,
 } from '@utils/grid/groupActions';
 
-type ToolbarAddRequest = { id: number; type: 'key' | 'stat' | 'graph' } | null;
+type ToolbarAddRequest = {
+  id: number;
+  type: 'key' | 'stat' | 'graph' | 'knob';
+} | null;
 
 interface SelectedKeyInfo {
   key: string;
@@ -247,6 +253,7 @@ const Grid = ({
     getKeyMenuItems,
     getStatMenuItems,
     getGraphMenuItems,
+    getKnobMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
@@ -288,6 +295,7 @@ const Grid = ({
   // 내장 통계 요소(Stat Items) 위치 정보
   const statPositions = useStatItemStore((state) => state.positions);
   const graphPositions = useGraphItemStore((state) => state.positions);
+  const knobPositions = useKnobItemStore((state) => state.positions);
 
   // 선택 관련 로직 훅 사용
   const {
@@ -309,6 +317,7 @@ const Grid = ({
       positions,
       statPositions,
       graphPositions,
+      knobPositions,
       selectedKeyType,
       pluginElements,
       clientToGridCoords,
@@ -347,6 +356,8 @@ const Grid = ({
       usePluginDisplayElementStore.getState().bringForward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphForward(selected.index);
+    } else if (selected.type === 'knob') {
+      await moveKnobForward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -362,6 +373,8 @@ const Grid = ({
       usePluginDisplayElementStore.getState().sendBackward(selected.id);
     } else if (selected.type === 'graph') {
       await moveGraphBackward(selected.index);
+    } else if (selected.type === 'knob') {
+      await moveKnobBackward(selected.index);
     }
     syncSelectedElementsToOverlay();
   };
@@ -395,6 +408,7 @@ const Grid = ({
   const keyRefs = useRef<(HTMLElement | null)[]>([]);
   const statRefs = useRef<(HTMLElement | null)[]>([]);
   const graphRefs = useRef<(HTMLElement | null)[]>([]);
+  const knobRefs = useRef<(HTMLElement | null)[]>([]);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [duplicateState, setDuplicateState] = useState<DuplicateState | null>(
     null,
@@ -417,6 +431,8 @@ const Grid = ({
         useStatItemStore.getState().positions[selectedKeyType] || [];
       const modeGraphPos =
         useGraphItemStore.getState().positions[selectedKeyType] || [];
+      const modeKnobPos =
+        useKnobItemStore.getState().positions[selectedKeyType] || [];
 
       let anyInGroup = false;
       let allInSameGroup = true;
@@ -431,6 +447,8 @@ const Grid = ({
           gid = modeStatPos[el.index]?.groupId;
         } else if (el.type === 'graph' && el.index !== undefined) {
           gid = modeGraphPos[el.index]?.groupId;
+        } else if (el.type === 'knob' && el.index !== undefined) {
+          gid = modeKnobPos[el.index]?.groupId;
         }
         if (gid) anyInGroup = true;
         if (first) {
@@ -505,6 +523,13 @@ const Grid = ({
     moveGraphBackward,
     addGraphAtPosition,
     placeDuplicateGraph,
+    deleteKnobAtIndex,
+    moveKnobToFront,
+    moveKnobToBack,
+    moveKnobForward,
+    moveKnobBackward,
+    addKnobAtPosition,
+    placeDuplicateKnob,
   } = canvasActions;
 
   // 복제 시작은 로컬 UI 상태(duplicateState) 설정이 필요하므로 래퍼 사용
@@ -517,6 +542,13 @@ const Grid = ({
 
   const beginDuplicateGraph = (sourceIndex: number) => {
     const result = canvasActions.beginDuplicateGraph(sourceIndex);
+    if (!result) return;
+    setDuplicateState(result);
+    setDuplicateCursor(null);
+  };
+
+  const beginDuplicateKnob = (sourceIndex: number) => {
+    const result = canvasActions.beginDuplicateKnob(sourceIndex);
     if (!result) return;
     setDuplicateState(result);
     setDuplicateCursor(null);
@@ -539,6 +571,8 @@ const Grid = ({
         moveStatToFront(el.index);
       } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToFront(el.index);
+      } else if (el.type === 'knob' && el.index !== undefined) {
+        moveKnobToFront(el.index);
       } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().bringToFront(el.id);
       }
@@ -559,6 +593,8 @@ const Grid = ({
         moveStatToBack(el.index);
       } else if (el.type === 'graph' && el.index !== undefined) {
         moveGraphToBack(el.index);
+      } else if (el.type === 'knob' && el.index !== undefined) {
+        moveKnobToBack(el.index);
       } else if (el.type === 'plugin') {
         usePluginDisplayElementStore.getState().sendToBack(el.id);
       }
@@ -611,6 +647,8 @@ const Grid = ({
         addStatAtPosition(targetPos.dx, targetPos.dy);
       } else if (toolbarAddRequest.type === 'graph') {
         addGraphAtPosition(targetPos.dx, targetPos.dy);
+      } else if (toolbarAddRequest.type === 'knob') {
+        addKnobAtPosition(targetPos.dx, targetPos.dy);
       }
     }
 
@@ -669,7 +707,7 @@ const Grid = ({
 
   // 요소 클릭 시 그룹 멤버 자동 선택
   const selectElementWithGroup = (
-    type: 'key' | 'stat' | 'graph',
+    type: 'key' | 'stat' | 'graph' | 'knob',
     index: number,
   ) => {
     if (isContextOpen) {
@@ -687,9 +725,13 @@ const Grid = ({
       groupId =
         useStatItemStore.getState().positions[selectedKeyType]?.[index]
           ?.groupId;
-    } else {
+    } else if (type === 'graph') {
       groupId =
         useGraphItemStore.getState().positions[selectedKeyType]?.[index]
+          ?.groupId;
+    } else {
+      groupId =
+        useKnobItemStore.getState().positions[selectedKeyType]?.[index]
           ?.groupId;
     }
 
@@ -714,6 +756,13 @@ const Grid = ({
           toggleSelection({ type: 'graph', id: `graph-${i}`, index: i });
         }
       });
+      const knobPos =
+        useKnobItemStore.getState().positions[selectedKeyType] || [];
+      knobPos.forEach((p, i) => {
+        if (p?.groupId === groupId && !(type === 'knob' && i === index)) {
+          toggleSelection({ type: 'knob', id: `knob-${i}`, index: i });
+        }
+      });
     }
   };
 
@@ -734,7 +783,7 @@ const Grid = ({
 
   // 요소 컨텍스트 메뉴 열기
   const openElementContextMenu = (
-    type: 'key' | 'stat' | 'graph',
+    type: 'key' | 'stat' | 'graph' | 'knob',
     index: number,
     clientX: number,
     clientY: number,
@@ -911,6 +960,24 @@ const Grid = ({
                 newSelectedElements.push({
                   type: 'graph',
                   id: `graph-${i}`,
+                  index: i,
+                });
+              }
+            });
+
+            // 범위 내 노브 요소도 선택
+            (knobPositions?.[selectedKeyType] || []).forEach((pos, i) => {
+              if (!pos || pos.hidden) return;
+              const elementBounds = {
+                x: pos.dx,
+                y: pos.dy,
+                width: pos.width || 80,
+                height: pos.height || 80,
+              };
+              if (isElementInMarquee(elementBounds, rangeRect)) {
+                newSelectedElements.push({
+                  type: 'knob',
+                  id: `knob-${i}`,
                   index: i,
                 });
               }
@@ -1166,6 +1233,105 @@ const Grid = ({
     ));
   };
 
+  const renderKnobItems = () => {
+    const items = knobPositions?.[selectedKeyType] || [];
+    if (!items.length) return null;
+
+    const handleKnobPositionChange = (
+      index: number,
+      dx: number,
+      dy: number,
+    ) => {
+      const current = useKnobItemStore.getState().positions;
+      const tabPositions = current[selectedKeyType] || [];
+      const prev = tabPositions[index];
+      if (!prev) return;
+      if (prev.dx === dx && prev.dy === dy) return;
+
+      const currentKeyPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      useHistoryStore.getState().pushState({
+        keyMappings: km,
+        positions: currentKeyPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
+
+      const nextTabPositions = tabPositions.map((pos, i) =>
+        i === index ? { ...pos, dx, dy } : pos,
+      );
+      const nextPositions = { ...current, [selectedKeyType]: nextTabPositions };
+
+      useKnobItemStore.getState().setPositions(nextPositions);
+      window.api.knobItems.updatePositions(nextPositions).catch((error) => {
+        console.error('Failed to update knob item positions', error);
+      });
+      try {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+          positions: nextPositions,
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    return items.map((position, index) => (
+      <KnobItem
+        key={`knob-${selectedKeyType}-${index}`}
+        index={index}
+        elementId={`knob-${index}`}
+        position={position}
+        onPositionChange={handleKnobPositionChange}
+        zIndex={position.zIndex ?? index}
+        onClick={() => {
+          selectElementWithGroup('knob', index);
+        }}
+        onCtrlClick={() => {
+          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+        }}
+        onShiftClick={() => {
+          toggleSelection({ type: 'knob', id: `knob-${index}`, index });
+        }}
+        isSelected={selectedElements.some(
+          (el) => el.type === 'knob' && el.index === index,
+        )}
+        selectedElements={selectedElements}
+        onMultiDrag={(deltaX, deltaY) =>
+          moveSelectedElements(deltaX, deltaY, false, false)
+        }
+        onMultiDragEnd={syncSelectedElementsToOverlay}
+        onMultiDragStart={pushDragHistory}
+        activeTool={activeTool}
+        onEraserClick={() => {
+          showConfirm(
+            t('confirm.removeKnob', { name: 'Knob' }),
+            () => deleteKnobAtIndex(index),
+            t('confirm.remove'),
+          );
+        }}
+        onContextMenu={(e) => {
+          openElementContextMenu(
+            'knob',
+            index,
+            e.clientX,
+            e.clientY,
+            knobRefs.current[index] || null,
+          );
+        }}
+        zoom={zoom}
+        panX={panX}
+        panY={panY}
+        isViewportTransforming={isTransforming}
+        setReferenceRef={(node) => {
+          knobRefs.current[index] = node;
+        }}
+      />
+    ));
+  };
+
   const renderDuplicateGhost = () => {
     if (!duplicateState || !duplicateCursor) return null;
 
@@ -1359,6 +1525,12 @@ const Grid = ({
               snapped.x - width / 2,
               snapped.y - height / 2,
             );
+          } else if (type === 'knob') {
+            placeDuplicateKnob(
+              duplicateState.position as KnobItemPosition,
+              snapped.x - width / 2,
+              snapped.y - height / 2,
+            );
           }
         }
         setDuplicateState(null);
@@ -1387,6 +1559,7 @@ const Grid = ({
         {renderKeys()}
         {renderStatItems()}
         {renderGraphItems()}
+        {renderKnobItems()}
         {/* Outside 카운터 미리보기 레이어 */}
         {keyCounterEnabled && (
           <KeyCounterPreviewLayer
@@ -1459,6 +1632,7 @@ const Grid = ({
             positions,
             statPositions,
             graphPositions,
+            knobPositions,
             selectedKeyType,
             pluginElements,
           );
@@ -1496,6 +1670,16 @@ const Grid = ({
               y: pos.dy,
               width: pos.width || 200,
               height: pos.height || 100,
+            };
+          }
+        } else if (el.type === 'knob' && el.index !== undefined) {
+          const pos = knobPositions?.[selectedKeyType]?.[el.index];
+          if (pos) {
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
             };
           }
         } else if (el.type === 'plugin') {
@@ -1575,6 +1759,17 @@ const Grid = ({
               height: pos.height || 100,
             };
             elementId = `graph-${el.index}`;
+          } else if (el.type === 'knob' && el.index !== undefined) {
+            const pos = knobPositions?.[selectedKeyType]?.[el.index];
+            if (!pos) return null;
+
+            bounds = {
+              x: pos.dx,
+              y: pos.dy,
+              width: pos.width || 60,
+              height: pos.height || 60,
+            };
+            elementId = `knob-${el.index}`;
           } else if (el.type === 'plugin') {
             // 플러그인 요소 - resizable 속성 확인
             const pluginEl = pluginElements.find((p) => p.fullId === el.id);
@@ -1625,6 +1820,7 @@ const Grid = ({
           positions={positions}
           statPositions={statPositions}
           graphPositions={graphPositions}
+          knobPositions={knobPositions}
           selectedKeyType={selectedKeyType}
           pluginElements={pluginElements}
           zoom={zoom}
@@ -1654,6 +1850,8 @@ const Grid = ({
               ? getStatMenuItems(contextIndex)
               : contextType === 'graph'
               ? getGraphMenuItems(contextIndex)
+              : contextType === 'knob'
+              ? getKnobMenuItems(contextIndex)
               : getKeyMenuItems(contextIndex)
           }
           onSelect={async (id: string) => {
@@ -1731,6 +1929,26 @@ const Grid = ({
                 moveGraphToFront(contextIndex);
               } else if (id === 'sendToBack') {
                 moveGraphToBack(contextIndex);
+              }
+
+              setIsContextOpen(false);
+              setContextPosition(null);
+              return;
+            }
+
+            if (contextType === 'knob') {
+              if (id === 'delete') {
+                showConfirm(
+                  t('confirm.removeKnob', { name: 'Knob' }),
+                  () => deleteKnobAtIndex(contextIndex),
+                  t('confirm.remove'),
+                );
+              } else if (id === 'duplicate') {
+                beginDuplicateKnob(contextIndex);
+              } else if (id === 'bringToFront') {
+                moveKnobToFront(contextIndex);
+              } else if (id === 'sendToBack') {
+                moveKnobToBack(contextIndex);
               }
 
               setIsContextOpen(false);
@@ -1942,6 +2160,8 @@ const Grid = ({
               addStatAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'addGraph' && gridAddLocalPos) {
               addGraphAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
+            } else if (id === 'addKnob' && gridAddLocalPos) {
+              addKnobAtPosition(gridAddLocalPos.dx, gridAddLocalPos.dy);
             } else if (id === 'tabCss') {
               setIsTabCssModalOpen(true);
             } else if (id === 'tabNote') {
@@ -1976,6 +2196,7 @@ const Grid = ({
           positions={positions[selectedKeyType] || []}
           statPositions={statPositions?.[selectedKeyType] || []}
           graphPositions={graphPositions?.[selectedKeyType] || []}
+          knobPositions={knobPositions?.[selectedKeyType] || []}
           zoom={zoom}
           panX={panX}
           panY={panY}

@@ -1,0 +1,90 @@
+---
+title: Knobs API
+description: dmn.knobItems API reference for HID knob elements
+---
+
+# Knobs API
+
+Manage knob elements — rotary visualization elements bound to HID device axes
+(e.g., rhythm game controller knobs). While HID device **buttons** are mapped
+and visualized exactly like keyboard keys, **axes** are visualized with
+dedicated knob elements that rotate along with the physical knob.
+
+<Callout type="info">
+  HID input recognition is currently supported on **Windows** only.
+</Callout>
+
+## Identifiers
+
+DmNote assigns stable string identifiers to HID inputs:
+
+| Kind   | Format                         | Example               |
+| ------ | ------------------------------ | --------------------- |
+| Button | `HIDB:vid:pid:usagePage:usage` | `HIDB:1ccf:101c:9:3`  |
+| Axis   | `HIDA:vid:pid:usagePage:usage` | `HIDA:1ccf:101c:1:48` |
+
+Button identifiers appear as key labels (mappable like any keyboard key and
+delivered through `dmn.keys.onRawInput` with `device: 'gamepad'`). Axis
+identifiers are stored in a knob element's `axisId`.
+
+## Types
+
+```typescript
+// KeyPosition styling fields are inherited (position, size, colors, images...)
+type KnobItemPosition = KeyPosition & {
+  axisId: string; // bound HID axis ("HIDA:..."), empty if unbound
+  sensitivity: number; // rotation multiplier (default 1)
+  reverse: boolean; // invert rotation direction
+};
+// Axis deltas are normalized by the axis resolution internally, so
+// sensitivity is a pure multiplier regardless of the device:
+// 1 = one physical revolution ≈ one on-screen revolution,
+// 2 = twice the rotation, 0.5 = half.
+
+// Keyed by tab/mode id (e.g., "4key")
+type KnobItemPositions = Record<string, KnobItemPosition[]>;
+```
+
+Commonly used inherited styling fields:
+
+- `backgroundColor` / `activeBackgroundColor` — idle / turning fill color
+- `borderColor` / `activeBorderColor` — idle / turning border color
+- `borderWidth` — border thickness in px (default 3)
+- `borderRadius` — corner radius in px; when unset the knob is a circle
+- `inactiveImage` / `activeImage` — idle / turning custom image
+- `idleTransparent` / `activeTransparent` — transparent background toggles
+
+While the physical knob is turning, the element switches to its
+active colors/image (like a pressed key) and rotates by
+`accumulatedRevolutions × 360° × sensitivity`.
+
+## Position Management
+
+### `dmn.knobItems.getPositions(): Promise<KnobItemPositions>`
+
+Returns knob element layouts for all tabs.
+
+```typescript
+const positions = await dmn.knobItems.getPositions();
+console.log(positions['4key']); // knob elements on the "4key" tab
+```
+
+### `dmn.knobItems.updatePositions(positions): Promise<KnobItemPositions>`
+
+Replaces knob element layouts and persists them.
+
+```typescript
+const positions = await dmn.knobItems.getPositions();
+positions['4key'][0].sensitivity = 2; // 2 on-screen turns per knob revolution
+await dmn.knobItems.updatePositions(positions);
+```
+
+### `dmn.knobItems.onPositionsChanged(callback): Unsubscribe`
+
+Subscribes to knob layout changes (`knobPositions:changed`).
+
+```typescript
+const unsub = dmn.knobItems.onPositionsChanged((positions) => {
+  console.log('knob layout changed', positions);
+});
+```

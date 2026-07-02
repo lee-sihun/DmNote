@@ -266,6 +266,7 @@ impl AppState {
             positions: state.key_positions.clone(),
             stat_positions: state.stat_positions.clone(),
             graph_positions: state.graph_positions.clone(),
+            knob_positions: state.knob_positions.clone(),
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
             current_mode: self.keyboard.current_mode(),
@@ -849,6 +850,22 @@ impl AppState {
                                 continue;
                             }
 
+                            // HID 축(노브) 메시지 → input:axis 이벤트 브로드캐스트
+                            // (버튼은 아래 HookMessage 경로로 기존 키 시각화 재사용)
+                            if let Ok(axis) =
+                                serde_json::from_str::<crate::ipc::HidAxisMessage>(s)
+                            {
+                                let _ = app_handle.emit(
+                                    "input:axis",
+                                    &json!({
+                                        "axisId": axis.axis_id,
+                                        "value": axis.value,
+                                        "full": axis.full,
+                                    }),
+                                );
+                                continue;
+                            }
+
                             // 입력 수신 시각 — 노트 위치의 프레임 양자화 보정용 age 측정 기준
                             let recv_at = Instant::now();
 
@@ -1197,6 +1214,8 @@ impl AppState {
         let window = window_builder
             .always_on_top(true)
             .skip_taskbar(false)
+            // 첫 표시를 SW_SHOWNOACTIVATE로 처리하도록 tao에 지시 (포커스 미탈취)
+            .focused(false)
             .visible(snapshot.overlay_visible)
             .inner_size(bounds.width, bounds.height)
             .position(bounds.x, bounds.y)
@@ -1226,10 +1245,12 @@ impl AppState {
         }
 
         // Windows 오버레이 창 포커스 수신 방지
+        // set_focusable(false): tao가 FOCUSABLE 플래그로 WS_EX_NOACTIVATE를 추적 적용
+        // (raw SetWindowLongW 적용 시 이후 tao의 스타일 재적용에서 NOACTIVATE가 소실됨)
         #[cfg(target_os = "windows")]
         {
-            if let Err(err) = set_window_no_activate(&window) {
-                log::warn!("failed to set WS_EX_NOACTIVATE for overlay: {err}");
+            if let Err(err) = window.set_focusable(false) {
+                log::warn!("failed to set overlay non-focusable: {err}");
             }
             // 시스템 컨텍스트 메뉴 비활성화
             if let Err(err) = disable_system_context_menu(&window) {
@@ -1882,6 +1903,9 @@ fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<(
         unsafe {
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         }
+        // tao 내부 VISIBLE 플래그 동기화 — raw ShowWindow는 tao 상태를 갱신하지 않아,
+        // 이후 set_always_on_top/set_ignore_cursor_events 호출 시 tao가 창을 숨겨버림
+        window.show()?;
         Ok(())
     }
     #[cfg(target_os = "macos")]
@@ -1901,21 +1925,9 @@ fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<(
 }
 
 fn hide_overlay_window(window: &WebviewWindow) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
-
-        let hwnd = window.hwnd()?;
-        unsafe {
-            let _ = ShowWindow(hwnd, SW_HIDE);
-        }
-        Ok(())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        window.hide()?;
-        Ok(())
-    }
+    // tao API 사용으로 내부 VISIBLE 플래그와 실제 창 상태 일치 유지
+    window.hide()?;
+    Ok(())
 }
 
 /// macOS 전체화면 Space에서도 오버레이가 보이도록 NSWindow 동작을 보정
@@ -1954,20 +1966,6 @@ fn apply_macos_overlay_fullscreen_behavior_inner(window: &WebviewWindow, always_
             log::warn!("macOS overlay: failed to get NSWindow handle: {err}");
         }
     }
-}
-
-#[cfg(target_os = "windows")]
-fn set_window_no_activate(window: &WebviewWindow) -> Result<()> {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongW, SetWindowLongW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
-    };
-
-    let hwnd = window.hwnd()?;
-    unsafe {
-        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_NOACTIVATE.0 as i32);
-    }
-    Ok(())
 }
 
 /// 드래그 가능한 영역에서 시스템 컨텍스트 메뉴(이전 크기, 이동, 최소화 등)가 표시되지 않도록 설정

@@ -143,7 +143,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
       }
     };
 
-    // 설정 다이얼로그 열기
+    // 설정 노브로그 열기
     const openSettingsDialogModal = async (): Promise<boolean> => {
       if (!isInitialized) {
         await loadSettings();

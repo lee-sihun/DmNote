@@ -6,6 +6,7 @@ import type {
 import { normalizeCounterSettings } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
 const DEFAULT_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
@@ -19,7 +20,7 @@ const SPACING_GROUP_OVERLAP_THRESHOLD = 0.45;
 // 같은 축 시작점이 사실상 동일한 요소(같은 열/행)로 보는 허용 오차
 const PRIMARY_AXIS_STACK_EPSILON = 0.1;
 
-type KeyLikeType = 'key' | 'stat' | 'graph';
+type KeyLikeType = 'key' | 'stat' | 'graph' | 'knob';
 type AxisDirection = 'horizontal' | 'vertical';
 
 interface LayoutElement {
@@ -495,6 +496,16 @@ interface UseBatchHandlersProps {
   onGraphBatchPreview?: (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
   ) => void;
+  knobPositions?: Record<string, KnobItemPosition[] | undefined>;
+  onKnobUpdate?: (data: Partial<KnobItemPosition> & { index: number }) => void;
+  onKnobBatchUpdate?: (
+    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
+    options?: BatchCommitOptions,
+  ) => void;
+  onKnobPreview?: (index: number, updates: Partial<KnobItemPosition>) => void;
+  onKnobBatchPreview?: (
+    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
+  ) => void;
 }
 
 export function useBatchHandlers({
@@ -515,6 +526,11 @@ export function useBatchHandlers({
   onGraphBatchUpdate,
   onGraphPreview,
   onGraphBatchPreview,
+  knobPositions,
+  onKnobUpdate,
+  onKnobBatchUpdate,
+  onKnobPreview,
+  onKnobBatchPreview,
 }: UseBatchHandlersProps) {
   const selectedKeys = selectedKeyLikeElements.filter(
     (el) => el.type === 'key',
@@ -525,10 +541,15 @@ export function useBatchHandlers({
   const selectedGraphs = selectedKeyLikeElements.filter(
     (el) => el.type === 'graph',
   );
+  const selectedKnobs = selectedKeyLikeElements.filter(
+    (el) => el.type === 'knob',
+  );
 
   const getKeyLikePosition = (type: KeyLikeType, index: number) => {
     if (type === 'key') return keyPositions[selectedKeyType]?.[index] ?? null;
     if (type === 'stat') return statPositions[selectedKeyType]?.[index] ?? null;
+    if (type === 'knob')
+      return knobPositions?.[selectedKeyType]?.[index] ?? null;
     return graphPositions?.[selectedKeyType]?.[index] ?? null;
   };
 
@@ -614,6 +635,36 @@ export function useBatchHandlers({
     }
   };
 
+  const dispatchKnobUpdates = (
+    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
+    kind: 'preview' | 'commit',
+    options?: BatchCommitOptions,
+  ) => {
+    if (updates.length === 0) return;
+    if (kind === 'preview') {
+      if (onKnobBatchPreview) {
+        onKnobBatchPreview(updates);
+        return;
+      }
+      if (onKnobPreview) {
+        updates.forEach(({ index, ...rest }) => onKnobPreview(index, rest));
+        return;
+      }
+      if (onKnobUpdate) {
+        updates.forEach((update) => onKnobUpdate(update));
+      }
+      return;
+    }
+
+    if (onKnobBatchUpdate) {
+      onKnobBatchUpdate(updates, options);
+      return;
+    }
+    if (onKnobUpdate) {
+      updates.forEach((update) => onKnobUpdate(update));
+    }
+  };
+
   const getSelectedLayoutElements = (): LayoutElement[] => {
     return selectedKeyLikeElements
       .filter(
@@ -655,11 +706,17 @@ export function useBatchHandlers({
       .map(({ type: _t, ...rest }) => rest) as Array<
       { index: number } & Partial<GraphItemPosition>
     >;
+    const knobUpdates = updates
+      .filter((u) => u.type === 'knob')
+      .map(({ type: _t, ...rest }) => rest) as Array<
+      { index: number } & Partial<KnobItemPosition>
+    >;
 
     if (kind === 'preview') {
       dispatchKeyUpdates(keyUpdates, 'preview');
       dispatchStatUpdates(statUpdates, 'preview');
       dispatchGraphUpdates(graphUpdates, 'preview');
+      dispatchKnobUpdates(knobUpdates, 'preview');
       return;
     }
 
@@ -678,6 +735,12 @@ export function useBatchHandlers({
     }
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+    if (knobUpdates.length > 0) {
+      dispatchKnobUpdates(knobUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }
@@ -708,6 +771,13 @@ export function useBatchHandlers({
       { index: number } & Partial<GraphItemPosition>
     >;
     dispatchGraphUpdates(graphUpdates, 'preview');
+
+    const knobUpdates = selectedKnobs
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [property]: value })) as Array<
+      { index: number } & Partial<KnobItemPosition>
+    >;
+    dispatchKnobUpdates(knobUpdates, 'preview');
   };
 
   // 스타일 변경 완료 (저장)
@@ -832,6 +902,49 @@ export function useBatchHandlers({
     >;
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+
+    const currentKnobs = knobPositions?.[selectedKeyType] || [];
+    const knobUpdates = selectedKnobs
+      .filter((el) => el.index !== undefined)
+      .map((el) => {
+        const index = el.index!;
+        const pos = currentKnobs[index];
+        // idle 변경 시 active가 비어 있으면 현재 표시값을 함께 저장 (키/통계와 동일)
+        if (pos) {
+          if (
+            property === 'backgroundColor' &&
+            pos.activeBackgroundColor == null
+          ) {
+            return {
+              index,
+              backgroundColor: value,
+              activeBackgroundColor:
+                pos.activeBackgroundColor ??
+                pos.backgroundColor ??
+                DEFAULT_ACTIVE_BACKGROUND_COLOR,
+            } as { index: number } & Partial<KnobItemPosition>;
+          }
+          if (property === 'borderColor' && pos.activeBorderColor == null) {
+            return {
+              index,
+              borderColor: value,
+              activeBorderColor:
+                pos.activeBorderColor ??
+                pos.borderColor ??
+                DEFAULT_ACTIVE_BORDER_COLOR,
+            } as { index: number } & Partial<KnobItemPosition>;
+          }
+        }
+        return { index, [property]: value } as {
+          index: number;
+        } & Partial<KnobItemPosition>;
+      });
+    if (knobUpdates.length > 0) {
+      dispatchKnobUpdates(knobUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }
@@ -1115,6 +1228,18 @@ export function useBatchHandlers({
     >;
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
+        skipHistory: hasSavedHistory,
+      });
+      hasSavedHistory = true;
+    }
+
+    const knobUpdates = selectedKnobs
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
+      { index: number } & Partial<KnobItemPosition>
+    >;
+    if (knobUpdates.length > 0) {
+      dispatchKnobUpdates(knobUpdates, 'commit', {
         skipHistory: hasSavedHistory,
       });
     }

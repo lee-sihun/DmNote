@@ -5,6 +5,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
@@ -24,6 +25,7 @@ export function pushCurrentStateToHistory(): void {
   const keyState = useKeyStore.getState();
   const statPositions = useStatItemStore.getState().positions;
   const graphPositions = useGraphItemStore.getState().positions;
+  const knobPositions = useKnobItemStore.getState().positions;
   const pluginElements = usePluginDisplayElementStore.getState().elements;
   const layerGroups = useLayerGroupStore.getState().layerGroups;
 
@@ -32,6 +34,7 @@ export function pushCurrentStateToHistory(): void {
     positions: keyState.positions,
     statPositions,
     graphPositions,
+    knobPositions,
     pluginElements,
     layerGroups,
     customTabs: keyState.customTabs,
@@ -94,6 +97,7 @@ interface RestoredState {
   positions: import('@src/types/key/keys').KeyPositions;
   statPositions: import('@src/types/key/statItems').StatItemPositions;
   graphPositions: import('@src/types/key/graphItems').GraphItemPositions;
+  knobPositions: import('@src/types/key/knobs').KnobItemPositions;
   pluginElements?: PluginDisplayElementInternal[];
   layerGroups?: import('@src/types/layerGroups').LayerGroups;
   keyCounters?: import('@src/types/key/keys').KeyCounters;
@@ -109,6 +113,9 @@ export function applyRestoredStateToStores(state: RestoredState): void {
     .setKeyMappingsAndPositions(state.keyMappings, state.positions);
   useStatItemStore.getState().setPositions(state.statPositions);
   useGraphItemStore.getState().setPositions(state.graphPositions);
+  if (state.knobPositions !== undefined) {
+    useKnobItemStore.getState().setPositions(state.knobPositions);
+  }
 
   if (state.layerGroups !== undefined) {
     useLayerGroupStore.getState().setLayerGroups(state.layerGroups);
@@ -197,6 +204,16 @@ export async function persistRestoredState(
       }),
   ];
 
+  if (state.knobPositions !== undefined) {
+    promises.push(
+      window.api.knobItems
+        .updatePositions(state.knobPositions)
+        .catch((error) => {
+          console.error('Failed to persist knob positions', error);
+        }),
+    );
+  }
+
   if (state.layerGroups !== undefined) {
     promises.push(
       window.api.layerGroups.update(state.layerGroups).catch((error) => {
@@ -231,6 +248,15 @@ export async function persistRestoredState(
     });
   } catch {
     /* 무시 */
+  }
+  if (state.knobPositions !== undefined) {
+    try {
+      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+        positions: state.knobPositions,
+      });
+    } catch {
+      /* 무시 */
+    }
   }
 
   // 설정 스냅샷 백엔드 동기화 (프리셋 로드 undo 전용)
@@ -270,9 +296,9 @@ export async function persistRestoredState(
       });
 
     // tabNoteOverrides 복원 (getAll 실패 시 store 값을 fallback으로 사용)
-    const currentTabOverrides = await window.api.noteTab.getAll().catch(() =>
-      useSettingsStore.getState().tabNoteOverrides,
-    );
+    const currentTabOverrides = await window.api.noteTab
+      .getAll()
+      .catch(() => useSettingsStore.getState().tabNoteOverrides);
     const tabIds = new Set<string>([
       ...Object.keys(snap.tabNoteOverrides),
       ...Object.keys(currentTabOverrides),

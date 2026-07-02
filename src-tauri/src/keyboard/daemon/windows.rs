@@ -198,7 +198,7 @@ pub(super) fn run_raw_input() -> Result<()> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{MapVirtualKeyW, MAPVK_VSC_TO_VK_EX};
     use windows::Win32::UI::Input::{
         GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
-        RAWINPUTHEADER, RIDEV_INPUTSINK, RIDEV_NOLEGACY, RID_INPUT, RIM_TYPEKEYBOARD,
+        RAWINPUTHEADER, RIDEV_INPUTSINK, RIDEV_NOLEGACY, RID_INPUT, RIM_TYPEHID, RIM_TYPEKEYBOARD,
         RIM_TYPEMOUSE,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -290,6 +290,7 @@ pub(super) fn run_raw_input() -> Result<()> {
         )?;
 
         // Raw Input 키보드 + 마우스 이벤트 등록 (비포커스 상태에서도 수신)
+        // HID(조이스틱/게임패드/멀티축) 추가 — 노브/버튼 입력 인식용
         let devices = [
             RAWINPUTDEVICE {
                 usUsagePage: 0x01,
@@ -303,10 +304,31 @@ pub(super) fn run_raw_input() -> Result<()> {
                 dwFlags: RIDEV_INPUTSINK,
                 hwndTarget: hwnd,
             },
+            RAWINPUTDEVICE {
+                usUsagePage: 0x01,
+                usUsage: 0x04, // Joystick
+                dwFlags: RIDEV_INPUTSINK,
+                hwndTarget: hwnd,
+            },
+            RAWINPUTDEVICE {
+                usUsagePage: 0x01,
+                usUsage: 0x05, // Gamepad
+                dwFlags: RIDEV_INPUTSINK,
+                hwndTarget: hwnd,
+            },
+            RAWINPUTDEVICE {
+                usUsagePage: 0x01,
+                usUsage: 0x08, // Multi-axis Controller
+                dwFlags: RIDEV_INPUTSINK,
+                hwndTarget: hwnd,
+            },
         ];
 
         RegisterRawInputDevices(&devices, size_of::<RAWINPUTDEVICE>() as u32)
             .map_err(|e| anyhow!("RegisterRawInputDevices failed: {e}"))?;
+
+        // HID 입력 처리기 (버튼/축 동적 디코딩)
+        let mut hid = super::windows_hid::HidProcessor::new();
 
         // 메시지 루프: WM_INPUT 처리 후 HookMessage로 변환
         let mut msg = MSG::default();
@@ -531,6 +553,10 @@ pub(super) fn run_raw_input() -> Result<()> {
                                 },
                             );
                         }
+                    }
+                    t if t == RIM_TYPEHID.0 => {
+                        // HID 버튼/축 디코딩 → 파이프 전송 (버튼=HookMessage, 축=HidAxisMessage)
+                        hid.handle_hid(raw, raw.header.hDevice, &mut sink);
                     }
                     _ => {}
                 }

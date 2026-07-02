@@ -20,6 +20,8 @@ import type {
 } from '@src/types/key/keys';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { StatItemPositions } from '@src/types/key/statItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 
 const createMappings = (key: string): KeyMappings => ({
   '4key': [key],
@@ -47,6 +49,17 @@ const createPositions = (count: number): KeyPositions => ({
   ],
 });
 
+const createKnobs = (rotationDeg: number): KnobItemPositions => ({
+  '4key': [
+    {
+      ...createPositions(1)['4key'][0],
+      axisId: 'HIDA:1:2:1:48',
+      sensitivity: rotationDeg,
+      reverse: false,
+    },
+  ],
+});
+
 const EMPTY_STATS: StatItemPositions = {};
 const EMPTY_GRAPHS: GraphItemPositions = {};
 const DEFAULT_TABS: CustomTab[] = [{ id: 'tab-1', name: 'Tab 1' }];
@@ -61,6 +74,7 @@ const resetStores = () => {
     isBootstrapped: true,
     isLocalUpdateInProgress: false,
   });
+  useKnobItemStore.setState({ positions: {} });
   applyCounterCacheSnapshot({});
 };
 
@@ -208,7 +222,9 @@ describe('useHistoryStore', () => {
       graphPositions: EMPTY_GRAPHS,
     });
 
-    expect(useHistoryStore.getState().past[0]?.settingsSnapshot).toBeUndefined();
+    expect(
+      useHistoryStore.getState().past[0]?.settingsSnapshot,
+    ).toBeUndefined();
   });
 
   it('명시적 keyCounters가 있으면 캐시 대신 그 값을 저장', () => {
@@ -226,6 +242,58 @@ describe('useHistoryStore', () => {
 
     expect(useHistoryStore.getState().past[0]?.keyCounters).toEqual(
       providedCounters,
+    );
+  });
+
+  it('명시적 knobPositions가 있으면 그대로 저장', () => {
+    const knobs = createKnobs(360);
+
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+      knobPositions: knobs,
+    });
+
+    expect(useHistoryStore.getState().past[0]?.knobPositions).toEqual(knobs);
+  });
+
+  it('knobPositions 미제공 시 현재 knob store에서 자동 캡처', () => {
+    useKnobItemStore.setState({ positions: createKnobs(180) });
+
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(useHistoryStore.getState().past[0]?.knobPositions).toEqual(
+      createKnobs(180),
+    );
+  });
+
+  it('undo는 이전 knobPositions 스냅샷을 반환하고 현재 knob을 future에 저장', () => {
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+      knobPositions: createKnobs(90),
+    });
+
+    const restored = useHistoryStore.getState().undo({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+      knobPositions: createKnobs(270),
+    });
+
+    expect(restored?.knobPositions).toEqual(createKnobs(90));
+    expect(useHistoryStore.getState().future[0]?.knobPositions).toEqual(
+      createKnobs(270),
     );
   });
 });

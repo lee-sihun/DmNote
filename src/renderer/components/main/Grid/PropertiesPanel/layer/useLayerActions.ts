@@ -7,6 +7,7 @@ import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -200,6 +201,39 @@ export function useLayerActions({
       return;
     }
 
+    if (item.type === 'knob' && item.index !== undefined) {
+      const current = useKnobItemStore.getState().positions;
+      const currentPositions = current[selectedKeyType] || [];
+      const target = currentPositions[item.index];
+      if (!target) return;
+
+      const updatedPositions = { ...current };
+      const updatedModePositions = [...currentPositions];
+      updatedModePositions[item.index] = {
+        ...target,
+        hidden: !target.hidden,
+      };
+      updatedPositions[selectedKeyType] = updatedModePositions;
+
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
+      try {
+        await window.api.knobItems.updatePositions(updatedPositions);
+      } catch (error) {
+        console.error('Failed to toggle knob item visibility', error);
+      } finally {
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      }
+      try {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
     if (item.type === 'plugin') {
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
@@ -312,6 +346,41 @@ export function useLayerActions({
       }
     }
 
+    // 노브 positions
+    const knobChildren = children.filter(
+      (c) => c.type === 'knob' && c.index !== undefined,
+    );
+    if (knobChildren.length > 0) {
+      const current = useKnobItemStore.getState().positions;
+      const modePositions = [...(current[selectedKeyType] || [])];
+      knobChildren.forEach((c) => {
+        if (c.index !== undefined && modePositions[c.index]) {
+          modePositions[c.index] = {
+            ...modePositions[c.index],
+            hidden: newHidden,
+          };
+        }
+      });
+      const updatedPositions = {
+        ...current,
+        [selectedKeyType]: modePositions,
+      };
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
+      try {
+        await window.api.knobItems.updatePositions(updatedPositions);
+      } finally {
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      }
+      try {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
+    }
+
     // 플러그인
     const pluginChildren = children.filter((c) => c.type === 'plugin');
     pluginChildren.forEach((c) => {
@@ -393,6 +462,34 @@ export function useLayerActions({
       } finally {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
+    } else if (item.type === 'knob' && item.index !== undefined) {
+      const current = useKnobItemStore.getState().positions;
+      const currentPositions = current[selectedKeyType] || [];
+      const target = currentPositions[item.index];
+      if (!target) return;
+
+      const updatedPositions = { ...current };
+      const updatedModePositions = [...currentPositions];
+      updatedModePositions[item.index] = {
+        ...target,
+        layerName: newLayerName,
+      };
+      updatedPositions[selectedKeyType] = updatedModePositions;
+
+      useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      useKnobItemStore.getState().setPositions(updatedPositions);
+      try {
+        await window.api.knobItems.updatePositions(updatedPositions);
+      } finally {
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      }
+      try {
+        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+          positions: updatedPositions,
+        });
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -467,12 +564,14 @@ export function useLayerActions({
     const layerGroupsForNormalization =
       options?.layerGroupsForNormalization ?? storeLayerGroups;
 
+    const currentKnobPositions = useKnobItemStore.getState().positions;
     const grouped = applyGroupIdToSelectedElements({
       mode: selectedKeyType,
       selectedElements: selectedForUpdate,
       keyPositions: pos,
       statPositions: currentStatPositions,
       graphPositions: currentGraphPositions,
+      knobPositions: currentKnobPositions,
       targetGroupId,
     });
 
@@ -481,6 +580,7 @@ export function useLayerActions({
       keyPositions: grouped.keyPositions,
       statPositions: grouped.statPositions,
       graphPositions: grouped.graphPositions,
+      knobPositions: grouped.knobPositions,
       layerGroups: layerGroupsForNormalization,
     });
 
@@ -505,10 +605,12 @@ export function useLayerActions({
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
 
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
     useGraphItemStore.getState().setPositions(normalized.graphPositions);
+    useKnobItemStore.getState().setPositions(normalized.knobPositions);
 
     if (shouldPersistGroups) {
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
@@ -518,6 +620,7 @@ export function useLayerActions({
       await window.api.keys.updatePositions(normalized.keyPositions);
       await window.api.statItems.updatePositions(normalized.statPositions);
       await window.api.graphItems.updatePositions(normalized.graphPositions);
+      await window.api.knobItems.updatePositions(normalized.knobPositions);
       if (shouldPersistGroups) {
         await window.api.layerGroups.update(normalized.layerGroups);
       }
@@ -525,6 +628,7 @@ export function useLayerActions({
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     return true;
@@ -599,6 +703,8 @@ export function useLayerActions({
         toggleSelection({ type: 'stat', id: item.id, index: item.index });
       } else if (item.type === 'graph' && item.index !== undefined) {
         toggleSelection({ type: 'graph', id: item.id, index: item.index });
+      } else if (item.type === 'knob' && item.index !== undefined) {
+        toggleSelection({ type: 'knob', id: item.id, index: item.index });
       } else if (item.type === 'plugin') {
         toggleSelection({ type: 'plugin', id: item.id });
       }
@@ -695,6 +801,7 @@ export function useLayerActions({
       const keyPos = useKeyStore.getState().positions;
       const statPos = useStatItemStore.getState().positions;
       const graphPos = useGraphItemStore.getState().positions;
+      const knobPos = useKnobItemStore.getState().positions;
 
       const singleGroupId = resolveSingleGroupIdFromSelection(
         selectedKeyType,
@@ -702,6 +809,7 @@ export function useLayerActions({
         keyPos,
         statPos,
         graphPos,
+        knobPos,
       );
 
       if (singleGroupId) {
@@ -762,6 +870,10 @@ export function useLayerActions({
         .filter((el) => el.type === 'graph' && el.index !== undefined)
         .map((el) => el.index as number);
 
+      const knobsToDelete = selectedElements
+        .filter((el) => el.type === 'knob' && el.index !== undefined)
+        .map((el) => el.index as number);
+
       const pluginsToDelete = selectedElements
         .filter((el) => el.type === 'plugin')
         .map((el) => el.id);
@@ -771,6 +883,7 @@ export function useLayerActions({
         keysToDelete.length > 0 ||
         statsToDelete.length > 0 ||
         graphsToDelete.length > 0 ||
+        knobsToDelete.length > 0 ||
         pluginsToDelete.length > 0
       ) {
         const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -882,6 +995,38 @@ export function useLayerActions({
         }
       }
 
+      // 노브 삭제
+      if (knobsToDelete.length > 0) {
+        const current = useKnobItemStore.getState().positions;
+        const posArray = current[selectedKeyType] || [];
+        const deleteSet = new Set(knobsToDelete);
+
+        const updatedPositions = {
+          ...current,
+          [selectedKeyType]: posArray.filter(
+            (_, index) => !deleteSet.has(index),
+          ),
+        };
+
+        useKnobItemStore.getState().setLocalUpdateInProgress(true);
+        useKnobItemStore.getState().setPositions(updatedPositions);
+        try {
+          await window.api.knobItems.updatePositions(updatedPositions);
+        } catch (error) {
+          console.error('Failed to delete knob items', error);
+        } finally {
+          useKnobItemStore.getState().setLocalUpdateInProgress(false);
+        }
+
+        try {
+          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+            positions: updatedPositions,
+          });
+        } catch {
+          // ignore
+        }
+      }
+
       // 플러그인 삭제
       if (pluginsToDelete.length > 0) {
         const currentElements =
@@ -898,6 +1043,7 @@ export function useLayerActions({
         keyPositions: useKeyStore.getState().positions,
         statPositions: useStatItemStore.getState().positions,
         graphPositions: useGraphItemStore.getState().positions,
+        knobPositions: useKnobItemStore.getState().positions,
         layerGroups: useLayerGroupStore.getState().layerGroups,
       });
 
@@ -905,9 +1051,11 @@ export function useLayerActions({
         useKeyStore.getState().setLocalUpdateInProgress(true);
         useStatItemStore.getState().setLocalUpdateInProgress(true);
         useGraphItemStore.getState().setLocalUpdateInProgress(true);
+        useKnobItemStore.getState().setLocalUpdateInProgress(true);
         useKeyStore.getState().setPositions(normalized.keyPositions);
         useStatItemStore.getState().setPositions(normalized.statPositions);
         useGraphItemStore.getState().setPositions(normalized.graphPositions);
+        useKnobItemStore.getState().setPositions(normalized.knobPositions);
         if (normalized.groupsChanged) {
           useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
         }
@@ -917,6 +1065,7 @@ export function useLayerActions({
           await window.api.graphItems.updatePositions(
             normalized.graphPositions,
           );
+          await window.api.knobItems.updatePositions(normalized.knobPositions);
           if (normalized.groupsChanged) {
             await window.api.layerGroups.update(normalized.layerGroups);
           }
@@ -924,6 +1073,7 @@ export function useLayerActions({
           useKeyStore.getState().setLocalUpdateInProgress(false);
           useStatItemStore.getState().setLocalUpdateInProgress(false);
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
+          useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
     }

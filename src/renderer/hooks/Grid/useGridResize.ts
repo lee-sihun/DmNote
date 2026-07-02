@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
@@ -16,6 +17,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { ElementBounds } from '@utils/grid/smartGuides';
 
 interface ResizeHandle {
@@ -451,6 +453,19 @@ export function useGridResize({
     handleElementResizePreview(`graph-${index}`, newBounds);
   };
 
+  const handleKnobResizePreview = (
+    index: number,
+    newBounds: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      handle?: ResizeHandle;
+    },
+  ) => {
+    handleElementResizePreview(`knob-${index}`, newBounds);
+  };
+
   // 플러그인 요소 리사이즈 처리 (스마트 가이드 포함) - 프리뷰 모드
   const handlePluginResizePreview = (
     fullId: string,
@@ -767,6 +782,8 @@ export function useGridResize({
       handleStatResizePreview(element.index, newBounds);
     } else if (element.type === 'graph' && element.index !== undefined) {
       handleGraphResizePreview(element.index, newBounds);
+    } else if (element.type === 'knob' && element.index !== undefined) {
+      handleKnobResizePreview(element.index, newBounds);
     } else if (element.type === 'plugin') {
       handlePluginResizePreview(element.id, newBounds);
     }
@@ -856,6 +873,35 @@ export function useGridResize({
         window.api.graphItems.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update graph positions after resize', error);
         });
+      } else if (element.type === 'knob' && element.index !== undefined) {
+        const knobStore = useKnobItemStore.getState();
+        const knobPositions = knobStore.positions;
+        const current = knobPositions[selectedKeyType] || [];
+        const nextPositions: KnobItemPositions = {
+          ...knobPositions,
+          [selectedKeyType]: current.map((pos, i) =>
+            i === element.index
+              ? {
+                  ...pos,
+                  dx: finalBounds.x,
+                  dy: finalBounds.y,
+                  width: finalBounds.width,
+                  height: finalBounds.height,
+                }
+              : pos,
+          ),
+        };
+        knobStore.setPositions(nextPositions);
+        window.api.knobItems.updatePositions(nextPositions).catch((error) => {
+          console.error('Failed to update knob positions after resize', error);
+        });
+        try {
+          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+            positions: nextPositions,
+          });
+        } catch {
+          // 무시
+        }
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
@@ -908,6 +954,9 @@ export function useGridResize({
       const graphStore = useGraphItemStore.getState();
       const graphPositions = graphStore.positions;
       const currentGraphs = graphPositions[selectedKeyType] || [];
+      const knobStore = useKnobItemStore.getState();
+      const knobPositions = knobStore.positions;
+      const currentKnobs = knobPositions[selectedKeyType] || [];
 
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
@@ -1018,6 +1067,49 @@ export function useGridResize({
               error,
             );
           });
+      }
+
+      // 노브 요소들 업데이트
+      const knobUpdates = finalData.elementBounds.filter(
+        ({ element }) => element.type === 'knob' && element.index !== undefined,
+      );
+
+      if (knobUpdates.length > 0) {
+        const nextKnobPositions: KnobItemPositions = {
+          ...knobPositions,
+          [selectedKeyType]: currentKnobs.map((pos, i) => {
+            const update = knobUpdates.find(
+              ({ element }) => element.index === i,
+            );
+            if (update) {
+              return {
+                ...pos,
+                dx: update.bounds.x,
+                dy: update.bounds.y,
+                width: update.bounds.width,
+                height: update.bounds.height,
+              };
+            }
+            return pos;
+          }),
+        };
+
+        knobStore.setPositions(nextKnobPositions);
+        window.api.knobItems
+          .updatePositions(nextKnobPositions)
+          .catch((error) => {
+            console.error(
+              'Failed to update knob positions after group resize',
+              error,
+            );
+          });
+        try {
+          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+            positions: nextKnobPositions,
+          });
+        } catch {
+          // 무시
+        }
       }
 
       // 플러그인 요소들 업데이트

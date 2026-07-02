@@ -194,7 +194,8 @@
     "confirm": "确认",
     "cancel": "取消",
     "ok": "确定",
-    "save": "保存"
+    "save": "保存",
+    "more": "更多"
   },
   "tooltip": {
     "github": "GitHub",
@@ -222,7 +223,8 @@
     "resetCounters": "重置计数器",
     "addKey": "按键",
     "addStat": "统计",
-    "addGraph": "图表"
+    "addGraph": "图表",
+    "addKnob": "旋钮"
   },
   "preset": {
     "import": "导入",
@@ -257,6 +259,7 @@
 
     "removeStat": "移除 [{{name}}] 统计?",
     "removeGraph": "移除 [{{name}}] 图表?",
+    "removeKnob": "移除 [{{name}}] 旋钮?",
     "remove": "移除"
   },
   "tabs": {
@@ -295,6 +298,7 @@
     "active": "激活"
   },
   "contextMenu": {
+    "delete": "删除",
     "duplicateKey": "复制按键",
     "deleteKey": "删除按键",
     "duplicateSelected": "复制选中项",
@@ -305,6 +309,8 @@
     "deleteStat": "删除统计",
     "duplicateGraph": "复制图表",
     "deleteGraph": "删除图表",
+    "duplicateKnob": "复制旋钮",
+    "deleteKnob": "删除旋钮",
     "noteSetting": "音符设置",
     "counterSetting": "计数器设置",
     "counterReset": "重置计数器",
@@ -317,6 +323,7 @@
     "addKey": "添加按键",
     "addStat": "添加统计",
     "addGraph": "添加图表",
+    "addKnob": "添加旋钮",
     "rename": "重命名",
     "quitApp": "退出程序",
     "snapToEdge": "贴靠屏幕边缘",
@@ -493,6 +500,12 @@
     "graphAnimation": "图表动效",
     "pressAnyKey": "按下任意键",
     "clickToSet": "点击设置",
+    "knobAxis": "旋钮映射",
+    "knobAxisUnset": "未设置",
+    "knobCapture": "点击设置",
+    "knobCapturing": "转动旋钮",
+    "knobSensitivity": "灵敏度",
+    "knobReverse": "反转方向",
     "customImage": "自定义图像",
     "configure": "配置",
     "className": "类名",

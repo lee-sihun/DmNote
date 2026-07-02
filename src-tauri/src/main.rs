@@ -59,7 +59,7 @@ fn main() {
         return;
     }
 
-    // macOS: 접근성 권한 확인 및 미부여 시 시스템 다이얼로그 표시
+    // macOS: 접근성 권한 확인 및 미부여 시 시스템 노브로그 표시
     #[cfg(target_os = "macos")]
     {
         request_accessibility_permission();
@@ -232,6 +232,8 @@ fn main() {
             commands::layout::stat_items::stat_positions_update,
             commands::layout::graph_items::graph_positions_get,
             commands::layout::graph_items::graph_positions_update,
+            commands::layout::knob_items::knob_positions_get,
+            commands::layout::knob_items::knob_positions_update,
             commands::layout::font::font_load,
             commands::layout::overlay::overlay_get,
             commands::layout::overlay::overlay_set_visible,
@@ -765,7 +767,7 @@ fn extract_zip_bytes_to_dir(zip_bytes: &[u8], dest_dir: &std::path::Path) -> Res
 }
 
 /// macOS 접근성(Accessibility) 권한을 확인하고,
-/// 없으면 시스템 권한 요청 다이얼로그를 자동으로 표시합니다.
+/// 없으면 시스템 권한 요청 노브로그를 자동으로 표시합니다.
 /// `AXIsProcessTrustedWithOptions`에 `kAXTrustedCheckOptionPrompt: true`를 전달하면
 /// macOS가 자동으로 "시스템 설정 > 개인정보 보호 및 보안 > 손쉬운 사용" 허용 팝업을 띄워줍니다.
 /// 참고: 입력 모니터링(Input Monitoring) 권한은 rdev가 CGEventTap을 생성할 때

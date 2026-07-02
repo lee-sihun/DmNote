@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -789,6 +790,7 @@ export function useKeyManager() {
       const currentKeyState = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
+      const currentKnobPositions = useKnobItemStore.getState().positions;
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -797,6 +799,7 @@ export function useKeyManager() {
         positions: currentKeyState.positions,
         statPositions: currentStatPositions,
         graphPositions: currentGraphPositions,
+        knobPositions: currentKnobPositions,
         pluginElements: currentPluginElements,
         layerGroups: currentLayerGroups,
       });

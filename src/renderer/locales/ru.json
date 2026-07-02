@@ -194,7 +194,8 @@
     "confirm": "Подтвердить",
     "cancel": "Отмена",
     "ok": "ОК",
-    "save": "Сохранить"
+    "save": "Сохранить",
+    "more": "Ещё"
   },
   "tooltip": {
     "github": "GitHub",
@@ -222,7 +223,8 @@
     "resetCounters": "Сброс счётчиков",
     "addKey": "Клавиша",
     "addStat": "Стат.",
-    "addGraph": "График"
+    "addGraph": "График",
+    "addKnob": "Ручка"
   },
   "preset": {
     "import": "Импорт",
@@ -256,6 +258,7 @@
     "removeKey": "Удалить клавишу [{{name}}]?",
     "removeStat": "Удалить стат. [{{name}}]?",
     "removeGraph": "Удалить график [{{name}}]?",
+    "removeKnob": "Удалить ручку [{{name}}]?",
     "remove": "Удалить"
   },
   "tabs": {
@@ -294,6 +297,7 @@
     "active": "Нажат"
   },
   "contextMenu": {
+    "delete": "Удалить",
     "duplicateKey": "Дублировать клавишу",
     "deleteKey": "Удалить клавишу",
     "duplicateSelected": "Дублировать выбранное",
@@ -302,6 +306,8 @@
     "deleteStat": "Удалить стат.",
     "duplicateGraph": "Дублировать график",
     "deleteGraph": "Удалить график",
+    "duplicateKnob": "Дублировать ручку",
+    "deleteKnob": "Удалить ручку",
     "noteSetting": "Настр. ноты",
     "counterSetting": "Настр. счётчика",
     "counterReset": "Сброс счётчика",
@@ -314,6 +320,7 @@
     "addKey": "Добавить клавишу",
     "addStat": "Добавить стат.",
     "addGraph": "Добавить график",
+    "addKnob": "Добавить ручку",
     "rename": "Переименовать",
     "quitApp": "Выйти из приложения",
     "snapToEdge": "Привязать к краю",
@@ -490,6 +497,12 @@
     "graphAnimation": "Моушн графика",
     "pressAnyKey": "Нажмите клавишу",
     "clickToSet": "Нажмите",
+    "knobAxis": "Назначение ручки",
+    "knobAxisUnset": "Не задано",
+    "knobCapture": "Нажмите",
+    "knobCapturing": "Поверните ручку",
+    "knobSensitivity": "Чувствительность",
+    "knobReverse": "Обратное направление",
     "customImage": "Своя картинка",
     "configure": "Настроить",
     "className": "Класс",
