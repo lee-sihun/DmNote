@@ -22,7 +22,8 @@ argument-hint: "[리뷰 초점 (선택)]"
 ## 서브에이전트 호출 방법
 
 `Agent` 도구를 사용합니다:
-- `subagent_type: "general-purpose"`, `model: "opus"`
+- `subagent_type: "general-purpose"`, `model: "opus"` (기본)
+- **에스컬레이션**: 데이터 모델/영속성(serde·마이그레이션), 동시성/레이스, 수치 정밀도, IPC 프로토콜 의미론 등 고위험 변경 리뷰는 `model` 지정을 **생략**하여 메인 모델(상위 티어)을 상속시킵니다.
 - 백그라운드 실행이 기본 — 완료 시 task-notification으로 자동 수신. 커밋 등 후속 작업은 리뷰 결과 수신 후에만 진행합니다.
 - 결과가 즉시 필요하면 `run_in_background: false`로 동기 실행합니다.
 
