@@ -333,8 +333,9 @@ pub struct GraphPosition {
 }
 
 fn default_knob_sensitivity() -> f64 {
-    // 8-bit 노브 기준 1회전 ≈ 화면 1회전 (360/256)
-    1.40625
+    // 순수 배율 — 1이면 축 해상도와 무관하게 물리 1회전 ≈ 화면 1회전
+    // (프론트엔드가 wrap 델타를 축 해상도로 정규화해 회전수 단위로 누적)
+    1.0
 }
 
 /// 회전(노브) 요소 — HID 축에 바인딩. KeyPosition 상속(표시명/스타일/클래스/이미지) + 노브 전용 필드.
@@ -344,7 +345,7 @@ pub struct KnobPosition {
     /// 바인딩된 HID 축 식별자 "HIDA:vid:pid:usagePage:usage"
     #[serde(default)]
     pub axis_id: String,
-    /// 노브 raw 1단위당 화면 회전 도수
+    /// 회전 배율 (물리 1회전당 화면 회전 수)
     #[serde(default = "default_knob_sensitivity")]
     pub sensitivity: f64,
     /// 회전 방향 반전

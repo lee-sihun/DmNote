@@ -1,7 +1,9 @@
 /**
  * HID 축(노브) 이벤트 버스
  * 백엔드 input:axis(절대 raw 값)를 한 번만 구독하고,
- * 축별 wrap 델타를 계산해 axisSignals에 누적(중앙 집중 — 1회만).
+ * 축별 wrap 델타를 축 해상도(full)로 정규화해 "회전수" 단위로
+ * axisSignals에 누적(중앙 집중 — 1회만). 해상도와 무관하게
+ * 물리 1회전 ≈ 누적 1.0이 되어 노브 sensitivity가 순수 배율이 됨.
  * 추가 구독자(매핑 UI 등)는 raw 페이로드를 그대로 받음.
  */
 
@@ -39,13 +41,14 @@ class AxisEventBus {
   private handle(payload: AxisPayload) {
     const { axisId, value, full } = payload;
 
-    // wrap 최단경로 델타: 절대값 순환을 부호 델타로 환산해 누적
+    // wrap 최단경로 델타: 절대값 순환을 부호 델타로 환산 후
+    // 축 해상도로 정규화(회전수 단위)해 누적
     if (full > 0) {
       const last = this.lastValue.get(axisId);
       if (last !== undefined) {
         const half = full / 2;
         const delta = ((((value - last + half) % full) + full) % full) - half;
-        addAxisDelta(axisId, delta);
+        addAxisDelta(axisId, delta / full);
       }
       this.lastValue.set(axisId, value);
     }

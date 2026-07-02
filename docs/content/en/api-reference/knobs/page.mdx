@@ -18,10 +18,10 @@ dedicated knob elements that rotate along with the physical knob.
 
 DmNote assigns stable string identifiers to HID inputs:
 
-| Kind | Format | Example |
-| --- | --- | --- |
-| Button | `HIDB:vid:pid:usagePage:usage` | `HIDB:1ccf:101c:9:3` |
-| Axis | `HIDA:vid:pid:usagePage:usage` | `HIDA:1ccf:101c:1:48` |
+| Kind   | Format                         | Example               |
+| ------ | ------------------------------ | --------------------- |
+| Button | `HIDB:vid:pid:usagePage:usage` | `HIDB:1ccf:101c:9:3`  |
+| Axis   | `HIDA:vid:pid:usagePage:usage` | `HIDA:1ccf:101c:1:48` |
 
 Button identifiers appear as key labels (mappable like any keyboard key and
 delivered through `dmn.keys.onRawInput` with `device: 'gamepad'`). Axis
@@ -33,9 +33,13 @@ identifiers are stored in a knob element's `axisId`.
 // KeyPosition styling fields are inherited (position, size, colors, images...)
 type KnobItemPosition = KeyPosition & {
   axisId: string; // bound HID axis ("HIDA:..."), empty if unbound
-  sensitivity: number; // degrees of on-screen rotation per raw unit
+  sensitivity: number; // rotation multiplier (default 1)
   reverse: boolean; // invert rotation direction
 };
+// Axis deltas are normalized by the axis resolution internally, so
+// sensitivity is a pure multiplier regardless of the device:
+// 1 = one physical revolution ≈ one on-screen revolution,
+// 2 = twice the rotation, 0.5 = half.
 
 // Keyed by tab/mode id (e.g., "4key")
 type KnobItemPositions = Record<string, KnobItemPosition[]>;
@@ -52,7 +56,7 @@ Commonly used inherited styling fields:
 
 While the physical knob is turning, the element switches to its
 active colors/image (like a pressed key) and rotates by
-`accumulatedDelta × sensitivity` degrees.
+`accumulatedRevolutions × 360° × sensitivity`.
 
 ## Position Management
 
@@ -71,7 +75,7 @@ Replaces knob element layouts and persists them.
 
 ```typescript
 const positions = await dmn.knobItems.getPositions();
-positions['4key'][0].sensitivity = 2.8125; // 2 turns per knob revolution
+positions['4key'][0].sensitivity = 2; // 2 on-screen turns per knob revolution
 await dmn.knobItems.updatePositions(positions);
 ```
 

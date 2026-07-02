@@ -738,7 +738,7 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     const list = [...(current[selectedKeyType] || [])];
     list.push({
       axisId: '',
-      sensitivity: 1.40625,
+      sensitivity: 1,
       reverse: false,
       dx,
       dy,

@@ -18,10 +18,10 @@ description: HID 노브 요소를 위한 dmn.knobItems API 레퍼런스
 
 DmNote는 HID 입력에 고정 문자열 식별자를 부여합니다:
 
-| 종류 | 형식 | 예시 |
-| --- | --- | --- |
-| 버튼 | `HIDB:vid:pid:usagePage:usage` | `HIDB:1ccf:101c:9:3` |
-| 축 | `HIDA:vid:pid:usagePage:usage` | `HIDA:1ccf:101c:1:48` |
+| 종류 | 형식                           | 예시                  |
+| ---- | ------------------------------ | --------------------- |
+| 버튼 | `HIDB:vid:pid:usagePage:usage` | `HIDB:1ccf:101c:9:3`  |
+| 축   | `HIDA:vid:pid:usagePage:usage` | `HIDA:1ccf:101c:1:48` |
 
 버튼 식별자는 키 라벨로 사용되며(일반 키보드 키처럼 매핑 가능,
 `dmn.keys.onRawInput`에서 `device: 'gamepad'`로 전달) 축 식별자는 노브
@@ -33,9 +33,12 @@ DmNote는 HID 입력에 고정 문자열 식별자를 부여합니다:
 // KeyPosition의 스타일 필드를 상속 (위치, 크기, 색상, 이미지 등)
 type KnobItemPosition = KeyPosition & {
   axisId: string; // 바인딩된 HID 축("HIDA:..."), 미바인딩이면 빈 문자열
-  sensitivity: number; // raw 1단위당 화면 회전 도수
+  sensitivity: number; // 회전 배율 (기본 1)
   reverse: boolean; // 회전 방향 반전
 };
+// 축 델타는 내부적으로 축 해상도로 정규화되므로 sensitivity는 기기와
+// 무관한 순수 배율입니다: 1 = 물리 1회전 ≈ 화면 1회전,
+// 2 = 두 배 회전, 0.5 = 절반.
 
 // 탭/모드 id(예: "4key")별 맵
 type KnobItemPositions = Record<string, KnobItemPosition[]>;
@@ -51,7 +54,7 @@ type KnobItemPositions = Record<string, KnobItemPosition[]>;
 - `idleTransparent` / `activeTransparent` — 배경 투명 토글
 
 물리 노브가 회전하는 동안 요소는 키의 눌림처럼 입력(active)
-색상/이미지로 전환되며, `누적 델타 × sensitivity`도 만큼 회전합니다.
+색상/이미지로 전환되며, `누적 회전수 × 360° × sensitivity`만큼 회전합니다.
 
 ## 위치 관리
 
@@ -70,7 +73,7 @@ console.log(positions['4key']); // "4key" 탭의 노브 요소들
 
 ```typescript
 const positions = await dmn.knobItems.getPositions();
-positions['4key'][0].sensitivity = 2.8125; // 노브 1회전당 화면 2회전
+positions['4key'][0].sensitivity = 2; // 노브 1회전당 화면 2회전
 await dmn.knobItems.updatePositions(positions);
 ```
 

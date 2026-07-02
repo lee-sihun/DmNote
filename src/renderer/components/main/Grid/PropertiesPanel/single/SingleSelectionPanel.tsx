@@ -1105,21 +1105,23 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
             <SectionDivider />
 
+            {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
             <PropertyRow
               label={t('propertiesPanel.knobSensitivity') || '민감도'}
             >
               <NumberInput
-                value={Number(singleKnobPosition.sensitivity ?? 1.40625)}
+                value={Number(singleKnobPosition.sensitivity ?? 1)}
                 onChange={(value) =>
                   handleKnobUpdate({
                     index: singleKnobIndex,
                     sensitivity: Math.max(0, value),
                   })
                 }
+                suffix="×"
                 min={0}
-                max={9999}
+                max={100}
                 allowDecimal
-                decimalScale={3}
+                decimalScale={2}
               />
             </PropertyRow>
 

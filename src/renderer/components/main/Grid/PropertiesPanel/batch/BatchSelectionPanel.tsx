@@ -1436,8 +1436,8 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   t,
 }) => {
   const sensitivityState = getMixedValueKnobs(
-    (pos) => Number(pos.sensitivity ?? 1.40625),
-    1.40625,
+    (pos) => Number(pos.sensitivity ?? 1),
+    1,
   );
   const reverseState = getMixedValueKnobs((pos) => pos.reverse ?? false, false);
   const batchKnobSpacing = getBatchSpacingValue();
@@ -1550,10 +1550,11 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                           sensitivity: Math.max(0, value),
                         })
                       }
+                      suffix="×"
                       min={0}
-                      max={9999}
+                      max={100}
                       allowDecimal
-                      decimalScale={3}
+                      decimalScale={2}
                       isMixed={sensitivityState.isMixed}
                     />
                   </PropertyRow>

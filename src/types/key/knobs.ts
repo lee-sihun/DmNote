@@ -5,7 +5,7 @@ import type { KeyPosition } from '@src/types/key/keys';
 export type KnobItemPosition = KeyPosition & {
   /** 바인딩된 HID 축 식별자 "HIDA:vid:pid:usagePage:usage" */
   axisId: string;
-  /** 노브 raw 1단위당 화면 회전 도수 */
+  /** 회전 배율 (물리 1회전당 화면 회전 수, 기본 1) */
   sensitivity: number;
   /** 회전 방향 반전 */
   reverse: boolean;

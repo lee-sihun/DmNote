@@ -38,15 +38,15 @@ interface OverlayKnobItemProps {
 // 회전 멈춤 후 입력(active) 상태를 유지하는 시간(ms)
 const ACTIVE_HOLD_MS = 150;
 
-// HID 축(노브)에 바인딩되는 회전 요소. axisSignals의 누적 wrap-델타에
-// 민감도/방향을 적용해 회전. 입력 사이 보간은 CSS transition으로 처리.
-// 회전 중에는 키의 눌림처럼 입력(active) 색상/이미지로 전환.
+// HID 축(노브)에 바인딩되는 회전 요소. axisSignals의 누적 회전수(정규화된
+// wrap-델타)에 배율(sensitivity)/방향을 적용해 회전. 입력 사이 보간은
+// CSS transition으로 처리. 회전 중에는 키의 눌림처럼 입력(active) 상태로 전환.
 const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   useSignals();
 
   const {
     axisId = '',
-    sensitivity = 1.40625,
+    sensitivity = 1,
     reverse = false,
     dx = 0,
     dy = 0,
@@ -97,7 +97,8 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
 
   if (!position || position.hidden) return null;
 
-  const angle = accum * sensitivity * (reverse ? -1 : 1);
+  // accum은 회전수 단위(물리 1회전 ≈ 1.0) — sensitivity는 순수 배율
+  const angle = accum * 360 * sensitivity * (reverse ? -1 : 1);
 
   const inactiveImageSrc = resolveImageSource(inactiveImage);
   const activeImageSrc = resolveImageSource(activeImage);
