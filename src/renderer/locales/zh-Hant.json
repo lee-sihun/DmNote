@@ -185,7 +185,8 @@
     "confirm": "確認",
     "cancel": "取消",
     "ok": "確定",
-    "save": "儲存"
+    "save": "儲存",
+    "more": "更多"
   },
   "tooltip": {
     "github": "GitHub",
@@ -288,6 +289,7 @@
     "active": "激活"
   },
   "contextMenu": {
+    "delete": "刪除",
     "duplicateKey": "複製按鍵",
     "deleteKey": "刪除按鍵",
     "duplicateSelected": "複製所選項目",

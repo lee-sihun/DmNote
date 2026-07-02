@@ -35,8 +35,9 @@ Subscribes to all raw input events (including unregistered keys).
 
 ```typescript
 interface RawInputEvent {
-  device: "KEYBOARD" | "MOUSE";
-  label: string; // e.g., 'A', 'LButton'
+  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  label: string; // e.g., 'A', 'LButton', 'HIDB:1ccf:101c:9:3'
+  labels: string[]; // all candidate labels for this event
   state: "DOWN" | "UP";
 }
 
@@ -44,6 +45,10 @@ const unsub = dmn.keys.onRawInput(({ device, label, state }) => {
   console.log(`[${device}] ${label} ${state}`);
 });
 ```
+
+HID device buttons (Windows) are delivered with `device: 'gamepad'` and
+labels in the form `HIDB:vid:pid:usagePage:usage`. See the
+[Knobs API](/docs/api-reference/knobs) for HID axis (knob) elements.
 
 ---
 

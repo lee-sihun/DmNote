@@ -185,7 +185,8 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "ok": "OK",
-    "save": "Save"
+    "save": "Save",
+    "more": "More"
   },
   "tooltip": {
     "github": "GitHub",
@@ -287,6 +288,7 @@
     "active": "Active"
   },
   "contextMenu": {
+    "delete": "Delete",
     "duplicateKey": "Duplicate Key",
     "deleteKey": "Delete Key",
     "duplicateSelected": "Duplicate Selection",

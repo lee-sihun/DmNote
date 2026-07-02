@@ -185,7 +185,8 @@
     "confirm": "확인",
     "cancel": "취소",
     "ok": "확인",
-    "save": "저장"
+    "save": "저장",
+    "more": "더보기"
   },
   "tooltip": {
     "github": "깃허브",
@@ -288,6 +289,7 @@
     "active": "입력"
   },
   "contextMenu": {
+    "delete": "삭제",
     "duplicateKey": "키 복제",
     "deleteKey": "키 삭제",
     "duplicateSelected": "선택 항목 복제",

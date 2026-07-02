@@ -185,7 +185,8 @@
     "confirm": "Подтвердить",
     "cancel": "Отмена",
     "ok": "ОК",
-    "save": "Сохранить"
+    "save": "Сохранить",
+    "more": "Ещё"
   },
   "tooltip": {
     "github": "GitHub",
@@ -287,6 +288,7 @@
     "active": "Нажат"
   },
   "contextMenu": {
+    "delete": "Удалить",
     "duplicateKey": "Дублировать клавишу",
     "deleteKey": "Удалить клавишу",
     "duplicateSelected": "Дублировать выбранное",
