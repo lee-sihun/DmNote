@@ -109,7 +109,19 @@ npm install
 npm run tauri:dev
 ```
 
-To build ASIO output on Windows, set up LLVM (`LIBCLANG_PATH`) and the ASIO SDK (`CPAL_ASIO_DIR`), then use `npm run tauri:dev:asio` or `npm run tauri:build:asio`.
+### Windows ASIO Build (Optional)
+
+ASIO key sound output is a Windows-only opt-in feature, included only in builds with the `asio-backend` feature enabled.
+
+```bash
+npm run tauri:dev:asio    # Dev server (with ASIO)
+npm run tauri:build:asio  # Production build (with ASIO)
+```
+
+In addition to the regular build environment, the following dependencies are required:
+
+- **LLVM/Clang**: Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
+- **ASIO SDK**: If the `CPAL_ASIO_DIR` environment variable is set, the SDK at that path is used. Otherwise, the [Steinberg ASIO SDK](https://www.steinberg.net/asiosdk) is automatically downloaded to a temp folder (`%TEMP%\asio_sdk`) on the first build (network connection required). Since it is re-downloaded whenever the temp folder gets cleaned up, download the SDK manually and point `CPAL_ASIO_DIR` to it if you want a fixed location.
 
 ## � Notes
 
