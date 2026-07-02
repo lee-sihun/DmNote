@@ -32,6 +32,7 @@ import {
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import ImagePicker from '@components/main/Modal/content/pickers/ImagePicker';
 
 const getStatTypeLabel = (statType?: StatItemType | null): string => {
@@ -835,6 +836,132 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
     ? singleKnobPosition.axisId.replace(/^HIDA:/, '')
     : t('propertiesPanel.knobAxisUnset') || '미지정';
 
+  // 대기/입력 색상 (키 패널과 동일한 기본값/전환 로직)
+  const DEFAULT_KNOB_BACKGROUND_COLOR = 'rgba(46, 46, 47, 0.9)';
+  const DEFAULT_KNOB_BORDER_COLOR = 'rgba(113, 113, 113, 0.9)';
+  const DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
+  const DEFAULT_KNOB_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
+
+  type KnobColorTarget = 'backgroundColor' | 'borderColor';
+  type KnobColorProperty =
+    | KnobColorTarget
+    | 'activeBackgroundColor'
+    | 'activeBorderColor';
+
+  const [pickerFor, setPickerFor] = useState<KnobColorTarget | null>(null);
+  const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
+  const bgColorBtnRef = useRef<HTMLButtonElement>(null);
+  const borderColorBtnRef = useRef<HTMLButtonElement>(null);
+
+  const [localColors, setLocalColors] = useState<
+    Record<KnobColorProperty, string>
+  >({
+    backgroundColor:
+      singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
+    activeBackgroundColor:
+      singleKnobPosition.activeBackgroundColor ||
+      singleKnobPosition.backgroundColor ||
+      DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+    borderColor: singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
+    activeBorderColor:
+      singleKnobPosition.activeBorderColor ||
+      singleKnobPosition.borderColor ||
+      DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+  });
+
+  // 피커가 닫혀있을 때만 외부 prop과 동기화
+  useEffect(() => {
+    if (!pickerFor) {
+      setLocalColors({
+        backgroundColor:
+          singleKnobPosition.backgroundColor || DEFAULT_KNOB_BACKGROUND_COLOR,
+        activeBackgroundColor:
+          singleKnobPosition.activeBackgroundColor ||
+          singleKnobPosition.backgroundColor ||
+          DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+        borderColor:
+          singleKnobPosition.borderColor || DEFAULT_KNOB_BORDER_COLOR,
+        activeBorderColor:
+          singleKnobPosition.activeBorderColor ||
+          singleKnobPosition.borderColor ||
+          DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+      });
+    }
+  }, [
+    pickerFor,
+    singleKnobPosition.backgroundColor,
+    singleKnobPosition.activeBackgroundColor,
+    singleKnobPosition.borderColor,
+    singleKnobPosition.activeBorderColor,
+    DEFAULT_KNOB_BACKGROUND_COLOR,
+    DEFAULT_KNOB_ACTIVE_BACKGROUND_COLOR,
+    DEFAULT_KNOB_BORDER_COLOR,
+    DEFAULT_KNOB_ACTIVE_BORDER_COLOR,
+  ]);
+
+  const resolveColorProperty = (target: KnobColorTarget): KnobColorProperty =>
+    colorState === 'active'
+      ? target === 'backgroundColor'
+        ? 'activeBackgroundColor'
+        : 'activeBorderColor'
+      : target;
+
+  const activeColorPropertyFor = (
+    target: KnobColorTarget,
+  ): 'activeBackgroundColor' | 'activeBorderColor' =>
+    target === 'backgroundColor'
+      ? 'activeBackgroundColor'
+      : 'activeBorderColor';
+
+  const isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
+  const colorValueFor = (target: KnobColorTarget): string =>
+    localColors[resolveColorProperty(target)];
+
+  const handleColorChange = (target: KnobColorTarget, color: string) => {
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+  };
+
+  const handleColorChangeComplete = (
+    target: KnobColorTarget,
+    color: string,
+  ) => {
+    const prop = resolveColorProperty(target);
+    setLocalColors((prev) => ({ ...prev, [prop]: color }));
+
+    const updates: Partial<KnobItemPosition> = {
+      [prop]: color,
+    } as Partial<KnobItemPosition>;
+
+    // idle 변경 시 active 값이 비어 있으면 현재 표시되던 active 값을 함께 저장
+    // (active가 idle로 덮이는 현상 방지 — 키 패널과 동일)
+    if (colorState !== 'active') {
+      const activeProp = activeColorPropertyFor(target);
+      const currentActive = singleKnobPosition[activeProp];
+      if (!isNonEmptyString(currentActive)) {
+        updates[activeProp] = localColors[activeProp];
+      }
+    }
+
+    handleKnobUpdate({ index: singleKnobIndex, ...updates });
+  };
+
+  const handlePickerToggle = (target: KnobColorTarget) => {
+    setPickerFor((prev) => (prev === target ? null : target));
+  };
+
+  // 라운딩 기본값: 미지정 시 원형(짧은 변의 절반)
+  const effectiveBorderRadius =
+    singleKnobPosition.borderRadius ??
+    Math.round(
+      Math.min(
+        singleKnobPosition.width || 60,
+        singleKnobPosition.height || 60,
+      ) / 2,
+    );
+
   return (
     <div
       ref={setRef}
@@ -1013,37 +1140,73 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
             <SectionDivider />
 
-            <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경'}>
-              <ColorInput
-                value={
-                  singleKnobPosition.backgroundColor || 'rgba(46, 46, 47, 0.9)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    backgroundColor: value,
-                  })
-                }
-                colorId={`knob-bg-color-${selectedKeyType}-${singleKnobIndex}`}
-                panelElement={panelElement}
+            {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
+            <PropertyRow
+              label={t('propertiesPanel.backgroundColor') || '배경색'}
+            >
+              <button
+                ref={bgColorBtnRef}
+                type="button"
+                onClick={() => handlePickerToggle('backgroundColor')}
+                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                  pickerFor === 'backgroundColor'
+                    ? 'border-[#459BF8]'
+                    : 'border-[#3A3943] hover:border-[#505058]'
+                }`}
+                style={{ backgroundColor: colorValueFor('backgroundColor') }}
               />
             </PropertyRow>
 
-            <PropertyRow label={t('propertiesPanel.borderColor') || '테두리'}>
-              <ColorInput
-                value={
-                  singleKnobPosition.borderColor || 'rgba(113, 113, 113, 0.9)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
+            {/* 테두리 색상 */}
+            <PropertyRow
+              label={t('propertiesPanel.borderColor') || '테두리 색상'}
+            >
+              <button
+                ref={borderColorBtnRef}
+                type="button"
+                onClick={() => handlePickerToggle('borderColor')}
+                className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                  pickerFor === 'borderColor'
+                    ? 'border-[#459BF8]'
+                    : 'border-[#3A3943] hover:border-[#505058]'
+                }`}
+                style={{ backgroundColor: colorValueFor('borderColor') }}
+              />
+            </PropertyRow>
+
+            {/* 테두리 두께 */}
+            <PropertyRow
+              label={t('propertiesPanel.borderWidth') || '테두리 두께'}
+            >
+              <NumberInput
+                value={singleKnobPosition.borderWidth ?? 3}
+                onChange={(value) =>
                   handleKnobUpdate({
                     index: singleKnobIndex,
-                    borderColor: value,
+                    borderWidth: value,
                   })
                 }
-                colorId={`knob-border-color-${selectedKeyType}-${singleKnobIndex}`}
-                panelElement={panelElement}
+                suffix="px"
+                min={0}
+                max={20}
+              />
+            </PropertyRow>
+
+            {/* 모서리 반경 (미지정 시 원형) */}
+            <PropertyRow
+              label={t('propertiesPanel.borderRadius') || '모서리 반경'}
+            >
+              <NumberInput
+                value={effectiveBorderRadius}
+                onChange={(value) =>
+                  handleKnobUpdate({
+                    index: singleKnobIndex,
+                    borderRadius: value,
+                  })
+                }
+                suffix="px"
+                min={0}
+                max={999}
               />
             </PropertyRow>
 
@@ -1096,8 +1259,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           panelElement={panelRef.current}
           idleImage={singleKnobPosition.inactiveImage || ''}
           activeImage={singleKnobPosition.activeImage || ''}
-          idleTransparent={false}
-          activeTransparent={false}
+          idleTransparent={singleKnobPosition.idleTransparent ?? false}
+          activeTransparent={singleKnobPosition.activeTransparent ?? false}
           idleImageFit={
             singleKnobPosition.idleImageFit ||
             singleKnobPosition.imageFit ||
@@ -1117,8 +1280,15 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           onActiveImageChange={(imageUrl: string) =>
             handleKnobUpdate({ index: singleKnobIndex, activeImage: imageUrl })
           }
-          onIdleTransparentChange={() => {}}
-          onActiveTransparentChange={() => {}}
+          onIdleTransparentChange={(value: boolean) =>
+            handleKnobUpdate({ index: singleKnobIndex, idleTransparent: value })
+          }
+          onActiveTransparentChange={(value: boolean) =>
+            handleKnobUpdate({
+              index: singleKnobIndex,
+              activeTransparent: value,
+            })
+          }
           onIdleImageFitChange={(fit: string) =>
             handleKnobUpdate({
               index: singleKnobIndex,
@@ -1138,6 +1308,27 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             handleKnobUpdate({ index: singleKnobIndex, activeImage: '' })
           }
           onClose={() => setShowImagePicker(false)}
+        />
+      )}
+
+      {/* 대기/입력 색상 ColorPicker (키 패널과 동일한 stateMode 토글) */}
+      {pickerFor && (
+        <ColorPicker
+          open={!!pickerFor}
+          referenceRef={
+            pickerFor === 'backgroundColor' ? bgColorBtnRef : borderColorBtnRef
+          }
+          panelElement={panelElement}
+          color={colorValueFor(pickerFor)}
+          onColorChange={(c: string) => handleColorChange(pickerFor, c)}
+          onColorChangeComplete={(c: string) =>
+            handleColorChangeComplete(pickerFor, c)
+          }
+          onClose={() => setPickerFor(null)}
+          solidOnly={true}
+          stateMode={colorState}
+          onStateModeChange={setColorState}
+          interactiveRefs={[bgColorBtnRef, borderColorBtnRef]}
         />
       )}
     </div>
