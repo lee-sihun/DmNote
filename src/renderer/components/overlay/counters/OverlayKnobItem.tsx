@@ -1,5 +1,5 @@
 'use no memo';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSignals } from '@preact/signals-react/runtime';
 import { getAxisSignal } from '@stores/signals/axisSignals';
 import { resolveImageSource } from '@utils/core/imageSource';
@@ -18,11 +18,16 @@ interface KnobPosition {
   activeImage?: string;
   inactiveImage?: string;
   idleTransparent?: boolean;
+  activeTransparent?: boolean;
   imageFit?: string;
   idleImageFit?: string;
+  activeImageFit?: string;
   backgroundColor?: string;
+  activeBackgroundColor?: string;
   borderColor?: string;
+  activeBorderColor?: string;
   borderWidth?: number;
+  borderRadius?: number;
 }
 
 interface OverlayKnobItemProps {
@@ -30,8 +35,12 @@ interface OverlayKnobItemProps {
   index?: number;
 }
 
+// 회전 멈춤 후 입력(active) 상태를 유지하는 시간(ms)
+const ACTIVE_HOLD_MS = 150;
+
 // HID 축(노브)에 바인딩되는 회전 요소. axisSignals의 누적 wrap-델타에
 // 민감도/방향을 적용해 회전. 입력 사이 보간은 CSS transition으로 처리.
+// 회전 중에는 키의 눌림처럼 입력(active) 색상/이미지로 전환.
 const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
   useSignals();
 
@@ -47,25 +56,69 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
     activeImage,
     inactiveImage,
     idleTransparent = false,
+    activeTransparent = false,
     imageFit,
     idleImageFit,
+    activeImageFit,
     backgroundColor,
+    activeBackgroundColor,
     borderColor,
+    activeBorderColor,
     borderWidth,
+    borderRadius,
   } = position ?? {};
+
+  const accum = axisId ? getAxisSignal(axisId).value : 0;
+
+  // 회전 감지 → 입력(active) 상태 (마지막 움직임 후 ACTIVE_HOLD_MS 유지)
+  const [isActive, setIsActive] = useState(false);
+
+  useEffect(() => {
+    if (!axisId) return undefined;
+    const signal = getAxisSignal(axisId);
+    let prev = signal.value;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = signal.subscribe((value) => {
+      if (value === prev) return;
+      prev = value;
+      setIsActive(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        setIsActive(false);
+      }, ACTIVE_HOLD_MS);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+      setIsActive(false);
+    };
+  }, [axisId]);
 
   if (!position || position.hidden) return null;
 
-  const accum = axisId ? getAxisSignal(axisId).value : 0;
   const angle = accum * sensitivity * (reverse ? -1 : 1);
 
+  const inactiveImageSrc = resolveImageSource(inactiveImage);
+  const activeImageSrc = resolveImageSource(activeImage);
   const imageSrc =
-    resolveImageSource(inactiveImage) ||
-    resolveImageSource(activeImage) ||
-    null;
-  const resolvedFit = (idleImageFit ||
-    imageFit ||
-    'cover') as React.CSSProperties['objectFit'];
+    (isActive && activeImageSrc ? activeImageSrc : inactiveImageSrc) || null;
+  const isUsingActiveImage = isActive && !!activeImageSrc;
+  const resolvedFit = (
+    isUsingActiveImage
+      ? activeImageFit || imageFit || 'cover'
+      : idleImageFit || imageFit || 'cover'
+  ) as React.CSSProperties['objectFit'];
+
+  const isTransparent = isActive ? activeTransparent : idleTransparent;
+  const stateBackground = isActive
+    ? activeBackgroundColor || backgroundColor || 'rgba(121, 121, 121, 0.9)'
+    : backgroundColor || 'rgba(46, 46, 47, 0.9)';
+  const stateBorderColor = isActive
+    ? activeBorderColor || borderColor || 'rgba(255, 255, 255, 0.9)'
+    : borderColor || 'rgba(113, 113, 113, 0.9)';
+  // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
+  const resolvedRadius = borderRadius != null ? `${borderRadius}px` : '50%';
 
   const transform = `translate3d(calc(${dx}px + var(--key-offset-x, 0px)), calc(${dy}px + var(--key-offset-y, 0px)), 0)`;
 
@@ -84,17 +137,13 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
         style={{
           width: '100%',
           height: '100%',
-          borderRadius: '50%',
+          borderRadius: resolvedRadius,
           overflow: 'hidden',
           position: 'relative',
-          background: idleTransparent
-            ? 'transparent'
-            : backgroundColor || 'rgba(46, 46, 47, 0.9)',
+          background: isTransparent ? 'transparent' : stateBackground,
           border:
             borderWidth && borderWidth > 0
-              ? `${borderWidth}px solid ${
-                  borderColor || 'rgba(113, 113, 113, 0.9)'
-                }`
+              ? `${borderWidth}px solid ${stateBorderColor}`
               : undefined,
           boxSizing: 'border-box',
           transform: `rotate(${angle}deg)`,
@@ -126,7 +175,7 @@ const OverlayKnobItem = ({ position, index = 0 }: OverlayKnobItemProps) => {
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: borderColor || 'rgba(255, 255, 255, 0.85)',
+              background: stateBorderColor,
               borderRadius: '4px',
             }}
           />

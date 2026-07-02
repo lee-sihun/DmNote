@@ -762,7 +762,9 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
       className: '',
       counter: createDefaultCounterSettings(),
       backgroundColor: 'rgba(46, 46, 47, 0.9)',
+      activeBackgroundColor: 'rgba(121, 121, 121, 0.9)',
       borderColor: 'rgba(113, 113, 113, 0.9)',
+      activeBorderColor: 'rgba(255, 255, 255, 0.9)',
       borderWidth: 3,
     });
     const nextPositions = { ...current, [selectedKeyType]: list };

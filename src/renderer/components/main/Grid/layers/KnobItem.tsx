@@ -21,6 +21,7 @@ interface KnobPosition {
   backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
+  borderRadius?: number;
   inactiveImage?: string;
   activeImage?: string;
   idleImageFit?: string;
@@ -91,6 +92,7 @@ const KnobItem = ({
     backgroundColor,
     borderColor,
     borderWidth,
+    borderRadius,
     inactiveImage,
     activeImage,
     idleImageFit,
@@ -435,7 +437,8 @@ const KnobItem = ({
         style={{
           width: '100%',
           height: '100%',
-          borderRadius: '50%',
+          // 모서리 반경 미지정 시 원형 유지 (px 지정 시 키와 동일한 px 단위)
+          borderRadius: borderRadius != null ? `${borderRadius}px` : '50%',
           overflow: 'hidden',
           position: 'relative',
           background: backgroundColor || 'rgba(46, 46, 47, 0.9)',
@@ -470,7 +473,7 @@ const KnobItem = ({
               width: '8%',
               height: '76%',
               transform: 'translateX(-50%)',
-              background: borderColor || 'rgba(255, 255, 255, 0.85)',
+              background: borderColor || 'rgba(113, 113, 113, 0.9)',
               borderRadius: '4px',
             }}
           />
