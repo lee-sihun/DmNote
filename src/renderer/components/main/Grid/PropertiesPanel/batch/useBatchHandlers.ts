@@ -907,11 +907,42 @@ export function useBatchHandlers({
       hasSavedHistory = true;
     }
 
+    const currentKnobs = knobPositions?.[selectedKeyType] || [];
     const knobUpdates = selectedKnobs
       .filter((el) => el.index !== undefined)
-      .map((el) => ({ index: el.index!, [property]: value })) as Array<
-      { index: number } & Partial<KnobItemPosition>
-    >;
+      .map((el) => {
+        const index = el.index!;
+        const pos = currentKnobs[index];
+        // idle 변경 시 active가 비어 있으면 현재 표시값을 함께 저장 (키/통계와 동일)
+        if (pos) {
+          if (
+            property === 'backgroundColor' &&
+            pos.activeBackgroundColor == null
+          ) {
+            return {
+              index,
+              backgroundColor: value,
+              activeBackgroundColor:
+                pos.activeBackgroundColor ??
+                pos.backgroundColor ??
+                DEFAULT_ACTIVE_BACKGROUND_COLOR,
+            } as { index: number } & Partial<KnobItemPosition>;
+          }
+          if (property === 'borderColor' && pos.activeBorderColor == null) {
+            return {
+              index,
+              borderColor: value,
+              activeBorderColor:
+                pos.activeBorderColor ??
+                pos.borderColor ??
+                DEFAULT_ACTIVE_BORDER_COLOR,
+            } as { index: number } & Partial<KnobItemPosition>;
+          }
+        }
+        return { index, [property]: value } as {
+          index: number;
+        } & Partial<KnobItemPosition>;
+      });
     if (knobUpdates.length > 0) {
       dispatchKnobUpdates(knobUpdates, 'commit', {
         skipHistory: hasSavedHistory,
