@@ -227,7 +227,6 @@ impl ObsBridgeService {
     }
 
     /// 범용 Tauri 이벤트 포워딩 (OBS 클라이언트에 tauri_event로 전달)
-    #[allow(dead_code)]
     pub fn broadcast_tauri_event(&self, event: String, data: Value) {
         let _ = self
             .broadcast_tx
