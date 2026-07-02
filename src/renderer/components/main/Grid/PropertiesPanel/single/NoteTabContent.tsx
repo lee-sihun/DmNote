@@ -11,7 +11,12 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
-import { isGradientColor, toRgbHexColor } from '@utils/color/colorUtils';
+import {
+  isGradientColor,
+  toRgbHexColor,
+  parseAlphaPercent,
+  hexWithAlphaPercent,
+} from '@utils/color/colorUtils';
 import { NOTE_SETTINGS_CONSTRAINTS } from '@src/types/settings/noteSettingsConstraints';
 import { useSettingsStore } from '@stores/useSettingsStore';
 
@@ -258,11 +263,16 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
   const [borderColor, setBorderColor] = useState<string>(
     () => keyPosition.noteBorderColor ?? '#FFFFFF',
   );
+  // 테두리 투명도(0~100). 노트 배경 투명도와 독립
+  const [localBorderOpacity, setLocalBorderOpacity] = useState<number>(
+    () => keyPosition.noteBorderOpacity ?? 100,
+  );
 
   useEffect(() => {
     if (pickerFor === 'border') return;
     setBorderColor(keyPosition.noteBorderColor ?? '#FFFFFF');
-  }, [keyPosition.noteBorderColor, pickerFor]);
+    setLocalBorderOpacity(keyPosition.noteBorderOpacity ?? 100);
+  }, [keyPosition.noteBorderColor, keyPosition.noteBorderOpacity, pickerFor]);
 
   const interactiveRefs = [
     noteColorButtonRef,
@@ -721,22 +731,35 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
               ? notePickerColor
               : pickerFor === 'glow'
               ? glowPickerColor
-              : borderColor
+              : hexWithAlphaPercent(borderColor, localBorderOpacity)
           }
           onColorChange={(c: NoteColor) => {
             if (pickerFor === 'border') {
-              const hex = toRgbHexColor(typeof c === 'string' ? c : undefined);
+              const raw = typeof c === 'string' ? c : undefined;
+              const hex = toRgbHexColor(raw);
+              const opacity = parseAlphaPercent(raw, localBorderOpacity);
               setBorderColor(hex);
+              setLocalBorderOpacity(opacity);
               return;
             }
             handleColorChange(pickerFor, c);
           }}
           onColorChangeComplete={(c: NoteColor) => {
             if (pickerFor === 'border') {
-              const hex = toRgbHexColor(typeof c === 'string' ? c : undefined);
+              const raw = typeof c === 'string' ? c : undefined;
+              const hex = toRgbHexColor(raw);
+              const opacity = parseAlphaPercent(raw, localBorderOpacity);
               setBorderColor(hex);
-              onKeyPreview?.(keyIndex, { noteBorderColor: hex });
-              onKeyUpdate({ index: keyIndex, noteBorderColor: hex });
+              setLocalBorderOpacity(opacity);
+              onKeyPreview?.(keyIndex, {
+                noteBorderColor: hex,
+                noteBorderOpacity: opacity,
+              });
+              onKeyUpdate({
+                index: keyIndex,
+                noteBorderColor: hex,
+                noteBorderOpacity: opacity,
+              });
               return;
             }
             handleColorChangeComplete(pickerFor, c);

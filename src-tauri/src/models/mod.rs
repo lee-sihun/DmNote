@@ -238,6 +238,9 @@ pub struct KeyPosition {
     /// 노트 테두리 색상
     #[serde(default)]
     pub note_border_color: Option<String>,
+    /// 노트 테두리 투명도 (0~100). 노트 배경 투명도와 독립. 기본 100.
+    #[serde(default = "default_note_border_opacity")]
+    pub note_border_opacity: u32,
     /// 노트 테두리 방향 (all/vertical/horizontal)
     #[serde(default)]
     pub note_border_side: Option<String>,
@@ -786,6 +789,10 @@ fn default_note_glow_enabled() -> bool {
 }
 fn default_note_glow_size() -> u32 {
     20
+}
+
+fn default_note_border_opacity() -> u32 {
+    100
 }
 fn default_note_glow_opacity() -> u32 {
     70

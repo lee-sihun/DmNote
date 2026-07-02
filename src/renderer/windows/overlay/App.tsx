@@ -34,6 +34,10 @@ import { computeLayout } from '@hooks/shared/useLayoutComputation';
 
 type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
 
+// 입력 시각 보정용 age 상한(ms). 백엔드 stall/클럭 이상으로 비정상적으로 큰
+// 값이 와도 노트가 화면 위로 튀지 않도록 제한
+const MAX_EVENT_AGE_MS = 250;
+
 export default function App() {
   useCustomCssInjection();
   useCustomJsInjection();
@@ -461,7 +465,7 @@ export default function App() {
     // 버스를 통해 키 이벤트 수신
     const unsubscribe = import('@utils/core/keyEventBus').then(
       ({ keyEventBus }) => {
-        return keyEventBus.subscribe(({ key, state }) => {
+        return keyEventBus.subscribe(({ key, state, eventAgeMs }) => {
           const isDown = state === 'DOWN';
           // 키 UI 업데이트 (딜레이 적용)
           updateKeySignalWithDelay(key, isDown);
@@ -476,10 +480,18 @@ export default function App() {
               keyPosition?.noteEffectEnabled !== false;
 
             if (keyNoteEffectEnabled) {
-              requestAnimationFrame(() => {
-                if (isDown) handleKeyDown(key);
-                else handleKeyUp(key);
-              });
+              // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
+              // requestAnimationFrame 래핑 시 노트 생성 시각이 프레임 경계로 양자화돼
+              // 주사율/OBS fps에 시간 해상도가 종속되던 문제 해결.
+              // age는 0~MAX_EVENT_AGE_MS로 clamp — 백엔드 stall/클럭 이상 시 노트가
+              // 화면 위로 튀는 것을 방지
+              const age = Math.min(
+                Math.max(eventAgeMs ?? 0, 0),
+                MAX_EVENT_AGE_MS,
+              );
+              const inputTime = performance.now() - age;
+              if (isDown) handleKeyDown(key, inputTime);
+              else handleKeyUp(key, inputTime);
             }
           }
         });

@@ -87,6 +87,7 @@ interface BatchLocalColors {
   noteColor: NoteColor;
   glowColor: NoteColor;
   borderColor: string;
+  borderOpacity: number;
   fillIdle: string;
   fillActive: string;
   strokeIdle: string;
@@ -395,6 +396,34 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         isMixed: false,
       };
     }
+    const color = typeof value === 'string' ? value : '#FFFFFF';
+    return {
+      style: { backgroundColor: color },
+      label: color.replace(/^#/, ''),
+      isMixed: false,
+    };
+  };
+
+  // 테두리 색은 단색만 지원. 피커 열림 시 로컬값, 닫힘 시 실제 공통값/Mixed 표시
+  const getBatchBorderColorDisplay = () => {
+    if (batchPickerFor === 'borderColor') {
+      const color = batchLocalColors.borderColor;
+      return {
+        style: { backgroundColor: color },
+        label: color.replace(/^#/, ''),
+        isMixed: false,
+      };
+    }
+
+    const mixedFn =
+      selectedKeyElements.length > 0 ? getMixedValueKeysOnly : getMixedValue;
+    const { isMixed, value } = mixedFn((pos) => pos.noteBorderColor, '#FFFFFF');
+    if (isMixed)
+      return {
+        style: { backgroundColor: '#666' },
+        label: 'Mixed',
+        isMixed: true,
+      };
     const color = typeof value === 'string' ? value : '#FFFFFF';
     return {
       style: { backgroundColor: color },
@@ -764,6 +793,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   }
                   getBatchNoteColorDisplay={getBatchNoteColorDisplay}
                   getBatchGlowColorDisplay={getBatchGlowColorDisplay}
+                  getBatchBorderColorDisplay={getBatchBorderColorDisplay}
                   onNoteColorPickerToggle={() =>
                     handleBatchPickerToggle('noteColor')
                   }
@@ -779,7 +809,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   batchNoteColorButtonRef={batchNoteColorButtonRef}
                   batchGlowColorButtonRef={batchGlowColorButtonRef}
                   batchBorderColorButtonRef={batchBorderColorButtonRef}
-                  batchLocalColors={batchLocalColors}
                   t={t}
                 />
               </div>

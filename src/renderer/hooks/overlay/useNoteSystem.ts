@@ -55,8 +55,8 @@ interface UseNoteSystemOptions {
 interface UseNoteSystemReturn {
   notesRef: React.MutableRefObject<Record<string, Note[]>>;
   subscribe: (callback: NoteSubscriber) => () => void;
-  handleKeyDown: (keyName: string) => void;
-  handleKeyUp: (keyName: string) => void;
+  handleKeyDown: (keyName: string, eventTime?: number) => void;
+  handleKeyUp: (keyName: string, eventTime?: number) => void;
   finalizeAllActive: () => void;
   noteBuffer: NoteBuffer;
   updateTrackLayouts: (layouts: TrackLayoutInput[]) => void;
@@ -467,8 +467,8 @@ export function useNoteSystem({
     finalizeTimersRef.current.set(state.noteId, timer);
   };
 
-  // 노트 생성/완료
-  const handleKeyDown = (keyName: string): void => {
+  // 노트 생성/완료. eventTime: 실제 입력 시각(performance.now 기준 보정값)
+  const handleKeyDown = (keyName: string, eventTime?: number): void => {
     if (!noteEffectEnabled.current) return;
 
     const useDelay = delayEnabledRef.current && delayMsRef.current > 0;
@@ -484,7 +484,7 @@ export function useNoteSystem({
 
     if (useDelay) {
       const delayMs = delayMsRef.current;
-      const downTime = performance.now();
+      const downTime = eventTime ?? performance.now();
       const state: NoteState = {
         useDelay: true,
         downTime,
@@ -517,14 +517,16 @@ export function useNoteSystem({
           scheduleNoteFinalization(keyName, state, { forceMinLength });
           state.releasedBeforeStart = false;
         }
-      }, delayMs);
+        // 실제 입력 시각 기준으로 노트 등장 시점을 맞춤. 입력 시각이 과거면
+        // 남은 대기를 0으로 clamp해 타이머가 음수가 되지 않도록 함
+      }, Math.max(0, downTime + delayMs - performance.now()));
 
       state.startTimer = startTimer;
       stateList.push(state);
       return;
     }
 
-    const noteId = createNote(keyName);
+    const noteId = createNote(keyName, eventTime);
     const createdNote = noteLookupRef.current.get(noteId);
     const noteStartTime = createdNote?.startTime ?? performance.now();
     stateList.push({
@@ -539,7 +541,7 @@ export function useNoteSystem({
     });
   };
 
-  const handleKeyUp = (keyName: string): void => {
+  const handleKeyUp = (keyName: string, eventTime?: number): void => {
     if (!noteEffectEnabled.current) return;
 
     const stateList = activeNotes.current.get(keyName);
@@ -555,13 +557,13 @@ export function useNoteSystem({
 
     if (!state) return;
 
-    const now = performance.now();
+    const now = eventTime ?? performance.now();
     state.released = true;
     state.releaseTime = now;
 
     if (!state.useDelay) {
       if (state.created && state.noteId) {
-        finalizeNote(keyName, state.noteId);
+        finalizeNote(keyName, state.noteId, now);
       }
       removeState(keyName, state);
       return;

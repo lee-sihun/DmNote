@@ -20,6 +20,9 @@ interface KeyStateEvent {
   key: string; // e.g., 'KeyA', 'MouseLeft'
   state: "UP" | "DOWN";
   mode: "keyboard" | "mouse";
+  // Elapsed time (ms) between input capture and event emit.
+  // Recover the real input time with `performance.now() - eventAgeMs`.
+  eventAgeMs?: number;
 }
 
 const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
