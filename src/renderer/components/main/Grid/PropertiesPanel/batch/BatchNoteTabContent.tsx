@@ -126,6 +126,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           }
           prefix="X"
           allowNegative
+          allowDecimal
+          decimalScale={1}
           min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
           placeholder="0"
@@ -138,6 +140,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           }
           prefix="Y"
           allowNegative
+          allowDecimal
+          decimalScale={1}
           min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
           placeholder="0"
@@ -154,6 +158,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           }
           suffix="px"
           min={1}
+          allowDecimal
+          decimalScale={1}
           placeholder="Auto"
           isMixed={noteWidthMixed.isMixed}
         />
@@ -326,6 +332,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
+          allowDecimal
+          decimalScale={1}
           isMixed={
             getMixedValue(
               (pos) => pos.noteBorderWidth,
@@ -350,6 +358,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
           max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
+          allowDecimal
+          decimalScale={1}
           isMixed={
             getMixedValue(
               (pos) => pos.noteBorderRadius,
@@ -404,6 +414,8 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           suffix="px"
           min={0}
           max={50}
+          allowDecimal
+          decimalScale={1}
           isMixed={getMixedValue((pos) => pos.noteGlowSize, 20).isMixed}
         />
       </PropertyRow>

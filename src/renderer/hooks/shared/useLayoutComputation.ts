@@ -84,7 +84,7 @@ export function computeLayout(input: LayoutInput) {
         const keyWidth = pos.width;
         const desiredNoteWidth =
           typeof pos.noteWidth === 'number' && Number.isFinite(pos.noteWidth)
-            ? Math.max(1, Math.round(pos.noteWidth))
+            ? Math.max(1, pos.noteWidth)
             : keyWidth;
         const noteAlign = pos.noteAlignment ?? 'center';
         const alignOff =
@@ -213,7 +213,7 @@ export function computeLayout(input: LayoutInput) {
       const desiredNoteWidth =
         typeof position.noteWidth === 'number' &&
         Number.isFinite(position.noteWidth)
-          ? Math.max(1, Math.round(position.noteWidth))
+          ? Math.max(1, position.noteWidth)
           : keyWidth;
       const noteAlign = position.noteAlignment ?? 'center';
       const noteAlignOffsetX =

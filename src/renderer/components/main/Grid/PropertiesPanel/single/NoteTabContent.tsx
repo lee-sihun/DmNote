@@ -472,6 +472,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           onChange={(value) => handleStyleChangeComplete('noteOffsetX', value)}
           prefix="X"
           allowNegative
+          allowDecimal
+          decimalScale={1}
           min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
           placeholder="0"
@@ -481,6 +483,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           onChange={(value) => handleStyleChangeComplete('noteOffsetY', value)}
           prefix="Y"
           allowNegative
+          allowDecimal
+          decimalScale={1}
           min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
           placeholder="0"
@@ -494,7 +498,9 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
           suffix="px"
           min={1}
-          placeholder={`${Math.round(keyPosition.width)}px`}
+          allowDecimal
+          decimalScale={1}
+          placeholder={`${keyPosition.width}px`}
         />
       </PropertyRow>
 
@@ -652,6 +658,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           suffix="px"
           min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
           max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
@@ -668,6 +676,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           suffix="px"
           min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
           max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 
@@ -711,6 +721,8 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           suffix="px"
           min={0}
           max={50}
+          allowDecimal
+          decimalScale={1}
         />
       </PropertyRow>
 

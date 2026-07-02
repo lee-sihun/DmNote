@@ -63,6 +63,8 @@ export interface OptionalNumberInputProps {
   width?: string;
   placeholder?: string;
   allowNegative?: boolean;
+  allowDecimal?: boolean;
+  decimalScale?: number;
   isMixed?: boolean;
   mixedPlaceholder?: string;
 }

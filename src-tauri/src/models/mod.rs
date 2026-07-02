@@ -207,10 +207,10 @@ pub struct KeyPosition {
     pub note_color: NoteColor,
     pub note_opacity: u32,
     #[serde(default)]
-    pub note_border_radius: Option<u32>,
+    pub note_border_radius: Option<f64>,
     /// 노트 넓이(px). None이면 키 width를 사용(자동).
     #[serde(default)]
-    pub note_width: Option<u32>,
+    pub note_width: Option<f64>,
     /// 노트 정렬 (left/center/right). 기본값 center.
     #[serde(default)]
     pub note_alignment: NoteAlignment,
@@ -219,7 +219,7 @@ pub struct KeyPosition {
     #[serde(default = "default_note_glow_enabled")]
     pub note_glow_enabled: bool,
     #[serde(default = "default_note_glow_size")]
-    pub note_glow_size: u32,
+    pub note_glow_size: f64,
     #[serde(default = "default_note_glow_opacity")]
     pub note_glow_opacity: u32,
     #[serde(default)]
@@ -787,8 +787,8 @@ fn default_note_effect_enabled() -> bool {
 fn default_note_glow_enabled() -> bool {
     false
 }
-fn default_note_glow_size() -> u32 {
-    20
+fn default_note_glow_size() -> f64 {
+    20.0
 }
 
 fn default_note_border_opacity() -> u32 {
@@ -1846,4 +1846,52 @@ pub struct SettingsPatch {
     pub shortcuts: Option<ShortcutsState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obs_mode_enabled: Option<bool>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KeyPosition;
+
+    // 필수 필드만 채운 최소 KeyPosition JSON. 시각 px 필드는 호출부에서 주입
+    fn key_position_json(visual_px: &str) -> String {
+        format!(
+            r##"{{
+                "dx": 0.0, "dy": 0.0, "width": 60.0, "height": 60.0,
+                "count": 0, "noteColor": "#FFFFFF", "noteOpacity": 80,
+                {visual_px}
+            }}"##
+        )
+    }
+
+    // 기존 정수 저장값이 f64 필드로 그대로 역직렬화되는지 (하위 호환)
+    #[test]
+    fn visual_px_fields_accept_integer_json() {
+        let json =
+            key_position_json(r#""noteWidth": 100, "noteBorderRadius": 8, "noteGlowSize": 20"#);
+        let pos: KeyPosition = serde_json::from_str(&json).unwrap();
+        assert_eq!(pos.note_width, Some(100.0));
+        assert_eq!(pos.note_border_radius, Some(8.0));
+        assert_eq!(pos.note_glow_size, 20.0);
+    }
+
+    // 소수 저장값이 정상 역직렬화되는지
+    #[test]
+    fn visual_px_fields_accept_decimal_json() {
+        let json = key_position_json(
+            r#""noteWidth": 100.5, "noteBorderRadius": 8.5, "noteGlowSize": 20.5"#,
+        );
+        let pos: KeyPosition = serde_json::from_str(&json).unwrap();
+        assert_eq!(pos.note_width, Some(100.5));
+        assert_eq!(pos.note_border_radius, Some(8.5));
+        assert_eq!(pos.note_glow_size, 20.5);
+    }
+
+    // note_glow_size 미지정 시 기본값(20.0) 적용
+    #[test]
+    fn note_glow_size_defaults_to_20() {
+        let json = key_position_json(r#""noteWidth": null"#);
+        let pos: KeyPosition = serde_json::from_str(&json).unwrap();
+        assert_eq!(pos.note_glow_size, 20.0);
+        assert_eq!(pos.note_width, None);
+    }
 }
