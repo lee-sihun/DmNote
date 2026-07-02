@@ -12,6 +12,7 @@ pub type KeyPositions = HashMap<String, Vec<KeyPosition>>;
 pub type KeyCounters = HashMap<String, HashMap<String, u32>>;
 pub type StatPositions = HashMap<String, Vec<StatPosition>>;
 pub type GraphPositions = HashMap<String, Vec<GraphPosition>>;
+pub type KnobPositions = HashMap<String, Vec<KnobPosition>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NoteColor {
@@ -343,6 +344,29 @@ pub struct GraphPosition {
     pub graph_color: String,
     #[serde(default = "default_true")]
     pub show_avg_line: bool,
+    #[serde(flatten)]
+    pub position: KeyPosition,
+}
+
+fn default_knob_sensitivity() -> f64 {
+    // 순수 배율 — 1이면 축 해상도와 무관하게 물리 1회전 ≈ 화면 1회전
+    // (프론트엔드가 wrap 델타를 축 해상도로 정규화해 회전수 단위로 누적)
+    1.0
+}
+
+/// 회전(노브) 요소 — HID 축에 바인딩. KeyPosition 상속(표시명/스타일/클래스/이미지) + 노브 전용 필드.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KnobPosition {
+    /// 바인딩된 HID 축 식별자 "HIDA:vid:pid:usagePage:usage"
+    #[serde(default)]
+    pub axis_id: String,
+    /// 회전 배율 (물리 1회전당 화면 회전 수)
+    #[serde(default = "default_knob_sensitivity")]
+    pub sensitivity: f64,
+    /// 회전 방향 반전
+    #[serde(default)]
+    pub reverse: bool,
     #[serde(flatten)]
     pub position: KeyPosition,
 }
@@ -1240,6 +1264,8 @@ pub struct AppStoreData {
     #[serde(default)]
     pub graph_positions: GraphPositions,
     #[serde(default)]
+    pub knob_positions: KnobPositions,
+    #[serde(default)]
     pub layer_groups: LayerGroups,
     #[serde(default)]
     pub key_counters: KeyCounters,
@@ -1319,6 +1345,7 @@ impl Default for AppStoreData {
             key_positions: KeyPositions::new(),
             stat_positions: StatPositions::new(),
             graph_positions: GraphPositions::new(),
+            knob_positions: KnobPositions::new(),
             layer_groups: LayerGroups::new(),
             key_counters: KeyCounters::new(),
             background_color: "transparent".to_string(),
@@ -1556,6 +1583,7 @@ pub struct BootstrapPayload {
     pub positions: KeyPositions,
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
+    pub knob_positions: KnobPositions,
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,

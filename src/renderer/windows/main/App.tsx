@@ -30,7 +30,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 
 import { useUIStore } from '@stores/useUIStore';
 
-type ToolbarAddItemType = 'key' | 'stat' | 'graph';
+type ToolbarAddItemType = 'key' | 'stat' | 'graph' | 'knob';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {

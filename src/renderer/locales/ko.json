@@ -194,7 +194,8 @@
     "confirm": "확인",
     "cancel": "취소",
     "ok": "확인",
-    "save": "저장"
+    "save": "저장",
+    "more": "더보기"
   },
   "tooltip": {
     "github": "깃허브",
@@ -222,7 +223,8 @@
     "resetCounters": "카운터 초기화",
     "addKey": "키",
     "addStat": "통계",
-    "addGraph": "그래프"
+    "addGraph": "그래프",
+    "addKnob": "노브"
   },
   "preset": {
     "import": "불러오기",
@@ -257,6 +259,7 @@
 
     "removeStat": "[{{name}}] 통계 항목을 제거하시겠습니까?",
     "removeGraph": "[{{name}}] 그래프를 제거하시겠습니까?",
+    "removeKnob": "[{{name}}] 노브를 제거하시겠습니까?",
     "remove": "제거하기"
   },
   "tabs": {
@@ -295,6 +298,7 @@
     "active": "입력"
   },
   "contextMenu": {
+    "delete": "삭제",
     "duplicateKey": "키 복제",
     "deleteKey": "키 삭제",
     "duplicateSelected": "선택 항목 복제",
@@ -303,6 +307,8 @@
     "deleteStat": "통계 삭제",
     "duplicateGraph": "그래프 복제",
     "deleteGraph": "그래프 삭제",
+    "duplicateKnob": "노브 복제",
+    "deleteKnob": "노브 삭제",
     "noteSetting": "노트 설정",
     "counterSetting": "카운터 설정",
     "counterReset": "카운터 초기화",
@@ -315,6 +321,7 @@
     "addKey": "키 추가",
     "addStat": "통계 추가",
     "addGraph": "그래프 추가",
+    "addKnob": "노브 추가",
     "rename": "이름 변경",
     "quitApp": "프로그램 종료",
     "snapToEdge": "화면 모서리에 맞추기",
@@ -486,6 +493,12 @@
     "graphShapeLine": "선 그래프",
     "graphShapeBar": "바 그래프",
     "graphShowAverageLine": "평균선 표시",
+    "knobAxis": "노브 매핑",
+    "knobAxisUnset": "미지정",
+    "knobCapture": "클릭하여 설정",
+    "knobCapturing": "노브를 돌리세요",
+    "knobSensitivity": "민감도",
+    "knobReverse": "방향 반전",
     "graphSpeed": "그래프 속도",
     "graphColor": "그래프 색상",
     "graphAnimation": "그래프 모션",

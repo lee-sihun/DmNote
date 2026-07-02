@@ -7,6 +7,7 @@ import {
 } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { DefaultsPayload } from '@src/renderer/defaults';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
@@ -19,6 +20,7 @@ export interface BootstrapPayload {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   customTabs: CustomTab[];
   selectedKeyType: string;
   currentMode: string;

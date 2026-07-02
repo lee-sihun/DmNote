@@ -232,7 +232,7 @@ export interface KeyData {
 // ============================================================================
 
 export interface LayerItem {
-  type: 'key' | 'stat' | 'graph' | 'plugin';
+  type: 'key' | 'stat' | 'graph' | 'knob' | 'plugin';
   id: string;
   index?: number;
   name: string;

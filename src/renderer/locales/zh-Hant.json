@@ -194,7 +194,8 @@
     "confirm": "確認",
     "cancel": "取消",
     "ok": "確定",
-    "save": "儲存"
+    "save": "儲存",
+    "more": "更多"
   },
   "tooltip": {
     "github": "GitHub",
@@ -222,7 +223,8 @@
     "resetCounters": "重置計數器",
     "addKey": "按鍵",
     "addStat": "統計",
-    "addGraph": "圖表"
+    "addGraph": "圖表",
+    "addKnob": "旋鈕"
   },
   "preset": {
     "import": "導入",
@@ -257,6 +259,7 @@
 
     "removeStat": "移除 [{{name}}] 統計?",
     "removeGraph": "移除 [{{name}}] 圖表?",
+    "removeKnob": "移除 [{{name}}] 旋鈕?",
     "remove": "移除"
   },
   "tabs": {
@@ -295,6 +298,7 @@
     "active": "激活"
   },
   "contextMenu": {
+    "delete": "刪除",
     "duplicateKey": "複製按鍵",
     "deleteKey": "刪除按鍵",
     "duplicateSelected": "複製所選項目",
@@ -303,6 +307,8 @@
     "deleteStat": "刪除統計",
     "duplicateGraph": "複製圖表",
     "deleteGraph": "刪除圖表",
+    "duplicateKnob": "複製旋鈕",
+    "deleteKnob": "刪除旋鈕",
     "noteSetting": "音符設定",
     "counterSetting": "計數器設定",
     "counterReset": "重置計數器",
@@ -315,6 +321,7 @@
     "addKey": "新增按鍵",
     "addStat": "新增統計",
     "addGraph": "新增圖表",
+    "addKnob": "新增旋鈕",
     "rename": "重新命名",
     "quitApp": "退出程式",
     "snapToEdge": "貼靠螢幕邊緣",
@@ -491,6 +498,12 @@
     "graphAnimation": "圖表動態",
     "pressAnyKey": "按下任意鍵",
     "clickToSet": "單擊設定",
+    "knobAxis": "旋鈕對應",
+    "knobAxisUnset": "未設定",
+    "knobCapture": "單擊設定",
+    "knobCapturing": "轉動旋鈕",
+    "knobSensitivity": "靈敏度",
+    "knobReverse": "反轉方向",
     "customImage": "自定義圖像",
     "configure": "配置",
     "className": "類名",

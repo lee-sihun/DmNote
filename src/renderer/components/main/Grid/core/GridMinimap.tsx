@@ -22,6 +22,7 @@ interface GridMinimapProps {
   positions: Position[];
   statPositions?: Position[];
   graphPositions?: Position[];
+  knobPositions?: Position[];
   zoom: number;
   panX: number;
   panY: number;
@@ -41,6 +42,7 @@ const GridMinimap = ({
   positions,
   statPositions = [],
   graphPositions = [],
+  knobPositions = [],
   zoom,
   panX,
   panY,
@@ -119,6 +121,7 @@ const GridMinimap = ({
       positions.length === 0 &&
       statPositions.length === 0 &&
       graphPositions.length === 0 &&
+      knobPositions.length === 0 &&
       pluginPositions.length === 0
     ) {
       return { minX: 0, minY: 0, maxX: 100, maxY: 100 };
@@ -164,6 +167,20 @@ const GridMinimap = ({
       const y = pos.dy || 0;
       const w = pos.width || 200;
       const h = pos.height || 100;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + w);
+      maxY = Math.max(maxY, y + h);
+    });
+
+    // 노브 요소 bounds
+    knobPositions.forEach((pos) => {
+      if (pos.hidden) return;
+      const x = pos.dx || 0;
+      const y = pos.dy || 0;
+      const w = pos.width || 60;
+      const h = pos.height || 60;
 
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
@@ -289,6 +306,7 @@ const GridMinimap = ({
     positions.length === 0 &&
     statPositions.length === 0 &&
     graphPositions.length === 0 &&
+    knobPositions.length === 0 &&
     pluginPositions.length === 0
   ) {
     return null;
@@ -523,6 +541,26 @@ const GridMinimap = ({
                 height={Math.max(h, 2)}
                 fill="rgba(134, 239, 172, 0.65)"
                 rx={1}
+              />
+            );
+          })}
+          {/* 노브 요소 표시 */}
+          {knobPositions.map((pos, index) => {
+            if (pos.hidden) return null;
+            const x = ((pos.dx || 0) - bounds.minX) * minimapScale + offsetX;
+            const y = ((pos.dy || 0) - bounds.minY) * minimapScale + offsetY;
+            const w = (pos.width || 60) * minimapScale;
+            const h = (pos.height || 60) * minimapScale;
+
+            return (
+              <rect
+                key={`knob-${index}`}
+                x={x}
+                y={y}
+                width={Math.max(w, 2)}
+                height={Math.max(h, 2)}
+                fill="rgba(180, 200, 255, 0.65)"
+                rx={Math.max(w, h) / 2}
               />
             );
           })}

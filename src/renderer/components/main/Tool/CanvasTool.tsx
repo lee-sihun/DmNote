@@ -11,7 +11,7 @@ import { TooltipGroup } from '../Modal/TooltipGroup';
 import ListPopup from '../Modal/ListPopup';
 
 type SelectableTool = 'move' | 'eraser';
-type AddItemType = 'key' | 'stat' | 'graph';
+type AddItemType = 'key' | 'stat' | 'graph' | 'knob';
 
 interface CanvasToolProps {
   onAddItem: (type: AddItemType) => void;
@@ -150,6 +150,7 @@ const CanvasTool = ({
           { id: 'addKey', label: t('toolbar.addKey') },
           { id: 'addStat', label: t('toolbar.addStat') },
           { id: 'addGraph', label: t('toolbar.addGraph') },
+          { id: 'addKnob', label: t('toolbar.addKnob') },
         ]}
         onSelect={(id) => {
           if (id === 'addKey') {
@@ -158,6 +159,8 @@ const CanvasTool = ({
             onAddItem('stat');
           } else if (id === 'addGraph') {
             onAddItem('graph');
+          } else if (id === 'addKnob') {
+            onAddItem('knob');
           }
           setIsAddPopupOpen(false);
         }}

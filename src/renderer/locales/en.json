@@ -194,7 +194,8 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "ok": "OK",
-    "save": "Save"
+    "save": "Save",
+    "more": "More"
   },
   "tooltip": {
     "github": "GitHub",
@@ -222,7 +223,8 @@
     "resetCounters": "Reset Counters",
     "addKey": "Key",
     "addStat": "Stat",
-    "addGraph": "Graph"
+    "addGraph": "Graph",
+    "addKnob": "Knob"
   },
   "preset": {
     "import": "Import",
@@ -256,6 +258,7 @@
     "removeKey": "Remove key [{{name}}]?",
     "removeStat": "Remove stat [{{name}}]?",
     "removeGraph": "Remove graph [{{name}}]?",
+    "removeKnob": "Remove knob [{{name}}]?",
     "remove": "Remove"
   },
   "tabs": {
@@ -294,6 +297,7 @@
     "active": "Active"
   },
   "contextMenu": {
+    "delete": "Delete",
     "duplicateKey": "Duplicate Key",
     "deleteKey": "Delete Key",
     "duplicateSelected": "Duplicate Selection",
@@ -302,6 +306,8 @@
     "deleteStat": "Delete Stat",
     "duplicateGraph": "Duplicate Graph",
     "deleteGraph": "Delete Graph",
+    "duplicateKnob": "Duplicate Knob",
+    "deleteKnob": "Delete Knob",
     "noteSetting": "Note Setting",
     "counterSetting": "Counter Setting",
     "counterReset": "Reset Counter",
@@ -314,6 +320,7 @@
     "addKey": "Add Key",
     "addStat": "Add Stat",
     "addGraph": "Add Graph",
+    "addKnob": "Add Knob",
     "rename": "Rename",
     "quitApp": "Quit Application",
     "snapToEdge": "Snap to Edge",
@@ -485,6 +492,12 @@
     "graphShapeLine": "Line",
     "graphShapeBar": "Bar",
     "graphShowAverageLine": "Show Average Line",
+    "knobAxis": "Knob Mapping",
+    "knobAxisUnset": "Unset",
+    "knobCapture": "Click to set",
+    "knobCapturing": "Turn the knob",
+    "knobSensitivity": "Sensitivity",
+    "knobReverse": "Reverse Direction",
     "graphSpeed": "Graph Speed",
     "graphColor": "Graph Color",
     "graphAnimation": "Graph Motion",

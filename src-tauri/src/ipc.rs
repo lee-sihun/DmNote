@@ -53,6 +53,18 @@ pub enum HookKeyState {
     Up = 1,
 }
 
+/// HID 축(노브/스틱) 절대값 메시지.
+/// 데몬이 throttle된 절대 raw 값을 전송하고, wrap 델타·누적은 프론트가 계산.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HidAxisMessage {
+    /// 축 식별자 "HIDA:vid:pid:usagePage:usage"
+    pub axis_id: String,
+    /// 현재 절대 raw 값
+    pub value: u32,
+    /// wrap 모듈러스(예: 8-bit 노브 = 256)
+    pub full: u32,
+}
+
 #[cfg(target_os = "windows")]
 use windows::Win32::{
     Foundation::{GetLastError, ERROR_PIPE_CONNECTED},

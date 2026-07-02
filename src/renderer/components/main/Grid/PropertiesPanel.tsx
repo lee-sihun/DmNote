@@ -4,6 +4,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
@@ -15,6 +16,7 @@ import { toRgbHexColor } from '@utils/color/colorUtils';
 import type { KeyPosition } from '@src/types/key/keys';
 import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 import type {
   PluginSettingSchema,
   PluginMessages,
@@ -39,9 +41,11 @@ import {
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
+  SingleKnobPanel,
   SingleKeyStatPanel,
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
+  BatchKnobOnlyPanel,
   PluginSettingsPanelView,
   useBatchHandlers,
   usePanelScroll,
@@ -141,11 +145,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selectedGraphElements = selectedElements.filter(
     (el) => el.type === 'graph',
   );
+  const selectedKnobElements = selectedElements.filter(
+    (el) => el.type === 'knob',
+  );
   const selectedKeyLikeElements = selectedElements.filter(
     (el) => el.type === 'key' || el.type === 'stat',
   );
   const selectedBatchStyleElements = selectedElements.filter(
-    (el) => el.type === 'key' || el.type === 'stat' || el.type === 'graph',
+    (el) =>
+      el.type === 'key' ||
+      el.type === 'stat' ||
+      el.type === 'graph' ||
+      el.type === 'knob',
   );
   const selectedPluginElements = selectedElements.filter(
     (el) => el.type === 'plugin',
@@ -210,6 +221,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleGraphIndex !== null
       ? graphItemPositions[selectedKeyType]?.[singleGraphIndex] ?? null
       : null;
+  const knobItemPositions = useKnobItemStore((state) => state.positions);
+  const singleKnobIndex =
+    selectedKnobElements.length === 1 ? selectedKnobElements[0].index : null;
+  const singleKnobPosition: KnobItemPosition | null =
+    singleKnobIndex != null
+      ? knobItemPositions[selectedKeyType]?.[singleKnobIndex] ?? null
+      : null;
   const allLayerGroups = useLayerGroupStore((state) => state.layerGroups);
   const layerGroupsForMode = allLayerGroups[selectedKeyType] || [];
   const selectedGroupInfo = (() => {
@@ -220,6 +238,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const keyModePositions = positions[selectedKeyType] || [];
     const statModePositions = statItemPositions[selectedKeyType] || [];
     const graphModePositions = graphItemPositions[selectedKeyType] || [];
+    const knobModePositions = knobItemPositions[selectedKeyType] || [];
 
     let groupId: string | undefined;
 
@@ -234,6 +253,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         typeof element.index === 'number'
       ) {
         currentGroupId = graphModePositions[element.index]?.groupId;
+      } else if (element.type === 'knob' && typeof element.index === 'number') {
+        currentGroupId = knobModePositions[element.index]?.groupId;
       } else {
         return null;
       }
@@ -251,7 +272,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     const totalMembers =
       keyModePositions.filter((pos) => pos?.groupId === groupId).length +
       statModePositions.filter((pos) => pos?.groupId === groupId).length +
-      graphModePositions.filter((pos) => pos?.groupId === groupId).length;
+      graphModePositions.filter((pos) => pos?.groupId === groupId).length +
+      knobModePositions.filter((pos) => pos?.groupId === groupId).length;
 
     if (totalMembers < 2 || totalMembers !== selectedElements.length) {
       return null;
@@ -273,6 +295,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
   const statPreviewHistorySavedRef = useRef(false);
   const graphPreviewHistorySavedRef = useRef(false);
+  const knobPreviewHistorySavedRef = useRef(false);
   const [pluginPanelSettings, setPluginPanelSettings] = useState<
     Record<string, unknown>
   >({});
@@ -390,6 +413,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleKeyPosition) return singleKeyPosition.layerName || '';
     if (singleStatPosition) return singleStatPosition.layerName || '';
     if (singleGraphPosition) return singleGraphPosition.layerName || '';
+    if (singleKnobPosition) return singleKnobPosition.layerName || '';
     return '';
   };
 
@@ -405,6 +429,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (singleGraphPosition) {
       return `${getStatTypeLabel(singleGraphPosition.statType ?? null)} Graph`;
     }
+    if (singleKnobPosition) return 'Knob';
     return '';
   };
 
@@ -516,6 +541,26 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           useGraphItemStore.getState().setLocalUpdateInProgress(false);
         }
       }
+    } else if (singleKnobIndex !== null && singleKnobPosition) {
+      const mode = selectedKeyType;
+      const current = useKnobItemStore.getState().positions;
+      const list = current[mode] || [];
+      if (list[singleKnobIndex]) {
+        const nextList = list.map((pos, i) =>
+          i === singleKnobIndex ? { ...pos, layerName: newLayerName } : pos,
+        );
+        const nextPositions = { ...current, [mode]: nextList };
+        useKnobItemStore.getState().setLocalUpdateInProgress(true);
+        useKnobItemStore.getState().setPositions(nextPositions);
+        try {
+          await window.api.knobItems.updatePositions(nextPositions);
+          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+            positions: nextPositions,
+          });
+        } finally {
+          useKnobItemStore.getState().setLocalUpdateInProgress(false);
+        }
+      }
     }
   };
 
@@ -534,7 +579,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedGroupInfo ||
         singleKeyPosition ||
         singleStatPosition ||
-        singleGraphPosition
+        singleGraphPosition ||
+        singleKnobPosition
       ) {
         setPanelMode('property');
         handleRenameStart();
@@ -546,6 +592,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleKeyPosition,
     singleStatPosition,
     singleGraphPosition,
+    singleKnobPosition,
   ]);
 
   // 선택이 변경되면 rename 모드 해제
@@ -619,7 +666,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   });
 
   // 배치 편집용 로컬 ColorPicker 상태
-  type BatchPickerTarget = 'noteColor' | 'glowColor' | 'borderColor' | 'fill' | 'stroke' | null;
+  type BatchPickerTarget =
+    | 'noteColor'
+    | 'glowColor'
+    | 'borderColor'
+    | 'fill'
+    | 'stroke'
+    | null;
   const [batchPickerFor, setBatchPickerFor] = useState<BatchPickerTarget>(null);
   const [batchCounterColorState, setBatchCounterColorState] = useState<
     'idle' | 'active'
@@ -1360,6 +1413,179 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
   };
 
+  const handleKnobUpdate = (
+    data: Partial<KnobItemPosition> & { index: number },
+  ) => {
+    const { index, ...updates } = data;
+    const mode = selectedKeyType;
+    const current = useKnobItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    if (!knobPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
+    }
+    knobPreviewHistorySavedRef.current = false;
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setPositions(nextPositions);
+    window.api.knobItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to update knob item', error);
+      })
+      .finally(() => {
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleKnobPreview = (
+    index: number,
+    updates: Partial<KnobItemPosition>,
+  ) => {
+    const mode = selectedKeyType;
+    const current = useKnobItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (!list[index]) return;
+
+    if (!knobPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
+      knobPreviewHistorySavedRef.current = true;
+    }
+
+    const nextList = list.map((pos, i) =>
+      i === index ? ({ ...pos, ...updates } as KnobItemPosition) : pos,
+    );
+    const nextPositions = { ...current, [mode]: nextList };
+    useKnobItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleKnobBatchPreview = (
+    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useKnobItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<KnobItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!knobPreviewHistorySavedRef.current) {
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: useKeyStore.getState().positions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: usePluginDisplayElementStore.getState().elements,
+      });
+      knobPreviewHistorySavedRef.current = true;
+    }
+
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+    useKnobItemStore.getState().setPositions(nextPositions);
+  };
+
+  const handleKnobBatchUpdate = (
+    updates: Array<{ index: number } & Partial<KnobItemPosition>>,
+    options?: { skipHistory?: boolean },
+  ) => {
+    if (updates.length === 0) return;
+
+    const mode = selectedKeyType;
+    const current = useKnobItemStore.getState().positions;
+    const list = current[mode] || [];
+    if (list.length === 0) return;
+
+    const updateMap = new Map<number, Partial<KnobItemPosition>>();
+    for (const { index, ...rest } of updates) {
+      if (list[index]) {
+        updateMap.set(index, rest);
+      }
+    }
+    if (updateMap.size === 0) return;
+
+    if (!options?.skipHistory && !knobPreviewHistorySavedRef.current) {
+      const currentPositions = useKeyStore.getState().positions;
+      const currentPluginElements =
+        usePluginDisplayElementStore.getState().elements;
+      const { keyMappings: km } = useKeyStore.getState();
+      pushHistoryState({
+        keyMappings: km,
+        positions: currentPositions,
+        statPositions: useStatItemStore.getState().positions,
+        graphPositions: useGraphItemStore.getState().positions,
+        pluginElements: currentPluginElements,
+      });
+    }
+    knobPreviewHistorySavedRef.current = false;
+
+    const nextList = list.map((pos, i) => {
+      const update = updateMap.get(i);
+      return update ? ({ ...pos, ...update } as KnobItemPosition) : pos;
+    });
+    const nextPositions = { ...current, [mode]: nextList };
+
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setPositions(nextPositions);
+    window.api.knobItems
+      .updatePositions(nextPositions)
+      .catch((error) => {
+        console.error('Failed to batch update knob items', error);
+      })
+      .finally(() => {
+        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      });
+    try {
+      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+        positions: nextPositions,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   const handleGraphPreview = (
     index: number,
     updates: Partial<GraphItemPosition>,
@@ -1543,6 +1769,18 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .filter((data) => data.position !== undefined);
   };
 
+  const getSelectedKnobsData = () => {
+    return selectedKnobElements
+      .map((el) => {
+        const index = el.index!;
+        const position = knobItemPositions[selectedKeyType]?.[index];
+        const knobLabel = (position?.displayText || '').trim() || 'Knob';
+        const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
+        return { index, position, keyCode: null, keyInfo };
+      })
+      .filter((data) => data.position !== undefined);
+  };
+
   const getSelectedBatchStyleData = () => {
     return selectedBatchStyleElements
       .map((el) => {
@@ -1559,6 +1797,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             (position?.displayText || '').trim() ||
             getStatTypeLabel(position?.statType ?? null);
           const keyInfo = { globalKey: statLabel, displayName: statLabel };
+          return { index, position, keyCode: null, keyInfo };
+        }
+        if (el.type === 'knob') {
+          const position = knobItemPositions[selectedKeyType]?.[index];
+          const knobLabel = (position?.displayText || '').trim() || 'Knob';
+          const keyInfo = { globalKey: knobLabel, displayName: knobLabel };
           return { index, position, keyCode: null, keyInfo };
         }
         const position = graphItemPositions[selectedKeyType]?.[index];
@@ -1616,6 +1860,32 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     return getMixedValueGraphs((pos) => getter(pos), defaultValue);
   };
 
+  const getMixedValueKnobs = <T,>(
+    getter: (pos: KnobItemPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    const knobsData = getSelectedKnobsData();
+    if (knobsData.length === 0) return { isMixed: false, value: defaultValue };
+
+    const firstValue = getter(knobsData[0].position!) ?? defaultValue;
+    const isMixed = knobsData.some((data) => {
+      const val = getter(data.position!) ?? defaultValue;
+      if (typeof val === 'object' && typeof firstValue === 'object') {
+        return JSON.stringify(val) !== JSON.stringify(firstValue);
+      }
+      return val !== firstValue;
+    });
+
+    return { isMixed, value: firstValue };
+  };
+
+  const getMixedValueKnobsAsKey = <T,>(
+    getter: (pos: KeyPosition) => T | undefined,
+    defaultValue: T,
+  ): { isMixed: boolean; value: T } => {
+    return getMixedValueKnobs((pos) => getter(pos), defaultValue);
+  };
+
   const getMixedValueBatch = <T,>(
     getter: (pos: KeyPosition) => T | undefined,
     defaultValue: T,
@@ -1658,7 +1928,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleBatchGlowColorChangeComplete,
   } = useBatchHandlers({
     selectedKeyLikeElements: selectedBatchStyleElements as {
-      type: 'key' | 'stat' | 'graph';
+      type: 'key' | 'stat' | 'graph' | 'knob';
       id: string;
       index?: number;
     }[],
@@ -1678,6 +1948,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onGraphBatchUpdate: handleGraphBatchUpdate,
     onGraphPreview: handleGraphPreview,
     onGraphBatchPreview: handleGraphBatchPreview,
+    knobPositions: knobItemPositions,
+    onKnobUpdate: handleKnobUpdate,
+    onKnobBatchUpdate: handleKnobBatchUpdate,
+    onKnobPreview: handleKnobPreview,
+    onKnobBatchPreview: handleKnobBatchPreview,
   });
 
   // NOTE 탭은 "키"에만 적용되어야 함
@@ -1788,6 +2063,15 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleGraphBatchUpdate(batchUpdates);
   };
 
+  const handleKnobBatchSharedSetting = (updates: Partial<KnobItemPosition>) => {
+    const batchUpdates = selectedKnobElements
+      .filter((el) => el.index !== undefined)
+      .map((el) => ({ index: el.index!, ...updates })) as Array<
+      { index: number } & Partial<KnobItemPosition>
+    >;
+    handleKnobBatchUpdate(batchUpdates);
+  };
+
   const renderPluginSettingsForm = (
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
@@ -1882,7 +2166,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           ? schemaValue.default
           : 0;
         // step 값에서 소수 자릿수 자동 추론
-        const stepStr = schemaValue.step != null ? String(schemaValue.step) : '';
+        const stepStr =
+          schemaValue.step != null ? String(schemaValue.step) : '';
         const dotIdx = stepStr.indexOf('.');
         const hasDecimal = dotIdx !== -1;
         const decimalScale = hasDecimal ? stepStr.length - dotIdx - 1 : 0;
@@ -2285,11 +2570,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  // 다중 선택인 경우 (키/통계, 그래프 혼합 포함)
+  // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
   if (
     selectedBatchStyleElements.length > 1 &&
-    selectedKeyLikeElements.length > 0 &&
-    selectedPluginElements.length === 0
+    selectedPluginElements.length === 0 &&
+    (selectedKeyLikeElements.length > 0 ||
+      (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
   ) {
     return (
       <BatchKeyLikePanel
@@ -2382,10 +2668,59 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
+  // 다중 선택인 경우 (노브 요소만)
+  if (
+    selectedKnobElements.length > 1 &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    return (
+      <BatchKnobOnlyPanel
+        setPanelElement={setPanelElement}
+        selectedKnobElements={selectedKnobElements}
+        selectedGroupInfo={selectedGroupInfo}
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
+        handleToggleMode={handleToggleMode}
+        handleTogglePanel={handleTogglePanel}
+        handleBatchAlign={handleBatchAlign}
+        handleBatchDistribute={handleBatchDistribute}
+        handleBatchSpacing={handleBatchSpacing}
+        handleBatchSpacingPreview={handleBatchSpacingPreview}
+        handleBatchSpacingCommit={handleBatchSpacingCommit}
+        getBatchSpacingValue={getBatchSpacingValue}
+        handleBatchResize={handleBatchResize}
+        handleBatchStyleChange={handleBatchStyleChange}
+        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+        handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
+        getMixedValueKnobs={getMixedValueKnobs}
+        getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
+        getSelectedKnobsData={getSelectedKnobsData}
+        batchScrollRefFor={batchScrollRefFor}
+        batchThumbRefFor={batchThumbRefFor}
+        batchImageButtonRef={batchImageButtonRef}
+        showBatchImagePicker={showBatchImagePicker}
+        setShowBatchImagePicker={setShowBatchImagePicker}
+        panelElement={panelElement}
+        useCustomCSS={useCustomCSS}
+        selectedKeyType={selectedKeyType}
+        t={t}
+      />
+    );
+  }
+
   // 다중 선택인 경우 (그래프 요소만)
   if (
     selectedGraphElements.length > 1 &&
     selectedKeyLikeElements.length === 0 &&
+    selectedKnobElements.length === 0 &&
     selectedPluginElements.length === 0
   ) {
     return (
@@ -2463,6 +2798,40 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         selectedPluginDefinition={selectedPluginDefinition}
         resolvedPluginSettings={resolvedPluginSettings}
         handlePluginSettingChange={handlePluginSettingChange}
+        t={t}
+      />
+    );
+  }
+
+  // 단일 노브 요소 선택인 경우
+  if (
+    selectedKnobElements.length === 1 &&
+    !!singleKnobPosition &&
+    selectedKeyLikeElements.length === 0 &&
+    selectedGraphElements.length === 0 &&
+    selectedPluginElements.length === 0
+  ) {
+    return (
+      <SingleKnobPanel
+        setPanelElement={setPanelElement}
+        singleKnobPosition={singleKnobPosition}
+        singleKnobIndex={singleKnobIndex!}
+        selectedKeyType={selectedKeyType}
+        isRenaming={isRenaming}
+        renameInputRef={renameInputRef}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        renameCancelledRef={renameCancelledRef}
+        handleRenameCommit={handleRenameCommit}
+        handleRenameCancel={handleRenameCancel}
+        handleRenameStart={handleRenameStart}
+        handleKnobUpdate={handleKnobUpdate}
+        handleToggleMode={handleToggleMode}
+        handleTogglePanel={handleTogglePanel}
+        singleScrollRefFor={singleScrollRefFor}
+        singleThumbRefFor={singleThumbRefFor}
+        panelElement={panelElement}
+        useCustomCSS={useCustomCSS}
         t={t}
       />
     );

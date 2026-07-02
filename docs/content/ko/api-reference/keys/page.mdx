@@ -171,12 +171,13 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 
 ### onRawInput(listener)
 
-로우 레벨 입력 이벤트를 구독합니다. 키보드, 마우스의 원시 입력을 감지합니다.
+로우 레벨 입력 이벤트를 구독합니다. 키보드, 마우스, HID 기기의 원시
+입력을 감지합니다.
 
 ```typescript
 interface RawInputPayload {
-  device: "keyboard" | "mouse" | "unknown";
-  label: string; // "KeyD", "MOUSE1", "MOUSE4" 등
+  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  label: string; // "KeyD", "MOUSE1", "HIDB:1ccf:101c:9:3" 등
   labels: string[]; // 모든 레이블 목록
   state: string; // "DOWN" | "UP"
 }
@@ -187,6 +188,10 @@ const unsub = dmn.keys.onRawInput(({ device, label, state }) => {
   console.log(`[${device}] ${label} ${state}`);
 });
 ```
+
+HID 기기 버튼(Windows)은 `device: 'gamepad'`와
+`HIDB:vid:pid:usagePage:usage` 형식의 레이블로 전달됩니다. HID 축(노브)
+요소는 [노브 API](/docs/api-reference/knobs)를 참고하세요.
 
 <Callout type="info">
   구독자가 없으면 백엔드에서 이벤트를 emit하지 않아 성능 오버헤드가 없습니다.

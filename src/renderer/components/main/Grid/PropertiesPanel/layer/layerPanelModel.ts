@@ -7,6 +7,7 @@ import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { LayerItem, DisplayItem } from '../types';
@@ -21,6 +22,7 @@ interface BuildLayerItemsParams {
   keyMappings: KeyMappings;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   pluginElements: PluginDisplayElementInternal[];
 }
 
@@ -30,6 +32,7 @@ export function buildLayerItems({
   keyMappings,
   statPositions,
   graphPositions,
+  knobPositions,
   pluginElements,
 }: BuildLayerItemsParams): LayerItem[] {
   const items: LayerItem[] = [];
@@ -90,6 +93,20 @@ export function buildLayerItems({
       id: `graph-${index}`,
       index,
       name: pos.layerName || defaultName,
+      zIndex: pos.zIndex ?? index,
+      hidden: !!pos.hidden,
+      groupId: pos.groupId,
+    });
+  });
+
+  // 노브 아이템
+  const currentKnobPositions = knobPositions[selectedKeyType] || [];
+  currentKnobPositions.forEach((pos, index) => {
+    items.push({
+      type: 'knob',
+      id: `knob-${index}`,
+      index,
+      name: pos.layerName || `Knob ${index + 1}`,
       zIndex: pos.zIndex ?? index,
       hidden: !!pos.hidden,
       groupId: pos.groupId,

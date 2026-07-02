@@ -5,6 +5,7 @@ import KeyCounterLayer from '@components/overlay/counters/KeyCounterLayer';
 import StatItem from '@components/overlay/counters/StatItem';
 import StatCounterLayer from '@components/overlay/counters/StatCounterLayer';
 import OverlayGraphItemBase from '@components/overlay/counters/OverlayGraphItem';
+import OverlayKnobItemBase from '@components/overlay/counters/OverlayKnobItem';
 import { PluginElementsRenderer } from '@components/shared/PluginElementsRenderer';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import {
@@ -63,6 +64,11 @@ interface OverlayGraphItemProps {
   position: Record<string, unknown>;
 }
 
+interface OverlayKnobItemProps {
+  index?: number;
+  position: Record<string, unknown>;
+}
+
 const OverlayKey = Key as React.ComponentType<OverlayKeyProps>;
 const OverlayStatItem =
   StatItem as unknown as React.ComponentType<OverlayStatItemProps>;
@@ -70,6 +76,8 @@ const OverlayStatCounterLayer =
   StatCounterLayer as unknown as React.ComponentType<OverlayStatCounterLayerProps>;
 const OverlayGraphItem =
   OverlayGraphItemBase as React.ComponentType<OverlayGraphItemProps>;
+const OverlayKnobItem =
+  OverlayKnobItemBase as React.ComponentType<OverlayKnobItemProps>;
 
 // Tracks 레이지 로딩
 const Tracks = lazy(async () => {
@@ -91,6 +99,7 @@ interface OverlaySceneProps {
   currentPositions: KeyPosition[];
   displayStatPositions: Record<string, unknown>[];
   displayGraphPositions: Record<string, unknown>[];
+  displayKnobPositions: Record<string, unknown>[];
   selectedKeyType: string;
 
   // 노트 이펙트
@@ -120,6 +129,7 @@ const OverlayScene = ({
   currentPositions,
   displayStatPositions,
   displayGraphPositions,
+  displayKnobPositions,
   selectedKeyType,
   noteEffect,
   noteSettings,
@@ -227,6 +237,20 @@ const OverlayScene = ({
             key={`graph-${selectedKeyType}-${index}`}
             index={index}
             position={graphPosition}
+          />
+        );
+      })}
+      {displayKnobPositions.map((pos, index) => {
+        if (!pos || (pos as { hidden?: boolean }).hidden) return null;
+        const knobPosition = {
+          ...pos,
+          zIndex: (pos as { zIndex?: number }).zIndex ?? index,
+        };
+        return (
+          <OverlayKnobItem
+            key={`knob-${selectedKeyType}-${index}`}
+            index={index}
+            position={knobPosition}
           />
         );
       })}

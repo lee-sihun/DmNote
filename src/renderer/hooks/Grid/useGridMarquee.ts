@@ -13,11 +13,13 @@ import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { KeyPositions } from '@src/types/key/keys';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
+import type { KnobItemPositions } from '@src/types/key/knobs';
 
 interface UseGridMarqueeParams {
   positions: KeyPositions;
   statPositions: StatItemPositions;
   graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
   selectedKeyType: string;
   pluginElements: PluginDisplayElementInternal[];
   clientToGridCoords: (
@@ -42,6 +44,7 @@ export function useGridMarquee({
   positions,
   statPositions,
   graphPositions,
+  knobPositions,
   selectedKeyType,
   pluginElements,
   clientToGridCoords,
@@ -137,6 +140,25 @@ export function useGridMarquee({
           newSelectedElements.push({
             type: 'graph',
             id: `graph-${index}`,
+            index,
+          });
+        }
+      });
+
+      // 노브 요소 체크
+      const knobs = knobPositions[selectedKeyType] || [];
+      knobs.forEach((pos, index) => {
+        if (!pos || pos.hidden) return;
+        const elementBounds = {
+          x: pos.dx,
+          y: pos.dy,
+          width: pos.width || 60,
+          height: pos.height || 60,
+        };
+        if (isElementInMarquee(elementBounds, rect)) {
+          newSelectedElements.push({
+            type: 'knob',
+            id: `knob-${index}`,
             index,
           });
         }

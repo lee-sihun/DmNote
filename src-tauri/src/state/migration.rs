@@ -26,8 +26,8 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
     let content = fs::read_to_string(path)
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
     let (state, needs_persist) = match serde_json::from_str::<AppStoreData>(&content) {
-        Ok(data) => {
-            let needs_font_persist = data.font_settings.custom_fonts.iter().any(|font| {
+        Ok(mut data) => {
+            let mut needs_persist = data.font_settings.custom_fonts.iter().any(|font| {
                 font.font_type == FontType::Local
                     && font
                         .css_content
@@ -36,11 +36,13 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
                         .unwrap_or(false)
             });
             // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
-            let needs_border_color_fix = has_convertible_note_border_color(&data);
-            (
-                normalize_state(data),
-                needs_font_persist || needs_border_color_fix,
-            )
+            if has_convertible_note_border_color(&data) {
+                needs_persist = true;
+            }
+            if migrate_legacy_knob_sensitivity(&mut data) {
+                needs_persist = true;
+            }
+            (normalize_state(data), needs_persist)
         }
         // 레거시/비정상 store 파일 복구 후 정규화 상태 저장
         Err(_) => (repair_legacy_state(&content), true),
@@ -52,6 +54,22 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
         );
     }
     Ok((state, needs_persist))
+}
+
+/// 레거시 노브 민감도 마이그레이션: 도수/카운트(구 기본 1.40625) → 순수 배율(1.0)
+/// 배율 의미 전환 이전에 저장된 기본값만 1로 재매핑 (사용자 지정값은 유지)
+fn migrate_legacy_knob_sensitivity(data: &mut AppStoreData) -> bool {
+    const LEGACY_DEFAULT: f64 = 1.40625; // 360 / 256
+    let mut changed = false;
+    for positions in data.knob_positions.values_mut() {
+        for knob in positions.iter_mut() {
+            if knob.sensitivity == LEGACY_DEFAULT {
+                knob.sensitivity = 1.0;
+                changed = true;
+            }
+        }
+    }
+    changed
 }
 
 /// 레거시 store 파일 경로 탐색

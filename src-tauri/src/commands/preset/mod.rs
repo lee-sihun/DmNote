@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     CustomCss, CustomJs, CustomTab, FontSettings, GraphPositions, KeyMappings, KeyPositions,
-    NoteSettings, StatPositions, TabNoteOverrides,
+    KnobPositions, NoteSettings, StatPositions, TabNoteOverrides,
 };
 
 #[derive(Serialize)]
@@ -26,6 +26,7 @@ pub struct PresetSnapshot {
     pub positions: KeyPositions,
     pub stat_positions: StatPositions,
     pub graph_positions: GraphPositions,
+    pub knob_positions: KnobPositions,
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub tab_note_overrides: TabNoteOverrides,
@@ -38,6 +39,8 @@ pub(crate) struct PresetFile {
     pub key_positions: Option<KeyPositions>,
     pub stat_positions: Option<StatPositions>,
     pub graph_positions: Option<GraphPositions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knob_positions: Option<KnobPositions>,
     pub background_color: Option<String>,
     pub note_settings: Option<NoteSettings>,
     pub note_effect: Option<bool>,

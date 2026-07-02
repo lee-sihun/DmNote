@@ -6,6 +6,7 @@
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import type { KeyPosition } from '@src/types/key/keys';
@@ -17,6 +18,7 @@ import type {
   GraphItemPosition,
   GraphItemPositions,
 } from '@src/types/key/graphItems';
+import type { KnobItemPosition, KnobItemPositions } from '@src/types/key/knobs';
 import type {
   KeyCounterSettings,
   CounterAnimationBezier,
@@ -34,34 +36,55 @@ function collectAllZIndexes(mode: string) {
   const graphPos = useGraphItemStore.getState().positions[mode] || [];
   const graphZIndexes = graphPos.map((p, i) => p.zIndex ?? i);
 
+  const knobPos = useKnobItemStore.getState().positions[mode] || [];
+  const knobZIndexes = knobPos.map((p, i) => p.zIndex ?? i);
+
   const pluginEls = usePluginDisplayElementStore.getState().elements;
   const pluginZIndexes = pluginEls
     .filter((el) => !el.tabId || el.tabId === mode)
     .map((el) => el.zIndex ?? 0);
 
-  return { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes };
+  return {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    knobZIndexes,
+    pluginZIndexes,
+  };
 }
 
 function getMaxZIndex(mode: string): number {
-  const { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes } =
-    collectAllZIndexes(mode);
+  const {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    knobZIndexes,
+    pluginZIndexes,
+  } = collectAllZIndexes(mode);
   return Math.max(
     0,
     ...keyZIndexes,
     ...statZIndexes,
     ...graphZIndexes,
+    ...knobZIndexes,
     ...pluginZIndexes,
   );
 }
 
 function getMinZIndex(mode: string): number {
-  const { keyZIndexes, statZIndexes, graphZIndexes, pluginZIndexes } =
-    collectAllZIndexes(mode);
+  const {
+    keyZIndexes,
+    statZIndexes,
+    graphZIndexes,
+    knobZIndexes,
+    pluginZIndexes,
+  } = collectAllZIndexes(mode);
   return Math.min(
     0,
     ...keyZIndexes,
     ...statZIndexes,
     ...graphZIndexes,
+    ...knobZIndexes,
     ...pluginZIndexes,
   );
 }
@@ -132,6 +155,30 @@ async function persistGraphPositions(
   }
 }
 
+// Knob positions persist 헬퍼
+async function persistKnobPositions(
+  nextPositions: KnobItemPositions,
+  errorMessage?: string,
+): Promise<void> {
+  const store = useKnobItemStore.getState();
+  store.setLocalUpdateInProgress(true);
+  store.setPositions(nextPositions);
+  try {
+    await window.api.knobItems.updatePositions(nextPositions);
+  } catch (error) {
+    console.error(errorMessage || 'Failed to update knob items', error);
+  } finally {
+    store.setLocalUpdateInProgress(false);
+  }
+  try {
+    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+      positions: nextPositions,
+    });
+  } catch {
+    /* 무시 */
+  }
+}
+
 export interface CanvasActions {
   // Stat 액션
   deleteStatAtIndex: (index: number) => void;
@@ -159,17 +206,35 @@ export interface CanvasActions {
     dx: number,
     dy: number,
   ) => void;
+  // Knob 액션
+  deleteKnobAtIndex: (index: number) => void;
+  moveKnobToFront: (index: number) => void;
+  moveKnobToBack: (index: number) => void;
+  moveKnobForward: (index: number) => Promise<void>;
+  moveKnobBackward: (index: number) => Promise<void>;
+  addKnobAtPosition: (dx: number, dy: number) => void;
+  beginDuplicateKnob: (sourceIndex: number) => DuplicateState | null;
+  placeDuplicateKnob: (
+    templatePosition: KnobItemPosition,
+    dx: number,
+    dy: number,
+  ) => void;
   // persist 헬퍼 (Grid에서 직접 사용)
   persistStatPositions: typeof persistStatPositions;
   persistGraphPositions: typeof persistGraphPositions;
+  persistKnobPositions: typeof persistKnobPositions;
   pushHistorySnapshot: typeof pushHistorySnapshot;
 }
 
 export interface DuplicateState {
-  elementType: 'key' | 'stat' | 'graph';
+  elementType: 'key' | 'stat' | 'graph' | 'knob';
   sourceIndex: number;
   keyName: string;
-  position: KeyPosition | StatItemPosition | GraphItemPosition;
+  position:
+    | KeyPosition
+    | StatItemPosition
+    | GraphItemPosition
+    | KnobItemPosition;
 }
 
 function getStatTypeLabel(type: string): string {
@@ -548,6 +613,164 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     persistGraphPositions(nextPositions, 'Failed to add graph item');
   };
 
+  // 노브 히스토리 스냅샷 (현재 stat/graph 캡처)
+  const pushKnobHistory = () =>
+    pushHistorySnapshot(
+      useStatItemStore.getState().positions,
+      useGraphItemStore.getState().positions,
+    );
+
+  const deleteKnobAtIndex = (indexToDelete: number) => {
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[indexToDelete]) return;
+    pushKnobHistory();
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.filter((_, idx) => idx !== indexToDelete),
+    };
+    persistKnobPositions(nextPositions, 'Failed to delete knob item');
+  };
+
+  const moveKnobToFront = (index: number) => {
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[index]) return;
+    pushKnobHistory();
+    const maxZ = getMaxZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: maxZ + 1 } : p,
+      ),
+    };
+    persistKnobPositions(nextPositions, 'Failed to move knob item to front');
+  };
+
+  const moveKnobForward = async (index: number) => {
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+    pushKnobHistory();
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex + 1 } : p,
+      ),
+    };
+    await persistKnobPositions(
+      updatedPositions,
+      'Failed to move knob item forward',
+    );
+  };
+
+  const moveKnobBackward = async (index: number) => {
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    const target = tabPositions[index];
+    if (!target) return;
+    pushKnobHistory();
+    const currentZIndex = target.zIndex ?? index;
+    const updatedPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: currentZIndex - 1 } : p,
+      ),
+    };
+    await persistKnobPositions(
+      updatedPositions,
+      'Failed to move knob item backward',
+    );
+  };
+
+  const moveKnobToBack = (index: number) => {
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    if (!tabPositions[index]) return;
+    pushKnobHistory();
+    const minZ = getMinZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: tabPositions.map((p, i) =>
+        i === index ? { ...p, zIndex: minZ - 1 } : p,
+      ),
+    };
+    persistKnobPositions(nextPositions, 'Failed to move knob item to back');
+  };
+
+  const beginDuplicateKnob = (sourceIndex: number): DuplicateState | null => {
+    const current = useKnobItemStore.getState().positions;
+    const position = current?.[selectedKeyType]?.[sourceIndex] || null;
+    if (!position) return null;
+    return {
+      elementType: 'knob',
+      sourceIndex,
+      keyName: 'Knob',
+      position: { ...position },
+    };
+  };
+
+  const placeDuplicateKnob = (
+    templatePosition: KnobItemPosition,
+    dx: number,
+    dy: number,
+  ) => {
+    if (!templatePosition) return;
+    const current = useKnobItemStore.getState().positions;
+    const tabPositions = current[selectedKeyType] || [];
+    pushKnobHistory();
+    const maxZ = getMaxZIndex(selectedKeyType);
+    const nextPositions = {
+      ...current,
+      [selectedKeyType]: [
+        ...tabPositions,
+        { ...templatePosition, dx, dy, zIndex: maxZ + 1 },
+      ],
+    };
+    persistKnobPositions(nextPositions, 'Failed to duplicate knob item');
+  };
+
+  const addKnobAtPosition = (dx: number, dy: number) => {
+    const current = useKnobItemStore.getState().positions;
+    pushKnobHistory();
+    const list = [...(current[selectedKeyType] || [])];
+    list.push({
+      axisId: '',
+      sensitivity: 1,
+      reverse: false,
+      dx,
+      dy,
+      width: 60,
+      height: 60,
+      hidden: false,
+      activeImage: '',
+      inactiveImage: '',
+      activeTransparent: false,
+      idleTransparent: false,
+      count: 0,
+      noteColor: '#FFFFFF',
+      noteOpacity: 80,
+      noteAlignment: 'center',
+      noteEffectEnabled: false,
+      noteGlowEnabled: false,
+      noteGlowSize: 20,
+      noteGlowOpacity: 70,
+      noteGlowColor: '#FFFFFF',
+      noteAutoYCorrection: true,
+      className: '',
+      counter: createDefaultCounterSettings(),
+      backgroundColor: 'rgba(46, 46, 47, 0.9)',
+      activeBackgroundColor: 'rgba(121, 121, 121, 0.9)',
+      borderColor: 'rgba(113, 113, 113, 0.9)',
+      activeBorderColor: 'rgba(255, 255, 255, 0.9)',
+      borderWidth: 3,
+    });
+    const nextPositions = { ...current, [selectedKeyType]: list };
+    persistKnobPositions(nextPositions, 'Failed to add knob item');
+  };
+
   return {
     deleteStatAtIndex,
     moveStatToFront,
@@ -565,8 +788,17 @@ export function useGridCanvasActions(selectedKeyType: string): CanvasActions {
     addGraphAtPosition,
     beginDuplicateGraph,
     placeDuplicateGraph,
+    deleteKnobAtIndex,
+    moveKnobToFront,
+    moveKnobToBack,
+    moveKnobForward,
+    moveKnobBackward,
+    addKnobAtPosition,
+    beginDuplicateKnob,
+    placeDuplicateKnob,
     persistStatPositions,
     persistGraphPositions,
+    persistKnobPositions,
     pushHistorySnapshot,
   };
 }

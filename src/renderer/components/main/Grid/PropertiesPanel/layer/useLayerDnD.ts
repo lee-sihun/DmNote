@@ -7,6 +7,7 @@ import { useState, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -34,6 +35,7 @@ function syncOverlayPositions(
   keyPositions: ReturnType<typeof useKeyStore.getState>['positions'],
   statPositions: ReturnType<typeof useStatItemStore.getState>['positions'],
   graphPositions: ReturnType<typeof useGraphItemStore.getState>['positions'],
+  knobPositions: ReturnType<typeof useKnobItemStore.getState>['positions'],
 ) {
   try {
     window.api.bridge.sendTo('overlay', 'positions:sync', {
@@ -52,6 +54,13 @@ function syncOverlayPositions(
   try {
     window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
       positions: graphPositions,
+    });
+  } catch {
+    // ignore
+  }
+  try {
+    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
+      positions: knobPositions,
     });
   } catch {
     // ignore
@@ -447,6 +456,7 @@ export function useLayerDnD({
     const currentPositions = useKeyStore.getState().positions;
     const currentStatPositions = useStatItemStore.getState().positions;
     const currentGraphPositions = useGraphItemStore.getState().positions;
+    const currentKnobPositions = useKnobItemStore.getState().positions;
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
     const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
@@ -472,6 +482,10 @@ export function useLayerDnD({
     const updatedGraphPositions = { ...currentGraphPositions };
     const currentGraphModePositions = [
       ...(updatedGraphPositions[selectedKeyType] || []),
+    ];
+    const updatedKnobPositions = { ...currentKnobPositions };
+    const currentKnobModePositions = [
+      ...(updatedKnobPositions[selectedKeyType] || []),
     ];
 
     newItems.forEach((item, idx) => {
@@ -508,6 +522,16 @@ export function useLayerDnD({
               : {}),
           };
         }
+      } else if (item.type === 'knob' && item.index !== undefined) {
+        if (currentKnobModePositions[item.index]) {
+          currentKnobModePositions[item.index] = {
+            ...currentKnobModePositions[item.index],
+            zIndex: newZIndex,
+            ...(isDraggedItem && !preserveGroupIds.has(item.id)
+              ? { groupId: newGroupId }
+              : {}),
+          };
+        }
       } else if (item.type === 'plugin') {
         usePluginDisplayElementStore.getState().updateElement(item.id, {
           zIndex: newZIndex,
@@ -518,18 +542,21 @@ export function useLayerDnD({
     updatedPositions[selectedKeyType] = currentModePositions;
     updatedStatPositions[selectedKeyType] = currentStatModePositions;
     updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
+    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
 
     const normalized = normalizeLayerGroupsForMode({
       mode: selectedKeyType,
       keyPositions: updatedPositions,
       statPositions: updatedStatPositions,
       graphPositions: updatedGraphPositions,
+      knobPositions: updatedKnobPositions,
       layerGroups: currentLayerGroups,
     });
 
     useGraphItemStore.getState().setPositions(normalized.graphPositions);
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
+    useKnobItemStore.getState().setPositions(normalized.knobPositions);
     if (normalized.groupsChanged) {
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
     }
@@ -538,10 +565,12 @@ export function useLayerDnD({
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
       await window.api.keys.updatePositions(normalized.keyPositions);
       await window.api.statItems.updatePositions(normalized.statPositions);
       await window.api.graphItems.updatePositions(normalized.graphPositions);
+      await window.api.knobItems.updatePositions(normalized.knobPositions);
       if (normalized.groupsChanged) {
         await window.api.layerGroups.update(normalized.layerGroups);
       }
@@ -551,12 +580,14 @@ export function useLayerDnD({
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     syncOverlayPositions(
       normalized.keyPositions,
       normalized.statPositions,
       normalized.graphPositions,
+      normalized.knobPositions,
     );
   };
 
@@ -656,6 +687,12 @@ export function useLayerDnD({
     const currentGraphModePositions = [
       ...(updatedGraphPositions[selectedKeyType] || []),
     ];
+    const updatedKnobPositions = {
+      ...useKnobItemStore.getState().positions,
+    };
+    const currentKnobModePositions = [
+      ...(updatedKnobPositions[selectedKeyType] || []),
+    ];
 
     newItems.forEach((item, idx) => {
       const newZIndex = maxZIndex - idx;
@@ -680,6 +717,13 @@ export function useLayerDnD({
             zIndex: newZIndex,
           };
         }
+      } else if (item.type === 'knob' && item.index !== undefined) {
+        if (currentKnobModePositions[item.index]) {
+          currentKnobModePositions[item.index] = {
+            ...currentKnobModePositions[item.index],
+            zIndex: newZIndex,
+          };
+        }
       } else if (item.type === 'plugin') {
         usePluginDisplayElementStore.getState().updateElement(item.id, {
           zIndex: newZIndex,
@@ -693,27 +737,33 @@ export function useLayerDnD({
     useStatItemStore.getState().setPositions(updatedStatPositions);
     updatedGraphPositions[selectedKeyType] = currentGraphModePositions;
     useGraphItemStore.getState().setPositions(updatedGraphPositions);
+    updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
+    useKnobItemStore.getState().setPositions(updatedKnobPositions);
 
     // 백엔드 동기화
     useKeyStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
+    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
       await window.api.keys.updatePositions(updatedPositions);
       await window.api.statItems.updatePositions(updatedStatPositions);
       await window.api.graphItems.updatePositions(updatedGraphPositions);
+      await window.api.knobItems.updatePositions(updatedKnobPositions);
     } catch (error) {
       console.error('Failed to reorder group', error);
     } finally {
       useKeyStore.getState().setLocalUpdateInProgress(false);
       useStatItemStore.getState().setLocalUpdateInProgress(false);
       useGraphItemStore.getState().setLocalUpdateInProgress(false);
+      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
     syncOverlayPositions(
       updatedPositions,
       updatedStatPositions,
       updatedGraphPositions,
+      updatedKnobPositions,
     );
   };
 

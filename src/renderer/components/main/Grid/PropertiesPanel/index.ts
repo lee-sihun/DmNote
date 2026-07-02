@@ -35,11 +35,13 @@ export { default as LayerPanel } from './layer/LayerPanel';
 export {
   PluginSelectionPanel,
   SingleGraphPanel,
+  SingleKnobPanel,
   SingleKeyStatPanel,
 } from './single/SingleSelectionPanel';
 export {
   BatchKeyLikePanel,
   BatchGraphOnlyPanel,
+  BatchKnobOnlyPanel,
 } from './batch/BatchSelectionPanel';
 export { default as PluginSettingsPanelView } from './PluginSettingsPanelView';
 

@@ -3,8 +3,14 @@ import type { KeyPosition } from '@src/types/key/keys';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
+import type { KnobItemPosition } from '@src/types/key/knobs';
 
-export type SelectableElementType = 'key' | 'stat' | 'graph' | 'plugin';
+export type SelectableElementType =
+  | 'key'
+  | 'stat'
+  | 'graph'
+  | 'knob'
+  | 'plugin';
 
 export interface SelectedElement {
   type: SelectableElementType;
@@ -31,6 +37,12 @@ export interface ClipboardGraphData {
   position: GraphItemPosition;
 }
 
+// 클립보드에 저장되는 노브 데이터
+export interface ClipboardKnobData {
+  type: 'knob';
+  position: KnobItemPosition;
+}
+
 // 클립보드에 저장되는 플러그인 요소 데이터
 export interface ClipboardPluginData {
   type: 'plugin';
@@ -41,6 +53,7 @@ export type ClipboardItem =
   | ClipboardKeyData
   | ClipboardStatData
   | ClipboardGraphData
+  | ClipboardKnobData
   | ClipboardPluginData;
 
 interface GridSelectionState {

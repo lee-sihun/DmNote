@@ -7,6 +7,7 @@ import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -31,6 +32,7 @@ export async function groupSelectedElements(
   const { keyMappings, positions } = useKeyStore.getState();
   const statPos = useStatItemStore.getState().positions;
   const graphPos = useGraphItemStore.getState().positions;
+  const knobPos = useKnobItemStore.getState().positions;
   const pluginEls = usePluginDisplayElementStore.getState().elements;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
   const modeGroups = currentLayerGroups[selectedKeyType] || [];
@@ -41,6 +43,7 @@ export async function groupSelectedElements(
     positions,
     statPos,
     graphPos,
+    knobPos,
   );
 
   let targetGroupId = singleGroupId;
@@ -66,6 +69,7 @@ export async function groupSelectedElements(
     keyPositions: positions,
     statPositions: statPos,
     graphPositions: graphPos,
+    knobPositions: knobPos,
     targetGroupId,
   });
 
@@ -74,6 +78,7 @@ export async function groupSelectedElements(
     keyPositions: grouped.keyPositions,
     statPositions: grouped.statPositions,
     graphPositions: grouped.graphPositions,
+    knobPositions: grouped.knobPositions,
     layerGroups: nextLayerGroups,
   });
 
@@ -98,6 +103,7 @@ export async function groupSelectedElements(
   useKeyStore.getState().setPositions(normalized.keyPositions);
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
+  useKnobItemStore.getState().setPositions(normalized.knobPositions);
 
   // API 동기화
   await Promise.all([
@@ -107,6 +113,9 @@ export async function groupSelectedElements(
       .catch(() => {}),
     window.api.graphItems
       .updatePositions(normalized.graphPositions)
+      .catch(() => {}),
+    window.api.knobItems
+      .updatePositions(normalized.knobPositions)
       .catch(() => {}),
   ]);
 
@@ -131,6 +140,7 @@ export async function ungroupSelectedElements(
   const { keyMappings, positions } = useKeyStore.getState();
   const statPos = useStatItemStore.getState().positions;
   const graphPos = useGraphItemStore.getState().positions;
+  const knobPos = useKnobItemStore.getState().positions;
   const pluginEls = usePluginDisplayElementStore.getState().elements;
   const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
@@ -140,6 +150,7 @@ export async function ungroupSelectedElements(
     keyPositions: positions,
     statPositions: statPos,
     graphPositions: graphPos,
+    knobPositions: knobPos,
     targetGroupId: undefined,
   });
 
@@ -148,6 +159,7 @@ export async function ungroupSelectedElements(
     keyPositions: ungrouped.keyPositions,
     statPositions: ungrouped.statPositions,
     graphPositions: ungrouped.graphPositions,
+    knobPositions: ungrouped.knobPositions,
     layerGroups: currentLayerGroups,
   });
 
@@ -168,6 +180,7 @@ export async function ungroupSelectedElements(
   useKeyStore.getState().setPositions(normalized.keyPositions);
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
+  useKnobItemStore.getState().setPositions(normalized.knobPositions);
 
   // API 동기화
   await Promise.all([
@@ -177,6 +190,9 @@ export async function ungroupSelectedElements(
       .catch(() => {}),
     window.api.graphItems
       .updatePositions(normalized.graphPositions)
+      .catch(() => {}),
+    window.api.knobItems
+      .updatePositions(normalized.knobPositions)
       .catch(() => {}),
   ]);
 

@@ -48,6 +48,7 @@ interface UseGridContextMenuReturn {
   getKeyMenuItems: (contextIndex: number | null) => MenuItem[];
   getStatMenuItems: (contextIndex: number | null) => MenuItem[];
   getGraphMenuItems: (contextIndex: number | null) => MenuItem[];
+  getKnobMenuItems: (contextIndex: number | null) => MenuItem[];
   getGridMenuItems: (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ) => MenuItem[];
@@ -172,6 +173,13 @@ export function useGridContextMenu({
     { id: 'sendToBack', label: t('contextMenu.sendToBack') },
   ];
 
+  const getKnobMenuItems = (_contextIndex: number | null): MenuItem[] => [
+    { id: 'delete', label: t('contextMenu.deleteKnob') },
+    { id: 'duplicate', label: t('contextMenu.duplicateKnob') },
+    { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+    { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+  ];
+
   const getGridMenuItems = (
     gridAddLocalPos: { dx: number; dy: number } | null,
   ): MenuItem[] => {
@@ -179,9 +187,14 @@ export function useGridContextMenu({
       { id: 'add', label: t('contextMenu.addKey') },
       { id: 'addStat', label: t('contextMenu.addStat') },
       { id: 'addGraph', label: t('contextMenu.addGraph') },
+      { id: 'addKnob', label: t('contextMenu.addKnob') },
     ];
     const bottomBaseItems: MenuItem[] = [
-      { id: 'tabCss', label: t('contextMenu.tabCssSetting'), disabled: !useCustomCSS },
+      {
+        id: 'tabCss',
+        label: t('contextMenu.tabCssSetting'),
+        disabled: !useCustomCSS,
+      },
       {
         id: 'tabNote',
         label: t('contextMenu.tabNoteSetting'),
@@ -238,6 +251,7 @@ export function useGridContextMenu({
     getKeyMenuItems,
     getStatMenuItems,
     getGraphMenuItems,
+    getKnobMenuItems,
     getGridMenuItems,
     pluginKeyMenuItems,
     pluginGridMenuItems,
