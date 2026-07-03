@@ -126,6 +126,11 @@ function main() {
   fs.cpSync(runtimeSrc, path.join(outDir, "webview2-fixed-runtime"), {
     recursive: true,
   });
+  // ASIO SDK(BSD 3-clause) 이진 재배포 고지 동봉
+  fs.copyFileSync(
+    path.join(repoRoot, "THIRD_PARTY_NOTICES.txt"),
+    path.join(outDir, "THIRD_PARTY_NOTICES.txt")
+  );
 
   // 4) Zip
   compressFolderToZip(outDir, zipPath);
