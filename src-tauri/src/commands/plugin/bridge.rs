@@ -66,7 +66,10 @@ pub fn plugin_bridge_send_to(
         window.emit("plugin-bridge:message", payload)?;
         Ok(())
     } else if window_label == "overlay" && state.is_obs_mode_active() {
-        // OBS 모드에서 overlay가 destroy된 상태 — 정상 무시
+        // OBS 모드에서 overlay가 destroy된 상태 — WS 클라이언트로 직접 포워딩
+        state
+            .obs_bridge
+            .broadcast_tauri_event("plugin-bridge:message".to_string(), payload);
         Ok(())
     } else {
         Err(CommandError::msg(format!(

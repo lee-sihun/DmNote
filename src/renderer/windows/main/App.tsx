@@ -20,6 +20,7 @@ import Palette from '@components/main/Modal/content/pickers/Palette';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useAppBootstrap } from '@hooks/app/useAppBootstrap';
+import { usePluginDisplayElementsResponder } from '@hooks/app/usePluginDisplayElementsResponder';
 import {
   useUpdateCheck,
   hasPendingPostUpdateReleaseNotice,
@@ -59,6 +60,7 @@ export default function App() {
   useCustomCssInjection();
   useCustomJsInjection();
   useAppBootstrap();
+  usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();
 
   // 업데이트 체크

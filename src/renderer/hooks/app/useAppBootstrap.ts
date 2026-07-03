@@ -18,6 +18,12 @@ import {
   setCachedKeyCounter,
 } from '@stores/signals/keyCounterCache';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
+import { obsApi } from '@api/modules/obsApi';
+import { notifyLocaleChanged } from '@api/modules/shared';
+import { stableStringify } from '@utils/core/stableStringify';
+import type { BootstrapPayload } from '@src/types/app';
+import type { KeyMappings, KeyPositions, CustomTab } from '@src/types/key/keys';
+import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
 import type {
   SettingsDiff,
   OverlayResizeAnchor,
@@ -56,6 +62,39 @@ function clonePlugins(source?: CustomJs | null): JsPlugin[] {
       enabled: true,
     },
   ];
+}
+
+// bootstrap payload → 설정 스토어 스냅샷 구성 (초기 적용/재동기화 공용)
+function buildSettingsSnapshot(
+  bootstrap: BootstrapPayload,
+  tabNoteOverrides: TabNoteOverrides,
+): SettingsStateSnapshot {
+  return {
+    hardwareAcceleration: bootstrap.settings.hardwareAcceleration,
+    alwaysOnTop: bootstrap.settings.alwaysOnTop,
+    overlayLocked: bootstrap.settings.overlayLocked,
+    angleMode: bootstrap.settings.angleMode,
+    noteEffect: bootstrap.settings.noteEffect,
+    noteSettings: bootstrap.settings.noteSettings,
+    tabNoteOverrides,
+    fontSettings: bootstrap.settings.fontSettings,
+    useCustomCSS: bootstrap.settings.useCustomCSS,
+    customCSSContent: bootstrap.settings.customCSS.content,
+    customCSSPath: bootstrap.settings.customCSS.path,
+    useCustomJS: bootstrap.settings.useCustomJS,
+    jsPlugins: clonePlugins(bootstrap.settings.customJS),
+    backgroundColor: bootstrap.settings.backgroundColor,
+    language: bootstrap.settings.language,
+    laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
+    developerModeEnabled: bootstrap.settings.developerModeEnabled ?? false,
+    trayEnabled: bootstrap.settings.trayEnabled ?? false,
+    autoUpdateEnabled: bootstrap.settings.autoUpdateEnabled ?? true,
+    overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
+    keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
+    gridSettings: bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
+    shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
+    obsModeEnabled: bootstrap.settings.obsModeEnabled ?? false,
+  };
 }
 
 // 앱 초기 구동 시 메인 스냅샷을 가져오고,
@@ -184,89 +223,220 @@ export function useAppBootstrap() {
       }
     };
 
-    (async () => {
-      const bootstrap = await window.api.app.bootstrap();
-      if (disposed) return;
+    // ── OBS WS 재연결/lag 복구 시 전체 상태 재동기화 ──
+    // obs:resync는 ipcShim 로컬 합성 이벤트 — 네이티브 윈도우에서는 발화하지 않음
+    let initialApplied = false;
+    let resyncInFlight = false;
+    let resyncQueued = false;
+
+    // 모든 슬라이스를 "변경 시에만" 적용 — 동일 데이터 재적용으로 인한 참조
+    // 변경이 overlay 키 이벤트 effect 재실행(키 하이라이트 리셋) 등 시각적
+    // 부작용을 유발하는 것을 방지
+    const applyResyncSnapshot = (bootstrap: BootstrapPayload) => {
       initDefaults(bootstrap.defaults);
-      setAll({
-        hardwareAcceleration: bootstrap.settings.hardwareAcceleration,
-        alwaysOnTop: bootstrap.settings.alwaysOnTop,
-        overlayLocked: bootstrap.settings.overlayLocked,
-        angleMode: bootstrap.settings.angleMode,
-        noteEffect: bootstrap.settings.noteEffect,
-        noteSettings: bootstrap.settings.noteSettings,
-        tabNoteOverrides: {},
-        fontSettings: bootstrap.settings.fontSettings,
-        useCustomCSS: bootstrap.settings.useCustomCSS,
-        customCSSContent: bootstrap.settings.customCSS.content,
-        customCSSPath: bootstrap.settings.customCSS.path,
-        useCustomJS: bootstrap.settings.useCustomJS,
-        jsPlugins: clonePlugins(bootstrap.settings.customJS),
-        backgroundColor: bootstrap.settings.backgroundColor,
-        language: bootstrap.settings.language,
-        laboratoryEnabled: bootstrap.settings.laboratoryEnabled,
-        developerModeEnabled: bootstrap.settings.developerModeEnabled ?? false,
-        trayEnabled: bootstrap.settings.trayEnabled ?? false,
-        autoUpdateEnabled: bootstrap.settings.autoUpdateEnabled ?? true,
-        overlayResizeAnchor: bootstrap.settings.overlayResizeAnchor,
-        keyCounterEnabled: bootstrap.settings.keyCounterEnabled,
-        gridSettings:
-          bootstrap.settings.gridSettings ?? getDefaultGridSettings(),
-        shortcuts: bootstrap.settings.shortcuts ?? getDefaultShortcuts(),
-        obsModeEnabled: bootstrap.settings.obsModeEnabled ?? false,
-      });
-      useFontStore.setState({
-        customFonts: bootstrap.settings.fontSettings.customFonts.map(
-          (font) => ({ ...font }),
-        ),
-      });
-      syncFontCSS();
-      useKeyStore.setState((state) => ({
-        ...state,
-        keyMappings: bootstrap.keys,
-        positions: bootstrap.positions,
-        customTabs: bootstrap.customTabs,
-        selectedKeyType: bootstrap.selectedKeyType,
-      }));
-      useStatItemStore.setState((state) => ({
-        ...state,
-        positions: bootstrap.statPositions ?? {},
-      }));
-      useGraphItemStore.setState((state) => ({
-        ...state,
-        positions: bootstrap.graphPositions ?? {},
-      }));
-      useKnobItemStore.setState((state) => ({
-        ...state,
-        positions: bootstrap.knobPositions ?? {},
-      }));
-      applyCounterCacheSnapshot(bootstrap.keyCounters);
-      if (isOverlayWindow) {
-        applyCounterSnapshot(bootstrap.keyCounters);
+
+      // 설정: tabNoteOverrides는 payload 내장값으로 원자 적용
+      // (초기 경로의 "{} → getAll" 2단계를 반복하면 한 프레임 깜빡임 발생)
+      const prevLanguage = useSettingsStore.getState().language;
+      useSettingsStore
+        .getState()
+        .syncFromSnapshot(
+          buildSettingsSnapshot(bootstrap, bootstrap.tabNoteOverrides ?? {}),
+        );
+      const nextLanguage = bootstrap.settings.language;
+      if (nextLanguage && nextLanguage !== prevLanguage) {
+        notifyLocaleChanged(nextLanguage);
       }
 
-      // 레이어 그룹 로드
-      window.api.layerGroups
-        .get()
-        .then((groups) => {
-          useLayerGroupStore.getState().setLayerGroups(groups);
-        })
-        .catch(() => {});
+      // 폰트: 변경 시에만 setState + CSS 재주입
+      const nextFonts = bootstrap.settings.fontSettings.customFonts;
+      if (
+        stableStringify(useFontStore.getState().customFonts) !==
+        stableStringify(nextFonts)
+      ) {
+        useFontStore.setState({
+          customFonts: nextFonts.map((font) => ({ ...font })),
+        });
+        syncFontCSS();
+      }
 
-      // 탭별 노트 트랙 설정 오버라이드 로드
-      window.api.noteTab
-        .getAll()
-        .then((tabNoteOverrides) => {
-          if (!disposed) {
-            useSettingsStore.setState({ tabNoteOverrides });
-          }
-        })
-        .catch(() => {});
+      // 키 스토어: 변경 슬라이스만 모아 단일 setState
+      // setSelectedKeyType 액션은 백엔드 setMode RPC를 역발사하므로 사용 금지
+      const keyState = useKeyStore.getState();
+      const keyChanges: {
+        keyMappings?: KeyMappings;
+        positions?: KeyPositions;
+        customTabs?: CustomTab[];
+        selectedKeyType?: string;
+      } = {};
+      if (
+        stableStringify(keyState.keyMappings) !==
+        stableStringify(bootstrap.keys)
+      ) {
+        keyChanges.keyMappings = bootstrap.keys;
+      }
+      if (
+        stableStringify(keyState.positions) !==
+        stableStringify(bootstrap.positions)
+      ) {
+        keyChanges.positions = bootstrap.positions;
+      }
+      if (
+        stableStringify(keyState.customTabs) !==
+        stableStringify(bootstrap.customTabs)
+      ) {
+        keyChanges.customTabs = bootstrap.customTabs;
+      }
+      if (keyState.selectedKeyType !== bootstrap.selectedKeyType) {
+        keyChanges.selectedKeyType = bootstrap.selectedKeyType;
+      }
+      if (Object.keys(keyChanges).length > 0) {
+        useKeyStore.setState((state) => ({ ...state, ...keyChanges }));
+      }
 
-      // macOS 커서 시스템 초기화 (시스템 설정 반영)
-      initializeCursorSystem().catch(() => {});
+      // stat/graph/knob positions: 변경 시에만 적용
+      const nextStat = bootstrap.statPositions ?? {};
+      if (
+        stableStringify(useStatItemStore.getState().positions) !==
+        stableStringify(nextStat)
+      ) {
+        useStatItemStore.setState((state) => ({
+          ...state,
+          positions: nextStat,
+        }));
+      }
+      const nextGraph = bootstrap.graphPositions ?? {};
+      if (
+        stableStringify(useGraphItemStore.getState().positions) !==
+        stableStringify(nextGraph)
+      ) {
+        useGraphItemStore.setState((state) => ({
+          ...state,
+          positions: nextGraph,
+        }));
+      }
+      const nextKnob = bootstrap.knobPositions ?? {};
+      if (
+        stableStringify(useKnobItemStore.getState().positions) !==
+        stableStringify(nextKnob)
+      ) {
+        useKnobItemStore.setState((state) => ({
+          ...state,
+          positions: nextKnob,
+        }));
+      }
+
+      // 레이어 그룹: payload 내장값 사용 (추가 RPC 불필요)
+      const nextGroups = bootstrap.layerGroups ?? {};
+      if (
+        stableStringify(useLayerGroupStore.getState().layerGroups) !==
+        stableStringify(nextGroups)
+      ) {
+        useLayerGroupStore.getState().setLayerGroups(nextGroups);
+      }
+
+      // 카운터: 캐시는 무조건(순수 데이터), 시그널은 동일 값 무통지라 안전.
+      // 딜레이 타이머로 대기 중인 키는 스킵 — 타이머가 스냅샷보다 최신
+      // 이벤트 값을 들고 있어, 스냅샷으로 덮으면 과거 값이 깜빡임
+      applyCounterCacheSnapshot(bootstrap.keyCounters);
+      if (isOverlayWindow) {
+        applyCounterSnapshot(bootstrap.keyCounters, (composed) =>
+          counterDelayTimers.has(composed),
+        );
+      }
 
       finalizeBootstrap();
+    };
+
+    // 연속 발화 코얼레서: 초기 적용 전/진행 중 요청은 큐잉 후 1회 재실행
+    const runResync = async () => {
+      if (disposed) return;
+      if (!initialApplied || resyncInFlight) {
+        resyncQueued = true;
+        return;
+      }
+      resyncInFlight = true;
+      do {
+        resyncQueued = false;
+        try {
+          const bootstrap = await window.api.app.bootstrap();
+          if (disposed) return;
+          applyResyncSnapshot(bootstrap);
+        } catch (error) {
+          console.error('OBS 재동기화 실패', error);
+        }
+      } while (resyncQueued && !disposed);
+      resyncInFlight = false;
+    };
+
+    (async () => {
+      try {
+        const bootstrap = await window.api.app.bootstrap();
+        if (disposed) return;
+        initDefaults(bootstrap.defaults);
+        setAll(buildSettingsSnapshot(bootstrap, {}));
+        useFontStore.setState({
+          customFonts: bootstrap.settings.fontSettings.customFonts.map(
+            (font) => ({ ...font }),
+          ),
+        });
+        syncFontCSS();
+        useKeyStore.setState((state) => ({
+          ...state,
+          keyMappings: bootstrap.keys,
+          positions: bootstrap.positions,
+          customTabs: bootstrap.customTabs,
+          selectedKeyType: bootstrap.selectedKeyType,
+        }));
+        useStatItemStore.setState((state) => ({
+          ...state,
+          positions: bootstrap.statPositions ?? {},
+        }));
+        useGraphItemStore.setState((state) => ({
+          ...state,
+          positions: bootstrap.graphPositions ?? {},
+        }));
+        useKnobItemStore.setState((state) => ({
+          ...state,
+          positions: bootstrap.knobPositions ?? {},
+        }));
+        applyCounterCacheSnapshot(bootstrap.keyCounters);
+        if (isOverlayWindow) {
+          applyCounterSnapshot(bootstrap.keyCounters);
+        }
+
+        // 레이어 그룹 로드
+        window.api.layerGroups
+          .get()
+          .then((groups) => {
+            useLayerGroupStore.getState().setLayerGroups(groups);
+          })
+          .catch(() => {});
+
+        // 탭별 노트 트랙 설정 오버라이드 로드
+        window.api.noteTab
+          .getAll()
+          .then((tabNoteOverrides) => {
+            if (!disposed) {
+              useSettingsStore.setState({ tabNoteOverrides });
+            }
+          })
+          .catch(() => {});
+
+        // macOS 커서 시스템 초기화 (시스템 설정 반영)
+        initializeCursorSystem().catch(() => {});
+
+        finalizeBootstrap();
+      } catch (error) {
+        console.error('초기 부트스트랩 실패', error);
+      } finally {
+        // 초기 성공/실패와 무관하게 재동기화 게이트를 연다 — 초기 실패
+        // 시에도 다음 obs:resync가 전체 상태를 복구할 수 있어야 함
+        initialApplied = true;
+        if (resyncQueued) {
+          void runResync();
+        }
+      }
     })();
 
     const unsubscribers = [
@@ -404,6 +574,10 @@ export function useAppBootstrap() {
         useSettingsStore.setState({
           jsPlugins: clonePlugins(script),
         });
+      }),
+      // OBS WS 재연결/lag 복구 시 전체 상태 재동기화 (네이티브에서는 미발화)
+      obsApi.onResync(() => {
+        void runResync();
       }),
       useSettingsStore.subscribe((state, previousState) => {
         const nextDelay = Number(state.noteSettings?.keyDisplayDelayMs ?? 0);

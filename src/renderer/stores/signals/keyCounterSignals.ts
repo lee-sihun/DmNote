@@ -34,17 +34,24 @@ export function getCounterSnapshot(): KeyCounters {
   return snapshot;
 }
 
-export function applyCounterSnapshot(counters: KeyCounters) {
+// shouldSkip: 적용/zeroing에서 제외할 composed key("mode::key") 판정
+// (예: 딜레이 타이머로 더 최신 값이 대기 중인 키를 스냅샷이 덮지 않도록)
+export function applyCounterSnapshot(
+  counters: KeyCounters,
+  shouldSkip?: (composedKey: string) => boolean,
+) {
   const seen = new Set<string>();
   Object.entries(counters).forEach(([mode, counter]) => {
     Object.entries(counter).forEach(([key, value]) => {
       const composed = composeKey(mode, key);
       seen.add(composed);
-      setKeyCounter(mode, key, value);
+      if (!shouldSkip?.(composed)) {
+        setKeyCounter(mode, key, value);
+      }
     });
   });
   for (const [composed] of keyCounterSignals) {
-    if (!seen.has(composed)) {
+    if (!seen.has(composed) && !shouldSkip?.(composed)) {
       keyCounterSignals.get(composed)!.value = 0;
     }
   }
