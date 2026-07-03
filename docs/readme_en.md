@@ -111,14 +111,14 @@ npm run tauri:dev
 
 ### Windows ASIO Build
 
-On Windows, ASIO key sound output is included in the default build (the `asio-backend` feature is enabled by default). Just use `npm run tauri:dev` / `npm run tauri:build` as usual.
+On Windows, `npm run tauri:dev` / `npm run tauri:build` include ASIO key sound output by default (the npm scripts enable the `asio-backend` feature).
 
-Windows builds require the following in addition to the regular dependencies:
+ASIO-enabled builds require the following in addition to the regular dependencies:
 
-- **LLVM/Clang** (required): Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
+- **LLVM/Clang**: Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
 - **ASIO SDK**: The Steinberg ASIO SDK is vendored in this repository (`src-tauri/vendor/asio-sdk`) and used automatically. No extra setup or network connection is needed; set the `CPAL_ASIO_DIR` environment variable to override it with your own SDK.
 
-If you need a build without ASIO, run `cargo build --no-default-features` in `src-tauri` (the tauri CLI has no option to disable default features).
+To build without ASIO (no LLVM required — handy for contributing), use `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`. Plain `cargo check` / `cargo build` in `src-tauri` also exclude ASIO by default; add `--features asio-backend` to cover the ASIO code paths.
 
 > This repository uses the Steinberg ASIO SDK under the GPLv3 option of its dual license. See [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt). _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 

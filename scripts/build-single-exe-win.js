@@ -92,7 +92,7 @@ function main() {
     DMNOTE_EMBED_WEBVIEW2_FIXED_RUNTIME: "1",
     DMNOTE_WEBVIEW2_ARCH: arch,
   };
-  run("npx tauri build --no-bundle", { cwd: repoRoot, env: buildEnv });
+  run("npx tauri build --no-bundle -f asio-backend", { cwd: repoRoot, env: buildEnv });
 
   const exeSrc = path.join(
     repoRoot,

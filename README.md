@@ -123,14 +123,14 @@ npm run tauri:dev
 
 ### Windows ASIO 빌드
 
-Windows에서는 키음 ASIO 출력이 기본 빌드에 포함됩니다 (`asio-backend` 기본 피처). 별도 명령어 없이 `npm run tauri:dev` / `npm run tauri:build`를 그대로 사용하면 됩니다.
+Windows에서는 `npm run tauri:dev` / `npm run tauri:build`에 키음 ASIO 출력이 기본 포함됩니다 (npm 스크립트가 `asio-backend` 피처를 활성화).
 
-Windows 빌드에는 일반 종속성에 더해 다음이 필요합니다.
+ASIO 포함 빌드에는 일반 종속성에 더해 다음이 필요합니다.
 
-- **LLVM/Clang** (필수): ASIO 헤더 바인딩 생성(bindgen)에 사용됩니다. LLVM을 설치하고(`winget install LLVM.LLVM` 또는 `scoop install llvm`), 환경 변수 `LIBCLANG_PATH`를 LLVM의 `bin` 폴더 경로로 설정하세요.
+- **LLVM/Clang**: ASIO 헤더 바인딩 생성(bindgen)에 사용됩니다. LLVM을 설치하고(`winget install LLVM.LLVM` 또는 `scoop install llvm`), 환경 변수 `LIBCLANG_PATH`를 LLVM의 `bin` 폴더 경로로 설정하세요.
 - **ASIO SDK**: Steinberg ASIO SDK가 저장소에 포함되어 있어(`src-tauri/vendor/asio-sdk`) 자동으로 사용됩니다. 별도 설정이나 네트워크 연결이 필요 없으며, 다른 SDK를 쓰려면 `CPAL_ASIO_DIR` 환경 변수로 재정의할 수 있습니다.
 
-ASIO를 제외한 빌드가 필요하면 `src-tauri`에서 `cargo build --no-default-features`를 사용하세요 (tauri CLI에는 기본 피처 비활성화 옵션이 없습니다).
+ASIO 없이 빌드하려면(LLVM 불필요 — 기여 시 편리) `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`를 사용하세요. `src-tauri`에서 직접 실행하는 `cargo check` / `cargo build`도 기본적으로 ASIO를 포함하지 않으며, ASIO 코드 경로까지 검사하려면 `--features asio-backend`를 붙이세요.
 
 > 이 저장소는 Steinberg ASIO SDK를 듀얼 라이선스 중 GPLv3 옵션으로 사용합니다. 자세한 내용은 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 참고하세요. _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 

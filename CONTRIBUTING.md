@@ -44,6 +44,8 @@ npm install
 npm run tauri:dev
 ```
 
+> Windows에서 `tauri:dev`는 ASIO 출력을 포함하므로 LLVM(`LIBCLANG_PATH`)이 필요합니다. LLVM 없이 실행하려면 `npm run tauri:dev:no-asio`를 사용하세요. 자세한 내용은 [README의 Windows ASIO 빌드](README.md#windows-asio-빌드) 섹션을 참고하세요.
+
 ## 📂 프로젝트 구조
 
 ```

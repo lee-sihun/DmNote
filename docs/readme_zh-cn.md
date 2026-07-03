@@ -111,14 +111,14 @@ npm run tauri:dev
 
 ### Windows ASIO 构建
 
-在 Windows 上，键音 ASIO 输出已包含在默认构建中（`asio-backend` 特性默认启用）。直接照常使用 `npm run tauri:dev` / `npm run tauri:build` 即可。
+在 Windows 上，`npm run tauri:dev` / `npm run tauri:build` 默认包含键音 ASIO 输出（npm 脚本会启用 `asio-backend` 特性）。
 
-除常规依赖外，Windows 构建还需要：
+包含 ASIO 的构建除常规依赖外还需要：
 
-- **LLVM/Clang**（必需）：供 bindgen 生成 ASIO 头文件绑定。安装 LLVM（`winget install LLVM.LLVM` 或 `scoop install llvm`），并将环境变量 `LIBCLANG_PATH` 设置为 LLVM 的 `bin` 文件夹路径。
+- **LLVM/Clang**：供 bindgen 生成 ASIO 头文件绑定。安装 LLVM（`winget install LLVM.LLVM` 或 `scoop install llvm`），并将环境变量 `LIBCLANG_PATH` 设置为 LLVM 的 `bin` 文件夹路径。
 - **ASIO SDK**: Steinberg ASIO SDK 已内置在仓库中（`src-tauri/vendor/asio-sdk`）并自动使用。无需额外设置或网络连接；如需使用自己的 SDK，可通过环境变量 `CPAL_ASIO_DIR` 覆盖。
 
-如需不含 ASIO 的构建，请在 `src-tauri` 中运行 `cargo build --no-default-features`（tauri CLI 没有禁用默认特性的选项）。
+如需不含 ASIO 的构建（无需 LLVM，便于参与贡献），请使用 `npm run tauri:dev:no-asio` / `npm run tauri:build:no-asio`。在 `src-tauri` 中直接运行的 `cargo check` / `cargo build` 默认也不包含 ASIO；如需检查 ASIO 代码路径，请加上 `--features asio-backend`。
 
 > 本仓库依据 Steinberg ASIO SDK 双重许可中的 GPLv3 选项使用该 SDK。详见 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)。_ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 

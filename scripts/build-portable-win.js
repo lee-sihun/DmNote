@@ -95,7 +95,7 @@ function main() {
   );
 
   // 2) Build binary only (no installer)
-  run("npx tauri build --no-bundle", { cwd: repoRoot });
+  run("npx tauri build --no-bundle -f asio-backend", { cwd: repoRoot });
 
   const exeSrc = path.join(
     repoRoot,
