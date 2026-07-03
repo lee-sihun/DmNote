@@ -121,19 +121,18 @@ npm install
 npm run tauri:dev
 ```
 
-### Windows ASIO 빌드 (선택)
+### Windows ASIO 빌드
 
-키음 ASIO 출력은 Windows 전용 옵트인 기능으로, `asio-backend` 피처를 켠 빌드에만 포함됩니다.
+Windows에서는 키음 ASIO 출력이 기본 빌드에 포함됩니다 (`asio-backend` 기본 피처). 별도 명령어 없이 `npm run tauri:dev` / `npm run tauri:build`를 그대로 사용하면 됩니다.
 
-```bash
-npm run tauri:dev:asio    # 개발 서버 (ASIO 포함)
-npm run tauri:build:asio  # 프로덕션 빌드 (ASIO 포함)
-```
+Windows 빌드에는 일반 종속성에 더해 다음이 필요합니다.
 
-일반 빌드 환경에 더해 다음 종속성이 필요합니다.
+- **LLVM/Clang** (필수): ASIO 헤더 바인딩 생성(bindgen)에 사용됩니다. LLVM을 설치하고(`winget install LLVM.LLVM` 또는 `scoop install llvm`), 환경 변수 `LIBCLANG_PATH`를 LLVM의 `bin` 폴더 경로로 설정하세요.
+- **ASIO SDK**: Steinberg ASIO SDK가 저장소에 포함되어 있어(`src-tauri/vendor/asio-sdk`) 자동으로 사용됩니다. 별도 설정이나 네트워크 연결이 필요 없으며, 다른 SDK를 쓰려면 `CPAL_ASIO_DIR` 환경 변수로 재정의할 수 있습니다.
 
-- **LLVM/Clang**: ASIO 헤더 바인딩 생성(bindgen)에 사용됩니다. LLVM을 설치하고(`winget install LLVM.LLVM` 또는 `scoop install llvm`), 환경 변수 `LIBCLANG_PATH`를 LLVM의 `bin` 폴더 경로로 설정하세요.
-- **ASIO SDK**: 환경 변수 `CPAL_ASIO_DIR`이 설정되어 있으면 해당 경로의 SDK를 사용합니다. 설정하지 않으면 최초 빌드 시 [Steinberg ASIO SDK](https://www.steinberg.net/asiosdk)를 임시 폴더(`%TEMP%\asio_sdk`)로 자동 다운로드합니다(네트워크 연결 필요). 임시 폴더가 정리되면 다시 다운로드하므로, 고정 경로를 원한다면 SDK를 직접 받아 `CPAL_ASIO_DIR`에 지정하세요.
+ASIO를 제외한 빌드가 필요하면 `src-tauri`에서 `cargo build --no-default-features`를 사용하세요 (tauri CLI에는 기본 피처 비활성화 옵션이 없습니다).
+
+> 이 저장소는 Steinberg ASIO SDK를 듀얼 라이선스 중 GPLv3 옵션으로 사용합니다. 자세한 내용은 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)를 참고하세요. _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
 ## 🤝 기여하기
 

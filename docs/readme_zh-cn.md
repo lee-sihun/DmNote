@@ -109,19 +109,18 @@ npm install
 npm run tauri:dev
 ```
 
-### Windows ASIO 构建（可选）
+### Windows ASIO 构建
 
-键音 ASIO 输出是 Windows 专属的可选功能，仅包含在启用 `asio-backend` 特性的构建中。
+在 Windows 上，键音 ASIO 输出已包含在默认构建中（`asio-backend` 特性默认启用）。直接照常使用 `npm run tauri:dev` / `npm run tauri:build` 即可。
 
-```bash
-npm run tauri:dev:asio    # 开发服务器（含 ASIO）
-npm run tauri:build:asio  # 生产构建（含 ASIO）
-```
+除常规依赖外，Windows 构建还需要：
 
-除常规构建环境外，还需要以下依赖：
+- **LLVM/Clang**（必需）：供 bindgen 生成 ASIO 头文件绑定。安装 LLVM（`winget install LLVM.LLVM` 或 `scoop install llvm`），并将环境变量 `LIBCLANG_PATH` 设置为 LLVM 的 `bin` 文件夹路径。
+- **ASIO SDK**: Steinberg ASIO SDK 已内置在仓库中（`src-tauri/vendor/asio-sdk`）并自动使用。无需额外设置或网络连接；如需使用自己的 SDK，可通过环境变量 `CPAL_ASIO_DIR` 覆盖。
 
-- **LLVM/Clang**: 供 bindgen 生成 ASIO 头文件绑定。安装 LLVM（`winget install LLVM.LLVM` 或 `scoop install llvm`），并将环境变量 `LIBCLANG_PATH` 设置为 LLVM 的 `bin` 文件夹路径。
-- **ASIO SDK**: 如果设置了环境变量 `CPAL_ASIO_DIR`，则使用该路径下的 SDK。未设置时，首次构建会自动将 [Steinberg ASIO SDK](https://www.steinberg.net/asiosdk) 下载到临时文件夹（`%TEMP%\asio_sdk`），需要网络连接。临时文件夹被清理后会重新下载，如需固定路径，请手动下载 SDK 并将 `CPAL_ASIO_DIR` 指向该路径。
+如需不含 ASIO 的构建，请在 `src-tauri` 中运行 `cargo build --no-default-features`（tauri CLI 没有禁用默认特性的选项）。
+
+> 本仓库依据 Steinberg ASIO SDK 双重许可中的 GPLv3 选项使用该 SDK。详见 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)。_ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
 ## � 注意事项
 

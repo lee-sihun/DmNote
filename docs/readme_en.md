@@ -109,19 +109,18 @@ npm install
 npm run tauri:dev
 ```
 
-### Windows ASIO Build (Optional)
+### Windows ASIO Build
 
-ASIO key sound output is a Windows-only opt-in feature, included only in builds with the `asio-backend` feature enabled.
+On Windows, ASIO key sound output is included in the default build (the `asio-backend` feature is enabled by default). Just use `npm run tauri:dev` / `npm run tauri:build` as usual.
 
-```bash
-npm run tauri:dev:asio    # Dev server (with ASIO)
-npm run tauri:build:asio  # Production build (with ASIO)
-```
+Windows builds require the following in addition to the regular dependencies:
 
-In addition to the regular build environment, the following dependencies are required:
+- **LLVM/Clang** (required): Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
+- **ASIO SDK**: The Steinberg ASIO SDK is vendored in this repository (`src-tauri/vendor/asio-sdk`) and used automatically. No extra setup or network connection is needed; set the `CPAL_ASIO_DIR` environment variable to override it with your own SDK.
 
-- **LLVM/Clang**: Used by bindgen to generate ASIO header bindings. Install LLVM (`winget install LLVM.LLVM` or `scoop install llvm`) and set the `LIBCLANG_PATH` environment variable to LLVM's `bin` folder.
-- **ASIO SDK**: If the `CPAL_ASIO_DIR` environment variable is set, the SDK at that path is used. Otherwise, the [Steinberg ASIO SDK](https://www.steinberg.net/asiosdk) is automatically downloaded to a temp folder (`%TEMP%\asio_sdk`) on the first build (network connection required). Since it is re-downloaded whenever the temp folder gets cleaned up, download the SDK manually and point `CPAL_ASIO_DIR` to it if you want a fixed location.
+If you need a build without ASIO, run `cargo build --no-default-features` in `src-tauri` (the tauri CLI has no option to disable default features).
+
+> This repository uses the Steinberg ASIO SDK under the GPLv3 option of its dual license. See [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt). _ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries._
 
 ## � Notes
 
