@@ -7,6 +7,7 @@ import type {
   ElementResizeAnchor,
 } from '@src/types/plugin/api';
 import { invokeExposedAction } from '@utils/displayElementActions';
+import { obsApi } from '@api/modules/obsApi';
 import {
   useGridSelectionStore,
   SelectedElement,
@@ -123,11 +124,19 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
       }
     });
 
+    const requestElementsFromMain = () => {
+      window.api.bridge.sendTo('main', 'plugin:displayElements:request', {});
+    };
+
     // 오버레이 초기 로드 시 메인에 현재 상태 요청
-    window.api.bridge.sendTo('main', 'plugin:displayElements:request', {});
+    requestElementsFromMain();
+
+    // OBS WS 재연결/lag 복구 시 재요청 (단절 중 유실된 sync 복구)
+    const unsubResync = obsApi.onResync(requestElementsFromMain);
 
     return () => {
       unsubscribe();
+      unsubResync();
     };
   }, [windowType, setElements]);
 
@@ -153,26 +162,8 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
     };
   }, [windowType]);
 
-  // 메인 윈도우에서 오버레이의 상태 요청 처리
-  useEffect(() => {
-    if (windowType !== 'main') return;
-
-    const unsubscribe = window.api.bridge.on(
-      'plugin:displayElements:request',
-      () => {
-        // 현재 상태를 오버레이로 전송
-        const currentElements =
-          usePluginDisplayElementStore.getState().elements;
-        window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-          elements: currentElements,
-        });
-      },
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [windowType]);
+  // 메인 윈도우의 상태 요청 응답은 usePluginDisplayElementsResponder가 담당
+  // (Grid 언마운트 시에도 응답 가능하도록 main App 레벨에 상시 마운트)
 
   // 메인 윈도우에서 오버레이의 앵커 업데이트 요청 처리
   useEffect(() => {

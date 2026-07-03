@@ -177,8 +177,11 @@ function onWsMessage(envelope: ObsEnvelope) {
     }
 
     case 'snapshot': {
-      // 재연결 시 snapshot 수신 — 연결 준비 신호로만 사용
+      // 재연결/lag 복구 시 snapshot 수신 — 내용은 버리고 재동기화 신호만 발행
+      // 'obs:resync'는 shim 로컬 합성 이벤트 (백엔드 emit 아님 —
+      // register_event_forwarding 등록 금지, 네이티브에서는 발화하지 않음)
       _snapshotReceived = true;
+      dispatchEvent('obs:resync', null);
       break;
     }
   }

@@ -10,4 +10,6 @@ export const obsApi = {
   regenerateToken: () => invoke<ObsStatus>('obs_regenerate_token'),
   onStatus: (listener: (status: ObsStatus) => void) =>
     subscribe<ObsStatus>('obs:status', listener),
+  // OBS WS 재연결/lag 복구 신호 (ipcShim 로컬 합성 이벤트 — 네이티브에서는 발화하지 않음)
+  onResync: (listener: () => void) => subscribe<null>('obs:resync', listener),
 };
