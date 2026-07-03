@@ -13,6 +13,7 @@ import {
   getDefaultGridSettings,
   getDefaultShortcuts,
 } from '@src/renderer/defaults';
+import { stableStringify } from '@utils/core/stableStringify';
 
 export interface GridSettings {
   alignmentGuides: boolean;
@@ -50,6 +51,7 @@ interface SettingsState {
   obsModeEnabled: boolean;
   setAll: (payload: SettingsStateSnapshot) => void;
   merge: (payload: Partial<SettingsStateSnapshot>) => void;
+  syncFromSnapshot: (payload: SettingsStateSnapshot) => void;
   setLaboratoryEnabled: (value: boolean) => void;
   setTrayEnabled: (value: boolean) => void;
   setAutoUpdateEnabled: (value: boolean) => void;
@@ -80,6 +82,7 @@ export type SettingsStateSnapshot = Omit<
   SettingsState,
   | 'setAll'
   | 'merge'
+  | 'syncFromSnapshot'
   | 'setLaboratoryEnabled'
   | 'setTrayEnabled'
   | 'setAutoUpdateEnabled'
@@ -182,10 +185,40 @@ function mergeSnapshot(
   return next;
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+// 내용 비교가 필요한 객체 필드 (원시 필드는 === 비교)
+// stableStringify: 백엔드 HashMap 직렬화 순서와 프론트 증분 병합 순서가
+// 달라도(예: tabNoteOverrides) 키 순서 차이로 오탐하지 않도록 정렬 비교
+const OBJECT_FIELDS = new Set<keyof SettingsStateSnapshot>([
+  'noteSettings',
+  'tabNoteOverrides',
+  'fontSettings',
+  'jsPlugins',
+  'gridSettings',
+  'shortcuts',
+]);
+
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...initialState,
   setAll: (payload) => set(() => mergeSnapshot(initialState, payload)),
   merge: (payload) => set((state) => mergeSnapshot(state, payload)),
+  // 스냅샷과 현재 상태를 필드별 비교해 변경분만 적용 (OBS 재동기화용)
+  // 무변경 시 set() 자체를 생략해 참조를 완전히 보존 — 구독자 재렌더/이펙트 재실행 방지
+  syncFromSnapshot: (payload) => {
+    const state = get();
+    const next = mergeSnapshot(initialState, payload);
+    const changed: Partial<SettingsStateSnapshot> = {};
+    (Object.keys(next) as (keyof SettingsStateSnapshot)[]).forEach((key) => {
+      const isEqual = OBJECT_FIELDS.has(key)
+        ? stableStringify(state[key]) === stableStringify(next[key])
+        : state[key] === next[key];
+      if (!isEqual) {
+        (changed as Record<string, unknown>)[key] = next[key];
+      }
+    });
+    if (Object.keys(changed).length > 0) {
+      set(changed);
+    }
+  },
   setDeveloperModeEnabled: (value) => set({ developerModeEnabled: value }),
   setAutoUpdateEnabled: (value) => set({ autoUpdateEnabled: value }),
   setHardwareAcceleration: (value) => set({ hardwareAcceleration: value }),
