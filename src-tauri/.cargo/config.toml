@@ -1,0 +1,4 @@
+[env]
+# 벤더링된 Steinberg ASIO SDK 경로 (src-tauri 기준 상대 경로)
+# 직접 export한 CPAL_ASIO_DIR이 있으면 그 값이 우선됨 (force 미지정)
+CPAL_ASIO_DIR = { value = "vendor/asio-sdk", relative = true }

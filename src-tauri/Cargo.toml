@@ -5,6 +5,7 @@ edition = "2021"
 default-run = "dm-note"
 
 [features]
+default = ["asio-backend"]
 asio-backend = ["dep:cpal"]
 
 [build-dependencies]
