@@ -45,7 +45,7 @@ try {
   // 환경 변수 설정하고 tauri dev 실행
   process.env.WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = webview2Path;
 
-  execSync("tauri dev", {
+  execSync("tauri dev -f asio-backend", {
     stdio: "inherit",
     env: process.env,
     shell: true,

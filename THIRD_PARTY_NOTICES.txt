@@ -1,0 +1,52 @@
+THIRD-PARTY NOTICES
+===================
+
+This file contains notices for third-party software included in DM Note.
+
+
+Steinberg ASIO SDK
+------------------
+
+Windows builds of DM Note include (statically link) a subset of the
+Steinberg ASIO SDK (version 2.3.4), vendored at src-tauri/vendor/asio-sdk.
+
+The Steinberg ASIO SDK is dual-licensed: under the proprietary Steinberg
+ASIO License, or alternatively under the GNU General Public License (GPL)
+Version 3. DM Note uses and redistributes the SDK under the GPLv3 option,
+consistent with DM Note's own license (GPL-3.0-only). See
+src-tauri/vendor/asio-sdk/LICENSE.txt for the SDK's license text.
+
+ASIO is a trademark of Steinberg Media Technologies GmbH, registered in
+Europe and other countries.
+
+Portions of the ASIO SDK (the ASIO host helper sources) are provided under
+the following BSD 3-clause license terms, reproduced here as required for
+redistribution in binary form:
+
+  (c) 2025, Steinberg Media Technologies GmbH, All Rights Reserved
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are
+  met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of the Steinberg Media Technologies nor the names
+      of its contributors may be used to endorse or promote products
+      derived from this software without specific prior written
+      permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+  PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+  OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+  EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+  PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

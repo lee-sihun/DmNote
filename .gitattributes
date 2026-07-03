@@ -1,0 +1,2 @@
+# 벤더링된 Steinberg ASIO SDK 소스는 원본 바이트 보존 (EOL 정규화 금지)
+src-tauri/vendor/asio-sdk/** -text
