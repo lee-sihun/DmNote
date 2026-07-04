@@ -2127,7 +2127,38 @@ struct MonitorData {
 }
 
 impl MonitorData {
+    #[cfg(not(target_os = "macos"))]
     fn gather(app: &AppHandle) -> Self {
+        Self::gather_inner(app)
+    }
+
+    /// macOS: available_monitors/primary_monitor의 Monitor 변환이 NSScreen(AppKit)을
+    /// 호출 스레드에서 직접 접근함 → 메인 스레드 밖(async 커맨드 등)에서 호출 시 크래시 (#67)
+    /// run_on_main_thread는 메인 스레드에서 호출되면 인라인 실행되므로 데드락 없음
+    #[cfg(target_os = "macos")]
+    fn gather(app: &AppHandle) -> Self {
+        let empty = Self {
+            specs: Vec::new(),
+            primary_index: None,
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let app_handle = app.clone();
+        if let Err(err) = app.run_on_main_thread(move || {
+            let _ = tx.send(Self::gather_inner(&app_handle));
+        }) {
+            log::warn!("monitor gather: failed to dispatch to main thread: {err}");
+            return empty;
+        }
+        match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            Ok(data) => data,
+            Err(err) => {
+                log::warn!("monitor gather: main thread result unavailable: {err}");
+                empty
+            }
+        }
+    }
+
+    fn gather_inner(app: &AppHandle) -> Self {
         let mut specs: Vec<MonitorSpec> = app
             .available_monitors()
             .ok()

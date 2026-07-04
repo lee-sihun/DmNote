@@ -373,8 +373,15 @@ fn configure_main_window(app: &tauri::AppHandle) {
     thread::spawn(move || {
         for attempt in 0..15 {
             if let Some(window) = handle.get_webview_window("main") {
-                if let Err(err) = apply_main_window_configuration(&handle, window) {
-                    log::warn!("failed to configure main window: {err}");
+                // primary_monitor 조회가 macOS에서 AppKit을 직접 접근하므로 메인 스레드에서 실행
+                let app_handle = handle.clone();
+                let dispatched = handle.run_on_main_thread(move || {
+                    if let Err(err) = apply_main_window_configuration(&app_handle, window) {
+                        log::warn!("failed to configure main window: {err}");
+                    }
+                });
+                if let Err(err) = dispatched {
+                    log::warn!("failed to dispatch main window configuration: {err}");
                 }
                 return;
             }
