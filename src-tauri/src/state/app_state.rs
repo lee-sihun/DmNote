@@ -1,4 +1,3 @@
-#[cfg(debug_assertions)]
 use std::time::Instant;
 use std::{
     collections::HashSet,
