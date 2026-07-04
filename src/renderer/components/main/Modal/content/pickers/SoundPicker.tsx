@@ -69,7 +69,10 @@ const SoundPicker = ({
         return false;
       }
       if (!query) return true;
-      return item.fileName.toLowerCase().includes(query);
+      return (
+        item.fileName.toLowerCase().includes(query) ||
+        (item.displayName?.toLowerCase().includes(query) ?? false)
+      );
     });
   })();
 
@@ -103,9 +106,9 @@ const SoundPicker = ({
                   ? 'bg-[#2E2D33] text-[#FFFFFF]'
                   : 'text-[#DBDEE8] hover:bg-[#26262C]'
               }`}
-              title={item.fileName}
+              title={item.displayName || item.fileName}
             >
-              {item.fileName}
+              {item.displayName || item.fileName}
             </button>
           );
         }}

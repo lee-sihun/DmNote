@@ -268,17 +268,22 @@ const SoundManagerModal = ({
                         className="flex items-center gap-[10px] flex-1 min-w-0 overflow-hidden"
                         style={{ height: '20px' }}
                       >
-                        <button
-                          type="button"
-                          className="flex-shrink-0 flex items-center justify-center transition-colors hover:opacity-80"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleDelete(item);
-                          }}
-                          title={t('tabCss.remove') || '삭제'}
-                        >
-                          <TrashIcon className="w-[14px] h-[15px]" />
-                        </button>
+                        {item.source === 'builtin' ? (
+                          // 내장 사운드는 삭제 불가 — 정렬 유지용 스페이서
+                          <span className="flex-shrink-0 w-[14px]" />
+                        ) : (
+                          <button
+                            type="button"
+                            className="flex-shrink-0 flex items-center justify-center transition-colors hover:opacity-80"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleDelete(item);
+                            }}
+                            title={t('tabCss.remove') || '삭제'}
+                          >
+                            <TrashIcon className="w-[14px] h-[15px]" />
+                          </button>
+                        )}
                         {item.originalPath ? (
                           <button
                             type="button"
@@ -296,7 +301,7 @@ const SoundManagerModal = ({
                           <span
                             className="text-white text-style-2 whitespace-nowrap text-ellipsis overflow-hidden block"
                             style={{ lineHeight: '18px' }}
-                            title={item.fileName}
+                            title={item.displayName || item.fileName}
                           >
                             {item.displayName || item.fileName}
                           </span>
