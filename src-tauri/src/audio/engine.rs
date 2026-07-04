@@ -685,6 +685,7 @@ const ERROR_CODE_DEFAULT_OPEN_FAILED: &str = "defaultOpenFailed";
 
 #[derive(Debug)]
 enum AudioSinkOpenError {
+    #[cfg_attr(all(windows, feature = "asio-backend"), allow(dead_code))]
     AsioUnavailableBuild,
     #[cfg_attr(not(all(windows, feature = "asio-backend")), allow(dead_code))]
     AsioDeviceNotFound,
