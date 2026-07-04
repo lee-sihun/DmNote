@@ -906,6 +906,19 @@ fn open_device_audio_sink(
 
 #[cfg(all(windows, feature = "asio-backend"))]
 fn try_open_asio_sink(device: cpal::Device, buffer_size: u32) -> AudioSinkResult<StreamHandler> {
+    use cpal::traits::DeviceTrait;
+
+    // 일부 드라이버(Realtek ASIO 등)는 클럭 미확립 상태에서 sample rate 0을 보고함.
+    // rodio from_device 내부의 NonZero unwrap 패닉(release는 abort) 방지를 위한 사전 검증
+    let default_config = device
+        .default_output_config()
+        .map_err(|err| AudioSinkOpenError::OpenFailed(anyhow::Error::new(err)))?;
+    if default_config.sample_rate() == 0 || default_config.channels() == 0 {
+        return Err(AudioSinkOpenError::OpenFailed(anyhow::anyhow!(
+            "ASIO 드라이버가 유효한 샘플레이트/채널 구성을 보고하지 않았습니다"
+        )));
+    }
+
     let (error, callback) = stream_error_callback("ASIO stream");
 
     let builder = DeviceSinkBuilder::from_device(device)
