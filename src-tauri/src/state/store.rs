@@ -15,6 +15,7 @@ use crate::models::{
     LayerGroups, SettingsState, StatPositions,
 };
 
+use super::builtin_sounds::seed_builtin_sounds;
 use super::migration::{
     find_legacy_store_file, load_store_from_path, migrate_key_images_to_app_data,
     migrate_local_fonts_to_app_data, normalize_state,
@@ -50,6 +51,10 @@ impl AppStore {
             needs_persist = true;
         }
         if migrate_key_images_to_app_data(&dir, &mut state) {
+            needs_persist = true;
+        }
+        // 내장 키음 시딩
+        if seed_builtin_sounds(&dir, &mut state) {
             needs_persist = true;
         }
 

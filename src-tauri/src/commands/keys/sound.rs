@@ -217,10 +217,17 @@ pub fn sound_list(
         })?;
     }
 
+    // 내장 사운드 우선, 이후 최신순
     items.sort_by(|a, b| {
-        b.modified_at_ms
-            .unwrap_or_default()
-            .cmp(&a.modified_at_ms.unwrap_or_default())
+        let a_builtin = a.source == SoundSource::Builtin;
+        let b_builtin = b.source == SoundSource::Builtin;
+        b_builtin
+            .cmp(&a_builtin)
+            .then_with(|| {
+                b.modified_at_ms
+                    .unwrap_or_default()
+                    .cmp(&a.modified_at_ms.unwrap_or_default())
+            })
             .then_with(|| a.file_name.cmp(&b.file_name))
     });
 
@@ -261,6 +268,16 @@ pub fn sound_delete(
     let sounds_dir = ensure_sounds_dir(&app)?;
     let validated_path = validate_sound_path(&sounds_dir, &sound_path)?;
     let path_key = normalize_path_string(&validated_path);
+
+    // 내장 사운드 삭제 차단 (OBS/플러그인 경유 호출 포함)
+    let is_builtin = state.store.with_state(|s| {
+        s.sound_library
+            .get(&path_key)
+            .is_some_and(|entry| entry.source == SoundSource::Builtin)
+    });
+    if is_builtin {
+        return Err(CommandError::msg("내장 사운드는 삭제할 수 없습니다."));
+    }
 
     // 라이브러리에서 원본 경로를 먼저 조회
     let original_rel_path = state.store.with_state(|s| {
@@ -526,6 +543,16 @@ pub fn sound_update_processed_wav(
     let sounds_dir = ensure_sounds_dir(&app)?;
     let validated_path = validate_sound_path(&sounds_dir, &request.sound_path)?;
     let path_key = normalize_path_string(&validated_path);
+
+    // 내장 사운드 덮어쓰기 차단 (OBS/플러그인 경유 호출 포함)
+    let is_builtin = state.store.with_state(|s| {
+        s.sound_library
+            .get(&path_key)
+            .is_some_and(|entry| entry.source == SoundSource::Builtin)
+    });
+    if is_builtin {
+        return Err(CommandError::msg("내장 사운드는 편집할 수 없습니다."));
+    }
 
     let wav_bytes = BASE64_STANDARD
         .decode(request.wav_base64.trim())
