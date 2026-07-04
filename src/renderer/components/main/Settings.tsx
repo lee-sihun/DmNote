@@ -72,6 +72,7 @@ const KEY_SOUND_OUTPUT_ERROR_KEYS: Record<string, string> = {
 // 재진입 시 '기본 장치 → ASIO' 드롭다운 깜빡임을 방지한다.
 let cachedKeySoundOutput: KeySoundOutputState | null = null;
 let cachedAsioDrivers: string[] = [];
+let cachedAsioDriversLoaded = false;
 
 interface SettingsProps {
   showAlert: (msg: string, confirmText?: string) => void;
@@ -164,6 +165,10 @@ const Settings = ({
   const [keySoundOutput, setKeySoundOutputRaw] =
     useState<KeySoundOutputState | null>(cachedKeySoundOutput);
   const [asioDrivers, setAsioDrivers] = useState<string[]>(cachedAsioDrivers);
+  // 목록 로딩 완료 전에는 드롭다운을 잠그지 않음 (첫 마운트 비활성 깜빡임 방지)
+  const [asioDriversLoaded, setAsioDriversLoaded] = useState(
+    cachedAsioDriversLoaded,
+  );
 
   const setKeySoundOutput = (state: KeySoundOutputState) => {
     cachedKeySoundOutput = state;
@@ -180,7 +185,9 @@ const Settings = ({
         ]);
         if (cancelled) return;
         cachedAsioDrivers = devices.asio;
+        cachedAsioDriversLoaded = true;
         setAsioDrivers(devices.asio);
+        setAsioDriversLoaded(true);
         setKeySoundOutput(state);
       } catch (error) {
         console.error('Failed to load key sound output state', error);
@@ -1153,6 +1160,9 @@ const Settings = ({
                     }
                     align="right"
                     widthClass="max-w-[160px]"
+                    disabled={
+                      asioDriversLoaded && visibleAsioDrivers.length === 0
+                    }
                   />
                 </div>
               </div>

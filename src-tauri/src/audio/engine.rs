@@ -956,11 +956,23 @@ fn list_asio_drivers() -> Vec<String> {
 
     let mut names: Vec<String> = devices
         .filter_map(|device| {
-            device
+            let name = device
                 .description()
                 .ok()
                 .map(|description| description.name().trim().to_string())
-                .filter(|name| !name.is_empty())
+                .filter(|name| !name.is_empty())?;
+            // 불량 드라이버(샘플레이트/채널 0 보고) 제외 — 열어도 재생 불가
+            match device.default_output_config() {
+                Ok(config) if config.sample_rate() > 0 && config.channels() > 0 => Some(name),
+                Ok(_) => {
+                    warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 유효하지 않은 샘플레이트/채널 보고");
+                    None
+                }
+                Err(err) => {
+                    warn!("[KeySound] ASIO 드라이버 '{name}' 목록 제외: 기본 구성 조회 실패 ({err})");
+                    None
+                }
+            }
         })
         .collect();
     names.sort();
