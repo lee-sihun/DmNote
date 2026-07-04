@@ -936,80 +936,6 @@ const Settings = ({
                 />
               </div>
             </div>
-            {/* 키음 출력 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
-              <div
-                className="flex flex-row justify-between items-center h-[40px]"
-                onMouseEnter={() => setHoveredKey('keySoundOutput')}
-                onMouseLeave={() => setHoveredKey(null)}
-              >
-                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
-                  {t('settings.keySoundOutput') || '키 사운드 출력'}
-                </p>
-                <div className="shrink-0">
-                  <Dropdown
-                    options={[
-                      {
-                        value: 'defaultDevice',
-                        label:
-                          t('settings.keySoundOutputDefault') ||
-                          '기본 재생 장치',
-                      },
-                      ...visibleAsioDrivers.map((name) => {
-                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
-                        const failed =
-                          name === requestedAsioDriver && !!keySoundOutputError;
-                        return {
-                          value: `asio:${name}`,
-                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                          label: failed
-                            ? `⚠ ${keySoundOutputError}`
-                            : `ASIO: ${
-                                name.length > 16
-                                  ? `${name.slice(0, 16)}…`
-                                  : name
-                              }`,
-                        };
-                      }),
-                    ]}
-                    value={
-                      keySoundOutput?.requested.kind === 'asio'
-                        ? `asio:${keySoundOutput.requested.driverName}`
-                        : 'defaultDevice'
-                    }
-                    onChange={handleKeySoundOutputChange}
-                    placeholder={
-                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
-                    }
-                    align="right"
-                    widthClass="max-w-[160px]"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p
-                  className={`text-style-3 ${
-                    keySoundOutput?.requested.kind === 'asio'
-                      ? 'text-[#FFFFFF]'
-                      : 'text-[#666666]'
-                  }`}
-                >
-                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                </p>
-                <Dropdown
-                  options={visibleAsioBuffers.map((size) => ({
-                    value: String(size),
-                    label: String(size),
-                  }))}
-                  value={String(requestedAsioBuffer)}
-                  onChange={handleAsioBufferChange}
-                  placeholder={String(DEFAULT_ASIO_BUFFER)}
-                  align="right"
-                  widthClass="w-[70px]"
-                  disabled={keySoundOutput?.requested.kind !== 'asio'}
-                />
-              </div>
-            </div>
             {/* 커스텀 CSS & JS 설정 */}
             <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
               <div
@@ -1178,6 +1104,80 @@ const Settings = ({
                     {t('settings.obsCopyUrl')}
                   </button>
                 </div>
+              </div>
+            </div>
+            {/* 키음 출력 설정 */}
+            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+              <div
+                className="flex flex-row justify-between items-center h-[40px]"
+                onMouseEnter={() => setHoveredKey('keySoundOutput')}
+                onMouseLeave={() => setHoveredKey(null)}
+              >
+                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
+                  {t('settings.keySoundOutput') || '키 사운드 출력'}
+                </p>
+                <div className="shrink-0">
+                  <Dropdown
+                    options={[
+                      {
+                        value: 'defaultDevice',
+                        label:
+                          t('settings.keySoundOutputDefault') ||
+                          '기본 재생 장치',
+                      },
+                      ...visibleAsioDrivers.map((name) => {
+                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
+                        const failed =
+                          name === requestedAsioDriver && !!keySoundOutputError;
+                        return {
+                          value: `asio:${name}`,
+                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                          label: failed
+                            ? `⚠ ${keySoundOutputError}`
+                            : `ASIO: ${
+                                name.length > 16
+                                  ? `${name.slice(0, 16)}…`
+                                  : name
+                              }`,
+                        };
+                      }),
+                    ]}
+                    value={
+                      keySoundOutput?.requested.kind === 'asio'
+                        ? `asio:${keySoundOutput.requested.driverName}`
+                        : 'defaultDevice'
+                    }
+                    onChange={handleKeySoundOutputChange}
+                    placeholder={
+                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
+                    }
+                    align="right"
+                    widthClass="max-w-[160px]"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-row justify-between items-center h-[40px]">
+                <p
+                  className={`text-style-3 ${
+                    keySoundOutput?.requested.kind === 'asio'
+                      ? 'text-[#FFFFFF]'
+                      : 'text-[#666666]'
+                  }`}
+                >
+                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
+                </p>
+                <Dropdown
+                  options={visibleAsioBuffers.map((size) => ({
+                    value: String(size),
+                    label: String(size),
+                  }))}
+                  value={String(requestedAsioBuffer)}
+                  onChange={handleAsioBufferChange}
+                  placeholder={String(DEFAULT_ASIO_BUFFER)}
+                  align="right"
+                  widthClass="w-[70px]"
+                  disabled={keySoundOutput?.requested.kind !== 'asio'}
+                />
               </div>
             </div>
             {/* 기타 설정 */}
