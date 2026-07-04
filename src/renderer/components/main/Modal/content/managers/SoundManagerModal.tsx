@@ -260,8 +260,14 @@ const SoundManagerModal = ({
                     <button
                       key={item.soundPath}
                       type="button"
-                      onClick={() => onSelectSound(item.soundPath)}
-                      className="w-full min-w-0 flex items-center justify-between gap-[8px]"
+                      onClick={() => {
+                        // 내장 사운드는 행 클릭 동작 없음
+                        if (item.source === 'builtin') return;
+                        onSelectSound(item.soundPath);
+                      }}
+                      className={`w-full min-w-0 flex items-center justify-between gap-[8px] ${
+                        item.source === 'builtin' ? 'cursor-default' : ''
+                      }`}
                       style={{ transform: 'translateZ(0)' }}
                     >
                       <div
@@ -269,8 +275,14 @@ const SoundManagerModal = ({
                         style={{ height: '20px' }}
                       >
                         {item.source === 'builtin' ? (
-                          // 내장 사운드는 삭제 불가 — 정렬 유지용 스페이서
-                          <span className="flex-shrink-0 w-[14px]" />
+                          // 내장 사운드는 삭제 불가 — 비활성 아이콘 표시
+                          <button
+                            type="button"
+                            disabled
+                            className="flex-shrink-0 flex items-center justify-center opacity-50 cursor-not-allowed"
+                          >
+                            <TrashIcon className="w-[14px] h-[15px]" />
+                          </button>
                         ) : (
                           <button
                             type="button"
