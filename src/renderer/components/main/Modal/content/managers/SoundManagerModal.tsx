@@ -299,7 +299,7 @@ const SoundManagerModal = ({
                         {item.originalPath ? (
                           <button
                             type="button"
-                            className="appearance-none bg-transparent border-0 p-0 m-0 text-white text-style-2 text-left whitespace-nowrap text-ellipsis overflow-hidden block cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
+                            className="appearance-none bg-transparent border-0 p-0 m-0 flex-1 min-w-0 text-white text-style-2 text-left whitespace-nowrap text-ellipsis overflow-hidden cursor-pointer transition-colors duration-150 hover:text-[#DBDEE8]"
                             style={{ lineHeight: '18px' }}
                             title={t('soundManager.editSound') || '편집'}
                             onClick={(event) => {
