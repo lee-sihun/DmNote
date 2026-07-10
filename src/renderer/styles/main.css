@@ -172,7 +172,8 @@ body.dmn-custom-cursor * {
 }
 
 @supports (animation-timeline: scroll(self)) {
-  .properties-panel-overlay-viewport {
+  .properties-panel-overlay-viewport,
+  .dmn-scroll-fade {
     mask-image: linear-gradient(
       to bottom,
       transparent,

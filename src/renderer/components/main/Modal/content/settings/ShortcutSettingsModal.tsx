@@ -6,7 +6,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { isMac } from '@utils/core/platform';
 // import { TooltipGroup } from "@components/main/Modal/TooltipGroup";
 // import FloatingTooltip from "@components/main/Modal/FloatingTooltip";
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import type {
   ShortcutBinding,
   ShortcutsState,
@@ -119,35 +119,17 @@ const ShortcutSettingsModal = ({
   const safeDraft: ShortcutsState = { ...defaults, ...draft };
 
   const contentRef = React.useRef<HTMLDivElement | null>(null);
-  const [scrollState, setScrollState] = React.useState({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
-  const [skipShadowTransition, setSkipShadowTransition] = React.useState(true);
   const [containerHeight, setContainerHeight] = React.useState<number | null>(
     null,
   );
   const [hasOverflow, setHasOverflow] = React.useState(false);
   const isFirstRender = React.useRef(true);
 
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const next = getScrollShadowState(el, contentRef.current);
-    setScrollState((prev) =>
-      prev.hasTopShadow === next.hasTopShadow &&
-      prev.hasBottomShadow === next.hasBottomShadow
-        ? prev
-        : next,
-    );
-  };
-
   const {
     scrollContainerRef: scrollRef,
     wrapperElement,
     scrollbarWidth,
-  } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
+  } = useLenis();
 
   React.useEffect(() => {
     if (isOpen) {
@@ -159,7 +141,6 @@ const ShortcutSettingsModal = ({
 
   React.useEffect(() => {
     if (!isOpen) return;
-    setSkipShadowTransition(true);
 
     const el = wrapperElement;
     const inner = contentRef.current;
@@ -176,18 +157,13 @@ const ShortcutSettingsModal = ({
       );
     };
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateScrollState(el);
-      updateHeight();
-    });
+    const resizeObserver = new ResizeObserver(updateHeight);
     if (inner) resizeObserver.observe(inner);
     resizeObserver.observe(el);
 
-    updateScrollState(el);
     updateHeight();
 
     const rafId = requestAnimationFrame(() => {
-      setSkipShadowTransition(false);
       isFirstRender.current = false;
     });
 
@@ -383,16 +359,8 @@ const ShortcutSettingsModal = ({
       >
         <div className="relative">
           <div
-            className={`absolute top-0 left-0 ${
-              hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-fast'
-            } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
-          />
-
-          <div
             ref={scrollRef}
-            className="overflow-y-auto modal-content-scroll pr-[14px]"
+            className="overflow-y-auto modal-content-scroll dmn-scroll-fade pr-[14px]"
             style={{
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
@@ -414,15 +382,12 @@ const ShortcutSettingsModal = ({
                 : 'height 100ms ease-in-out',
             }}
           >
-            <div ref={contentRef} className="flex flex-col gap-[28px] py-[4px]">
-              <div className="flex flex-col gap-[19px]">
-                <div className="flex items-center gap-[10px]">
-                  <p className="text-body font-medium text-fg-muted uppercase tracking-wider whitespace-nowrap">
-                    {t('shortcutSetting.sectionOverlay')}
-                  </p>
-                  <div className="flex-1 h-[1px] bg-line" />
-                </div>
-                <div className="flex flex-col gap-[19px]">
+            <div ref={contentRef} className="flex flex-col gap-[16px] py-[4px]">
+              <div className="flex flex-col gap-[8px]">
+                <p className="px-[2px] text-caption text-fg-faint uppercase tracking-wider">
+                  {t('shortcutSetting.sectionOverlay')}
+                </p>
+                <PropertySection>
                   {overlayActions.map((action) => {
                     const binding = safeDraft[action.key];
                     const isRowListening = listeningKey === action.key;
@@ -434,7 +399,7 @@ const ShortcutSettingsModal = ({
                     return (
                       <div
                         key={action.key}
-                        className="flex items-center justify-between"
+                        className="flex items-center justify-between min-h-[32px]"
                       >
                         {/* 툴팁 비활성화 */}
                         {/*
@@ -468,17 +433,14 @@ const ShortcutSettingsModal = ({
                       </div>
                     );
                   })}
-                </div>
+                </PropertySection>
               </div>
 
-              <div className="flex flex-col gap-[19px]">
-                <div className="flex items-center gap-[10px]">
-                  <p className="text-body font-medium text-fg-muted uppercase tracking-wider whitespace-nowrap">
-                    {t('shortcutSetting.sectionCanvas')}
-                  </p>
-                  <div className="flex-1 h-[1px] bg-line" />
-                </div>
-                <div className="flex flex-col gap-[19px]">
+              <div className="flex flex-col gap-[8px]">
+                <p className="px-[2px] text-caption text-fg-faint uppercase tracking-wider">
+                  {t('shortcutSetting.sectionCanvas')}
+                </p>
+                <PropertySection>
                   {canvasActions.map((action) => {
                     const binding = safeDraft[action.key];
                     const isRowListening = listeningKey === action.key;
@@ -490,7 +452,7 @@ const ShortcutSettingsModal = ({
                     return (
                       <div
                         key={action.key}
-                        className="flex items-center justify-between"
+                        className="flex items-center justify-between min-h-[32px]"
                       >
                         {/* 툴팁 비활성화 */}
                         {/*
@@ -524,18 +486,10 @@ const ShortcutSettingsModal = ({
                       </div>
                     );
                   })}
-                </div>
+                </PropertySection>
               </div>
             </div>
           </div>
-
-          <div
-            className={`absolute bottom-0 left-0 ${
-              hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-fast'
-            } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
-          />
         </div>
 
         {error ? (
