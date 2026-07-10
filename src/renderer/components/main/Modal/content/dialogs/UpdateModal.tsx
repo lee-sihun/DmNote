@@ -202,7 +202,7 @@ const UpdateModal = ({
                 type="checkbox"
                 checked={skipChecked}
                 onChange={(e) => setSkipChecked(e.target.checked)}
-                className="w-[14px] h-[14px] rounded-[3px]-strong bg-inset 
+                className="w-[14px] h-[14px] rounded-[3px] border border-line-strong bg-inset
                            checked:bg-accent checked:border-accent cursor-pointer
                            appearance-none relative
                            after:content-[''] after:absolute after:hidden

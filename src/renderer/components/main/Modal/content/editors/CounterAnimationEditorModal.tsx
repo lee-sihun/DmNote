@@ -867,7 +867,7 @@ const CounterAnimationEditorModal = ({
                 placeholder={
                   t('counterSetting.animationNamePlaceholder') || '모션 이름'
                 }
-                className="w-full h-[32px] px-[12px] rounded-[8px] bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
+                className="w-full h-[32px] px-[12px] rounded-[8px] bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
               />
             </div>
 

@@ -460,9 +460,7 @@ const ShortcutSettingsModal = ({
                             }));
                           }}
                           className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
-                            isRowListening
-                              ? 'border-accent'
-                              : 'border-line'
+                            isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >
                           {display}
@@ -518,9 +516,7 @@ const ShortcutSettingsModal = ({
                             }));
                           }}
                           className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
-                            isRowListening
-                              ? 'border-accent'
-                              : 'border-line'
+                            isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >
                           {display}

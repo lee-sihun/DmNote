@@ -250,7 +250,7 @@ export default function CommonListPickerPopup<T>({
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:border-accent outline-none transition-colors duration-fast"
+          className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
         />
 
         {filterOptions && filterValue !== undefined && onFilterChange ? (

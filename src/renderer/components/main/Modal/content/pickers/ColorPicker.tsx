@@ -1416,9 +1416,7 @@ function GradientInput({
           }}
           placeholder={label}
           className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-style-4 text-fg uppercase pt-[1px] leading-[23px] ${
-            selected
-              ? 'border-accent'
-              : 'border-line focus:border-accent'
+            selected ? 'shadow-focus-ring' : 'focus:shadow-focus-ring'
           }`}
         />
       </div>
@@ -1442,7 +1440,7 @@ function GradientInput({
               }
             }}
             className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px] ${
-              rightFocused ? 'border-accent' : ''
+              ''
             }`}
             title={rightTitle}
           />

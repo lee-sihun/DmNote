@@ -1046,7 +1046,7 @@ const SoundTrimModal = ({
               value={soundName}
               onChange={(e) => setSoundName(e.target.value)}
               placeholder={t('soundTrimModal.namePlaceholder')}
-              className="w-full h-[30px] px-[10px] rounded-md bg-inset text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent transition-colors"
+              className="w-full h-[30px] px-[10px] rounded-md bg-inset text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:shadow-focus-ring transition-shadow duration-fast"
               disabled={isSaving}
             />
           </div>
@@ -1132,7 +1132,7 @@ const SoundTrimModal = ({
           {!isEditMode ? (
             <button
               type="button"
-              className="text-caption leading-[14px] text-accent-hover hover:text-accent-hover transition-colors"
+              className="text-caption leading-[14px] text-accent hover:text-accent-hover transition-colors"
               onClick={selectFile}
               disabled={isDecoding || isSaving}
             >

@@ -123,7 +123,7 @@ const ManagerModalLayout = ({
         <div className="relative">
           {/* 상단 그림자 */}
           <div
-            className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
+            className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-glass-heavy to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
               scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -149,7 +149,7 @@ const ManagerModalLayout = ({
 
           {/* 하단 그림자 */}
           <div
-            className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
+            className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-glass-heavy to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
               scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
             }`}
           />

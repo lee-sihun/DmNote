@@ -590,7 +590,7 @@ export default function App() {
   });
 
   return (
-    <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px]-strong">
+    <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px]">
       <TitleBar />
       <div className="flex-1 bg-panel overflow-hidden flex">
         {isSettingsOpen ? (
