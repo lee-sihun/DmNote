@@ -15,7 +15,7 @@ const CheckboxRow: React.FC<{
   onChange: () => void;
 }> = ({ label, checked, onChange }) => (
   <div className="flex justify-between items-center w-full h-[23px]">
-    <p className="text-white text-style-2">{label}</p>
+    <p className="text-fg-muted text-label">{label}</p>
     <Checkbox checked={checked} onChange={onChange} />
   </div>
 );

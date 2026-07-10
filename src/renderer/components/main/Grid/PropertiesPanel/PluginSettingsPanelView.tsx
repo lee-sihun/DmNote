@@ -52,7 +52,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
           <span className="text-fg text-style-2">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
           </span>
-          <span className="text-fg-faint text-style-4 truncate max-w-[150px]">
+          <span className="text-fg-faint text-body truncate max-w-[150px]">
             {pluginSettingsPanel.pluginId}
           </span>
         </div>

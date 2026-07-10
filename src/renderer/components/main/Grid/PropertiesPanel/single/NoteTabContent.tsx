@@ -433,7 +433,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
     <>
       {/* 노트 효과 표시 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
         </p>
         <Checkbox
@@ -449,7 +449,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
       {/* Y축 자동 보정 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
         </p>
         <Checkbox
@@ -685,7 +685,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
       {/* 글로우 효과 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteGlow') || '글로우 효과'}
         </p>
         <Checkbox

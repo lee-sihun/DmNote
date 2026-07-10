@@ -439,12 +439,12 @@ const ShortcutSettingsModal = ({
                         {/* 툴팁 비활성화 */}
                         {/*
                           <FloatingTooltip content={action.help}>
-                            <span className="text-style-2 text-white cursor-help">
+                            <span className="text-body text-fg cursor-help">
                               {action.label}
                             </span>
                           </FloatingTooltip>
                         */}
-                        <span className="text-style-2 text-white">
+                        <span className="text-body text-fg">
                           {action.label}
                         </span>
                         <button
@@ -459,7 +459,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >
@@ -495,12 +495,12 @@ const ShortcutSettingsModal = ({
                         {/* 툴팁 비활성화 */}
                         {/*
                           <FloatingTooltip content={action.help}>
-                            <span className="text-style-2 text-white cursor-help">
+                            <span className="text-body text-fg cursor-help">
                               {action.label}
                             </span>
                           </FloatingTooltip>
                         */}
-                        <span className="text-style-2 text-white">
+                        <span className="text-body text-fg">
                           {action.label}
                         </span>
                         <button
@@ -515,7 +515,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >

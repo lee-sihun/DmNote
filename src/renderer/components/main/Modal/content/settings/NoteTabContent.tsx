@@ -311,7 +311,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
       <div className="flex flex-col gap-[19px]">
         {/* 색상 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('keySetting.noteColor')}</p>
+          <p className="text-fg-muted text-label">{t('keySetting.noteColor')}</p>
           <button
             ref={colorButtonRef}
             type="button"
@@ -332,7 +332,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
         {/* 노트 투명도 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('keySetting.noteOpacity')}
           </p>
           <input
@@ -356,7 +356,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
         {/* 글로우 */}
         <div className="flex flex-col gap-[19px]">
           <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlow')}
             </p>
             <Checkbox checked={state.glowEnabled} onChange={handleGlowToggle} />
@@ -367,7 +367,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowColor')}
             </p>
             <button
@@ -399,7 +399,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowSize')}
             </p>
             <input
@@ -425,7 +425,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               !state.glowEnabled ? 'opacity-40' : ''
             }`}
           >
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.noteGlowOpacity')}
             </p>
             <input
@@ -450,7 +450,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
         {/* 노트 효과 사용 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('keySetting.noteEffectEnabled')}
           </p>
           <Checkbox
@@ -461,7 +461,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
 
         {/* Y축 자동 보정 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('keySetting.noteAutoYCorrection')}
           </p>
           <Checkbox

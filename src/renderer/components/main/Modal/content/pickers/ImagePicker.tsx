@@ -247,11 +247,11 @@ const ImagePicker = ({
         </div>
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-line -mx-[8px]" />
+        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
 
         {/* 키 투명화 토글 */}
         <div className="flex justify-between items-center w-full">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('imagePicker.transparent')}
           </p>
           <Checkbox
@@ -263,7 +263,7 @@ const ImagePicker = ({
         {/* 이미지 맞춤 */}
         {showImageFit && (
           <div className="flex justify-between items-center w-full">
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('propertiesPanel.imageFit') || '표시'}
             </p>
             <Dropdown
@@ -292,7 +292,7 @@ const ImagePicker = ({
         )}
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-line -mx-[8px]" />
+        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
 
         {/* 이미지 초기화 버튼 */}
         <button

@@ -229,12 +229,12 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
       <div className="flex flex-col gap-[19px]">
         {/* 키 매핑 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('keySetting.keyMapping')}
           </p>
           <button
             onClick={handleKeyListen}
-            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
               state.isListening ? 'shadow-focus-ring' : ''
             } text-fg text-style-2`}
           >
@@ -246,7 +246,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
 
         {/* 키 사이즈 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('keySetting.keySize')}</p>
+          <p className="text-fg-muted text-label">{t('keySetting.keySize')}</p>
           <div className="flex items-center gap-[10.5px]">
             <div
               className={`relative w-[54px] h-[23px] bg-inset rounded-md ${
@@ -309,7 +309,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
 
         {/* 커스텀 이미지 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('keySetting.customImage')}
           </p>
           <button
@@ -332,7 +332,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
         {/* 클래스 이름 - 커스텀 CSS 활성화 시에만 표시 */}
         {useCustomCSS && (
           <div className="flex justify-between w-full items-center">
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('keySetting.className')}
             </p>
             <input

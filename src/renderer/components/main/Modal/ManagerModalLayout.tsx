@@ -156,7 +156,7 @@ const ManagerModalLayout = ({
         </div>
 
         {/* 구분선 */}
-        <div className="h-px bg-line my-[20px] -ml-[20px] -mr-[6px]" />
+        <div className="h-px bg-white/[0.06] my-[20px] -ml-[20px] -mr-[6px]" />
 
         {/* 하단 버튼 */}
         <div className="flex items-center gap-[8px] pr-[14px]">{footer}</div>

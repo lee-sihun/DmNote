@@ -210,13 +210,13 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
               </>
             )}
             {!hasSinglePluginSelection && (
-              <p className="text-fg-faint text-style-4 text-center">
+              <p className="text-fg-faint text-body text-center">
                 {t('propertiesPanel.pluginMultiSelection') ||
                   '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'}
               </p>
             )}
             {hasSinglePluginSelection && showModalHint && (
-              <p className="text-fg-faint text-style-4 text-center">
+              <p className="text-fg-faint text-body text-center">
                 {t('propertiesPanel.pluginModalHint') ||
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
@@ -458,7 +458,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
             {(singleGraphPosition.graphType || 'line') === 'line' && (
               <div className="flex justify-between items-center w-full h-[23px]">
-                <p className="text-white text-style-2">
+                <p className="text-fg-muted text-label">
                   {t('propertiesPanel.graphShowAverageLine') ||
                     'Show Average Line'}
                 </p>
@@ -512,7 +512,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             </PropertyRow>
 
             <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-white text-style-2">
+              <p className="text-fg-muted text-label">
                 {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
               </p>
               <Checkbox
@@ -610,7 +610,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 type="button"
                 className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                   showGraphImagePicker ? 'shadow-focus-ring' : ''
-                } text-fg text-style-4`}
+                } text-fg text-body`}
                 onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
               >
                 {t('propertiesPanel.configure') || 'Configure'}
@@ -622,7 +622,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 <SectionDivider />
 
                 <div className="flex justify-between items-center w-full h-[23px]">
-                  <p className="text-white text-style-2">
+                  <p className="text-fg-muted text-label">
                     {t('propertiesPanel.useInlineStyles') ||
                       '인라인 스타일 우선'}
                   </p>
@@ -1038,7 +1038,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setCapturing((v) => !v)}
-                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
                   capturing ? 'shadow-focus-ring' : ''
                 } text-fg text-style-2`}
                 title={singleKnobPosition.axisId || ''}
@@ -1126,7 +1126,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             </PropertyRow>
 
             <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-white text-style-2">
+              <p className="text-fg-muted text-label">
                 {t('propertiesPanel.knobReverse') || '방향 반전'}
               </p>
               <Checkbox
@@ -1220,7 +1220,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 type="button"
                 className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                   showImagePicker ? 'shadow-focus-ring' : ''
-                } text-fg text-style-4`}
+                } text-fg text-body`}
                 onClick={() => setShowImagePicker(!showImagePicker)}
               >
                 {t('propertiesPanel.configure') || 'Configure'}

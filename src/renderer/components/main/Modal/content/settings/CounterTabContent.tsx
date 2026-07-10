@@ -286,7 +286,7 @@ const CounterTabContent = forwardRef<
     <div className="flex flex-col gap-[19px]">
       {/* 배치 영역 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('counterSetting.placementArea')}
         </p>
         <Dropdown
@@ -298,7 +298,7 @@ const CounterTabContent = forwardRef<
 
       {/* 정렬 방향 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('counterSetting.alignDirection')}
         </p>
         <div ref={alignDropdownWrapperRef}>
@@ -313,7 +313,7 @@ const CounterTabContent = forwardRef<
       {/* 정렬 방식 (내부 배치 전용) */}
       {state.placement === 'inside' && (
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('counterSetting.alignMode')}
           </p>
           <Dropdown
@@ -326,7 +326,7 @@ const CounterTabContent = forwardRef<
 
       {/* 간격 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('counterSetting.gap')}</p>
+        <p className="text-fg-muted text-label">{t('counterSetting.gap')}</p>
         <input
           type="text"
           value={state.displayGap}
@@ -348,7 +348,7 @@ const CounterTabContent = forwardRef<
 
       {/* 채우기 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('counterSetting.fill')}</p>
+        <p className="text-fg-muted text-label">{t('counterSetting.fill')}</p>
         <div ref={fillGroupRef} className="flex items-center gap-[8px]">
           <button
             ref={fillIdleBtnRef}
@@ -381,7 +381,7 @@ const CounterTabContent = forwardRef<
 
       {/* 외곽선 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('counterSetting.stroke')}</p>
+        <p className="text-fg-muted text-label">{t('counterSetting.stroke')}</p>
         <div ref={strokeGroupRef} className="flex items-center gap-[8px]">
           <button
             ref={strokeIdleBtnRef}
@@ -416,7 +416,7 @@ const CounterTabContent = forwardRef<
 
       {/* 카운터 사용 */}
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('counterSetting.counterEnabled')}
         </p>
         <Checkbox

@@ -142,13 +142,13 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
       >
         {/* CSS 사용 여부 토글 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('tabCss.enableCss')}</p>
+          <p className="text-fg-muted text-label">{t('tabCss.enableCss')}</p>
           <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
         </div>
 
         {/* CSS 파일 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('tabCss.cssFile')}</p>
+          <p className="text-fg-muted text-label">{t('tabCss.cssFile')}</p>
           <div className="flex items-center gap-[8px]">
             <button
               type="button"

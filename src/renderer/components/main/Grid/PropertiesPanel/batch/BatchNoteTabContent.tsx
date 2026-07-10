@@ -80,7 +80,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
     <>
       {/* 노트 효과 표시 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
         </p>
         <Checkbox
@@ -97,7 +97,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
       {/* Y축 자동 보정 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
         </p>
         <Checkbox
@@ -168,7 +168,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
       {/* 노트 정렬 */}
       <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
         {getMixedValue((pos) => pos.noteAlignment, 'center').isMixed && (
-          <span className="text-fg-faint text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-body italic">Mixed</span>
         )}
         <Dropdown
           options={[
@@ -373,7 +373,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
 
       {/* 글로우 효과 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('keySetting.noteGlow') || '글로우 효과'}
         </p>
         <Checkbox

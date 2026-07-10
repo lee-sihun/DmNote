@@ -207,7 +207,7 @@ const NoteSetting = ({
   const renderNoteTab = () => (
     <div className="flex flex-col gap-[12px]">
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('noteSetting.frameLimit')}</p>
+        <p className="text-fg-muted text-label">{t('noteSetting.frameLimit')}</p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.frameLimit.min}
@@ -224,7 +224,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('noteSetting.speed')}</p>
+        <p className="text-fg-muted text-label">{t('noteSetting.speed')}</p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.speed.min}
@@ -237,7 +237,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('noteSetting.trackHeight')}
         </p>
         <input
@@ -256,7 +256,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('noteSetting.reverseEffect')}
         </p>
         <Checkbox
@@ -266,7 +266,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center min-h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('noteSetting.fade')}
           {reverse ? ' (R)' : ''}
         </p>
@@ -365,7 +365,7 @@ const NoteSetting = ({
   const renderAdvancedTab = () => (
     <div className="flex flex-col gap-[12px]">
       <div className="flex justify-between w-full items-center h-[23px]">
-        <p className="text-white text-style-2">{t('laboratory.delayToggle')}</p>
+        <p className="text-fg-muted text-label">{t('laboratory.delayToggle')}</p>
         <Checkbox
           checked={delayedNoteEnabled}
           onChange={() => setDelayedNoteEnabled((prev) => !prev)}
@@ -373,7 +373,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('laboratory.minLength')}</p>
+        <p className="text-fg-muted text-label">{t('laboratory.minLength')}</p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.min}
@@ -395,7 +395,7 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('laboratory.threshold')}</p>
+        <p className="text-fg-muted text-label">{t('laboratory.threshold')}</p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.min}
@@ -419,7 +419,7 @@ const NoteSetting = ({
       <div className="w-full h-[1px] bg-line" />
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-white text-style-2">{t('laboratory.keyDelay')}</p>
+        <p className="text-fg-muted text-label">{t('laboratory.keyDelay')}</p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.min}
@@ -457,7 +457,7 @@ const NoteSetting = ({
         className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {title && <p className="text-white text-style-2 mb-[10px]">{title}</p>}
+        {title && <p className="text-fg-muted text-label mb-[10px]">{title}</p>}
         <TabSwitch
           tabs={[
             { id: NOTE_TAB, label: t('keySetting.tabNote') },

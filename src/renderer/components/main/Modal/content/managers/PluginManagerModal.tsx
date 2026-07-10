@@ -98,7 +98,7 @@ export const PluginManagerModal = ({
               >
                 <TrashIcon className="w-[14px] h-[15px]" />
               </button>
-              <span className="text-white text-style-2">{plugin.name}</span>
+              <span className="text-fg-muted text-label">{plugin.name}</span>
             </div>
             <div className="flex items-center justify-center w-[27px] h-[21px]">
               <Checkbox

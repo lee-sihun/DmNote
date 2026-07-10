@@ -87,7 +87,7 @@ const LaboratoryModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">
+          <p className="text-fg-muted text-label">
             {t('laboratory.delayToggle')}
           </p>
           <Checkbox
@@ -97,7 +97,7 @@ const LaboratoryModal = ({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('laboratory.minLength')}</p>
+          <p className="text-fg-muted text-label">{t('laboratory.minLength')}</p>
           <input
             type="number"
             min={1}
@@ -116,7 +116,7 @@ const LaboratoryModal = ({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('laboratory.threshold')}</p>
+          <p className="text-fg-muted text-label">{t('laboratory.threshold')}</p>
           <input
             type="number"
             min={0}
@@ -139,7 +139,7 @@ const LaboratoryModal = ({
 
         {/* 키 딜레이 설정 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-white text-style-2">{t('laboratory.keyDelay')}</p>
+          <p className="text-fg-muted text-label">{t('laboratory.keyDelay')}</p>
           <div className="flex items-center gap-[8px]">
             <input
               type="number"

@@ -2099,7 +2099,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     if (!schema || Object.keys(schema).length === 0) {
       return (
-        <p className="text-fg-faint text-style-4 text-center">
+        <p className="text-fg-faint text-body text-center">
           {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
         </p>
       );
@@ -2249,7 +2249,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             key={key}
             className="flex justify-between items-center w-full h-[23px]"
           >
-            <p className="text-white text-style-2">{labelText}</p>
+            <p className="text-fg-muted text-label">{labelText}</p>
             <div className="flex items-center gap-[10.5px]">{control}</div>
           </div>
         );

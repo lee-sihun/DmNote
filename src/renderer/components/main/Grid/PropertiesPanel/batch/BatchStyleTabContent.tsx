@@ -542,7 +542,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 'rgba(46, 46, 47, 0.9)',
               ).isMixed
         ) ? (
-          <span className="text-fg-faint text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-body italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
@@ -585,7 +585,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 'rgba(113, 113, 113, 0.9)',
               ).isMixed
         ) ? (
-          <span className="text-fg-faint text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-body italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
@@ -618,7 +618,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {/* 테두리 두께 */}
       <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
         {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
-          <span className="text-fg-faint text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-body italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderWidth, 3).value}
@@ -636,7 +636,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {/* 모서리 반경 */}
       <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
         {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
-          <span className="text-fg-faint text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-body italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderRadius, 10).value}
@@ -658,7 +658,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           type="button"
           className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showBatchImagePicker ? 'shadow-focus-ring' : ''
-          } text-fg text-style-4`}
+          } text-fg text-body`}
           onClick={onToggleBatchImagePicker}
         >
           {t('propertiesPanel.configure') || '설정하기'}
@@ -697,14 +697,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           {/* 폰트 */}
           <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
             {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
-              <span className="text-fg-faint text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-body italic">Mixed</span>
             ) : null}
             <button
               ref={fontButtonRef}
               type="button"
               className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                 showFontPicker ? 'shadow-focus-ring' : ''
-              } text-fg text-style-4`}
+              } text-fg text-body`}
               onClick={() => setShowFontPicker(!showFontPicker)}
             >
               {t('propertiesPanel.configure') || '설정하기'}
@@ -714,7 +714,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           {/* 글꼴 크기 */}
           <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
             {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
-              <span className="text-fg-faint text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-body italic">Mixed</span>
             ) : null}
             <NumberInput
               value={getMixedValue((pos) => pos.fontSize, 14).value}
@@ -742,7 +742,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                     'rgba(121, 121, 121, 0.9)',
                   ).isMixed
             ) ? (
-              <span className="text-fg-faint text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-body italic">Mixed</span>
             ) : null}
             <ColorInput
               value={
@@ -812,7 +812,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
           {/* CSS 우선순위 토글 */}
           <div className="flex justify-between items-center w-full h-[23px]">
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
@@ -868,7 +868,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 }
               >
                 {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
-                  <span className="text-fg-faint text-style-4 italic">
+                  <span className="text-fg-faint text-body italic">
                     Mixed
                   </span>
                 ) : null}
@@ -888,7 +888,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
               <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
                 {soundMixedValue((pos) => pos.soundPath, '').isMixed ? (
-                  <span className="text-fg-faint text-style-4 italic">
+                  <span className="text-fg-faint text-body italic">
                     Mixed
                   </span>
                 ) : null}
@@ -897,7 +897,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   type="button"
                   className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                     showSoundPicker ? 'shadow-focus-ring' : ''
-                  } text-fg text-style-4`}
+                  } text-fg text-body`}
                   onClick={() => setShowSoundPicker((prev) => !prev)}
                 >
                   {t('propertiesPanel.configure') || '설정하기'}
@@ -908,7 +908,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
               >
                 {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-                  <span className="text-fg-faint text-style-4 italic">
+                  <span className="text-fg-faint text-body italic">
                     Mixed
                   </span>
                 ) : null}

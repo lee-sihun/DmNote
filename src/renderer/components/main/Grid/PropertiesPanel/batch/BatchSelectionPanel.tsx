@@ -579,7 +579,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-fg-faint text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedBatchStyleElements.length})
               </span>
             )}
@@ -639,7 +639,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                       >
                         {graphTypeState.isMixed ? (
-                          <span className="text-fg-faint text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -656,7 +656,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
 
                       {hasLineGraph && (
                         <div className="flex justify-between items-center w-full h-[23px]">
-                          <p className="text-white text-style-2">
+                          <p className="text-fg-muted text-label">
                             {t('propertiesPanel.graphShowAverageLine') ||
                               'Show Average Line'}
                           </p>
@@ -675,7 +675,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                       >
                         {graphSpeedState.isMixed ? (
-                          <span className="text-fg-faint text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -703,7 +703,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         label={t('propertiesPanel.graphColor') || 'Graph Color'}
                       >
                         {graphColorState.isMixed ? (
-                          <span className="text-fg-faint text-style-4 italic">
+                          <span className="text-fg-faint text-body italic">
                             Mixed
                           </span>
                         ) : null}
@@ -721,13 +721,13 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       </PropertyRow>
 
                       <div className="flex justify-between items-center w-full h-[23px]">
-                        <p className="text-white text-style-2">
+                        <p className="text-fg-muted text-label">
                           {t('propertiesPanel.graphAnimation') ||
                             'Graph Animation'}
                         </p>
                         <div className="flex items-center gap-[6px]">
                           {graphAnimationState.isMixed ? (
-                            <span className="text-fg-faint text-style-4 italic">
+                            <span className="text-fg-faint text-body italic">
                               Mixed
                             </span>
                           ) : null}
@@ -1159,7 +1159,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-fg-faint text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedGraphElements.length})
               </span>
             )}
@@ -1200,7 +1200,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     label={t('propertiesPanel.graphShape') || 'Graph Shape'}
                   >
                     {graphTypeState.isMixed ? (
-                      <span className="text-fg-faint text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1217,7 +1217,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
 
                   {hasLineGraph && (
                     <div className="flex justify-between items-center w-full h-[23px]">
-                      <p className="text-white text-style-2">
+                      <p className="text-fg-muted text-label">
                         {t('propertiesPanel.graphShowAverageLine') ||
                           'Show Average Line'}
                       </p>
@@ -1236,7 +1236,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
                   >
                     {graphSpeedState.isMixed ? (
-                      <span className="text-fg-faint text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1261,7 +1261,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     label={t('propertiesPanel.graphColor') || 'Graph Color'}
                   >
                     {graphColorState.isMixed ? (
-                      <span className="text-fg-faint text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1277,12 +1277,12 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </PropertyRow>
 
                   <div className="flex justify-between items-center w-full h-[23px]">
-                    <p className="text-white text-style-2">
+                    <p className="text-fg-muted text-label">
                       {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {graphAnimationState.isMixed ? (
-                        <span className="text-fg-faint text-style-4 italic">
+                        <span className="text-fg-faint text-body italic">
                           Mixed
                         </span>
                       ) : null}
@@ -1527,7 +1527,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               </span>
             )}
             {!selectedGroupInfo && (
-              <span className="text-fg-faint text-style-4">
+              <span className="text-fg-faint text-body">
                 ({selectedKnobElements.length})
               </span>
             )}
@@ -1568,7 +1568,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                     label={t('propertiesPanel.knobSensitivity') || '민감도'}
                   >
                     {sensitivityState.isMixed ? (
-                      <span className="text-fg-faint text-style-4 italic">
+                      <span className="text-fg-faint text-body italic">
                         Mixed
                       </span>
                     ) : null}
@@ -1589,12 +1589,12 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                   </PropertyRow>
 
                   <div className="flex justify-between items-center w-full h-[23px]">
-                    <p className="text-white text-style-2">
+                    <p className="text-fg-muted text-label">
                       {t('propertiesPanel.knobReverse') || '방향 반전'}
                     </p>
                     <div className="flex items-center gap-[6px]">
                       {reverseState.isMixed ? (
-                        <span className="text-fg-faint text-style-4 italic">
+                        <span className="text-fg-faint text-body italic">
                           Mixed
                         </span>
                       ) : null}

@@ -163,7 +163,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
     <>
       {/* 카운터 사용 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('counterSetting.counterEnabled') || '카운터 표시'}
         </p>
         <Checkbox
@@ -302,7 +302,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           type="button"
           className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             pickerFor === 'font' ? 'shadow-focus-ring' : ''
-          } text-fg text-style-4`}
+          } text-fg text-body`}
           onClick={() => handlePickerToggle('font')}
         >
           {t('propertiesPanel.configure') || '설정하기'}
@@ -345,7 +345,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
       {/* 카운터 애니메이션 */}
       <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-white text-style-2">
+        <p className="text-fg-muted text-label">
           {t('counterSetting.animationEnabled') || '카운터 애니메이션'}
         </p>
         <Checkbox
@@ -367,7 +367,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           type="button"
           className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showAnimationPicker ? 'shadow-focus-ring' : ''
-          } text-fg text-style-4`}
+          } text-fg text-body`}
           onClick={() => setShowAnimationPicker((prev) => !prev)}
         >
           {t('propertiesPanel.configure') || '설정하기'}

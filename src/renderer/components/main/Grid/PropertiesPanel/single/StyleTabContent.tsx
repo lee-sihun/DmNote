@@ -410,7 +410,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           <PropertyRow label={t('propertiesPanel.keyMapping') || '키 매핑'}>
             <button
               onClick={onKeyListen}
-              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
                 isListening ? 'shadow-focus-ring' : ''
               } text-fg text-style-2`}
             >
@@ -551,7 +551,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             type="button"
             className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
               showImagePicker ? 'shadow-focus-ring' : ''
-            } text-fg text-style-4`}
+            } text-fg text-body`}
             onClick={onToggleImagePicker}
           >
             {t('propertiesPanel.configure') || '설정하기'}
@@ -581,7 +581,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           type="button"
           className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             pickerFor === 'font' ? 'shadow-focus-ring' : ''
-          } text-fg text-style-4`}
+          } text-fg text-body`}
           onClick={() => handlePickerToggle('font')}
         >
           {t('propertiesPanel.configure') || '설정하기'}
@@ -647,7 +647,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
           {/* CSS 우선순위 토글 */}
           <div className="flex justify-between items-center w-full h-[23px]">
-            <p className="text-white text-style-2">
+            <p className="text-fg-muted text-label">
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
             <Checkbox
@@ -697,7 +697,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               type="button"
               className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                 showSoundPicker ? 'shadow-focus-ring' : ''
-              } text-fg text-style-4`}
+              } text-fg text-body`}
               onClick={() => {
                 setPickerFor(null);
                 setShowSoundPicker((prev) => !prev);
