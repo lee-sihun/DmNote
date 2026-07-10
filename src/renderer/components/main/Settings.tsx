@@ -590,10 +590,10 @@ const Settings = ({
   };
 
   const actionButtonClass = (enabled: boolean): string =>
-    'py-[4px] px-[8px] border-[1px] rounded-[7px] text-style-2 transition-colors ' +
+    'inline-flex items-center h-[24px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
     (enabled
-      ? 'bg-[#2A2A31] border-[#3A3944] text-[#DBDEE8] hover:bg-[#34343c]'
-      : 'bg-[#222228] border-[#31303C] text-[#44464E] cursor-not-allowed');
+      ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1] active:bg-white/[0.13]'
+      : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed');
 
   const handleNoteEffectChange = async (): Promise<void> => {
     const next: boolean = !noteEffect;
@@ -815,24 +815,24 @@ const Settings = ({
     <div className="relative w-full h-full">
       <div
         ref={scrollContainerRef}
-        className={`settings-content-scroll w-full h-full flex flex-col py-[10px] px-[10px] gap-[19px] overflow-y-auto bg-[#0B0B0D] ${
+        className={`settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-app ${
           isScrollHovered ? 'show-scrollbar' : ''
         }`}
         onMouseEnter={() => setIsScrollHovered(true)}
         onMouseLeave={() => setIsScrollHovered(false)}
       >
         {/* 설정 */}
-        <div className="flex flex-row gap-[19px]">
-          <div className="flex flex-col gap-[10px] w-[348px]">
+        <div className="flex flex-row gap-[12px]">
+          <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey('overlayLock')}
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleOverlayLockChange}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.overlayLock')}
                 </p>
                 <Checkbox
@@ -846,7 +846,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleAlwaysOnTopChange}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.alwaysOnTop')}
                 </p>
                 <Checkbox
@@ -860,7 +860,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleNoteEffectChange}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.noteEffect')}
                 </p>
                 <Checkbox
@@ -874,7 +874,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleKeyCounterToggle}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.keyCounter')}
                 </p>
                 <div className="flex items-center gap-[8px]">
@@ -897,7 +897,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleLaboratoryToggle}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t("settings.laboratory")}
                 </p>
                 <Checkbox
@@ -910,7 +910,7 @@ const Settings = ({
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleTrayToggle}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.trayEnabled')}
                 </p>
                 <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
@@ -921,7 +921,7 @@ const Settings = ({
                 onMouseEnter={() => setHoveredKey('resizeAnchor')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.resizeAnchor')}
                 </p>
                 <Dropdown
@@ -944,7 +944,7 @@ const Settings = ({
               </div>
             </div>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
               <div
                 className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
@@ -954,7 +954,7 @@ const Settings = ({
                   className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                   onClick={handleToggleCustomCSS}
                 >
-                  <p className="text-style-3 text-[#FFFFFF]">
+                  <p className="text-label text-fg">
                     {t('settings.customCSS')}
                   </p>
                   <Checkbox
@@ -965,8 +965,8 @@ const Settings = ({
                 <div className="flex flex-row justify-between items-center h-[40px]">
                   <p
                     className={
-                      'text-[12px] truncate max-w-[150px] ' +
-                      (useCustomCSS ? 'text-[#989BA6]' : 'text-[#44464E]')
+                      'text-body truncate max-w-[150px] ' +
+                      (useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled')
                     }
                   >
                     {customCSSPath && customCSSPath.length > 0
@@ -976,12 +976,7 @@ const Settings = ({
                   <button
                     onClick={handleLoadCustomCSS}
                     disabled={!useCustomCSS}
-                    className={
-                      'py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 ' +
-                      (useCustomCSS
-                        ? 'text-[#DBDEE8]'
-                        : 'text-[#44464E] cursor-not-allowed bg-[#222228] border-[#31303C]')
-                    }
+                    className={actionButtonClass(useCustomCSS)}
                   >
                     {t('settings.loadCss')}
                   </button>
@@ -996,7 +991,7 @@ const Settings = ({
                   className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                   onClick={handleToggleCustomJS}
                 >
-                  <p className="text-style-3 text-[#FFFFFF]">
+                  <p className="text-label text-fg">
                     {t('settings.customJS')}
                   </p>
                   <Checkbox
@@ -1007,8 +1002,8 @@ const Settings = ({
                 <div className="flex flex-row justify-between items-center h-[40px]">
                   <p
                     className={
-                      'text-[12px] truncate max-w-[150px] ' +
-                      (useCustomJS ? 'text-[#989BA6]' : 'text-[#44464E]')
+                      'text-body truncate max-w-[150px] ' +
+                      (useCustomJS ? 'text-fg-muted' : 'text-fg-disabled')
                     }
                   >
                     {t('settings.pluginManageLabel')}
@@ -1018,10 +1013,10 @@ const Settings = ({
                       onClick={handleReloadPlugins}
                       disabled={!canReloadPlugins || isReloadingPlugins}
                       className={
-                        'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-none ' +
+                        'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
                         (canReloadPlugins && !isReloadingPlugins
-                          ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
-                          : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
+                          ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
+                          : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed')
                       }
                       style={
                         isReloadingPlugins
@@ -1030,14 +1025,7 @@ const Settings = ({
                       }
                       title={t('settings.reloadPlugins')}
                     >
-                      <ResetIcon
-                        className={
-                          'w-[13px] h-[13px] -scale-x-100 ' +
-                          (canReloadPlugins && !isReloadingPlugins
-                            ? '[&_path]:fill-[#DBDEE8]'
-                            : '[&_path]:fill-[#44464E]')
-                        }
-                      />
+                      <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
                     </button>
                     <button
                       onClick={handleOpenPluginModal}
@@ -1051,7 +1039,7 @@ const Settings = ({
             </div>
             {/* OBS 모드 */}
             <div
-              className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]"
+              className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl"
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
@@ -1059,7 +1047,7 @@ const Settings = ({
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleObsToggle}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.obsMode')}
                 </p>
                 <Checkbox
@@ -1070,8 +1058,8 @@ const Settings = ({
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p
                   className={
-                    'text-[12px] ' +
-                    (obsStatus.running ? 'text-[#989BA6]' : 'text-[#44464E]')
+                    'text-body ' +
+                    (obsStatus.running ? 'text-fg-muted' : 'text-fg-disabled')
                   }
                 >
                   {obsStatus.running
@@ -1088,20 +1076,13 @@ const Settings = ({
                     onClick={handleObsRegenerateToken}
                     disabled={!obsStatus.running}
                     className={
-                      'flex items-center justify-center px-[5px] py-[4px] border-[1px] rounded-[7px] transition-colors ' +
+                      'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
                       (obsStatus.running
-                        ? 'bg-[#2A2A31] border-[#3A3944] hover:bg-[#34343c]'
-                        : 'bg-[#222228] border-[#31303C] cursor-not-allowed')
+                        ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
+                        : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed')
                     }
                   >
-                    <ResetIcon
-                      className={
-                        'w-[13px] h-[13px] -scale-x-100 ' +
-                        (obsStatus.running
-                          ? '[&_path]:fill-[#DBDEE8]'
-                          : '[&_path]:fill-[#44464E]')
-                      }
-                    />
+                    <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
                   </button>
                   <button
                     onClick={handleObsCopyUrl}
@@ -1114,13 +1095,13 @@ const Settings = ({
               </div>
             </div>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px]"
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-style-3 text-[#FFFFFF] flex-1 min-w-0 truncate pr-[10px]">
+                <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
                   {t('settings.keySoundOutput') || '키 사운드 출력'}
                 </p>
                 <div className="shrink-0">
@@ -1168,10 +1149,10 @@ const Settings = ({
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p
-                  className={`text-style-3 ${
+                  className={`text-label ${
                     keySoundOutput?.requested.kind === 'asio'
-                      ? 'text-[#FFFFFF]'
-                      : 'text-[#666666]'
+                      ? 'text-fg'
+                      : 'text-fg-disabled'
                   }`}
                 >
                   {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
@@ -1191,9 +1172,9 @@ const Settings = ({
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col p-[19px] py-[7px] bg-primary rounded-[7px] gap-[0px]">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.language')}
                 </p>
                 <Dropdown
@@ -1205,7 +1186,7 @@ const Settings = ({
                 />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.shortcuts')}
                 </p>
                 <button
@@ -1216,7 +1197,7 @@ const Settings = ({
                 </button>
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.graphicsOption')}
                 </p>
                 <Dropdown
@@ -1233,7 +1214,7 @@ const Settings = ({
                   className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                   onClick={handleAutoUpdateToggle}
                 >
-                  <p className="text-style-3 text-[#FFFFFF]">
+                  <p className="text-label text-fg">
                     {t('settings.autoUpdate')}
                   </p>
                   <Checkbox
@@ -1246,7 +1227,7 @@ const Settings = ({
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleDeveloperModeToggle}
               >
-                <p className="text-style-3 text-[#FFFFFF]">
+                <p className="text-label text-fg">
                   {t('settings.developerMode')}
                 </p>
                 <Checkbox
@@ -1255,13 +1236,13 @@ const Settings = ({
                 />
               </div>
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[14px] px-[12px] bg-[#101013] rounded-[7px] mt-[7px] mb-[12px]">
-                <p className="text-style-3 text-[#FFFFFF]">
+              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-lg mt-[8px] mb-[12px]">
+                <p className="text-body text-fg-muted tabular-nums">
                   Ver {__APP_VERSION__}
                 </p>
                 <div className="flex gap-[8px]">
                   <button
-                    className="bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#DCDEE7] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-fg bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => checkForUpdates(true)}
                     disabled={isChecking}
                   >
@@ -1270,7 +1251,7 @@ const Settings = ({
                       : t('update.checkUpdate')}
                   </button>
                   <button
-                    className="bg-[#401C1D] rounded-[7px] py-[4px] px-[9px] text-style-2 text-[#E8DBDB]"
+                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] transition-colors duration-fast"
                     onClick={handleResetAll}
                   >
                     {t('settings.resetData')}
@@ -1281,7 +1262,7 @@ const Settings = ({
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[10px] right-[10px] w-[522px] h-[376px] bg-primary rounded-[7px] pointer-events-none overflow-hidden">
+      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-white/[0.03] border border-line rounded-xl pointer-events-none overflow-hidden">
         {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
           <div className="relative w-full h-full">
             <video
@@ -1293,8 +1274,8 @@ const Settings = ({
               playsInline
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black to-transparent pointer-events-none">
-              <span className="mb-[15px] text-white text-[15px] font-medium">
+            <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-[100px] bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+              <span className="mb-[16px] text-white text-title">
                 {t(
                   hoveredKey === 'obsMode'
                     ? 'settings.obsGuide'
@@ -1304,7 +1285,7 @@ const Settings = ({
             </div>
           </div>
         ) : (
-          <FlaskIcon />
+          <FlaskIcon className="text-white/[0.06]" />
         )}
       </div>
       {isPluginModalOpen && (
