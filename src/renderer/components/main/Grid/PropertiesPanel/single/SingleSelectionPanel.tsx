@@ -608,7 +608,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               <button
                 ref={graphImageButtonRef}
                 type="button"
-                className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                   showGraphImagePicker ? 'shadow-focus-ring' : ''
                 } text-fg text-style-4`}
                 onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
@@ -1150,7 +1150,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 ref={bgColorBtnRef}
                 type="button"
                 onClick={() => handlePickerToggle('backgroundColor')}
-                className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
                   pickerFor === 'backgroundColor'
                     ? 'border-accent'
                     : 'border-line'
@@ -1167,7 +1167,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 ref={borderColorBtnRef}
                 type="button"
                 onClick={() => handlePickerToggle('borderColor')}
-                className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
                   pickerFor === 'borderColor'
                     ? 'border-accent'
                     : 'border-line'
@@ -1218,7 +1218,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <button
                 ref={imageButtonRef}
                 type="button"
-                className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                   showImagePicker ? 'shadow-focus-ring' : ''
                 } text-fg text-style-4`}
                 onClick={() => setShowImagePicker(!showImagePicker)}

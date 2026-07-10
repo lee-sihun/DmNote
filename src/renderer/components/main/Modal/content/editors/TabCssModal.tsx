@@ -154,10 +154,10 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleClearCss}
               disabled={isLoading || !hasTabCss}
-              className={`px-[7px] h-[23px] rounded-md border-[1px] flex items-center justify-center text-style-4 ${
+              className={`px-[8px] h-[23px] rounded-md transition-colors duration-fast flex items-center justify-center text-style-4 ${
                 hasTabCss
-                  ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] border-[rgba(229,72,77,0.3)] text-danger-fg'
-                  : 'bg-white/[0.04] border-line text-fg-disabled cursor-not-allowed'
+                  ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] text-danger-fg'
+                  : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
               }`}
             >
               {t('tabCss.remove')}

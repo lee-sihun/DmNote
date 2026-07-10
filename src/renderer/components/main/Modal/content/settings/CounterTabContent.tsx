@@ -157,7 +157,7 @@ const CounterTabContent = forwardRef<
 
   // 컬러 버튼 스타일
   const colorButtonClass = (active: boolean) =>
-    `relative px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+    `relative px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
       active ? 'shadow-focus-ring' : ''
     } text-fg text-style-2`;
 

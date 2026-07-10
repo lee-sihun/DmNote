@@ -1116,7 +1116,7 @@ function PaletteSlot({
   return (
     <button
       type="button"
-      className={`w-[22px] h-[22px] rounded-md border transition-colors ${
+      className={`w-[22px] h-[22px] rounded-md border border-white/[0.12] transition-colors ${
         isEmpty
           ? 'border-line cursor-default'
           : 'border-line cursor-pointer'
@@ -1415,7 +1415,7 @@ function GradientInput({
             }
           }}
           placeholder={label}
-          className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md border-[1px] text-style-4 text-fg uppercase pt-[1px] leading-[23px] ${
+          className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-style-4 text-fg uppercase pt-[1px] leading-[23px] ${
             selected
               ? 'border-accent'
               : 'border-line focus:border-accent'

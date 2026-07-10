@@ -656,7 +656,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         <button
           ref={batchImageButtonRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showBatchImagePicker ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={onToggleBatchImagePicker}
@@ -702,7 +702,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               ref={fontButtonRef}
               type="button"
-              className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+              className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                 showFontPicker ? 'shadow-focus-ring' : ''
               } text-fg text-style-4`}
               onClick={() => setShowFontPicker(!showFontPicker)}
@@ -895,7 +895,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 <button
                   ref={soundButtonRef}
                   type="button"
-                  className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                  className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
                     showSoundPicker ? 'shadow-focus-ring' : ''
                   } text-fg text-style-4`}
                   onClick={() => setShowSoundPicker((prev) => !prev)}

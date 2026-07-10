@@ -201,7 +201,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           ref={batchCounterFillButtonRef}
           type="button"
           onClick={onFillPickerToggle}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isFillPickerOpen
               ? 'border-accent'
               : 'border-line'
@@ -223,7 +223,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
           ref={batchCounterStrokeButtonRef}
           type="button"
           onClick={onStrokePickerToggle}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isStrokePickerOpen
               ? 'border-accent'
               : 'border-line'
@@ -246,7 +246,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         <button
           ref={fontButtonRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showFontPicker ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={() => setShowFontPicker((prev) => !prev)}
@@ -313,7 +313,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         <button
           ref={animationButtonRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showAnimationPicker ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={() => setShowAnimationPicker((prev) => !prev)}

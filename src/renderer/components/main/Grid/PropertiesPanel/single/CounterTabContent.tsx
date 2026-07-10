@@ -261,7 +261,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           ref={fillBtnRef}
           type="button"
           onClick={() => handlePickerToggle('fill')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'fill'
               ? 'border-accent'
               : 'border-line'
@@ -280,7 +280,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
           ref={strokeBtnRef}
           type="button"
           onClick={() => handlePickerToggle('stroke')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'stroke'
               ? 'border-accent'
               : 'border-line'
@@ -300,7 +300,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <button
           ref={fontBtnRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             pickerFor === 'font' ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={() => handlePickerToggle('font')}
@@ -365,7 +365,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         <button
           ref={animationBtnRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
             showAnimationPicker ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={() => setShowAnimationPicker((prev) => !prev)}

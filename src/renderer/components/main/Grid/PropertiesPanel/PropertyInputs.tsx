@@ -718,7 +718,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+        className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
           open ? 'shadow-focus-ring' : ''
         }`}
         style={{

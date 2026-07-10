@@ -315,7 +315,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           <button
             ref={imageButtonRef}
             type="button"
-            className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+            className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
               state.showImagePicker ? 'shadow-focus-ring' : ''
             } text-fg text-style-4`}
             onClick={() =>

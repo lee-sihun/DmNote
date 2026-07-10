@@ -539,7 +539,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           ref={noteColorButtonRef}
           type="button"
           onClick={() => handlePickerToggle('note')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'note'
               ? 'border-accent'
               : 'border-line'
@@ -555,7 +555,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             ref={borderColorButtonRef}
             type="button"
             onClick={() => handlePickerToggle('border')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+            className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
               pickerFor === 'border'
                 ? 'border-accent'
                 : 'border-line'
@@ -705,7 +705,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           ref={glowColorButtonRef}
           type="button"
           onClick={() => handlePickerToggle('glow')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'glow'
               ? 'border-accent'
               : 'border-line'
