@@ -868,13 +868,6 @@ const ColorPickerWrapper = ({
                 ? opacityPercentSolidInput
                 : undefined
             }
-            alphaPercentFocused={
-              solidOnly
-                ? isAlphaPercentFocused
-                : showOpacityControl
-                ? opacityPercentFocusTarget === 'solid'
-                : false
-            }
             onAlphaPercentChange={
               solidOnly
                 ? handleAlphaPercentChange
@@ -919,9 +912,6 @@ const ColorPickerWrapper = ({
             }
             rightBottomValue={
               showOpacityControl ? opacityPercentBottomInput : undefined
-            }
-            rightFocusTarget={
-              showOpacityControl ? opacityPercentFocusTarget : null
             }
             onRightValueChange={
               showOpacityControl
@@ -1181,7 +1171,6 @@ interface InputProps {
   previewColor?: string;
   alpha?: number;
   alphaPercentValue?: string;
-  alphaPercentFocused?: boolean;
   onAlphaPercentChange?: (value: string) => void;
   onAlphaPercentCommit?: () => void;
   onAlphaPercentFocusChange?: (focused: boolean) => void;
@@ -1194,7 +1183,6 @@ const Input = ({
   previewColor,
   alpha,
   alphaPercentValue,
-  alphaPercentFocused: _alphaPercentFocused,
   onAlphaPercentChange,
   onAlphaPercentCommit,
   onAlphaPercentFocusChange,
@@ -1273,7 +1261,6 @@ interface GradientInputsProps {
   onSelect?: (side: GradientSide) => void;
   rightTopValue?: string;
   rightBottomValue?: string;
-  rightFocusTarget?: OpacityTarget | null;
   onRightValueChange?: (target: GradientSide, raw: string) => void;
   onRightCommit?: (target: GradientSide) => void;
   onRightFocusChange?: (target: GradientSide, focused: boolean) => void;
@@ -1291,7 +1278,6 @@ function GradientInputs({
   onSelect,
   rightTopValue,
   rightBottomValue,
-  rightFocusTarget,
   onRightValueChange,
   onRightCommit,
   onRightFocusChange,
@@ -1307,7 +1293,6 @@ function GradientInputs({
         selected={selected === 'top'}
         onSelect={() => onSelect?.('top')}
         rightValue={rightTopValue}
-        rightFocused={rightFocusTarget === 'top'}
         onRightValueChange={(raw: string) => onRightValueChange?.('top', raw)}
         onRightCommit={() => onRightCommit?.('top')}
         onRightFocusChange={(focused: boolean) =>
@@ -1323,7 +1308,6 @@ function GradientInputs({
         selected={selected === 'bottom'}
         onSelect={() => onSelect?.('bottom')}
         rightValue={rightBottomValue}
-        rightFocused={rightFocusTarget === 'bottom'}
         onRightValueChange={(raw: string) =>
           onRightValueChange?.('bottom', raw)
         }
@@ -1345,7 +1329,6 @@ interface GradientInputProps {
   selected: boolean;
   onSelect?: () => void;
   rightValue?: string;
-  rightFocused?: boolean;
   onRightValueChange?: (value: string) => void;
   onRightCommit?: () => void;
   onRightFocusChange?: (focused: boolean) => void;
@@ -1360,7 +1343,6 @@ function GradientInput({
   selected,
   onSelect,
   rightValue,
-  rightFocused,
   onRightValueChange,
   onRightCommit,
   onRightFocusChange,
