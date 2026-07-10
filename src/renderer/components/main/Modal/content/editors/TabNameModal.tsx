@@ -83,7 +83,7 @@ const TabNameModal = ({
         )}
         <div className="flex gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSubmit}
           >
             {t('tabs.create')}

@@ -178,7 +178,7 @@ const LaboratoryModal = ({
         <div className="flex gap-[8px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="w-[150px] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
           >
             {t('laboratory.save')}
           </button>

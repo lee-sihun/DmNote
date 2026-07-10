@@ -41,6 +41,9 @@ module.exports = {
           active: "var(--ui-accent-active)",
           muted: "var(--ui-accent-muted)",
           fg: "var(--ui-accent-fg)",
+          deep: "var(--ui-accent-deep)",
+          "deep-hover": "var(--ui-accent-deep-hover)",
+          "deep-active": "var(--ui-accent-deep-active)",
         },
         danger: {
           DEFAULT: "var(--ui-danger)",

@@ -126,7 +126,7 @@ const UpdateModal = ({
             <div className="flex gap-[10px]">
               <button
                 onClick={handleGoToRelease}
-                className="flex-1 h-[32px] bg-accent hover:bg-accent-hover active:bg-accent-active
+                className="flex-1 h-[32px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active
                            rounded-lg text-accent-fg text-body font-medium transition-colors"
               >
                 {t('update.goToRelease')}
@@ -220,7 +220,7 @@ const UpdateModal = ({
               <button
                 onClick={handlePrimaryClick}
                 disabled={primaryActionDisabled}
-                className="flex-1 h-[32px] bg-accent hover:bg-accent-hover active:bg-accent-active
+                className="flex-1 h-[32px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active
                            rounded-lg text-accent-fg text-body font-medium transition-colors
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >

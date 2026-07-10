@@ -41,12 +41,16 @@
   --ui-fg-faint: #64666f;
   --ui-fg-disabled: #45464e;
 
-  /* 액센트 — 브랜드 퍼플 */
+  /* 액센트 — 브랜드 퍼플. 인디케이터·포커스 등 작은 지점용 */
   --ui-accent: #8b5cf6;
   --ui-accent-hover: #9d74f8;
   --ui-accent-active: #7a4be0;
   --ui-accent-muted: rgba(139, 92, 246, 0.16);
   --ui-accent-fg: #ffffff;
+  /* 큰 면적 CTA용 — 면적이 클수록 휘도·채도를 내림 (다크에서 눈부심 방지) */
+  --ui-accent-deep: #6b4ad0;
+  --ui-accent-deep-hover: #7857d8;
+  --ui-accent-deep-active: #5f40bd;
 
   /* 시맨틱 */
   --ui-danger: #e5484d;
