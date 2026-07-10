@@ -318,7 +318,7 @@ const GridMinimap = ({
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 flex flex-col gap-[2px] select-none"
+      className="absolute bottom-2 left-2 flex flex-col gap-[6px] select-none"
       style={{
         opacity: shouldShow ? 1 : 0,
         transition: 'opacity 200ms ease-out',
@@ -338,7 +338,6 @@ const GridMinimap = ({
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 8,
-          boxShadow: 'var(--ui-shadow-2)',
           boxSizing: 'border-box',
           overflow: 'hidden',
         }}
@@ -480,7 +479,6 @@ const GridMinimap = ({
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 8,
-          boxShadow: 'var(--ui-shadow-2)',
           boxSizing: 'border-box',
           overflow: 'hidden',
         }}
@@ -508,7 +506,7 @@ const GridMinimap = ({
                 y={y}
                 width={Math.max(w, 2)}
                 height={Math.max(h, 2)}
-                fill="rgba(255, 255, 255, 0.6)"
+                fill="rgba(255, 255, 255, 0.5)"
                 rx={1}
               />
             );
@@ -598,8 +596,8 @@ const GridMinimap = ({
             y={viewport.y}
             width={viewport.width}
             height={viewport.height}
-            fill="rgba(255, 255, 255, 0.06)"
-            stroke="rgba(255, 255, 255, 0.35)"
+            fill="rgba(255, 255, 255, 0.04)"
+            stroke="rgba(255, 255, 255, 0.25)"
             strokeWidth={1}
             rx={2}
           />
