@@ -187,6 +187,9 @@ const ImagePicker = ({
       <div
         ref={pickerContainerRef}
         className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
+      style={{
+        visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
+      }}
       >
         {/* 모드 전환 버튼 */}
         <div className="flex gap-[6px] max-w-full">

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import PlusIcon from '@assets/svgs/plus2.svg';
-import MinusIcon from '@assets/svgs/minus.svg';
+import TrashIcon from '@assets/svgs/trash.svg';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useLenis } from '@hooks/useLenis';
 import Alert from '../dialogs/Alert.jsx';
@@ -113,9 +113,14 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col w-[176px] p-[6px] bg-glass backdrop-blur-[24px] rounded-[12px] shadow-elevation-2">
+    <div className="flex flex-col w-[184px] p-[6px] bg-glass backdrop-blur-[24px] rounded-[12px] shadow-elevation-2">
+      {/* 섹션 헤더 */}
+      <div className="px-[8px] pt-[5px] pb-[6px] text-caption text-fg-faint select-none">
+        {t('tabs.title')}
+      </div>
+
       {customTabs.length === 0 ? (
-        <div className="flex items-center justify-center py-[12px] text-caption text-fg-faint">
+        <div className="px-[8px] pb-[8px] text-body text-fg-faint">
           {t('tabs.empty')}
         </div>
       ) : (
@@ -145,45 +150,58 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
             {[...customTabs]
               .slice()
               .reverse()
-              .map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center px-[8px] rounded-[6px] text-body text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
-                    selectedKeyType === tab.id ? 'bg-surface-active' : ''
-                  }`}
-                  onClick={() => handleSelect(tab.id)}
-                >
-                  <span className="truncate">{tab.name}</span>
-                </button>
-              ))}
+              .map((tab) => {
+                const isSelected = selectedKeyType === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    className={`group w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center gap-[4px] px-[8px] rounded-[6px] text-body text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
+                      isSelected ? 'bg-surface-active' : ''
+                    }`}
+                    onClick={() => handleSelect(tab.id)}
+                  >
+                    <span className="flex-1 min-w-0 truncate text-left">
+                      {tab.name}
+                    </span>
+                    {isSelected && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        title={t('tabs.delete')}
+                        className="w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger-muted transition-all duration-fast"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAskDelete(true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setAskDelete(true);
+                          }
+                        }}
+                      >
+                        <TrashIcon className="w-[10px] h-[10px]" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
           </div>
         </div>
       )}
 
-      <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
-
       {!maxReached && (
-        <button
-          className="w-full h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] text-fg-muted hover:text-fg hover:bg-surface-hover active:bg-surface-active transition-colors duration-fast"
-          onClick={() => setShowNameModal(true)}
-        >
-          <PlusIcon className="w-[10px] h-[10px] shrink-0" />
-          <span className="text-body">{t('tabs.createTitle')}</span>
-        </button>
-      )}
-      {customTabs.length > 0 && (
-        <button
-          className={`w-full h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
-            isCustomSelected
-              ? 'text-danger hover:bg-danger-muted active:bg-[rgba(229,72,77,0.2)]'
-              : 'text-fg-disabled cursor-not-allowed'
-          }`}
-          disabled={!isCustomSelected}
-          onClick={() => setAskDelete(true)}
-        >
-          <MinusIcon className="w-[10px] shrink-0" />
-          <span className="text-body">{t('tabs.delete')}</span>
-        </button>
+        <>
+          <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
+          <button
+            className="w-full h-[28px] rounded-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
+            onClick={() => setShowNameModal(true)}
+          >
+            <PlusIcon className="w-[9px] h-[9px] shrink-0" />
+            <span className="text-body">{t('tabs.createTitle')}</span>
+          </button>
+        </>
       )}
 
       <TabNameModal

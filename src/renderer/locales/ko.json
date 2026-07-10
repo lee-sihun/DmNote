@@ -262,6 +262,7 @@
     "remove": "제거하기"
   },
   "tabs": {
+    "title": "커스텀 탭",
     "empty": "추가 탭이 없습니다",
     "createTitle": "탭 생성",
     "create": "생성하기",

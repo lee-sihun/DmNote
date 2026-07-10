@@ -262,6 +262,7 @@
     "remove": "移除"
   },
   "tabs": {
+    "title": "自定义标签页",
     "empty": "无额外标签页",
     "createTitle": "创建标签页",
     "create": "创建",

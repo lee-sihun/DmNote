@@ -262,6 +262,7 @@
     "remove": "移除"
   },
   "tabs": {
+    "title": "自訂標籤頁",
     "empty": "無額外標籤頁",
     "createTitle": "建立標籤頁",
     "create": "建立",

@@ -262,6 +262,7 @@
     "remove": "Remove"
   },
   "tabs": {
+    "title": "Custom tabs",
     "empty": "No additional tabs",
     "createTitle": "Create Tab",
     "create": "Create",
