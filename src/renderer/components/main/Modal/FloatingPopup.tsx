@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   useFloating,
@@ -25,6 +25,8 @@ type FloatingPopupProps = {
   children?: React.ReactNode;
   autoClose?: boolean;
   closeOnScroll?: boolean; // 스크롤 시 닫을지 여부
+  portalToBody?: boolean;
+  animate?: boolean;
 };
 
 const FloatingPopup = ({
@@ -42,6 +44,8 @@ const FloatingPopup = ({
   children,
   autoClose = true,
   closeOnScroll = false,
+  portalToBody = false,
+  animate = true,
 }: FloatingPopupProps) => {
   const { x, y, refs, strategy, update } = useFloating({
     placement: placement as Placement,
@@ -120,7 +124,7 @@ const FloatingPopup = ({
   }, [open, closeOnScroll, onClose]);
 
   // 고정 좌표 사용 시 메뉴 위치를 조정
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       !open ||
       !floatingRef.current ||
@@ -131,43 +135,41 @@ const FloatingPopup = ({
       return;
     }
 
-    const timer = requestAnimationFrame(() => {
-      const rect = floatingRef.current?.getBoundingClientRect();
-      if (!rect) return;
+    const rect = floatingRef.current.getBoundingClientRect();
 
-      let adjustedX = fixedX + offsetX;
-      let adjustedY = fixedY + offsetY;
+    let adjustedX = fixedX + offsetX;
+    let adjustedY = fixedY + offsetY;
 
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const menuWidth = rect.width;
-      const menuHeight = rect.height;
-      const padding = 5; // 창 가장자리로부터의 패딩
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const menuWidth = rect.width;
+    const menuHeight = rect.height;
+    const padding = 5; // 창 가장자리로부터의 패딩
 
-      // 오른쪽 경계를 벗어나면 왼쪽으로 이동
-      if (adjustedX + menuWidth > viewportWidth - padding) {
-        adjustedX = viewportWidth - menuWidth - padding;
-      }
+    // 오른쪽 경계를 벗어나면 왼쪽으로 이동
+    if (adjustedX + menuWidth > viewportWidth - padding) {
+      adjustedX = viewportWidth - menuWidth - padding;
+    }
 
-      // 아래쪽 경계를 벗어나면 위쪽으로 이동
-      if (adjustedY + menuHeight > viewportHeight - padding) {
-        adjustedY = viewportHeight - menuHeight - padding;
-      }
+    // 아래쪽 경계를 벗어나면 위쪽으로 이동
+    if (adjustedY + menuHeight > viewportHeight - padding) {
+      adjustedY = viewportHeight - menuHeight - padding;
+    }
 
-      // 왼쪽 경계를 벗어나면 최소 padding 위치로 조정
-      if (adjustedX < padding) {
-        adjustedX = padding;
-      }
+    // 왼쪽 경계를 벗어나면 최소 padding 위치로 조정
+    if (adjustedX < padding) {
+      adjustedX = padding;
+    }
 
-      // 위쪽 경계를 벗어나면 최소 padding 위치로 조정
-      if (adjustedY < padding) {
-        adjustedY = padding;
-      }
+    // 위쪽 경계를 벗어나면 최소 padding 위치로 조정
+    if (adjustedY < padding) {
+      adjustedY = padding;
+    }
 
-      setAdjustedPos({ x: adjustedX, y: adjustedY });
+    setAdjustedPos((prev) => {
+      if (prev?.x === adjustedX && prev.y === adjustedY) return prev;
+      return { x: adjustedX, y: adjustedY };
     });
-
-    return () => cancelAnimationFrame(timer);
   }, [open, fixedX, fixedY, offsetX, offsetY]);
 
   useEffect(() => {
@@ -287,7 +289,7 @@ const FloatingPopup = ({
         left,
         top,
       }}
-      className={`${className} tooltip-fade-in`}
+      className={`${className}${animate ? ' tooltip-fade-in' : ''}`}
       role="dialog"
       aria-modal="false"
     >
@@ -295,8 +297,8 @@ const FloatingPopup = ({
     </div>
   );
 
-  // fixedX/fixedY가 있으면 Portal을 사용하여 body에 렌더링 (overflow 클리핑 방지)
-  if (isFixed) {
+  // 위치 계산 전후에 렌더 루트가 바뀌지 않도록 필요 시 처음부터 body에 렌더링
+  if (portalToBody || isFixed) {
     return createPortal(floatingContent, document.body);
   }
 

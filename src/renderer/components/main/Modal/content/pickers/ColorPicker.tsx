@@ -614,49 +614,46 @@ const ColorPickerWrapper = ({
     }
 
     if (panelElement) {
-      // 다음 프레임에서 실제 렌더링된 picker 크기를 측정
-      requestAnimationFrame(() => {
-        const panelRect = panelElement.getBoundingClientRect();
+      const panelRect = panelElement.getBoundingClientRect();
 
-        // picker 요소의 실제 크기를 측정하거나 기본값 사용
-        const pickerEl = pickerContainerRef.current;
-        const pickerWidth = pickerEl ? pickerEl.offsetWidth : 164;
-        // 솔리드 모드 높이를 기준으로 함
-        const solidPickerHeight =
-          (solidOnly ? 280 : 264) +
-          (showStateSwitch ? 31 : 0) +
-          (showOpacityControl ? 36 : 0); // 상태 탭(대기/입력) + 추가 투명도 컨트롤 포함
-        const actualPickerHeight = pickerEl
-          ? pickerEl.offsetHeight
-          : solidPickerHeight;
+      // picker 요소의 실제 크기를 측정하거나 기본값 사용
+      const pickerEl = pickerContainerRef.current;
+      const pickerWidth = pickerEl ? pickerEl.offsetWidth : 164;
+      // 솔리드 모드 높이를 기준으로 함
+      const solidPickerHeight =
+        (solidOnly ? 280 : 264) +
+        (showStateSwitch ? 31 : 0) +
+        (showOpacityControl ? 36 : 0); // 상태 탭(대기/입력) + 추가 투명도 컨트롤 포함
+      const actualPickerHeight = pickerEl
+        ? pickerEl.offsetHeight
+        : solidPickerHeight;
 
-        const gap = 5; // 패널과 피커 사이의 간격
-        const padding = 5; // 화면 가장자리 패딩
+      const gap = 5; // 패널과 피커 사이의 간격
+      const padding = 5; // 화면 가장자리 패딩
 
-        // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
-        let fixedX = panelRect.left - pickerWidth - gap;
+      // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
+      let fixedX = panelRect.left - pickerWidth - gap;
 
-        // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
-        if (fixedX < padding) {
-          fixedX = padding;
-        }
+      // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
+      if (fixedX < padding) {
+        fixedX = padding;
+      }
 
-        // Y축: 패널 하단에서 picker 하단을 기준으로 정렬
-        // 솔리드 피커의 하단 위치를 기준으로 함
-        const panelBottomPadding = 20; // 패널 하단에서 약간 올려서 배치
-        const solidPickerBottom = panelRect.bottom - panelBottomPadding;
+      // Y축: 패널 하단에서 picker 하단을 기준으로 정렬
+      // 솔리드 피커의 하단 위치를 기준으로 함
+      const panelBottomPadding = 20; // 패널 하단에서 약간 올려서 배치
+      const solidPickerBottom = panelRect.bottom - panelBottomPadding;
 
-        // 그라디언트 모드일 때도 하단은 솔리드와 동일하게 유지
-        // 따라서 Y 위치는 (하단 기준 - 실제 높이)
-        let fixedY = solidPickerBottom - actualPickerHeight;
+      // 그라디언트 모드일 때도 하단은 솔리드와 동일하게 유지
+      // 따라서 Y 위치는 (하단 기준 - 실제 높이)
+      let fixedY = solidPickerBottom - actualPickerHeight;
 
-        // Y축 상단 경계 체크
-        if (fixedY < padding) {
-          fixedY = padding;
-        }
+      // Y축 상단 경계 체크
+      if (fixedY < padding) {
+        fixedY = padding;
+      }
 
-        setFixedPosition({ x: fixedX, y: fixedY });
-      });
+      setFixedPosition({ x: fixedX, y: fixedY });
     } else {
       setFixedPosition(null);
     }
@@ -780,6 +777,8 @@ const ColorPickerWrapper = ({
       onClose={handleClose}
       autoClose={false}
       closeOnScroll={false}
+      portalToBody={Boolean(panelElement)}
+      animate={!panelElement}
     >
       <div
         ref={pickerContainerRef}

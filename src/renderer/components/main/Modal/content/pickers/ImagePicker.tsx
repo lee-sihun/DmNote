@@ -127,43 +127,40 @@ const ImagePicker = ({
     }
 
     if (panelElement) {
-      // 다음 프레임에서 실제 렌더링된 picker 크기를 측정
-      requestAnimationFrame(() => {
-        const panelRect = panelElement.getBoundingClientRect();
+      const panelRect = panelElement.getBoundingClientRect();
 
-        // picker 요소의 실제 크기를 측정하거나 기본값 사용
-        const pickerEl = pickerContainerRef.current;
-        const pickerWidth = pickerEl ? pickerEl.offsetWidth : 164;
-        const pickerHeight = pickerEl ? pickerEl.offsetHeight : 220;
+      // picker 요소의 실제 크기를 측정하거나 기본값 사용
+      const pickerEl = pickerContainerRef.current;
+      const pickerWidth = pickerEl ? pickerEl.offsetWidth : 164;
+      const pickerHeight = pickerEl ? pickerEl.offsetHeight : 220;
 
-        // ColorPicker의 솔리드 모드 높이를 기준으로 하단 정렬
-        const _colorPickerSolidHeight = 264;
+      // ColorPicker의 솔리드 모드 높이를 기준으로 하단 정렬
+      const _colorPickerSolidHeight = 264;
 
-        const gap = 5; // 패널과 피커 사이의 간격
-        const padding = 5; // 화면 가장자리 패딩
+      const gap = 5; // 패널과 피커 사이의 간격
+      const padding = 5; // 화면 가장자리 패딩
 
-        // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
-        let fixedX = panelRect.left - pickerWidth - gap;
+      // X축: 패널 왼쪽에서 gap만큼 떨어진 위치
+      let fixedX = panelRect.left - pickerWidth - gap;
 
-        // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
-        if (fixedX < padding) {
-          fixedX = padding;
-        }
+      // 왼쪽 화면 경계를 벗어나면 최소 padding 위치로 조정
+      if (fixedX < padding) {
+        fixedX = padding;
+      }
 
-        // Y축: ColorPicker의 솔리드 모드 하단과 동일한 위치에 ImagePicker 하단 정렬
-        const panelBottomPadding = 20;
-        const solidPickerBottom = panelRect.bottom - panelBottomPadding;
+      // Y축: ColorPicker의 솔리드 모드 하단과 동일한 위치에 ImagePicker 하단 정렬
+      const panelBottomPadding = 20;
+      const solidPickerBottom = panelRect.bottom - panelBottomPadding;
 
-        // ImagePicker 하단을 ColorPicker 솔리드 모드 하단과 동일하게
-        let fixedY = solidPickerBottom - pickerHeight;
+      // ImagePicker 하단을 ColorPicker 솔리드 모드 하단과 동일하게
+      let fixedY = solidPickerBottom - pickerHeight;
 
-        // Y축 상단 경계 체크
-        if (fixedY < padding) {
-          fixedY = padding;
-        }
+      // Y축 상단 경계 체크
+      if (fixedY < padding) {
+        fixedY = padding;
+      }
 
-        setFixedPosition({ x: fixedX, y: fixedY });
-      });
+      setFixedPosition({ x: fixedX, y: fixedY });
     } else {
       setFixedPosition(null);
     }
@@ -185,6 +182,8 @@ const ImagePicker = ({
       interactiveRefs={interactiveRefs}
       onClose={onClose}
       autoClose={false}
+      portalToBody={Boolean(panelElement)}
+      animate={!panelElement}
     >
       <div
         ref={pickerContainerRef}

@@ -1,5 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import FloatingPopup from '../../FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
@@ -58,17 +64,12 @@ export default function CommonListPickerPopup<T>({
   isLoading = false,
   loadingText = '로딩...',
   errorText = '',
-  listHeightClass = 'max-h-[120px]',
+  listHeightClass = 'h-[120px]',
   onAdd,
   addLabel,
   addButtonRef,
 }: CommonListPickerPopupProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
-  const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
-    containerRef.current = node;
-    setContainerEl(node);
-  }, []);
   const [fixedPosition, setFixedPosition] = useState<{
     x: number;
     y: number;
@@ -76,7 +77,35 @@ export default function CommonListPickerPopup<T>({
 
   const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
-  useEffect(() => {
+  const calculatePosition = useCallback(() => {
+    if (!panelElement) return;
+
+    const panelRect = panelElement.getBoundingClientRect();
+    const popupEl = containerRef.current;
+    const popupWidth = popupEl ? popupEl.offsetWidth : estimatedWidth;
+    const popupHeight = popupEl ? popupEl.offsetHeight : estimatedHeight;
+
+    const gap = 5;
+    const padding = 5;
+    const panelBottomPadding = 20;
+
+    let fixedX = panelRect.left - popupWidth - gap;
+    if (fixedX < padding) {
+      fixedX = padding;
+    }
+
+    let fixedY = panelRect.bottom - panelBottomPadding - popupHeight;
+    if (fixedY < padding) {
+      fixedY = padding;
+    }
+
+    setFixedPosition((prev) => {
+      if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
+      return { x: fixedX, y: fixedY };
+    });
+  }, [estimatedHeight, estimatedWidth, panelElement]);
+
+  useLayoutEffect(() => {
     if (!open) {
       setFixedPosition(null);
       return;
@@ -87,78 +116,22 @@ export default function CommonListPickerPopup<T>({
       return;
     }
 
-    const calculatePosition = () => {
-      const panelRect = panelElement.getBoundingClientRect();
-      const popupEl = containerRef.current;
-      const popupWidth = popupEl ? popupEl.offsetWidth : estimatedWidth;
-      const popupHeight = popupEl ? popupEl.offsetHeight : estimatedHeight;
+    calculatePosition();
+  }, [calculatePosition, open, panelElement]);
 
-      const gap = 5;
-      const padding = 5;
-      const panelBottomPadding = 20;
-
-      let fixedX = panelRect.left - popupWidth - gap;
-      if (fixedX < padding) {
-        fixedX = padding;
-      }
-
-      let fixedY = panelRect.bottom - panelBottomPadding - popupHeight;
-      if (fixedY < padding) {
-        fixedY = padding;
-      }
-
-      setFixedPosition((prev) => {
-        if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
-        return { x: fixedX, y: fixedY };
-      });
-    };
-
-    const rafId = requestAnimationFrame(calculatePosition);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-    };
-  }, [estimatedHeight, estimatedWidth, open, panelElement]);
-
-  // 팝업 크기가 변하면(로딩 텍스트 등) 위치 재계산
-  // containerEl을 deps로 사용하여 portal 전환 후에도 ResizeObserver가 올바른 DOM에 연결됨
-  useEffect(() => {
-    if (!open || !panelElement || !containerEl) return;
-
-    const calculatePosition = () => {
-      const panelRect = panelElement.getBoundingClientRect();
-      const popupWidth = containerEl.offsetWidth || estimatedWidth;
-      const popupHeight = containerEl.offsetHeight || estimatedHeight;
-
-      const gap = 5;
-      const padding = 5;
-      const panelBottomPadding = 20;
-
-      let fixedX = panelRect.left - popupWidth - gap;
-      if (fixedX < padding) {
-        fixedX = padding;
-      }
-
-      let fixedY = panelRect.bottom - panelBottomPadding - popupHeight;
-      if (fixedY < padding) {
-        fixedY = padding;
-      }
-
-      setFixedPosition((prev) => {
-        if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
-        return { x: fixedX, y: fixedY };
-      });
-    };
+  // 팝업의 실제 크기가 바뀌면 위치 재계산
+  useLayoutEffect(() => {
+    if (!open || !panelElement || !containerRef.current) return;
 
     const resizeObserver = new ResizeObserver(() => {
       calculatePosition();
     });
-    resizeObserver.observe(containerEl);
+    resizeObserver.observe(containerRef.current);
 
     return () => {
       resizeObserver.disconnect();
     };
-  }, [open, panelElement, containerEl, estimatedHeight, estimatedWidth]);
+  }, [calculatePosition, open, panelElement]);
 
   useEffect(() => {
     if (!open) return;
@@ -183,9 +156,11 @@ export default function CommonListPickerPopup<T>({
       interactiveRefs={interactiveRefs}
       onClose={onClose}
       autoClose={false}
+      portalToBody={Boolean(panelElement)}
+      animate={!panelElement}
     >
       <div
-        ref={containerCallbackRef}
+        ref={containerRef}
         className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3`.trim()}
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
@@ -237,24 +212,25 @@ export default function CommonListPickerPopup<T>({
             className={`flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade ${listHeightClass}`}
           >
             <div className="flex flex-col gap-[4px]">
-              {items.length === 0 ? (
+              {items.length === 0 && !isLoading && !errorText ? (
                 <div className="flex items-center justify-center py-[14px] text-fg-faint text-body">
                   {emptyText}
                 </div>
-              ) : (
-                items.map((item) => renderItem(item))
-              )}
+              ) : null}
+              {items.map((item) => renderItem(item))}
+              {isLoading ? (
+                <p className="py-[14px] text-fg-muted text-body text-center">
+                  {loadingText}
+                </p>
+              ) : null}
+              {errorText ? (
+                <p className="py-[14px] text-danger text-body text-center">
+                  {errorText}
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
-
-        {isLoading ? (
-          <p className="text-fg-muted text-body text-center">{loadingText}</p>
-        ) : null}
-
-        {errorText ? (
-          <p className="text-danger text-body text-center">{errorText}</p>
-        ) : null}
       </div>
     </FloatingPopup>
   );
