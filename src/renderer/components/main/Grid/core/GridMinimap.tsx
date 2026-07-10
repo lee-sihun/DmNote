@@ -318,8 +318,14 @@ const GridMinimap = ({
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-2 left-2 flex flex-col gap-[6px] select-none"
+      className="absolute bottom-2 left-2 select-none"
       style={{
+        width: MINIMAP_WIDTH,
+        backgroundColor: 'var(--ui-bg-inset)',
+        border: '1px solid var(--ui-line)',
+        borderRadius: 8,
+        boxSizing: 'border-box',
+        overflow: 'hidden',
         opacity: shouldShow ? 1 : 0,
         transition: 'opacity 200ms ease-out',
         pointerEvents: shouldShow ? 'auto' : 'none',
@@ -327,17 +333,13 @@ const GridMinimap = ({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      {/* 줌 컨트롤 (미니맵 위) */}
+      {/* 줌 컨트롤 (상단 행) */}
       <div
         className="flex items-center cursor-default"
         style={{
-          width: MINIMAP_WIDTH,
-          height: 23,
-          backgroundColor: 'var(--ui-bg-inset)',
-          border: '1px solid var(--ui-line)',
-          borderRadius: 8,
+          width: '100%',
+          height: 24,
           boxSizing: 'border-box',
-          overflow: 'hidden',
         }}
       >
         {/* 초기화 버튼 */}
@@ -470,13 +472,8 @@ const GridMinimap = ({
       <div
         className="relative cursor-pointer"
         style={{
-          width: MINIMAP_WIDTH,
+          width: '100%',
           height: MINIMAP_HEIGHT,
-          backgroundColor: 'var(--ui-bg-inset)',
-          border: '1px solid var(--ui-line)',
-          borderRadius: 8,
-          boxSizing: 'border-box',
-          overflow: 'hidden',
         }}
         onClick={handleMinimapClick}
         onMouseDown={handleMouseDown}
@@ -586,16 +583,14 @@ const GridMinimap = ({
               />
             );
           })}
-          {/* 현재 뷰포트 표시 */}
+          {/* 현재 뷰포트 표시 — 은은한 면으로만 */}
           <rect
             x={viewport.x}
             y={viewport.y}
             width={viewport.width}
             height={viewport.height}
-            fill="rgba(255, 255, 255, 0.04)"
-            stroke="rgba(255, 255, 255, 0.25)"
-            strokeWidth={1}
-            rx={2}
+            fill="rgba(255, 255, 255, 0.07)"
+            rx={3}
           />
         </svg>
       </div>
