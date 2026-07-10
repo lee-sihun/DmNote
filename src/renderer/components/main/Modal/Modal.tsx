@@ -47,7 +47,7 @@ const Modal = ({ onClick, children, animate = true }: ModalProps) => {
   return createPortal(
     <div
       data-dmn-modal-backdrop="true"
-      className={`fixed top-[31px] left-[1px] flex items-center justify-center w-[900px] h-[396px] bg-[#000000] bg-opacity-70 z-50 ${backdropAnimClass}`}
+      className={`fixed top-[31px] bottom-[61px] left-[1px] right-[1px] flex items-center justify-center bg-black/60 backdrop-blur-[2px] z-50 ${backdropAnimClass}`}
       onPointerDown={handleBackdropPointerDown}
       onClick={handleBackdropClick}
       onWheel={handleWheel}

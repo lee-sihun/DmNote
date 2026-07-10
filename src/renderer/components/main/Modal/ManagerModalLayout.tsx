@@ -113,7 +113,7 @@ const ManagerModalLayout = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col bg-elevated rounded-xl border border-line shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 탭 영역 */}
@@ -123,7 +123,7 @@ const ManagerModalLayout = ({
         <div className="relative">
           {/* 상단 그림자 */}
           <div
-            className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
+            className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
               scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
             }`}
           />
@@ -149,17 +149,17 @@ const ManagerModalLayout = ({
 
           {/* 하단 그림자 */}
           <div
-            className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
+            className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
               scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
             }`}
           />
         </div>
 
         {/* 구분선 */}
-        <div className="h-px bg-[#2A2A30] my-[20px] -ml-[20px] -mr-[6px]" />
+        <div className="h-px bg-line my-[20px] -ml-[20px] -mr-[6px]" />
 
         {/* 하단 버튼 */}
-        <div className="flex items-center gap-[10.5px] pr-[14px]">{footer}</div>
+        <div className="flex items-center gap-[8px] pr-[14px]">{footer}</div>
 
         {/* 추가 콘텐츠 (로딩/에러 등) */}
         {extra}

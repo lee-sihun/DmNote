@@ -80,7 +80,7 @@ const Alert = ({
   return (
     <Modal onClick={onCancel}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col bg-elevated rounded-xl border border-line shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 or Custom HTML */}
@@ -88,14 +88,14 @@ const Alert = ({
           <div className="relative">
             {/* 상단 그림자 */}
             <div
-              className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
+              className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 transition-opacity duration-fast ${
                 scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
               }`}
             />
 
             <div
               ref={scrollRef}
-              className="max-h-[244px] overflow-y-auto modal-content-scroll pr-[14px] text-center text-[#FFFFFF]"
+              className="max-h-[244px] overflow-y-auto modal-content-scroll pr-[14px] text-center text-fg"
               style={{
                 width:
                   hasOverflow && scrollbarWidth > 0
@@ -115,13 +115,13 @@ const Alert = ({
 
             {/* 하단 그림자 */}
             <div
-              className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 transition-opacity duration-150 ${
+              className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 transition-opacity duration-fast ${
                 scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </div>
         ) : (
-          <div className="max-w-[235.5px] text-center text-[#FFFFFF] text-style-3 !leading-[20px] pr-[14px]">
+          <div className="max-w-[236px] text-center text-fg text-label pr-[14px]">
             {message}
           </div>
         )}
@@ -130,20 +130,20 @@ const Alert = ({
         <div
           className={`flex ${
             !shouldShowCancel ? 'justify-center' : ''
-          } gap-[10.5px] mt-[19px] pr-[14px]`}
+          } gap-[8px] mt-[20px] pr-[14px]`}
         >
           <button
             onClick={onConfirm}
-            className={`w-${
-              shouldShowCancel ? '[150px]' : 'full'
-            } h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3`}
+            className={`${
+              shouldShowCancel ? 'w-[150px]' : 'w-full'
+            } h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-lg text-fg text-label transition-colors duration-fast`}
           >
             {confirmLabel}
           </button>
           {shouldShowCancel && (
             <button
               onClick={onCancel}
-              className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+              className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-lg text-danger-fg text-label transition-colors duration-fast"
             >
               {cancelLabel}
             </button>

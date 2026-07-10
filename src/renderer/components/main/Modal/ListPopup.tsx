@@ -113,7 +113,7 @@ const SubMenu = ({
           node;
         if (needsScroll) subLenisRef(node);
       }}
-      className={`fixed z-[10001] bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
+      className={`fixed z-[10001] bg-elevated border border-line shadow-elevation-2 rounded-lg p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -210,7 +210,7 @@ const MenuItemRow = ({
   if (item.type === 'separator') {
     return (
       <div className="-mx-[5px] py-[3px]">
-        <div className="h-[1px] bg-[#3A3D4A]" />
+        <div className="h-[1px] bg-line" />
       </div>
     );
   }
@@ -231,15 +231,15 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[108px] h-[24px] px-[24px] rounded-[7px] flex items-center justify-center ${
+        className={`w-full min-w-[108px] h-[24px] px-[24px] rounded-[6px] flex items-center justify-center transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
-            : 'hover:bg-button-hover active:bg-button-active cursor-pointer'
+            : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
         }`}
       >
         <span
-          className={`text-style-2 whitespace-nowrap ${
-            item.disabled ? 'text-[#6B6E7B]' : 'text-[#DBDEE8]'
+          className={`text-body whitespace-nowrap ${
+            item.disabled ? 'text-fg-disabled' : 'text-fg'
           }`}
         >
           {item.label}
@@ -259,10 +259,10 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[120px] h-[24px] px-[6px] rounded-[5px] flex items-center gap-[4px] ${
+        className={`w-full min-w-[120px] h-[24px] px-[6px] rounded-[6px] flex items-center gap-[4px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
-            : 'hover:bg-button-hover active:bg-button-active cursor-pointer'
+            : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
         }`}
       >
         {/* 좌측 체크 영역 (고정 너비) */}
@@ -273,7 +273,7 @@ const MenuItemRow = ({
               height="12"
               viewBox="0 0 12 12"
               fill="none"
-              className="text-[#DBDEE8]"
+              className="text-fg"
             >
               <path
                 d="M2 6.5L4.5 9L10 3"
@@ -288,9 +288,9 @@ const MenuItemRow = ({
 
         {/* 라벨 텍스트 */}
         <span
-          className={`flex-1 text-style-2 whitespace-nowrap ${
+          className={`flex-1 text-body whitespace-nowrap ${
             isLeft ? 'text-left' : 'text-center'
-          } ${item.disabled ? 'text-[#6B6E7B]' : 'text-[#DBDEE8]'}`}
+          } ${item.disabled ? 'text-fg-disabled' : 'text-fg'}`}
         >
           {item.label}
         </span>
@@ -303,7 +303,7 @@ const MenuItemRow = ({
               height="12"
               viewBox="0 0 7 12"
               fill="none"
-              className="text-[#DBDEE8]"
+              className="text-fg-muted"
             >
               <path
                 d="M1 1L5.5 6L1 11"
@@ -346,7 +346,7 @@ const ListPopup = ({
   maxVisibleItems,
 }: ListPopupProps) => {
   const defaultClassName =
-    'z-30 bg-button-primary rounded-[7px] p-[5px] flex flex-col gap-[1px]';
+    'z-30 bg-elevated border border-line shadow-elevation-2 rounded-lg p-[5px] flex flex-col gap-[1px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산
