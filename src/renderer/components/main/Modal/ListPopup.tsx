@@ -352,8 +352,9 @@ const ListPopup = ({
   textAlign = 'center',
   maxVisibleItems,
 }: ListPopupProps) => {
+  // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
-    'z-30 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px]';
+    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산
