@@ -256,7 +256,6 @@
     "resetKeyCounter": "重置 [{{name}}] 鍵的計數器?",
     "reset": "重置",
     "removeKey": "移除 [{{name}}] 鍵?",
-
     "removeStat": "移除 [{{name}}] 統計?",
     "removeGraph": "移除 [{{name}}] 圖表?",
     "removeKnob": "移除 [{{name}}] 旋鈕?",
@@ -552,7 +551,15 @@
     "filterBuiltin": "內建字體",
     "filterLocal": "本地字體",
     "filterWeb": "網路字體",
-    "noFonts": "無字體"
+    "noFonts": "無字體",
+    "addLocalFont": "新增本地字體",
+    "addWebFont": "新增網路字體",
+    "edit": "編輯",
+    "rename": "重新命名",
+    "delete": "刪除",
+    "enabledToggle": "啟用",
+    "saveFailed": "字體設定儲存失敗。",
+    "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜尋",
@@ -561,8 +568,10 @@
     "noSounds": "無音效",
     "loadFailed": "音效清單載入失敗",
     "edit": "編輯",
+    "rename": "重新命名",
     "delete": "刪除",
     "deleteFailed": "音效刪除失敗",
+    "renameFailed": "音效重新命名失敗",
     "deleteConfirm": "確定刪除該音效？檔案將被刪除，並從所有使用它的元素中移除。"
   },
   "soundTrimModal": {
@@ -586,15 +595,6 @@
     "loadOriginalError": "無法載入原始音訊。",
     "saveErrorDefault": "無法儲存處理後的音效。",
     "saveErrorFailed": "儲存處理後的音效失敗。"
-  },
-  "fontManager": {
-    "localTab": "本地字體",
-    "webTab": "網路字體",
-    "noLocalFonts": "無本地字體",
-    "noWebFonts": "無網路字體",
-    "removeFont": "刪除字體",
-    "adding": "添加中...",
-    "addFont": "添加"
   },
   "webFontInput": {
     "cssLabel": "@font-face CSS",

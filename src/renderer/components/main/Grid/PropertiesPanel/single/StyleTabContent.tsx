@@ -12,7 +12,6 @@ import {
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
-import FontManagerModal from '../../../Modal/content/managers/FontManagerModal';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
 
@@ -102,8 +101,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 폰트 버튼 ref
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   const soundButtonRef = useRef<HTMLButtonElement>(null);
-  // 폰트 관리 모달 상태
-  const [showFontManager, setShowFontManager] = useState(false);
   const [showSoundPicker, setShowSoundPicker] = useState(false);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
@@ -795,9 +792,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             handleStyleChangeComplete('fontFamily', fontName);
           }}
           onClose={() => setPickerFor(null)}
-          onOpenManager={() => {
-            setShowFontManager(true);
-          }}
           interactiveRefs={[fontButtonRef]}
         />
       )}
@@ -817,15 +811,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           onClose={() => setShowSoundPicker(false)}
           interactiveRefs={[soundButtonRef]}
           previewVolume={keyPosition.soundVolume ?? 100}
-        />
-      )}
-
-      {/* FontManagerModal */}
-      {showFontManager && (
-        <FontManagerModal
-          isOpen={showFontManager}
-          onClose={() => setShowFontManager(false)}
-          t={t}
         />
       )}
     </>

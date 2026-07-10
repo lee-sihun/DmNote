@@ -16,7 +16,6 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 
 type PickerTarget = 'fill' | 'stroke' | 'font' | null;
@@ -39,7 +38,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null && pickerFor !== 'font';
   const [colorState, setColorState] = useState<ColorState>('idle');
-  const [showFontManager, setShowFontManager] = useState(false);
   const [showAnimationPicker, setShowAnimationPicker] = useState(false);
 
   const counterSettings = normalizeCounterSettings(keyPosition.counter);
@@ -405,19 +403,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             handleCounterUpdate({ fontFamily: fontName });
           }}
           onClose={() => setPickerFor(null)}
-          onOpenManager={() => {
-            setShowFontManager(true);
-          }}
           interactiveRefs={[fontBtnRef]}
-        />
-      )}
-
-      {/* FontManagerModal */}
-      {showFontManager && (
-        <FontManagerModal
-          isOpen={showFontManager}
-          onClose={() => setShowFontManager(false)}
-          t={t}
         />
       )}
 

@@ -9,7 +9,6 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
-import FontManagerModal from '@components/main/Modal/content/managers/FontManagerModal';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
 
 interface BatchKeyVisual {
@@ -78,7 +77,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   const animationButtonRef = useRef<HTMLButtonElement>(null);
   const [showFontPicker, setShowFontPicker] = useState(false);
-  const [showFontManager, setShowFontManager] = useState(false);
   const [showAnimationPicker, setShowAnimationPicker] = useState(false);
 
   const handleAnimationUpdate = (
@@ -335,19 +333,7 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             handleBatchCounterUpdate({ fontFamily });
           }}
           onClose={() => setShowFontPicker(false)}
-          onOpenManager={() => {
-            setShowFontManager(true);
-          }}
           interactiveRefs={[fontButtonRef]}
-        />
-      )}
-
-      {/* FontManagerModal */}
-      {showFontManager && (
-        <FontManagerModal
-          isOpen={showFontManager}
-          onClose={() => setShowFontManager(false)}
-          t={t}
         />
       )}
 

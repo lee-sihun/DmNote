@@ -114,6 +114,11 @@ export type SoundSaveProcessedWavResult = {
   soundPath?: string;
 };
 
+export type SoundRenameResult = {
+  success: boolean;
+  displayName: string;
+};
+
 export type SoundDeleteResult = {
   success: boolean;
 };
@@ -874,6 +879,7 @@ export interface DMNoteAPI {
   sound: {
     load(): Promise<SoundLoadResult>;
     list(): Promise<SoundListItem[]>;
+    rename(soundPath: string, displayName: string): Promise<SoundRenameResult>;
     remove(soundPath: string): Promise<SoundDeleteResult>;
     saveProcessedWav(
       wavBase64: string,

@@ -551,7 +551,15 @@
     "filterBuiltin": "Built-in",
     "filterLocal": "Local",
     "filterWeb": "Web",
-    "noFonts": "No fonts"
+    "noFonts": "No fonts",
+    "addLocalFont": "Add Local Font",
+    "addWebFont": "Add Web Font",
+    "edit": "Edit",
+    "rename": "Rename",
+    "delete": "Delete",
+    "enabledToggle": "Enabled",
+    "saveFailed": "Failed to save font settings.",
+    "deleteConfirm": "Delete this font? Elements using it will fall back to the default font."
   },
   "soundPicker": {
     "searchPlaceholder": "Search...",
@@ -560,8 +568,10 @@
     "noSounds": "No sounds",
     "loadFailed": "Failed to load sound list",
     "edit": "Edit",
+    "rename": "Rename",
     "delete": "Delete",
     "deleteFailed": "Failed to delete sound",
+    "renameFailed": "Failed to rename sound",
     "deleteConfirm": "Delete this sound? The file will be deleted and unassigned from every element using it."
   },
   "soundTrimModal": {
@@ -585,15 +595,6 @@
     "loadOriginalError": "Unable to load the original audio.",
     "saveErrorDefault": "Failed to save the processed sound.",
     "saveErrorFailed": "Failed to save the processed sound."
-  },
-  "fontManager": {
-    "localTab": "Local Fonts",
-    "webTab": "Web Fonts",
-    "noLocalFonts": "No local fonts",
-    "noWebFonts": "No web fonts",
-    "removeFont": "Remove font",
-    "adding": "Adding...",
-    "addFont": "Add"
   },
   "webFontInput": {
     "cssLabel": "@font-face CSS",

@@ -16,6 +16,11 @@ export const soundApi = {
     invoke<import('@src/types/plugin/api').SoundLoadResult>('sound_load'),
   list: () =>
     invoke<import('@src/types/plugin/api').SoundListItem[]>('sound_list'),
+  rename: (soundPath: string, displayName: string) =>
+    invoke<import('@src/types/plugin/api').SoundRenameResult>('sound_rename', {
+      soundPath,
+      displayName,
+    }),
   remove: (soundPath: string) =>
     invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
       soundPath,

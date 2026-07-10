@@ -40,6 +40,10 @@ const SoundPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelledRef = useRef(false);
   const addFileInputRef = useRef<HTMLInputElement>(null);
   const menu = usePickerItemMenu<string>();
 
@@ -68,6 +72,13 @@ const SoundPicker = ({
     if (open) return;
     menu.close();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 이름 변경 시작 시 입력에 포커스
+  useEffect(() => {
+    if (renamingPath === null) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renamingPath]);
 
   const filterOptions = [
     { value: 'all', label: t('soundPicker.filterAll') || '전체' },
@@ -99,6 +110,10 @@ const SoundPicker = ({
       id: 'edit',
       label: t('soundPicker.edit') || '편집',
       disabled: !menuTargetItem?.originalPath,
+    },
+    {
+      id: 'rename',
+      label: t('soundPicker.rename') || '이름 변경',
     },
     {
       id: 'delete',
@@ -138,11 +153,28 @@ const SoundPicker = ({
       if (normalizedSelectedSound === item.soundPath) {
         onSoundSelect(null);
       }
+      await loadSounds();
     } catch (error) {
       console.error('Failed to delete sound', error);
+      // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
+      await loadSounds();
       setLoadError(t('soundPicker.deleteFailed') || '사운드 삭제 실패');
     }
-    await loadSounds();
+  };
+
+  const commitRename = async (item: SoundListItem) => {
+    const trimmed = renameValue.trim();
+    setRenamingPath(null);
+    if (!trimmed || trimmed === (item.displayName || item.fileName)) return;
+    try {
+      await window.api.sound.rename(item.soundPath, trimmed);
+      await loadSounds();
+    } catch (error) {
+      console.error('Failed to rename sound', error);
+      // loadSounds가 loadError를 초기화하므로 reload 후에 실패 메시지 설정
+      await loadSounds();
+      setLoadError(t('soundPicker.renameFailed') || '사운드 이름 변경 실패');
+    }
   };
 
   const handleTrimSaved = (soundPath: string) => {
@@ -187,6 +219,7 @@ const SoundPicker = ({
               tabIndex={0}
               onClick={() => onSoundSelect(item.soundPath)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   onSoundSelect(item.soundPath);
@@ -204,9 +237,36 @@ const SoundPicker = ({
               }`}
               title={displayName}
             >
-              <span className="min-w-0 flex-1 truncate text-left">
-                {displayName}
-              </span>
+              {renamingPath === item.soundPath ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-[#FFFFFF] caret-[#3B82F6]"
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  onBlur={() => {
+                    if (!renameCancelledRef.current) void commitRename(item);
+                    renameCancelledRef.current = false;
+                  }}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      renameCancelledRef.current = true;
+                      setRenamingPath(null);
+                    }
+                  }}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {displayName}
+                </span>
+              )}
 
               {isLocal ? (
                 <button
@@ -217,11 +277,15 @@ const SoundPicker = ({
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF] hover:bg-[#3A3943]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8] hover:bg-[#2A2A30]'
+                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF]'
+                      : 'text-[#8A8D99] hover:text-[#DBDEE8]'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    menu.capturePressState(item.soundPath);
+                  }}
                   onClick={(event) =>
                     menu.openFromButton(event, item.soundPath)
                   }
@@ -261,6 +325,10 @@ const SoundPicker = ({
             if (!item) return;
             if (id === 'edit') {
               setTrimState({ mode: 'edit', item });
+            } else if (id === 'rename') {
+              renameCancelledRef.current = false;
+              setRenameValue(item.displayName || item.fileName);
+              setRenamingPath(item.soundPath);
             } else if (id === 'delete') {
               void handleDelete(item);
             }

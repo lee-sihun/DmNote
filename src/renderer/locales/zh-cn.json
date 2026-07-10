@@ -256,7 +256,6 @@
     "resetKeyCounter": "重置 [{{name}}] 键的计数器?",
     "reset": "重置",
     "removeKey": "移除 [{{name}}] 键?",
-
     "removeStat": "移除 [{{name}}] 统计?",
     "removeGraph": "移除 [{{name}}] 图表?",
     "removeKnob": "移除 [{{name}}] 旋钮?",
@@ -303,9 +302,7 @@
     "deleteKey": "删除按键",
     "duplicateSelected": "复制选中项",
     "deleteSelected": "删除选中项",
-
     "duplicateStat": "复制统计",
-
     "deleteStat": "删除统计",
     "duplicateGraph": "复制图表",
     "deleteGraph": "删除图表",
@@ -554,7 +551,15 @@
     "filterBuiltin": "内置字体",
     "filterLocal": "本地字体",
     "filterWeb": "网络字体",
-    "noFonts": "无字体"
+    "noFonts": "无字体",
+    "addLocalFont": "添加本地字体",
+    "addWebFont": "添加网络字体",
+    "edit": "编辑",
+    "rename": "重命名",
+    "delete": "删除",
+    "enabledToggle": "启用",
+    "saveFailed": "字体设置保存失败。",
+    "deleteConfirm": "确定删除该字体？使用它的元素将以默认字体显示。"
   },
   "soundPicker": {
     "searchPlaceholder": "搜索",
@@ -563,8 +568,10 @@
     "noSounds": "无音频",
     "loadFailed": "音频列表加载失败",
     "edit": "编辑",
+    "rename": "重命名",
     "delete": "删除",
     "deleteFailed": "音频删除失败",
+    "renameFailed": "音频重命名失败",
     "deleteConfirm": "确定删除该音频？文件将被删除，并从所有使用它的元素中移除。"
   },
   "soundTrimModal": {
@@ -588,15 +595,6 @@
     "loadOriginalError": "无法加载原始音频。",
     "saveErrorDefault": "无法保存处理后的音频。",
     "saveErrorFailed": "保存处理后的音频失败。"
-  },
-  "fontManager": {
-    "localTab": "本地字体",
-    "webTab": "网络字体",
-    "noLocalFonts": "无本地字体",
-    "noWebFonts": "无网络字体",
-    "removeFont": "删除字体",
-    "adding": "添加中...",
-    "addFont": "添加"
   },
   "webFontInput": {
     "cssLabel": "@font-face CSS",
