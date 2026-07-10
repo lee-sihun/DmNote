@@ -1018,7 +1018,7 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`relative z-10 w-full h-full rounded-[6px] text-body transition-colors duration-base ${
+    className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
       active ? 'text-fg' : 'text-fg-muted hover:text-fg'
     }`}
   >
@@ -1045,10 +1045,10 @@ export const Tabs: React.FC<TabsProps> = ({
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
 
   return (
-    <div className="relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px]">
+    <div className="relative flex w-full h-[30px] bg-inset rounded-[10px] items-center p-[2px]">
       <div
         aria-hidden
-        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
         style={{
           width: `calc((100% - 4px) / ${tabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`,

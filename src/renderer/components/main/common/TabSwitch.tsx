@@ -26,13 +26,13 @@ const TabSwitch = ({
 
   return (
     <div
-      className={`relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px] ${
+      className={`relative flex w-full h-[30px] bg-inset rounded-[10px] items-center p-[2px] ${
         className ?? ''
       }`}
     >
       <div
         aria-hidden
-        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
         style={{
           width: `calc((100% - 4px) / ${tabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`,
@@ -43,7 +43,7 @@ const TabSwitch = ({
           key={tab.id}
           type="button"
           onClick={() => onTabChange(tab.id)}
-          className={`relative z-10 w-full h-full rounded-[6px] text-body transition-colors duration-base ${
+          className={`relative z-10 w-full h-full rounded-[8px] text-body transition-colors duration-base ${
             activeTab === tab.id ? 'text-fg' : 'text-fg-muted hover:text-fg'
           }`}
         >
