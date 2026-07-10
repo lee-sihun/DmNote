@@ -46,8 +46,8 @@ const Dropdown: React.FC<DropdownProps> = ({
       // 하단 메뉴 높이 고려 (약 50px)
       const bottomPadding = 60;
 
-      // 드롭다운 메뉴 예상 높이 (옵션당 25px + padding)
-      const estimatedMenuHeight = Math.min(options.length * 25 + 4, 200);
+      // 드롭다운 메뉴 예상 높이 (옵션당 26px + padding)
+      const estimatedMenuHeight = Math.min(options.length * 26 + 8, 200);
 
       // 버튼 아래 공간이 부족하면 위로 펼치기
       const spaceBelow = viewportHeight - buttonRect.bottom - bottomPadding;
@@ -74,16 +74,16 @@ const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div
       ref={ref}
-      className={`relative ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+      className={`relative ${disabled ? 'opacity-40 pointer-events-none' : ''}`}
     >
       {iconTrigger ? (
         <button
           ref={buttonRef}
           type="button"
-          className={`flex items-center justify-center w-[23px] h-[23px] rounded-[7px] border-[1px] cursor-pointer transition-colors ${
+          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md border cursor-pointer transition-colors duration-fast ${
             open
-              ? 'border-[#459BF8] bg-[#2A2A31]'
-              : 'border-[#3A3943] bg-[#2A2A31] hover:border-[#505058]'
+              ? 'border-accent bg-surface'
+              : 'border-line bg-surface hover:border-line-strong'
           }`}
           onClick={() => setOpen((prev) => !prev)}
           disabled={disabled}
@@ -94,17 +94,13 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex box-border items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
-            fullWidth ? 'w-full' : ''
-          } ${widthClass}`}
+          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-surface border rounded-md text-fg text-body transition-colors duration-fast ${
+            open ? 'border-accent' : 'border-line hover:border-line-strong'
+          } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={() => setOpen((prev) => !prev)}
           disabled={disabled}
         >
-          <span
-            className={`truncate leading-[23px] ${
-              !selected ? 'text-[#DBDEE8]' : ''
-            }`}
-          >
+          <span className={`truncate ${!selected ? 'text-fg-muted' : ''}`}>
             {selected ? selected.label : placeholder}
           </span>
           <svg
@@ -112,13 +108,13 @@ const Dropdown: React.FC<DropdownProps> = ({
             height="5"
             viewBox="0 0 14 8"
             fill="none"
-            className={`ml-[5px] transition-transform duration-200 ${
+            className={`ml-[5px] shrink-0 text-fg-muted transition-transform duration-base ease-out-expo ${
               open ? 'rotate-180' : 'rotate-0'
             }`}
           >
             <path
               d="M1 1L7 7L13 1"
-              stroke="#DBDEE8"
+              stroke="currentColor"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -128,7 +124,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       )}
       {open && (
         <div
-          className={`absolute flex flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-x-hidden overflow-y-auto gap-[2px] max-h-[200px] ${
+          className={`absolute flex flex-col p-[4px] gap-[1px] bg-elevated border border-line rounded-lg shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${
             fullWidth
               ? 'left-0 right-0'
               : align === 'right'
@@ -136,10 +132,10 @@ const Dropdown: React.FC<DropdownProps> = ({
               : align === 'center'
               ? 'left-1/2 -translate-x-1/2'
               : 'left-0'
-          } ${widthClass} ${openUpward ? 'bottom-[25px]' : 'top-[25px]'}`}
+          } ${widthClass} ${openUpward ? 'bottom-[28px]' : 'top-[28px]'}`}
         >
           {options.length === 0 ? (
-            <div className="px-4 py-3 text-[#9AA0AA] text-[18px] font-medium">
+            <div className="px-[8px] py-[6px] text-body text-fg-faint">
               옵션 없음
             </div>
           ) : (
@@ -147,15 +143,17 @@ const Dropdown: React.FC<DropdownProps> = ({
               <button
                 key={opt.value}
                 type="button"
-                className={`text-left w-full h-[23px] px-[13px] py-[0px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
-                  value === opt.value ? '!bg-[#24232A] pointer-events-none' : ''
+                className={`text-left w-full h-[24px] px-[8px] rounded-[6px] text-body transition-colors duration-fast flex items-center ${
+                  value === opt.value
+                    ? 'bg-surface-active text-fg pointer-events-none'
+                    : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
                 }`}
                 onClick={() => {
                   onChange(opt.value);
                   setOpen(false);
                 }}
               >
-                <span className="truncate leading-[23px]">{opt.label}</span>
+                <span className="truncate">{opt.label}</span>
               </button>
             ))
           )}

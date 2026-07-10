@@ -12,6 +12,7 @@ interface TabSwitchProps {
   className?: string;
 }
 
+// 세그먼트 컨트롤
 const TabSwitch = ({
   tabs,
   activeTab,
@@ -19,7 +20,7 @@ const TabSwitch = ({
   className,
 }: TabSwitchProps) => (
   <div
-    className={`flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px] ${
+    className={`flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px] gap-[2px] ${
       className ?? ''
     }`}
   >
@@ -28,10 +29,10 @@ const TabSwitch = ({
         key={tab.id}
         type="button"
         onClick={() => onTabChange(tab.id)}
-        className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
+        className={`w-full h-full rounded-[6px] text-body transition-colors duration-fast ${
           activeTab === tab.id
-            ? 'bg-[#3A3943] text-white'
-            : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
+            ? 'bg-surface-active text-fg shadow-elevation-1'
+            : 'text-fg-muted hover:text-fg'
         }`}
       >
         {tab.label}

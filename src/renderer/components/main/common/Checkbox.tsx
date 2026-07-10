@@ -1,17 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 interface CheckboxProps {
   checked: boolean;
   onChange: () => void;
 }
 
+// 토글 스위치 — 이름은 기존 사용처 호환을 위해 유지
 const Checkbox = ({ checked, onChange }: CheckboxProps) => {
-  const [isChecked, setIsChecked] = useState(checked);
-
-  useEffect(() => {
-    setIsChecked(checked);
-  }, [checked]);
-
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -20,15 +15,17 @@ const Checkbox = ({ checked, onChange }: CheckboxProps) => {
 
   return (
     <div
-      className={`relative w-[27px] h-[16px] rounded-[75px] cursor-pointer transition-colors duration-75 
-        ${isChecked ? 'bg-[#493C1D]' : 'bg-[#3B4049]'}`}
+      role="switch"
+      aria-checked={checked}
+      className={`relative w-[30px] h-[18px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
+        checked ? 'bg-accent' : 'bg-white/[0.14] hover:bg-white/[0.18]'
+      }`}
       onClick={handleClick}
     >
       <div
-        className={`absolute w-[12px] h-[12px] rounded-[75px] top-[2px] transition-all duration-75 ease-in-out 
-          ${
-            isChecked ? 'left-[13px] bg-[#FFB400]' : 'left-[2px] bg-[#989BA6]'
-          }`}
+        className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-elevation-1 transition-all duration-base ease-out-expo ${
+          checked ? 'left-[14px]' : 'left-[2px]'
+        }`}
       />
     </div>
   );
