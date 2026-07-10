@@ -4,9 +4,9 @@ import type { NoteTabContentProps } from '../types';
 import type { NoteColor, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
+  PropertySection,
   NumberInput,
   OptionalNumberInput,
-  SectionDivider,
 } from '../PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
@@ -431,294 +431,305 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
 
   return (
     <>
-      {/* 노트 효과 표시 */}
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
-        </p>
-        <Checkbox
-          checked={keyPosition.noteEffectEnabled ?? true}
-          onChange={() =>
-            handleStyleChangeComplete(
-              'noteEffectEnabled',
-              !(keyPosition.noteEffectEnabled ?? true),
-            )
-          }
-        />
-      </div>
-
-      {/* Y축 자동 보정 */}
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
-        </p>
-        <Checkbox
-          checked={keyPosition.noteAutoYCorrection ?? true}
-          onChange={() =>
-            handleStyleChangeComplete(
-              'noteAutoYCorrection',
-              !(keyPosition.noteAutoYCorrection ?? true),
-            )
-          }
-        />
-      </div>
-
-      <SectionDivider />
-
-      {/* 오프셋 */}
-      <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
-        <OptionalNumberInput
-          value={keyPosition.noteOffsetX || undefined}
-          onChange={(value) => handleStyleChangeComplete('noteOffsetX', value)}
-          prefix="X"
-          allowNegative
-          allowDecimal
-          decimalScale={1}
-          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
-          placeholder="0"
-        />
-        <OptionalNumberInput
-          value={keyPosition.noteOffsetY || undefined}
-          onChange={(value) => handleStyleChangeComplete('noteOffsetY', value)}
-          prefix="Y"
-          allowNegative
-          allowDecimal
-          decimalScale={1}
-          min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
-          placeholder="0"
-        />
-      </PropertyRow>
-
-      {/* 노트 넓이 */}
-      <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
-        <OptionalNumberInput
-          value={keyPosition.noteWidth}
-          onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
-          suffix="px"
-          min={1}
-          allowDecimal
-          decimalScale={1}
-          placeholder={`${keyPosition.width}px`}
-        />
-      </PropertyRow>
-
-      {/* 노트 정렬 */}
-      <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
-        <Dropdown
-          options={[
-            {
-              label: t('keySetting.noteAlignLeft') || '좌측',
-              value: 'left',
-            },
-            {
-              label: t('keySetting.noteAlignCenter') || '중앙',
-              value: 'center',
-            },
-            {
-              label: t('keySetting.noteAlignRight') || '우측',
-              value: 'right',
-            },
-          ]}
-          value={keyPosition.noteAlignment ?? 'center'}
-          onChange={(value) =>
-            handleStyleChangeComplete(
-              'noteAlignment',
-              value as 'left' | 'center' | 'right',
-            )
-          }
-        />
-      </PropertyRow>
-
-      <SectionDivider />
-
-      {/* 노트 색상 */}
-      <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
-        <button
-          ref={noteColorButtonRef}
-          type="button"
-          onClick={() => handlePickerToggle('note')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'note' ? 'border-accent' : 'border-line'
-          }`}
-          style={getNoteColorDisplay().style}
-        />
-      </PropertyRow>
-
-      {/* 노트 테두리 색상 + 방향 */}
-      <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
-        <div className="flex items-center gap-[4px]">
-          <button
-            ref={borderColorButtonRef}
-            type="button"
-            onClick={() => handlePickerToggle('border')}
-            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-              pickerFor === 'border' ? 'border-accent' : 'border-line'
-            }`}
-            style={{ backgroundColor: borderColor }}
-          />
-          <Dropdown
-            iconTrigger={
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                {(keyPosition.noteBorderSide ?? 'all') === 'all' && (
-                  <rect
-                    x="1.5"
-                    y="1.5"
-                    width="10"
-                    height="10"
-                    rx="1.5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  />
-                )}
-                {(keyPosition.noteBorderSide ?? 'all') === 'vertical' && (
-                  <>
-                    <line
-                      x1="1.5"
-                      y1="1"
-                      x2="1.5"
-                      y2="12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1="11.5"
-                      y1="1"
-                      x2="11.5"
-                      y2="12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </>
-                )}
-                {(keyPosition.noteBorderSide ?? 'all') === 'horizontal' && (
-                  <>
-                    <line
-                      x1="1"
-                      y1="1.5"
-                      x2="12"
-                      y2="1.5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1="1"
-                      y1="11.5"
-                      x2="12"
-                      y2="11.5"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </>
-                )}
-              </svg>
-            }
-            align="right"
-            options={[
-              { label: t('keySetting.borderSideAll') || '전체', value: 'all' },
-              {
-                label: t('keySetting.borderSideVertical') || '수직',
-                value: 'vertical',
-              },
-              {
-                label: t('keySetting.borderSideHorizontal') || '수평',
-                value: 'horizontal',
-              },
-            ]}
-            value={keyPosition.noteBorderSide ?? 'all'}
-            onChange={(value) =>
+      <PropertySection>
+        {/* 노트 효과 표시 */}
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-muted text-label">
+            {t('keySetting.noteEffectEnabled') || '노트 효과 표시'}
+          </p>
+          <Checkbox
+            checked={keyPosition.noteEffectEnabled ?? true}
+            onChange={() =>
               handleStyleChangeComplete(
-                'noteBorderSide',
-                value as 'all' | 'vertical' | 'horizontal',
+                'noteEffectEnabled',
+                !(keyPosition.noteEffectEnabled ?? true),
               )
             }
           />
         </div>
-      </PropertyRow>
 
-      {/* 노트 테두리 두께 */}
-      <PropertyRow label={t('keySetting.noteBorderWidth') || '테두리 두께'}>
-        <NumberInput
-          value={
-            keyPosition.noteBorderWidth ??
-            NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default
-          }
-          onChange={(value) =>
-            handleStyleChangeComplete('noteBorderWidth', value)
-          }
-          suffix="px"
-          min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+        {/* Y축 자동 보정 */}
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-muted text-label">
+            {t('keySetting.noteAutoYCorrection') || 'Y축 자동 보정'}
+          </p>
+          <Checkbox
+            checked={keyPosition.noteAutoYCorrection ?? true}
+            onChange={() =>
+              handleStyleChangeComplete(
+                'noteAutoYCorrection',
+                !(keyPosition.noteAutoYCorrection ?? true),
+              )
+            }
+          />
+        </div>
+      </PropertySection>
 
-      {/* 노트 라운딩 */}
-      <PropertyRow label={t('keySetting.noteBorderRadius') || '노트 라운딩'}>
-        <NumberInput
-          value={
-            keyPosition.noteBorderRadius ??
-            NOTE_SETTINGS_CONSTRAINTS.borderRadius.default
-          }
-          onChange={(value) =>
-            handleStyleChangeComplete('noteBorderRadius', value)
-          }
-          suffix="px"
-          min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+      <PropertySection>
+        {/* 오프셋 */}
+        <PropertyRow label={t('keySetting.noteOffset') || '오프셋'}>
+          <OptionalNumberInput
+            value={keyPosition.noteOffsetX || undefined}
+            onChange={(value) =>
+              handleStyleChangeComplete('noteOffsetX', value)
+            }
+            prefix="X"
+            allowNegative
+            allowDecimal
+            decimalScale={1}
+            min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetX.max}
+            placeholder="0"
+          />
+          <OptionalNumberInput
+            value={keyPosition.noteOffsetY || undefined}
+            onChange={(value) =>
+              handleStyleChangeComplete('noteOffsetY', value)
+            }
+            prefix="Y"
+            allowNegative
+            allowDecimal
+            decimalScale={1}
+            min={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.noteOffsetY.max}
+            placeholder="0"
+          />
+        </PropertyRow>
 
-      <SectionDivider />
+        {/* 노트 넓이 */}
+        <PropertyRow label={t('keySetting.noteWidth') || '노트 넓이'}>
+          <OptionalNumberInput
+            value={keyPosition.noteWidth}
+            onChange={(value) => handleStyleChangeComplete('noteWidth', value)}
+            suffix="px"
+            min={1}
+            allowDecimal
+            decimalScale={1}
+            placeholder={`${keyPosition.width}px`}
+          />
+        </PropertyRow>
 
-      {/* 글로우 효과 */}
-      <div className="flex justify-between items-center w-full h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('keySetting.noteGlow') || '글로우 효과'}
-        </p>
-        <Checkbox
-          checked={keyPosition.noteGlowEnabled ?? false}
-          onChange={() =>
-            handleStyleChangeComplete(
-              'noteGlowEnabled',
-              !(keyPosition.noteGlowEnabled ?? false),
-            )
-          }
-        />
-      </div>
+        {/* 노트 정렬 */}
+        <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
+          <Dropdown
+            options={[
+              {
+                label: t('keySetting.noteAlignLeft') || '좌측',
+                value: 'left',
+              },
+              {
+                label: t('keySetting.noteAlignCenter') || '중앙',
+                value: 'center',
+              },
+              {
+                label: t('keySetting.noteAlignRight') || '우측',
+                value: 'right',
+              },
+            ]}
+            value={keyPosition.noteAlignment ?? 'center'}
+            onChange={(value) =>
+              handleStyleChangeComplete(
+                'noteAlignment',
+                value as 'left' | 'center' | 'right',
+              )
+            }
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      {/* 글로우 색상/크기/투명도 */}
-      <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
-        <button
-          ref={glowColorButtonRef}
-          type="button"
-          onClick={() => handlePickerToggle('glow')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'glow' ? 'border-accent' : 'border-line'
-          }`}
-          style={getGlowColorDisplay().style}
-        />
-      </PropertyRow>
+      <PropertySection>
+        {/* 노트 색상 */}
+        <PropertyRow label={t('keySetting.noteColor') || '노트 색상'}>
+          <button
+            ref={noteColorButtonRef}
+            type="button"
+            onClick={() => handlePickerToggle('note')}
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'note' ? 'border-accent' : 'border-line'
+            }`}
+            style={getNoteColorDisplay().style}
+          />
+        </PropertyRow>
 
-      <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
-        <NumberInput
-          value={keyPosition.noteGlowSize ?? 20}
-          onChange={(value) => handleStyleChangeComplete('noteGlowSize', value)}
-          suffix="px"
-          min={0}
-          max={50}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+        {/* 노트 테두리 색상 + 방향 */}
+        <PropertyRow label={t('keySetting.noteBorderColor') || '테두리 색상'}>
+          <div className="flex items-center gap-[4px]">
+            <button
+              ref={borderColorButtonRef}
+              type="button"
+              onClick={() => handlePickerToggle('border')}
+              className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                pickerFor === 'border' ? 'border-accent' : 'border-line'
+              }`}
+              style={{ backgroundColor: borderColor }}
+            />
+            <Dropdown
+              iconTrigger={
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  {(keyPosition.noteBorderSide ?? 'all') === 'all' && (
+                    <rect
+                      x="1.5"
+                      y="1.5"
+                      width="10"
+                      height="10"
+                      rx="1.5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                  )}
+                  {(keyPosition.noteBorderSide ?? 'all') === 'vertical' && (
+                    <>
+                      <line
+                        x1="1.5"
+                        y1="1"
+                        x2="1.5"
+                        y2="12"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="11.5"
+                        y1="1"
+                        x2="11.5"
+                        y2="12"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </>
+                  )}
+                  {(keyPosition.noteBorderSide ?? 'all') === 'horizontal' && (
+                    <>
+                      <line
+                        x1="1"
+                        y1="1.5"
+                        x2="12"
+                        y2="1.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="1"
+                        y1="11.5"
+                        x2="12"
+                        y2="11.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                    </>
+                  )}
+                </svg>
+              }
+              align="right"
+              options={[
+                {
+                  label: t('keySetting.borderSideAll') || '전체',
+                  value: 'all',
+                },
+                {
+                  label: t('keySetting.borderSideVertical') || '수직',
+                  value: 'vertical',
+                },
+                {
+                  label: t('keySetting.borderSideHorizontal') || '수평',
+                  value: 'horizontal',
+                },
+              ]}
+              value={keyPosition.noteBorderSide ?? 'all'}
+              onChange={(value) =>
+                handleStyleChangeComplete(
+                  'noteBorderSide',
+                  value as 'all' | 'vertical' | 'horizontal',
+                )
+              }
+            />
+          </div>
+        </PropertyRow>
+
+        {/* 노트 테두리 두께 */}
+        <PropertyRow label={t('keySetting.noteBorderWidth') || '테두리 두께'}>
+          <NumberInput
+            value={
+              keyPosition.noteBorderWidth ??
+              NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.default
+            }
+            onChange={(value) =>
+              handleStyleChangeComplete('noteBorderWidth', value)
+            }
+            suffix="px"
+            min={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.noteBorderWidth.max}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 노트 라운딩 */}
+        <PropertyRow label={t('keySetting.noteBorderRadius') || '노트 라운딩'}>
+          <NumberInput
+            value={
+              keyPosition.noteBorderRadius ??
+              NOTE_SETTINGS_CONSTRAINTS.borderRadius.default
+            }
+            onChange={(value) =>
+              handleStyleChangeComplete('noteBorderRadius', value)
+            }
+            suffix="px"
+            min={NOTE_SETTINGS_CONSTRAINTS.borderRadius.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.borderRadius.max}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+      </PropertySection>
+
+      <PropertySection>
+        {/* 글로우 효과 */}
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-muted text-label">
+            {t('keySetting.noteGlow') || '글로우 효과'}
+          </p>
+          <Checkbox
+            checked={keyPosition.noteGlowEnabled ?? false}
+            onChange={() =>
+              handleStyleChangeComplete(
+                'noteGlowEnabled',
+                !(keyPosition.noteGlowEnabled ?? false),
+              )
+            }
+          />
+        </div>
+
+        {/* 글로우 색상/크기/투명도 */}
+        <PropertyRow label={t('keySetting.noteGlowColor') || '글로우 색상'}>
+          <button
+            ref={glowColorButtonRef}
+            type="button"
+            onClick={() => handlePickerToggle('glow')}
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'glow' ? 'border-accent' : 'border-line'
+            }`}
+            style={getGlowColorDisplay().style}
+          />
+        </PropertyRow>
+
+        <PropertyRow label={t('keySetting.noteGlowSize') || '글로우 크기'}>
+          <NumberInput
+            value={keyPosition.noteGlowSize ?? 20}
+            onChange={(value) =>
+              handleStyleChangeComplete('noteGlowSize', value)
+            }
+            suffix="px"
+            min={0}
+            max={50}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+      </PropertySection>
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
       {pickerFor && (

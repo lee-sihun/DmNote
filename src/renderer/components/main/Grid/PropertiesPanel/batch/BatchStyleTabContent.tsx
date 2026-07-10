@@ -5,7 +5,7 @@ import {
   NumberInput,
   ColorInput,
   TextInput,
-  SectionDivider,
+  PropertySection,
   FontStyleToggle,
 } from '../index';
 import Checkbox from '@components/main/common/Checkbox';
@@ -200,161 +200,238 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
   return (
     <>
-      {/* 정렬 */}
-      <PropertyRow label={t('propertiesPanel.alignment') || '정렬'}>
-        <div className="flex gap-[4px]">
-          {/* 수평 정렬 */}
-          <div className="flex">
-            <button
-              type="button"
-              onClick={() => handleBatchAlign('left')}
-              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M1 1V9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <rect
-                  x="2.5"
-                  y="2.5"
-                  width="6"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="2.5"
-                  y="6"
-                  width="4"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchAlign('centerH')}
-              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M5 1V9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <rect
-                  x="1.5"
-                  y="2.5"
-                  width="7"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="2.5"
-                  y="6"
-                  width="5"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchAlign('right')}
-              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M9 1V9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <rect
-                  x="1.5"
-                  y="2.5"
-                  width="6"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-                <rect
-                  x="3.5"
-                  y="6"
-                  width="4"
-                  height="1.5"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
+      <PropertySection>
+        {/* 정렬 */}
+        <PropertyRow label={t('propertiesPanel.alignment') || '정렬'}>
+          <div className="flex gap-[4px]">
+            {/* 수평 정렬 */}
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('left')}
+                className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1 1V9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="2.5"
+                    y="2.5"
+                    width="6"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="2.5"
+                    y="6"
+                    width="4"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('centerH')}
+                className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M5 1V9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="1.5"
+                    y="2.5"
+                    width="7"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="2.5"
+                    y="6"
+                    width="5"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('right')}
+                className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M9 1V9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="1.5"
+                    y="2.5"
+                    width="6"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="3.5"
+                    y="6"
+                    width="4"
+                    height="1.5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
+            {/* 수직 정렬 */}
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('top')}
+                className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1 1H9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="2.5"
+                    y="2.5"
+                    width="1.5"
+                    height="6"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="6"
+                    y="2.5"
+                    width="1.5"
+                    height="4"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('centerV')}
+                className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1 5H9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="2.5"
+                    y="1.5"
+                    width="1.5"
+                    height="7"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="6"
+                    y="2.5"
+                    width="1.5"
+                    height="5"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAlign('bottom')}
+                className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+                title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1 9H9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x="2.5"
+                    y="1.5"
+                    width="1.5"
+                    height="6"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="6"
+                    y="3.5"
+                    width="1.5"
+                    height="4"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
-          {/* 수직 정렬 */}
-          <div className="flex">
+        </PropertyRow>
+
+        {/* 분배 */}
+        <PropertyRow label={t('propertiesPanel.distribution') || '분배'}>
+          <div className="flex gap-[4px]">
             <button
               type="button"
-              onClick={() => handleBatchAlign('top')}
-              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
+              onClick={() => handleBatchDistribute('horizontal')}
+              disabled={selectedCount < 3}
+              className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
+                selectedCount < 3
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-surface-hover'
+              }`}
+              title={t('propertiesPanel.distributeH') || '수평 분배'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M1 1H9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
                 <rect
-                  x="2.5"
+                  x="0.5"
                   y="2.5"
                   width="1.5"
-                  height="6"
+                  height="5"
                   rx="0.5"
                   fill="currentColor"
                 />
                 <rect
-                  x="6"
+                  x="4.25"
                   y="2.5"
                   width="1.5"
-                  height="4"
-                  rx="0.5"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBatchAlign('centerV')}
-              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M1 5H9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <rect
-                  x="2.5"
-                  y="1.5"
-                  width="1.5"
-                  height="7"
+                  height="5"
                   rx="0.5"
                   fill="currentColor"
                 />
                 <rect
-                  x="6"
+                  x="8"
                   y="2.5"
                   width="1.5"
                   height="5"
@@ -365,453 +442,393 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleBatchAlign('bottom')}
-              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
-              title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
+              onClick={() => handleBatchDistribute('vertical')}
+              disabled={selectedCount < 3}
+              className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
+                selectedCount < 3
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-surface-hover'
+              }`}
+              title={t('propertiesPanel.distributeV') || '수직 분배'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path
-                  d="M1 9H9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
                 <rect
                   x="2.5"
-                  y="1.5"
-                  width="1.5"
-                  height="6"
+                  y="0.5"
+                  width="5"
+                  height="1.5"
                   rx="0.5"
                   fill="currentColor"
                 />
                 <rect
-                  x="6"
-                  y="3.5"
-                  width="1.5"
-                  height="4"
+                  x="2.5"
+                  y="4.25"
+                  width="5"
+                  height="1.5"
+                  rx="0.5"
+                  fill="currentColor"
+                />
+                <rect
+                  x="2.5"
+                  y="8"
+                  width="5"
+                  height="1.5"
                   rx="0.5"
                   fill="currentColor"
                 />
               </svg>
             </button>
           </div>
-        </div>
-      </PropertyRow>
+        </PropertyRow>
 
-      {/* 분배 */}
-      <PropertyRow label={t('propertiesPanel.distribution') || '분배'}>
-        <div className="flex gap-[4px]">
-          <button
-            type="button"
-            onClick={() => handleBatchDistribute('horizontal')}
-            disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-              selectedCount < 3
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-surface-hover'
-            }`}
-            title={t('propertiesPanel.distributeH') || '수평 분배'}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect
-                x="0.5"
-                y="2.5"
-                width="1.5"
-                height="5"
-                rx="0.5"
-                fill="currentColor"
-              />
-              <rect
-                x="4.25"
-                y="2.5"
-                width="1.5"
-                height="5"
-                rx="0.5"
-                fill="currentColor"
-              />
-              <rect
-                x="8"
-                y="2.5"
-                width="1.5"
-                height="5"
-                rx="0.5"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleBatchDistribute('vertical')}
-            disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
-              selectedCount < 3
-                ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-surface-hover'
-            }`}
-            title={t('propertiesPanel.distributeV') || '수직 분배'}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect
-                x="2.5"
-                y="0.5"
-                width="5"
-                height="1.5"
-                rx="0.5"
-                fill="currentColor"
-              />
-              <rect
-                x="2.5"
-                y="4.25"
-                width="5"
-                height="1.5"
-                rx="0.5"
-                fill="currentColor"
-              />
-              <rect
-                x="2.5"
-                y="8"
-                width="5"
-                height="1.5"
-                rx="0.5"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-        </div>
-      </PropertyRow>
+        {/* 간격 */}
+        <PropertyRow label={t('propertiesPanel.spacing') || '간격'}>
+          <NumberInput
+            value={batchSpacing.value}
+            onChange={onSpacingChange}
+            onBlur={onSpacingBlur}
+            suffix="px"
+            min={0}
+            max={500}
+            allowDecimal
+            decimalScale={1}
+            isMixed={batchSpacing.isMixed}
+          />
+        </PropertyRow>
 
-      {/* 간격 */}
-      <PropertyRow label={t('propertiesPanel.spacing') || '간격'}>
-        <NumberInput
-          value={batchSpacing.value}
-          onChange={onSpacingChange}
-          onBlur={onSpacingBlur}
-          suffix="px"
-          min={0}
-          max={500}
-          allowDecimal
-          decimalScale={1}
-          isMixed={batchSpacing.isMixed}
-        />
-      </PropertyRow>
-
-      {/* 크기 */}
-      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-        <NumberInput
-          value={getMixedValue((pos) => pos.width, 60).value}
-          onChange={(value) => handleBatchResize('width', value)}
-          prefix="W"
-          min={10}
-          max={500}
-          allowDecimal
-          decimalScale={1}
-          isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
-        />
-        <NumberInput
-          value={getMixedValue((pos) => pos.height, 60).value}
-          onChange={(value) => handleBatchResize('height', value)}
-          prefix="H"
-          min={10}
-          max={500}
-          allowDecimal
-          decimalScale={1}
-          isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
-        />
-      </PropertyRow>
+        {/* 크기 */}
+        <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+          <NumberInput
+            value={getMixedValue((pos) => pos.width, 60).value}
+            onChange={(value) => handleBatchResize('width', value)}
+            prefix="W"
+            min={10}
+            max={500}
+            allowDecimal
+            decimalScale={1}
+            isMixed={getMixedValue((pos) => pos.width, 60).isMixed}
+          />
+          <NumberInput
+            value={getMixedValue((pos) => pos.height, 60).value}
+            onChange={(value) => handleBatchResize('height', value)}
+            prefix="H"
+            min={10}
+            max={500}
+            allowDecimal
+            decimalScale={1}
+            isMixed={getMixedValue((pos) => pos.height, 60).isMixed}
+          />
+        </PropertyRow>
+      </PropertySection>
 
       {afterSizeContent ? (
-        <>
-          <SectionDivider />
-          {afterSizeContent}
-          <SectionDivider />
-        </>
-      ) : (
-        <SectionDivider />
-      )}
+        <PropertySection>{afterSizeContent}</PropertySection>
+      ) : null}
 
-      {/* 배경색 */}
-      <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
-        {(
-          colorState === 'active'
-            ? getMixedValue(
-                (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-                'rgba(121, 121, 121, 0.9)',
-              ).isMixed
-            : getMixedValue(
+      <PropertySection>
+        {/* 배경색 */}
+        <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
+          {(
+            colorState === 'active'
+              ? getMixedValue(
+                  (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
+                  'rgba(121, 121, 121, 0.9)',
+                ).isMixed
+              : getMixedValue(
+                  (pos) => pos.backgroundColor,
+                  'rgba(46, 46, 47, 0.9)',
+                ).isMixed
+          ) ? (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          ) : null}
+          <ColorInput
+            value={
+              getMixedValue(
                 (pos) => pos.backgroundColor,
                 'rgba(46, 46, 47, 0.9)',
-              ).isMixed
-        ) ? (
-          <span className="text-fg-faint text-body italic">Mixed</span>
-        ) : null}
-        <ColorInput
-          value={
-            getMixedValue((pos) => pos.backgroundColor, 'rgba(46, 46, 47, 0.9)')
-              .value
-          }
-          activeValue={
-            getMixedValue(
-              (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
-              'rgba(121, 121, 121, 0.9)',
-            ).value
-          }
-          showStateTabs
-          stateMode={colorState}
-          onStateModeChange={setColorState}
-          onChange={(color) => handleBatchStyleChange('backgroundColor', color)}
-          onChangeComplete={(color) =>
-            handleBatchStyleChangeComplete('backgroundColor', color)
-          }
-          onActiveChange={(color) =>
-            handleBatchStyleChange('activeBackgroundColor', color)
-          }
-          onActiveChangeComplete={(color) =>
-            handleBatchStyleChangeComplete('activeBackgroundColor', color)
-          }
-          panelElement={panelElement}
-        />
-      </PropertyRow>
+              ).value
+            }
+            activeValue={
+              getMixedValue(
+                (pos) => pos.activeBackgroundColor ?? pos.backgroundColor,
+                'rgba(121, 121, 121, 0.9)',
+              ).value
+            }
+            showStateTabs
+            stateMode={colorState}
+            onStateModeChange={setColorState}
+            onChange={(color) =>
+              handleBatchStyleChange('backgroundColor', color)
+            }
+            onChangeComplete={(color) =>
+              handleBatchStyleChangeComplete('backgroundColor', color)
+            }
+            onActiveChange={(color) =>
+              handleBatchStyleChange('activeBackgroundColor', color)
+            }
+            onActiveChangeComplete={(color) =>
+              handleBatchStyleChangeComplete('activeBackgroundColor', color)
+            }
+            panelElement={panelElement}
+          />
+        </PropertyRow>
 
-      {/* 테두리 색상 */}
-      <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
-        {(
-          colorState === 'active'
-            ? getMixedValue(
-                (pos) => pos.activeBorderColor ?? pos.borderColor,
-                'rgba(255, 255, 255, 0.9)',
-              ).isMixed
-            : getMixedValue(
+        {/* 테두리 색상 */}
+        <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
+          {(
+            colorState === 'active'
+              ? getMixedValue(
+                  (pos) => pos.activeBorderColor ?? pos.borderColor,
+                  'rgba(255, 255, 255, 0.9)',
+                ).isMixed
+              : getMixedValue(
+                  (pos) => pos.borderColor,
+                  'rgba(113, 113, 113, 0.9)',
+                ).isMixed
+          ) ? (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          ) : null}
+          <ColorInput
+            value={
+              getMixedValue(
                 (pos) => pos.borderColor,
                 'rgba(113, 113, 113, 0.9)',
-              ).isMixed
-        ) ? (
-          <span className="text-fg-faint text-body italic">Mixed</span>
-        ) : null}
-        <ColorInput
-          value={
-            getMixedValue((pos) => pos.borderColor, 'rgba(113, 113, 113, 0.9)')
-              .value
-          }
-          activeValue={
-            getMixedValue(
-              (pos) => pos.activeBorderColor ?? pos.borderColor,
-              'rgba(255, 255, 255, 0.9)',
-            ).value
-          }
-          showStateTabs
-          stateMode={colorState}
-          onStateModeChange={setColorState}
-          onChange={(color) => handleBatchStyleChange('borderColor', color)}
-          onChangeComplete={(color) =>
-            handleBatchStyleChangeComplete('borderColor', color)
-          }
-          onActiveChange={(color) =>
-            handleBatchStyleChange('activeBorderColor', color)
-          }
-          onActiveChangeComplete={(color) =>
-            handleBatchStyleChangeComplete('activeBorderColor', color)
-          }
-          panelElement={panelElement}
-        />
-      </PropertyRow>
-
-      {/* 테두리 두께 */}
-      <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
-        {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
-          <span className="text-fg-faint text-body italic">Mixed</span>
-        ) : null}
-        <NumberInput
-          value={getMixedValue((pos) => pos.borderWidth, 3).value}
-          onChange={(value) =>
-            handleBatchStyleChangeComplete('borderWidth', value)
-          }
-          suffix="px"
-          min={0}
-          max={20}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 모서리 반경 */}
-      <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
-        {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
-          <span className="text-fg-faint text-body italic">Mixed</span>
-        ) : null}
-        <NumberInput
-          value={getMixedValue((pos) => pos.borderRadius, 10).value}
-          onChange={(value) =>
-            handleBatchStyleChangeComplete('borderRadius', value)
-          }
-          suffix="px"
-          min={0}
-          max={100}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 커스텀 이미지 */}
-      <PropertyRow label={t('propertiesPanel.customImage') || '커스텀 이미지'}>
-        <button
-          ref={batchImageButtonRef}
-          type="button"
-          className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-            showBatchImagePicker ? 'shadow-focus-ring' : ''
-          } text-fg text-body`}
-          onClick={onToggleBatchImagePicker}
-        >
-          {t('propertiesPanel.configure') || '설정하기'}
-        </button>
-      </PropertyRow>
-
-      {!hideDisplayText || !hideFontControls ? <SectionDivider /> : null}
-
-      {/* 표시 텍스트 */}
-      {!hideDisplayText && (
-        <PropertyRow label={t('propertiesPanel.displayText') || '표시 텍스트'}>
-          {(() => {
-            const { isMixed, value } = getDisplayTextMixed();
-            const displayTextValue = getMixedValue(
-              (pos) => pos.displayText,
-              '',
-            ).value;
-            // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
-            return (
-              <TextInput
-                value={isMixed ? '' : displayTextValue}
-                onChange={(v) =>
-                  handleBatchStyleChangeComplete('displayText', v)
-                }
-                placeholder={isMixed ? 'Mixed' : value}
-                width="54px"
-                isMixed={isMixed}
-              />
-            );
-          })()}
+              ).value
+            }
+            activeValue={
+              getMixedValue(
+                (pos) => pos.activeBorderColor ?? pos.borderColor,
+                'rgba(255, 255, 255, 0.9)',
+              ).value
+            }
+            showStateTabs
+            stateMode={colorState}
+            onStateModeChange={setColorState}
+            onChange={(color) => handleBatchStyleChange('borderColor', color)}
+            onChangeComplete={(color) =>
+              handleBatchStyleChangeComplete('borderColor', color)
+            }
+            onActiveChange={(color) =>
+              handleBatchStyleChange('activeBorderColor', color)
+            }
+            onActiveChangeComplete={(color) =>
+              handleBatchStyleChangeComplete('activeBorderColor', color)
+            }
+            panelElement={panelElement}
+          />
         </PropertyRow>
-      )}
 
-      {!hideFontControls && (
-        <>
-          {/* 폰트 */}
-          <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-            {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
-              <span className="text-fg-faint text-body italic">Mixed</span>
-            ) : null}
-            <button
-              ref={fontButtonRef}
-              type="button"
-              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                showFontPicker ? 'shadow-focus-ring' : ''
-              } text-fg text-body`}
-              onClick={() => setShowFontPicker(!showFontPicker)}
+        {/* 테두리 두께 */}
+        <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
+          {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          ) : null}
+          <NumberInput
+            value={getMixedValue((pos) => pos.borderWidth, 3).value}
+            onChange={(value) =>
+              handleBatchStyleChangeComplete('borderWidth', value)
+            }
+            suffix="px"
+            min={0}
+            max={20}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 모서리 반경 */}
+        <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
+          {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
+            <span className="text-fg-faint text-body italic">Mixed</span>
+          ) : null}
+          <NumberInput
+            value={getMixedValue((pos) => pos.borderRadius, 10).value}
+            onChange={(value) =>
+              handleBatchStyleChangeComplete('borderRadius', value)
+            }
+            suffix="px"
+            min={0}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 커스텀 이미지 */}
+        <PropertyRow
+          label={t('propertiesPanel.customImage') || '커스텀 이미지'}
+        >
+          <button
+            ref={batchImageButtonRef}
+            type="button"
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+              showBatchImagePicker ? 'shadow-focus-ring' : ''
+            } text-fg text-body`}
+            onClick={onToggleBatchImagePicker}
+          >
+            {t('propertiesPanel.configure') || '설정하기'}
+          </button>
+        </PropertyRow>
+      </PropertySection>
+
+      {(!hideDisplayText || !hideFontControls) && (
+        <PropertySection>
+          {/* 표시 텍스트 */}
+          {!hideDisplayText && (
+            <PropertyRow
+              label={t('propertiesPanel.displayText') || '표시 텍스트'}
             >
-              {t('propertiesPanel.configure') || '설정하기'}
-            </button>
-          </PropertyRow>
+              {(() => {
+                const { isMixed, value } = getDisplayTextMixed();
+                const displayTextValue = getMixedValue(
+                  (pos) => pos.displayText,
+                  '',
+                ).value;
+                // displayText가 직접 설정되어 있으면 그 값을 value에, 아니면 placeholder에 기본값 표시
+                return (
+                  <TextInput
+                    value={isMixed ? '' : displayTextValue}
+                    onChange={(v) =>
+                      handleBatchStyleChangeComplete('displayText', v)
+                    }
+                    placeholder={isMixed ? 'Mixed' : value}
+                    width="54px"
+                    isMixed={isMixed}
+                  />
+                );
+              })()}
+            </PropertyRow>
+          )}
 
-          {/* 글꼴 크기 */}
-          <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
-            {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
-              <span className="text-fg-faint text-body italic">Mixed</span>
-            ) : null}
-            <NumberInput
-              value={getMixedValue((pos) => pos.fontSize, 14).value}
-              onChange={(value) =>
-                handleBatchStyleChangeComplete('fontSize', value)
-              }
-              suffix="px"
-              min={8}
-              max={72}
-              allowDecimal
-              decimalScale={1}
-            />
-          </PropertyRow>
+          {!hideFontControls && (
+            <>
+              {/* 폰트 */}
+              <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
+                {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
+                  <span className="text-fg-faint text-body italic">Mixed</span>
+                ) : null}
+                <button
+                  ref={fontButtonRef}
+                  type="button"
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                    showFontPicker ? 'shadow-focus-ring' : ''
+                  } text-fg text-body`}
+                  onClick={() => setShowFontPicker(!showFontPicker)}
+                >
+                  {t('propertiesPanel.configure') || '설정하기'}
+                </button>
+              </PropertyRow>
 
-          {/* 글꼴 색상 */}
-          <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
-            {(
-              colorState === 'active'
-                ? getMixedValue(
-                    (pos) => pos.activeFontColor ?? pos.fontColor,
-                    '#FFFFFF',
-                  ).isMixed
-                : getMixedValue(
-                    (pos) => pos.fontColor,
-                    'rgba(121, 121, 121, 0.9)',
-                  ).isMixed
-            ) ? (
-              <span className="text-fg-faint text-body italic">Mixed</span>
-            ) : null}
-            <ColorInput
-              value={
-                getMixedValue(
-                  (pos) => pos.fontColor,
-                  'rgba(121, 121, 121, 0.9)',
-                ).value
-              }
-              activeValue={
-                getMixedValue(
-                  (pos) => pos.activeFontColor ?? pos.fontColor,
-                  '#FFFFFF',
-                ).value
-              }
-              showStateTabs
-              stateMode={colorState}
-              onStateModeChange={setColorState}
-              onChange={(color) => handleBatchStyleChange('fontColor', color)}
-              onChangeComplete={(color) =>
-                handleBatchStyleChangeComplete('fontColor', color)
-              }
-              onActiveChange={(color) =>
-                handleBatchStyleChange('activeFontColor', color)
-              }
-              onActiveChangeComplete={(color) =>
-                handleBatchStyleChangeComplete('activeFontColor', color)
-              }
-              panelElement={panelElement}
-            />
-          </PropertyRow>
+              {/* 글꼴 크기 */}
+              <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
+                {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
+                  <span className="text-fg-faint text-body italic">Mixed</span>
+                ) : null}
+                <NumberInput
+                  value={getMixedValue((pos) => pos.fontSize, 14).value}
+                  onChange={(value) =>
+                    handleBatchStyleChangeComplete('fontSize', value)
+                  }
+                  suffix="px"
+                  min={8}
+                  max={72}
+                  allowDecimal
+                  decimalScale={1}
+                />
+              </PropertyRow>
 
-          {/* 글꼴 스타일 */}
-          <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
-            <FontStyleToggle
-              isBold={
-                getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true)
-                  .value
-              }
-              isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
-              isUnderline={
-                getMixedValue((pos) => pos.fontUnderline, false).value
-              }
-              isStrikethrough={
-                getMixedValue((pos) => pos.fontStrikethrough, false).value
-              }
-              onBoldChange={(value) =>
-                handleBatchStyleChangeComplete('fontWeight', value ? 700 : 400)
-              }
-              onItalicChange={(value) =>
-                handleBatchStyleChangeComplete('fontItalic', value)
-              }
-              onUnderlineChange={(value) =>
-                handleBatchStyleChangeComplete('fontUnderline', value)
-              }
-              onStrikethroughChange={(value) =>
-                handleBatchStyleChangeComplete('fontStrikethrough', value)
-              }
-            />
-          </PropertyRow>
-        </>
+              {/* 글꼴 색상 */}
+              <PropertyRow
+                label={t('propertiesPanel.fontColor') || '글꼴 색상'}
+              >
+                {(
+                  colorState === 'active'
+                    ? getMixedValue(
+                        (pos) => pos.activeFontColor ?? pos.fontColor,
+                        '#FFFFFF',
+                      ).isMixed
+                    : getMixedValue(
+                        (pos) => pos.fontColor,
+                        'rgba(121, 121, 121, 0.9)',
+                      ).isMixed
+                ) ? (
+                  <span className="text-fg-faint text-body italic">Mixed</span>
+                ) : null}
+                <ColorInput
+                  value={
+                    getMixedValue(
+                      (pos) => pos.fontColor,
+                      'rgba(121, 121, 121, 0.9)',
+                    ).value
+                  }
+                  activeValue={
+                    getMixedValue(
+                      (pos) => pos.activeFontColor ?? pos.fontColor,
+                      '#FFFFFF',
+                    ).value
+                  }
+                  showStateTabs
+                  stateMode={colorState}
+                  onStateModeChange={setColorState}
+                  onChange={(color) =>
+                    handleBatchStyleChange('fontColor', color)
+                  }
+                  onChangeComplete={(color) =>
+                    handleBatchStyleChangeComplete('fontColor', color)
+                  }
+                  onActiveChange={(color) =>
+                    handleBatchStyleChange('activeFontColor', color)
+                  }
+                  onActiveChangeComplete={(color) =>
+                    handleBatchStyleChangeComplete('activeFontColor', color)
+                  }
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              {/* 글꼴 스타일 */}
+              <PropertyRow
+                label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}
+              >
+                <FontStyleToggle
+                  isBold={
+                    getMixedValue((pos) => (pos.fontWeight ?? 700) >= 700, true)
+                      .value
+                  }
+                  isItalic={getMixedValue((pos) => pos.fontItalic, false).value}
+                  isUnderline={
+                    getMixedValue((pos) => pos.fontUnderline, false).value
+                  }
+                  isStrikethrough={
+                    getMixedValue((pos) => pos.fontStrikethrough, false).value
+                  }
+                  onBoldChange={(value) =>
+                    handleBatchStyleChangeComplete(
+                      'fontWeight',
+                      value ? 700 : 400,
+                    )
+                  }
+                  onItalicChange={(value) =>
+                    handleBatchStyleChangeComplete('fontItalic', value)
+                  }
+                  onUnderlineChange={(value) =>
+                    handleBatchStyleChangeComplete('fontUnderline', value)
+                  }
+                  onStrikethroughChange={(value) =>
+                    handleBatchStyleChangeComplete('fontStrikethrough', value)
+                  }
+                />
+              </PropertyRow>
+            </>
+          )}
+        </PropertySection>
       )}
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
-        <>
-          <SectionDivider />
-
+        <PropertySection>
           {/* CSS 우선순위 토글 */}
-          <div className="flex justify-between items-center w-full h-[23px]">
+          <div className="flex justify-between items-center w-full min-h-[32px]">
             <p className="text-fg-muted text-label">
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
@@ -850,7 +867,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               isMixed={getMixedValue((pos) => pos.className, '').isMixed}
             />
           </PropertyRow>
-        </>
+        </PropertySection>
       )}
 
       {showSoundControls &&
@@ -859,9 +876,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           const soundChangeComplete =
             handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete;
           return (
-            <>
-              <SectionDivider />
-
+            <PropertySection>
               <PropertyRow
                 label={
                   t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'
@@ -922,7 +937,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   }
                 />
               </PropertyRow>
-            </>
+            </PropertySection>
           );
         })()}
 

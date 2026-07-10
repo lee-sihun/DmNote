@@ -4,6 +4,7 @@ export * from './types';
 // UI 컴포넌트
 export {
   PropertyRow,
+  PropertySection,
   NumberInput,
   OptionalNumberInput,
   TextInput,

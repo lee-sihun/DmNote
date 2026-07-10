@@ -4,10 +4,10 @@ import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
+  PropertySection,
   NumberInput,
   TextInput,
   FontStyleToggle,
-  SectionDivider,
 } from '../PropertyInputs';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
@@ -392,21 +392,17 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
     <>
       {/* 키 매핑(또는 통계 종류 등 대체 컨트롤) - 단일 선택 모드에서만 표시 */}
       {mappingControlLayout ? (
-        <>
-          {mappingControlLayout}
-          <SectionDivider />
-        </>
+        <PropertySection>{mappingControlLayout}</PropertySection>
       ) : mappingControl ? (
-        <>
+        <PropertySection>
           <PropertyRow
             label={mappingLabel || t('propertiesPanel.keyMapping') || '키 매핑'}
           >
             {mappingControl}
           </PropertyRow>
-          <SectionDivider />
-        </>
+        </PropertySection>
       ) : onKeyListen ? (
-        <>
+        <PropertySection>
           <PropertyRow label={t('propertiesPanel.keyMapping') || '키 매핑'}>
             <button
               onClick={onKeyListen}
@@ -421,226 +417,239 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
                   'Click to set'}
             </button>
           </PropertyRow>
-          <SectionDivider />
-        </>
+        </PropertySection>
       ) : null}
 
-      {/* 위치 */}
-      <PropertyRow label={t('propertiesPanel.position') || '위치'}>
-        <NumberInput
-          value={isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx}
-          onChange={handlePositionXChange}
-          prefix="X"
-          min={-9999}
-          max={9999}
-          allowDecimal
-          decimalScale={1}
-        />
-        <NumberInput
-          value={isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy}
-          onChange={handlePositionYChange}
-          prefix="Y"
-          min={-9999}
-          max={9999}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+      {/* 위치·크기 */}
+      <PropertySection>
+        <PropertyRow label={t('propertiesPanel.position') || '위치'}>
+          <NumberInput
+            value={
+              isIndividualMode ? keyPosition.dx : localDx ?? keyPosition.dx
+            }
+            onChange={handlePositionXChange}
+            prefix="X"
+            min={-9999}
+            max={9999}
+            allowDecimal
+            decimalScale={1}
+          />
+          <NumberInput
+            value={
+              isIndividualMode ? keyPosition.dy : localDy ?? keyPosition.dy
+            }
+            onChange={handlePositionYChange}
+            prefix="Y"
+            min={-9999}
+            max={9999}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
 
-      {/* 크기 */}
-      <PropertyRow label={t('propertiesPanel.size') || '크기'}>
-        <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.width ?? 60
-              : localWidth ?? keyPosition.width ?? 60
-          }
-          onChange={handleWidthChange}
-          onBlur={onSizeBlur}
-          prefix="W"
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
-        />
-        <NumberInput
-          value={
-            isIndividualMode
-              ? keyPosition.height ?? 60
-              : localHeight ?? keyPosition.height ?? 60
-          }
-          onChange={handleHeightChange}
-          onBlur={onSizeBlur}
-          prefix="H"
-          min={1}
-          max={999}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
+        {/* 크기 */}
+        <PropertyRow label={t('propertiesPanel.size') || '크기'}>
+          <NumberInput
+            value={
+              isIndividualMode
+                ? keyPosition.width ?? 60
+                : localWidth ?? keyPosition.width ?? 60
+            }
+            onChange={handleWidthChange}
+            onBlur={onSizeBlur}
+            prefix="W"
+            min={1}
+            max={999}
+            allowDecimal
+            decimalScale={1}
+          />
+          <NumberInput
+            value={
+              isIndividualMode
+                ? keyPosition.height ?? 60
+                : localHeight ?? keyPosition.height ?? 60
+            }
+            onChange={handleHeightChange}
+            onBlur={onSizeBlur}
+            prefix="H"
+            min={1}
+            max={999}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      <SectionDivider />
-
-      {/* 배경색 */}
-      <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
-        <button
-          ref={bgColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('backgroundColor')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'backgroundColor' ? 'border-accent' : 'border-line'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('backgroundColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 테두리 색상 */}
-      <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
-        <button
-          ref={borderColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('borderColor')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'borderColor' ? 'border-accent' : 'border-line'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('borderColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 테두리 두께 */}
-      <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
-        <NumberInput
-          value={keyPosition.borderWidth ?? 3}
-          onChange={(value) => handleStyleChangeComplete('borderWidth', value)}
-          suffix="px"
-          min={0}
-          max={20}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 모서리 반경 */}
-      <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
-        <NumberInput
-          value={keyPosition.borderRadius ?? 10}
-          onChange={(value) => handleStyleChangeComplete('borderRadius', value)}
-          suffix="px"
-          min={0}
-          max={100}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
-      {onToggleImagePicker && imageButtonRef && (
-        <PropertyRow
-          label={t('propertiesPanel.customImage') || '커스텀 이미지'}
-        >
+      {/* 외형 */}
+      <PropertySection>
+        {/* 배경색 */}
+        <PropertyRow label={t('propertiesPanel.backgroundColor') || '배경색'}>
           <button
-            ref={imageButtonRef}
+            ref={bgColorBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('backgroundColor')}
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'backgroundColor' ? 'border-accent' : 'border-line'
+            }`}
+            style={{
+              backgroundColor: getDisplayColor(
+                colorValueFor('backgroundColor'),
+              ),
+            }}
+          />
+        </PropertyRow>
+
+        {/* 테두리 색상 */}
+        <PropertyRow label={t('propertiesPanel.borderColor') || '테두리 색상'}>
+          <button
+            ref={borderColorBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('borderColor')}
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'borderColor' ? 'border-accent' : 'border-line'
+            }`}
+            style={{
+              backgroundColor: getDisplayColor(colorValueFor('borderColor')),
+            }}
+          />
+        </PropertyRow>
+
+        {/* 테두리 두께 */}
+        <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
+          <NumberInput
+            value={keyPosition.borderWidth ?? 3}
+            onChange={(value) =>
+              handleStyleChangeComplete('borderWidth', value)
+            }
+            suffix="px"
+            min={0}
+            max={20}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 모서리 반경 */}
+        <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
+          <NumberInput
+            value={keyPosition.borderRadius ?? 10}
+            onChange={(value) =>
+              handleStyleChangeComplete('borderRadius', value)
+            }
+            suffix="px"
+            min={0}
+            max={100}
+            allowDecimal
+            decimalScale={1}
+          />
+        </PropertyRow>
+
+        {/* 커스텀 이미지 - 단일 선택 모드에서만 표시 */}
+        {onToggleImagePicker && imageButtonRef && (
+          <PropertyRow
+            label={t('propertiesPanel.customImage') || '커스텀 이미지'}
+          >
+            <button
+              ref={imageButtonRef}
+              type="button"
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                showImagePicker ? 'shadow-focus-ring' : ''
+              } text-fg text-body`}
+              onClick={onToggleImagePicker}
+            >
+              {t('propertiesPanel.configure') || '설정하기'}
+            </button>
+          </PropertyRow>
+        )}
+      </PropertySection>
+
+      {/* 텍스트·폰트 */}
+      <PropertySection>
+        {/* 표시 텍스트 */}
+        {!hideDisplayText && (
+          <PropertyRow
+            label={t('propertiesPanel.displayText') || '표시 텍스트'}
+          >
+            <TextInput
+              value={keyPosition.displayText || ''}
+              onChange={handleDisplayTextChange}
+              onBlur={handleDisplayTextBlur}
+              placeholder={keyInfo?.displayName || ''}
+              width="54px"
+            />
+          </PropertyRow>
+        )}
+
+        {/* 폰트 */}
+        <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
+          <button
+            ref={fontButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              showImagePicker ? 'shadow-focus-ring' : ''
+              pickerFor === 'font' ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={onToggleImagePicker}
+            onClick={() => handlePickerToggle('font')}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
         </PropertyRow>
-      )}
 
-      <SectionDivider />
-
-      {/* 표시 텍스트 */}
-      {!hideDisplayText && (
-        <PropertyRow label={t('propertiesPanel.displayText') || '표시 텍스트'}>
-          <TextInput
-            value={keyPosition.displayText || ''}
-            onChange={handleDisplayTextChange}
-            onBlur={handleDisplayTextBlur}
-            placeholder={keyInfo?.displayName || ''}
-            width="54px"
+        {/* 글꼴 크기 */}
+        <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
+          <NumberInput
+            value={keyPosition.fontSize ?? 14}
+            onChange={(value) => handleStyleChangeComplete('fontSize', value)}
+            suffix="px"
+            min={8}
+            max={72}
+            allowDecimal
+            decimalScale={1}
           />
         </PropertyRow>
-      )}
 
-      {/* 폰트 */}
-      <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
-        <button
-          ref={fontButtonRef}
-          type="button"
-          className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-            pickerFor === 'font' ? 'shadow-focus-ring' : ''
-          } text-fg text-body`}
-          onClick={() => handlePickerToggle('font')}
-        >
-          {t('propertiesPanel.configure') || '설정하기'}
-        </button>
-      </PropertyRow>
+        {/* 글꼴 색상 */}
+        <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
+          <button
+            ref={fontColorBtnRef}
+            type="button"
+            onClick={() => handlePickerToggle('fontColor')}
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+              pickerFor === 'fontColor' ? 'border-accent' : 'border-line'
+            }`}
+            style={{
+              backgroundColor: getDisplayColor(colorValueFor('fontColor')),
+            }}
+          />
+        </PropertyRow>
 
-      {/* 글꼴 크기 */}
-      <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
-        <NumberInput
-          value={keyPosition.fontSize ?? 14}
-          onChange={(value) => handleStyleChangeComplete('fontSize', value)}
-          suffix="px"
-          min={8}
-          max={72}
-          allowDecimal
-          decimalScale={1}
-        />
-      </PropertyRow>
-
-      {/* 글꼴 색상 */}
-      <PropertyRow label={t('propertiesPanel.fontColor') || '글꼴 색상'}>
-        <button
-          ref={fontColorBtnRef}
-          type="button"
-          onClick={() => handlePickerToggle('fontColor')}
-          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-            pickerFor === 'fontColor' ? 'border-accent' : 'border-line'
-          }`}
-          style={{
-            backgroundColor: getDisplayColor(colorValueFor('fontColor')),
-          }}
-        />
-      </PropertyRow>
-
-      {/* 글꼴 스타일 */}
-      <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
-        <FontStyleToggle
-          isBold={(keyPosition.fontWeight ?? 700) >= 700}
-          isItalic={keyPosition.fontItalic ?? false}
-          isUnderline={keyPosition.fontUnderline ?? false}
-          isStrikethrough={keyPosition.fontStrikethrough ?? false}
-          onBoldChange={(value) =>
-            handleStyleChangeComplete('fontWeight', value ? 700 : 400)
-          }
-          onItalicChange={(value) =>
-            handleStyleChangeComplete('fontItalic', value)
-          }
-          onUnderlineChange={(value) =>
-            handleStyleChangeComplete('fontUnderline', value)
-          }
-          onStrikethroughChange={(value) =>
-            handleStyleChangeComplete('fontStrikethrough', value)
-          }
-        />
-      </PropertyRow>
+        {/* 글꼴 스타일 */}
+        <PropertyRow label={t('propertiesPanel.fontStyle') || '글꼴 스타일'}>
+          <FontStyleToggle
+            isBold={(keyPosition.fontWeight ?? 700) >= 700}
+            isItalic={keyPosition.fontItalic ?? false}
+            isUnderline={keyPosition.fontUnderline ?? false}
+            isStrikethrough={keyPosition.fontStrikethrough ?? false}
+            onBoldChange={(value) =>
+              handleStyleChangeComplete('fontWeight', value ? 700 : 400)
+            }
+            onItalicChange={(value) =>
+              handleStyleChangeComplete('fontItalic', value)
+            }
+            onUnderlineChange={(value) =>
+              handleStyleChangeComplete('fontUnderline', value)
+            }
+            onStrikethroughChange={(value) =>
+              handleStyleChangeComplete('fontStrikethrough', value)
+            }
+          />
+        </PropertyRow>
+      </PropertySection>
 
       {/* 커스텀 CSS 활성화 시에만 클래스명 및 CSS 우선순위 표시 */}
       {useCustomCSS && (
-        <>
-          <SectionDivider />
-
+        <PropertySection>
           {/* CSS 우선순위 토글 */}
-          <div className="flex justify-between items-center w-full h-[23px]">
+          <div className="flex justify-between items-center w-full min-h-[32px]">
             <p className="text-fg-muted text-label">
               {t('propertiesPanel.useInlineStyles') || '인라인 스타일 우선'}
             </p>
@@ -665,13 +674,11 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               width="90px"
             />
           </PropertyRow>
-        </>
+        </PropertySection>
       )}
 
       {showSoundControls && (
-        <>
-          <SectionDivider />
-
+        <PropertySection>
           <PropertyRow
             label={t('propertiesPanel.keySoundEnabled') || '키 사운드 활성화'}
           >
@@ -717,7 +724,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               max={200}
             />
           </PropertyRow>
-        </>
+        </PropertySection>
       )}
 
       {/* 이미지 픽커 팝업 - 단일 선택 모드에서만 */}

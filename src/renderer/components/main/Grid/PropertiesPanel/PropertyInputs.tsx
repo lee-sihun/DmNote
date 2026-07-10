@@ -23,9 +23,18 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   label,
   children,
 }) => (
-  <div className="flex justify-between items-center w-full min-h-[23px]">
+  <div className="flex justify-between items-center w-full min-h-[32px]">
     <p className="text-fg-muted text-label">{label}</p>
     <div className="flex items-center gap-[8px]">{children}</div>
+  </div>
+);
+
+// 그룹 카드 — 관련 속성 행을 하나의 면으로 묶는 섹션 컨테이너
+export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => (
+  <div className="bg-fill-faint rounded-[10px] px-[10px] py-[4px] flex flex-col">
+    {children}
   </div>
 );
 

@@ -527,7 +527,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className="flex items-center justify-between p-[12px] pb-[12px]">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -564,7 +564,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -624,7 +624,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.STYLE ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 showSoundControls={selectedKeyElements.length > 0}
@@ -653,7 +653,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                       </PropertyRow>
 
                       {hasLineGraph && (
-                        <div className="flex justify-between items-center w-full h-[23px]">
+                        <div className="flex justify-between items-center w-full min-h-[32px]">
                           <p className="text-fg-muted text-label">
                             {t('propertiesPanel.graphShowAverageLine') ||
                               'Show Average Line'}
@@ -718,7 +718,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                         />
                       </PropertyRow>
 
-                      <div className="flex justify-between items-center w-full h-[23px]">
+                      <div className="flex justify-between items-center w-full min-h-[32px]">
                         <p className="text-fg-muted text-label">
                           {t('propertiesPanel.graphAnimation') ||
                             'Graph Animation'}
@@ -783,7 +783,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 activeTab === TABS.NOTE ? '' : 'hidden'
               }`}
             >
-              <div className="p-[12px] flex flex-col gap-[12px]">
+              <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
                   handleBatchStyleChangeComplete={
@@ -827,7 +827,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.COUNTER ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
@@ -1104,7 +1104,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className="flex items-center justify-between p-[12px] pb-[12px]">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1141,7 +1141,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1183,7 +1183,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
               hideDisplayText
@@ -1211,7 +1211,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </PropertyRow>
 
                   {hasLineGraph && (
-                    <div className="flex justify-between items-center w-full h-[23px]">
+                    <div className="flex justify-between items-center w-full min-h-[32px]">
                       <p className="text-fg-muted text-label">
                         {t('propertiesPanel.graphShowAverageLine') ||
                           'Show Average Line'}
@@ -1271,7 +1271,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                     />
                   </PropertyRow>
 
-                  <div className="flex justify-between items-center w-full h-[23px]">
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
                     <p className="text-fg-muted text-label">
                       {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                     </p>
@@ -1469,7 +1469,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className="flex items-center justify-between p-[12px] pb-[12px]">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1506,7 +1506,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1548,7 +1548,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
               hideDisplayText
@@ -1580,7 +1580,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                     />
                   </PropertyRow>
 
-                  <div className="flex justify-between items-center w-full h-[23px]">
+                  <div className="flex justify-between items-center w-full min-h-[32px]">
                     <p className="text-fg-muted text-label">
                       {t('propertiesPanel.knobReverse') || '방향 반전'}
                     </p>

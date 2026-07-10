@@ -5,9 +5,14 @@ import { LENIS_CONFIG } from '@config/lenis';
 interface UseLenisOptions {
   /**
    * 스크롤 애니메이션 지속 시간 (초)
-   * @default LENIS_CONFIG.duration
+   * 지정 시 duration+easing 방식, 미지정 시 lerp 방식 (기본)
    */
   duration?: number;
+  /**
+   * 목표점 추적 강도 (0~1)
+   * @default LENIS_CONFIG.lerp
+   */
+  lerp?: number;
   /**
    * 이징 함수
    * @default easeOutExpo
@@ -53,7 +58,8 @@ export const useLenis = (options: UseLenisOptions = {}) => {
   }, [options.onScroll]);
 
   const {
-    duration = LENIS_CONFIG.duration,
+    duration,
+    lerp = LENIS_CONFIG.lerp,
     easing = easeOutExpo,
     wheelMultiplier = LENIS_CONFIG.wheelMultiplier,
   } = options;
@@ -90,11 +96,11 @@ export const useLenis = (options: UseLenisOptions = {}) => {
       wrapper.childElementCount === 1
         ? (wrapper.firstElementChild as HTMLElement | null) ?? wrapper
         : wrapper;
+    // duration 미지정 시 lerp 방식 — 꼬리 구간의 서브픽셀 계단(드르륵) 없이 연속 추적
     const lenis = new Lenis({
       wrapper,
       content: contentEl,
-      duration,
-      easing,
+      ...(duration != null ? { duration, easing } : { lerp }),
       wheelMultiplier,
     });
 
@@ -133,7 +139,7 @@ export const useLenis = (options: UseLenisOptions = {}) => {
       lenis.destroy();
       lenisRef.current = null;
     };
-  }, [wrapper, duration, easing, wheelMultiplier]);
+  }, [wrapper, duration, lerp, easing, wheelMultiplier]);
 
   return {
     scrollContainerRef,

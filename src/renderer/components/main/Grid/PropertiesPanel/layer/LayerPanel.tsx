@@ -123,7 +123,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className="flex items-center justify-between p-[12px] pb-[12px]">
           <span className="text-fg text-style-2">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>

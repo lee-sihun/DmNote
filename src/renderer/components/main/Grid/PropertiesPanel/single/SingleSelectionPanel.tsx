@@ -21,7 +21,7 @@ import {
   NumberInput,
   TextInput,
   ColorInput,
-  SectionDivider,
+  PropertySection,
   SidebarToggleIcon,
   ModeToggleIcon,
   Tabs,
@@ -135,7 +135,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
 }) => {
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-[12px]">
         <span className="text-fg text-style-2 truncate max-w-[120px]">
           {pluginTitle}
         </span>
@@ -161,9 +161,9 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             {isPluginResizable && (
-              <>
+              <PropertySection>
                 <PropertyRow label={t('propertiesPanel.position') || '위치'}>
                   <NumberInput
                     value={selectedPluginElement?.position.x ?? 0}
@@ -204,8 +204,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                     decimalScale={1}
                   />
                 </PropertyRow>
-                <SectionDivider />
-              </>
+              </PropertySection>
             )}
             {!hasSinglePluginSelection && (
               <p className="text-fg-faint text-body text-center">
@@ -219,15 +218,20 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
             )}
-            {showSettings &&
-              renderPluginSettingsForm(
-                selectedPluginDefinition?.settings,
-                resolvedPluginSettings,
-                selectedPluginDefinition?.messages,
-                `plugin-element-${selectedPluginElement?.fullId ?? 'unknown'}`,
-                handlePluginSettingChange,
-                { wrap: false },
-              )}
+            {showSettings && (
+              <PropertySection>
+                {renderPluginSettingsForm(
+                  selectedPluginDefinition?.settings,
+                  resolvedPluginSettings,
+                  selectedPluginDefinition?.messages,
+                  `plugin-element-${
+                    selectedPluginElement?.fullId ?? 'unknown'
+                  }`,
+                  handlePluginSettingChange,
+                  { wrap: false },
+                )}
+              </PropertySection>
+            )}
           </div>
           <div className="properties-panel-overlay-bar">
             <div
@@ -315,7 +319,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-[12px]">
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -350,7 +354,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
@@ -379,244 +383,248 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
-            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-              <NumberInput
-                value={Math.round(singleGraphPosition.dx || 0)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    dx: value,
-                  })
-                }
-                prefix="X"
-                min={-9999}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleGraphPosition.dy || 0)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    dy: value,
-                  })
-                }
-                prefix="Y"
-                min={-9999}
-                max={9999}
-              />
-            </PropertyRow>
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      dx: value,
+                    })
+                  }
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      dy: value,
+                    })
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
+                />
+              </PropertyRow>
 
-            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-              <NumberInput
-                value={Math.round(singleGraphPosition.width || 200)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    width: Math.max(20, value),
-                  })
-                }
-                prefix="W"
-                min={20}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleGraphPosition.height || 100)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    height: Math.max(20, value),
-                  })
-                }
-                prefix="H"
-                min={20}
-                max={9999}
-              />
-            </PropertyRow>
+              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+                <NumberInput
+                  value={Math.round(singleGraphPosition.width || 200)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      width: Math.max(20, value),
+                    })
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleGraphPosition.height || 100)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      height: Math.max(20, value),
+                    })
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+            </PropertySection>
 
-            <SectionDivider />
+            <PropertySection>
+              <PropertyRow
+                label={t('propertiesPanel.graphShape') || 'Graph Shape'}
+              >
+                <Dropdown
+                  options={graphShapeOptions}
+                  value={singleGraphPosition.graphType || 'line'}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphType: value as GraphItemType,
+                    })
+                  }
+                />
+              </PropertyRow>
 
-            <PropertyRow
-              label={t('propertiesPanel.graphShape') || 'Graph Shape'}
-            >
-              <Dropdown
-                options={graphShapeOptions}
-                value={singleGraphPosition.graphType || 'line'}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphType: value as GraphItemType,
-                  })
-                }
-              />
-            </PropertyRow>
+              {(singleGraphPosition.graphType || 'line') === 'line' && (
+                <div className="flex justify-between items-center w-full min-h-[32px]">
+                  <p className="text-fg-muted text-label">
+                    {t('propertiesPanel.graphShowAverageLine') ||
+                      'Show Average Line'}
+                  </p>
+                  <Checkbox
+                    checked={singleGraphPosition.showAvgLine ?? true}
+                    onChange={() =>
+                      handleGraphUpdate({
+                        index: singleGraphIndex,
+                        showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      })
+                    }
+                  />
+                </div>
+              )}
 
-            {(singleGraphPosition.graphType || 'line') === 'line' && (
-              <div className="flex justify-between items-center w-full h-[23px]">
+              <PropertyRow
+                label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.graphSpeed || 1000)}
+                  width="62px"
+                  onChange={(value) => {
+                    const clamped = Math.max(500, Math.min(5000, value));
+                    const snapped = Math.round(clamped / 100) * 100;
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphSpeed: snapped,
+                    });
+                  }}
+                  min={500}
+                  max={5000}
+                  suffix="ms"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.graphColor') || 'Graph Color'}
+              >
+                <ColorInput
+                  value={singleGraphPosition.graphColor || '#86EFAC'}
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      graphColor: value,
+                    })
+                  }
+                  colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <div className="flex justify-between items-center w-full min-h-[32px]">
                 <p className="text-fg-muted text-label">
-                  {t('propertiesPanel.graphShowAverageLine') ||
-                    'Show Average Line'}
+                  {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
                 </p>
                 <Checkbox
-                  checked={singleGraphPosition.showAvgLine ?? true}
+                  checked={singleGraphPosition.graphAnimationEnabled ?? true}
                   onChange={() =>
                     handleGraphUpdate({
                       index: singleGraphIndex,
-                      showAvgLine: !(singleGraphPosition.showAvgLine ?? true),
+                      graphAnimationEnabled: !(
+                        singleGraphPosition.graphAnimationEnabled ?? true
+                      ),
                     })
                   }
                 />
               </div>
-            )}
+            </PropertySection>
 
-            <PropertyRow
-              label={t('propertiesPanel.graphSpeed') || 'Graph Speed'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.graphSpeed || 1000)}
-                width="62px"
-                onChange={(value) => {
-                  const clamped = Math.max(500, Math.min(5000, value));
-                  const snapped = Math.round(clamped / 100) * 100;
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphSpeed: snapped,
-                  });
-                }}
-                min={500}
-                max={5000}
-                suffix="ms"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.graphColor') || 'Graph Color'}
-            >
-              <ColorInput
-                value={singleGraphPosition.graphColor || '#86EFAC'}
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphColor: value,
-                  })
+            <PropertySection>
+              <PropertyRow
+                label={
+                  t('propertiesPanel.backgroundColor') || 'Background Color'
                 }
-                colorId={`graph-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-fg-muted text-label">
-                {t('propertiesPanel.graphAnimation') || 'Graph Animation'}
-              </p>
-              <Checkbox
-                checked={singleGraphPosition.graphAnimationEnabled ?? true}
-                onChange={() =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    graphAnimationEnabled: !(
-                      singleGraphPosition.graphAnimationEnabled ?? true
-                    ),
-                  })
-                }
-              />
-            </div>
-
-            <SectionDivider />
-
-            <PropertyRow
-              label={t('propertiesPanel.backgroundColor') || 'Background Color'}
-            >
-              <ColorInput
-                value={
-                  singleGraphPosition.backgroundColor || 'rgba(17, 17, 20, 0.9)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    backgroundColor: value,
-                  })
-                }
-                colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderColor') || 'Border Color'}
-            >
-              <ColorInput
-                value={
-                  singleGraphPosition.borderColor || 'rgba(255, 255, 255, 0.1)'
-                }
-                onChange={() => {}}
-                onChangeComplete={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderColor: value,
-                  })
-                }
-                colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
-                panelElement={panelElement}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderWidth') || 'Border Width'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.borderWidth ?? 3)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderWidth: Math.max(0, Math.min(20, value)),
-                  })
-                }
-                min={0}
-                max={20}
-                suffix="px"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.borderRadius') || 'Border Radius'}
-            >
-              <NumberInput
-                value={Math.round(singleGraphPosition.borderRadius ?? 8)}
-                onChange={(value) =>
-                  handleGraphUpdate({
-                    index: singleGraphIndex,
-                    borderRadius: Math.max(0, Math.min(100, value)),
-                  })
-                }
-                min={0}
-                max={100}
-                suffix="px"
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.customImage') || 'Custom Image'}
-            >
-              <button
-                ref={graphImageButtonRef}
-                type="button"
-                className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                  showGraphImagePicker ? 'shadow-focus-ring' : ''
-                } text-fg text-body`}
-                onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
               >
-                {t('propertiesPanel.configure') || 'Configure'}
-              </button>
-            </PropertyRow>
+                <ColorInput
+                  value={
+                    singleGraphPosition.backgroundColor ||
+                    'rgba(17, 17, 20, 0.9)'
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      backgroundColor: value,
+                    })
+                  }
+                  colorId={`graph-bg-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderColor') || 'Border Color'}
+              >
+                <ColorInput
+                  value={
+                    singleGraphPosition.borderColor ||
+                    'rgba(255, 255, 255, 0.1)'
+                  }
+                  onChange={() => {}}
+                  onChangeComplete={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderColor: value,
+                    })
+                  }
+                  colorId={`graph-border-color-${selectedKeyType}-${singleGraphIndex}`}
+                  panelElement={panelElement}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderWidth') || 'Border Width'}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderWidth ?? 3)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderWidth: Math.max(0, Math.min(20, value)),
+                    })
+                  }
+                  min={0}
+                  max={20}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.borderRadius') || 'Border Radius'}
+              >
+                <NumberInput
+                  value={Math.round(singleGraphPosition.borderRadius ?? 8)}
+                  onChange={(value) =>
+                    handleGraphUpdate({
+                      index: singleGraphIndex,
+                      borderRadius: Math.max(0, Math.min(100, value)),
+                    })
+                  }
+                  min={0}
+                  max={100}
+                  suffix="px"
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.customImage') || 'Custom Image'}
+              >
+                <button
+                  ref={graphImageButtonRef}
+                  type="button"
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                    showGraphImagePicker ? 'shadow-focus-ring' : ''
+                  } text-fg text-body`}
+                  onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
+                >
+                  {t('propertiesPanel.configure') || 'Configure'}
+                </button>
+              </PropertyRow>
+            </PropertySection>
 
             {useCustomCSS && (
-              <>
-                <SectionDivider />
-
-                <div className="flex justify-between items-center w-full h-[23px]">
+              <PropertySection>
+                <div className="flex justify-between items-center w-full min-h-[32px]">
                   <p className="text-fg-muted text-label">
                     {t('propertiesPanel.useInlineStyles') ||
                       '인라인 스타일 우선'}
@@ -648,7 +656,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                     width="90px"
                   />
                 </PropertyRow>
-              </>
+              </PropertySection>
             )}
           </div>
           <div className="properties-panel-overlay-bar">
@@ -959,7 +967,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-[12px]">
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -994,7 +1002,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
@@ -1024,215 +1032,219 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
-            <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
-              <button
-                type="button"
-                onClick={() => setCapturing((v) => !v)}
-                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
-                  capturing ? 'shadow-focus-ring' : ''
-                } text-fg text-style-2`}
-                title={singleKnobPosition.axisId || ''}
-              >
-                <span className="truncate max-w-[120px]">
-                  {capturing
-                    ? t('propertiesPanel.knobCapturing') || '감지 중…'
-                    : singleKnobPosition.axisId
-                    ? axisLabel
-                    : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
-                </span>
-              </button>
-            </PropertyRow>
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
+                <button
+                  type="button"
+                  onClick={() => setCapturing((v) => !v)}
+                  className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
+                    capturing ? 'shadow-focus-ring' : ''
+                  } text-fg text-style-2`}
+                  title={singleKnobPosition.axisId || ''}
+                >
+                  <span className="truncate max-w-[120px]">
+                    {capturing
+                      ? t('propertiesPanel.knobCapturing') || '감지 중…'
+                      : singleKnobPosition.axisId
+                      ? axisLabel
+                      : t('propertiesPanel.knobCapture') || '노브 돌려서 감지'}
+                  </span>
+                </button>
+              </PropertyRow>
+            </PropertySection>
 
-            <SectionDivider />
-
-            <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
-              <NumberInput
-                value={Math.round(singleKnobPosition.dx || 0)}
-                onChange={(value) =>
-                  handleKnobUpdate({ index: singleKnobIndex, dx: value })
-                }
-                prefix="X"
-                min={-9999}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleKnobPosition.dy || 0)}
-                onChange={(value) =>
-                  handleKnobUpdate({ index: singleKnobIndex, dy: value })
-                }
-                prefix="Y"
-                min={-9999}
-                max={9999}
-              />
-            </PropertyRow>
-
-            <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
-              <NumberInput
-                value={Math.round(singleKnobPosition.width || 60)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    width: Math.max(20, value),
-                  })
-                }
-                prefix="W"
-                min={20}
-                max={9999}
-              />
-              <NumberInput
-                value={Math.round(singleKnobPosition.height || 60)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    height: Math.max(20, value),
-                  })
-                }
-                prefix="H"
-                min={20}
-                max={9999}
-              />
-            </PropertyRow>
-
-            <SectionDivider />
-
-            {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
-            <PropertyRow
-              label={t('propertiesPanel.knobSensitivity') || '민감도'}
-            >
-              <NumberInput
-                value={Number(singleKnobPosition.sensitivity ?? 1)}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    sensitivity: Math.max(0, value),
-                  })
-                }
-                suffix="×"
-                min={0}
-                max={100}
-                allowDecimal
-                decimalScale={2}
-              />
-            </PropertyRow>
-
-            <div className="flex justify-between items-center w-full h-[23px]">
-              <p className="text-fg-muted text-label">
-                {t('propertiesPanel.knobReverse') || '방향 반전'}
-              </p>
-              <Checkbox
-                checked={singleKnobPosition.reverse ?? false}
-                onChange={() =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    reverse: !(singleKnobPosition.reverse ?? false),
-                  })
-                }
-              />
-            </div>
-
-            <SectionDivider />
-
-            {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
-            <PropertyRow
-              label={t('propertiesPanel.backgroundColor') || '배경색'}
-            >
-              <button
-                ref={bgColorBtnRef}
-                type="button"
-                onClick={() => handlePickerToggle('backgroundColor')}
-                className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                  pickerFor === 'backgroundColor'
-                    ? 'border-accent'
-                    : 'border-line'
-                }`}
-                style={{ backgroundColor: colorValueFor('backgroundColor') }}
-              />
-            </PropertyRow>
-
-            {/* 테두리 색상 */}
-            <PropertyRow
-              label={t('propertiesPanel.borderColor') || '테두리 색상'}
-            >
-              <button
-                ref={borderColorBtnRef}
-                type="button"
-                onClick={() => handlePickerToggle('borderColor')}
-                className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-                  pickerFor === 'borderColor' ? 'border-accent' : 'border-line'
-                }`}
-                style={{ backgroundColor: colorValueFor('borderColor') }}
-              />
-            </PropertyRow>
-
-            {/* 테두리 두께 */}
-            <PropertyRow
-              label={t('propertiesPanel.borderWidth') || '테두리 두께'}
-            >
-              <NumberInput
-                value={singleKnobPosition.borderWidth ?? 3}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    borderWidth: value,
-                  })
-                }
-                suffix="px"
-                min={0}
-                max={20}
-              />
-            </PropertyRow>
-
-            {/* 모서리 반경 (미지정 시 원형) */}
-            <PropertyRow
-              label={t('propertiesPanel.borderRadius') || '모서리 반경'}
-            >
-              <NumberInput
-                value={effectiveBorderRadius}
-                onChange={(value) =>
-                  handleKnobUpdate({
-                    index: singleKnobIndex,
-                    borderRadius: value,
-                  })
-                }
-                suffix="px"
-                min={0}
-                max={999}
-              />
-            </PropertyRow>
-
-            <PropertyRow
-              label={t('propertiesPanel.customImage') || 'Custom Image'}
-            >
-              <button
-                ref={imageButtonRef}
-                type="button"
-                className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                  showImagePicker ? 'shadow-focus-ring' : ''
-                } text-fg text-body`}
-                onClick={() => setShowImagePicker(!showImagePicker)}
-              >
-                {t('propertiesPanel.configure') || 'Configure'}
-              </button>
-            </PropertyRow>
-
-            {useCustomCSS && (
-              <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
-                <TextInput
-                  value={classNameDraft}
-                  onChange={setClassNameDraft}
-                  onBlur={() =>
-                    handleKnobUpdate({
-                      index: singleKnobIndex,
-                      className: classNameDraft || '',
-                    })
+            <PropertySection>
+              <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
+                <NumberInput
+                  value={Math.round(singleKnobPosition.dx || 0)}
+                  onChange={(value) =>
+                    handleKnobUpdate({ index: singleKnobIndex, dx: value })
                   }
-                  placeholder="className"
-                  width="90px"
+                  prefix="X"
+                  min={-9999}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleKnobPosition.dy || 0)}
+                  onChange={(value) =>
+                    handleKnobUpdate({ index: singleKnobIndex, dy: value })
+                  }
+                  prefix="Y"
+                  min={-9999}
+                  max={9999}
                 />
               </PropertyRow>
-            )}
+
+              <PropertyRow label={t('propertiesPanel.size') || 'Size'}>
+                <NumberInput
+                  value={Math.round(singleKnobPosition.width || 60)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      width: Math.max(20, value),
+                    })
+                  }
+                  prefix="W"
+                  min={20}
+                  max={9999}
+                />
+                <NumberInput
+                  value={Math.round(singleKnobPosition.height || 60)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      height: Math.max(20, value),
+                    })
+                  }
+                  prefix="H"
+                  min={20}
+                  max={9999}
+                />
+              </PropertyRow>
+            </PropertySection>
+
+            <PropertySection>
+              {/* 회전 배율: 1 = 물리 1회전당 화면 1회전 (축 해상도 무관) */}
+              <PropertyRow
+                label={t('propertiesPanel.knobSensitivity') || '민감도'}
+              >
+                <NumberInput
+                  value={Number(singleKnobPosition.sensitivity ?? 1)}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      sensitivity: Math.max(0, value),
+                    })
+                  }
+                  suffix="×"
+                  min={0}
+                  max={100}
+                  allowDecimal
+                  decimalScale={2}
+                />
+              </PropertyRow>
+
+              <div className="flex justify-between items-center w-full min-h-[32px]">
+                <p className="text-fg-muted text-label">
+                  {t('propertiesPanel.knobReverse') || '방향 반전'}
+                </p>
+                <Checkbox
+                  checked={singleKnobPosition.reverse ?? false}
+                  onChange={() =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      reverse: !(singleKnobPosition.reverse ?? false),
+                    })
+                  }
+                />
+              </div>
+            </PropertySection>
+
+            <PropertySection>
+              {/* 배경색 (대기/입력 상태 전환은 피커 내부 토글) */}
+              <PropertyRow
+                label={t('propertiesPanel.backgroundColor') || '배경색'}
+              >
+                <button
+                  ref={bgColorBtnRef}
+                  type="button"
+                  onClick={() => handlePickerToggle('backgroundColor')}
+                  className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                    pickerFor === 'backgroundColor'
+                      ? 'border-accent'
+                      : 'border-line'
+                  }`}
+                  style={{ backgroundColor: colorValueFor('backgroundColor') }}
+                />
+              </PropertyRow>
+
+              {/* 테두리 색상 */}
+              <PropertyRow
+                label={t('propertiesPanel.borderColor') || '테두리 색상'}
+              >
+                <button
+                  ref={borderColorBtnRef}
+                  type="button"
+                  onClick={() => handlePickerToggle('borderColor')}
+                  className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+                    pickerFor === 'borderColor'
+                      ? 'border-accent'
+                      : 'border-line'
+                  }`}
+                  style={{ backgroundColor: colorValueFor('borderColor') }}
+                />
+              </PropertyRow>
+
+              {/* 테두리 두께 */}
+              <PropertyRow
+                label={t('propertiesPanel.borderWidth') || '테두리 두께'}
+              >
+                <NumberInput
+                  value={singleKnobPosition.borderWidth ?? 3}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      borderWidth: value,
+                    })
+                  }
+                  suffix="px"
+                  min={0}
+                  max={20}
+                />
+              </PropertyRow>
+
+              {/* 모서리 반경 (미지정 시 원형) */}
+              <PropertyRow
+                label={t('propertiesPanel.borderRadius') || '모서리 반경'}
+              >
+                <NumberInput
+                  value={effectiveBorderRadius}
+                  onChange={(value) =>
+                    handleKnobUpdate({
+                      index: singleKnobIndex,
+                      borderRadius: value,
+                    })
+                  }
+                  suffix="px"
+                  min={0}
+                  max={999}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                label={t('propertiesPanel.customImage') || 'Custom Image'}
+              >
+                <button
+                  ref={imageButtonRef}
+                  type="button"
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
+                    showImagePicker ? 'shadow-focus-ring' : ''
+                  } text-fg text-body`}
+                  onClick={() => setShowImagePicker(!showImagePicker)}
+                >
+                  {t('propertiesPanel.configure') || 'Configure'}
+                </button>
+              </PropertyRow>
+
+              {useCustomCSS && (
+                <PropertyRow label={t('propertiesPanel.className') || '클래스'}>
+                  <TextInput
+                    value={classNameDraft}
+                    onChange={setClassNameDraft}
+                    onBlur={() =>
+                      handleKnobUpdate({
+                        index: singleKnobIndex,
+                        className: classNameDraft || '',
+                      })
+                    }
+                    placeholder="className"
+                    width="90px"
+                  />
+                </PropertyRow>
+              )}
+            </PropertySection>
           </div>
           <div className="properties-panel-overlay-bar">
             <div
@@ -1522,7 +1534,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[8px]">
+        <div className="flex items-center justify-between p-[12px] pb-[12px]">
           {isRenaming ? (
             <input
               ref={renameInputRef}
@@ -1557,7 +1569,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               </span>
               <button
                 onClick={handleRenameStart}
-                className="w-[18px] h-[18px] flex items-center justify-center text-fg-faint hover:text-fg hover:bg-surface-hover rounded-[4px] transition-colors flex-shrink-0"
+                className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
                 title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
@@ -1605,7 +1617,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.STYLE ? '' : 'hidden'
           }`}
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <StyleTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1666,7 +1678,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               activeTab === TABS.NOTE ? '' : 'hidden'
             }`}
           >
-            <div className="p-[12px] flex flex-col gap-[12px]">
+            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
               <NoteTabContent
                 keyIndex={singleKeyIndex!}
                 keyPosition={singleKeyPosition!}
@@ -1693,7 +1705,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.COUNTER ? '' : 'hidden'
           }`}
         >
-          <div className="p-[12px] flex flex-col gap-[12px]">
+          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
             <CounterTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}

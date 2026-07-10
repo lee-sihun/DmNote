@@ -2247,7 +2247,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return (
           <div
             key={key}
-            className="flex justify-between items-center w-full h-[23px]"
+            className="flex justify-between items-center w-full min-h-[32px]"
           >
             <p className="text-fg-muted text-label">{labelText}</p>
             <div className="flex items-center gap-[10.5px]">{control}</div>

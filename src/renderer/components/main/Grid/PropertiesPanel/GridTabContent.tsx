@@ -1,20 +1,20 @@
 import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useSettingsStore, type GridSettings } from '@stores/useSettingsStore';
-import { SectionDivider, PropertyRow, NumberInput } from './PropertyInputs';
+import { PropertySection, PropertyRow, NumberInput } from './PropertyInputs';
 import Checkbox from '@components/main/common/Checkbox';
 
 // ============================================================================
 // 그리드 탭 콘텐츠 컴포넌트
 // ============================================================================
 
-// 체크박스 행 컴포넌트 (높이 23px 고정)
+// 체크박스 행 컴포넌트
 const CheckboxRow: React.FC<{
   label: string;
   checked: boolean;
   onChange: () => void;
 }> = ({ label, checked, onChange }) => (
-  <div className="flex justify-between items-center w-full h-[23px]">
+  <div className="flex justify-between items-center w-full min-h-[32px]">
     <p className="text-fg-muted text-label">{label}</p>
     <Checkbox checked={checked} onChange={onChange} />
   </div>
@@ -42,66 +42,74 @@ const GridTabContent: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-[12px] p-[12px]">
-      {/* 그리드 스냅 크기 */}
-      <PropertyRow label={t('gridSettings.gridSnapSize')}>
-        <NumberInput
-          value={gridSettings.gridSnapSize}
-          onChange={(val) => handleSettingChange('gridSnapSize', val)}
-          min={1}
-          max={10}
-          suffix="px"
-          width="54px"
-        />
-      </PropertyRow>
+    <div className="flex flex-col gap-[12px] px-[12px] pb-[12px]">
+      {/* 그리드 */}
+      <PropertySection>
+        <PropertyRow label={t('gridSettings.gridSnapSize')}>
+          <NumberInput
+            value={gridSettings.gridSnapSize}
+            onChange={(val) => handleSettingChange('gridSnapSize', val)}
+            min={1}
+            max={10}
+            suffix="px"
+            width="54px"
+          />
+        </PropertyRow>
 
-      {/* 오버레이 여백 */}
-      <PropertyRow label={t('gridSettings.overlayPadding')}>
-        <NumberInput
-          value={gridSettings.overlayPadding}
-          onChange={(val) => handleSettingChange('overlayPadding', val)}
-          min={0}
-          max={30}
-          suffix="px"
-          width="54px"
-        />
-      </PropertyRow>
-
-      <SectionDivider />
+        {/* 오버레이 여백 */}
+        <PropertyRow label={t('gridSettings.overlayPadding')}>
+          <NumberInput
+            value={gridSettings.overlayPadding}
+            onChange={(val) => handleSettingChange('overlayPadding', val)}
+            min={0}
+            max={30}
+            suffix="px"
+            width="54px"
+          />
+        </PropertyRow>
+      </PropertySection>
 
       {/* 미니맵 */}
-      <CheckboxRow
-        label={t('gridSettings.minimapEnabled')}
-        checked={gridSettings.minimapEnabled}
-        onChange={() =>
-          handleSettingChange('minimapEnabled', !gridSettings.minimapEnabled)
-        }
-      />
-
-      <SectionDivider />
+      <PropertySection>
+        <CheckboxRow
+          label={t('gridSettings.minimapEnabled')}
+          checked={gridSettings.minimapEnabled}
+          onChange={() =>
+            handleSettingChange('minimapEnabled', !gridSettings.minimapEnabled)
+          }
+        />
+      </PropertySection>
 
       {/* 스마트 가이드 */}
-      <CheckboxRow
-        label={t('gridSettings.alignmentGuides')}
-        checked={gridSettings.alignmentGuides}
-        onChange={() =>
-          handleSettingChange('alignmentGuides', !gridSettings.alignmentGuides)
-        }
-      />
-      <CheckboxRow
-        label={t('gridSettings.spacingGuides')}
-        checked={gridSettings.spacingGuides}
-        onChange={() =>
-          handleSettingChange('spacingGuides', !gridSettings.spacingGuides)
-        }
-      />
-      <CheckboxRow
-        label={t('gridSettings.sizeMatchGuides')}
-        checked={gridSettings.sizeMatchGuides}
-        onChange={() =>
-          handleSettingChange('sizeMatchGuides', !gridSettings.sizeMatchGuides)
-        }
-      />
+      <PropertySection>
+        <CheckboxRow
+          label={t('gridSettings.alignmentGuides')}
+          checked={gridSettings.alignmentGuides}
+          onChange={() =>
+            handleSettingChange(
+              'alignmentGuides',
+              !gridSettings.alignmentGuides,
+            )
+          }
+        />
+        <CheckboxRow
+          label={t('gridSettings.spacingGuides')}
+          checked={gridSettings.spacingGuides}
+          onChange={() =>
+            handleSettingChange('spacingGuides', !gridSettings.spacingGuides)
+          }
+        />
+        <CheckboxRow
+          label={t('gridSettings.sizeMatchGuides')}
+          checked={gridSettings.sizeMatchGuides}
+          onChange={() =>
+            handleSettingChange(
+              'sizeMatchGuides',
+              !gridSettings.sizeMatchGuides,
+            )
+          }
+        />
+      </PropertySection>
     </div>
   );
 };

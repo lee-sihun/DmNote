@@ -45,7 +45,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
 }) => {
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-[12px]">
         <div className="flex flex-col gap-[2px]">
           <span className="text-fg text-style-2">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
@@ -67,7 +67,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
         >
-          <div className="p-[12px]">
+          <div className="px-[12px] pb-[12px]">
             {renderPluginSettingsForm(
               pluginSettingsPanel.definition.settings,
               pluginPanelSettings,

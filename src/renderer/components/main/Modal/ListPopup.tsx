@@ -106,7 +106,6 @@ const SubMenu = ({
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
   const { scrollContainerRef: subLenisRef } = useLenis({
-    duration: 0.5,
     wheelMultiplier: 0.7,
   });
 
@@ -388,7 +387,6 @@ const ListPopup = ({
   }>({ id: null, close: null });
 
   const { scrollContainerRef: lenisRef } = useLenis({
-    duration: 0.5,
     wheelMultiplier: 0.7,
   });
 
