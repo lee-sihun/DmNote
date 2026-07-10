@@ -129,7 +129,7 @@ function drawWaveform(
   const visStartX = Math.max(padX, startX);
   const visEndX = Math.min(padX + drawableW, endX);
   if (visEndX > visStartX) {
-    ctx.fillStyle = 'rgba(69, 155, 248, 0.10)';
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.12)';
     ctx.fillRect(visStartX, 0, visEndX - visStartX, height);
   }
 
@@ -142,7 +142,7 @@ function drawWaveform(
     const x = padX + px;
 
     const inRange = x >= startX && x <= endX;
-    ctx.fillStyle = inRange ? '#9EC4FF' : '#545868';
+    ctx.fillStyle = inRange ? '#B9A5F9' : '#4A4B55';
     ctx.fillRect(x, y, 1, barHeight);
   }
 
@@ -1022,7 +1022,7 @@ const SoundTrimModal = ({
         {/* 헤더 바 */}
         <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
+            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-fg-muted">
               Sound
             </span>
             <span className="truncate text-body leading-[16px] text-fg">
@@ -1094,7 +1094,7 @@ const SoundTrimModal = ({
                     </svg>
                   )}
                 </button>
-                <span className="text-caption leading-[12px] text-success font-medium tabular-nums">
+                <span className="text-caption leading-[12px] text-fg-muted font-medium tabular-nums">
                   {audioBuffer ? formatSecLabel(trimDurationMs) : '--'}
                 </span>
               </div>
@@ -1157,13 +1157,13 @@ const SoundTrimModal = ({
         ) : null}
 
         {/* 푸터 */}
-        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
+        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-md text-style-3 transition-colors ${
+            className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
               canSubmit
-                ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
-                : 'bg-white/[0.04] text-fg-muted cursor-not-allowed'
+                ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
+                : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
             }`}
             onClick={() => {
               void handleSave();
@@ -1178,7 +1178,7 @@ const SoundTrimModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3 transition-colors"
+            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={closeModal}
             disabled={isSaving}
           >

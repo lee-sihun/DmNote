@@ -134,8 +134,8 @@ module.exports = {
         ".text-style-4": {
           fontSize: "14px",
           lineHeight: "20px",
-          letterSpacing: "-0.01em",
-          fontWeight: "600",
+          letterSpacing: "0",
+          fontWeight: "500",
         },
       });
     },

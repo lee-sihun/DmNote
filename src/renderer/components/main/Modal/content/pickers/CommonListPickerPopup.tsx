@@ -243,14 +243,14 @@ export default function CommonListPickerPopup<T>({
     >
       <div
         ref={containerCallbackRef}
-        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-elevated rounded-xl border-[1px] border-line`.trim()}
+        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-elevated rounded-xl border-[1px] border-line shadow-elevation-2`.trim()}
       >
         <input
           type="text"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-[23px] px-[8px] bg-inset rounded-md border-[1px] border-line text-fg text-style-2 placeholder-fg-faint focus:border-accent outline-none"
+          className="w-full h-[26px] px-[8px] bg-inset rounded-md border-[1px] border-line text-fg text-body placeholder-fg-faint hover:border-line-strong focus:border-accent outline-none transition-colors duration-fast"
         />
 
         {filterOptions && filterValue !== undefined && onFilterChange ? (
@@ -287,7 +287,7 @@ export default function CommonListPickerPopup<T>({
             }
           >
             {items.length === 0 ? (
-              <div className="flex items-center justify-center py-[10px] text-fg-faint text-style-4">
+              <div className="flex items-center justify-center py-[14px] text-fg-faint text-body">
                 {emptyText}
               </div>
             ) : (
@@ -319,20 +319,18 @@ export default function CommonListPickerPopup<T>({
         <button
           ref={addButtonRef}
           type="button"
-          className="w-full h-[23px] flex items-center justify-center rounded-md bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors"
+          className="w-full h-[26px] flex items-center justify-center rounded-md text-fg-muted bg-white/[0.05] hover:bg-white/[0.08] hover:text-fg active:bg-white/[0.11] transition-colors duration-fast"
           onClick={onAdd}
         >
           {addButtonContent}
         </button>
 
         {isLoading ? (
-          <p className="text-fg-muted text-style-4 text-center">
-            {loadingText}
-          </p>
+          <p className="text-fg-muted text-body text-center">{loadingText}</p>
         ) : null}
 
         {errorText ? (
-          <p className="text-danger-fg text-style-4 text-center">{errorText}</p>
+          <p className="text-danger text-body text-center">{errorText}</p>
         ) : null}
       </div>
     </FloatingPopup>

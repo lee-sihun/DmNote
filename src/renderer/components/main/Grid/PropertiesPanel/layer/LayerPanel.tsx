@@ -35,10 +35,8 @@ const LayerPanelTabButton: React.FC<LayerPanelTabButtonProps> = ({
 }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-md text-style-2 transition-colors ${
-      active
-        ? 'bg-surface-active text-fg shadow-elevation-1'
-        : 'text-fg-muted hover:text-fg'
+    className={`relative z-10 w-full h-full rounded-[6px] text-body transition-colors duration-base ${
+      active ? 'text-fg' : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -59,22 +57,34 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
   activeTab,
   onTabChange,
   t,
-}) => (
-  <div className="flex w-full h-[30px] bg-inset rounded-md items-center p-[3px] gap-[5px]">
-    <LayerPanelTabButton
-      active={activeTab === LAYER_PANEL_TABS.LAYER}
-      onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
-    >
-      {t('propertiesPanel.tabLayer') || '레이어'}
-    </LayerPanelTabButton>
-    <LayerPanelTabButton
-      active={activeTab === LAYER_PANEL_TABS.GRID}
-      onClick={() => onTabChange(LAYER_PANEL_TABS.GRID)}
-    >
-      {t('propertiesPanel.tabGrid') || '그리드'}
-    </LayerPanelTabButton>
-  </div>
-);
+}) => {
+  const activeIndex = activeTab === LAYER_PANEL_TABS.GRID ? 1 : 0;
+
+  return (
+    <div className="relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px]">
+      <div
+        aria-hidden
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-surface-active shadow-elevation-1 transition-transform duration-base ease-out-expo"
+        style={{
+          width: 'calc((100% - 4px) / 2)',
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+      />
+      <LayerPanelTabButton
+        active={activeTab === LAYER_PANEL_TABS.LAYER}
+        onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
+      >
+        {t('propertiesPanel.tabLayer') || '레이어'}
+      </LayerPanelTabButton>
+      <LayerPanelTabButton
+        active={activeTab === LAYER_PANEL_TABS.GRID}
+        onClick={() => onTabChange(LAYER_PANEL_TABS.GRID)}
+      >
+        {t('propertiesPanel.tabGrid') || '그리드'}
+      </LayerPanelTabButton>
+    </div>
+  );
+};
 
 // ============================================================================
 // 레이어 패널 컴포넌트

@@ -299,12 +299,12 @@ const WebFontInputModal = ({
           </p>
         </div>
 
-        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
+        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
-            className={`w-[120px] h-[30px] rounded-md text-style-3 text-fg transition-colors ${
+            className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
               canSubmit
-                ? 'bg-white/[0.07] hover:bg-white/[0.1]'
-                : 'bg-white/[0.04] cursor-not-allowed opacity-50'
+                ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
+                : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
             }`}
             onClick={handleSubmit}
             disabled={!canSubmit}
@@ -312,7 +312,7 @@ const WebFontInputModal = ({
             {submitButtonLabel}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3 transition-colors"
+            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={handleClose}
           >
             {t('common.cancel') || '취소'}

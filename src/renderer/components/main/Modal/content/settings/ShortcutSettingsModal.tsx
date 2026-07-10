@@ -550,7 +550,7 @@ const ShortcutSettingsModal = ({
 
         <div className="flex gap-[8px] mt-[19px] pr-[14px]">
           <button
-            className="flex-1 h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
+            className="flex-1 h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSave}
             disabled={isListening}
             style={
@@ -560,7 +560,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.save')}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
+            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
             disabled={isListening}
             style={
@@ -570,7 +570,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.cancel')}
           </button>
           {/* <button
-            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
+            className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={handleReset}
             disabled={isListening}
             style={

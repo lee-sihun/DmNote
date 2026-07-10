@@ -136,14 +136,14 @@ const Alert = ({
             onClick={onConfirm}
             className={`${
               shouldShowCancel ? 'w-[150px]' : 'w-full'
-            } h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-lg text-fg text-label transition-colors duration-fast`}
+            } h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast`}
           >
             {confirmLabel}
           </button>
           {shouldShowCancel && (
             <button
               onClick={onCancel}
-              className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-lg text-danger-fg text-label transition-colors duration-fast"
+              className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             >
               {cancelLabel}
             </button>

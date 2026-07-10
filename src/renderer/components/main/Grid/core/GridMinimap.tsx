@@ -589,8 +589,8 @@ const GridMinimap = ({
             y={viewport.y}
             width={viewport.width}
             height={viewport.height}
-            fill="rgba(139, 92, 246, 0.2)"
-            stroke="rgba(139, 92, 246, 0.8)"
+            fill="rgba(255, 255, 255, 0.06)"
+            stroke="rgba(255, 255, 255, 0.35)"
             strokeWidth={1}
             rx={2}
           />

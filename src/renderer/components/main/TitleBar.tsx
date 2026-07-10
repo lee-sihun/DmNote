@@ -20,11 +20,11 @@ const TitleBar = (): React.ReactElement => {
       className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-app rounded-t-[8px] [app-region:drag]"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      <div className="flex items-center gap-[6px] pointer-events-none">
-        <Logo className="w-[12px] h-[12px] text-fg-faint" />
-        <div className="text-[11px] font-semibold tracking-[0.08em] text-fg-faint select-none">
+      <div className="flex items-center gap-[6px] text-fg-muted pointer-events-none">
+        <Logo className="w-[12px] h-[12px] shrink-0" />
+        <span className="text-[12px] leading-[12px] font-semibold tracking-[0.06em] select-none">
           DM NOTE
-        </div>
+        </span>
       </div>
       {!isMacOS && (
         <div

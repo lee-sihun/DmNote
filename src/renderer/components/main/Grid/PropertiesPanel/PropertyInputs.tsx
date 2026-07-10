@@ -24,8 +24,8 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   children,
 }) => (
   <div className="flex justify-between items-center w-full min-h-[23px]">
-    <p className="text-white text-style-2">{label}</p>
-    <div className="flex items-center gap-[10.5px]">{children}</div>
+    <p className="text-fg-muted text-label">{label}</p>
+    <div className="flex items-center gap-[8px]">{children}</div>
   </div>
 );
 
@@ -240,7 +240,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
         className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
           isFocused ? 'border-accent' : 'border-line'
-        } text-style-4 ${
+        } text-body tabular-nums ${
           showMixedPlaceholder
             ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
             : 'text-fg'
@@ -275,7 +275,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           prefix && !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
         } top-[-1px] h-[23px] ${
           prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-        } bg-transparent text-style-4 ${
+        } bg-transparent text-body tabular-nums ${
           showMixedPlaceholder
             ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
             : 'text-fg'
@@ -502,7 +502,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
             !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
           } top-[-1px] h-[23px] ${
             !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
-          } bg-transparent text-style-4 ${textClass} ${placeholderClass} text-center`}
+          } bg-transparent text-body tabular-nums ${textClass} ${placeholderClass} text-center`}
         />
       </div>
     );
@@ -521,7 +521,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         placeholder={effectivePlaceholder}
         className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
           isFocused ? 'border-accent' : 'border-line'
-        } text-style-4 ${textClass} ${placeholderClass}`}
+        } text-body tabular-nums ${textClass} ${placeholderClass}`}
         style={{ width }}
       />
     );
@@ -539,7 +539,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       placeholder={effectivePlaceholder}
       className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
         isFocused ? 'border-accent' : 'border-line'
-      } text-style-4 ${textClass} ${placeholderClass}`}
+      } text-body tabular-nums ${textClass} ${placeholderClass}`}
       style={{ width }}
     />
   );
@@ -586,7 +586,7 @@ export const TextInput: React.FC<TextInputProps> = ({
       placeholder={placeholder}
       className={`text-center h-[23px] p-[6px] bg-inset rounded-md border-[1px] ${
         isFocused ? 'border-accent' : 'border-line'
-      } text-style-4 ${
+      } text-body tabular-nums ${
         isMixed
           ? 'text-fg placeholder:text-fg-faint placeholder:italic'
           : 'text-fg'
@@ -771,7 +771,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
           isOpen ? 'border-accent' : 'border-line'
         } px-[8px] flex items-center justify-between gap-[4px] hover:border-line-strong transition-colors`}
       >
-        <span className="text-style-4 text-fg">
+        <span className="text-body tabular-nums text-fg">
           {options.find((opt) => opt.value === value)?.label || value}
         </span>
         <svg
@@ -804,7 +804,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`w-full px-[8px] py-[6px] text-left text-style-4 hover:bg-surface-hover transition-colors ${
+                className={`w-full px-[8px] py-[6px] text-left text-body tabular-nums hover:bg-surface-hover transition-colors ${
                   value === opt.value ? 'text-accent' : 'text-fg'
                 }`}
               >
@@ -964,9 +964,9 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   onStrikethroughChange,
 }) => {
   const buttonClass = (active: boolean) =>
-    `w-[24px] h-[21px] flex items-center justify-center transition-colors ${
+    `w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${
       active
-        ? 'bg-accent-muted text-accent'
+        ? 'bg-white/[0.12] text-fg'
         : 'bg-inset text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
     }`;
 
@@ -1011,10 +1011,8 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-md text-style-2 transition-colors ${
-      active
-        ? 'bg-surface-active text-fg shadow-elevation-1'
-        : 'text-fg-muted hover:text-fg'
+    className={`relative z-10 w-full h-full rounded-[6px] text-body transition-colors duration-base ${
+      active ? 'text-fg' : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -1031,32 +1029,33 @@ export const Tabs: React.FC<TabsProps> = ({
     ? availableTabs
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
+  const labels: Record<string, string> = {
+    [TABS.STYLE]: t('propertiesPanel.tabStyle') || '키',
+    [TABS.NOTE]: t('propertiesPanel.tabNote') || '노트',
+    [TABS.COUNTER]: t('propertiesPanel.tabCounter') || '카운터',
+  };
+
+  const activeIndex = Math.max(0, tabs.indexOf(activeTab));
+
   return (
-    <div className="flex w-full h-[30px] bg-inset rounded-md items-center p-[3px] gap-[5px]">
-      {tabs.includes(TABS.STYLE) && (
+    <div className="relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px]">
+      <div
+        aria-hidden
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-surface-active shadow-elevation-1 transition-transform duration-base ease-out-expo"
+        style={{
+          width: `calc((100% - 4px) / ${tabs.length})`,
+          transform: `translateX(${activeIndex * 100}%)`,
+        }}
+      />
+      {tabs.map((tab) => (
         <TabButton
-          active={activeTab === TABS.STYLE}
-          onClick={() => onTabChange(TABS.STYLE)}
+          key={tab}
+          active={activeTab === tab}
+          onClick={() => onTabChange(tab)}
         >
-          {t('propertiesPanel.tabStyle') || '키'}
+          {labels[tab]}
         </TabButton>
-      )}
-      {tabs.includes(TABS.NOTE) && (
-        <TabButton
-          active={activeTab === TABS.NOTE}
-          onClick={() => onTabChange(TABS.NOTE)}
-        >
-          {t('propertiesPanel.tabNote') || '노트'}
-        </TabButton>
-      )}
-      {tabs.includes(TABS.COUNTER) && (
-        <TabButton
-          active={activeTab === TABS.COUNTER}
-          onClick={() => onTabChange(TABS.COUNTER)}
-        >
-          {t('propertiesPanel.tabCounter') || '카운터'}
-        </TabButton>
-      )}
+      ))}
     </div>
   );
 };
