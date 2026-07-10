@@ -361,7 +361,7 @@ const ShortcutSettingsModal = ({
                 : 'height 100ms ease-in-out',
             }}
           >
-            <div ref={contentRef} className="flex flex-col gap-[16px] py-[4px]">
+            <div ref={contentRef} className="flex flex-col gap-[16px]">
               <div className="flex flex-col gap-[8px]">
                 <p className="px-[2px] text-caption text-fg-faint uppercase tracking-wider">
                   {t('shortcutSetting.sectionOverlay')}
