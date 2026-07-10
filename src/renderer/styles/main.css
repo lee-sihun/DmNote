@@ -3,6 +3,11 @@
  * 오버레이/OBS 윈도우에는 로드되지 않음 — 공유 스타일은 global.css에
  */
 
+/* 기본 텍스트 색 — currentColor 아이콘의 폴백 */
+body {
+  color: var(--ui-fg);
+}
+
 /* 커스텀 커서 미리보기 */
 body.dmn-custom-cursor,
 body.dmn-custom-cursor * {

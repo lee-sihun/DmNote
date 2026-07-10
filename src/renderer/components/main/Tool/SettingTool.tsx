@@ -255,10 +255,10 @@ SettingToolProps) => {
   };
 
   return (
-    <div className="flex gap-[10px]">
+    <div className="flex gap-[8px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button icon={<FolderIcon />} onClick={handlePresetSave} />
             </FloatingTooltip>
@@ -315,7 +315,7 @@ SettingToolProps) => {
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-button-primary rounded-[7px] gap-[5px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[4px]">
           <FloatingTooltip
             content={
               isObsModeActive
@@ -395,13 +395,13 @@ const Button = ({
     <button
       type="button"
       disabled={disabled}
-      className={`flex items-center justify-center h-[30px] w-[30px] rounded-[7px] transition-colors ${
+      className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast ${
         disabled
-          ? 'opacity-40 cursor-not-allowed'
-          : `active:bg-button-active ${
+          ? 'opacity-40 cursor-not-allowed text-fg-muted'
+          : `active:bg-white/[0.09] ${
               isSelected
-                ? 'bg-button-active'
-                : 'bg-button-primary hover:bg-button-hover'
+                ? 'bg-surface-active text-fg'
+                : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
             }`
       }`}
       onClick={disabled ? undefined : onClick}
@@ -422,10 +422,10 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
       <button
         ref={ref}
         type="button"
-        className={`flex items-center justify-center h-[30px] w-[14px] rounded-[7px] transition-colors active:bg-button-active ${
+        className={`flex items-center justify-center h-[30px] w-[14px] rounded-md transition-colors duration-fast active:bg-white/[0.09] ${
           isSelected
-            ? 'bg-button-active hover:bg-button-active'
-            : 'bg-button-primary hover:bg-button-hover'
+            ? 'bg-surface-active text-fg'
+            : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
         }`}
         onClick={onClick}
       >

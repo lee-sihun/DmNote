@@ -590,9 +590,9 @@ export default function App() {
   });
 
   return (
-    <div className="bg-[#111012] w-full h-full flex flex-col overflow-hidden rounded-[7px] border border-[rgba(255,255,255,0.1)]">
+    <div className="bg-app w-full h-full flex flex-col overflow-hidden rounded-[8px] border border-line-strong">
       <TitleBar />
-      <div className="flex-1 bg-[#2A2A31] overflow-hidden flex">
+      <div className="flex-1 bg-panel overflow-hidden flex">
         {isSettingsOpen ? (
           <div className="h-full w-full overflow-y-auto">
             <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
