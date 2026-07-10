@@ -119,7 +119,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
 
   return (
     <div
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-elevated border-l border-line flex flex-col z-30 shadow-lg"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
       onMouseDown={handleHeaderEmptyClick}
     >
       {/* 헤더 + 탭 영역 */}

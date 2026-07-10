@@ -11,6 +11,7 @@
   --ui-bg-surface-active: #2b2b32;
   --ui-bg-elevated: #1f1f24;
   --ui-bg-inset: #101013;
+  --ui-glass: rgba(23, 23, 28, 0.88);
 
   /* 경계선 — 헤어라인은 저알파 화이트 */
   --ui-line: rgba(255, 255, 255, 0.07);

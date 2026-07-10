@@ -45,7 +45,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-elevated border-l border-line flex flex-col z-30 shadow-lg"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
     >
       <div className="flex items-center justify-between p-[12px] border-b border-line">
         <div className="flex flex-col gap-[2px]">

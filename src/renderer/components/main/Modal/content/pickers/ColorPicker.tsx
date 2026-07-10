@@ -782,7 +782,7 @@ const ColorPickerWrapper = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line shadow-elevation-2"
       >
         {showStateSwitch && (
           <StateSwitch state={stateMode} onChange={onStateModeChange} />

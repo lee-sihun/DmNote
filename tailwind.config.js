@@ -15,6 +15,7 @@ module.exports = {
         },
         elevated: "var(--ui-bg-elevated)",
         inset: "var(--ui-bg-inset)",
+        glass: "var(--ui-glass)",
         line: {
           DEFAULT: "var(--ui-line)",
           strong: "var(--ui-line-strong)",
