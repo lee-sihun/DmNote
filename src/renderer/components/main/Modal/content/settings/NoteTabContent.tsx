@@ -311,7 +311,9 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
       <div className="flex flex-col gap-[19px]">
         {/* 색상 */}
         <div className="flex justify-between w-full items-center">
-          <p className="text-fg-muted text-label">{t('keySetting.noteColor')}</p>
+          <p className="text-fg-muted text-label">
+            {t('keySetting.noteColor')}
+          </p>
           <button
             ref={colorButtonRef}
             type="button"

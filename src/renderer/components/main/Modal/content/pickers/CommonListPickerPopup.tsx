@@ -244,9 +244,9 @@ export default function CommonListPickerPopup<T>({
       <div
         ref={containerCallbackRef}
         className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3`.trim()}
-      style={{
-        visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
-      }}
+        style={{
+          visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
+        }}
       >
         <input
           type="text"

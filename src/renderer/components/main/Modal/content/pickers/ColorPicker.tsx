@@ -783,9 +783,9 @@ const ColorPickerWrapper = ({
       <div
         ref={pickerContainerRef}
         className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
-      style={{
-        visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
-      }}
+        style={{
+          visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
+        }}
       >
         {showStateSwitch && (
           <StateSwitch state={stateMode} onChange={onStateModeChange} />
@@ -1120,9 +1120,7 @@ function PaletteSlot({
     <button
       type="button"
       className={`w-[22px] h-[22px] rounded-md border border-white/[0.12] transition-colors ${
-        isEmpty
-          ? 'border-line cursor-default'
-          : 'border-line cursor-pointer'
+        isEmpty ? 'border-line cursor-default' : 'border-line cursor-pointer'
       }`}
       style={getBackgroundStyle()}
       onClick={isEmpty ? undefined : onClick}
@@ -1442,9 +1440,7 @@ function GradientInput({
                 event.currentTarget.blur();
               }
             }}
-            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px] ${
-              ''
-            }`}
+            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px] ${''}`}
             title={rightTitle}
           />
         </div>

@@ -97,7 +97,9 @@ const LaboratoryModal = ({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-fg-muted text-label">{t('laboratory.minLength')}</p>
+          <p className="text-fg-muted text-label">
+            {t('laboratory.minLength')}
+          </p>
           <input
             type="number"
             min={1}
@@ -116,7 +118,9 @@ const LaboratoryModal = ({
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-fg-muted text-label">{t('laboratory.threshold')}</p>
+          <p className="text-fg-muted text-label">
+            {t('laboratory.threshold')}
+          </p>
           <input
             type="number"
             min={0}

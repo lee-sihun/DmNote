@@ -3,6 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { SidebarToggleIcon, ModeToggleIcon } from '../PropertyInputs';
+import { PANEL_ROOT_CLASS } from '../panelChrome';
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from '../types';
 import LayerTabContent from './LayerTabContent';
 import GridTabContent from '../GridTabContent';
@@ -64,7 +65,7 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
     <div className="relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px]">
       <div
         aria-hidden
-        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-surface-active shadow-elevation-1 transition-transform duration-base ease-out-expo"
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
         style={{
           width: 'calc((100% - 4px) / 2)',
           transform: `translateX(${activeIndex * 100}%)`,
@@ -118,10 +119,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
   };
 
   return (
-    <div
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
-      onMouseDown={handleHeaderEmptyClick}
-    >
+    <div className={PANEL_ROOT_CLASS} onMouseDown={handleHeaderEmptyClick}>
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
@@ -136,8 +134,8 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
               onClick={hasSelection ? onSwitchToProperty : undefined}
               className={`w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
                 hasSelection
-                  ? 'hover:bg-surface-hover cursor-pointer'
-                  : 'cursor-not-allowed opacity-70'
+                  ? 'text-white/45 hover:text-white/90 hover:bg-fill-hover cursor-pointer'
+                  : 'text-fg-disabled cursor-not-allowed'
               }`}
               title={
                 t('propertiesPanel.switchToProperty') || 'Switch to Property'
@@ -148,7 +146,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
             {/* 패널 닫기 버튼 */}
             <button
               onClick={onClose}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
               title={t('propertiesPanel.closePanel') || 'Close Panel'}
             >
               <SidebarToggleIcon isOpen={true} />

@@ -2,7 +2,8 @@ import React from 'react';
 
 type IconButtonSize = 'sm' | 'md';
 
-interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface IconButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: IconButtonSize;
   /** 토글형 버튼의 선택 상태 */
   selected?: boolean;

@@ -656,7 +656,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         <button
           ref={batchImageButtonRef}
           type="button"
-          className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+          className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
             showBatchImagePicker ? 'shadow-focus-ring' : ''
           } text-fg text-body`}
           onClick={onToggleBatchImagePicker}
@@ -702,7 +702,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               ref={fontButtonRef}
               type="button"
-              className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+              className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                 showFontPicker ? 'shadow-focus-ring' : ''
               } text-fg text-body`}
               onClick={() => setShowFontPicker(!showFontPicker)}
@@ -868,9 +868,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 }
               >
                 {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
-                  <span className="text-fg-faint text-body italic">
-                    Mixed
-                  </span>
+                  <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <Checkbox
                   checked={
@@ -888,14 +886,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
               <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
                 {soundMixedValue((pos) => pos.soundPath, '').isMixed ? (
-                  <span className="text-fg-faint text-body italic">
-                    Mixed
-                  </span>
+                  <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <button
                   ref={soundButtonRef}
                   type="button"
-                  className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+                  className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                     showSoundPicker ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
                   onClick={() => setShowSoundPicker((prev) => !prev)}
@@ -908,9 +904,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
               >
                 {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-                  <span className="text-fg-faint text-body italic">
-                    Mixed
-                  </span>
+                  <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <NumberInput
                   value={soundMixedValue((pos) => pos.soundVolume, 100).value}

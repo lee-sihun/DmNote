@@ -2,7 +2,7 @@
 
 // 색·모션·그림자 값의 단일 소스는 src/renderer/styles/tokens.css
 module.exports = {
-  content: ["./src/**/*.{js,jsx,tsx,html}"],
+  content: ["./src/**/*.{js,jsx,ts,tsx,html}"],
   theme: {
     extend: {
       colors: {
@@ -17,9 +17,16 @@ module.exports = {
         inset: "var(--ui-bg-inset)",
         glass: "var(--ui-glass)",
         "glass-heavy": "var(--ui-glass-heavy)",
+        "glass-dim": "var(--ui-glass-dim)",
+        "glass-panel": "var(--ui-glass-panel)",
         line: {
           DEFAULT: "var(--ui-line)",
           strong: "var(--ui-line-strong)",
+        },
+        fill: {
+          DEFAULT: "var(--ui-fill)",
+          hover: "var(--ui-fill-hover)",
+          active: "var(--ui-fill-active)",
         },
         fg: {
           DEFAULT: "var(--ui-fg)",
@@ -74,6 +81,8 @@ module.exports = {
         "elevation-1": "var(--ui-shadow-1)",
         "elevation-2": "var(--ui-shadow-2)",
         "elevation-3": "var(--ui-shadow-3)",
+        "elevation-chrome": "var(--ui-shadow-chrome)",
+        "elevation-panel": "var(--ui-shadow-panel)",
         "focus-ring": "var(--ui-focus-ring)",
       },
     },

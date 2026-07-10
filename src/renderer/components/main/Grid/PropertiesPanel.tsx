@@ -2552,7 +2552,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       <div className="absolute right-0 top-0 z-30">
         <button
           onClick={handleTogglePanel}
-          className="m-[8px] w-[32px] h-[32px] bg-elevated rounded-md flex items-center justify-center hover:bg-surface-hover transition-colors shadow-lg"
+          className="m-[8px] w-[32px] h-[32px] flex items-center justify-center bg-glass-dim backdrop-blur-[24px] rounded-[8px] shadow-elevation-chrome text-white/45 hover:text-white/90 transition-colors"
           title={t('propertiesPanel.openPanel') || '속성 패널 열기'}
         >
           <SidebarToggleIcon isOpen={false} />

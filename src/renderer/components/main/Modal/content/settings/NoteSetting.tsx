@@ -207,7 +207,9 @@ const NoteSetting = ({
   const renderNoteTab = () => (
     <div className="flex flex-col gap-[12px]">
       <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">{t('noteSetting.frameLimit')}</p>
+        <p className="text-fg-muted text-label">
+          {t('noteSetting.frameLimit')}
+        </p>
         <input
           type="number"
           min={NOTE_SETTINGS_CONSTRAINTS.frameLimit.min}
@@ -365,7 +367,9 @@ const NoteSetting = ({
   const renderAdvancedTab = () => (
     <div className="flex flex-col gap-[12px]">
       <div className="flex justify-between w-full items-center h-[23px]">
-        <p className="text-fg-muted text-label">{t('laboratory.delayToggle')}</p>
+        <p className="text-fg-muted text-label">
+          {t('laboratory.delayToggle')}
+        </p>
         <Checkbox
           checked={delayedNoteEnabled}
           onChange={() => setDelayedNoteEnabled((prev) => !prev)}

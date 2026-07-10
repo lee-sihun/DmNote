@@ -120,81 +120,79 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
           <div className="px-[8px] pt-[5px] pb-[6px] text-caption text-fg-faint select-none">
             {t('tabs.title')}
           </div>
-        <div
-          ref={scrollRef}
-          className="flex flex-col w-full gap-[2px] overflow-y-auto modal-content-scroll"
-          style={{
-            maxHeight: `${TAB_LIST_MAX_HEIGHT}px`,
-            width:
-              scrollbarCompensation > 0
-                ? `calc(100% + ${scrollbarCompensation}px)`
-                : undefined,
-            marginRight:
-              scrollbarCompensation > 0
-                ? `-${scrollbarCompensation}px`
-                : undefined,
-          }}
-        >
           <div
-            className="flex flex-col gap-[2px]"
-            style={
-              hasOverflow
-                ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
-                : undefined
-            }
+            ref={scrollRef}
+            className="flex flex-col w-full gap-[2px] overflow-y-auto modal-content-scroll"
+            style={{
+              maxHeight: `${TAB_LIST_MAX_HEIGHT}px`,
+              width:
+                scrollbarCompensation > 0
+                  ? `calc(100% + ${scrollbarCompensation}px)`
+                  : undefined,
+              marginRight:
+                scrollbarCompensation > 0
+                  ? `-${scrollbarCompensation}px`
+                  : undefined,
+            }}
           >
-            {[...customTabs]
-              .slice()
-              .reverse()
-              .map((tab) => {
-                const isSelected = selectedKeyType === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    className={`group w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center gap-[4px] px-[8px] rounded-[6px] text-body text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
-                      isSelected ? 'bg-surface-active' : ''
-                    }`}
-                    onClick={() => handleSelect(tab.id)}
-                  >
-                    <span className="flex-1 min-w-0 truncate text-left">
-                      {tab.name}
-                    </span>
-                    {isSelected && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        title={t('tabs.delete')}
-                        className="w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger-muted transition-all duration-fast"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAskDelete(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
+            <div
+              className="flex flex-col gap-[2px]"
+              style={
+                hasOverflow
+                  ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
+                  : undefined
+              }
+            >
+              {[...customTabs]
+                .slice()
+                .reverse()
+                .map((tab) => {
+                  const isSelected = selectedKeyType === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`group w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center gap-[4px] px-[8px] rounded-[6px] text-body text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
+                        isSelected ? 'bg-surface-active' : ''
+                      }`}
+                      onClick={() => handleSelect(tab.id)}
+                    >
+                      <span className="flex-1 min-w-0 truncate text-left">
+                        {tab.name}
+                      </span>
+                      {isSelected && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title={t('tabs.delete')}
+                          className="w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger-muted transition-all duration-fast"
+                          onClick={(e) => {
                             e.stopPropagation();
                             setAskDelete(true);
-                          }
-                        }}
-                      >
-                        <TrashIcon className="w-[10px] h-[10px]" />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setAskDelete(true);
+                            }
+                          }}
+                        >
+                          <TrashIcon className="w-[10px] h-[10px]" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
-        </div>
 
-          {!maxReached && (
-            <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
-          )}
+          {!maxReached && <div className="h-px bg-line my-[6px] -mx-[6px]" />}
         </>
       )}
 
       {!maxReached && (
         <button
-          className="w-full h-[28px] rounded-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
+          className="w-full h-[28px] rounded-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
           onClick={() => setShowNameModal(true)}
         >
           <PlusIcon className="w-[9px] h-[9px] shrink-0" />

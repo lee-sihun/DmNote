@@ -67,9 +67,7 @@ const TabNameModal = ({
         className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-style-3 text-fg">
-          {t('tabs.createTitle')}
-        </div>
+        <div className="text-style-3 text-fg">{t('tabs.createTitle')}</div>
         <input
           autoFocus
           value={name}

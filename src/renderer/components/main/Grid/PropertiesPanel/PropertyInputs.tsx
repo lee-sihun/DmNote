@@ -472,9 +472,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   const placeholderClass = effectivePlaceholder
     ? 'placeholder:text-fg-faint placeholder:italic'
     : '';
-  const textClass = showMixedPlaceholder
-    ? 'text-fg-faint italic'
-    : 'text-fg';
+  const textClass = showMixedPlaceholder ? 'text-fg-faint italic' : 'text-fg';
 
   if (prefix) {
     return (
@@ -718,7 +716,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className={`w-[23px] h-[23px] rounded-md border-[1px] border-white/[0.12] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+        className={`w-[23px] h-[23px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
           open ? 'shadow-focus-ring' : ''
         }`}
         style={{
@@ -779,11 +777,11 @@ export const SelectInput: React.FC<SelectInputProps> = ({
           height="5"
           viewBox="0 0 8 5"
           fill="none"
-          className="flex-shrink-0"
+          className="flex-shrink-0 text-white/45"
         >
           <path
             d="M1 1L4 4L7 1"
-            stroke="#6B6D75"
+            stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -830,7 +828,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     <button
       onClick={() => onChange(!checked)}
       className={`w-[32px] h-[18px] rounded-full transition-colors relative flex-shrink-0 ${
-        checked ? 'bg-accent' : 'bg-white/[0.14]'
+        checked ? 'bg-accent' : 'bg-line-strong'
       }`}
     >
       <div
@@ -847,7 +845,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 // ============================================================================
 
 export const SectionDivider: React.FC = () => (
-  <div className="w-full h-[1px] bg-white/[0.06]" />
+  <div className="w-full h-[1px] bg-line" />
 );
 
 // ============================================================================
@@ -966,7 +964,7 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   const buttonClass = (active: boolean) =>
     `w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${
       active
-        ? 'bg-white/[0.12] text-fg'
+        ? 'bg-fill-active text-fg'
         : 'bg-inset text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
     }`;
 
@@ -1041,7 +1039,7 @@ export const Tabs: React.FC<TabsProps> = ({
     <div className="relative flex w-full h-[30px] bg-inset rounded-lg items-center p-[2px]">
       <div
         aria-hidden
-        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-surface-active shadow-elevation-1 transition-transform duration-base ease-out-expo"
+        className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"
         style={{
           width: `calc((100% - 4px) / ${tabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`,
@@ -1068,16 +1066,17 @@ export const CloseIcon: React.FC = () => (
   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
     <path
       d="M1 1L9 9M9 1L1 9"
-      stroke="#6B6D75"
+      stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
     />
   </svg>
 );
 
-export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
-  isOpen,
-}) => (
+export const SidebarToggleIcon: React.FC<{
+  isOpen: boolean;
+  color?: string;
+}> = ({ isOpen, color = 'currentColor' }) => (
   <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
     <rect
       x="0.75"
@@ -1085,7 +1084,7 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
       width="14.5"
       height="12.5"
       rx="2"
-      stroke="#6B6D75"
+      stroke={color}
       strokeWidth="1.5"
       fill="none"
     />
@@ -1094,7 +1093,7 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
       y1="1"
       x2={isOpen ? '10' : '12'}
       y2="13"
-      stroke="#6B6D75"
+      stroke={color}
       strokeWidth="1.5"
     />
     {isOpen && (
@@ -1104,7 +1103,7 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
           y1="4"
           x2="13.5"
           y2="4"
-          stroke="#6B6D75"
+          stroke={color}
           strokeWidth="1"
           strokeLinecap="round"
         />
@@ -1113,7 +1112,7 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
           y1="7"
           x2="13.5"
           y2="7"
-          stroke="#6B6D75"
+          stroke={color}
           strokeWidth="1"
           strokeLinecap="round"
         />
@@ -1122,7 +1121,7 @@ export const SidebarToggleIcon: React.FC<{ isOpen: boolean }> = ({
           y1="10"
           x2="13.5"
           y2="10"
-          stroke="#6B6D75"
+          stroke={color}
           strokeWidth="1"
           strokeLinecap="round"
         />
@@ -1136,13 +1135,20 @@ export const ModeToggleIcon: React.FC<{
   mode: 'layer' | 'property';
   disabled?: boolean;
 }> = ({ mode, disabled = false }) => {
-  const strokeColor = disabled ? '#4A4A50' : '#6B6D75';
-  const fillColor = disabled ? '#4A4A50' : '#6B6D75';
+  const strokeColor = 'currentColor';
+  const fillColor = 'currentColor';
+  const disabledClass = disabled ? 'text-fg-disabled' : undefined;
 
   if (mode === 'layer') {
     // 레이어 아이콘 (쌓인 레이어)
     return (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        className={disabledClass}
+      >
         <path
           d="M8 2L14 5.5L8 9L2 5.5L8 2Z"
           stroke={strokeColor}
@@ -1170,7 +1176,13 @@ export const ModeToggleIcon: React.FC<{
 
   // 속성 아이콘 (슬라이더/설정)
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      className={disabledClass}
+    >
       <line
         x1="2"
         y1="4"

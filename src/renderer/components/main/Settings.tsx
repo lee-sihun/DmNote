@@ -860,9 +860,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleNoteEffectChange}
               >
-                <p className="text-label text-fg">
-                  {t('settings.noteEffect')}
-                </p>
+                <p className="text-label text-fg">{t('settings.noteEffect')}</p>
                 <Checkbox
                   checked={noteEffect}
                   onChange={handleNoteEffectChange}
@@ -874,9 +872,7 @@ const Settings = ({
                 onMouseLeave={() => setHoveredKey(null)}
                 onClick={handleKeyCounterToggle}
               >
-                <p className="text-label text-fg">
-                  {t('settings.keyCounter')}
-                </p>
+                <p className="text-label text-fg">{t('settings.keyCounter')}</p>
                 <div className="flex items-center gap-[8px]">
                   {/* <button
                     onClick={handleResetCounters}
@@ -991,9 +987,7 @@ const Settings = ({
                   className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                   onClick={handleToggleCustomJS}
                 >
-                  <p className="text-label text-fg">
-                    {t('settings.customJS')}
-                  </p>
+                  <p className="text-label text-fg">{t('settings.customJS')}</p>
                   <Checkbox
                     checked={useCustomJS}
                     onChange={handleToggleCustomJS}
@@ -1047,9 +1041,7 @@ const Settings = ({
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onClick={handleObsToggle}
               >
-                <p className="text-label text-fg">
-                  {t('settings.obsMode')}
-                </p>
+                <p className="text-label text-fg">{t('settings.obsMode')}</p>
                 <Checkbox
                   checked={obsStatus.running}
                   onChange={handleObsToggle}
@@ -1174,9 +1166,7 @@ const Settings = ({
             {/* 기타 설정 */}
             <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-label text-fg">
-                  {t('settings.language')}
-                </p>
+                <p className="text-label text-fg">{t('settings.language')}</p>
                 <Dropdown
                   options={LANGUAGE_OPTIONS}
                   value={language}
@@ -1186,9 +1176,7 @@ const Settings = ({
                 />
               </div>
               <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-label text-fg">
-                  {t('settings.shortcuts')}
-                </p>
+                <p className="text-label text-fg">{t('settings.shortcuts')}</p>
                 <button
                   onClick={() => setShortcutModalOpen(true)}
                   className={actionButtonClass(true)}

@@ -9,7 +9,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active',
+  primary:
+    'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active',
   secondary:
     'bg-white/[0.07] text-fg hover:bg-white/[0.1] active:bg-white/[0.13]',
   ghost:
