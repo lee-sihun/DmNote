@@ -347,7 +347,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -360,7 +360,7 @@ const ShortcutSettingsModal = ({
         <div className="relative">
           <div
             ref={scrollRef}
-            className="overflow-y-auto modal-content-scroll dmn-scroll-fade pr-[14px]"
+            className="overflow-y-auto modal-content-scroll dmn-scroll-fade -mr-[14px] pr-[14px]"
             style={{
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
@@ -493,12 +493,12 @@ const ShortcutSettingsModal = ({
         </div>
 
         {error ? (
-          <div className="mt-[12px] px-[10px] py-[8px] bg-danger-muted rounded-md text-body text-danger-fg pr-[14px]">
+          <div className="mt-[12px] px-[10px] py-[8px] bg-danger-muted rounded-md text-body text-danger-fg">
             {error}
           </div>
         ) : null}
 
-        <div className="flex gap-[8px] mt-[19px] pr-[14px]">
+        <div className="flex gap-[8px] mt-[19px]">
           <button
             className="flex-1 h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSave}
