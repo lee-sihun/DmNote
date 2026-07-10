@@ -133,7 +133,7 @@ const UpdateModal = ({
               </button>
               <button
                 onClick={onClose}
-                className="w-[80px] h-[32px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]
+                className="w-[80px] h-[32px] bg-fill hover:bg-fill-hover active:bg-fill-active
                            rounded-md text-fg text-body transition-colors"
               >
                 {t('common.confirm')}
@@ -228,7 +228,7 @@ const UpdateModal = ({
               </button>
               <button
                 onClick={handleClose}
-                className="w-[80px] h-[32px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]
+                className="w-[80px] h-[32px] bg-fill hover:bg-fill-hover active:bg-fill-active
                            rounded-md text-fg text-body transition-colors"
               >
                 {t('update.later')}

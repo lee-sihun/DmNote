@@ -1016,11 +1016,11 @@ const SoundTrimModal = ({
   return (
     <Modal onClick={closeModal}>
       <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-white/[0.04] rounded-[10px] overflow-hidden"
+        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-[10px] overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 헤더 바 */}
-        <div className="h-[37px] bg-white/[0.04] px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
             <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-fg-muted">
               Sound
@@ -1128,7 +1128,7 @@ const SoundTrimModal = ({
         </div>
 
         {/* 힌트 바 */}
-        <div className="h-[28px] bg-white/[0.04] px-[12px] flex items-center justify-between gap-[12px]">
+        <div className="h-[28px] bg-fill-faint px-[12px] flex items-center justify-between gap-[12px]">
           {!isEditMode ? (
             <button
               type="button"
@@ -1157,13 +1157,13 @@ const SoundTrimModal = ({
         ) : null}
 
         {/* 푸터 */}
-        <div className="bg-white/[0.04] px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
+        <div className="bg-fill-faint px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
             type="button"
             className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
               canSubmit
                 ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
-                : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
+                : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
             }`}
             onClick={() => {
               void handleSave();
@@ -1178,7 +1178,7 @@ const SoundTrimModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={closeModal}
             disabled={isSaving}
           >

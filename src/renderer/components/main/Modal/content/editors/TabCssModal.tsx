@@ -157,7 +157,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               className={`px-[8px] h-[23px] rounded-md transition-colors duration-fast flex items-center justify-center text-style-4 ${
                 hasTabCss
                   ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] text-danger-fg'
-                  : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
+                  : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
               }`}
             >
               {t('tabCss.remove')}
@@ -166,7 +166,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleLoadCss}
               disabled={isLoading}
-              className="px-[7px] h-[23px] bg-white/[0.07] rounded-md flex items-center justify-center text-fg text-style-4 hover:bg-white/[0.1] active:bg-white/[0.13]"
+              className="px-[7px] h-[23px] bg-fill rounded-md flex items-center justify-center text-fg text-style-4 hover:bg-fill-hover active:bg-fill-active"
             >
               {t('tabCss.loadFile')}
             </button>
@@ -183,7 +183,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
           </button>
           <button
             onClick={handleCancel}
-            className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}
           </button>

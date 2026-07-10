@@ -234,7 +234,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           </p>
           <button
             onClick={handleKeyListen}
-            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
+            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
               state.isListening ? 'shadow-focus-ring' : ''
             } text-fg text-style-2`}
           >
@@ -315,7 +315,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           <button
             ref={imageButtonRef}
             type="button"
-            className={`px-[8px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               state.showImagePicker ? 'shadow-focus-ring' : ''
             } text-fg text-style-4`}
             onClick={() =>

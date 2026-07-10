@@ -203,7 +203,7 @@ const ImagePicker = ({
               className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-body transition-colors duration-fast ${
                 mode === item.key
                   ? 'bg-surface-active text-fg shadow-elevation-1'
-                  : 'hover:bg-white/[0.06] text-fg-muted hover:text-fg'
+                  : 'hover:bg-fill text-fg-muted hover:text-fg'
               }`}
               onClick={() => setMode(item.key)}
             >
@@ -250,7 +250,7 @@ const ImagePicker = ({
         </div>
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         {/* 키 투명화 토글 */}
         <div className="flex justify-between items-center w-full">
@@ -295,7 +295,7 @@ const ImagePicker = ({
         )}
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         {/* 이미지 초기화 버튼 */}
         <button

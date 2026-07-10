@@ -28,7 +28,7 @@ const IconButton = ({
       className={`inline-flex items-center justify-center shrink-0 select-none transition-colors duration-fast disabled:opacity-40 disabled:pointer-events-none ${
         selected
           ? 'bg-surface-active text-fg'
-          : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09]'
+          : 'text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover'
       } ${SIZE_CLASSES[size]} ${className}`}
       {...rest}
     >

@@ -107,7 +107,7 @@ const CanvasTool = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[4px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
         {tools.map((toolItem) => (
           <FloatingTooltip
             key={toolItem.key}
@@ -215,12 +215,12 @@ const IconButton = React.forwardRef<
         type="button"
         aria-label={ariaLabel}
         aria-pressed={isSelected}
-        className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast active:bg-white/[0.09] ${
+        className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast active:bg-fill-hover ${
           isSelected
             ? selectedVariant === 'hover'
-              ? 'bg-white/[0.07] text-fg'
+              ? 'bg-fill text-fg'
               : 'bg-surface-active text-fg'
-            : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
+            : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
       >

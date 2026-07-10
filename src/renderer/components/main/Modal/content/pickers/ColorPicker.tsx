@@ -1119,8 +1119,8 @@ function PaletteSlot({
   return (
     <button
       type="button"
-      className={`w-[22px] h-[22px] rounded-md border border-white/[0.12] transition-colors ${
-        isEmpty ? 'border-line cursor-default' : 'border-line cursor-pointer'
+      className={`w-[22px] h-[22px] rounded-md border border-line transition-colors ${
+        isEmpty ? 'cursor-default' : 'cursor-pointer'
       }`}
       style={getBackgroundStyle()}
       onClick={isEmpty ? undefined : onClick}
@@ -1152,7 +1152,7 @@ function StateSwitch({ state, onChange }: StateSwitchProps) {
           className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
             state === item.key
               ? 'bg-surface-active text-fg'
-              : 'hover:bg-white/[0.1] text-fg-faint'
+              : 'hover:bg-fill text-fg-faint'
           }`}
           onClick={() => onChange?.(item.key)}
         >
@@ -1184,7 +1184,7 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
           className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
             mode === item.key
               ? 'bg-surface-active text-fg'
-              : 'hover:bg-white/[0.1] text-fg-faint'
+              : 'hover:bg-fill text-fg-faint'
           }`}
           onClick={() => onChange?.(item.key)}
         >

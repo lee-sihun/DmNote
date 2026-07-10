@@ -258,7 +258,7 @@ SettingToolProps) => {
     <div className="flex gap-[8px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button icon={<FolderIcon />} onClick={handlePresetSave} />
             </FloatingTooltip>
@@ -315,7 +315,7 @@ SettingToolProps) => {
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[4px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
           <FloatingTooltip
             content={
               isObsModeActive
@@ -398,10 +398,10 @@ const Button = ({
       className={`flex items-center justify-center h-[30px] w-[30px] rounded-md transition-colors duration-fast ${
         disabled
           ? 'opacity-40 cursor-not-allowed text-fg-muted'
-          : `active:bg-white/[0.09] ${
+          : `active:bg-fill-hover ${
               isSelected
                 ? 'bg-surface-active text-fg'
-                : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
+                : 'text-fg-muted hover:bg-fill hover:text-fg'
             }`
       }`}
       onClick={disabled ? undefined : onClick}
@@ -422,10 +422,10 @@ const ChevronButton = React.forwardRef<HTMLButtonElement, ChevronButtonProps>(
       <button
         ref={ref}
         type="button"
-        className={`flex items-center justify-center h-[30px] w-[14px] rounded-md transition-colors duration-fast active:bg-white/[0.09] ${
+        className={`flex items-center justify-center h-[30px] w-[14px] rounded-md transition-colors duration-fast active:bg-fill-hover ${
           isSelected
             ? 'bg-surface-active text-fg'
-            : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
+            : 'text-fg-muted hover:bg-fill hover:text-fg'
         }`}
         onClick={onClick}
       >

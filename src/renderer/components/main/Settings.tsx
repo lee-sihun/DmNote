@@ -592,8 +592,8 @@ const Settings = ({
   const actionButtonClass = (enabled: boolean): string =>
     'inline-flex items-center h-[24px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
     (enabled
-      ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1] active:bg-white/[0.13]'
-      : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed');
+      ? 'bg-fill text-fg hover:bg-fill-hover active:bg-fill-active'
+      : 'bg-fill-faint text-fg-disabled cursor-not-allowed');
 
   const handleNoteEffectChange = async (): Promise<void> => {
     const next: boolean = !noteEffect;
@@ -825,7 +825,7 @@ const Settings = ({
         <div className="flex flex-row gap-[12px]">
           <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey('overlayLock')}
@@ -940,7 +940,7 @@ const Settings = ({
               </div>
             </div>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
               <div
                 className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
@@ -1009,8 +1009,8 @@ const Settings = ({
                       className={
                         'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
                         (canReloadPlugins && !isReloadingPlugins
-                          ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
-                          : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed')
+                          ? 'bg-fill text-fg hover:bg-fill-hover'
+                          : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
                       }
                       style={
                         isReloadingPlugins
@@ -1033,7 +1033,7 @@ const Settings = ({
             </div>
             {/* OBS 모드 */}
             <div
-              className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl"
+              className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl"
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
@@ -1070,8 +1070,8 @@ const Settings = ({
                     className={
                       'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
                       (obsStatus.running
-                        ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
-                        : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed')
+                        ? 'bg-fill text-fg hover:bg-fill-hover'
+                        : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
                     }
                   >
                     <ResetIcon className="w-[13px] h-[13px] -scale-x-100" />
@@ -1087,7 +1087,7 @@ const Settings = ({
               </div>
             </div>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px]"
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
@@ -1164,7 +1164,7 @@ const Settings = ({
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-label text-fg">{t('settings.language')}</p>
                 <Dropdown
@@ -1230,7 +1230,7 @@ const Settings = ({
                 </p>
                 <div className="flex gap-[8px]">
                   <button
-                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-fg bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-fg bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => checkForUpdates(true)}
                     disabled={isChecking}
                   >
@@ -1250,7 +1250,7 @@ const Settings = ({
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-white/[0.04] rounded-xl pointer-events-none overflow-hidden">
+      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-fill-faint rounded-xl pointer-events-none overflow-hidden">
         {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
           <div className="relative w-full h-full">
             <video
@@ -1273,7 +1273,7 @@ const Settings = ({
             </div>
           </div>
         ) : (
-          <FlaskIcon className="text-white/[0.06]" />
+          <FlaskIcon className="text-fill" />
         )}
       </div>
       {isPluginModalOpen && (

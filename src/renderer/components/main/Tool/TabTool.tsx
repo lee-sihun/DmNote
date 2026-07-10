@@ -15,7 +15,7 @@ const TabTool = () => {
 
   return (
     <div className="flex gap-[8px]">
-      <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[4px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
         {keyTypes.map((keyType) => {
           const num = keyType.replace('key', '');
           const label = t(`mode.button${num}`);
@@ -35,7 +35,7 @@ const TabTool = () => {
       </div>
       <button
         ref={gridButtonRef}
-        className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-white/[0.05] rounded-[10px]"
+        className="flex items-center justify-center w-[40px] h-[40px] p-[5px] bg-fill rounded-[10px]"
         onClick={() => {
           if (!isBootstrapped) return;
           setIsPopupOpen((prev) => !prev);
@@ -46,7 +46,7 @@ const TabTool = () => {
           className={`w-[30px] h-[30px] flex items-center justify-center rounded-md transition-colors duration-fast ${
             isCustomSelected
               ? 'bg-surface-active text-fg'
-              : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09]'
+              : 'text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover'
           } ${!isBootstrapped ? 'opacity-40' : ''}`}
         >
           <GridIcon />
@@ -83,7 +83,7 @@ const Button = ({
       className={`flex items-center h-[30px] px-[10px] rounded-md transition-colors duration-fast ${
         isSelected
           ? 'bg-surface-active text-fg'
-          : 'text-fg-muted hover:bg-white/[0.06] hover:text-fg'
+          : 'text-fg-muted hover:bg-fill hover:text-fg'
       } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
       onClick={onClick}
       disabled={disabled}

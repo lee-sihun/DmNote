@@ -846,7 +846,7 @@ const CounterAnimationEditorModal = ({
         className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-elevated rounded-[12px] shadow-2xl overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="h-[37px] bg-white/[0.04] px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
             <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
               Motion
@@ -1351,7 +1351,7 @@ const CounterAnimationEditorModal = ({
           </div>
         </div>
 
-        <div className="bg-white/[0.04] px-[12px] py-[10px] flex items-center gap-[8px]">
+        <div className="bg-fill-faint px-[12px] py-[10px] flex items-center gap-[8px]">
           <div className="flex items-center gap-1.5 mr-auto">
             <svg
               className="w-3.5 h-3.5 shrink-0"
@@ -1370,7 +1370,7 @@ const CounterAnimationEditorModal = ({
             className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
               canSave
                 ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
-                : 'bg-white/[0.04] text-fg-disabled cursor-not-allowed'
+                : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
             }`}
             disabled={!canSave}
             onClick={() => {
@@ -1383,7 +1383,7 @@ const CounterAnimationEditorModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel') || '취소'}

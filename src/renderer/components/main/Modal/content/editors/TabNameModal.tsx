@@ -89,7 +89,7 @@ const TabNameModal = ({
             {t('tabs.create')}
           </button>
           <button
-            className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel')}

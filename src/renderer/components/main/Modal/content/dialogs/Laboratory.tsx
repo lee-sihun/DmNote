@@ -169,7 +169,7 @@ const LaboratoryModal = ({
           </p>
           <button
             onClick={handleAutoCalculate}
-            className="px-[10px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-4"
+            className="px-[10px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-md text-fg text-style-4"
           >
             {t('laboratory.autoCalc')}
           </button>
@@ -184,7 +184,7 @@ const LaboratoryModal = ({
           </button>
           <button
             onClick={onClose}
-            className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('laboratory.cancel')}
           </button>

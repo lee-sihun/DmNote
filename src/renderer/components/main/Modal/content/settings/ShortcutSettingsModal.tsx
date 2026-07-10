@@ -459,7 +459,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >
@@ -515,7 +515,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
                           } text-fg text-style-2`}
                         >
@@ -556,7 +556,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.save')}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
             disabled={isListening}
             style={
@@ -566,7 +566,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.cancel')}
           </button>
           {/* <button
-            className="w-[75px] h-[30px] bg-white/[0.05] hover:bg-white/[0.08] active:bg-white/[0.11] rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={handleReset}
             disabled={isListening}
             style={

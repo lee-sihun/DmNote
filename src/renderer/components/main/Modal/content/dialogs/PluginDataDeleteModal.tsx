@@ -52,13 +52,13 @@ export function PluginDataDeleteModal({
             {t('settings.deleteWithData')}
           </button>
           <button
-            className="flex-1 h-[30px] bg-white/[0.07] rounded-md text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
+            className="flex-1 h-[30px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
             onClick={onDeletePluginOnly}
           >
             {t('settings.deletePluginOnly')}
           </button>
           <button
-            className="h-[30px] px-[12px] bg-white/[0.07] rounded-md text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
+            className="h-[30px] px-[12px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
             onClick={onClose}
           >
             {t('common.cancel')}

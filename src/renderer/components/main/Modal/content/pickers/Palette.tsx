@@ -80,7 +80,7 @@ export default Palette;
 function Color({ color, onClick }: ColorProps) {
   return (
     <button
-      className="w-[22px] h-[22px] rounded-md border-[1px] border-white/[0.12] hover:scale-110 transition-transform duration-fast ease-out-expo"
+      className="w-[22px] h-[22px] rounded-md border-[1px] border-line-strong hover:scale-110 transition-transform duration-fast ease-out-expo"
       style={{ backgroundColor: color }}
       onClick={onClick}
     />

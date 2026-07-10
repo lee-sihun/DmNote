@@ -34,7 +34,7 @@ const TitleBar = (): React.ReactElement => {
         >
           <button
             onClick={handleMinimize}
-            className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09] transition-colors duration-fast"
+            className="w-[38px] h-full flex justify-center items-center text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
           >
             <Minimize className="scale-[0.8] pointer-events-none" />
           </button>

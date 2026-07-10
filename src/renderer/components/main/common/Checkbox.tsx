@@ -18,7 +18,7 @@ const Checkbox = ({ checked, onChange }: CheckboxProps) => {
       role="switch"
       aria-checked={checked}
       className={`relative w-[30px] h-[18px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${
-        checked ? 'bg-accent' : 'bg-white/[0.14] hover:bg-white/[0.18]'
+        checked ? 'bg-accent' : 'bg-line-strong hover:bg-white/[0.18]'
       }`}
       onClick={handleClick}
     >

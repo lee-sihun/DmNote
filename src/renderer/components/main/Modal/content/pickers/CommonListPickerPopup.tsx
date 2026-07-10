@@ -265,7 +265,7 @@ export default function CommonListPickerPopup<T>({
           />
         ) : null}
 
-        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         <div
           ref={scrollRef}
@@ -317,12 +317,12 @@ export default function CommonListPickerPopup<T>({
           </div>
         </div>
 
-        <div className="h-[1px] bg-white/[0.06] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         <button
           ref={addButtonRef}
           type="button"
-          className="w-full h-[26px] flex items-center justify-center rounded-md text-fg-muted bg-white/[0.05] hover:bg-white/[0.08] hover:text-fg active:bg-white/[0.11] transition-colors duration-fast"
+          className="w-full h-[26px] flex items-center justify-center rounded-md text-fg-muted bg-fill hover:bg-fill-hover hover:text-fg active:bg-fill-active transition-colors duration-fast"
           onClick={onAdd}
         >
           {addButtonContent}

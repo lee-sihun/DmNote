@@ -52,13 +52,13 @@ const ToolBar = ({
       {isSettingsOpen ? (
         <TooltipGroup>
           <div className="flex gap-[8px]">
-            <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px] gap-[4px]">
+            <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
               <FloatingTooltip content={t('tooltip.github')}>
                 <button
                   onClick={() =>
                     handleClick('https://github.com/lee-sihun/DmNote')
                   }
-                  className="flex items-center justify-center w-[30px] h-[30px] rounded-md text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09] transition-colors duration-fast"
+                  className="flex items-center justify-center w-[30px] h-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >
                   <Github className="flex-shrink-0 mb-[3px]" />
                 </button>
@@ -68,7 +68,7 @@ const ToolBar = ({
                   onClick={() =>
                     handleClick('https://github.com/lee-sihun/DmNote/issues')
                   }
-                  className="flex items-center justify-center gap-[8px] h-[30px] px-[12px] rounded-md text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09] transition-colors duration-fast"
+                  className="flex items-center justify-center gap-[8px] h-[30px] px-[12px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
                 >
                   <Bug className="flex-shrink-0" />
                   <p className="text-label truncate">Report</p>
@@ -121,12 +121,12 @@ const TrackSettingButton = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-white/[0.05] rounded-[10px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px]">
         <FloatingTooltip content={t('tooltip.trackSettings') || '트랙 설정'}>
           <button
             type="button"
             onClick={onOpenNoteSetting}
-            className="flex items-center justify-center h-[30px] w-[30px] rounded-md text-fg-muted hover:bg-white/[0.06] hover:text-fg active:bg-white/[0.09] transition-colors duration-fast"
+            className="flex items-center justify-center h-[30px] w-[30px] rounded-md text-fg-muted hover:bg-fill hover:text-fg active:bg-fill-hover transition-colors duration-fast"
           >
             <NoteIcon />
           </button>

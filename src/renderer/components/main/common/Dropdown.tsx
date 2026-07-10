@@ -80,7 +80,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md cursor-pointer bg-white/[0.06] hover:bg-white/[0.09] transition-colors duration-fast ${
+          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md cursor-pointer bg-fill hover:bg-fill-hover transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           }`}
           onClick={() => setOpen((prev) => !prev)}
@@ -92,7 +92,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-white/[0.06] hover:bg-white/[0.09] rounded-md text-fg text-body transition-colors duration-fast ${
+          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={() => setOpen((prev) => !prev)}

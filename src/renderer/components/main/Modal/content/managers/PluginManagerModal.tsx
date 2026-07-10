@@ -47,8 +47,8 @@ export const PluginManagerModal = ({
         <button
           className={`flex items-center justify-center w-[150px] h-[30px] rounded-md text-style-3 text-fg transition-colors ${
             isAdding
-              ? 'bg-white/[0.04] cursor-not-allowed opacity-50'
-              : 'bg-white/[0.07] hover:bg-white/[0.1]'
+              ? 'bg-fill-faint cursor-not-allowed opacity-50'
+              : 'bg-fill hover:bg-fill-hover'
           }`}
           onClick={onAdd}
           disabled={isAdding}
@@ -58,7 +58,7 @@ export const PluginManagerModal = ({
             : `${t('settings.loadJs')} (${plugins.length})`}
         </button>
         <button
-          className="flex items-center justify-center w-[75px] h-[30px] bg-white/[0.07] rounded-md text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
+          className="flex items-center justify-center w-[75px] h-[30px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
           onClick={onClose}
         >
           {t('common.ok')}

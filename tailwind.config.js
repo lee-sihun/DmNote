@@ -27,6 +27,7 @@ module.exports = {
           DEFAULT: "var(--ui-fill)",
           hover: "var(--ui-fill-hover)",
           active: "var(--ui-fill-active)",
+          faint: "var(--ui-fill-faint)",
         },
         fg: {
           DEFAULT: "var(--ui-fg)",

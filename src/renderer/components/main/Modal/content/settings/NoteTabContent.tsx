@@ -317,7 +317,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           <button
             ref={colorButtonRef}
             type="button"
-            className={`relative w-[80px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+            className={`relative w-[80px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               state.showPicker ? 'shadow-focus-ring' : ''
             } text-fg text-style-2`}
             onClick={() =>
@@ -376,7 +376,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               ref={glowColorButtonRef}
               type="button"
               disabled={!state.glowEnabled}
-              className={`relative w-[80px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors duration-fast rounded-md flex items-center justify-center ${
+              className={`relative w-[80px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                 state.showGlowPicker ? 'shadow-focus-ring' : ''
               } text-fg text-style-2`}
               onClick={() => {
