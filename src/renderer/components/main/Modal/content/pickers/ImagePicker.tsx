@@ -3,6 +3,8 @@ import { useTranslation } from '@contexts/useTranslation';
 import FloatingPopup from '../../FloatingPopup';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import TabSwitch from '@components/main/common/TabSwitch';
+import { PropertySection } from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { resolveImageSource } from '@utils/core/imageSource';
 
 interface ImagePickerProps {
@@ -186,34 +188,23 @@ const ImagePicker = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
+        className="flex flex-col p-[8px] gap-[8px] w-[172px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
         }}
       >
-        {/* 모드 전환 버튼 */}
-        <div className="flex gap-[6px] max-w-full">
-          {[
-            { key: STATE_MODES.idle, label: t('imagePicker.idle') },
-            { key: STATE_MODES.active, label: t('imagePicker.active') },
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-body transition-colors duration-fast ${
-                mode === item.key
-                  ? 'bg-surface-active text-fg shadow-elevation-1'
-                  : 'hover:bg-fill text-fg-muted hover:text-fg'
-              }`}
-              onClick={() => setMode(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {/* 모드 전환 */}
+        <TabSwitch
+          tabs={[
+            { id: STATE_MODES.idle, label: t('imagePicker.idle') },
+            { id: STATE_MODES.active, label: t('imagePicker.active') },
+          ]}
+          activeTab={mode}
+          onTabChange={setMode}
+        />
 
         {/* 이미지 미리보기 영역 */}
-        <div className="relative w-[129px] h-[64px] rounded-md overflow-hidden cursor-pointer group">
+        <div className="relative w-full h-[76px] rounded-[8px] overflow-hidden cursor-pointer group">
           {/* 투명 격자 배경 */}
           <div
             className="absolute inset-0"
@@ -247,63 +238,75 @@ const ImagePicker = ({
               cursor: isLoadingImage ? 'progress' : 'pointer',
             }}
           />
+
+          {/* 초기화 칩 — 이미지가 있을 때만, 프리뷰 호버 시 표시 */}
+          {currentImage && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleReset();
+              }}
+              title={t('imagePicker.reset')}
+              className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-blur-[24px] shadow-elevation-chrome text-white/45 hover:text-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
+            >
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                <path
+                  d="M1 1L7 7M7 1L1 7"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
         </div>
 
-        {/* 구분선 */}
-        <div className="h-[1px] bg-line -mx-[8px]" />
-
-        {/* 키 투명화 토글 */}
-        <div className="flex justify-between items-center w-full">
-          <p className="text-fg-muted text-label">
-            {t('imagePicker.transparent')}
-          </p>
-          <Checkbox
-            checked={currentTransparent}
-            onChange={handleTransparentToggle}
-          />
-        </div>
-
-        {/* 이미지 맞춤 */}
-        {showImageFit && (
-          <div className="flex justify-between items-center w-full">
+        {/* 설정 카드 */}
+        <PropertySection>
+          {/* 키 투명화 토글 */}
+          <div className="flex justify-between items-center w-full min-h-[32px]">
             <p className="text-fg-muted text-label">
-              {t('propertiesPanel.imageFit') || '표시'}
+              {t('imagePicker.transparent')}
             </p>
-            <Dropdown
-              value={currentImageFit || 'cover'}
-              options={[
-                {
-                  value: 'cover',
-                  label: t('propertiesPanel.imageFitCover') || '채우기',
-                },
-                {
-                  value: 'contain',
-                  label: t('propertiesPanel.imageFitContain') || '맞춤',
-                },
-                {
-                  value: 'fill',
-                  label: t('propertiesPanel.imageFitFill') || '늘리기',
-                },
-                {
-                  value: 'none',
-                  label: t('propertiesPanel.imageFitNone') || '원본',
-                },
-              ]}
-              onChange={handleImageFitChange}
+            <Checkbox
+              checked={currentTransparent}
+              onChange={handleTransparentToggle}
             />
           </div>
-        )}
 
-        {/* 구분선 */}
-        <div className="h-[1px] bg-line -mx-[8px]" />
+          {/* 이미지 맞춤 */}
+          {showImageFit && (
+            <div className="flex justify-between items-center w-full min-h-[32px]">
+              <p className="text-fg-muted text-label">
+                {t('propertiesPanel.imageFit') || '표시'}
+              </p>
+              <Dropdown
+                value={currentImageFit || 'cover'}
+                options={[
+                  {
+                    value: 'cover',
+                    label: t('propertiesPanel.imageFitCover') || '채우기',
+                  },
+                  {
+                    value: 'contain',
+                    label: t('propertiesPanel.imageFitContain') || '맞춤',
+                  },
+                  {
+                    value: 'fill',
+                    label: t('propertiesPanel.imageFitFill') || '늘리기',
+                  },
+                  {
+                    value: 'none',
+                    label: t('propertiesPanel.imageFitNone') || '원본',
+                  },
+                ]}
+                onChange={handleImageFitChange}
+              />
+            </div>
+          )}
+        </PropertySection>
 
-        {/* 이미지 초기화 버튼 */}
-        <button
-          onClick={handleReset}
-          className="w-full h-[23px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-2 transition-colors"
-        >
-          {t('imagePicker.reset')}
-        </button>
       </div>
     </FloatingPopup>
   );

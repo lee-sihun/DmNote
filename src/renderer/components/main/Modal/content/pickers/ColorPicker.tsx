@@ -10,6 +10,7 @@ import {
 } from 'react-color-palette';
 import 'react-color-palette/css';
 import FloatingPopup from '../../FloatingPopup';
+import TabSwitch from '@components/main/common/TabSwitch';
 import {
   MODES,
   isGradientColor,
@@ -1141,25 +1142,14 @@ function StateSwitch({ state, onChange }: StateSwitchProps) {
   const activeLabel = t('colorPicker.active') || '입력';
 
   return (
-    <div className="flex gap-[6px] max-w-full">
-      {[
-        { key: 'idle', label: idleLabel },
-        { key: 'active', label: activeLabel },
-      ].map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
-            state === item.key
-              ? 'bg-surface-active text-fg'
-              : 'hover:bg-fill text-fg-faint'
-          }`}
-          onClick={() => onChange?.(item.key)}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <TabSwitch
+      tabs={[
+        { id: 'idle', label: idleLabel },
+        { id: 'active', label: activeLabel },
+      ]}
+      activeTab={state ?? 'idle'}
+      onTabChange={(id) => onChange?.(id)}
+    />
   );
 }
 
@@ -1173,25 +1163,14 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
   const solidLabel = t('colorPicker.solid');
   const gradientLabel = t('colorPicker.gradient');
   return (
-    <div className="flex gap-[6px] max-w-full">
-      {[
-        { key: MODES.solid, label: solidLabel },
-        { key: MODES.gradient, label: gradientLabel },
-      ].map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
-            mode === item.key
-              ? 'bg-surface-active text-fg'
-              : 'hover:bg-fill text-fg-faint'
-          }`}
-          onClick={() => onChange?.(item.key)}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <TabSwitch
+      tabs={[
+        { id: MODES.solid, label: solidLabel },
+        { id: MODES.gradient, label: gradientLabel },
+      ]}
+      activeTab={mode}
+      onTabChange={onChange}
+    />
   );
 }
 
