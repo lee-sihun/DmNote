@@ -115,7 +115,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   return (
     <div className="flex flex-col w-[176px] p-[6px] bg-glass backdrop-blur-[24px] rounded-[12px] shadow-elevation-2">
       {customTabs.length === 0 ? (
-        <div className="flex items-center justify-center py-[14px] text-body text-fg-faint">
+        <div className="flex items-center justify-center py-[12px] text-caption text-fg-faint">
           {t('tabs.empty')}
         </div>
       ) : (
@@ -160,7 +160,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
         </div>
       )}
 
-      <div className="my-[4px]" />
+      <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
 
       {!maxReached && (
         <button
