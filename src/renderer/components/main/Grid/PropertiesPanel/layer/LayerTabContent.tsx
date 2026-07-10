@@ -526,7 +526,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             </p>
           </div>
         ) : (
-          <div className="relative pt-[12px]">
+          <div className="relative">
             {displayItems.map((displayItem, displayIndex) => {
               // ── 그룹 헤더 렌더링 ──
               if (displayItem.displayType === 'group-header') {
