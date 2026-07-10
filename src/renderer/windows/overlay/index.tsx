@@ -2,6 +2,7 @@ import '@api/dmnoteApi';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { I18nProvider } from '@contexts/I18nContext';
+import '@styles/tokens.css';
 import '@styles/global.css';
 
 window.__dmn_window_type = 'overlay';

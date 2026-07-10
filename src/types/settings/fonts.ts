@@ -46,14 +46,30 @@ export interface WebFontCssValidationResult {
   familyNames: string[];
 }
 
+// 앱 기본 폰트 (전역 로드 — global.css @font-face)
+export const DEFAULT_FONT_FAMILY = 'Pretendard Variable';
+
 // 내장 폰트 목록 (기본 제공)
 export const BUILTIN_FONTS: CustomFont[] = [
+  {
+    id: 'pretendard-variable',
+    type: 'builtin',
+    name: DEFAULT_FONT_FAMILY,
+    displayName: 'Pretendard Variable',
+    enabled: true,
+  },
   {
     id: 'suit',
     type: 'builtin',
     name: 'SUIT-Regular',
     displayName: 'SUIT',
     enabled: true,
+    cssContent: `@font-face {
+  font-family: 'SUIT-Regular';
+  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}`,
   },
   {
     id: 'pretendard',

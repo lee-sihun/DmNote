@@ -1,0 +1,54 @@
+/*
+ * 디자인 토큰 — 모든 윈도우에서 로드됨
+ * UI 색·모션·그림자의 단일 소스. 컴포넌트에서 hex 직접 사용 금지
+ */
+:root {
+  /* 배경 — 어두운 순서: inset < app < panel < surface */
+  --ui-bg-app: #0b0b0d;
+  --ui-bg-panel: #141417;
+  --ui-bg-surface: #1d1d22;
+  --ui-bg-surface-hover: #24242a;
+  --ui-bg-surface-active: #2b2b32;
+  --ui-bg-elevated: #1f1f24;
+  --ui-bg-inset: #101013;
+
+  /* 경계선 — 헤어라인은 저알파 화이트 */
+  --ui-line: rgba(255, 255, 255, 0.07);
+  --ui-line-strong: rgba(255, 255, 255, 0.14);
+
+  /* 텍스트 위계 */
+  --ui-fg: #edeef2;
+  --ui-fg-muted: #9b9da7;
+  --ui-fg-faint: #64666f;
+  --ui-fg-disabled: #45464e;
+
+  /* 액센트 — 단일 블루 */
+  --ui-accent: #3e7bfa;
+  --ui-accent-hover: #5a8efb;
+  --ui-accent-active: #3569e8;
+  --ui-accent-muted: rgba(62, 123, 250, 0.15);
+  --ui-accent-fg: #ffffff;
+
+  /* 시맨틱 */
+  --ui-danger: #e5484d;
+  --ui-danger-hover: #ec5d62;
+  --ui-danger-active: #d93b40;
+  --ui-danger-muted: rgba(229, 72, 77, 0.14);
+  --ui-danger-fg: #ff9599;
+  --ui-success: #3dbe7b;
+  --ui-success-muted: rgba(61, 190, 123, 0.14);
+  --ui-warning: #f0b429;
+  --ui-warning-muted: rgba(240, 180, 41, 0.14);
+
+  /* 모션 */
+  --ui-duration-fast: 120ms;
+  --ui-duration-base: 180ms;
+  --ui-duration-slow: 240ms;
+  --ui-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ui-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* 그림자 — 레이어드 */
+  --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ui-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --ui-shadow-3: 0 20px 48px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
+}

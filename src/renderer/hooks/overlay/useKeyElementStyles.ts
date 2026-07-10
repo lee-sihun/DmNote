@@ -192,7 +192,7 @@ export function computeKeyElementStyles({
     willChange: 'auto',
     fontSize: fontSize ? `${fontSize}px` : undefined,
     fontFamily: fontFamily
-      ? `"${fontFamily}", "SUIT-Regular", sans-serif`
+      ? `"${fontFamily}", "Pretendard Variable", sans-serif`
       : undefined,
     fontWeight: fontWeight ?? 700,
     fontStyle: fontItalic ? ('italic' as const) : ('normal' as const),

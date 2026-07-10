@@ -1154,7 +1154,7 @@ const CounterAnimationEditorModal = ({
                       style={{
                         fontSize: `${keyVisual?.fontSize ?? 14}px`,
                         fontFamily: keyVisual?.fontFamily
-                          ? `"${keyVisual.fontFamily}", "SUIT-Regular", sans-serif`
+                          ? `"${keyVisual.fontFamily}", "Pretendard Variable", sans-serif`
                           : undefined,
                         fontWeight: keyVisual?.fontWeight ?? 700,
                         fontStyle: keyVisual?.fontItalic ? 'italic' : 'normal',

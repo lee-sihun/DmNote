@@ -72,7 +72,7 @@ const KeyCounterPreview = ({
           {
             fontSize: `${counterSettings.fontSize ?? 16}px`,
             fontFamily: counterSettings.fontFamily
-              ? `"${counterSettings.fontFamily}", "SUIT-Regular", sans-serif`
+              ? `"${counterSettings.fontFamily}", "Pretendard Variable", sans-serif`
               : undefined,
             fontWeight: counterSettings.fontWeight ?? 400,
             fontStyle: counterSettings.fontItalic ? 'italic' : 'normal',

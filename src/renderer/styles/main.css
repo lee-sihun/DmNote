@@ -1,0 +1,411 @@
+/*
+ * 메인 윈도우 전용 스타일
+ * 오버레이/OBS 윈도우에는 로드되지 않음 — 공유 스타일은 global.css에
+ */
+
+/* 라디오 버튼 */
+input[type='radio']:checked + span {
+  border-color: var(--ui-accent);
+}
+
+input[type='radio']:checked + span span {
+  background: var(--ui-accent);
+  transform: scale(0.5);
+}
+
+/* 커스텀 커서 미리보기 */
+body.dmn-custom-cursor,
+body.dmn-custom-cursor * {
+  cursor: none !important;
+}
+
+/* ===== 스크롤바 ===== */
+
+.settings-scroll {
+  overscroll-behavior: contain;
+}
+
+.settings-scroll::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.settings-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb,
+.settings-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover,
+.settings-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
+.settings-scroll:hover::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.listpopup-scroll {
+  overscroll-behavior: contain;
+}
+
+.listpopup-scroll::-webkit-scrollbar {
+  width: 4px;
+  background: transparent;
+}
+
+.listpopup-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+.listpopup-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.listpopup-scroll::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.modal-content-scroll {
+  overscroll-behavior: contain;
+  /* 네이티브 동작 유지 */
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  contain: paint;
+}
+
+.modal-content-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.modal-content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.modal-content-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+}
+
+.modal-content-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-content-scroll::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* 설정 스크롤 - 호버 시에만 표시 */
+.settings-content-scroll {
+  overscroll-behavior: contain;
+}
+
+.settings-content-scroll::-webkit-scrollbar {
+  width: 4px;
+  background: transparent;
+}
+
+.settings-content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.settings-content-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
+.properties-panel-overlay-scroll {
+  position: relative;
+  overflow: hidden;
+}
+
+.properties-panel-overlay-viewport {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.properties-panel-overlay-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.properties-panel-overlay-bar {
+  position: absolute;
+  top: 0;
+  right: 0px;
+  bottom: 0;
+  width: 4px;
+  opacity: 0;
+  transition: opacity var(--ui-duration-fast) var(--ui-ease-out);
+  pointer-events: none;
+}
+
+.properties-panel-overlay-scroll:hover .properties-panel-overlay-bar {
+  opacity: 1;
+}
+
+.properties-panel-overlay-thumb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+}
+
+.properties-panel-overlay-scroll:hover .properties-panel-overlay-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.properties-panel-overlay-scroll:active .properties-panel-overlay-thumb {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* ===== 등장 모션 ===== */
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tooltip-fade-in {
+  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
+}
+
+@keyframes modalScale {
+  from {
+    transform: scale(0.97);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+.animate-modal-scale {
+  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) forwards;
+}
+
+@keyframes modalFade {
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-modal-fade {
+  animation: modalFade var(--ui-duration-fast) var(--ui-ease-out) forwards;
+}
+
+/* ===== ColorPicker ===== */
+
+.rcp-saturation {
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
+}
+
+.rcp-saturation-cursor {
+  height: 10px !important;
+  width: 10px !important;
+  transform: translate(-50%, -50%) !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
+  border: 2px solid white !important;
+  border-radius: 100% !important;
+}
+
+.rcp-hue {
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  height: 10px !important;
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
+}
+
+.rcp-hue-cursor {
+  height: 10px !important;
+  width: 10px !important;
+  transform: translate(-50%, 0%) !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
+  border: 2px solid white !important;
+  border-radius: 100% !important;
+}
+
+.rcp-alpha {
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  height: 10px !important;
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
+}
+
+.rcp-alpha-cursor {
+  height: 10px !important;
+  width: 10px !important;
+  transform: translate(-50%, 0%) !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
+  border: 2px solid white !important;
+  border-radius: 100% !important;
+}
+
+/* ===== 코드 에디터 ===== */
+
+.webfont-cm-editor {
+  height: 100%;
+}
+
+.webfont-cm-editor .cm-editor {
+  height: 100%;
+  background: var(--ui-bg-inset);
+  color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-line {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.webfont-cm-editor .cm-scroller,
+.webfont-cm-editor .cm-content,
+.webfont-cm-editor .cm-gutterElement {
+  font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 20px;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+.webfont-cm-editor .cm-gutterElement {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.webfont-cm-editor .cm-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.webfont-cm-editor .cm-content {
+  min-height: 100%;
+  padding: 8px 12px 8px 14px;
+  tab-size: 2;
+  caret-color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-line {
+  padding: 0;
+}
+
+.webfont-cm-editor .cm-gutters {
+  background: var(--ui-bg-panel);
+  color: var(--ui-fg-faint);
+  border-right: 1px solid var(--ui-line);
+}
+
+.webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
+  width: 52px;
+  min-width: 52px;
+  box-sizing: border-box;
+  padding: 0 12px 0 0;
+  text-align: right;
+}
+
+.webfont-cm-editor .cm-activeLine {
+  background: #ffffff10;
+}
+
+.webfont-cm-editor .cm-activeLineGutter {
+  color: var(--ui-fg-muted);
+  background: var(--ui-bg-panel);
+}
+
+.webfont-cm-editor .cm-content ::selection {
+  background: #5b7fae;
+}
+
+.webfont-cm-editor .cm-content ::-moz-selection {
+  background: #5b7fae;
+}
+
+.webfont-cm-editor .cm-cursor,
+.webfont-cm-editor .cm-dropCursor {
+  border-left-color: #d4d4d4;
+}
+
+.webfont-cm-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.webfont-cm-editor .cm-placeholder {
+  color: var(--ui-fg-faint);
+  white-space: pre;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.26);
+}

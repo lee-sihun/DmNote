@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
+import { DEFAULT_FONT_FAMILY } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import PlusIcon from '@assets/svgs/plus2.svg';
 import Modal from '@components/main/Modal/Modal';
@@ -321,7 +322,7 @@ const FontPicker = ({
         renderItem={(font) => {
           const isSelected = effectiveSelectedFont
             ? effectiveSelectedFont === font.name
-            : font.name === 'SUIT-Regular';
+            : font.name === DEFAULT_FONT_FAMILY;
           const isCustom = font.type !== 'builtin';
           const isDisabled = !font.enabled;
           const fontFamily = isDisabled

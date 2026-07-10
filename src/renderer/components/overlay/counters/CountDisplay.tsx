@@ -139,7 +139,7 @@ const CountDisplay = ({
           transformOrigin: 'center bottom',
           fontSize: `${Number.isFinite(fontSize) ? fontSize : 16}px`,
           fontFamily: fontFamily
-            ? `"${fontFamily}", "SUIT-Regular", sans-serif`
+            ? `"${fontFamily}", "Pretendard Variable", sans-serif`
             : undefined,
           fontWeight: Number.isFinite(fontWeight) ? fontWeight : 400,
           fontStyle: fontItalic ? 'italic' : 'normal',

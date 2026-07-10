@@ -2,41 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 레거시 컴포넌트 클래스 — ui/ 프리미티브로 흡수 후 제거 예정 */
 @layer components {
   .icon-btn {
-    @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-[#303036] rounded-[4px] transition-colors;
+    @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-md transition-colors;
   }
   .input-field {
-    @apply text-center h-[23px] bg-[#2A2A30] rounded-[7px] border border-[#3A3943] focus:border-[#459BF8] text-[11px] text-[#D7D8DB];
+    @apply text-center h-[23px] bg-inset rounded-md border border-line focus:border-accent text-[11px] text-fg;
   }
   .btn-danger {
-    @apply bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB];
+    @apply bg-danger-muted rounded-md text-danger-fg;
+  }
+  .btn-danger:hover {
+    background: rgba(229, 72, 77, 0.2);
+  }
+  .btn-danger:active {
+    background: rgba(229, 72, 77, 0.26);
   }
   .btn-secondary {
-    @apply bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#D7D8DB];
+    @apply bg-surface hover:bg-surface-hover active:bg-surface-active rounded-md text-fg;
   }
   .btn-default {
-    @apply px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[11px];
+    @apply px-[10px] h-[23px] bg-surface hover:bg-surface-hover active:bg-surface-active rounded-md text-[11px];
   }
 }
 
+/* 기본 서체 — 가변 웨이트 셀프호스팅 */
 @font-face {
-  font-family: 'SUIT-Regular';
-  src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_suit@1.0/SUIT-Regular.woff2')
-    format('woff2');
-  font-weight: normal;
+  font-family: 'Pretendard Variable';
+  src: url('../assets/fonts/PretendardVariable.woff2')
+    format('woff2-variations');
+  font-weight: 45 920;
   font-style: normal;
+  font-display: swap;
 }
 
 :root {
-  font-family: 'SUIT-Regular', sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system,
+    BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 html,
 body,
 #root {
   height: 100%;
-  /* background: transparent !important; */
 }
 
 * {
@@ -52,31 +63,10 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* 기존 CSS 그리드 배경 - SVG GridBackground 컴포넌트로 대체됨 */
-/* .grid-bg {
-  background-image: linear-gradient(
-      to right,
-      rgb(25, 25, 28) 1px,
-      transparent 1px
-    ),
-    linear-gradient(to bottom, rgb(25, 25, 28) 1px, transparent 1px);
-  background-size: 5px 5px;
-} */
-
 .image-rendering {
   image-rendering: -webkit-optimize-contrast;
   transform: translateZ(0);
   backface-visibility: hidden;
-}
-
-/* 라디오 버튼 스타일링 */
-input[type='radio']:checked + span {
-  border-color: #ffb400;
-}
-
-input[type='radio']:checked + span span {
-  background: #ffb400;
-  transform: scale(0.5);
 }
 
 /* 숫자 인풋 버튼 제거 */
@@ -84,165 +74,6 @@ input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
-}
-
-/* SettingsTab custom scrollbar */
-.settings-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-scroll::-webkit-scrollbar {
-  width: 6px;
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 0px;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb,
-.settings-scroll:hover::-webkit-scrollbar-thumb {
-  background: #989ba6;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-track,
-.settings-scroll:hover::-webkit-scrollbar-track {
-  background: #24262d;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover,
-.settings-scroll:hover::-webkit-scrollbar-thumb:hover {
-  background: #b1b4bd;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
-.settings-scroll:hover::-webkit-scrollbar-thumb:active {
-  background: #d0d3d9;
-}
-
-/* ListPopup 컨텍스트 메뉴 커스텀 스크롤바 */
-.listpopup-scroll {
-  overscroll-behavior: contain;
-}
-
-.listpopup-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.listpopup-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb {
-  background: #4a4d5a;
-  border-radius: 4px;
-}
-
-.listpopup-scroll:hover::-webkit-scrollbar-thumb {
-  background: #5e6170;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:hover {
-  background: #74778a;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:active {
-  background: #8b8ea0;
-}
-
-@keyframes tooltipFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tooltip-fade-in {
-  animation: tooltipFadeIn 120ms ease-out;
-}
-
-@keyframes modalScale {
-  from {
-    transform: scale(0.95);
-  }
-
-  to {
-    transform: scale(1);
-  }
-}
-
-.animate-modal-scale {
-  animation: modalScale 120ms ease-out forwards;
-}
-
-@keyframes modalFade {
-  to {
-    opacity: 1;
-  }
-}
-
-.animate-modal-fade {
-  animation: modalFade 60ms ease-out forwards;
-}
-
-/* ColorPicker */
-.rcp-saturation {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-saturation-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, -50%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-hue {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-hue-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
-}
-
-.rcp-alpha {
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  height: 10px !important;
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.25) !important;
-}
-
-.rcp-alpha-cursor {
-  height: 10px !important;
-  width: 10px !important;
-  transform: translate(-50%, 0%) !important;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid white !important;
-  border-radius: 100% !important;
 }
 
 .counter {
@@ -277,246 +108,7 @@ input[type='number']::-webkit-outer-spin-button {
   padding-inline: var(--dmn-text-safe-inline, 2px);
 }
 
-/* Modal scrollbar */
-.modal-content-scroll {
-  overscroll-behavior: contain;
-  /* 네이티브 동작 유지 */
-  -webkit-overflow-scrolling: touch;
-  transform: translateZ(0);
-  contain: paint;
-}
-
-.modal-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-  background: transparent;
-}
-
-.modal-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.modal-content-scroll::-webkit-scrollbar-thumb {
-  background: #3a3943;
-  border-radius: 2px;
-}
-
-.modal-content-scroll::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
-}
-
-.modal-content-scroll::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
-}
-
-/* WebFontInputModal code editor */
-.webfont-cm-editor {
-  height: 100%;
-}
-
-.webfont-cm-editor .cm-editor {
-  height: 100%;
-  background: #1e1e1e;
-  color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-scroller,
-.webfont-cm-editor .cm-content,
-.webfont-cm-editor .cm-line {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.webfont-cm-editor .cm-scroller,
-.webfont-cm-editor .cm-content,
-.webfont-cm-editor .cm-gutterElement {
-  font-family: Consolas, 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 20px;
-  letter-spacing: 0;
-  font-variant-ligatures: none;
-  font-feature-settings: 'liga' 0, 'calt' 0;
-}
-
-.webfont-cm-editor .cm-gutterElement {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.webfont-cm-editor .cm-scroller {
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.webfont-cm-editor .cm-content {
-  min-height: 100%;
-  padding: 8px 12px 8px 14px;
-  tab-size: 2;
-  caret-color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-line {
-  padding: 0;
-}
-
-.webfont-cm-editor .cm-gutters {
-  background: #252526;
-  color: #858585;
-  border-right: 1px solid #33343d;
-}
-
-.webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
-  width: 52px;
-  min-width: 52px;
-  box-sizing: border-box;
-  padding: 0 12px 0 0;
-  text-align: right;
-}
-
-.webfont-cm-editor .cm-activeLine {
-  background: #ffffff10;
-}
-
-.webfont-cm-editor .cm-activeLineGutter {
-  color: #c6c6c6;
-  background: #252526;
-}
-
-.webfont-cm-editor .cm-content ::selection {
-  background: #5b7fae;
-}
-
-.webfont-cm-editor .cm-content ::-moz-selection {
-  background: #5b7fae;
-}
-
-.webfont-cm-editor .cm-cursor,
-.webfont-cm-editor .cm-dropCursor {
-  border-left-color: #d4d4d4;
-}
-
-.webfont-cm-editor .cm-editor.cm-focused {
-  outline: none;
-}
-
-.webfont-cm-editor .cm-placeholder {
-  color: #6f6e7a;
-  white-space: pre;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-  background: transparent;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb {
-  background: #3a3943;
-  border-radius: 2px;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
-}
-
-.webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
-}
-
-/* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
-.properties-panel-overlay-scroll {
-  position: relative;
-  overflow: hidden;
-}
-
-.properties-panel-overlay-viewport {
-  height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.properties-panel-overlay-viewport::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.properties-panel-overlay-bar {
-  position: absolute;
-  top: 0;
-  right: 0px;
-  bottom: 0;
-  width: 4px;
-  opacity: 0;
-  transition: opacity 120ms ease-out;
-  pointer-events: none;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-bar {
-  opacity: 1;
-}
-
-.properties-panel-overlay-thumb {
-  position: absolute;
-  left: 0;
-  right: 0;
-  background: #3a3943;
-  border-radius: 2px;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-thumb {
-  background: #4a4953;
-}
-
-.properties-panel-overlay-scroll:active .properties-panel-overlay-thumb {
-  background: #5a5963;
-}
-
-/* 설정 스크롤 - 호버 시에만 표시 */
-.settings-content-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.settings-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb {
-  background: #3a3943;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #4a4953;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:active {
-  background: #5a5963;
-}
-
-body.dmn-custom-cursor,
-body.dmn-custom-cursor * {
-  cursor: none !important;
-}
-
-/* 
+/*
  * 드래그/리사이즈 중 애니메이션 비활성화
  * 커스텀 CSS에서 transition이나 animation이 적용된 경우,
  * 메인 창 그리드에서 키/플러그인 요소를 드래그하거나 크기 조절할 때

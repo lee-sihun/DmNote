@@ -515,7 +515,7 @@ const DraggableKey = React.memo(
           : `var(--key-text-color, ${fontColor || 'rgba(121, 121, 121, 0.9)'})`,
       fontSize: fontSize ? `${fontSize}px` : undefined,
       fontFamily: fontFamily
-        ? `"${fontFamily}", "SUIT-Regular", sans-serif`
+        ? `"${fontFamily}", "Pretendard Variable", sans-serif`
         : undefined,
       fontWeight: fontWeight ?? 700,
       fontStyle: fontItalic ? 'italic' : 'normal',
