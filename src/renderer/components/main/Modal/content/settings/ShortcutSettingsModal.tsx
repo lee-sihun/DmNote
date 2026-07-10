@@ -347,7 +347,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[12px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -360,7 +360,7 @@ const ShortcutSettingsModal = ({
         <div className="relative">
           <div
             ref={scrollRef}
-            className="overflow-y-auto modal-content-scroll dmn-scroll-fade -mr-[14px] pr-[14px]"
+            className="overflow-y-auto modal-content-scroll dmn-scroll-fade -mr-[8px] pr-[8px]"
             style={{
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
@@ -368,7 +368,7 @@ const ShortcutSettingsModal = ({
               // 명시 폭은 -mr을 무력화하므로 스크롤바 차선(14px) 몫을 폭에 포함
               width:
                 hasOverflow && scrollbarWidth > 0
-                  ? `calc(100% + 14px + ${scrollbarWidth}px)`
+                  ? `calc(100% + 8px + ${scrollbarWidth}px)`
                   : undefined,
               transform:
                 hasOverflow && scrollbarWidth > 0
@@ -499,7 +499,7 @@ const ShortcutSettingsModal = ({
           </div>
         ) : null}
 
-        <div className="flex gap-[8px] mt-[19px]">
+        <div className="flex gap-[8px] mt-[12px]">
           <button
             className="flex-1 h-[30px] bg-accent hover:bg-accent-hover active:bg-accent-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSave}

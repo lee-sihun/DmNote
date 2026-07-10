@@ -99,16 +99,17 @@ body.dmn-custom-cursor * {
   border-radius: 2px;
 }
 
+/* 썸은 스크롤 중에만 표시 (is-scrolling은 useLenis가 관리) */
 .modal-content-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: transparent;
   border-radius: 2px;
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.modal-content-scroll.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
 }
 
-.modal-content-scroll::-webkit-scrollbar-thumb:active {
+.modal-content-scroll.is-scrolling::-webkit-scrollbar-thumb:active {
   background: rgba(255, 255, 255, 0.26);
 }
 
