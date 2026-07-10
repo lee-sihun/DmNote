@@ -22,6 +22,7 @@ pub struct ModeResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResetAllResponse {
     pub keys: KeyMappings,
     pub positions: KeyPositions,
