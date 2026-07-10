@@ -1,16 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import FloatingPopup from '../../FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
-
-const SCROLL_CONTENT_GUTTER = 4;
 
 type FilterOption = {
   value: string;
@@ -34,17 +26,14 @@ interface CommonListPickerPopupProps<T> {
   onFilterChange?: (value: string) => void;
   items: T[];
   renderItem: (item: T) => React.ReactNode;
-  renderItemActions?: (item: T) => React.ReactNode;
-  itemRowClassName?: string;
-  getItemKey?: (item: T, index: number) => React.Key;
   emptyText: string;
   isLoading?: boolean;
   loadingText?: string;
   errorText?: string;
   listHeightClass?: string;
   onAdd: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  addButtonContent: React.ReactNode;
-  // + 버튼에 앵커된 메뉴가 열릴 때 외부 클릭 판정 제외용
+  addLabel: string;
+  // 추가 버튼에 앵커된 메뉴가 열릴 때 외부 클릭 판정 제외용
   addButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
@@ -65,16 +54,13 @@ export default function CommonListPickerPopup<T>({
   onFilterChange,
   items,
   renderItem,
-  renderItemActions,
-  itemRowClassName = '',
-  getItemKey,
   emptyText,
   isLoading = false,
   loadingText = '로딩...',
   errorText = '',
-  listHeightClass = 'min-h-[120px] h-[120px]',
+  listHeightClass = 'max-h-[120px]',
   onAdd,
-  addButtonContent,
+  addLabel,
   addButtonRef,
 }: CommonListPickerPopupProps<T>) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -87,19 +73,12 @@ export default function CommonListPickerPopup<T>({
     x: number;
     y: number;
   } | null>(null);
-  const [hasOverflow, setHasOverflow] = useState(false);
 
-  const {
-    scrollContainerRef: scrollRef,
-    wrapperElement,
-    lenisInstance,
-    scrollbarWidth,
-  } = useLenis();
+  const { scrollContainerRef: scrollRef, lenisInstance } = useLenis();
 
   useEffect(() => {
     if (!open) {
       setFixedPosition(null);
-      setHasOverflow(false);
       return;
     }
 
@@ -189,42 +168,6 @@ export default function CommonListPickerPopup<T>({
     return () => cancelAnimationFrame(rafId);
   }, [open, items.length, filterValue, searchQuery, lenisInstance]);
 
-  useEffect(() => {
-    if (!open) {
-      setHasOverflow(false);
-      return;
-    }
-
-    const wrapper = wrapperElement;
-    if (!wrapper) return;
-
-    const updateOverflow = () => {
-      const nextHasOverflow = wrapper.scrollHeight > wrapper.clientHeight;
-      setHasOverflow((prev) =>
-        prev === nextHasOverflow ? prev : nextHasOverflow,
-      );
-    };
-
-    const rafId = requestAnimationFrame(updateOverflow);
-    const resizeObserver = new ResizeObserver(updateOverflow);
-    resizeObserver.observe(wrapper);
-
-    const contentEl = wrapper.firstElementChild;
-    if (contentEl instanceof HTMLElement) {
-      resizeObserver.observe(contentEl);
-    }
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
-    };
-  }, [open, wrapperElement, items.length]);
-
-  const scrollbarCompensation = useMemo(
-    () => (hasOverflow ? scrollbarWidth + SCROLL_CONTENT_GUTTER : 0),
-    [hasOverflow, scrollbarWidth],
-  );
-
   const effectiveOffsetY = fixedPosition ? 0 : -93;
 
   return (
@@ -256,77 +199,54 @@ export default function CommonListPickerPopup<T>({
           className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
         />
 
-        {filterOptions && filterValue !== undefined && onFilterChange ? (
-          <Dropdown
-            options={filterOptions}
-            value={filterValue}
-            onChange={onFilterChange}
-            fullWidth
-          />
-        ) : null}
-
-        <div className="h-[1px] bg-line -mx-[8px]" />
-
-        <div
-          ref={scrollRef}
-          className={`flex flex-col gap-[4px] overflow-y-auto modal-content-scroll ${listHeightClass}`}
-          style={{
-            width:
-              scrollbarCompensation > 0
-                ? `calc(100% + ${scrollbarCompensation}px)`
-                : undefined,
-            marginRight:
-              scrollbarCompensation > 0
-                ? `-${scrollbarCompensation}px`
-                : undefined,
-          }}
-        >
-          <div
-            className="flex flex-col gap-[4px]"
-            style={
-              hasOverflow
-                ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
-                : undefined
-            }
+        {/* 필터 + 추가 — 같은 재질의 칩 한 쌍 */}
+        <div className="flex items-center gap-[4px]">
+          {filterOptions && filterValue !== undefined && onFilterChange ? (
+            <div className="flex-1 min-w-0">
+              <Dropdown
+                options={filterOptions}
+                value={filterValue}
+                onChange={onFilterChange}
+                fullWidth
+              />
+            </div>
+          ) : null}
+          <button
+            ref={addButtonRef}
+            type="button"
+            onClick={onAdd}
+            title={addLabel}
+            aria-label={addLabel}
+            className="ml-auto w-[24px] h-[24px] shrink-0 flex items-center justify-center rounded-md bg-fill hover:bg-fill-hover active:bg-fill-active text-fg-muted hover:text-fg transition-colors duration-fast"
           >
-            {items.length === 0 ? (
-              <div className="flex items-center justify-center py-[14px] text-fg-faint text-body">
-                {emptyText}
-              </div>
-            ) : (
-              items.map((item, index) => {
-                const node = renderItem(item);
-                if (!renderItemActions) {
-                  return node;
-                }
-
-                const key = getItemKey ? getItemKey(item, index) : index;
-                return (
-                  <div
-                    key={key}
-                    className={`w-full h-[24px] flex items-center gap-[4px] ${itemRowClassName}`.trim()}
-                  >
-                    <div className="flex-1 min-w-0">{node}</div>
-                    <div className="ml-auto shrink-0 flex items-center justify-end gap-[2px]">
-                      {renderItemActions(item)}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+              <path
+                d="M4 1V7M1 4H7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
 
-        <div className="h-[1px] bg-line -mx-[8px]" />
-
-        <button
-          ref={addButtonRef}
-          type="button"
-          className="w-full h-[26px] flex items-center justify-center rounded-md text-fg-muted bg-fill hover:bg-fill-hover hover:text-fg active:bg-fill-active transition-colors duration-fast"
-          onClick={onAdd}
-        >
-          {addButtonContent}
-        </button>
+        {/* 리스트 웰 — 면으로 영역 구분 */}
+        <div className="bg-inset rounded-md p-[4px] flex flex-col gap-[4px]">
+          <div
+            ref={scrollRef}
+            className={`flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade ${listHeightClass}`}
+          >
+            <div className="flex flex-col gap-[4px]">
+              {items.length === 0 ? (
+                <div className="flex items-center justify-center py-[14px] text-fg-faint text-body">
+                  {emptyText}
+                </div>
+              ) : (
+                items.map((item) => renderItem(item))
+              )}
+            </div>
+          </div>
+        </div>
 
         {isLoading ? (
           <p className="text-fg-muted text-body text-center">{loadingText}</p>

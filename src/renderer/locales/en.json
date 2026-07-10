@@ -406,7 +406,8 @@
     "fontSize": "Font Size",
     "fontStyle": "Font Style",
     "apply": "Apply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "addAnimation": "Add Animation"
   },
   "tabCss": {
     "enableCss": "Active tab CSS",
@@ -560,7 +561,8 @@
     "delete": "Delete",
     "enabledToggle": "Enabled",
     "saveFailed": "Failed to save font settings.",
-    "deleteConfirm": "Delete this font? Elements using it will fall back to the default font."
+    "deleteConfirm": "Delete this font? Elements using it will fall back to the default font.",
+    "add": "Add Font"
   },
   "soundPicker": {
     "searchPlaceholder": "Search...",
@@ -573,7 +575,8 @@
     "delete": "Delete",
     "deleteFailed": "Failed to delete sound",
     "renameFailed": "Failed to rename sound",
-    "deleteConfirm": "Delete this sound? The file will be deleted and unassigned from every element using it."
+    "deleteConfirm": "Delete this sound? The file will be deleted and unassigned from every element using it.",
+    "add": "Add Sound"
   },
   "soundTrimModal": {
     "defaultTitle": "Add Sound",

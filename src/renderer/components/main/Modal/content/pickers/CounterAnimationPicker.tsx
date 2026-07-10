@@ -13,9 +13,9 @@ import {
   normalizeCounterAnimationLibrary,
 } from '@src/types/key/counterAnimation';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
+import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import CommonListPickerPopup from './CommonListPickerPopup';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
-import PlusIcon from '@assets/svgs/plus2.svg';
 
 interface CounterAnimationPickerProps {
   open: boolean;
@@ -95,13 +95,7 @@ const CounterAnimationPicker = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [editorState, setEditorState] = useState<EditorState | null>(null);
-  const [actionMenuPresetId, setActionMenuPresetId] = useState<string | null>(
-    null,
-  );
-  const [actionMenuPosition, setActionMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const menu = usePickerItemMenu<string>();
 
   const loadLibrary = async () => {
     setIsLoading(true);
@@ -127,9 +121,8 @@ const CounterAnimationPicker = ({
 
   useEffect(() => {
     if (open) return;
-    setActionMenuPresetId(null);
-    setActionMenuPosition(null);
-  }, [open]);
+    menu.close();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allPresets = [...library.builtinPresets, ...library.userPresets];
 
@@ -172,7 +165,7 @@ const CounterAnimationPicker = ({
   })();
 
   const handlePresetSelect = (preset: CounterAnimationPreset) => {
-    setActionMenuPresetId(null);
+    menu.close();
     onAnimationChange(applyPresetToAnimation(animation, preset));
   };
 
@@ -206,8 +199,7 @@ const CounterAnimationPicker = ({
   };
 
   const openEditModal = (preset: CounterAnimationPreset) => {
-    setActionMenuPresetId(null);
-    setActionMenuPosition(null);
+    menu.close();
     setEditorState({ mode: 'edit', preset });
   };
 
@@ -241,7 +233,7 @@ const CounterAnimationPicker = ({
   };
 
   const handlePickerClose = () => {
-    if (actionMenuPresetId !== null) return;
+    if (menu.menuKey !== null) return;
     onClose();
   };
 
@@ -265,7 +257,6 @@ const CounterAnimationPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as FilterType)}
         items={filteredItems}
-        getItemKey={(item) => item.id}
         renderItem={(preset) => {
           const isSelected = selectedPresetId === preset.id;
           const isUserPreset = preset.source === 'user';
@@ -300,8 +291,8 @@ const CounterAnimationPicker = ({
               {isUserPreset ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
-                    isSelected || actionMenuPresetId === preset.id
+                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                    isSelected || menu.menuKey === preset.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100'
                   } ${
@@ -311,21 +302,11 @@ const CounterAnimationPicker = ({
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
-                  onClick={(event) => {
-                    event.preventDefault();
+                  onPointerDown={(event) => {
                     event.stopPropagation();
-                    if (actionMenuPresetId === preset.id) {
-                      setActionMenuPresetId(null);
-                      setActionMenuPosition(null);
-                      return;
-                    }
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setActionMenuPosition({
-                      x: rect.right + 4,
-                      y: rect.top - 2,
-                    });
-                    setActionMenuPresetId(preset.id);
+                    menu.capturePressState(preset.id);
                   }}
+                  onClick={(event) => menu.openFromButton(event, preset.id)}
                 >
                   <MoreVerticalIcon />
                 </button>
@@ -340,29 +321,25 @@ const CounterAnimationPicker = ({
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={errorText}
         onAdd={openCreateModal}
-        addButtonContent={<PlusIcon />}
+        addLabel={t('counterSetting.addAnimation') || '애니메이션 추가'}
       />
 
-      {actionMenuPresetId !== null && (
+      {menu.menuKey !== null && (
         <ListPopup
           open
-          position={actionMenuPosition ?? undefined}
-          onClose={() => {
-            setActionMenuPresetId(null);
-            setActionMenuPosition(null);
-          }}
+          position={menu.menuPosition ?? undefined}
+          onClose={menu.close}
           textAlign="center"
           items={menuItems}
           onSelect={(id) => {
-            const preset = allPresets.find((p) => p.id === actionMenuPresetId);
+            const preset = allPresets.find((p) => p.id === menu.menuKey);
             if (!preset) return;
             if (id === 'edit') {
               openEditModal(preset);
             } else if (id === 'delete') {
               void handleDeletePreset(preset);
             }
-            setActionMenuPresetId(null);
-            setActionMenuPosition(null);
+            menu.close();
           }}
           className="z-[60]"
           offsetX={0}

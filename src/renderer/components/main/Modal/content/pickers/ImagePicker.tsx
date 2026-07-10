@@ -306,7 +306,6 @@ const ImagePicker = ({
             </div>
           )}
         </PropertySection>
-
       </div>
     </FloatingPopup>
   );

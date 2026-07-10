@@ -4,7 +4,6 @@ import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
 import { DEFAULT_FONT_FAMILY } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import PlusIcon from '@assets/svgs/plus2.svg';
 import Modal from '@components/main/Modal/Modal';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
@@ -318,7 +317,6 @@ const FontPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as FilterType)}
         items={filteredFonts}
-        getItemKey={(font) => font.id}
         renderItem={(font) => {
           const isSelected = effectiveSelectedFont
             ? effectiveSelectedFont === font.name
@@ -395,7 +393,7 @@ const FontPicker = ({
               {isCustom ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
                     isSelected || menu.menuKey === font.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
@@ -427,7 +425,7 @@ const FontPicker = ({
           const rect = event.currentTarget.getBoundingClientRect();
           setAddMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
         }}
-        addButtonContent={<PlusIcon />}
+        addLabel={t('fontPicker.add') || '폰트 추가'}
         addButtonRef={addButtonRef}
       />
 

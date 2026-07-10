@@ -406,7 +406,8 @@
     "fontSize": "字體大小",
     "fontStyle": "字體樣式",
     "apply": "應用",
-    "cancel": "取消"
+    "cancel": "取消",
+    "addAnimation": "新增動畫"
   },
   "tabCss": {
     "enableCss": "啟用標籤頁 CSS",
@@ -560,7 +561,8 @@
     "delete": "刪除",
     "enabledToggle": "啟用",
     "saveFailed": "字體設定儲存失敗。",
-    "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。"
+    "deleteConfirm": "確定刪除該字體？使用它的元素將以預設字體顯示。",
+    "add": "新增字型"
   },
   "soundPicker": {
     "searchPlaceholder": "搜尋",
@@ -573,7 +575,8 @@
     "delete": "刪除",
     "deleteFailed": "音效刪除失敗",
     "renameFailed": "音效重新命名失敗",
-    "deleteConfirm": "確定刪除該音效？檔案將被刪除，並從所有使用它的元素中移除。"
+    "deleteConfirm": "確定刪除該音效？檔案將被刪除，並從所有使用它的元素中移除。",
+    "add": "新增音效"
   },
   "soundTrimModal": {
     "defaultTitle": "新增音效",

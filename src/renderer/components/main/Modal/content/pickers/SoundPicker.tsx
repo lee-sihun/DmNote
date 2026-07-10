@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
-import PlusIcon from '@assets/svgs/plus2.svg';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
 import MoreVerticalIcon from './MoreVerticalIcon';
@@ -206,7 +205,6 @@ const SoundPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as 'all' | 'local')}
         items={filteredSounds}
-        getItemKey={(item) => item.soundPath}
         renderItem={(item) => {
           const isSelected = item.soundPath === normalizedSelectedSound;
           const isLocal = item.source === 'local';
@@ -271,7 +269,7 @@ const SoundPicker = ({
               {isLocal ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
                     isSelected || menu.menuKey === item.soundPath
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
@@ -301,7 +299,7 @@ const SoundPicker = ({
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
         onAdd={() => addFileInputRef.current?.click()}
-        addButtonContent={<PlusIcon />}
+        addLabel={t('soundPicker.add') || '사운드 추가'}
       />
 
       <input

@@ -406,7 +406,8 @@
     "fontSize": "폰트 크기",
     "fontStyle": "폰트 스타일",
     "apply": "적용하기",
-    "cancel": "취소"
+    "cancel": "취소",
+    "addAnimation": "애니메이션 추가"
   },
   "tabCss": {
     "enableCss": "현재 탭 CSS 활성화",
@@ -560,7 +561,8 @@
     "delete": "삭제",
     "enabledToggle": "활성화",
     "saveFailed": "폰트 설정 저장에 실패했습니다.",
-    "deleteConfirm": "폰트를 삭제하시겠습니까? 이 폰트를 사용 중인 요소는 기본 폰트로 표시됩니다."
+    "deleteConfirm": "폰트를 삭제하시겠습니까? 이 폰트를 사용 중인 요소는 기본 폰트로 표시됩니다.",
+    "add": "폰트 추가"
   },
   "soundPicker": {
     "searchPlaceholder": "검색",
@@ -573,7 +575,8 @@
     "delete": "삭제",
     "deleteFailed": "사운드 삭제 실패",
     "renameFailed": "사운드 이름 변경 실패",
-    "deleteConfirm": "사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다."
+    "deleteConfirm": "사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다.",
+    "add": "사운드 추가"
   },
   "soundTrimModal": {
     "defaultTitle": "사운드 추가",
