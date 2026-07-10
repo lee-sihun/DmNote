@@ -365,9 +365,10 @@ const ShortcutSettingsModal = ({
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
               maxHeight: '235px',
+              // 명시 폭은 -mr을 무력화하므로 스크롤바 차선(14px) 몫을 폭에 포함
               width:
                 hasOverflow && scrollbarWidth > 0
-                  ? `calc(100% + ${scrollbarWidth}px)`
+                  ? `calc(100% + 14px + ${scrollbarWidth}px)`
                   : undefined,
               transform:
                 hasOverflow && scrollbarWidth > 0
