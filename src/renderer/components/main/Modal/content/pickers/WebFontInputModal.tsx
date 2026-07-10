@@ -264,12 +264,12 @@ const WebFontInputModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-elevated rounded-[10px] border border-line overflow-hidden"
+        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-white/[0.04] rounded-[10px] overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-white/[0.04] px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
+            <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
               CSS
             </span>
             <span className="truncate text-body leading-[16px] text-fg">
@@ -282,7 +282,7 @@ const WebFontInputModal = ({
         </div>
 
         <div className="p-[12px] pb-[0px]">
-          <div className="w-full h-[220px] rounded-[8px] border border-line bg-inset overflow-hidden">
+          <div className="w-full h-[220px] rounded-[8px] bg-inset overflow-hidden">
             <div
               ref={editorContainerRef}
               className="h-full webfont-cm-editor"
@@ -290,7 +290,7 @@ const WebFontInputModal = ({
           </div>
         </div>
 
-        <div className="h-[28px] mt-[10px] bg-surface border-t border-line px-[12px] flex items-center justify-between gap-[12px]">
+        <div className="h-[28px] mt-[10px] bg-white/[0.04] px-[12px] flex items-center justify-between gap-[12px]">
           <p className="truncate text-caption leading-[14px] text-fg-muted">
             {fixedHintMessage}
           </p>
@@ -299,7 +299,7 @@ const WebFontInputModal = ({
           </p>
         </div>
 
-        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
+        <div className="bg-white/[0.04] px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
             className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
               canSubmit

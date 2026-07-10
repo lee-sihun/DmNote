@@ -542,7 +542,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'note'
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={getNoteColorDisplay().style}
         />
@@ -558,7 +558,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
               pickerFor === 'border'
                 ? 'border-accent'
-                : 'border-line hover:border-line-strong'
+                : 'border-line'
             }`}
             style={{ backgroundColor: borderColor }}
           />
@@ -572,7 +572,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                     width="10"
                     height="10"
                     rx="1.5"
-                    stroke="#DBDEE8"
+                    stroke="currentColor"
                     strokeWidth="1.5"
                   />
                 )}
@@ -583,7 +583,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       y1="1"
                       x2="1.5"
                       y2="12"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -592,7 +592,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       y1="1"
                       x2="11.5"
                       y2="12"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -605,7 +605,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       y1="1.5"
                       x2="12"
                       y2="1.5"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -614,7 +614,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
                       y1="11.5"
                       x2="12"
                       y2="11.5"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -708,7 +708,7 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'glow'
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={getGlowColorDisplay().style}
         />

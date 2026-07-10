@@ -410,8 +410,8 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           <PropertyRow label={t('propertiesPanel.keyMapping') || '키 매핑'}>
             <button
               onClick={onKeyListen}
-              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
-                isListening ? 'border-accent' : 'border-line'
+              className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+                isListening ? 'shadow-focus-ring' : ''
               } text-fg text-style-2`}
             >
               {isListening
@@ -490,7 +490,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'backgroundColor'
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={{
             backgroundColor: getDisplayColor(colorValueFor('backgroundColor')),
@@ -507,7 +507,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'borderColor'
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={{
             backgroundColor: getDisplayColor(colorValueFor('borderColor')),
@@ -550,7 +550,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             ref={imageButtonRef}
             type="button"
             className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-              showImagePicker ? 'border-accent' : 'border-line'
+              showImagePicker ? 'shadow-focus-ring' : ''
             } text-fg text-style-4`}
             onClick={onToggleImagePicker}
           >
@@ -580,7 +580,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           ref={fontButtonRef}
           type="button"
           className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-            pickerFor === 'font' ? 'border-accent' : 'border-line'
+            pickerFor === 'font' ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={() => handlePickerToggle('font')}
         >
@@ -610,7 +610,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'fontColor'
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={{
             backgroundColor: getDisplayColor(colorValueFor('fontColor')),
@@ -696,7 +696,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               ref={soundButtonRef}
               type="button"
               className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                showSoundPicker ? 'border-accent' : 'border-line'
+                showSoundPicker ? 'shadow-focus-ring' : ''
               } text-fg text-style-4`}
               onClick={() => {
                 setPickerFor(null);

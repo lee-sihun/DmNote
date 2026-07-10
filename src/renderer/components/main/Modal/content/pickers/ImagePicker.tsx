@@ -186,7 +186,7 @@ const ImagePicker = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
       >
         {/* 모드 전환 버튼 */}
         <div className="flex gap-[6px] max-w-full">
@@ -210,7 +210,7 @@ const ImagePicker = ({
         </div>
 
         {/* 이미지 미리보기 영역 */}
-        <div className="relative w-[129px] h-[64px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer group">
+        <div className="relative w-[129px] h-[64px] rounded-md overflow-hidden cursor-pointer group">
           {/* 투명 격자 배경 */}
           <div
             className="absolute inset-0"

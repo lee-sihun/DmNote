@@ -524,10 +524,10 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-line">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           <div className="flex items-center gap-[8px]">
@@ -536,7 +536,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1106,9 +1106,9 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex-shrink-0 border-b border-line">
+      <div className="flex-shrink-0">
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
@@ -1116,7 +1116,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1474,9 +1474,9 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex-shrink-0 border-b border-line">
+      <div className="flex-shrink-0">
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
@@ -1484,7 +1484,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {

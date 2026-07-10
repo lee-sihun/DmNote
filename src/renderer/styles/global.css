@@ -8,7 +8,7 @@
     @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-md transition-colors;
   }
   .input-field {
-    @apply text-center h-[23px] bg-inset rounded-md border border-line focus:border-accent text-[11px] text-fg;
+    @apply text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-[11px] text-fg;
   }
   .btn-danger {
     @apply bg-danger-muted rounded-md text-danger-fg;

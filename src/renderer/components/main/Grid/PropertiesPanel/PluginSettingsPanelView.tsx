@@ -45,9 +45,9 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex items-center justify-between p-[12px] border-b border-line">
+      <div className="flex items-center justify-between p-[12px]">
         <div className="flex flex-col gap-[2px]">
           <span className="text-fg text-style-2">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
@@ -91,13 +91,13 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
         <div className="flex gap-[8px]">
           <button
             onClick={handlePluginSettingsPanelCancel}
-            className="flex-1 h-[30px] bg-white/[0.07] border border-line rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
+            className="flex-1 h-[30px] bg-white/[0.07] rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
           >
             {t('common.cancel') || '취소'}
           </button>
           <button
             onClick={handlePluginSettingsPanelConfirm}
-            className="flex-1 h-[30px] bg-white/[0.07] border border-line rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
+            className="flex-1 h-[30px] bg-white/[0.07] rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
           >
             {t('common.save') || '저장'}
           </button>

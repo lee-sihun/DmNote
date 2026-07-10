@@ -83,7 +83,7 @@ const LaboratoryModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-elevated rounded-xl gap-[19px] border-[1px] border-line"
+        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 gap-[16px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">
@@ -111,7 +111,7 @@ const LaboratoryModal = ({
               );
               setMinimum(String(sanitized));
             }}
-            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
           />
         </div>
 
@@ -130,7 +130,7 @@ const LaboratoryModal = ({
               );
               setThreshold(String(sanitized));
             }}
-            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
           />
         </div>
 
@@ -154,7 +154,7 @@ const LaboratoryModal = ({
                 );
                 setKeyDelay(String(sanitized));
               }}
-              className="text-center w-[55px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+              className="text-center w-[55px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
             />
           </div>
         </div>

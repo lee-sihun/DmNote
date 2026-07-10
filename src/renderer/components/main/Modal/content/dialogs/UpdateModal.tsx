@@ -81,7 +81,7 @@ const UpdateModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px] min-w-[320px] max-w-[400px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] min-w-[320px] max-w-[400px]"
         onClick={(e) => e.stopPropagation()}
       >
         {isLatestVersion ? (
@@ -95,7 +95,7 @@ const UpdateModal = ({
                   height="16"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -111,7 +111,7 @@ const UpdateModal = ({
             </div>
 
             {/* 버전 정보 */}
-            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px] border-[1px] border-line">
+            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px]">
               <div className="flex justify-between items-center">
                 <span className="text-fg-muted text-body">
                   {t('update.currentVersion')}
@@ -156,7 +156,7 @@ const UpdateModal = ({
                   <g clipPath="url(#clip0_972_48)">
                     <path
                       d="M11.7063 6.70625L7.70625 10.7063C7.31563 11.0969 6.68125 11.0969 6.29063 10.7063L2.29063 6.70625C1.9 6.31563 1.9 5.68125 2.29063 5.29063C2.68125 4.9 3.31562 4.9 3.70625 5.29063L6 7.58437V1C6 0.446875 6.44687 0 7 0C7.55313 0 8 0.446875 8 1V7.58437L10.2937 5.29063C10.6844 4.9 11.3188 4.9 11.7094 5.29063C12.1 5.68125 12.1 6.31563 11.7094 6.70625H11.7063ZM2 11V13C2 13.5531 2.44687 14 3 14H11C11.5531 14 12 13.5531 12 13V11C12 10.4469 12.4469 10 13 10C13.5531 10 14 10.4469 14 11V13C14 14.6562 12.6562 16 11 16H3C1.34375 16 0 14.6562 0 13V11C0 10.4469 0.446875 10 1 10C1.55313 10 2 10.4469 2 11Z"
-                      fill="#DBDEE8"
+                      fill="currentColor"
                     />
                   </g>
                   <defs>
@@ -177,7 +177,7 @@ const UpdateModal = ({
             </div>
 
             {/* 버전 정보 */}
-            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px] border-[1px] border-line">
+            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px]">
               <div className="flex justify-between items-center mb-[8px]">
                 <span className="text-fg-muted text-body">
                   {t('update.currentVersion')}
@@ -202,7 +202,7 @@ const UpdateModal = ({
                 type="checkbox"
                 checked={skipChecked}
                 onChange={(e) => setSkipChecked(e.target.checked)}
-                className="w-[14px] h-[14px] rounded-[3px] border border-line-strong bg-inset 
+                className="w-[14px] h-[14px] rounded-[3px]-strong bg-inset 
                            checked:bg-accent checked:border-accent cursor-pointer
                            appearance-none relative
                            after:content-[''] after:absolute after:hidden

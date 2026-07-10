@@ -843,12 +843,12 @@ const CounterAnimationEditorModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-elevated rounded-[12px] border border-line shadow-2xl overflow-hidden"
+        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-elevated rounded-[12px] shadow-2xl overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-white/[0.04] px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
+            <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
               Motion
             </span>
             <span className="truncate text-body leading-[16px] text-fg">
@@ -867,14 +867,14 @@ const CounterAnimationEditorModal = ({
                 placeholder={
                   t('counterSetting.animationNamePlaceholder') || '모션 이름'
                 }
-                className="w-full h-[32px] px-[12px] rounded-[8px] border border-line bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
+                className="w-full h-[32px] px-[12px] rounded-[8px] bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
               />
             </div>
 
-            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-elevated border border-line shadow-sm min-h-0 items-center">
+            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-elevated shadow-sm min-h-0 items-center">
               <div className="shrink-0 flex flex-col">
                 <div
-                  className="rounded-[8px] border border-line bg-inset overflow-hidden"
+                  className="rounded-[8px] bg-inset overflow-hidden"
                   style={{
                     width: `${TOTAL_SIZE + 16}px`,
                     height: `${TOTAL_SIZE + 16}px`,
@@ -1094,7 +1094,7 @@ const CounterAnimationEditorModal = ({
             ) : null}
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-[10px] border border-line overflow-hidden shadow-inner relative">
+          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-[10px] overflow-hidden shadow-inner relative">
             <div
               className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-[10px] cursor-pointer select-none"
               onPointerDown={handlePreviewPointerDown}
@@ -1351,7 +1351,7 @@ const CounterAnimationEditorModal = ({
           </div>
         </div>
 
-        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center gap-[8px]">
+        <div className="bg-white/[0.04] px-[12px] py-[10px] flex items-center gap-[8px]">
           <div className="flex items-center gap-1.5 mr-auto">
             <svg
               className="w-3.5 h-3.5 shrink-0"

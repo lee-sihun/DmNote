@@ -243,14 +243,14 @@ export default function CommonListPickerPopup<T>({
     >
       <div
         ref={containerCallbackRef}
-        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-elevated rounded-xl border-[1px] border-line shadow-elevation-2`.trim()}
+        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3`.trim()}
       >
         <input
           type="text"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-[26px] px-[8px] bg-inset rounded-md border-[1px] border-line text-fg text-body placeholder-fg-faint hover:border-line-strong focus:border-accent outline-none transition-colors duration-fast"
+          className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:border-accent outline-none transition-colors duration-fast"
         />
 
         {filterOptions && filterValue !== undefined && onFilterChange ? (

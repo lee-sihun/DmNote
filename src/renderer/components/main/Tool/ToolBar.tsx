@@ -47,7 +47,7 @@ const ToolBar = ({
 
   return (
     <div
-      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app border-t border-line justify-between`}
+      className={`flex flex-row items-center w-full h-[60px] min-h-[60px] p-[10px] bg-app justify-between`}
     >
       {isSettingsOpen ? (
         <TooltipGroup>

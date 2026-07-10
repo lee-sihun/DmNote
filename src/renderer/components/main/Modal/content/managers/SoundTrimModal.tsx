@@ -1016,13 +1016,13 @@ const SoundTrimModal = ({
   return (
     <Modal onClick={closeModal}>
       <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-elevated rounded-[10px] border border-line overflow-hidden"
+        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-white/[0.04] rounded-[10px] overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 헤더 바 */}
-        <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-white/[0.04] px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-fg-muted">
+            <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-fg-muted">
               Sound
             </span>
             <span className="truncate text-body leading-[16px] text-fg">
@@ -1046,13 +1046,13 @@ const SoundTrimModal = ({
               value={soundName}
               onChange={(e) => setSoundName(e.target.value)}
               placeholder={t('soundTrimModal.namePlaceholder')}
-              className="w-full h-[30px] px-[10px] rounded-md border border-line bg-inset text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent transition-colors"
+              className="w-full h-[30px] px-[10px] rounded-md bg-inset text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent transition-colors"
               disabled={isSaving}
             />
           </div>
 
           {/* 파형 섹션 */}
-          <div className="rounded-[8px] border border-line bg-inset overflow-hidden">
+          <div className="rounded-[8px] bg-inset overflow-hidden">
             <div className="flex items-center h-[100px]">
               {/* 재생 버튼 */}
               <div className="w-[52px] h-full flex flex-col items-center justify-center gap-[4px]">
@@ -1074,7 +1074,7 @@ const SoundTrimModal = ({
                         width="3"
                         height="9"
                         rx="0.75"
-                        fill="#DBDEE8"
+                        fill="currentColor"
                       />
                       <rect
                         x="7"
@@ -1082,14 +1082,14 @@ const SoundTrimModal = ({
                         width="3"
                         height="9"
                         rx="0.75"
-                        fill="#DBDEE8"
+                        fill="currentColor"
                       />
                     </svg>
                   ) : (
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                       <path
                         d="M3.5 1.8C3.5 1.49 3.84 1.3 4.1 1.47L10.1 5.67C10.34 5.83 10.34 6.17 10.1 6.33L4.1 10.53C3.84 10.7 3.5 10.51 3.5 10.2V1.8Z"
-                        fill="#DBDEE8"
+                        fill="currentColor"
                       />
                     </svg>
                   )}
@@ -1128,7 +1128,7 @@ const SoundTrimModal = ({
         </div>
 
         {/* 힌트 바 */}
-        <div className="h-[28px] bg-surface border-t border-line px-[12px] flex items-center justify-between gap-[12px]">
+        <div className="h-[28px] bg-white/[0.04] px-[12px] flex items-center justify-between gap-[12px]">
           {!isEditMode ? (
             <button
               type="button"
@@ -1157,7 +1157,7 @@ const SoundTrimModal = ({
         ) : null}
 
         {/* 푸터 */}
-        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
+        <div className="bg-white/[0.04] px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
             type="button"
             className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${

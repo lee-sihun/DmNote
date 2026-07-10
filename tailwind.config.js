@@ -16,6 +16,7 @@ module.exports = {
         elevated: "var(--ui-bg-elevated)",
         inset: "var(--ui-bg-inset)",
         glass: "var(--ui-glass)",
+        "glass-heavy": "var(--ui-glass-heavy)",
         line: {
           DEFAULT: "var(--ui-line)",
           strong: "var(--ui-line-strong)",
@@ -73,6 +74,7 @@ module.exports = {
         "elevation-1": "var(--ui-shadow-1)",
         "elevation-2": "var(--ui-shadow-2)",
         "elevation-3": "var(--ui-shadow-3)",
+        "focus-ring": "var(--ui-focus-ring)",
       },
     },
   },

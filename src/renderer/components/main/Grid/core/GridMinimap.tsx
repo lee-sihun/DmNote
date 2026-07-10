@@ -333,9 +333,11 @@ const GridMinimap = ({
         style={{
           width: MINIMAP_WIDTH,
           height: 23,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          borderRadius: 4,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backgroundColor: 'var(--ui-glass)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 8,
+          boxShadow: 'var(--ui-shadow-2)',
           boxSizing: 'border-box',
           overflow: 'hidden',
         }}
@@ -468,12 +470,17 @@ const GridMinimap = ({
       </div>
       {/* 미니맵 */}
       <div
-        className="relative bg-black/60 rounded cursor-pointer"
+        className="relative cursor-pointer"
         style={{
           width: MINIMAP_WIDTH,
           height: MINIMAP_HEIGHT,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          backgroundColor: 'var(--ui-glass)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRadius: 8,
+          boxShadow: 'var(--ui-shadow-2)',
           boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
         onClick={handleMinimapClick}
         onMouseDown={handleMouseDown}

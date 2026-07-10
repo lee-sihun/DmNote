@@ -137,7 +137,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   return (
     <Modal onClick={handleCancel}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-elevated rounded-xl border-[1px] border-line gap-[19px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 gap-[19px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* CSS 사용 여부 토글 */}
@@ -166,7 +166,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleLoadCss}
               disabled={isLoading}
-              className="px-[7px] h-[23px] bg-white/[0.07] rounded-md border-[1px] border-line flex items-center justify-center text-fg text-style-4 hover:bg-white/[0.1] active:bg-white/[0.13]"
+              className="px-[7px] h-[23px] bg-white/[0.07] rounded-md flex items-center justify-center text-fg text-style-4 hover:bg-white/[0.1] active:bg-white/[0.13]"
             >
               {t('tabCss.loadFile')}
             </button>

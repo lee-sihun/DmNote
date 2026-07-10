@@ -238,8 +238,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
-        className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
-          isFocused ? 'border-accent' : 'border-line'
+        className={`text-center h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
         } text-body tabular-nums ${
           showMixedPlaceholder
             ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
@@ -252,8 +252,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div
-      className={`relative h-[23px] bg-inset rounded-md border-[1px] ${
-        isFocused ? 'border-accent' : 'border-line'
+      className={`relative h-[23px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
       }`}
       style={{ width }}
     >
@@ -479,8 +479,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
   if (prefix) {
     return (
       <div
-        className={`relative h-[23px] bg-inset rounded-md border-[1px] ${
-          isFocused ? 'border-accent' : 'border-line'
+        className={`relative h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
         }`}
         style={{ width }}
       >
@@ -519,8 +519,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={effectivePlaceholder}
-        className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
-          isFocused ? 'border-accent' : 'border-line'
+        className={`text-center h-[23px] bg-inset rounded-md ${
+          isFocused ? 'shadow-focus-ring' : ''
         } text-body tabular-nums ${textClass} ${placeholderClass}`}
         style={{ width }}
       />
@@ -537,8 +537,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
       placeholder={effectivePlaceholder}
-      className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
-        isFocused ? 'border-accent' : 'border-line'
+      className={`text-center h-[23px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
       } text-body tabular-nums ${textClass} ${placeholderClass}`}
       style={{ width }}
     />
@@ -584,8 +584,8 @@ export const TextInput: React.FC<TextInputProps> = ({
       onFocus={() => setIsFocused(true)}
       onBlur={handleBlur}
       placeholder={placeholder}
-      className={`text-center h-[23px] p-[6px] bg-inset rounded-md border-[1px] ${
-        isFocused ? 'border-accent' : 'border-line'
+      className={`text-center h-[23px] p-[6px] bg-inset rounded-md ${
+        isFocused ? 'shadow-focus-ring' : ''
       } text-body tabular-nums ${
         isMixed
           ? 'text-fg placeholder:text-fg-faint placeholder:italic'
@@ -719,7 +719,7 @@ export const ColorInput: React.FC<ColorInputProps> = ({
         ref={buttonRef}
         onClick={handleToggle}
         className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-          open ? 'border-accent' : 'border-line hover:border-line-strong'
+          open ? 'shadow-focus-ring' : ''
         }`}
         style={{
           backgroundColor: getDisplayColor(
@@ -767,9 +767,9 @@ export const SelectInput: React.FC<SelectInputProps> = ({
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`h-[23px] min-w-[70px] bg-inset rounded-md border-[1px] ${
-          isOpen ? 'border-accent' : 'border-line'
-        } px-[8px] flex items-center justify-between gap-[4px] hover:border-line-strong transition-colors`}
+        className={`h-[23px] min-w-[70px] bg-inset rounded-md ${
+          isOpen ? 'shadow-focus-ring' : ''
+        } px-[8px] flex items-center justify-between gap-[4px] transition-colors`}
       >
         <span className="text-body tabular-nums text-fg">
           {options.find((opt) => opt.value === value)?.label || value}
@@ -796,7 +796,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-[27px] left-0 right-0 bg-elevated border border-line rounded-lg z-20 overflow-hidden shadow-elevation-2 min-w-[70px]">
+          <div className="absolute top-[27px] left-0 right-0 bg-glass backdrop-blur-[24px] rounded-[10px] z-20 overflow-hidden shadow-elevation-2 min-w-[70px]">
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -971,7 +971,7 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
     }`;
 
   return (
-    <div className="flex items-center h-[23px] bg-inset rounded-md border border-line overflow-hidden">
+    <div className="flex items-center h-[23px] bg-inset rounded-md overflow-hidden">
       <button
         onClick={() => onBoldChange(!isBold)}
         className={buttonClass(isBold)}

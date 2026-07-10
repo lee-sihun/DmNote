@@ -119,11 +119,11 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
 
   return (
     <div
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
       onMouseDown={handleHeaderEmptyClick}
     >
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-line">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           <span className="text-fg text-style-2">

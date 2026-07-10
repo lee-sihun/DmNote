@@ -362,7 +362,7 @@ const FontPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-[#3B82F6]"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-accent"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -488,7 +488,7 @@ const FontPicker = ({
           fallback={
             <Modal onClick={() => setWebFontModal(null)}>
               <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-[10px] border border-line"
+                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-[10px]"
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-body leading-[16px] text-fg-muted">

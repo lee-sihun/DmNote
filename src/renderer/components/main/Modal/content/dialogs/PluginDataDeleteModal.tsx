@@ -23,7 +23,7 @@ export function PluginDataDeleteModal({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col w-[380px] bg-elevated rounded-xl border-[1px] border-line p-[20px] gap-[16px]"
+        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] gap-[16px]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex flex-col gap-[8px]">
@@ -35,7 +35,7 @@ export function PluginDataDeleteModal({
           </span>
         </div>
 
-        <div className="flex flex-col gap-[8px] p-[12px] bg-inset border-[1px] border-line rounded-[8px]">
+        <div className="flex flex-col gap-[8px] p-[12px] bg-inset rounded-[8px]">
           <div className="flex items-start gap-[8px]">
             <span className="text-style-3 text-warning mt-[6px]">⚠️</span>
             <span className="text-style-2 text-fg !leading-[1.2]">

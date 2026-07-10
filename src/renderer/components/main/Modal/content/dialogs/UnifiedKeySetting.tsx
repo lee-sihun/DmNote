@@ -234,7 +234,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   return (
     <Modal onClick={handleClose} animate={!initialSkipRef.current}>
       <div
-        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px] pr-[6px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pr-[14px]">

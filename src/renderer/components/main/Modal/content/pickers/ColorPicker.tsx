@@ -782,7 +782,7 @@ const ColorPickerWrapper = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line shadow-elevation-2"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
       >
         {showStateSwitch && (
           <StateSwitch state={stateMode} onChange={onStateModeChange} />
@@ -995,7 +995,7 @@ function ColorPaletteSection({
   }
 
   return (
-    <div className="flex flex-col gap-[6px] pt-[8px] border-t border-line">
+    <div className="flex flex-col gap-[6px] pt-[8px]">
       {/* 솔리드 팔레트 */}
       <div className="flex gap-[4px] justify-between">
         {filledSolid.map((color, index) => (
@@ -1238,7 +1238,7 @@ const Input = ({
     <div className="flex items-center gap-[6px] w-full">
       <div className="relative flex-1 min-w-0">
         <div
-          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-line"
+          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px]"
           style={{ background: rgbaPreview }}
         />
         <input
@@ -1251,7 +1251,7 @@ const Input = ({
               onValueCommit?.();
             }
           }}
-          className="pl-[23px] text-left w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg uppercase pt-[1px] leading-[23px]"
+          className="pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg uppercase pt-[1px] leading-[23px]"
         />
       </div>
 
@@ -1274,7 +1274,7 @@ const Input = ({
                 event.currentTarget.blur();
               }
             }}
-            className="px-[6px] text-center w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg pt-[1px] leading-[23px]"
+            className="px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px]"
           />
         </div>
       )}
@@ -1396,7 +1396,7 @@ function GradientInput({
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
             if (e.key === 'Enter') onSelect?.();
           }}
-          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-line"
+          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px]"
           style={{
             background: value ? `#${value}` : '#561ecb',
           }}
@@ -1441,7 +1441,7 @@ function GradientInput({
                 event.currentTarget.blur();
               }
             }}
-            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg pt-[1px] leading-[23px] ${
+            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px] ${
               rightFocused ? 'border-accent' : ''
             }`}
             title={rightTitle}

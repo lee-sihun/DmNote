@@ -114,7 +114,7 @@ const SubMenu = ({
           node;
         if (needsScroll) subLenisRef(node);
       }}
-      className={`fixed z-[10001] bg-elevated border border-line shadow-elevation-2 rounded-lg p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
+      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -353,7 +353,7 @@ const ListPopup = ({
   maxVisibleItems,
 }: ListPopupProps) => {
   const defaultClassName =
-    'z-30 bg-elevated border border-line shadow-elevation-2 rounded-lg p-[5px] flex flex-col gap-[1px]';
+    'z-30 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산

@@ -135,9 +135,9 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex items-center justify-between p-[12px] border-b border-line">
+      <div className="flex items-center justify-between p-[12px]">
         <span className="text-fg text-style-2 truncate max-w-[120px]">
           {pluginTitle}
         </span>
@@ -318,14 +318,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex items-center justify-between p-[12px] border-b border-line">
+      <div className="flex items-center justify-between p-[12px]">
         {isRenaming ? (
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -609,7 +609,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
                 ref={graphImageButtonRef}
                 type="button"
                 className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                  showGraphImagePicker ? 'border-accent' : 'border-line'
+                  showGraphImagePicker ? 'shadow-focus-ring' : ''
                 } text-fg text-style-4`}
                 onClick={() => setShowGraphImagePicker(!showGraphImagePicker)}
               >
@@ -965,14 +965,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   return (
     <div
       ref={setRef}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
-      <div className="flex items-center justify-between p-[12px] border-b border-line">
+      <div className="flex items-center justify-between p-[12px]">
         {isRenaming ? (
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -1038,8 +1038,8 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setCapturing((v) => !v)}
-                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
-                  capturing ? 'border-accent' : 'border-line'
+                className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
+                  capturing ? 'shadow-focus-ring' : ''
                 } text-fg text-style-2`}
                 title={singleKnobPosition.axisId || ''}
               >
@@ -1153,7 +1153,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
                   pickerFor === 'backgroundColor'
                     ? 'border-accent'
-                    : 'border-line hover:border-line-strong'
+                    : 'border-line'
                 }`}
                 style={{ backgroundColor: colorValueFor('backgroundColor') }}
               />
@@ -1170,7 +1170,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
                   pickerFor === 'borderColor'
                     ? 'border-accent'
-                    : 'border-line hover:border-line-strong'
+                    : 'border-line'
                 }`}
                 style={{ backgroundColor: colorValueFor('borderColor') }}
               />
@@ -1219,7 +1219,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                 ref={imageButtonRef}
                 type="button"
                 className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                  showImagePicker ? 'border-accent' : 'border-line'
+                  showImagePicker ? 'shadow-focus-ring' : ''
                 } text-fg text-style-4`}
                 onClick={() => setShowImagePicker(!showImagePicker)}
               >
@@ -1530,17 +1530,17 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] border-l border-line shadow-[-8px_0_24px_rgba(0,0,0,0.25)] flex flex-col z-30"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-glass backdrop-blur-[24px] shadow-elevation-panel flex flex-col z-30"
     >
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-line">
+      <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
           {isRenaming ? (
             <input
               ref={renameInputRef}
               type="text"
-              className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-[#3B82F6]"
+              className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={() => {

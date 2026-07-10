@@ -825,7 +825,7 @@ const Settings = ({
         <div className="flex flex-row gap-[12px]">
           <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey('overlayLock')}
@@ -944,7 +944,7 @@ const Settings = ({
               </div>
             </div>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
               <div
                 className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
@@ -1039,7 +1039,7 @@ const Settings = ({
             </div>
             {/* OBS 모드 */}
             <div
-              className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl"
+              className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl"
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
@@ -1095,7 +1095,7 @@ const Settings = ({
               </div>
             </div>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
               <div
                 className="flex flex-row justify-between items-center h-[40px]"
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
@@ -1172,7 +1172,7 @@ const Settings = ({
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.03] border border-line rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-white/[0.04] rounded-xl">
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-label text-fg">
                   {t('settings.language')}
@@ -1262,7 +1262,7 @@ const Settings = ({
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-white/[0.03] border border-line rounded-xl pointer-events-none overflow-hidden">
+      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-white/[0.04] rounded-xl pointer-events-none overflow-hidden">
         {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
           <div className="relative w-full h-full">
             <video

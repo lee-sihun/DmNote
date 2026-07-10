@@ -158,13 +158,13 @@ const CounterTabContent = forwardRef<
   // 컬러 버튼 스타일
   const colorButtonClass = (active: boolean) =>
     `relative px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-      active ? 'border-accent' : 'border-line'
+      active ? 'shadow-focus-ring' : ''
     } text-fg text-style-2`;
 
   // 컬러 프리뷰 박스
   const renderColorSquare = (style: React.CSSProperties) => (
     <div
-      className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
+      className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
       style={style}
     />
   );
@@ -339,7 +339,7 @@ const CounterTabContent = forwardRef<
             }))
           }
           onBlur={handleGapBlur}
-          className="text-center h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+          className="text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
           style={{
             width: alignDropdownWidth ? `${alignDropdownWidth}px` : undefined,
           }}

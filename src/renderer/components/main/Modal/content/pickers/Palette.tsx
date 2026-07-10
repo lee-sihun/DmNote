@@ -52,7 +52,7 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
 
   return (
     <div
-      className="flex flex-col justify-between rounded-lg bg-elevated border-line border-[1px] shadow-elevation-2 p-[8px]"
+      className="flex flex-col justify-between rounded-lg bg-glass backdrop-blur-[24px] shadow-elevation-2 p-[8px]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="grid grid-cols-5 gap-x-[8px] gap-y-[8px]">
@@ -80,7 +80,7 @@ export default Palette;
 function Color({ color, onClick }: ColorProps) {
   return (
     <button
-      className="w-[22px] h-[22px] border-[1px] border-line-strong rounded-md hover:scale-110 transition-transform duration-fast ease-out-expo"
+      className="w-[22px] h-[22px]-strong rounded-md hover:scale-110 transition-transform duration-fast ease-out-expo"
       style={{ backgroundColor: color }}
       onClick={onClick}
     />

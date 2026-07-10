@@ -208,13 +208,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('left')}
-              className="w-[24px] h-[23px] bg-inset border border-line rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M1 1V9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -224,7 +224,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="6"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="2.5"
@@ -232,20 +232,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="4"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
             <button
               type="button"
               onClick={() => handleBatchAlign('centerH')}
-              className="w-[24px] h-[23px] bg-inset border border-line border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M5 1V9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -255,7 +255,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="7"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="2.5"
@@ -263,20 +263,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="5"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
             <button
               type="button"
               onClick={() => handleBatchAlign('right')}
-              className="w-[24px] h-[23px] bg-inset border border-line rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M9 1V9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -286,7 +286,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="6"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="3.5"
@@ -294,7 +294,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="4"
                   height="1.5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
@@ -304,13 +304,13 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('top')}
-              className="w-[24px] h-[23px] bg-inset border border-line rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M1 1H9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -320,7 +320,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="6"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="6"
@@ -328,20 +328,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="4"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
             <button
               type="button"
               onClick={() => handleBatchAlign('centerV')}
-              className="w-[24px] h-[23px] bg-inset border border-line border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M1 5H9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -351,7 +351,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="7"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="6"
@@ -359,20 +359,20 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="5"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
             <button
               type="button"
               onClick={() => handleBatchAlign('bottom')}
-              className="w-[24px] h-[23px] bg-inset border border-line rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
+              className="w-[24px] h-[23px] bg-inset rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <path
                   d="M1 9H9"
-                  stroke="#DBDEE8"
+                  stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                 />
@@ -382,7 +382,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="6"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
                 <rect
                   x="6"
@@ -390,7 +390,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   width="1.5"
                   height="4"
                   rx="0.5"
-                  fill="#DBDEE8"
+                  fill="currentColor"
                 />
               </svg>
             </button>
@@ -405,7 +405,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             type="button"
             onClick={() => handleBatchDistribute('horizontal')}
             disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-inset border border-line rounded-md flex items-center justify-center transition-colors ${
+            className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
               selectedCount < 3
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:bg-surface-hover'
@@ -419,7 +419,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="1.5"
                 height="5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
               <rect
                 x="4.25"
@@ -427,7 +427,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="1.5"
                 height="5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
               <rect
                 x="8"
@@ -435,7 +435,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="1.5"
                 height="5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
             </svg>
           </button>
@@ -443,7 +443,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             type="button"
             onClick={() => handleBatchDistribute('vertical')}
             disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-inset border border-line rounded-md flex items-center justify-center transition-colors ${
+            className={`w-[24px] h-[23px] bg-inset rounded-md flex items-center justify-center transition-colors ${
               selectedCount < 3
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:bg-surface-hover'
@@ -457,7 +457,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="5"
                 height="1.5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
               <rect
                 x="2.5"
@@ -465,7 +465,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="5"
                 height="1.5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
               <rect
                 x="2.5"
@@ -473,7 +473,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 width="5"
                 height="1.5"
                 rx="0.5"
-                fill="#DBDEE8"
+                fill="currentColor"
               />
             </svg>
           </button>
@@ -657,7 +657,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           ref={batchImageButtonRef}
           type="button"
           className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-            showBatchImagePicker ? 'border-accent' : 'border-line'
+            showBatchImagePicker ? 'shadow-focus-ring' : ''
           } text-fg text-style-4`}
           onClick={onToggleBatchImagePicker}
         >
@@ -703,7 +703,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
               ref={fontButtonRef}
               type="button"
               className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                showFontPicker ? 'border-accent' : 'border-line'
+                showFontPicker ? 'shadow-focus-ring' : ''
               } text-fg text-style-4`}
               onClick={() => setShowFontPicker(!showFontPicker)}
             >
@@ -896,7 +896,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   ref={soundButtonRef}
                   type="button"
                   className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                    showSoundPicker ? 'border-accent' : 'border-line'
+                    showSoundPicker ? 'shadow-focus-ring' : ''
                   } text-fg text-style-4`}
                   onClick={() => setShowSoundPicker((prev) => !prev)}
                 >

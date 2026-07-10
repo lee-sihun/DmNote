@@ -17,7 +17,7 @@ const TitleBar = (): React.ReactElement => {
   return (
     <div
       data-tauri-drag-region
-      className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-app border-b border-line rounded-t-[8px] [app-region:drag]"
+      className="relative w-full h-[30px] min-h-[30px] flex justify-center items-center bg-app rounded-t-[8px] [app-region:drag]"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       <div className="flex items-center gap-[6px] text-fg-muted pointer-events-none">

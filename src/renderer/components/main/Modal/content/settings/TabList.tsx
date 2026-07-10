@@ -14,8 +14,8 @@ interface TabListProps {
 
 const MAX_CUSTOM_TABS = 30;
 const VISIBLE_TAB_COUNT = 5;
-const TAB_ITEM_HEIGHT = 24;
-const TAB_ITEM_GAP = 6;
+const TAB_ITEM_HEIGHT = 26;
+const TAB_ITEM_GAP = 2;
 const SCROLL_CONTENT_GUTTER = 4;
 const TAB_LIST_MAX_HEIGHT =
   VISIBLE_TAB_COUNT * TAB_ITEM_HEIGHT + (VISIBLE_TAB_COUNT - 1) * TAB_ITEM_GAP;
@@ -113,75 +113,78 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center max-w-[154px] bg-elevated rounded-lg border border-line shadow-elevation-2">
-      <div className="min-h-[39px] w-full border-b-[1px] border-line flex flex-col items-center justify-center p-[8px] gap-[8px]">
-        {customTabs.length === 0 ? (
-          <span className="text-style-2 text-fg">{t('tabs.empty')}</span>
-        ) : (
+    <div className="flex flex-col w-[176px] p-[6px] bg-glass backdrop-blur-[24px] rounded-[12px] shadow-elevation-2">
+      {customTabs.length === 0 ? (
+        <div className="flex items-center justify-center py-[14px] text-body text-fg-faint">
+          {t('tabs.empty')}
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="flex flex-col w-full gap-[2px] overflow-y-auto modal-content-scroll"
+          style={{
+            maxHeight: `${TAB_LIST_MAX_HEIGHT}px`,
+            width:
+              scrollbarCompensation > 0
+                ? `calc(100% + ${scrollbarCompensation}px)`
+                : undefined,
+            marginRight:
+              scrollbarCompensation > 0
+                ? `-${scrollbarCompensation}px`
+                : undefined,
+          }}
+        >
           <div
-            ref={scrollRef}
-            className="flex flex-col w-full gap-[6px] overflow-y-auto modal-content-scroll"
-            style={{
-              maxHeight: `${TAB_LIST_MAX_HEIGHT}px`,
-              width:
-                scrollbarCompensation > 0
-                  ? `calc(100% + ${scrollbarCompensation}px)`
-                  : undefined,
-              marginRight:
-                scrollbarCompensation > 0
-                  ? `-${scrollbarCompensation}px`
-                  : undefined,
-            }}
+            className="flex flex-col gap-[2px]"
+            style={
+              hasOverflow
+                ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
+                : undefined
+            }
           >
-            <div
-              className="flex flex-col gap-[6px]"
-              style={
-                hasOverflow
-                  ? { width: `calc(100% - ${SCROLL_CONTENT_GUTTER}px)` }
-                  : undefined
-              }
-            >
-              {[...customTabs]
-                .slice()
-                .reverse()
-                .map((tab) => (
-                  <button
-                    key={tab.id}
-                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-md text-style-2 text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
-                      selectedKeyType === tab.id ? 'bg-surface-active' : ''
-                    }`}
-                    onClick={() => handleSelect(tab.id)}
-                  >
-                    {tab.name}
-                  </button>
-                ))}
-            </div>
+            {[...customTabs]
+              .slice()
+              .reverse()
+              .map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center px-[8px] rounded-[6px] text-body text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
+                    selectedKeyType === tab.id ? 'bg-surface-active' : ''
+                  }`}
+                  onClick={() => handleSelect(tab.id)}
+                >
+                  <span className="truncate">{tab.name}</span>
+                </button>
+              ))}
           </div>
-        )}
-      </div>
-      <div className="flex flex-row p-[8px] w-[154px] gap-[8px]">
-        {!maxReached && (
-          <button
-            className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-md bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]"
-            onClick={() => setShowNameModal(true)}
-          >
-            <PlusIcon />
-          </button>
-        )}
-        {customTabs.length > 0 && (
-          <button
-            className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-md ${
-              isCustomSelected
-                ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)]'
-                : 'bg-white/[0.06] opacity-50 cursor-not-allowed'
-            }`}
-            disabled={!isCustomSelected}
-            onClick={() => setAskDelete(true)}
-          >
-            <MinusIcon />
-          </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      <div className="my-[4px]" />
+
+      {!maxReached && (
+        <button
+          className="w-full h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] text-fg-muted hover:text-fg hover:bg-surface-hover active:bg-surface-active transition-colors duration-fast"
+          onClick={() => setShowNameModal(true)}
+        >
+          <PlusIcon className="w-[10px] h-[10px] shrink-0" />
+          <span className="text-body">{t('tabs.createTitle')}</span>
+        </button>
+      )}
+      {customTabs.length > 0 && (
+        <button
+          className={`w-full h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
+            isCustomSelected
+              ? 'text-danger hover:bg-danger-muted active:bg-[rgba(229,72,77,0.2)]'
+              : 'text-fg-disabled cursor-not-allowed'
+          }`}
+          disabled={!isCustomSelected}
+          onClick={() => setAskDelete(true)}
+        >
+          <MinusIcon className="w-[10px] shrink-0" />
+          <span className="text-body">{t('tabs.delete')}</span>
+        </button>
+      )}
 
       <TabNameModal
         isOpen={showNameModal}

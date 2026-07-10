@@ -80,7 +80,7 @@ const Alert = ({
   return (
     <Modal onClick={onCancel}>
       <div
-        className="flex flex-col bg-elevated rounded-xl border border-line shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 or Custom HTML */}

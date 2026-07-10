@@ -80,10 +80,8 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md border cursor-pointer transition-colors duration-fast ${
-            open
-              ? 'border-accent bg-surface'
-              : 'border-line bg-surface hover:border-line-strong'
+          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md cursor-pointer bg-white/[0.06] hover:bg-white/[0.09] transition-colors duration-fast ${
+            open ? 'shadow-focus-ring' : ''
           }`}
           onClick={() => setOpen((prev) => !prev)}
           disabled={disabled}
@@ -94,8 +92,8 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-surface border rounded-md text-fg text-body transition-colors duration-fast ${
-            open ? 'border-accent' : 'border-line hover:border-line-strong'
+          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-white/[0.06] hover:bg-white/[0.09] rounded-md text-fg text-body transition-colors duration-fast ${
+            open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={() => setOpen((prev) => !prev)}
           disabled={disabled}
@@ -124,7 +122,7 @@ const Dropdown: React.FC<DropdownProps> = ({
       )}
       {open && (
         <div
-          className={`absolute flex flex-col p-[4px] gap-[1px] bg-elevated border border-line rounded-lg shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${
+          className={`absolute flex flex-col p-[4px] gap-[1px] bg-glass backdrop-blur-[24px] rounded-[10px] shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${
             fullWidth
               ? 'left-0 right-0'
               : align === 'right'

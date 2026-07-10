@@ -64,7 +64,7 @@ const TabNameModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-elevated rounded-xl border-[1px] border-line"
+        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-style-3 text-fg">
@@ -77,7 +77,7 @@ const TabNameModal = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit();
           }}
-          className="w-full min-w-0 h-[30px] px-[12px] rounded-md bg-inset text-fg text-style-3 border-[1px] border-line focus:border-accent"
+          className="w-full min-w-0 h-[30px] px-[12px] rounded-md bg-inset text-fg text-style-3 focus:shadow-focus-ring"
           placeholder={t('tabs.name.placeholder')}
         />
         {error && (

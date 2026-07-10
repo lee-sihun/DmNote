@@ -16,7 +16,7 @@ const ADVANCED_TAB = 'advanced' as const;
 type TabId = typeof NOTE_TAB | typeof ADVANCED_TAB;
 
 const INPUT_CLASS =
-  'text-center h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg';
+  'text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg';
 
 function sanitizeNumericValue(
   value: string | number | undefined,
@@ -272,7 +272,7 @@ const NoteSetting = ({
         </p>
         <div className="flex items-center gap-[8px]">
           <div
-            className="relative h-[23px] bg-inset rounded-md border-[1px] border-line"
+            className="relative h-[23px] bg-inset rounded-md"
             style={{ width: '54px' }}
           >
             <svg
@@ -315,7 +315,7 @@ const NoteSetting = ({
             />
           </div>
           <div
-            className="relative h-[23px] bg-inset rounded-md border-[1px] border-line"
+            className="relative h-[23px] bg-inset rounded-md"
             style={{ width: '54px' }}
           >
             <svg
@@ -454,7 +454,7 @@ const NoteSetting = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
         {title && <p className="text-white text-style-2 mb-[10px]">{title}</p>}

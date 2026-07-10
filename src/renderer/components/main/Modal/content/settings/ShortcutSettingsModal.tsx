@@ -371,7 +371,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-elevated rounded-xl border-[1px] border-line p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -459,7 +459,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
                             isRowListening
                               ? 'border-accent'
                               : 'border-line'
@@ -517,7 +517,7 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md ${
                             isRowListening
                               ? 'border-accent'
                               : 'border-line'

@@ -10,7 +10,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         ref={ref}
-        className={`h-[24px] px-[8px] bg-inset border border-line rounded-md text-body text-fg placeholder:text-fg-faint transition-colors duration-fast hover:border-line-strong focus:border-accent disabled:opacity-40 ${
+        className={`h-[24px] px-[8px] bg-inset rounded-md text-body text-fg placeholder:text-fg-faint transition-shadow duration-fast focus:shadow-focus-ring disabled:opacity-40 ${
           align === 'center' ? 'text-center' : ''
         } ${className}`}
         {...rest}

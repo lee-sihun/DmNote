@@ -205,7 +205,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isNoteColorPickerOpen
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={getBatchNoteColorDisplay().style}
           title={getBatchNoteColorDisplay().label}
@@ -223,7 +223,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
               isBorderColorPickerOpen
                 ? 'border-accent'
-                : 'border-line hover:border-line-strong'
+                : 'border-line'
             }`}
             style={getBatchBorderColorDisplay().style}
             title={getBatchBorderColorDisplay().label}
@@ -239,7 +239,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                     width="10"
                     height="10"
                     rx="1.5"
-                    stroke="#DBDEE8"
+                    stroke="currentColor"
                     strokeWidth="1.5"
                   />
                 )}
@@ -251,7 +251,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                       y1="1"
                       x2="1.5"
                       y2="12"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -260,7 +260,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                       y1="1"
                       x2="11.5"
                       y2="12"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -274,7 +274,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                       y1="1.5"
                       x2="12"
                       y2="1.5"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -283,7 +283,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
                       y1="11.5"
                       x2="12"
                       y2="11.5"
-                      stroke="#DBDEE8"
+                      stroke="currentColor"
                       strokeWidth="1.5"
                       strokeLinecap="round"
                     />
@@ -396,7 +396,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
           className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isGlowColorPickerOpen
               ? 'border-accent'
-              : 'border-line hover:border-line-strong'
+              : 'border-line'
           }`}
           style={getBatchGlowColorDisplay().style}
           title={getBatchGlowColorDisplay().label}

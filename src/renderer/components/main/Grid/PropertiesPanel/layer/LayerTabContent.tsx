@@ -598,7 +598,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                       <input
                         ref={actions.renameInputRef}
                         type="text"
-                        className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-[#3B82F6]"
+                        className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
                         value={actions.renameValue}
                         onChange={(e) => actions.setRenameValue(e.target.value)}
                         onBlur={() => {
@@ -734,7 +734,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                     <input
                       ref={actions.renameInputRef}
                       type="text"
-                      className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-[#3B82F6]"
+                      className="flex-1 text-body bg-transparent border-none p-0 outline-none text-fg min-w-0 caret-accent"
                       value={actions.renameValue}
                       onChange={(e) => actions.setRenameValue(e.target.value)}
                       onBlur={() => {

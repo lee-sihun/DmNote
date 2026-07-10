@@ -316,14 +316,14 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
             ref={colorButtonRef}
             type="button"
             className={`relative w-[80px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-              state.showPicker ? 'border-accent' : 'border-line'
+              state.showPicker ? 'shadow-focus-ring' : ''
             } text-fg text-style-2`}
             onClick={() =>
               setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
             }
           >
             <div
-              className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
+              className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
               style={renderColorPreview()}
             />
             <span className="ml-[16px] text-left">{colorLabel}</span>
@@ -347,7 +347,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               }))
             }
             onBlur={handleOpacityBlur}
-            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
           />
         </div>
 
@@ -375,7 +375,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               type="button"
               disabled={!state.glowEnabled}
               className={`relative w-[80px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
-                state.showGlowPicker ? 'border-accent' : 'border-line'
+                state.showGlowPicker ? 'shadow-focus-ring' : ''
               } text-fg text-style-2`}
               onClick={() => {
                 if (state.glowEnabled) {
@@ -387,7 +387,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               }}
             >
               <div
-                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
+                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px]"
                 style={renderGlowColorPreview()}
               />
               <span className="ml-[16px] text-left">{glowColorLabel}</span>
@@ -416,7 +416,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowSizeBlur}
-              className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
             />
           </div>
 
@@ -441,7 +441,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowOpacityBlur}
-              className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg"
             />
           </div>
         </div>
