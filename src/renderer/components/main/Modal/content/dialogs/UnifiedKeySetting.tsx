@@ -234,7 +234,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   return (
     <Modal onClick={handleClose} animate={!initialSkipRef.current}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pr-[14px]">
@@ -256,8 +256,8 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           <div
             className={`absolute top-0 left-0 ${
               hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-fast'
             } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
           />
 
@@ -292,8 +292,8 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
           <div
             className={`absolute bottom-0 left-0 ${
               hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-fast'
             } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
@@ -302,13 +302,13 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         <div className="flex gap-[10.5px] mt-[19px] pr-[14px]">
           <button
             onClick={handleSubmit}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="w-[150px] h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleClose}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
           >
             {t('keySetting.cancel')}
           </button>

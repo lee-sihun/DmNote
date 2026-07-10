@@ -264,25 +264,25 @@ const WebFontInputModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-[#1A191E] rounded-[10px] border border-[#2A2A30] overflow-hidden"
+        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-elevated rounded-[10px] border border-line overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="h-[37px] bg-[#2A2A30] border-b border-[#3A3943] px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-[4px] border border-[#3A3943] bg-[#1A191E] text-[10px] leading-[18px] font-semibold tracking-[0.2px] text-[#8CC2FF]">
+            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
               CSS
             </span>
-            <span className="truncate text-[12px] leading-[16px] text-[#DBDEE8]">
+            <span className="truncate text-body leading-[16px] text-fg">
               {detectedFontFileName}
             </span>
           </div>
-          <span className="text-[11px] leading-[14px] text-[#8A8D99]">
+          <span className="text-caption leading-[14px] text-fg-muted">
             {availabilityLabel}
           </span>
         </div>
 
         <div className="p-[12px] pb-[0px]">
-          <div className="w-full h-[220px] rounded-[8px] border border-[#3A3943] bg-[#1E1E1E] overflow-hidden">
+          <div className="w-full h-[220px] rounded-[8px] border border-line bg-inset overflow-hidden">
             <div
               ref={editorContainerRef}
               className="h-full webfont-cm-editor"
@@ -290,21 +290,21 @@ const WebFontInputModal = ({
           </div>
         </div>
 
-        <div className="h-[28px] mt-[10px] bg-[#2A2A30] border-t border-[#3A3943] px-[12px] flex items-center justify-between gap-[12px]">
-          <p className="truncate text-[11px] leading-[14px] text-[#8A8D99]">
+        <div className="h-[28px] mt-[10px] bg-surface border-t border-line px-[12px] flex items-center justify-between gap-[12px]">
+          <p className="truncate text-caption leading-[14px] text-fg-muted">
             {fixedHintMessage}
           </p>
-          <p className="shrink-0 text-[11px] leading-[14px] text-[#8A8D99]">
+          <p className="shrink-0 text-caption leading-[14px] text-fg-muted">
             Ctrl/Cmd + Enter
           </p>
         </div>
 
-        <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
+        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center justify-end gap-[10.5px]">
           <button
-            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 text-[#DCDEE7] transition-colors ${
+            className={`w-[120px] h-[30px] rounded-md text-style-3 text-fg transition-colors ${
               canSubmit
-                ? 'bg-[#2A2A30] hover:bg-[#34343c]'
-                : 'bg-[#222228] cursor-not-allowed opacity-50'
+                ? 'bg-white/[0.07] hover:bg-white/[0.1]'
+                : 'bg-white/[0.04] cursor-not-allowed opacity-50'
             }`}
             onClick={handleSubmit}
             disabled={!canSubmit}
@@ -312,7 +312,7 @@ const WebFontInputModal = ({
             {submitButtonLabel}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
+            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3 transition-colors"
             onClick={handleClose}
           >
             {t('common.cancel') || '취소'}

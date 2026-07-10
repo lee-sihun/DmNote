@@ -843,21 +843,21 @@ const CounterAnimationEditorModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-[#1A191E] rounded-[12px] border border-[#2A2A30] shadow-2xl overflow-hidden"
+        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-elevated rounded-[12px] border border-line shadow-2xl overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="h-[37px] bg-[#2A2A30] border-b border-[#3A3943] px-[12px] flex items-center justify-between">
+        <div className="h-[37px] bg-surface border-b border-line px-[12px] flex items-center justify-between">
           <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-[4px] border border-[#3A3943] bg-[#1A191E] text-[10px] leading-[18px] font-semibold tracking-[0.2px] text-[#8CC2FF]">
+            <span className="px-[6px] h-[18px] rounded-md border border-line bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
               Motion
             </span>
-            <span className="truncate text-[12px] leading-[16px] text-[#DBDEE8]">
+            <span className="truncate text-body leading-[16px] text-fg">
               {headerTitle}
             </span>
           </div>
         </div>
 
-        <div className="flex-1 p-[16px] flex gap-[16px] bg-[#121116] min-h-0">
+        <div className="flex-1 p-[16px] flex gap-[16px] bg-inset min-h-0">
           <div className="w-[390px] flex flex-col gap-[16px] min-h-0 shrink-0">
             <div>
               <input
@@ -867,14 +867,14 @@ const CounterAnimationEditorModal = ({
                 placeholder={
                   t('counterSetting.animationNamePlaceholder') || '모션 이름'
                 }
-                className="w-full h-[32px] px-[12px] rounded-[8px] border border-[#2A2A30] bg-[#0A0A0C] text-[12px] leading-[16px] text-[#DBDEE8] placeholder-[#5A5C66] outline-none focus:border-[#459BF8] focus:ring-1 focus:ring-[#459BF8]/20 transition-all font-medium shadow-inner"
+                className="w-full h-[32px] px-[12px] rounded-[8px] border border-line bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
               />
             </div>
 
-            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-[#1A191E] border border-[#2A2A30] shadow-sm min-h-0 items-center">
+            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-elevated border border-line shadow-sm min-h-0 items-center">
               <div className="shrink-0 flex flex-col">
                 <div
-                  className="rounded-[8px] border border-[#2A2A30] bg-[#0F0F13] overflow-hidden"
+                  className="rounded-[8px] border border-line bg-inset overflow-hidden"
                   style={{
                     width: `${TOTAL_SIZE + 16}px`,
                     height: `${TOTAL_SIZE + 16}px`,
@@ -1004,7 +1004,7 @@ const CounterAnimationEditorModal = ({
 
               <div className="flex-1 min-w-0 flex flex-col gap-[12px] justify-start pt-[2px]">
                 <div className="flex flex-col gap-[6px] [&>div]:w-full [&_button]:w-full">
-                  <label className="text-[11px] font-medium text-[#8A8D99]">
+                  <label className="text-caption font-medium text-fg-muted">
                     Preset
                   </label>
                   <Dropdown
@@ -1016,7 +1016,7 @@ const CounterAnimationEditorModal = ({
                 </div>
 
                 <div className="flex flex-col gap-[6px]">
-                  <label className="text-[11px] font-medium text-[#8A8D99]">
+                  <label className="text-caption font-medium text-fg-muted">
                     Cubic Bezier
                   </label>
                   <TextInput
@@ -1047,7 +1047,7 @@ const CounterAnimationEditorModal = ({
 
                 <div className="flex gap-[12px]">
                   <div className="flex-1 flex flex-col gap-[6px]">
-                    <label className="text-[11px] font-medium text-[#8A8D99]">
+                    <label className="text-caption font-medium text-fg-muted">
                       {t('counterSetting.scale') || '스케일'}
                     </label>
                     <NumberInput
@@ -1067,7 +1067,7 @@ const CounterAnimationEditorModal = ({
                   </div>
 
                   <div className="flex-1 flex flex-col gap-[6px]">
-                    <label className="text-[11px] font-medium text-[#8A8D99]">
+                    <label className="text-caption font-medium text-fg-muted">
                       {t('counterSetting.duration') || '지속 시간'}
                     </label>
                     <NumberInput
@@ -1088,15 +1088,15 @@ const CounterAnimationEditorModal = ({
             </div>
 
             {errorText ? (
-              <p className="text-[11px] leading-[14px] text-[#E6A7A7] mt-[-8px] ml-[2px]">
+              <p className="text-caption leading-[14px] text-danger-fg mt-[-8px] ml-[2px]">
                 {errorText}
               </p>
             ) : null}
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-[#0B0B0E] rounded-[10px] border border-[#2A2A30] overflow-hidden shadow-inner relative">
+          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-[10px] border border-line overflow-hidden shadow-inner relative">
             <div
-              className="flex-1 min-h-0 flex items-center justify-center relative bg-[#0F0F13] rounded-[10px] cursor-pointer select-none"
+              className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-[10px] cursor-pointer select-none"
               onPointerDown={handlePreviewPointerDown}
             >
               {previewCss && (
@@ -1343,7 +1343,7 @@ const CounterAnimationEditorModal = ({
                 })()}
               </div>
               <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
-                <span className="mb-2.5 text-white/70 text-[12px] font-medium tracking-wide">
+                <span className="mb-2.5 text-white/70 text-body font-medium tracking-wide">
                   {t('counterSetting.pressToPreview') || '눌러서 미리보기'}
                 </span>
               </div>
@@ -1351,7 +1351,7 @@ const CounterAnimationEditorModal = ({
           </div>
         </div>
 
-        <div className="bg-[#1A191E] border-t border-[#2A2A30] px-[12px] py-[10px] flex items-center gap-[10.5px]">
+        <div className="bg-elevated border-t border-line px-[12px] py-[10px] flex items-center gap-[10.5px]">
           <div className="flex items-center gap-1.5 mr-auto">
             <svg
               className="w-3.5 h-3.5 shrink-0"
@@ -1360,17 +1360,17 @@ const CounterAnimationEditorModal = ({
             >
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
-            <span className="text-[11px] text-[#8A8D99] tracking-wide">
+            <span className="text-caption text-fg-muted tracking-wide">
               {t('counterSetting.motionPerformanceNotice') ||
                 '모션 효과는 시스템 리소스를 추가로 사용합니다'}
             </span>
           </div>
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-[7px] text-style-3 transition-colors ${
+            className={`w-[120px] h-[30px] rounded-md text-style-3 transition-colors ${
               canSave
-                ? 'bg-[#2A2A30] text-[#DCDEE7] hover:bg-[#34343c]'
-                : 'bg-[#222228] text-[#777986] cursor-not-allowed'
+                ? 'bg-white/[0.07] text-fg hover:bg-white/[0.1]'
+                : 'bg-white/[0.04] text-fg-muted cursor-not-allowed'
             }`}
             disabled={!canSave}
             onClick={() => {
@@ -1383,7 +1383,7 @@ const CounterAnimationEditorModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3 transition-colors"
+            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3 transition-colors"
             onClick={onClose}
           >
             {t('common.cancel') || '취소'}

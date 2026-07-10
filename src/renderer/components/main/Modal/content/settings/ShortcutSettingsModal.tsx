@@ -371,7 +371,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[320px] bg-elevated rounded-xl border-[1px] border-line p-[20px] pr-[6px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -385,8 +385,8 @@ const ShortcutSettingsModal = ({
           <div
             className={`absolute top-0 left-0 ${
               hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-b from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } h-[10px] bg-gradient-to-b from-elevated to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-fast'
             } ${scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'}`}
           />
 
@@ -417,10 +417,10 @@ const ShortcutSettingsModal = ({
             <div ref={contentRef} className="flex flex-col gap-[28px] py-[4px]">
               <div className="flex flex-col gap-[19px]">
                 <div className="flex items-center gap-[10px]">
-                  <p className="text-[12px] font-medium text-[#9A9DA8] uppercase tracking-wider whitespace-nowrap">
+                  <p className="text-body font-medium text-fg-muted uppercase tracking-wider whitespace-nowrap">
                     {t('shortcutSetting.sectionOverlay')}
                   </p>
-                  <div className="flex-1 h-[1px] bg-[#2A2A30]" />
+                  <div className="flex-1 h-[1px] bg-line" />
                 </div>
                 <div className="flex flex-col gap-[19px]">
                   {overlayActions.map((action) => {
@@ -459,11 +459,11 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
                             isRowListening
-                              ? 'border-[#459BF8]'
-                              : 'border-[#3A3943]'
-                          } text-[#DBDEE8] text-style-2`}
+                              ? 'border-accent'
+                              : 'border-line'
+                          } text-fg text-style-2`}
                         >
                           {display}
                         </button>
@@ -475,10 +475,10 @@ const ShortcutSettingsModal = ({
 
               <div className="flex flex-col gap-[19px]">
                 <div className="flex items-center gap-[10px]">
-                  <p className="text-[12px] font-medium text-[#9A9DA8] uppercase tracking-wider whitespace-nowrap">
+                  <p className="text-body font-medium text-fg-muted uppercase tracking-wider whitespace-nowrap">
                     {t('shortcutSetting.sectionCanvas')}
                   </p>
-                  <div className="flex-1 h-[1px] bg-[#2A2A30]" />
+                  <div className="flex-1 h-[1px] bg-line" />
                 </div>
                 <div className="flex flex-col gap-[19px]">
                   {canvasActions.map((action) => {
@@ -517,11 +517,11 @@ const ShortcutSettingsModal = ({
                               [action.key]: { key: '' },
                             }));
                           }}
-                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
+                          className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
                             isRowListening
-                              ? 'border-[#459BF8]'
-                              : 'border-[#3A3943]'
-                          } text-[#DBDEE8] text-style-2`}
+                              ? 'border-accent'
+                              : 'border-line'
+                          } text-fg text-style-2`}
                         >
                           {display}
                         </button>
@@ -536,21 +536,21 @@ const ShortcutSettingsModal = ({
           <div
             className={`absolute bottom-0 left-0 ${
               hasOverflow ? 'right-[14px]' : 'right-0'
-            } h-[10px] bg-gradient-to-t from-[#1A191E] to-transparent pointer-events-none z-10 ${
-              skipShadowTransition ? '' : 'transition-opacity duration-150'
+            } h-[10px] bg-gradient-to-t from-elevated to-transparent pointer-events-none z-10 ${
+              skipShadowTransition ? '' : 'transition-opacity duration-fast'
             } ${scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
 
         {error ? (
-          <div className="mt-[12px] px-[10px] py-[8px] bg-[#401C1D] rounded-[7px] text-[12px] text-[#E8DBDB] pr-[14px]">
+          <div className="mt-[12px] px-[10px] py-[8px] bg-danger-muted rounded-md text-body text-danger-fg pr-[14px]">
             {error}
           </div>
         ) : null}
 
         <div className="flex gap-[8px] mt-[19px] pr-[14px]">
           <button
-            className="flex-1 h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="flex-1 h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
             onClick={handleSave}
             disabled={isListening}
             style={
@@ -560,7 +560,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.save')}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="px-[24px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
             onClick={onClose}
             disabled={isListening}
             style={
@@ -570,7 +570,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.cancel')}
           </button>
           {/* <button
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
             onClick={handleReset}
             disabled={isListening}
             style={

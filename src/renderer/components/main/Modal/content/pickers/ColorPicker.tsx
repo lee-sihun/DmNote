@@ -782,7 +782,7 @@ const ColorPickerWrapper = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line"
       >
         {showStateSwitch && (
           <StateSwitch state={stateMode} onChange={onStateModeChange} />
@@ -995,7 +995,7 @@ function ColorPaletteSection({
   }
 
   return (
-    <div className="flex flex-col gap-[6px] pt-[8px] border-t border-[#2A2A30]">
+    <div className="flex flex-col gap-[6px] pt-[8px] border-t border-line">
       {/* 솔리드 팔레트 */}
       <div className="flex gap-[4px] justify-between">
         {filledSolid.map((color, index) => (
@@ -1044,7 +1044,7 @@ function PaletteSlot({
   // 배경 스타일 계산
   const getBackgroundStyle = (): React.CSSProperties => {
     if (isEmpty) {
-      return { backgroundColor: '#2A2A30' };
+      return { backgroundColor: 'var(--ui-bg-surface)' };
     }
 
     if (
@@ -1069,7 +1069,7 @@ function PaletteSlot({
       return { backgroundColor: color.startsWith('#') ? color : `#${color}` };
     }
 
-    return { backgroundColor: '#2A2A30' };
+    return { backgroundColor: 'var(--ui-bg-surface)' };
   };
 
   // 툴팁 텍스트 생성
@@ -1116,10 +1116,10 @@ function PaletteSlot({
   return (
     <button
       type="button"
-      className={`w-[22px] h-[22px] rounded-[7px] border transition-colors ${
+      className={`w-[22px] h-[22px] rounded-md border transition-colors ${
         isEmpty
-          ? 'border-[#3A3943] cursor-default'
-          : 'border-[#3A3943] cursor-pointer'
+          ? 'border-line cursor-default'
+          : 'border-line cursor-pointer'
       }`}
       style={getBackgroundStyle()}
       onClick={isEmpty ? undefined : onClick}
@@ -1148,10 +1148,10 @@ function StateSwitch({ state, onChange }: StateSwitchProps) {
         <button
           key={item.key}
           type="button"
-          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-[7px] text-style-4 text-[#DBDEE8] transition-colors ${
+          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
             state === item.key
-              ? 'bg-[#2E2D33] text-[#FFFFFF]'
-              : 'hover:bg-[#303036] text-[#6F6E7A]'
+              ? 'bg-surface-active text-fg'
+              : 'hover:bg-white/[0.1] text-fg-faint'
           }`}
           onClick={() => onChange?.(item.key)}
         >
@@ -1180,10 +1180,10 @@ function ModeSwitch({ mode, onChange }: ModeSwitchProps) {
         <button
           key={item.key}
           type="button"
-          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-[7px] text-style-4 text-[#DBDEE8] transition-colors ${
+          className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
             mode === item.key
-              ? 'bg-[#2E2D33] text-[#FFFFFF]'
-              : 'hover:bg-[#303036] text-[#6F6E7A]'
+              ? 'bg-surface-active text-fg'
+              : 'hover:bg-white/[0.1] text-fg-faint'
           }`}
           onClick={() => onChange?.(item.key)}
         >
@@ -1238,7 +1238,7 @@ const Input = ({
     <div className="flex items-center gap-[6px] w-full">
       <div className="relative flex-1 min-w-0">
         <div
-          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-line"
           style={{ background: rgbaPreview }}
         />
         <input
@@ -1251,7 +1251,7 @@ const Input = ({
               onValueCommit?.();
             }
           }}
-          className="pl-[23px] text-left w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8] uppercase pt-[1px] leading-[23px]"
+          className="pl-[23px] text-left w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg uppercase pt-[1px] leading-[23px]"
         />
       </div>
 
@@ -1274,7 +1274,7 @@ const Input = ({
                 event.currentTarget.blur();
               }
             }}
-            className="px-[6px] text-center w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8] pt-[1px] leading-[23px]"
+            className="px-[6px] text-center w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg pt-[1px] leading-[23px]"
           />
         </div>
       )}
@@ -1396,7 +1396,7 @@ function GradientInput({
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
             if (e.key === 'Enter') onSelect?.();
           }}
-          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+          className="absolute left-[6px] top-[7px] w-[11px] h-[11px] rounded-[2px] border border-line"
           style={{
             background: value ? `#${value}` : '#561ecb',
           }}
@@ -1415,10 +1415,10 @@ function GradientInput({
             }
           }}
           placeholder={label}
-          className={`pl-[23px] text-left w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] text-style-4 text-[#DBDEE8] uppercase pt-[1px] leading-[23px] ${
+          className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md border-[1px] text-style-4 text-fg uppercase pt-[1px] leading-[23px] ${
             selected
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] focus:border-[#459BF8]'
+              ? 'border-accent'
+              : 'border-line focus:border-accent'
           }`}
         />
       </div>
@@ -1441,8 +1441,8 @@ function GradientInput({
                 event.currentTarget.blur();
               }
             }}
-            className={`px-[6px] text-center w-full h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8] pt-[1px] leading-[23px] ${
-              rightFocused ? 'border-[#459BF8]' : ''
+            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg pt-[1px] leading-[23px] ${
+              rightFocused ? 'border-accent' : ''
             }`}
             title={rightTitle}
           />

@@ -157,14 +157,14 @@ const CounterTabContent = forwardRef<
 
   // 컬러 버튼 스타일
   const colorButtonClass = (active: boolean) =>
-    `relative px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-      active ? 'border-[#459BF8]' : 'border-[#3A3943]'
-    } text-[#DBDEE8] text-style-2`;
+    `relative px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+      active ? 'border-accent' : 'border-line'
+    } text-fg text-style-2`;
 
   // 컬러 프리뷰 박스
   const renderColorSquare = (style: React.CSSProperties) => (
     <div
-      className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+      className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
       style={style}
     />
   );
@@ -339,7 +339,7 @@ const CounterTabContent = forwardRef<
             }))
           }
           onBlur={handleGapBlur}
-          className="text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+          className="text-center h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
           style={{
             width: alignDropdownWidth ? `${alignDropdownWidth}px` : undefined,
           }}
@@ -412,7 +412,7 @@ const CounterTabContent = forwardRef<
         </div>
       </div>
 
-      <div className="h-px w-full bg-[#2A2A30]" />
+      <div className="h-px w-full bg-line" />
 
       {/* 카운터 사용 */}
       <div className="flex justify-between w-full items-center">

@@ -243,14 +243,14 @@ export default function CommonListPickerPopup<T>({
     >
       <div
         ref={containerCallbackRef}
-        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]`.trim()}
+        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-elevated rounded-xl border-[1px] border-line`.trim()}
       >
         <input
           type="text"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-[23px] px-[8px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] text-[#DBDEE8] text-style-2 placeholder-[#6F6E7A] focus:border-[#459BF8] outline-none"
+          className="w-full h-[23px] px-[8px] bg-inset rounded-md border-[1px] border-line text-fg text-style-2 placeholder-fg-faint focus:border-accent outline-none"
         />
 
         {filterOptions && filterValue !== undefined && onFilterChange ? (
@@ -262,7 +262,7 @@ export default function CommonListPickerPopup<T>({
           />
         ) : null}
 
-        <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         <div
           ref={scrollRef}
@@ -287,7 +287,7 @@ export default function CommonListPickerPopup<T>({
             }
           >
             {items.length === 0 ? (
-              <div className="flex items-center justify-center py-[10px] text-[#6F6E7A] text-style-4">
+              <div className="flex items-center justify-center py-[10px] text-fg-faint text-style-4">
                 {emptyText}
               </div>
             ) : (
@@ -314,25 +314,25 @@ export default function CommonListPickerPopup<T>({
           </div>
         </div>
 
-        <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         <button
           ref={addButtonRef}
           type="button"
-          className="w-full h-[23px] flex items-center justify-center rounded-[7px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] transition-colors"
+          className="w-full h-[23px] flex items-center justify-center rounded-md bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] transition-colors"
           onClick={onAdd}
         >
           {addButtonContent}
         </button>
 
         {isLoading ? (
-          <p className="text-[#9FA3B2] text-style-4 text-center">
+          <p className="text-fg-muted text-style-4 text-center">
             {loadingText}
           </p>
         ) : null}
 
         {errorText ? (
-          <p className="text-[#E6A7A7] text-style-4 text-center">{errorText}</p>
+          <p className="text-danger-fg text-style-4 text-center">{errorText}</p>
         ) : null}
       </div>
     </FloatingPopup>

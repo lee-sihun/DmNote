@@ -16,7 +16,7 @@ const ADVANCED_TAB = 'advanced' as const;
 type TabId = typeof NOTE_TAB | typeof ADVANCED_TAB;
 
 const INPUT_CLASS =
-  'text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]';
+  'text-center h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg';
 
 function sanitizeNumericValue(
   value: string | number | undefined,
@@ -272,7 +272,7 @@ const NoteSetting = ({
         </p>
         <div className="flex items-center gap-[10.5px]">
           <div
-            className="relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]"
+            className="relative h-[23px] bg-inset rounded-md border-[1px] border-line"
             style={{ width: '54px' }}
           >
             <svg
@@ -311,11 +311,11 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeTopPx, 'fadeTopPx')),
                   );
               }}
-              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-center"
+              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-center"
             />
           </div>
           <div
-            className="relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943]"
+            className="relative h-[23px] bg-inset rounded-md border-[1px] border-line"
             style={{ width: '54px' }}
           >
             <svg
@@ -354,7 +354,7 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx')),
                   );
               }}
-              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-center"
+              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-center"
             />
           </div>
         </div>
@@ -416,7 +416,7 @@ const NoteSetting = ({
         />
       </div>
 
-      <div className="w-full h-[1px] bg-[#2A2A30]" />
+      <div className="w-full h-[1px] bg-line" />
 
       <div className="flex justify-between w-full items-center">
         <p className="text-white text-style-2">{t('laboratory.keyDelay')}</p>
@@ -438,12 +438,12 @@ const NoteSetting = ({
       </div>
 
       <div className="flex justify-between w-full items-center">
-        <p className="text-[#717178] text-style-4">
+        <p className="text-fg-faint text-style-4">
           {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
         </p>
         <button
           onClick={handleAutoCalculate}
-          className="px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-4"
+          className="px-[10px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-4"
         >
           {t('laboratory.autoCalc')}
         </button>
@@ -454,7 +454,7 @@ const NoteSetting = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px]"
+        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
         {title && <p className="text-white text-style-2 mb-[10px]">{title}</p>}
@@ -477,7 +477,7 @@ const NoteSetting = ({
           className={`${isAnimating ? 'overflow-hidden' : ''} ${
             disableHeightTransition
               ? ''
-              : 'transition-[height] duration-100 ease-in-out'
+              : 'transition-[height] duration-fast ease-in-out'
           }`}
           style={{
             height:
@@ -497,13 +497,13 @@ const NoteSetting = ({
         <div className="flex gap-[10.5px] mt-[19px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="w-[150px] h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
           >
             {t('noteSetting.save')}
           </button>
           <button
             onClick={onClose}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
           >
             {t('noteSetting.cancel')}
           </button>

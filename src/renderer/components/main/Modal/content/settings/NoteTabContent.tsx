@@ -315,15 +315,15 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
           <button
             ref={colorButtonRef}
             type="button"
-            className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-2`}
+            className={`relative w-[80px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+              state.showPicker ? 'border-accent' : 'border-line'
+            } text-fg text-style-2`}
             onClick={() =>
               setState((prev) => ({ ...prev, showPicker: !prev.showPicker }))
             }
           >
             <div
-              className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+              className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
               style={renderColorPreview()}
             />
             <span className="ml-[16px] text-left">{colorLabel}</span>
@@ -347,11 +347,11 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               }))
             }
             onBlur={handleOpacityBlur}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
           />
         </div>
 
-        <div className="h-px w-full bg-[#2A2A30]" />
+        <div className="h-px w-full bg-line" />
 
         {/* 글로우 */}
         <div className="flex flex-col gap-[19px]">
@@ -374,9 +374,9 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               ref={glowColorButtonRef}
               type="button"
               disabled={!state.glowEnabled}
-              className={`relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                state.showGlowPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-2`}
+              className={`relative w-[80px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                state.showGlowPicker ? 'border-accent' : 'border-line'
+              } text-fg text-style-2`}
               onClick={() => {
                 if (state.glowEnabled) {
                   setState((prev) => ({
@@ -387,7 +387,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
               }}
             >
               <div
-                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]"
+                className="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-line"
                 style={renderGlowColorPreview()}
               />
               <span className="ml-[16px] text-left">{glowColorLabel}</span>
@@ -416,7 +416,7 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowSizeBlur}
-              className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
             />
           </div>
 
@@ -441,12 +441,12 @@ const NoteTabContent = forwardRef<NoteTabContentRef, NoteTabContentProps>(
                 }))
               }
               onBlur={handleGlowOpacityBlur}
-              className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
             />
           </div>
         </div>
 
-        <div className="h-px w-full bg-[#2A2A30]" />
+        <div className="h-px w-full bg-line" />
 
         {/* 노트 효과 사용 */}
         <div className="flex justify-between w-full items-center">

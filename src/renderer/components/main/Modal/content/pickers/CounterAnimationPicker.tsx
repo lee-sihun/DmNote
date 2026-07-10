@@ -286,10 +286,10 @@ const CounterAnimationPicker = ({
                   handlePresetSelect(preset);
                 }
               }}
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C]'
+                  ? 'bg-surface-active text-fg'
+                  : 'text-fg hover:bg-surface-hover'
               }`}
               title={displayName}
             >
@@ -300,14 +300,14 @@ const CounterAnimationPicker = ({
               {isUserPreset ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
+                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
                     isSelected || actionMenuPresetId === preset.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100'
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF] hover:bg-[#3A3943]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8] hover:bg-[#2A2A30]'
+                      ? 'text-fg hover:text-fg hover:bg-surface-active'
+                      : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}

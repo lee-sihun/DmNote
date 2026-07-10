@@ -186,7 +186,7 @@ const ImagePicker = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-elevated rounded-xl border-[1px] border-line"
       >
         {/* 모드 전환 버튼 */}
         <div className="flex gap-[6px] max-w-full">
@@ -197,10 +197,10 @@ const ImagePicker = ({
             <button
               key={item.key}
               type="button"
-              className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-[7px] text-style-4 text-[#DBDEE8] transition-colors ${
+              className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
                 mode === item.key
-                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
-                  : 'hover:bg-[#303036] text-[#6F6E7A]'
+                  ? 'bg-surface-active text-fg'
+                  : 'hover:bg-white/[0.1] text-fg-faint'
               }`}
               onClick={() => setMode(item.key)}
             >
@@ -210,7 +210,7 @@ const ImagePicker = ({
         </div>
 
         {/* 이미지 미리보기 영역 */}
-        <div className="relative w-[129px] h-[64px] rounded-[7px] border-[1px] border-[#3A3943] overflow-hidden cursor-pointer group">
+        <div className="relative w-[129px] h-[64px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer group">
           {/* 투명 격자 배경 */}
           <div
             className="absolute inset-0"
@@ -247,7 +247,7 @@ const ImagePicker = ({
         </div>
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         {/* 키 투명화 토글 */}
         <div className="flex justify-between items-center w-full">
@@ -292,12 +292,12 @@ const ImagePicker = ({
         )}
 
         {/* 구분선 */}
-        <div className="h-[1px] bg-[#2A2A30] -mx-[8px]" />
+        <div className="h-[1px] bg-line -mx-[8px]" />
 
         {/* 이미지 초기화 버튼 */}
         <button
           onClick={handleReset}
-          className="w-full h-[23px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-2 transition-colors"
+          className="w-full h-[23px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-2 transition-colors"
         >
           {t('imagePicker.reset')}
         </button>

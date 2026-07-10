@@ -230,10 +230,10 @@ const SoundPicker = ({
                   ? (event) => menu.openFromContextMenu(event, item.soundPath)
                   : undefined
               }
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF]'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C]'
+                  ? 'bg-surface-active text-fg'
+                  : 'text-fg hover:bg-surface-hover'
               }`}
               title={displayName}
             >
@@ -241,7 +241,7 @@ const SoundPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-[#FFFFFF] caret-[#3B82F6]"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-[#3B82F6]"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -271,14 +271,14 @@ const SoundPicker = ({
               {isLocal ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
+                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
                     isSelected || menu.menuKey === item.soundPath
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8]'
+                      ? 'text-fg hover:text-fg'
+                      : 'text-fg-muted hover:text-fg'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}

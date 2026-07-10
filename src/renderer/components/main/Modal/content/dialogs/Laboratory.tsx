@@ -83,7 +83,7 @@ const LaboratoryModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] gap-[19px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col items-center justify-center p-[20px] bg-elevated rounded-xl gap-[19px] border-[1px] border-line"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">
@@ -111,7 +111,7 @@ const LaboratoryModal = ({
               );
               setMinimum(String(sanitized));
             }}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
           />
         </div>
 
@@ -130,12 +130,12 @@ const LaboratoryModal = ({
               );
               setThreshold(String(sanitized));
             }}
-            className="text-center w-[47px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+            className="text-center w-[47px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
           />
         </div>
 
         {/* 구분선 */}
-        <div className="w-full h-[1px] bg-[#2A2A30]" />
+        <div className="w-full h-[1px] bg-line" />
 
         {/* 키 딜레이 설정 */}
         <div className="flex justify-between w-full items-center">
@@ -154,18 +154,18 @@ const LaboratoryModal = ({
                 );
                 setKeyDelay(String(sanitized));
               }}
-              className="text-center w-[55px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[55px] h-[23px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
             />
           </div>
         </div>
 
         <div className="flex justify-between w-full items-center">
-          <p className="text-[#717178] text-style-4">
+          <p className="text-fg-faint text-style-4">
             {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
           </p>
           <button
             onClick={handleAutoCalculate}
-            className="px-[10px] h-[23px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-4"
+            className="px-[10px] h-[23px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-4"
           >
             {t('laboratory.autoCalc')}
           </button>
@@ -174,13 +174,13 @@ const LaboratoryModal = ({
         <div className="flex gap-[10.5px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="w-[150px] h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
           >
             {t('laboratory.save')}
           </button>
           <button
             onClick={onClose}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
           >
             {t('laboratory.cancel')}
           </button>

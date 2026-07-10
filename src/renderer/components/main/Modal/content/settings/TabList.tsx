@@ -113,10 +113,10 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center max-w-[154px] bg-button-primary rounded-[7px] border border-button-hover">
+    <div className="flex flex-col items-center justify-center max-w-[154px] bg-button-primary rounded-md border border-button-hover">
       <div className="min-h-[39px] w-full border-b-[1px] border-button-hover flex flex-col items-center justify-center p-[8px] gap-[8px]">
         {customTabs.length === 0 ? (
-          <span className="text-style-2 text-[#DBDEE8]">{t('tabs.empty')}</span>
+          <span className="text-style-2 text-fg">{t('tabs.empty')}</span>
         ) : (
           <div
             ref={scrollRef}
@@ -147,7 +147,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
                 .map((tab) => (
                   <button
                     key={tab.id}
-                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-button-hover active:bg-button-active ${
+                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-md text-style-2 text-fg hover:bg-button-hover active:bg-button-active ${
                       selectedKeyType === tab.id ? 'bg-button-hover' : ''
                     }`}
                     onClick={() => handleSelect(tab.id)}
@@ -162,7 +162,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
       <div className="flex flex-row p-[8px] w-[154px] gap-[8px]">
         {!maxReached && (
           <button
-            className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] bg-button-hover hover:bg-button-active active:bg-[#333333]"
+            className="flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-md bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]"
             onClick={() => setShowNameModal(true)}
           >
             <PlusIcon />
@@ -170,9 +170,9 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
         )}
         {customTabs.length > 0 && (
           <button
-            className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-[7px] ${
+            className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-md ${
               isCustomSelected
-                ? 'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929]'
+                ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)]'
                 : 'bg-button-hover opacity-50 cursor-not-allowed'
             }`}
             disabled={!isCustomSelected}

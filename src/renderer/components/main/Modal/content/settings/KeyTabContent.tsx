@@ -234,9 +234,9 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           </p>
           <button
             onClick={handleKeyListen}
-            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-              state.isListening ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-2`}
+            className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8.5px] bg-inset rounded-md border-[1px] ${
+              state.isListening ? 'border-accent' : 'border-line'
+            } text-fg text-style-2`}
           >
             {state.isListening
               ? t('keySetting.pressAnyKey')
@@ -249,11 +249,11 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           <p className="text-white text-style-2">{t('keySetting.keySize')}</p>
           <div className="flex items-center gap-[10.5px]">
             <div
-              className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.widthFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+              className={`relative w-[54px] h-[23px] bg-inset rounded-md border-[1px] ${
+                state.widthFocused ? 'border-accent' : 'border-line'
               }`}
             >
-              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
                 X
               </span>
               <input
@@ -273,15 +273,15 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
                     return { ...prev, width: finalVal, widthFocused: false };
                   });
                 }}
-                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
+                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-left"
               />
             </div>
             <div
-              className={`relative w-[54px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-                state.heightFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+              className={`relative w-[54px] h-[23px] bg-inset rounded-md border-[1px] ${
+                state.heightFocused ? 'border-accent' : 'border-line'
               }`}
             >
-              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+              <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
                 Y
               </span>
               <input
@@ -301,7 +301,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
                     return { ...prev, height: finalVal, heightFocused: false };
                   });
                 }}
-                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-[#DBDEE8] text-left"
+                className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-left"
               />
             </div>
           </div>
@@ -315,9 +315,9 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
           <button
             ref={imageButtonRef}
             type="button"
-            className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-              state.showImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-            } text-[#DBDEE8] text-style-4`}
+            className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+              state.showImagePicker ? 'border-accent' : 'border-line'
+            } text-fg text-style-4`}
             onClick={() =>
               setState((prev) => ({
                 ...prev,
@@ -340,7 +340,7 @@ const KeyTabContent = forwardRef<KeyTabContentRef, KeyTabContentProps>(
               value={state.className}
               onChange={handleClassNameChange}
               placeholder="className"
-              className="text-center w-[90px] h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8]"
+              className="text-center w-[90px] h-[23px] p-[6px] bg-inset rounded-md border-[1px] border-line focus:border-accent text-style-4 text-fg"
             />
           </div>
         )}

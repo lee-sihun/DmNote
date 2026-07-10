@@ -64,10 +64,10 @@ const TabNameModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30]"
+        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-elevated rounded-xl border-[1px] border-line"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-style-3 text-[#FFFFFF]">
+        <div className="text-style-3 text-fg">
           {t('tabs.createTitle')}
         </div>
         <input
@@ -77,21 +77,21 @@ const TabNameModal = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit();
           }}
-          className="w-full min-w-0 h-[30px] px-[12px] rounded-[7px] bg-[#2A2A30] text-[#DCDEE7] text-style-3 border-[1px] border-[#3A3943] focus:border-[#459BF8]"
+          className="w-full min-w-0 h-[30px] px-[12px] rounded-md bg-inset text-fg text-style-3 border-[1px] border-line focus:border-accent"
           placeholder={t('tabs.name.placeholder')}
         />
         {error && (
-          <div className="text-[#ED6A5E] text-style-1 my-[-12px]">{error}</div>
+          <div className="text-danger text-style-1 my-[-12px]">{error}</div>
         )}
-        <div className="flex gap-[10.5px]">
+        <div className="flex gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="flex-1 h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
             onClick={handleSubmit}
           >
             {t('tabs.create')}
           </button>
           <button
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
             onClick={onClose}
           >
             {t('common.cancel')}

@@ -137,7 +137,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   return (
     <Modal onClick={handleCancel}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] gap-[19px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-elevated rounded-xl border-[1px] border-line gap-[19px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* CSS 사용 여부 토글 */}
@@ -154,10 +154,10 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleClearCss}
               disabled={isLoading || !hasTabCss}
-              className={`px-[7px] h-[23px] rounded-[7px] border-[1px] flex items-center justify-center text-style-4 ${
+              className={`px-[7px] h-[23px] rounded-md border-[1px] flex items-center justify-center text-style-4 ${
                 hasTabCss
-                  ? 'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] border-[#4A2A2A] text-[#E6DBDB]'
-                  : 'bg-[#2A2A30] border-[#3A3943] text-[#6B6D77] cursor-not-allowed'
+                  ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] border-[rgba(229,72,77,0.3)] text-danger-fg'
+                  : 'bg-white/[0.04] border-line text-fg-disabled cursor-not-allowed'
               }`}
             >
               {t('tabCss.remove')}
@@ -166,7 +166,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleLoadCss}
               disabled={isLoading}
-              className="px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-4 hover:bg-[#303036] active:bg-[#393941]"
+              className="px-[7px] h-[23px] bg-white/[0.07] rounded-md border-[1px] border-line flex items-center justify-center text-fg text-style-4 hover:bg-white/[0.1] active:bg-white/[0.13]"
             >
               {t('tabCss.loadFile')}
             </button>
@@ -177,13 +177,13 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
         <div className="flex gap-[10.5px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] rounded-[7px] text-[#DCDEE7] text-style-3"
+            className="w-[150px] h-[30px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] rounded-md text-fg text-style-3"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleCancel}
-            className="w-[75px] h-[30px] bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] rounded-[7px] text-[#E6DBDB] text-style-3"
+            className="w-[75px] h-[30px] bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] rounded-md text-danger-fg text-style-3"
           >
             {t('keySetting.cancel')}
           </button>

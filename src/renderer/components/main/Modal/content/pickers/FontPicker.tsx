@@ -349,12 +349,12 @@ const FontPicker = ({
                   ? (event) => menu.openFromContextMenu(event, font.id)
                   : undefined
               }
-              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] group ${
+              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] group ${
                 isSelected
-                  ? 'bg-[#2E2D33] text-[#FFFFFF] cursor-pointer'
+                  ? 'bg-surface-active text-fg cursor-pointer'
                   : isDisabled
-                  ? 'text-[#6F6E7A] hover:bg-[#26262C] cursor-default'
-                  : 'text-[#DBDEE8] hover:bg-[#26262C] cursor-pointer'
+                  ? 'text-fg-faint hover:bg-surface-hover cursor-default'
+                  : 'text-fg hover:bg-surface-hover cursor-pointer'
               }`}
               title={font.displayName}
             >
@@ -362,7 +362,7 @@ const FontPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-[#FFFFFF] caret-[#3B82F6]"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-[#3B82F6]"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -395,14 +395,14 @@ const FontPicker = ({
               {isCustom ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
+                  className={`w-[18px] h-[18px] rounded-md transition-all flex items-center justify-center shrink-0 ${
                     isSelected || menu.menuKey === font.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                   } ${
                     isSelected
-                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF]'
-                      : 'text-[#8A8D99] hover:text-[#DBDEE8]'
+                      ? 'text-fg hover:text-fg'
+                      : 'text-fg-muted hover:text-fg'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
@@ -488,10 +488,10 @@ const FontPicker = ({
           fallback={
             <Modal onClick={() => setWebFontModal(null)}>
               <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-[#1A191E] rounded-[10px] border border-[#2A2A30]"
+                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-[10px] border border-line"
                 onClick={(event) => event.stopPropagation()}
               >
-                <p className="text-[12px] leading-[16px] text-[#8A8D99]">
+                <p className="text-body leading-[16px] text-fg-muted">
                   로딩 중...
                 </p>
               </div>

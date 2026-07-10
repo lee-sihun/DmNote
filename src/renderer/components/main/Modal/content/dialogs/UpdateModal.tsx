@@ -81,7 +81,7 @@ const UpdateModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="flex flex-col bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] min-w-[320px] max-w-[400px]"
+        className="flex flex-col bg-elevated rounded-xl border-[1px] border-line p-[20px] min-w-[320px] max-w-[400px]"
         onClick={(e) => e.stopPropagation()}
       >
         {isLatestVersion ? (
@@ -89,7 +89,7 @@ const UpdateModal = ({
           <>
             {/* 헤더 */}
             <div className="flex items-center gap-[10px] mb-[16px]">
-              <div className="w-[32px] h-[32px] rounded-full bg-[#274E39] flex items-center justify-center">
+              <div className="w-[32px] h-[32px] rounded-full bg-success-muted flex items-center justify-center">
                 <svg
                   width="16"
                   height="16"
@@ -104,19 +104,19 @@ const UpdateModal = ({
                 </svg>
               </div>
               <div>
-                <h2 className="text-[#FFFFFF] text-[14px] font-medium">
+                <h2 className="text-fg text-label font-medium">
                   {t('update.latestAlready')}
                 </h2>
               </div>
             </div>
 
             {/* 버전 정보 */}
-            <div className="bg-[#222127] rounded-[8px] p-[12px] mb-[16px] border-[1px] border-[#2F2E36]">
+            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px] border-[1px] border-line">
               <div className="flex justify-between items-center">
-                <span className="text-[#8A8A8A] text-[12px]">
+                <span className="text-fg-muted text-body">
                   {t('update.currentVersion')}
                 </span>
-                <span className="text-[#61AF85] text-[12px] font-mono font-medium">
+                <span className="text-success text-body font-mono font-medium">
                   {updateInfo.currentVersion}
                 </span>
               </div>
@@ -126,15 +126,15 @@ const UpdateModal = ({
             <div className="flex gap-[10px]">
               <button
                 onClick={handleGoToRelease}
-                className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46]
-                           rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors"
+                className="flex-1 h-[32px] bg-accent hover:bg-accent-hover active:bg-accent-active
+                           rounded-lg text-accent-fg text-body font-medium transition-colors"
               >
                 {t('update.goToRelease')}
               </button>
               <button
                 onClick={onClose}
-                className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
-                           rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
+                className="w-[80px] h-[32px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]
+                           rounded-md text-fg text-body transition-colors"
               >
                 {t('common.confirm')}
               </button>
@@ -145,7 +145,7 @@ const UpdateModal = ({
           <>
             {/* 헤더 */}
             <div className="flex items-center gap-[10px] mb-[16px]">
-              <div className="w-[32px] h-[32px] rounded-full bg-[#274E39] flex items-center justify-center">
+              <div className="w-[32px] h-[32px] rounded-full bg-success-muted flex items-center justify-center">
                 <svg
                   width="14"
                   height="16"
@@ -167,30 +167,30 @@ const UpdateModal = ({
                 </svg>
               </div>
               <div>
-                <h2 className="text-[#FFFFFF] text-[14px] font-medium">
+                <h2 className="text-fg text-label font-medium">
                   {t('update.title')}
                 </h2>
-                <p className="text-[#8A8A8A] text-[11px]">
+                <p className="text-fg-muted text-caption">
                   {formatDate(updateInfo.publishedAt)}
                 </p>
               </div>
             </div>
 
             {/* 버전 정보 */}
-            <div className="bg-[#222127] rounded-[8px] p-[12px] mb-[16px] border-[1px] border-[#2F2E36]">
+            <div className="bg-inset rounded-[8px] p-[12px] mb-[16px] border-[1px] border-line">
               <div className="flex justify-between items-center mb-[8px]">
-                <span className="text-[#8A8A8A] text-[12px]">
+                <span className="text-fg-muted text-body">
                   {t('update.currentVersion')}
                 </span>
-                <span className="text-[#FFFFFF] text-[12px] font-mono">
+                <span className="text-fg text-body font-mono">
                   {updateInfo.currentVersion}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-[#8A8A8A] text-[12px]">
+                <span className="text-fg-muted text-body">
                   {t('update.latestVersion')}
                 </span>
-                <span className="text-[#61AF85] text-[12px] font-mono font-medium">
+                <span className="text-success text-body font-mono font-medium">
                   {updateInfo.latestVersion}
                 </span>
               </div>
@@ -202,15 +202,15 @@ const UpdateModal = ({
                 type="checkbox"
                 checked={skipChecked}
                 onChange={(e) => setSkipChecked(e.target.checked)}
-                className="w-[14px] h-[14px] rounded-[3px] border border-[#3A3A40] bg-[#222127] 
-                           checked:bg-[#4A4A52] checked:border-[#5A5A62] cursor-pointer
+                className="w-[14px] h-[14px] rounded-[3px] border border-line-strong bg-inset 
+                           checked:bg-accent checked:border-accent cursor-pointer
                            appearance-none relative
                            after:content-[''] after:absolute after:hidden
                            after:left-[4px] after:top-[1px] after:w-[4px] after:h-[8px]
                            after:border-r-[2px] after:border-b-[2px] after:border-white
                            after:rotate-45 checked:after:block"
               />
-              <span className="text-[#8A8A8A] text-[11px]">
+              <span className="text-fg-muted text-caption">
                 {t('update.skipVersion')}
               </span>
             </label>
@@ -220,16 +220,16 @@ const UpdateModal = ({
               <button
                 onClick={handlePrimaryClick}
                 disabled={primaryActionDisabled}
-                className="flex-1 h-[32px] bg-[#274E39] hover:bg-[#2C5841] active:bg-[#305F46]
-                           rounded-[7px] text-[#DBDEE8] text-[12px] font-medium transition-colors
+                className="flex-1 h-[32px] bg-accent hover:bg-accent-hover active:bg-accent-active
+                           rounded-lg text-accent-fg text-body font-medium transition-colors
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {primaryActionLabel || t('update.goToRelease')}
               </button>
               <button
                 onClick={handleClose}
-                className="w-[80px] h-[32px] bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941]
-                           rounded-[7px] text-[#DCDEE7] text-[12px] transition-colors"
+                className="w-[80px] h-[32px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13]
+                           rounded-md text-fg text-body transition-colors"
               >
                 {t('update.later')}
               </button>
