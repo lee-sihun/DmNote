@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 
@@ -40,6 +41,8 @@ const SubMenu = ({
   textAlign = 'left',
   maxVisibleItems,
   anchorRect,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   items: ListItem[];
   onSelect?: (id: string) => void;
@@ -47,6 +50,8 @@ const SubMenu = ({
   textAlign?: 'left' | 'center';
   maxVisibleItems?: number;
   anchorRect: DOMRect | null;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
   const siblingActiveRef = useRef<{
@@ -107,13 +112,18 @@ const SubMenu = ({
 
   if (!pos) return null;
 
-  return (
+  // body 포털 필수 — 부모 팝업의 backdrop-filter가 fixed의 containing block이 되어
+  // 뷰포트 좌표가 어긋나는 것 방지. 호버 유지는 onMouseEnter/Leave 콜백으로 연결
+  return createPortal(
     <div
       ref={(node) => {
         (subMenuRef as React.MutableRefObject<HTMLDivElement | null>).current =
           node;
         if (needsScroll) subLenisRef(node);
       }}
+      data-dmn-popup-submenu="true"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
@@ -137,7 +147,8 @@ const SubMenu = ({
           hasCheckColumn={hasCheckColumn}
         />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -333,6 +344,11 @@ const MenuItemRow = ({
           textAlign={textAlign}
           maxVisibleItems={item.maxVisibleChildren}
           anchorRect={rowRect}
+          onMouseEnter={() => {
+            // 포털로 DOM 중첩이 끊기므로 서브메뉴 진입 시 닫힘 타이머 취소
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          }}
+          onMouseLeave={handleMouseLeave}
         />
       )}
     </div>

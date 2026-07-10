@@ -82,6 +82,11 @@ const FloatingPopup = ({
           target instanceof Element &&
           !!target.closest('[data-dmn-modal-backdrop="true"]');
         if (isInsideModal) return;
+        // 서브메뉴도 body 포털이라 floating 내부로 인식되지 않음 — 닫힘 예외
+        const isInsideSubMenu =
+          target instanceof Element &&
+          !!target.closest('[data-dmn-popup-submenu="true"]');
+        if (isInsideSubMenu) return;
         onClose?.();
       };
 
