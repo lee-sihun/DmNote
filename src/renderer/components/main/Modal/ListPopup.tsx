@@ -275,7 +275,7 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[132px] h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
+        className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
@@ -313,25 +313,23 @@ const MenuItemRow = ({
           {item.label}
         </span>
 
-        {/* 우측 서브메뉴 화살표 */}
+        {/* 우측 서브메뉴 화살표 — 라벨보다 작은 보조 글리프, 크롬 아이콘 톤, 패딩에 직접 정렬 */}
         {hasChildren && (
-          <span className="w-[12px] flex-shrink-0 flex items-center justify-center">
-            <svg
-              width="6"
-              height="10"
-              viewBox="0 0 7 12"
-              fill="none"
-              className="text-fg-faint"
-            >
-              <path
-                d="M1 1L5.5 6L1 11"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
+          <svg
+            width="5"
+            height="10"
+            viewBox="0 0 5 10"
+            fill="none"
+            className="flex-shrink-0 text-white/45"
+          >
+            <path
+              d="M1 1.5L4 5L1 8.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         )}
       </button>
 
