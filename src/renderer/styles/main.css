@@ -99,18 +99,22 @@ body.dmn-custom-cursor * {
   border-radius: 2px;
 }
 
-/* 썸은 스크롤 중에만 표시 (is-scrolling은 useLenis가 관리) */
 .modal-content-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.14);
   border-radius: 2px;
 }
 
-.modal-content-scroll.is-scrolling::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+/* 스크롤바 전역 숨김 — 위치 단서는 스크롤 엣지 페이드 마스크가 대신함 */
+* {
+  scrollbar-width: none !important;
 }
 
-.modal-content-scroll.is-scrolling::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.26);
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+.properties-panel-overlay-bar {
+  display: none !important;
 }
 
 /* 설정 스크롤 - 호버 시에만 표시 */

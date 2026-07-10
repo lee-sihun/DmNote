@@ -107,14 +107,7 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     lenisRef.current = lenis;
 
     // Lenis scroll 이벤트 리스너 등록
-    // 스크롤 중에만 is-scrolling 클래스 유지 — 스크롤바 자동 숨김용
-    let scrollingTimer: ReturnType<typeof setTimeout> | null = null;
     const handleLenisScroll = () => {
-      wrapper.classList.add('is-scrolling');
-      if (scrollingTimer) clearTimeout(scrollingTimer);
-      scrollingTimer = setTimeout(() => {
-        wrapper.classList.remove('is-scrolling');
-      }, 600);
       onScrollRef.current?.();
     };
     lenis.on('scroll', handleLenisScroll);
@@ -140,8 +133,6 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     // 클린업
     return () => {
       cancelAnimationFrame(rafId);
-      if (scrollingTimer) clearTimeout(scrollingTimer);
-      wrapper.classList.remove('is-scrolling');
       if (ro) ro.disconnect();
       else window.removeEventListener('resize', onResize);
       lenis.off('scroll', handleLenisScroll);

@@ -122,14 +122,9 @@ const ShortcutSettingsModal = ({
   const [containerHeight, setContainerHeight] = React.useState<number | null>(
     null,
   );
-  const [hasOverflow, setHasOverflow] = React.useState(false);
   const isFirstRender = React.useRef(true);
 
-  const {
-    scrollContainerRef: scrollRef,
-    wrapperElement,
-    scrollbarWidth,
-  } = useLenis();
+  const { scrollContainerRef: scrollRef, wrapperElement } = useLenis();
 
   React.useEffect(() => {
     if (isOpen) {
@@ -151,10 +146,6 @@ const ShortcutSettingsModal = ({
       const contentHeight = inner.scrollHeight;
       const maxHeight = 235;
       setContainerHeight(Math.min(contentHeight, maxHeight));
-      const nextHasOverflow = contentHeight > maxHeight;
-      setHasOverflow((prev) =>
-        prev === nextHasOverflow ? prev : nextHasOverflow,
-      );
     };
 
     const resizeObserver = new ResizeObserver(updateHeight);
@@ -360,24 +351,11 @@ const ShortcutSettingsModal = ({
         <div className="relative">
           <div
             ref={scrollRef}
-            className="overflow-y-auto modal-content-scroll dmn-scroll-fade -mr-[8px] pr-[8px]"
+            className="overflow-y-auto modal-content-scroll dmn-scroll-fade"
             style={{
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
               maxHeight: '235px',
-              // 명시 폭은 -mr을 무력화하므로 스크롤바 차선(14px) 몫을 폭에 포함
-              width:
-                hasOverflow && scrollbarWidth > 0
-                  ? `calc(100% + 8px + ${scrollbarWidth}px)`
-                  : undefined,
-              transform:
-                hasOverflow && scrollbarWidth > 0
-                  ? `translateX(-${scrollbarWidth}px)`
-                  : undefined,
-              paddingLeft:
-                hasOverflow && scrollbarWidth > 0
-                  ? `${scrollbarWidth}px`
-                  : undefined,
               transition: isFirstRender.current
                 ? 'none'
                 : 'height 100ms ease-in-out',
