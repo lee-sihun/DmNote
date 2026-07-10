@@ -323,7 +323,7 @@ body.dmn-custom-cursor * {
 
 .webfont-cm-editor .cm-editor {
   height: 100%;
-  background: var(--ui-bg-inset);
+  background: var(--ui-bg-inset-solid);
   color: #d4d4d4;
 }
 
