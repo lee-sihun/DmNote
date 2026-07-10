@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { StyleTabContentProps } from '../types';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
 import {
@@ -9,11 +10,16 @@ import {
   TextInput,
   FontStyleToggle,
 } from '../PropertyInputs';
+import { usePanelNav } from '../PanelNavContext';
 import ImagePicker from '../../../Modal/content/pickers/ImagePicker';
 import ColorPicker from '../../../Modal/content/pickers/ColorPicker';
 import FontPicker from '../../../Modal/content/pickers/FontPicker';
 import SoundPicker from '../../../Modal/content/pickers/SoundPicker';
 import Checkbox from '../../../common/Checkbox';
+
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'single-style:font';
+const SOUND_PAGE_KEY = 'single-style:sound';
 
 // 피커 타겟 타입
 type PickerTarget =
@@ -21,7 +27,6 @@ type PickerTarget =
   | 'borderColor'
   | 'fontColor'
   | 'image'
-  | 'font'
   | null;
 
 type ColorState = 'idle' | 'active';
@@ -101,10 +106,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 폰트 버튼 ref
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   const soundButtonRef = useRef<HTMLButtonElement>(null);
-  const [showSoundPicker, setShowSoundPicker] = useState(false);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 인-패널 내비게이션 (사운드/폰트 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   // 로컬 색상 상태 (드래그 중 UI 업데이트용)
   const [localColors, setLocalColors] = useState<
@@ -586,9 +594,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
             ref={fontButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              pickerFor === 'font' ? 'shadow-focus-ring' : ''
+              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={() => handlePickerToggle('font')}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === FONT_PAGE_KEY) closePage();
+              else openPage(FONT_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
@@ -697,11 +709,12 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               ref={soundButtonRef}
               type="button"
               className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                showSoundPicker ? 'shadow-focus-ring' : ''
+                activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
               } text-fg text-body`}
               onClick={() => {
                 setPickerFor(null);
-                setShowSoundPicker((prev) => !prev);
+                if (activePageKey === SOUND_PAGE_KEY) closePage();
+                else openPage(SOUND_PAGE_KEY);
               }}
             >
               {t('propertiesPanel.configure') || '설정하기'}
@@ -756,7 +769,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
       )}
 
       {/* 통합 ColorPicker - 단일 인스턴스로 깜빡임 없이 전환 */}
-      {pickerFor && pickerFor !== 'image' && pickerFor !== 'font' && (
+      {pickerFor && pickerFor !== 'image' && (
         <ColorPicker
           open={!!pickerFor}
           referenceRef={
@@ -782,38 +795,47 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         />
       )}
 
-      {/* FontPicker */}
-      {pickerFor === 'font' && (
-        <FontPicker
-          open={true}
-          referenceRef={fontButtonRef}
-          panelElement={panelElement}
-          selectedFont={keyPosition.fontFamily || null}
-          onFontSelect={(fontName) => {
-            handleStyleChangeComplete('fontFamily', fontName);
-          }}
-          onClose={() => setPickerFor(null)}
-          interactiveRefs={[fontButtonRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            referenceRef={fontButtonRef}
+            selectedFont={keyPosition.fontFamily || null}
+            onFontSelect={(fontName) => {
+              handleStyleChangeComplete('fontFamily', fontName);
+            }}
+            onClose={closePage}
+            renderMode="page"
+            pageTitle={t('propertiesPanel.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {/* SoundPicker */}
-      {showSoundControls && showSoundPicker && (
-        <SoundPicker
-          open={true}
-          referenceRef={soundButtonRef}
-          panelElement={panelElement}
-          selectedSound={keyPosition.soundPath || null}
-          onSoundSelect={(soundPath) => {
-            const nextPath = soundPath || '';
-            onKeyPreview?.(keyIndex, { soundPath: nextPath });
-            onKeyUpdate({ index: keyIndex, soundPath: nextPath });
-          }}
-          onClose={() => setShowSoundPicker(false)}
-          interactiveRefs={[soundButtonRef]}
-          previewVolume={keyPosition.soundVolume ?? 100}
-        />
-      )}
+      {/* SoundPicker — 패널 서브 페이지 */}
+      {showSoundControls &&
+        renderPageKey === SOUND_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <SoundPicker
+            open
+            referenceRef={soundButtonRef}
+            selectedSound={keyPosition.soundPath || null}
+            onSoundSelect={(soundPath) => {
+              const nextPath = soundPath || '';
+              onKeyPreview?.(keyIndex, { soundPath: nextPath });
+              onKeyUpdate({ index: keyIndex, soundPath: nextPath });
+            }}
+            onClose={closePage}
+            previewVolume={keyPosition.soundVolume ?? 100}
+            renderMode="page"
+            pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

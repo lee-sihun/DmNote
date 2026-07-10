@@ -47,7 +47,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex items-center justify-between p-[12px] pb-[12px]">
         <div className="flex flex-col gap-[2px]">
-          <span className="text-fg text-style-2">
+          <span className="text-fg text-style-2 leading-none">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
           </span>
           <span className="text-fg-faint text-body truncate max-w-[150px]">
@@ -56,7 +56,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
         </div>
         <button
           onClick={handlePluginSettingsPanelCancel}
-          className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+          className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
           title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
         >
           <SidebarToggleIcon isOpen={true} />

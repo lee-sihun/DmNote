@@ -15,6 +15,10 @@ interface SoundPickerProps {
   onSoundSelect: (soundPath: string | null) => void;
   onClose: () => void;
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
+  // 페이지 모드 패스스루 — 패널 서브 페이지로 렌더할 때 사용
+  renderMode?: 'popup' | 'page';
+  pageTitle?: string;
+  onBack?: () => void;
   previewVolume?: number;
 }
 
@@ -30,6 +34,9 @@ const SoundPicker = ({
   onSoundSelect,
   onClose,
   interactiveRefs = [],
+  renderMode = 'popup',
+  pageTitle,
+  onBack,
   previewVolume,
 }: SoundPickerProps) => {
   const { t } = useTranslation();
@@ -194,6 +201,9 @@ const SoundPicker = ({
         referenceRef={referenceRef}
         panelElement={panelElement}
         interactiveRefs={interactiveRefs}
+        renderMode={renderMode}
+        pageTitle={pageTitle}
+        onBack={onBack}
         onClose={handlePickerClose}
         widthClass="w-[156px]"
         estimatedWidth={164}

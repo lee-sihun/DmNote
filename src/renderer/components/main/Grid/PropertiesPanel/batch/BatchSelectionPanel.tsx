@@ -534,7 +534,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -556,7 +556,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -564,7 +564,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -572,7 +572,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2">
+              <span className="text-fg text-style-2 leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
@@ -585,14 +585,14 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
           <div className="flex items-center gap-[4px]">
             <button
               onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
             <button
               onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
@@ -840,7 +840,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
                 isFillPickerOpen={batchPickerFor === 'fill'}
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
-                panelElement={panelElement}
                 t={t}
               />
             </div>
@@ -1111,7 +1110,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1133,7 +1132,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1141,7 +1140,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1149,7 +1148,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2">
+              <span className="text-fg text-style-2 leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
@@ -1162,14 +1161,14 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           <div className="flex items-center gap-[4px]">
             <button
               onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
             <button
               onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
@@ -1476,7 +1475,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1498,7 +1497,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 cursor-default truncate max-w-[110px]"
+                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1506,7 +1505,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1514,7 +1513,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2">
+              <span className="text-fg text-style-2 leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
@@ -1527,14 +1526,14 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           <div className="flex items-center gap-[4px]">
             <button
               onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
             </button>
             <button
               onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />

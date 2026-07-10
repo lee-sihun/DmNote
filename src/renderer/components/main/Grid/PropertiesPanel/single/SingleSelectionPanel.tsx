@@ -136,20 +136,20 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex items-center justify-between p-[12px] pb-[12px]">
-        <span className="text-fg text-style-2 truncate max-w-[120px]">
+        <span className="text-fg text-style-2 leading-none truncate max-w-[120px]">
           {pluginTitle}
         </span>
         <div className="flex items-center gap-[4px]">
           <button
             onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
           <button
             onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
           >
             <SidebarToggleIcon isOpen={true} />
@@ -324,7 +324,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -354,7 +354,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
@@ -364,14 +364,14 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
         <div className="flex items-center gap-[4px]">
           <button
             onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
           <button
             onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || 'Close'}
           >
             <SidebarToggleIcon isOpen={true} />
@@ -972,7 +972,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -1002,7 +1002,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
@@ -1012,14 +1012,14 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         <div className="flex items-center gap-[4px]">
           <button
             onClick={handleToggleMode}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
           <button
             onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || 'Close'}
           >
             <SidebarToggleIcon isOpen={true} />
@@ -1539,7 +1539,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             <input
               ref={renameInputRef}
               type="text"
-              className="text-fg text-style-2 bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+              className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={() => {
@@ -1561,7 +1561,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           ) : (
             <div className="flex items-center gap-[4px] min-w-0">
               <span
-                className="text-fg text-style-2 cursor-default truncate max-w-[110px]"
+                className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
                 onDoubleClick={handleRenameStart}
                 title={keyLikeTitle}
               >
@@ -1569,7 +1569,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               </span>
               <button
                 onClick={handleRenameStart}
-                className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors flex-shrink-0"
+                className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                 title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
@@ -1581,7 +1581,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             {/* 레이어 모드로 전환 버튼 */}
             <button
               onClick={handleToggleMode}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
             >
               <ModeToggleIcon mode="layer" />
@@ -1589,7 +1589,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             {/* 패널 닫기 버튼 */}
             <button
               onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />

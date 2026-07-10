@@ -278,6 +278,39 @@ body.dmn-custom-cursor * {
   animation: viewFade var(--ui-duration-base) var(--ui-ease-out);
 }
 
+/* 패널 페이지 전환 — side-by-side push. 두 페이지가 absolute로 겹치고
+   활성 페이지만 보임. 루트는 왼쪽으로, 서브 페이지는 오른쪽으로 exit */
+.dmn-panel-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  transition:
+    opacity var(--ui-duration-page) var(--ui-ease-page),
+    transform var(--ui-duration-page) var(--ui-ease-page),
+    filter var(--ui-duration-page) var(--ui-ease-page);
+}
+
+.dmn-panel-page[data-active='false'] {
+  opacity: 0;
+  pointer-events: none;
+  filter: blur(var(--ui-page-blur));
+}
+
+.dmn-panel-page[data-page-depth='root'][data-active='false'] {
+  transform: translateX(calc(var(--ui-page-slide-distance) * -1));
+}
+
+.dmn-panel-page[data-page-depth='sub'][data-active='false'] {
+  transform: translateX(var(--ui-page-slide-distance));
+}
+
+.dmn-panel-page[data-active='true'] {
+  opacity: 1;
+  transform: translateX(0);
+  filter: blur(0);
+}
+
 @keyframes tooltipFadeIn {
   from {
     opacity: 0;
@@ -500,5 +533,14 @@ body.dmn-custom-cursor * {
 
   .animate-modal-fade {
     opacity: 1;
+  }
+
+  .dmn-panel-page {
+    transition: none;
+  }
+
+  .dmn-panel-page[data-active='false'] {
+    transform: none;
+    filter: none;
   }
 }

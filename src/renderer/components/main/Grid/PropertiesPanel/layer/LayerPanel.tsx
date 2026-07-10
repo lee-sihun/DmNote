@@ -124,7 +124,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[12px]">
-          <span className="text-fg text-style-2">
+          <span className="text-fg text-style-2 leading-none">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
           <div className="flex items-center gap-[4px]">
@@ -132,9 +132,9 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
             <button
               disabled={!hasSelection}
               onClick={hasSelection ? onSwitchToProperty : undefined}
-              className={`w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
+              className={`w-[24px] h-[24px] -my-[6px] flex items-center justify-center rounded-[4px] transition-colors ${
                 hasSelection
-                  ? 'text-white/45 hover:text-white/90 hover:bg-fill-hover cursor-pointer'
+                  ? 'text-white/45 hover:text-white/90 cursor-pointer'
                   : 'text-fg-disabled cursor-not-allowed'
               }`}
               title={
@@ -146,7 +146,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
             {/* 패널 닫기 버튼 */}
             <button
               onClick={onClose}
-              className="w-[24px] h-[24px] flex items-center justify-center text-white/45 hover:text-white/90 hover:bg-fill-hover rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || 'Close Panel'}
             >
               <SidebarToggleIcon isOpen={true} />

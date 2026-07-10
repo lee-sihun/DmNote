@@ -50,6 +50,10 @@ interface CounterAnimationPickerProps {
   onClose: () => void;
   t: (key: string) => string;
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
+  // 페이지 모드 패스스루 — 패널 서브 페이지로 렌더할 때 사용
+  renderMode?: 'popup' | 'page';
+  pageTitle?: string;
+  onBack?: () => void;
 }
 
 type FilterType = 'all' | 'builtin' | 'user';
@@ -87,6 +91,9 @@ const CounterAnimationPicker = ({
   onClose,
   t,
   interactiveRefs = [],
+  renderMode = 'popup',
+  pageTitle,
+  onBack,
 }: CounterAnimationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -244,6 +251,9 @@ const CounterAnimationPicker = ({
         referenceRef={referenceRef}
         panelElement={panelElement}
         interactiveRefs={interactiveRefs}
+        renderMode={renderMode}
+        pageTitle={pageTitle}
+        onBack={onBack}
         onClose={handlePickerClose}
         widthClass="w-[156px]"
         estimatedWidth={164}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { KeyPosition } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -11,6 +12,11 @@ import {
 import Checkbox from '@components/main/common/Checkbox';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import SoundPicker from '@components/main/Modal/content/pickers/SoundPicker';
+import { usePanelNav } from '../PanelNavContext';
+
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'batch-style:font';
+const SOUND_PAGE_KEY = 'batch-style:sound';
 
 const SPACING_COMMIT_DEBOUNCE_MS = 80;
 const SPACING_COMMIT_EPSILON = 0.0001;
@@ -102,8 +108,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
   t,
 }) => {
   const [colorState, setColorState] = useState<'idle' | 'active'>('idle');
-  const [showFontPicker, setShowFontPicker] = useState(false);
-  const [showSoundPicker, setShowSoundPicker] = useState(false);
+  // 인-패널 내비게이션 (폰트/사운드 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   // 간격 입력 세션 동안 첫 변경만 히스토리를 남기고 이후는 skipHistory로 묶는다.
   const lastSpacingRef = useRef<number | null>(null);
@@ -711,9 +718,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   ref={fontButtonRef}
                   type="button"
                   className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                    showFontPicker ? 'shadow-focus-ring' : ''
+                    activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
-                  onClick={() => setShowFontPicker(!showFontPicker)}
+                  onClick={() => {
+                    if (activePageKey === FONT_PAGE_KEY) closePage();
+                    else openPage(FONT_PAGE_KEY);
+                  }}
                 >
                   {t('propertiesPanel.configure') || '설정하기'}
                 </button>
@@ -907,9 +917,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   ref={soundButtonRef}
                   type="button"
                   className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-                    showSoundPicker ? 'shadow-focus-ring' : ''
+                    activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
                   } text-fg text-body`}
-                  onClick={() => setShowSoundPicker((prev) => !prev)}
+                  onClick={() => {
+                    if (activePageKey === SOUND_PAGE_KEY) closePage();
+                    else openPage(SOUND_PAGE_KEY);
+                  }}
                 >
                   {t('propertiesPanel.configure') || '설정하기'}
                 </button>
@@ -941,46 +954,59 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           );
         })()}
 
-      {/* FontPicker */}
-      {!hideFontControls && showFontPicker && (
-        <FontPicker
-          open={true}
-          referenceRef={fontButtonRef}
-          panelElement={panelElement}
-          selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
-          onFontSelect={(fontName) => {
-            handleBatchStyleChangeComplete('fontFamily', fontName);
-          }}
-          onClose={() => setShowFontPicker(false)}
-          interactiveRefs={[fontButtonRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {!hideFontControls &&
+        renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            referenceRef={fontButtonRef}
+            selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
+            onFontSelect={(fontName) => {
+              handleBatchStyleChangeComplete('fontFamily', fontName);
+            }}
+            onClose={closePage}
+            renderMode="page"
+            pageTitle={t('propertiesPanel.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {/* SoundPicker */}
-      {showSoundControls && showSoundPicker && (
-        <SoundPicker
-          open={true}
-          referenceRef={soundButtonRef}
-          panelElement={panelElement}
-          selectedSound={
-            (getKeyOnlyMixedValue ?? getMixedValue)((pos) => pos.soundPath, '')
-              .value || null
-          }
-          onSoundSelect={(soundPath) => {
-            (
-              handleKeyOnlyStyleChangeComplete ?? handleBatchStyleChangeComplete
-            )('soundPath', soundPath || '');
-          }}
-          onClose={() => setShowSoundPicker(false)}
-          interactiveRefs={[soundButtonRef]}
-          previewVolume={
-            (getKeyOnlyMixedValue ?? getMixedValue)(
-              (pos) => pos.soundVolume,
-              100,
-            ).value
-          }
-        />
-      )}
+      {/* SoundPicker — 패널 서브 페이지 */}
+      {showSoundControls &&
+        renderPageKey === SOUND_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <SoundPicker
+            open={true}
+            referenceRef={soundButtonRef}
+            selectedSound={
+              (getKeyOnlyMixedValue ?? getMixedValue)(
+                (pos) => pos.soundPath,
+                '',
+              ).value || null
+            }
+            onSoundSelect={(soundPath) => {
+              (
+                handleKeyOnlyStyleChangeComplete ??
+                handleBatchStyleChangeComplete
+              )('soundPath', soundPath || '');
+            }}
+            onClose={closePage}
+            previewVolume={
+              (getKeyOnlyMixedValue ?? getMixedValue)(
+                (pos) => pos.soundVolume,
+                100,
+              ).value
+            }
+            renderMode="page"
+            pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

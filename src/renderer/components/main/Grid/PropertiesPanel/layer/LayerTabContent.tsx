@@ -645,7 +645,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         e.stopPropagation();
                         actions.handleToggleGroupVisibility(e, gh.groupId);
                       }}
-                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-fill-hover cursor-pointer ${
+                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] cursor-pointer ${
                         gh.allHidden
                           ? ''
                           : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
@@ -783,7 +783,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         ? t('propertiesPanel.showLayer') || 'Show'
                         : t('propertiesPanel.hideLayer') || 'Hide'
                     }
-                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] hover:bg-fill-hover cursor-pointer ${
+                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] cursor-pointer ${
                       item.hidden
                         ? ''
                         : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'

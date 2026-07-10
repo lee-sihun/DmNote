@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { CounterTabContentProps } from '../types';
 import type {
   KeyCounterAnimationSettings,
@@ -17,8 +18,13 @@ import Dropdown from '@components/main/common/Dropdown';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
+import { usePanelNav } from '../PanelNavContext';
 
-type PickerTarget = 'fill' | 'stroke' | 'font' | null;
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'single-counter:font';
+const ANIMATION_PAGE_KEY = 'single-counter:animation';
+
+type PickerTarget = 'fill' | 'stroke' | null;
 type ColorState = 'idle' | 'active';
 
 const CounterTabContent: React.FC<CounterTabContentProps> = ({
@@ -36,9 +42,12 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
   const animationBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
-  const pickerOpen = pickerFor !== null && pickerFor !== 'font';
+  const pickerOpen = pickerFor !== null;
   const [colorState, setColorState] = useState<ColorState>('idle');
-  const [showAnimationPicker, setShowAnimationPicker] = useState(false);
+
+  // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   const counterSettings = normalizeCounterSettings(keyPosition.counter);
 
@@ -301,9 +310,13 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             ref={fontBtnRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              pickerFor === 'font' ? 'shadow-focus-ring' : ''
+              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={() => handlePickerToggle('font')}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === FONT_PAGE_KEY) closePage();
+              else openPage(FONT_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
@@ -368,16 +381,20 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
             ref={animationBtnRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              showAnimationPicker ? 'shadow-focus-ring' : ''
+              activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={() => setShowAnimationPicker((prev) => !prev)}
+            onClick={() => {
+              setPickerFor(null);
+              if (activePageKey === ANIMATION_PAGE_KEY) closePage();
+              else openPage(ANIMATION_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
         </PropertyRow>
       </PropertySection>
 
-      {pickerFor && pickerFor !== 'font' && (
+      {pickerFor && (
         <ColorPicker
           open={pickerOpen}
           referenceRef={pickerFor === 'fill' ? fillBtnRef : strokeBtnRef}
@@ -395,57 +412,66 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         />
       )}
 
-      {/* FontPicker */}
-      {pickerFor === 'font' && (
-        <FontPicker
-          open={true}
-          referenceRef={fontBtnRef}
-          panelElement={panelElement}
-          selectedFont={counterSettings.fontFamily || null}
-          onFontSelect={(fontName) => {
-            handleCounterUpdate({ fontFamily: fontName });
-          }}
-          onClose={() => setPickerFor(null)}
-          interactiveRefs={[fontBtnRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            referenceRef={fontBtnRef}
+            selectedFont={counterSettings.fontFamily || null}
+            onFontSelect={(fontName) => {
+              handleCounterUpdate({ fontFamily: fontName });
+            }}
+            onClose={closePage}
+            renderMode="page"
+            pageTitle={t('counterSetting.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {showAnimationPicker && (
-        <CounterAnimationPicker
-          open={showAnimationPicker}
-          referenceRef={animationBtnRef}
-          panelElement={panelElement}
-          animation={counterSettings.animation}
-          counterSettings={counterSettings}
-          keyVisual={{
-            width: keyPosition.width,
-            height: keyPosition.height,
-            backgroundColor: keyPosition.backgroundColor,
-            borderColor: keyPosition.borderColor,
-            borderWidth: keyPosition.borderWidth,
-            borderRadius: keyPosition.borderRadius,
-            fontColor: keyPosition.fontColor,
-            fontSize: keyPosition.fontSize,
-            fontWeight: keyPosition.fontWeight,
-            fontFamily: keyPosition.fontFamily,
-            fontItalic: keyPosition.fontItalic,
-            fontUnderline: keyPosition.fontUnderline,
-            fontStrikethrough: keyPosition.fontStrikethrough,
-            displayText: keyPosition.displayText,
-            displayName: keyDisplayName,
-            className: keyPosition.className,
-            activeBackgroundColor: keyPosition.activeBackgroundColor,
-            activeBorderColor: keyPosition.activeBorderColor,
-            activeFontColor: keyPosition.activeFontColor,
-            useInlineStyles: keyPosition.useInlineStyles,
-            isStat,
-          }}
-          onAnimationChange={handleAnimationUpdate}
-          onClose={() => setShowAnimationPicker(false)}
-          t={t}
-          interactiveRefs={[animationBtnRef]}
-        />
-      )}
+      {/* CounterAnimationPicker — 패널 서브 페이지 */}
+      {renderPageKey === ANIMATION_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <CounterAnimationPicker
+            open
+            referenceRef={animationBtnRef}
+            animation={counterSettings.animation}
+            counterSettings={counterSettings}
+            keyVisual={{
+              width: keyPosition.width,
+              height: keyPosition.height,
+              backgroundColor: keyPosition.backgroundColor,
+              borderColor: keyPosition.borderColor,
+              borderWidth: keyPosition.borderWidth,
+              borderRadius: keyPosition.borderRadius,
+              fontColor: keyPosition.fontColor,
+              fontSize: keyPosition.fontSize,
+              fontWeight: keyPosition.fontWeight,
+              fontFamily: keyPosition.fontFamily,
+              fontItalic: keyPosition.fontItalic,
+              fontUnderline: keyPosition.fontUnderline,
+              fontStrikethrough: keyPosition.fontStrikethrough,
+              displayText: keyPosition.displayText,
+              displayName: keyDisplayName,
+              className: keyPosition.className,
+              activeBackgroundColor: keyPosition.activeBackgroundColor,
+              activeBorderColor: keyPosition.activeBorderColor,
+              activeFontColor: keyPosition.activeFontColor,
+              useInlineStyles: keyPosition.useInlineStyles,
+              isStat,
+            }}
+            onAnimationChange={handleAnimationUpdate}
+            onClose={closePage}
+            t={t}
+            renderMode="page"
+            pageTitle={t('counterSetting.animation') || '애니메이션'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

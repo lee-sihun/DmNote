@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import {
   PropertyRow,
@@ -10,6 +11,11 @@ import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import FontPicker from '@components/main/Modal/content/pickers/FontPicker';
 import CounterAnimationPicker from '@components/main/Modal/content/pickers/CounterAnimationPicker';
+import { usePanelNav } from '../PanelNavContext';
+
+// 인-패널 서브 페이지 키 — 트리거 사이트별 유니크
+const FONT_PAGE_KEY = 'batch-counter:font';
+const ANIMATION_PAGE_KEY = 'batch-counter:animation';
 
 interface BatchKeyVisual {
   width?: number;
@@ -54,7 +60,6 @@ interface BatchCounterTabContentProps {
   isFillPickerOpen: boolean;
   isStrokePickerOpen: boolean;
   // 패널 요소 (FloatingPopup 위치용)
-  panelElement: HTMLElement | null;
   // 번역
   t: (key: string) => string;
 }
@@ -71,13 +76,13 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   batchCounterStrokeButtonRef,
   isFillPickerOpen,
   isStrokePickerOpen,
-  panelElement,
   t,
 }) => {
   const fontButtonRef = useRef<HTMLButtonElement>(null);
   const animationButtonRef = useRef<HTMLButtonElement>(null);
-  const [showFontPicker, setShowFontPicker] = useState(false);
-  const [showAnimationPicker, setShowAnimationPicker] = useState(false);
+  // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
+  const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
+    usePanelNav();
 
   const handleAnimationUpdate = (
     nextAnimation: KeyCounterSettings['animation'],
@@ -246,9 +251,12 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             ref={fontButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              showFontPicker ? 'shadow-focus-ring' : ''
+              activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={() => setShowFontPicker((prev) => !prev)}
+            onClick={() => {
+              if (activePageKey === FONT_PAGE_KEY) closePage();
+              else openPage(FONT_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
@@ -313,44 +321,56 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
             ref={animationButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
-              showAnimationPicker ? 'shadow-focus-ring' : ''
+              activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
             } text-fg text-body`}
-            onClick={() => setShowAnimationPicker((prev) => !prev)}
+            onClick={() => {
+              if (activePageKey === ANIMATION_PAGE_KEY) closePage();
+              else openPage(ANIMATION_PAGE_KEY);
+            }}
           >
             {t('propertiesPanel.configure') || '설정하기'}
           </button>
         </PropertyRow>
       </PropertySection>
 
-      {/* FontPicker */}
-      {showFontPicker && (
-        <FontPicker
-          open={true}
-          referenceRef={fontButtonRef}
-          panelElement={panelElement}
-          selectedFont={batchCounterSettings.fontFamily || null}
-          onFontSelect={(fontFamily) => {
-            handleBatchCounterUpdate({ fontFamily });
-          }}
-          onClose={() => setShowFontPicker(false)}
-          interactiveRefs={[fontButtonRef]}
-        />
-      )}
+      {/* FontPicker — 패널 서브 페이지 */}
+      {renderPageKey === FONT_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <FontPicker
+            open
+            referenceRef={fontButtonRef}
+            selectedFont={batchCounterSettings.fontFamily || null}
+            onFontSelect={(fontFamily) => {
+              handleBatchCounterUpdate({ fontFamily });
+            }}
+            onClose={closePage}
+            renderMode="page"
+            pageTitle={t('counterSetting.font') || '폰트'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
 
-      {showAnimationPicker && (
-        <CounterAnimationPicker
-          open={showAnimationPicker}
-          referenceRef={animationButtonRef}
-          panelElement={panelElement}
-          animation={batchCounterSettings.animation}
-          counterSettings={batchCounterSettings}
-          keyVisual={keyVisual}
-          onAnimationChange={handleAnimationUpdate}
-          onClose={() => setShowAnimationPicker(false)}
-          t={t}
-          interactiveRefs={[animationButtonRef]}
-        />
-      )}
+      {/* CounterAnimationPicker — 패널 서브 페이지 */}
+      {renderPageKey === ANIMATION_PAGE_KEY &&
+        pageHost &&
+        createPortal(
+          <CounterAnimationPicker
+            open
+            referenceRef={animationButtonRef}
+            animation={batchCounterSettings.animation}
+            counterSettings={batchCounterSettings}
+            keyVisual={keyVisual}
+            onAnimationChange={handleAnimationUpdate}
+            onClose={closePage}
+            t={t}
+            renderMode="page"
+            pageTitle={t('counterSetting.animation') || '애니메이션'}
+            onBack={closePage}
+          />,
+          pageHost,
+        )}
     </>
   );
 };

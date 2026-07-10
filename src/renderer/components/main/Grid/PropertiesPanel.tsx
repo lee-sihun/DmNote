@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -54,6 +54,8 @@ import {
   useBatchHandlers,
   usePanelScroll,
 } from './PropertiesPanel/index';
+import { SIDE_PANEL_FRAME_CLASS } from './PropertiesPanel/panelChrome';
+import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
@@ -71,6 +73,9 @@ const getStatTypeLabel = (statType?: StatItemType | null): string => {
       return 'KPS';
   }
 };
+
+// 서브 페이지 exit 전환 시간 — --ui-duration-page와 동기
+const PAGE_EXIT_MS = 250;
 
 // ============================================================================
 // 메인 컴포넌트 Props
@@ -373,6 +378,67 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<TabType>(TABS.STYLE);
+
+  // 인-패널 내비게이션 — 피커 서브 페이지 (키는 트리거 사이트별 유니크)
+  // activePageKey는 애니메이션 상태, renderPageKey는 마운트 상태 —
+  // exit 전환이 끝날 때까지 콘텐츠를 유지해 빈 페이지 슬라이드 방지
+  const [activePageKey, setActivePageKey] = useState<string | null>(null);
+  const [renderPageKey, setRenderPageKey] = useState<string | null>(null);
+  const [pageHost, setPageHost] = useState<HTMLDivElement | null>(null);
+  const pageExitTimerRef = useRef<number | null>(null);
+
+  const openPage = useCallback((key: string) => {
+    if (pageExitTimerRef.current !== null) {
+      window.clearTimeout(pageExitTimerRef.current);
+      pageExitTimerRef.current = null;
+    }
+    setActivePageKey(key);
+    setRenderPageKey(key);
+  }, []);
+
+  const closePage = useCallback(() => {
+    setActivePageKey(null);
+    if (pageExitTimerRef.current !== null) {
+      window.clearTimeout(pageExitTimerRef.current);
+    }
+    pageExitTimerRef.current = window.setTimeout(() => {
+      pageExitTimerRef.current = null;
+      setRenderPageKey(null);
+    }, PAGE_EXIT_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pageExitTimerRef.current !== null) {
+        window.clearTimeout(pageExitTimerRef.current);
+      }
+    };
+  }, []);
+
+  // 탭/모드/패널 표시 전환 시 서브 페이지 닫기
+  useEffect(() => {
+    closePage();
+  }, [activeTab, panelMode, isPanelVisible, selectedKeyType, closePage]);
+
+  // Escape로 서브 페이지 닫기 — 입력 필드 편집과 경합 방지
+  useEffect(() => {
+    if (!activePageKey) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      closePage();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [activePageKey, closePage]);
 
   // 통계 요소 선택 시 NOTE 탭 숨김 처리
   useEffect(() => {
@@ -803,6 +869,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     setShowGraphImagePicker(false);
     setShowBatchImagePicker(false);
     setIsListening(false);
+    closePage();
   }, [
     singleKeyIndex,
     selectedKeyElements.length,
@@ -810,6 +877,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     isPanelVisible,
     pluginSettingsPanel,
     setIsPanelVisible,
+    closePage,
   ]);
 
   // 언마운트 시 키보드 플래그 오염 방지
@@ -2561,68 +2629,386 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   }
 
-  if (pluginSettingsPanel) {
+  // 선택 상태별 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
+  const renderPanelBody = () => {
+    if (pluginSettingsPanel) {
+      return (
+        <PluginSettingsPanelView
+          setPanelElement={setPanelElement}
+          pluginSettingsPanel={pluginSettingsPanel}
+          pluginPanelSettings={pluginPanelSettings}
+          handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
+          handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
+          handlePluginSettingsPanelCancel={handlePluginSettingsPanelCancel}
+          setPluginScrollRef={setPluginScrollRef}
+          setPluginThumbRef={setPluginThumbRef}
+          renderPluginSettingsForm={renderPluginSettingsForm}
+          t={t}
+        />
+      );
+    }
+
+    // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
+    if (panelMode === 'layer') {
+      const hasAnySelection =
+        selectedKeyElements.length > 0 || selectedElements.length > 0;
+      return (
+        <LayerPanel
+          onClose={handleTogglePanel}
+          onSwitchToProperty={handleToggleMode}
+          hasSelection={hasAnySelection}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    // 선택된 키 요소가 없으면 레이어 패널 표시
+    if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
+      return (
+        <LayerPanel
+          onClose={handleTogglePanel}
+          onSwitchToProperty={handleToggleMode}
+          onSelectionFromPanel={() => {
+            selectionFromLayerPanelRef.current = true;
+          }}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
+    if (
+      selectedBatchStyleElements.length > 1 &&
+      selectedPluginElements.length === 0 &&
+      (selectedKeyLikeElements.length > 0 ||
+        (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
+    ) {
+      return (
+        <BatchKeyLikePanel
+          setPanelElement={setPanelElement}
+          selectedBatchStyleElements={selectedBatchStyleElements}
+          selectedKeyElements={selectedKeyElements}
+          selectedStatElements={selectedStatElements}
+          selectedGraphElements={selectedGraphElements}
+          selectedKeyLikeElements={selectedKeyLikeElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
+          handleBatchCounterUpdate={handleBatchCounterUpdate}
+          handleBatchNoteColorChange={handleBatchNoteColorChange}
+          handleBatchNoteColorChangeComplete={
+            handleBatchNoteColorChangeComplete
+          }
+          handleBatchGlowColorChange={handleBatchGlowColorChange}
+          handleBatchGlowColorChangeComplete={
+            handleBatchGlowColorChangeComplete
+          }
+          handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
+          getMixedValue={getMixedValue}
+          getMixedValueBatch={getMixedValueBatch}
+          getMixedValueGraphs={getMixedValueGraphs}
+          getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
+          getMixedValueKeysOnly={getMixedValueKeysOnly}
+          getSelectedKeysData={getSelectedKeysData}
+          getSelectedGraphsData={getSelectedGraphsData}
+          getSelectedBatchStyleData={getSelectedBatchStyleData}
+          getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
+          handleBatchKeyOnlyStyleChangeComplete={
+            handleBatchKeyOnlyStyleChangeComplete
+          }
+          handleBatchNoteColorChangeKeysOnly={
+            handleBatchNoteColorChangeKeysOnly
+          }
+          handleBatchNoteColorChangeCompleteKeysOnly={
+            handleBatchNoteColorChangeCompleteKeysOnly
+          }
+          handleBatchGlowColorChangeKeysOnly={
+            handleBatchGlowColorChangeKeysOnly
+          }
+          handleBatchGlowColorChangeCompleteKeysOnly={
+            handleBatchGlowColorChangeCompleteKeysOnly
+          }
+          batchScrollRefFor={batchScrollRefFor}
+          batchThumbRefFor={batchThumbRefFor}
+          batchNoteColorButtonRef={batchNoteColorButtonRef}
+          batchGlowColorButtonRef={batchGlowColorButtonRef}
+          batchBorderColorButtonRef={batchBorderColorButtonRef}
+          batchCounterFillButtonRef={batchCounterFillButtonRef}
+          batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          batchPickerFor={batchPickerFor}
+          setBatchPickerFor={setBatchPickerFor}
+          batchCounterColorState={batchCounterColorState}
+          setBatchCounterColorState={setBatchCounterColorState}
+          batchLocalColors={batchLocalColors}
+          setBatchLocalColors={setBatchLocalColors}
+          batchLocalOpacities={batchLocalOpacities}
+          setBatchLocalOpacities={setBatchLocalOpacities}
+          handleBatchPickerToggle={handleBatchPickerToggle}
+          handleBatchPickerColorChange={handleBatchPickerColorChange}
+          handleBatchPickerColorChangeComplete={
+            handleBatchPickerColorChangeComplete
+          }
+          getBatchPickerColor={getBatchPickerColor}
+          getBatchPickerRef={getBatchPickerRef}
+          batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (노브 요소만)
+    if (
+      selectedKnobElements.length > 1 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <BatchKnobOnlyPanel
+          setPanelElement={setPanelElement}
+          selectedKnobElements={selectedKnobElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
+          getMixedValueKnobs={getMixedValueKnobs}
+          getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
+          getSelectedKnobsData={getSelectedKnobsData}
+          batchScrollRefFor={batchScrollRefFor}
+          batchThumbRefFor={batchThumbRefFor}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 다중 선택인 경우 (그래프 요소만)
+    if (
+      selectedGraphElements.length > 1 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedKnobElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <BatchGraphOnlyPanel
+          setPanelElement={setPanelElement}
+          selectedGraphElements={selectedGraphElements}
+          selectedGroupInfo={selectedGroupInfo}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          handleBatchAlign={handleBatchAlign}
+          handleBatchDistribute={handleBatchDistribute}
+          handleBatchSpacing={handleBatchSpacing}
+          handleBatchSpacingPreview={handleBatchSpacingPreview}
+          handleBatchSpacingCommit={handleBatchSpacingCommit}
+          getBatchSpacingValue={getBatchSpacingValue}
+          handleBatchResize={handleBatchResize}
+          handleBatchStyleChange={handleBatchStyleChange}
+          handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
+          handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
+          getMixedValueGraphs={getMixedValueGraphs}
+          getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
+          getSelectedGraphsData={getSelectedGraphsData}
+          batchScrollRefFor={batchScrollRefFor}
+          batchThumbRefFor={batchThumbRefFor}
+          batchImageButtonRef={batchImageButtonRef}
+          showBatchImagePicker={showBatchImagePicker}
+          setShowBatchImagePicker={setShowBatchImagePicker}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          selectedKeyType={selectedKeyType}
+          t={t}
+        />
+      );
+    }
+
+    // 플러그인 요소가 선택된 경우
+    if (
+      selectedPluginElements.length > 0 &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0
+    ) {
+      const pluginTitle =
+        selectedPluginDefinition?.name ||
+        selectedPluginElement?.definitionId ||
+        t('propertiesPanel.pluginElement') ||
+        'Plugin';
+
+      return (
+        <PluginSelectionPanel
+          setPanelElement={setPanelElement}
+          pluginTitle={pluginTitle}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          setPluginScrollRef={setPluginScrollRef}
+          setPluginThumbRef={setPluginThumbRef}
+          isPluginResizable={isPluginResizable}
+          selectedPluginElement={selectedPluginElement}
+          pluginDisplaySize={pluginDisplaySize}
+          handlePluginPositionXChange={handlePluginPositionXChange}
+          handlePluginPositionYChange={handlePluginPositionYChange}
+          handlePluginWidthChange={handlePluginWidthChange}
+          handlePluginHeightChange={handlePluginHeightChange}
+          hasSinglePluginSelection={hasSinglePluginSelection}
+          showModalHint={showModalHint}
+          showSettings={showSettings}
+          renderPluginSettingsForm={renderPluginSettingsForm}
+          selectedPluginDefinition={selectedPluginDefinition}
+          resolvedPluginSettings={resolvedPluginSettings}
+          handlePluginSettingChange={handlePluginSettingChange}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 노브 요소 선택인 경우
+    if (
+      selectedKnobElements.length === 1 &&
+      !!singleKnobPosition &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedGraphElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <SingleKnobPanel
+          setPanelElement={setPanelElement}
+          singleKnobPosition={singleKnobPosition}
+          singleKnobIndex={singleKnobIndex!}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleKnobUpdate={handleKnobUpdate}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          singleScrollRefFor={singleScrollRefFor}
+          singleThumbRefFor={singleThumbRefFor}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 그래프 요소 선택인 경우
+    if (
+      selectedGraphElements.length === 1 &&
+      !!singleGraphPosition &&
+      selectedKeyLikeElements.length === 0 &&
+      selectedPluginElements.length === 0
+    ) {
+      return (
+        <SingleGraphPanel
+          setPanelElement={setPanelElement}
+          singleGraphPosition={singleGraphPosition}
+          singleGraphIndex={singleGraphIndex!}
+          selectedKeyType={selectedKeyType}
+          isRenaming={isRenaming}
+          renameInputRef={renameInputRef}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          renameCancelledRef={renameCancelledRef}
+          handleRenameCommit={handleRenameCommit}
+          handleRenameCancel={handleRenameCancel}
+          handleRenameStart={handleRenameStart}
+          handleToggleMode={handleToggleMode}
+          handleTogglePanel={handleTogglePanel}
+          handleGraphUpdate={handleGraphUpdate}
+          singleScrollRefFor={singleScrollRefFor}
+          singleThumbRefFor={singleThumbRefFor}
+          showGraphImagePicker={showGraphImagePicker}
+          setShowGraphImagePicker={setShowGraphImagePicker}
+          graphImageButtonRef={graphImageButtonRef}
+          graphClassNameDraft={graphClassNameDraft}
+          setGraphClassNameDraft={setGraphClassNameDraft}
+          panelElement={panelElement}
+          useCustomCSS={useCustomCSS}
+          t={t}
+        />
+      );
+    }
+
+    // 단일 키/통계 요소 선택인 경우
+    const isSingleStat = !singleKeyPosition && !!singleStatPosition;
+    const isSingleKey = !!singleKeyPosition;
+    if (!isSingleKey && !isSingleStat) {
+      return null;
+    }
+
     return (
-      <PluginSettingsPanelView
+      <SingleKeyStatPanel
         setPanelElement={setPanelElement}
-        pluginSettingsPanel={pluginSettingsPanel}
-        pluginPanelSettings={pluginPanelSettings}
-        handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
-        handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
-        handlePluginSettingsPanelCancel={handlePluginSettingsPanelCancel}
-        setPluginScrollRef={setPluginScrollRef}
-        setPluginThumbRef={setPluginThumbRef}
-        renderPluginSettingsForm={renderPluginSettingsForm}
-        t={t}
-      />
-    );
-  }
-
-  // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
-  if (panelMode === 'layer') {
-    const hasAnySelection =
-      selectedKeyElements.length > 0 || selectedElements.length > 0;
-    return (
-      <LayerPanel
-        onClose={handleTogglePanel}
-        onSwitchToProperty={handleToggleMode}
-        hasSelection={hasAnySelection}
-        onSelectionFromPanel={() => {
-          selectionFromLayerPanelRef.current = true;
-        }}
-      />
-    );
-  }
-
-  // 선택된 키 요소가 없으면 레이어 패널 표시
-  if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
-    return (
-      <LayerPanel
-        onClose={handleTogglePanel}
-        onSwitchToProperty={handleToggleMode}
-        onSelectionFromPanel={() => {
-          selectionFromLayerPanelRef.current = true;
-        }}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (키/통계 포함, 또는 그래프+노브 혼합)
-  if (
-    selectedBatchStyleElements.length > 1 &&
-    selectedPluginElements.length === 0 &&
-    (selectedKeyLikeElements.length > 0 ||
-      (selectedGraphElements.length > 0 && selectedKnobElements.length > 0))
-  ) {
-    return (
-      <BatchKeyLikePanel
-        setPanelElement={setPanelElement}
-        selectedBatchStyleElements={selectedBatchStyleElements}
-        selectedKeyElements={selectedKeyElements}
-        selectedStatElements={selectedStatElements}
-        selectedGraphElements={selectedGraphElements}
-        selectedKeyLikeElements={selectedKeyLikeElements}
-        selectedGroupInfo={selectedGroupInfo}
+        isSingleStat={isSingleStat}
+        isSingleKey={isSingleKey}
+        singleKeyIndex={singleKeyIndex}
+        singleStatIndex={singleStatIndex}
+        singleKeyPosition={singleKeyPosition}
+        singleStatPosition={singleStatPosition}
+        singleKeyCode={singleKeyCode}
+        singleKeyInfo={singleKeyInfo}
+        selectedKeyType={selectedKeyType}
         isRenaming={isRenaming}
         renameInputRef={renameInputRef}
         renameValue={renameValue}
@@ -2635,334 +3021,53 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleTogglePanel={handleTogglePanel}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleKeyOnlyStyleChangeComplete={handleKeyOnlyStyleChangeComplete}
-        handleBatchCounterUpdate={handleBatchCounterUpdate}
-        handleBatchNoteColorChange={handleBatchNoteColorChange}
-        handleBatchNoteColorChangeComplete={handleBatchNoteColorChangeComplete}
-        handleBatchGlowColorChange={handleBatchGlowColorChange}
-        handleBatchGlowColorChangeComplete={handleBatchGlowColorChangeComplete}
-        handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
-        getMixedValue={getMixedValue}
-        getMixedValueBatch={getMixedValueBatch}
-        getMixedValueGraphs={getMixedValueGraphs}
-        getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
-        getMixedValueKeysOnly={getMixedValueKeysOnly}
-        getSelectedKeysData={getSelectedKeysData}
-        getSelectedGraphsData={getSelectedGraphsData}
-        getSelectedBatchStyleData={getSelectedBatchStyleData}
-        getSelectedKeyOnlyPositions={getSelectedKeyOnlyPositions}
-        handleBatchKeyOnlyStyleChangeComplete={
-          handleBatchKeyOnlyStyleChangeComplete
-        }
-        handleBatchNoteColorChangeKeysOnly={handleBatchNoteColorChangeKeysOnly}
-        handleBatchNoteColorChangeCompleteKeysOnly={
-          handleBatchNoteColorChangeCompleteKeysOnly
-        }
-        handleBatchGlowColorChangeKeysOnly={handleBatchGlowColorChangeKeysOnly}
-        handleBatchGlowColorChangeCompleteKeysOnly={
-          handleBatchGlowColorChangeCompleteKeysOnly
-        }
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchNoteColorButtonRef={batchNoteColorButtonRef}
-        batchGlowColorButtonRef={batchGlowColorButtonRef}
-        batchBorderColorButtonRef={batchBorderColorButtonRef}
-        batchCounterFillButtonRef={batchCounterFillButtonRef}
-        batchCounterStrokeButtonRef={batchCounterStrokeButtonRef}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        batchPickerFor={batchPickerFor}
-        setBatchPickerFor={setBatchPickerFor}
-        batchCounterColorState={batchCounterColorState}
-        setBatchCounterColorState={setBatchCounterColorState}
-        batchLocalColors={batchLocalColors}
-        setBatchLocalColors={setBatchLocalColors}
-        batchLocalOpacities={batchLocalOpacities}
-        setBatchLocalOpacities={setBatchLocalOpacities}
-        handleBatchPickerToggle={handleBatchPickerToggle}
-        handleBatchPickerColorChange={handleBatchPickerColorChange}
-        handleBatchPickerColorChangeComplete={
-          handleBatchPickerColorChangeComplete
-        }
-        getBatchPickerColor={getBatchPickerColor}
-        getBatchPickerRef={getBatchPickerRef}
-        batchColorPickerInteractiveRefs={batchColorPickerInteractiveRefs}
+        onPositionChange={onPositionChange}
+        onKeyUpdate={onKeyUpdate}
+        onKeyPreview={onKeyPreview}
+        onKeyMappingChange={onKeyMappingChange}
+        handleStatUpdate={handleStatUpdate}
+        handleStatPreview={handleStatPreview}
+        isListening={isListening}
+        handleKeyListen={handleKeyListen}
+        localState={localState}
+        setLocalState={setLocalState}
+        handleSizeBlur={handleSizeBlur}
+        showImagePicker={showImagePicker}
+        setShowImagePicker={setShowImagePicker}
+        imageButtonRef={imageButtonRef}
         panelElement={panelElement}
         useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (노브 요소만)
-  if (
-    selectedKnobElements.length > 1 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <BatchKnobOnlyPanel
-        setPanelElement={setPanelElement}
-        selectedKnobElements={selectedKnobElements}
-        selectedGroupInfo={selectedGroupInfo}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleKnobBatchSharedSetting={handleKnobBatchSharedSetting}
-        getMixedValueKnobs={getMixedValueKnobs}
-        getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
-        getSelectedKnobsData={getSelectedKnobsData}
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 다중 선택인 경우 (그래프 요소만)
-  if (
-    selectedGraphElements.length > 1 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedKnobElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <BatchGraphOnlyPanel
-        setPanelElement={setPanelElement}
-        selectedGraphElements={selectedGraphElements}
-        selectedGroupInfo={selectedGroupInfo}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleBatchAlign={handleBatchAlign}
-        handleBatchDistribute={handleBatchDistribute}
-        handleBatchSpacing={handleBatchSpacing}
-        handleBatchSpacingPreview={handleBatchSpacingPreview}
-        handleBatchSpacingCommit={handleBatchSpacingCommit}
-        getBatchSpacingValue={getBatchSpacingValue}
-        handleBatchResize={handleBatchResize}
-        handleBatchStyleChange={handleBatchStyleChange}
-        handleBatchStyleChangeComplete={handleBatchStyleChangeComplete}
-        handleGraphBatchSharedSetting={handleGraphBatchSharedSetting}
-        getMixedValueGraphs={getMixedValueGraphs}
-        getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
-        getSelectedGraphsData={getSelectedGraphsData}
-        batchScrollRefFor={batchScrollRefFor}
-        batchThumbRefFor={batchThumbRefFor}
-        batchImageButtonRef={batchImageButtonRef}
-        showBatchImagePicker={showBatchImagePicker}
-        setShowBatchImagePicker={setShowBatchImagePicker}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        selectedKeyType={selectedKeyType}
-        t={t}
-      />
-    );
-  }
-
-  // 플러그인 요소가 선택된 경우
-  if (
-    selectedPluginElements.length > 0 &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0
-  ) {
-    const pluginTitle =
-      selectedPluginDefinition?.name ||
-      selectedPluginElement?.definitionId ||
-      t('propertiesPanel.pluginElement') ||
-      'Plugin';
-
-    return (
-      <PluginSelectionPanel
-        setPanelElement={setPanelElement}
-        pluginTitle={pluginTitle}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        setPluginScrollRef={setPluginScrollRef}
-        setPluginThumbRef={setPluginThumbRef}
-        isPluginResizable={isPluginResizable}
-        selectedPluginElement={selectedPluginElement}
-        pluginDisplaySize={pluginDisplaySize}
-        handlePluginPositionXChange={handlePluginPositionXChange}
-        handlePluginPositionYChange={handlePluginPositionYChange}
-        handlePluginWidthChange={handlePluginWidthChange}
-        handlePluginHeightChange={handlePluginHeightChange}
-        hasSinglePluginSelection={hasSinglePluginSelection}
-        showModalHint={showModalHint}
-        showSettings={showSettings}
-        renderPluginSettingsForm={renderPluginSettingsForm}
-        selectedPluginDefinition={selectedPluginDefinition}
-        resolvedPluginSettings={resolvedPluginSettings}
-        handlePluginSettingChange={handlePluginSettingChange}
-        t={t}
-      />
-    );
-  }
-
-  // 단일 노브 요소 선택인 경우
-  if (
-    selectedKnobElements.length === 1 &&
-    !!singleKnobPosition &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedGraphElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <SingleKnobPanel
-        setPanelElement={setPanelElement}
-        singleKnobPosition={singleKnobPosition}
-        singleKnobIndex={singleKnobIndex!}
-        selectedKeyType={selectedKeyType}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleKnobUpdate={handleKnobUpdate}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
         singleScrollRefFor={singleScrollRefFor}
         singleThumbRefFor={singleThumbRefFor}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
         t={t}
       />
     );
-  }
+  };
 
-  // 단일 그래프 요소 선택인 경우
-  if (
-    selectedGraphElements.length === 1 &&
-    !!singleGraphPosition &&
-    selectedKeyLikeElements.length === 0 &&
-    selectedPluginElements.length === 0
-  ) {
-    return (
-      <SingleGraphPanel
-        setPanelElement={setPanelElement}
-        singleGraphPosition={singleGraphPosition}
-        singleGraphIndex={singleGraphIndex!}
-        selectedKeyType={selectedKeyType}
-        isRenaming={isRenaming}
-        renameInputRef={renameInputRef}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        renameCancelledRef={renameCancelledRef}
-        handleRenameCommit={handleRenameCommit}
-        handleRenameCancel={handleRenameCancel}
-        handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
-        handleGraphUpdate={handleGraphUpdate}
-        singleScrollRefFor={singleScrollRefFor}
-        singleThumbRefFor={singleThumbRefFor}
-        showGraphImagePicker={showGraphImagePicker}
-        setShowGraphImagePicker={setShowGraphImagePicker}
-        graphImageButtonRef={graphImageButtonRef}
-        graphClassNameDraft={graphClassNameDraft}
-        setGraphClassNameDraft={setGraphClassNameDraft}
-        panelElement={panelElement}
-        useCustomCSS={useCustomCSS}
-        t={t}
-      />
-    );
-  }
+  const panelBody = renderPanelBody();
+  if (!panelBody) return null;
 
-  // 단일 키/통계 요소 선택인 경우
-  const isSingleStat = !singleKeyPosition && !!singleStatPosition;
-  const isSingleKey = !!singleKeyPosition;
-  if (!isSingleKey && !isSingleStat) {
-    return null;
-  }
-
+  // 프레임이 글래스를 소유하고, 루트/서브 페이지가 그 안에서 슬라이드 전환
   return (
-    <SingleKeyStatPanel
-      setPanelElement={setPanelElement}
-      isSingleStat={isSingleStat}
-      isSingleKey={isSingleKey}
-      singleKeyIndex={singleKeyIndex}
-      singleStatIndex={singleStatIndex}
-      singleKeyPosition={singleKeyPosition}
-      singleStatPosition={singleStatPosition}
-      singleKeyCode={singleKeyCode}
-      singleKeyInfo={singleKeyInfo}
-      selectedKeyType={selectedKeyType}
-      isRenaming={isRenaming}
-      renameInputRef={renameInputRef}
-      renameValue={renameValue}
-      setRenameValue={setRenameValue}
-      renameCancelledRef={renameCancelledRef}
-      handleRenameCommit={handleRenameCommit}
-      handleRenameCancel={handleRenameCancel}
-      handleRenameStart={handleRenameStart}
-      handleToggleMode={handleToggleMode}
-      handleTogglePanel={handleTogglePanel}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      onPositionChange={onPositionChange}
-      onKeyUpdate={onKeyUpdate}
-      onKeyPreview={onKeyPreview}
-      onKeyMappingChange={onKeyMappingChange}
-      handleStatUpdate={handleStatUpdate}
-      handleStatPreview={handleStatPreview}
-      isListening={isListening}
-      handleKeyListen={handleKeyListen}
-      localState={localState}
-      setLocalState={setLocalState}
-      handleSizeBlur={handleSizeBlur}
-      showImagePicker={showImagePicker}
-      setShowImagePicker={setShowImagePicker}
-      imageButtonRef={imageButtonRef}
-      panelElement={panelElement}
-      useCustomCSS={useCustomCSS}
-      singleScrollRefFor={singleScrollRefFor}
-      singleThumbRefFor={singleThumbRefFor}
-      t={t}
-    />
+    <PanelNavProvider
+      value={{ activePageKey, renderPageKey, openPage, closePage, pageHost }}
+    >
+      <div className={SIDE_PANEL_FRAME_CLASS}>
+        <div
+          className="dmn-panel-page"
+          data-page-depth="root"
+          data-active={activePageKey ? 'false' : 'true'}
+        >
+          {panelBody}
+        </div>
+        <div
+          ref={setPageHost}
+          className="dmn-panel-page"
+          data-page-depth="sub"
+          data-active={activePageKey ? 'true' : 'false'}
+        />
+      </div>
+    </PanelNavProvider>
   );
 };
 
