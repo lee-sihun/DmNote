@@ -333,10 +333,8 @@ const GridMinimap = ({
         style={{
           width: MINIMAP_WIDTH,
           height: 23,
-          backgroundColor: 'var(--ui-glass)',
+          backgroundColor: 'var(--ui-bg-inset)',
           border: '1px solid var(--ui-line)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 8,
           boxSizing: 'border-box',
           overflow: 'hidden',
@@ -474,10 +472,8 @@ const GridMinimap = ({
         style={{
           width: MINIMAP_WIDTH,
           height: MINIMAP_HEIGHT,
-          backgroundColor: 'var(--ui-glass)',
+          backgroundColor: 'var(--ui-bg-inset)',
           border: '1px solid var(--ui-line)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 8,
           boxSizing: 'border-box',
           overflow: 'hidden',

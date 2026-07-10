@@ -43,7 +43,7 @@ const ZoomIndicator = ({ zoom }: ZoomIndicatorProps) => {
   // 미니맵 위에 위치: 미니맵(80px) + gap(8px) + bottom(8px) = 96px
   return (
     <div
-      className={`absolute bottom-[96px] left-2 bg-glass backdrop-blur-[20px] shadow-elevation-2 text-fg text-caption tabular-nums px-[8px] py-[4px] rounded-[8px] select-none pointer-events-none transition-opacity duration-base ${
+      className={`absolute bottom-[96px] left-2 bg-inset border border-line text-fg text-caption tabular-nums px-[8px] py-[4px] rounded-[8px] select-none pointer-events-none transition-opacity duration-base ${
         isVisible ? 'opacity-100' : 'opacity-0'
       }`}
     >

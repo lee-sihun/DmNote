@@ -114,16 +114,12 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
 
   return (
     <div className="flex flex-col w-[184px] p-[6px] bg-glass backdrop-blur-[24px] rounded-[12px] shadow-elevation-2">
-      {/* 섹션 헤더 */}
-      <div className="px-[8px] pt-[5px] pb-[6px] text-caption text-fg-faint select-none">
-        {t('tabs.title')}
-      </div>
-
-      {customTabs.length === 0 ? (
-        <div className="px-[8px] pb-[8px] text-body text-fg-faint">
-          {t('tabs.empty')}
-        </div>
-      ) : (
+      {customTabs.length > 0 && (
+        <>
+          {/* 섹션 헤더 */}
+          <div className="px-[8px] pt-[5px] pb-[6px] text-caption text-fg-faint select-none">
+            {t('tabs.title')}
+          </div>
         <div
           ref={scrollRef}
           className="flex flex-col w-full gap-[2px] overflow-y-auto modal-content-scroll"
@@ -189,19 +185,21 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
               })}
           </div>
         </div>
+
+          {!maxReached && (
+            <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
+          )}
+        </>
       )}
 
       {!maxReached && (
-        <>
-          <div className="h-px bg-white/[0.06] my-[6px] -mx-[6px]" />
-          <button
-            className="w-full h-[28px] rounded-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
-            onClick={() => setShowNameModal(true)}
-          >
-            <PlusIcon className="w-[9px] h-[9px] shrink-0" />
-            <span className="text-body">{t('tabs.createTitle')}</span>
-          </button>
-        </>
+        <button
+          className="w-full h-[28px] rounded-[8px] bg-white/[0.07] hover:bg-white/[0.1] active:bg-white/[0.13] flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
+          onClick={() => setShowNameModal(true)}
+        >
+          <PlusIcon className="w-[9px] h-[9px] shrink-0" />
+          <span className="text-body">{t('tabs.createTitle')}</span>
+        </button>
       )}
 
       <TabNameModal
