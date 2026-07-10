@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   PropertyRowProps,
   NumberInputProps,
@@ -769,11 +770,50 @@ export const SelectInput: React.FC<SelectInputProps> = ({
   onChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // 트리거가 스크롤/리사이즈로 움직이면 좌표가 어긋나므로 닫는다
+  // (메뉴 내부 스크롤은 제외)
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = (event?: Event) => {
+      if (
+        event?.target instanceof Node &&
+        menuRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setIsOpen(false);
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [isOpen]);
 
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={triggerRef}
+        onClick={() => {
+          if (!isOpen && triggerRef.current) {
+            const rect = triggerRef.current.getBoundingClientRect();
+            setMenuPos({
+              left: rect.left,
+              top: rect.bottom + 4,
+              width: rect.width,
+            });
+          }
+          setIsOpen(!isOpen);
+        }}
         className={`h-[23px] min-w-[70px] bg-inset rounded-md ${
           isOpen ? 'shadow-focus-ring' : ''
         } px-[8px] flex items-center justify-between gap-[4px] transition-colors`}
@@ -797,30 +837,46 @@ export const SelectInput: React.FC<SelectInputProps> = ({
           />
         </svg>
       </button>
-      {isOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute top-[27px] left-0 right-0 bg-glass backdrop-blur-[24px] rounded-[10px] z-20 overflow-hidden shadow-elevation-2 min-w-[70px]">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full px-[8px] py-[6px] text-left text-body tabular-nums hover:bg-surface-hover transition-colors ${
-                  value === opt.value ? 'text-accent' : 'text-fg'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {isOpen &&
+        menuPos &&
+        createPortal(
+          // 패널의 backdrop-filter·mask 아래에서는 중첩 backdrop-blur가
+          // 무력화되므로 메뉴는 body로 포털해 backdrop root 밖에서 그린다
+          <>
+            <div
+              className="fixed inset-0 z-[59]"
+              onClick={() => setIsOpen(false)}
+            />
+            <div
+              ref={menuRef}
+              data-dmn-popup-submenu="true"
+              className="fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] shadow-elevation-2 min-w-[70px] tooltip-fade-in"
+              style={{
+                left: menuPos.left,
+                top: menuPos.top,
+                width: menuPos.width,
+              }}
+            >
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`text-left w-full h-[24px] px-[8px] rounded-[6px] text-body tabular-nums transition-colors duration-fast flex items-center ${
+                    value === opt.value
+                      ? 'bg-surface-active text-fg pointer-events-none'
+                      : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+                  }`}
+                >
+                  <span className="truncate">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 };

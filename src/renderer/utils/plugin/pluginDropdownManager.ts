@@ -119,11 +119,10 @@ export function setupPluginDropdownInteractions(
     menu.classList.remove('hidden');
     menu.classList.add('flex');
     menu.style.position = 'fixed';
-    menu.style.zIndex = '10020';
-    menu.style.maxHeight = '220px';
+    // z 계층: 크롬 30 < 팝업 40 < 모달 50 < 포털 메뉴 60
+    menu.style.zIndex = '60';
+    menu.style.maxHeight = '200px';
     menu.style.overflowY = 'auto';
-    menu.style.boxShadow = '0px 12px 30px rgba(0, 0, 0, 0.45)';
-    menu.style.borderRadius = '7px';
     menu.dataset.pluginDropdownPortal = 'true';
 
     openMenus.add(menu);

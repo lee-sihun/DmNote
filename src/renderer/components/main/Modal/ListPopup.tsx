@@ -65,10 +65,10 @@ const SubMenu = ({
     const normalLeft = anchorRect.right + 2;
     let top = anchorRect.top;
 
-    // 서브메뉴의 대략적인 높이 추정
+    // 서브메뉴의 대략적인 높이 추정 (아이템 26 + 갭 4 + 패딩 8)
     const separatorCount = items.filter((i) => i.type === 'separator').length;
     const itemCount = items.length - separatorCount;
-    const estimatedHeight = itemCount * 26 + separatorCount * 9 + 10;
+    const estimatedHeight = itemCount * 30 + separatorCount * 5 + 4;
     const estimatedWidth = 160;
 
     // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
@@ -96,12 +96,13 @@ const SubMenu = ({
   })();
 
   const itemHeight = 26;
+  const itemGap = 4;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const effectiveMax = maxVisibleItems ?? normalItemCount;
   const needsScroll = normalItemCount > effectiveMax;
   const maxHeight = needsScroll
-    ? effectiveMax * itemHeight + separatorCount * 9 + 10
+    ? effectiveMax * (itemHeight + itemGap) + separatorCount * (1 + itemGap) + 6
     : undefined;
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
@@ -123,7 +124,7 @@ const SubMenu = ({
       data-dmn-popup-submenu="true"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px] tooltip-fade-in${
+      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -221,10 +222,10 @@ const MenuItemRow = ({
     };
   }, []);
 
-  // 구분선 (부모 p-[5px] 패딩을 무시하고 전체 폭 사용)
+  // 구분선 (부모 p-[4px] 패딩을 무시하고 전체 폭 사용)
   if (item.type === 'separator') {
     return (
-      <div className="-mx-[5px] py-[3px]">
+      <div className="-mx-[4px]">
         <div className="h-[1px] bg-line" />
       </div>
     );
@@ -367,17 +368,20 @@ const ListPopup = ({
 }: ListPopupProps) => {
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
-    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[5px] flex flex-col gap-[1px]';
+    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[4px] flex flex-col gap-[4px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
-  // 스크롤 필요 여부 계산
+  // 스크롤 필요 여부 계산 (아이템 26 + 갭 4 리듬)
   const itemHeight = 26;
+  const itemGap = 4;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const needsScroll =
     maxVisibleItems != null && normalItemCount > maxVisibleItems;
   const maxHeight = needsScroll
-    ? maxVisibleItems * itemHeight + separatorCount * 9 + 10
+    ? maxVisibleItems * (itemHeight + itemGap) +
+      separatorCount * (1 + itemGap) +
+      6
     : undefined;
   const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
@@ -410,7 +414,7 @@ const ListPopup = ({
             ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
             : undefined
         }
-        className={`flex flex-col gap-[1px]${
+        className={`flex flex-col gap-[4px]${
           needsScroll ? ' listpopup-scroll' : ''
         }`}
       >

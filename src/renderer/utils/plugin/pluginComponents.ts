@@ -278,8 +278,10 @@ export function createDropdown(options: DropdownOptions): string {
   const itemsHtml = items
     .map(
       (opt) => `
-    <button type="button" class="text-left w-full h-[23px] px-[13px] py-[0px] rounded-[7px] text-style-2 text-[#DBDEE8] transition-colors duration-100 flex items-center bg-[#2A2A31] hover:bg-[#24232A] ${
-      selected === opt.value ? '!bg-[#24232A]' : ''
+    <button type="button" class="text-left w-full h-[24px] px-[8px] rounded-[6px] text-body transition-colors duration-fast flex items-center ${
+      selected === opt.value
+        ? 'bg-surface-active text-fg pointer-events-none'
+        : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
     }" data-value="${opt.value}">
       <span class="truncate">${opt.label}</span>
     </button>
@@ -290,15 +292,15 @@ export function createDropdown(options: DropdownOptions): string {
   return `<div class="relative plugin-dropdown" ${idAttr} ${onChangeAttr} data-selected="${
     selected || ''
   }">
-    <button type="button" class="flex items-center justify-between h-[23px] py-[0px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-[#DBDEE8] text-style-2 outline-none ${
-      disabled ? 'opacity-50 pointer-events-none' : ''
+    <button type="button" class="flex items-center justify-between h-[24px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast outline-none ${
+      disabled ? 'opacity-40 pointer-events-none' : ''
     }" data-dropdown-toggle>
       <span class="truncate">${displayText}</span>
-      <svg width="8" height="5" viewBox="0 0 14 8" fill="none" class="ml-[5px] transition-transform duration-200">
-        <path d="M1 1L7 7L13 1" stroke="#DBDEE8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg width="8" height="5" viewBox="0 0 14 8" fill="none" class="ml-[5px] shrink-0 text-fg-muted transition-transform duration-200">
+        <path d="M1 1L7 7L13 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <div class="hidden absolute left-0 top-[26px] flex-col justify-center items-center p-[1px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] z-20 overflow-hidden gap-[2px]" data-dropdown-menu>
+    <div class="hidden absolute left-0 top-[28px] flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
       ${itemsHtml}
     </div>
   </div>`;

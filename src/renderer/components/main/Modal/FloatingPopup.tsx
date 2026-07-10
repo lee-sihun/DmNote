@@ -228,6 +228,15 @@ const FloatingPopup = ({
         return;
       }
 
+      // 서브메뉴·포털 드롭다운도 body 포털이라 floating 내부로 인식되지 않음
+      const isInsideSubMenu =
+        target instanceof Element &&
+        !!target.closest('[data-dmn-popup-submenu="true"]');
+      if (isInsideSubMenu) {
+        pointerCapturedInside = false;
+        return;
+      }
+
       if (pointerCapturedInside) {
         return;
       }
