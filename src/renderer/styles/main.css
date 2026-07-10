@@ -188,9 +188,10 @@ body.dmn-custom-cursor * {
     0% {
       --dmn-fade-top: 0px;
     }
+    /* 위쪽은 정적 거터(12px)가 분리를 담당하므로 클리핑 라인만 살짝 소프트닝 */
     10%,
     100% {
-      --dmn-fade-top: 20px;
+      --dmn-fade-top: 10px;
     }
     0%,
     90% {
