@@ -7,6 +7,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import Modal from '@components/main/Modal/Modal';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
+import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
@@ -357,7 +358,7 @@ const FontPicker = ({
                   ? (event) => menu.openFromContextMenu(event, font.id)
                   : undefined
               }
-              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] group ${
+              className={`${pickerRowClass(renderMode)} ${
                 isSelected
                   ? 'bg-surface-active text-fg cursor-pointer'
                   : isDisabled
@@ -403,7 +404,7 @@ const FontPicker = ({
               {isCustom ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                  className={`${pickerMoreButtonClass(renderMode)} ${
                     isSelected || menu.menuKey === font.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'

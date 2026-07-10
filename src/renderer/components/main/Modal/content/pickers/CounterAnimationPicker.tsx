@@ -15,6 +15,7 @@ import {
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import CommonListPickerPopup from './CommonListPickerPopup';
+import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
 
 interface CounterAnimationPickerProps {
@@ -287,7 +288,7 @@ const CounterAnimationPicker = ({
                   handlePresetSelect(preset);
                 }
               }}
-              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`${pickerRowClass(renderMode)} cursor-pointer ${
                 isSelected
                   ? 'bg-surface-active text-fg'
                   : 'text-fg hover:bg-surface-hover'
@@ -301,7 +302,7 @@ const CounterAnimationPicker = ({
               {isUserPreset ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                  className={`${pickerMoreButtonClass(renderMode)} ${
                     isSelected || menu.menuKey === preset.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100'

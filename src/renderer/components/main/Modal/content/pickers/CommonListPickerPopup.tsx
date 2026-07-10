@@ -150,19 +150,60 @@ export default function CommonListPickerPopup<T>({
 
   const effectiveOffsetY = fixedPosition ? 0 : -93;
 
-  const searchInput = (
-    <input
-      type="text"
-      value={searchQuery}
-      onChange={(event) => onSearchQueryChange(event.target.value)}
-      placeholder={searchPlaceholder}
-      className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
-    />
-  );
+  // 페이지 모드는 프라이머리 검색(h-30 + 돋보기 글리프), 팝업은 콤팩트 웰
+  const searchInput =
+    renderMode === 'page' ? (
+      <div className="relative shrink-0">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          className="absolute left-[10px] top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none"
+        >
+          <circle
+            cx="5"
+            cy="5"
+            r="3.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+          <path
+            d="M8 8L10.5 10.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          placeholder={searchPlaceholder}
+          className="w-full h-[30px] pl-[30px] pr-[10px] bg-inset rounded-[10px] text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
+        />
+      </div>
+    ) : (
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(event) => onSearchQueryChange(event.target.value)}
+        placeholder={searchPlaceholder}
+        className="w-full h-[26px] px-[8px] bg-inset rounded-md text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
+      />
+    );
 
-  // 필터 + 추가 — 같은 재질의 칩 한 쌍
+  // 필터 + 추가 — 같은 재질의 칩 한 쌍. 페이지는 검색과 같은 30 크롬 스케일
+  const controlChipClass =
+    renderMode === 'page'
+      ? 'w-[30px] h-[30px] rounded-[10px]'
+      : 'w-[24px] h-[24px] rounded-md';
   const filterAddRow = (
-    <div className="flex items-center gap-[4px]">
+    <div
+      className={`flex items-center ${
+        renderMode === 'page' ? 'gap-[8px]' : 'gap-[4px]'
+      }`}
+    >
       {filterOptions && filterValue !== undefined && onFilterChange ? (
         <div className="flex-1 min-w-0">
           <Dropdown
@@ -170,6 +211,11 @@ export default function CommonListPickerPopup<T>({
             value={filterValue}
             onChange={onFilterChange}
             fullWidth
+            heightClass={renderMode === 'page' ? 'h-[30px]' : 'h-[24px]'}
+            paddingXClass={renderMode === 'page' ? 'px-[10px]' : 'px-[8px]'}
+            roundedClass={
+              renderMode === 'page' ? 'rounded-[10px]' : 'rounded-md'
+            }
           />
         </div>
       ) : null}
@@ -179,7 +225,7 @@ export default function CommonListPickerPopup<T>({
         onClick={onAdd}
         title={addLabel}
         aria-label={addLabel}
-        className="ml-auto w-[24px] h-[24px] shrink-0 flex items-center justify-center rounded-md bg-fill hover:bg-fill-hover active:bg-fill-active text-fg-muted hover:text-fg transition-colors duration-fast"
+        className={`ml-auto ${controlChipClass} shrink-0 flex items-center justify-center bg-fill hover:bg-fill-hover active:bg-fill-active text-fg-muted hover:text-fg transition-colors duration-fast`}
       >
         <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
           <path
@@ -193,10 +239,11 @@ export default function CommonListPickerPopup<T>({
     </div>
   );
 
+  // flex-1로 스크롤 영역을 채워 빈 상태가 중앙에 오게 함
   const listInner = (
-    <div className="flex flex-col gap-[4px]">
+    <div className="flex flex-col gap-[4px] flex-1">
       {items.length === 0 && !isLoading && !errorText ? (
-        <div className="flex items-center justify-center py-[14px] text-fg-faint text-body">
+        <div className="flex-1 flex items-center justify-center py-[14px] text-fg-faint text-body">
           {emptyText}
         </div>
       ) : null}
@@ -246,19 +293,19 @@ export default function CommonListPickerPopup<T>({
             </span>
           </button>
         </div>
-        <div className="flex-1 min-h-0 flex flex-col gap-[8px] px-[12px] pb-[12px]">
-          {searchInput}
-          <div className="shrink-0">{filterAddRow}</div>
-          {/* 리스트 카드 — 전고 고정, 공간 부족 시 내부 스크롤 */}
-          <div className="bg-fill-faint rounded-[10px] p-[4px] flex-1 min-h-0 flex flex-col">
-            <div
-              ref={scrollRef}
-              className="min-h-0 flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade"
-            >
-              {listInner}
-            </div>
+        {/* 검색 — 리스트와 인접한 프라이머리 컨트롤 */}
+        <div className="px-[12px] pb-[12px] shrink-0">{searchInput}</div>
+        {/* 리스트 웰 — 리세스드 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
+        <div className="mx-[12px] bg-inset rounded-[10px] p-[4px] flex-1 min-h-0 flex flex-col">
+          <div
+            ref={scrollRef}
+            className="flex-1 min-h-0 flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade"
+          >
+            {listInner}
           </div>
         </div>
+        {/* 하단 도구 바 — 필터 + 추가 (Xcode 내비게이터 문법) */}
+        <div className="p-[12px] shrink-0">{filterAddRow}</div>
       </div>
     );
   }

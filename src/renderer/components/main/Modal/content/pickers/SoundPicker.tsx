@@ -3,6 +3,7 @@ import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
+import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
@@ -225,12 +226,12 @@ const SoundPicker = ({
               key={item.soundPath}
               role="button"
               tabIndex={0}
-              onClick={() => onSoundSelect(item.soundPath)}
+              onClick={() => onSoundSelect(isSelected ? '' : item.soundPath)}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  onSoundSelect(item.soundPath);
+                  onSoundSelect(isSelected ? '' : item.soundPath);
                 }
               }}
               onContextMenu={
@@ -238,7 +239,7 @@ const SoundPicker = ({
                   ? (event) => menu.openFromContextMenu(event, item.soundPath)
                   : undefined
               }
-              className={`w-full h-[24px] px-[8px] rounded-md text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
+              className={`${pickerRowClass(renderMode)} cursor-pointer ${
                 isSelected
                   ? 'bg-surface-active text-fg'
                   : 'text-fg hover:bg-surface-hover'
@@ -279,7 +280,7 @@ const SoundPicker = ({
               {isLocal ? (
                 <button
                   type="button"
-                  className={`w-[18px] h-[18px] -mr-[8px] rounded-md transition-all flex items-center justify-center shrink-0 ${
+                  className={`${pickerMoreButtonClass(renderMode)} ${
                     isSelected || menu.menuKey === item.soundPath
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'

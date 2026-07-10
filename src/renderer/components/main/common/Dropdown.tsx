@@ -20,6 +20,12 @@ interface DropdownProps {
   align?: 'left' | 'center' | 'right';
   /** 트리거/메뉴 너비 고정용 Tailwind 클래스 (예: 'w-[160px]'). 길면 말줄임(...) 처리됨 */
   widthClass?: string;
+  /** 트리거 높이 클래스 (기본 h-[24px]) */
+  heightClass?: string;
+  /** 트리거 수평 패딩 클래스 (기본 px-[8px]) */
+  paddingXClass?: string;
+  /** 트리거 라운딩 클래스 (기본 rounded-md) */
+  roundedClass?: string;
 }
 
 interface MenuPosition {
@@ -39,6 +45,9 @@ const Dropdown: React.FC<DropdownProps> = ({
   iconTrigger,
   align = 'left',
   widthClass = '',
+  heightClass = 'h-[24px]',
+  paddingXClass = 'px-[8px]',
+  roundedClass = 'rounded-md',
 }) => {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
@@ -187,7 +196,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex box-border items-center justify-between h-[24px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast ${
+          className={`flex box-border items-center justify-between ${heightClass} ${paddingXClass} bg-fill hover:bg-fill-hover ${roundedClass} text-fg text-body transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={toggleOpen}
