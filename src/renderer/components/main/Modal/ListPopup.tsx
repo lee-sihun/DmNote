@@ -63,7 +63,7 @@ const SubMenu = ({
     // 서브메뉴의 대략적인 높이 추정
     const separatorCount = items.filter((i) => i.type === 'separator').length;
     const itemCount = items.length - separatorCount;
-    const estimatedHeight = itemCount * 24 + separatorCount * 9 + 10;
+    const estimatedHeight = itemCount * 26 + separatorCount * 9 + 10;
     const estimatedWidth = 160;
 
     // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
@@ -90,7 +90,7 @@ const SubMenu = ({
     };
   })();
 
-  const itemHeight = 24;
+  const itemHeight = 26;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const effectiveMax = maxVisibleItems ?? normalItemCount;
@@ -98,6 +98,7 @@ const SubMenu = ({
   const maxHeight = needsScroll
     ? effectiveMax * itemHeight + separatorCount * 9 + 10
     : undefined;
+  const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
   const { scrollContainerRef: subLenisRef } = useLenis({
     duration: 0.5,
@@ -133,6 +134,7 @@ const SubMenu = ({
           onSelect={onSelect}
           onCloseAll={onCloseAll}
           siblingActiveRef={siblingActiveRef}
+          hasCheckColumn={hasCheckColumn}
         />
       ))}
     </div>
@@ -146,6 +148,7 @@ const MenuItemRow = ({
   onSelect,
   onCloseAll,
   siblingActiveRef,
+  hasCheckColumn = false,
 }: {
   item: ListItem;
   textAlign: 'left' | 'center';
@@ -156,6 +159,8 @@ const MenuItemRow = ({
     id: string | null;
     close: (() => void) | null;
   }>;
+  /** 목록에 체크 가능한 항목이 있을 때만 좌측 체크 컬럼 렌더 */
+  hasCheckColumn?: boolean;
 }) => {
   const [subMenuOpen, setSubMenuOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
@@ -231,7 +236,7 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[108px] h-[24px] px-[24px] rounded-[6px] flex items-center justify-center transition-colors duration-fast ${
+        className={`w-full min-w-[108px] h-[26px] px-[24px] rounded-[6px] flex items-center justify-center transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
@@ -259,32 +264,34 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[120px] h-[24px] px-[6px] rounded-[6px] flex items-center gap-[4px] transition-colors duration-fast ${
+        className={`w-full min-w-[132px] h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
         }`}
       >
-        {/* 좌측 체크 영역 (고정 너비) */}
-        <span className="w-[16px] flex-shrink-0 flex items-center justify-center">
-          {hasCheck && item.checked && (
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              className="text-fg"
-            >
-              <path
-                d="M2 6.5L4.5 9L10 3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-        </span>
+        {/* 좌측 체크 영역 — 체크 가능한 목록에서만 렌더 */}
+        {hasCheckColumn && (
+          <span className="w-[14px] flex-shrink-0 flex items-center justify-center">
+            {hasCheck && item.checked && (
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                className="text-fg"
+              >
+                <path
+                  d="M2 6.5L4.5 9L10 3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </span>
+        )}
 
         {/* 라벨 텍스트 */}
         <span
@@ -295,15 +302,15 @@ const MenuItemRow = ({
           {item.label}
         </span>
 
-        {/* 우측 서브메뉴 화살표 영역 (고정 너비) */}
-        <span className="w-[16px] flex-shrink-0 flex items-center justify-center">
-          {hasChildren && (
+        {/* 우측 서브메뉴 화살표 */}
+        {hasChildren && (
+          <span className="w-[12px] flex-shrink-0 flex items-center justify-center">
             <svg
-              width="7"
-              height="12"
+              width="6"
+              height="10"
               viewBox="0 0 7 12"
               fill="none"
-              className="text-fg-muted"
+              className="text-fg-faint"
             >
               <path
                 d="M1 1L5.5 6L1 11"
@@ -313,8 +320,8 @@ const MenuItemRow = ({
                 strokeLinejoin="round"
               />
             </svg>
-          )}
-        </span>
+          </span>
+        )}
       </button>
 
       {/* 서브메뉴 */}
@@ -350,7 +357,7 @@ const ListPopup = ({
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산
-  const itemHeight = 24;
+  const itemHeight = 26;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
   const normalItemCount = items.length - separatorCount;
   const needsScroll =
@@ -358,6 +365,7 @@ const ListPopup = ({
   const maxHeight = needsScroll
     ? maxVisibleItems * itemHeight + separatorCount * 9 + 10
     : undefined;
+  const hasCheckColumn = items.some((it) => typeof it.checked === 'boolean');
 
   const siblingActiveRef = useRef<{
     id: string | null;
@@ -401,6 +409,7 @@ const ListPopup = ({
             onSelect={onSelect}
             onCloseAll={onClose}
             siblingActiveRef={siblingActiveRef}
+            hasCheckColumn={hasCheckColumn}
           />
         ))}
       </div>
