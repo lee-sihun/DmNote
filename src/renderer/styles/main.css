@@ -195,6 +195,37 @@ body.dmn-custom-cursor * {
 
 /* ===== 등장 모션 ===== */
 
+/* 화면 전환 (캔버스 ↔ 설정) */
+@keyframes viewEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.view-enter {
+  animation: viewEnter var(--ui-duration-base) var(--ui-ease-out);
+}
+
+@keyframes viewFade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.view-fade {
+  animation: viewFade var(--ui-duration-base) var(--ui-ease-out);
+}
+
 @keyframes tooltipFadeIn {
   from {
     opacity: 0;
@@ -403,4 +434,19 @@ body.dmn-custom-cursor * {
 
 .webfont-cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   background: rgba(255, 255, 255, 0.26);
+}
+
+/* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-fade-in,
+  .animate-modal-scale,
+  .animate-modal-fade,
+  .view-enter,
+  .view-fade {
+    animation: none;
+  }
+
+  .animate-modal-fade {
+    opacity: 1;
+  }
 }

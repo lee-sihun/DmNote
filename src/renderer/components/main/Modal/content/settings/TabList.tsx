@@ -113,8 +113,8 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center max-w-[154px] bg-button-primary rounded-md border border-button-hover">
-      <div className="min-h-[39px] w-full border-b-[1px] border-button-hover flex flex-col items-center justify-center p-[8px] gap-[8px]">
+    <div className="flex flex-col items-center justify-center max-w-[154px] bg-elevated rounded-lg border border-line shadow-elevation-2">
+      <div className="min-h-[39px] w-full border-b-[1px] border-line flex flex-col items-center justify-center p-[8px] gap-[8px]">
         {customTabs.length === 0 ? (
           <span className="text-style-2 text-fg">{t('tabs.empty')}</span>
         ) : (
@@ -147,8 +147,8 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
                 .map((tab) => (
                   <button
                     key={tab.id}
-                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-md text-style-2 text-fg hover:bg-button-hover active:bg-button-active ${
-                      selectedKeyType === tab.id ? 'bg-button-hover' : ''
+                    className={`w-full min-h-[24px] h-[24px] flex-shrink-0 flex items-center justify-center rounded-md text-style-2 text-fg transition-colors duration-fast hover:bg-surface-hover active:bg-surface-active ${
+                      selectedKeyType === tab.id ? 'bg-surface-active' : ''
                     }`}
                     onClick={() => handleSelect(tab.id)}
                   >
@@ -173,7 +173,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
             className={`flex flex-1 items-center justify-center max-w-[138px] h-[22px] rounded-md ${
               isCustomSelected
                 ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)]'
-                : 'bg-button-hover opacity-50 cursor-not-allowed'
+                : 'bg-white/[0.06] opacity-50 cursor-not-allowed'
             }`}
             disabled={!isCustomSelected}
             onClick={() => setAskDelete(true)}

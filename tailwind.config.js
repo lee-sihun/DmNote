@@ -47,13 +47,6 @@ module.exports = {
           DEFAULT: "var(--ui-warning)",
           muted: "var(--ui-warning-muted)",
         },
-        // 레거시 별칭 — 마이그레이션 완료 후 제거
-        primary: "var(--ui-bg-app)",
-        button: {
-          primary: "var(--ui-bg-app)",
-          hover: "var(--ui-bg-surface-hover)",
-          active: "var(--ui-bg-surface-active)",
-        },
       },
       fontFamily: {
         sans: [
