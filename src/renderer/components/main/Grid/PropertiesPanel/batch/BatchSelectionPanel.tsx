@@ -601,7 +601,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
         </div>
 
         {/* 탭 */}
-        <div className="px-[12px] pb-[12px]">
+        <div className="px-[12px]">
           <Tabs
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -624,7 +624,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.STYLE ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <div className="p-[12px] flex flex-col gap-[12px]">
               <BatchStyleTabContent
                 selectedCount={selectedBatchStyleElements.length}
                 showSoundControls={selectedKeyElements.length > 0}
@@ -783,7 +783,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 activeTab === TABS.NOTE ? '' : 'hidden'
               }`}
             >
-              <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+              <div className="p-[12px] flex flex-col gap-[12px]">
                 <BatchNoteTabContent
                   getMixedValue={getMixedValueKeysOnly}
                   handleBatchStyleChangeComplete={
@@ -827,7 +827,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               activeTab === TABS.COUNTER ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <div className="p-[12px] flex flex-col gap-[12px]">
               <BatchCounterTabContent
                 batchCounterSettings={batchCounterSettings}
                 keyVisual={batchKeyVisual}
@@ -1104,7 +1104,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className="flex items-center justify-between p-[12px] pb-0">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1183,7 +1183,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedGraphElements.length}
               hideDisplayText
@@ -1469,7 +1469,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className="flex items-center justify-between p-[12px] pb-0">
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1548,7 +1548,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
           ref={batchScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             <BatchStyleTabContent
               selectedCount={selectedKnobElements.length}
               hideDisplayText

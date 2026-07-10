@@ -155,7 +155,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
         </div>
 
         {/* 탭 */}
-        <div className="px-[12px] pb-[12px]">
+        <div className="px-[12px]">
           <LayerPanelTabs
             activeTab={activeTab}
             onTabChange={setActiveTab}

@@ -135,7 +135,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
 }) => {
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-0">
         <span className="text-fg text-style-2 truncate max-w-[120px]">
           {pluginTitle}
         </span>
@@ -161,7 +161,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
           ref={setPluginScrollRef}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             {isPluginResizable && (
               <PropertySection>
                 <PropertyRow label={t('propertiesPanel.position') || '위치'}>
@@ -319,7 +319,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-0">
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -383,7 +383,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.position') || 'Position'}>
                 <NumberInput
@@ -967,7 +967,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className="flex items-center justify-between p-[12px] pb-0">
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -1032,7 +1032,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           ref={singleScrollRefFor(TABS.STYLE)}
           className="properties-panel-overlay-viewport"
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             {/* 노브 매핑 (키 매핑과 동일한 라벨/버튼 구조) */}
             <PropertySection>
               <PropertyRow label={t('propertiesPanel.knobAxis') || '노브 매핑'}>
@@ -1598,7 +1598,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
         </div>
 
         {/* 탭 */}
-        <div className="px-[12px] pb-[12px]">
+        <div className="px-[12px]">
           <Tabs
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -1617,7 +1617,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.STYLE ? '' : 'hidden'
           }`}
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             <StyleTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}
@@ -1678,7 +1678,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               activeTab === TABS.NOTE ? '' : 'hidden'
             }`}
           >
-            <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+            <div className="p-[12px] flex flex-col gap-[12px]">
               <NoteTabContent
                 keyIndex={singleKeyIndex!}
                 keyPosition={singleKeyPosition!}
@@ -1705,7 +1705,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             activeTab === TABS.COUNTER ? '' : 'hidden'
           }`}
         >
-          <div className="px-[12px] pb-[12px] flex flex-col gap-[12px]">
+          <div className="p-[12px] flex flex-col gap-[12px]">
             <CounterTabContent
               keyIndex={keyLikeIndex}
               keyPosition={keyLikePosition}

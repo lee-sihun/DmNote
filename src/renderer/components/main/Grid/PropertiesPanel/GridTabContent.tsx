@@ -42,7 +42,7 @@ const GridTabContent: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-[12px] px-[12px] pb-[12px]">
+    <div className="flex flex-col gap-[12px] p-[12px]">
       {/* 그리드 */}
       <PropertySection>
         <PropertyRow label={t('gridSettings.gridSnapSize')}>
