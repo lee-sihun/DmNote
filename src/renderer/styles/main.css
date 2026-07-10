@@ -157,6 +157,51 @@ body.dmn-custom-cursor * {
   scrollbar-width: none;
 }
 
+/* 스크롤 엣지 페이드 — 스크롤 위치에 반응하는 마스크.
+   scroll-driven animations 지원 엔진(WebView2, Safari 26+)에서만 켜지고
+   미지원 엔진은 마스크 없이 정상 렌더 (폴백 없음, 의도된 열화) */
+@property --dmn-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --dmn-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@supports (animation-timeline: scroll(self)) {
+  .properties-panel-overlay-viewport {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--dmn-fade-top, 0px),
+      black calc(100% - var(--dmn-fade-bottom, 0px)),
+      transparent
+    );
+    animation: dmn-scroll-fade linear both;
+    animation-timeline: scroll(self);
+  }
+
+  @keyframes dmn-scroll-fade {
+    0% {
+      --dmn-fade-top: 0px;
+    }
+    10%,
+    100% {
+      --dmn-fade-top: 20px;
+    }
+    0%,
+    90% {
+      --dmn-fade-bottom: 20px;
+    }
+    100% {
+      --dmn-fade-bottom: 0px;
+    }
+  }
+}
+
 .properties-panel-overlay-viewport::-webkit-scrollbar {
   width: 0;
   height: 0;
