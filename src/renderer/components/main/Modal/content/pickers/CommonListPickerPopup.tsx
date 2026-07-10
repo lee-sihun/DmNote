@@ -42,7 +42,7 @@ interface CommonListPickerPopupProps<T> {
   loadingText?: string;
   errorText?: string;
   listHeightClass?: string;
-  onAdd: () => void;
+  onAdd: (event: React.MouseEvent<HTMLButtonElement>) => void;
   addButtonContent: React.ReactNode;
 }
 

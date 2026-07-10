@@ -558,16 +558,12 @@
     "searchPlaceholder": "搜尋",
     "filterAll": "全部",
     "filterLocal": "本地音效",
-    "noSounds": "無音效"
-  },
-  "soundManager": {
-    "title": "音效",
     "noSounds": "無音效",
-    "addSound": "添加",
     "loadFailed": "音效清單載入失敗",
-    "stateChangeFailed": "音效狀態變更失敗",
+    "edit": "編輯",
+    "delete": "刪除",
     "deleteFailed": "音效刪除失敗",
-    "editSound": "編輯"
+    "deleteConfirm": "確定刪除該音效？檔案將被刪除，並從所有使用它的元素中移除。"
   },
   "soundTrimModal": {
     "defaultTitle": "新增音效",

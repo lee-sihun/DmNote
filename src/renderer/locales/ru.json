@@ -557,16 +557,12 @@
     "searchPlaceholder": "Поиск...",
     "filterAll": "Все",
     "filterLocal": "Локальные звуки",
-    "noSounds": "Звуков нет"
-  },
-  "soundManager": {
-    "title": "Звуки",
     "noSounds": "Звуков нет",
-    "addSound": "Добавить",
     "loadFailed": "Не удалось загрузить список звуков",
-    "stateChangeFailed": "Не удалось изменить состояние звука",
+    "edit": "Редактировать",
+    "delete": "Удалить",
     "deleteFailed": "Не удалось удалить звук",
-    "editSound": "Редактировать"
+    "deleteConfirm": "Удалить звук? Файл будет удалён, и звук будет снят со всех элементов, где он используется."
   },
   "soundTrimModal": {
     "defaultTitle": "Добавить звук",

@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
 import PlusIcon from '@assets/svgs/plus2.svg';
+import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPopup from './CommonListPickerPopup';
-import SoundManagerModal from '../managers/SoundManagerModal';
+import MoreVerticalIcon from './MoreVerticalIcon';
+import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
+import SoundTrimModal from '../managers/SoundTrimModal';
 
 interface SoundPickerProps {
   open: boolean;
@@ -15,6 +18,10 @@ interface SoundPickerProps {
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
   previewVolume?: number;
 }
+
+type TrimState =
+  | { mode: 'create'; file: File }
+  | { mode: 'edit'; item: SoundListItem };
 
 const SoundPicker = ({
   open,
@@ -32,7 +39,9 @@ const SoundPicker = ({
   const [sounds, setSounds] = useState<SoundListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
-  const [showManager, setShowManager] = useState(false);
+  const [trimState, setTrimState] = useState<TrimState | null>(null);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const menu = usePickerItemMenu<string>();
 
   const normalizedSelectedSound = (selectedSound || '').trim();
 
@@ -44,7 +53,7 @@ const SoundPicker = ({
       setSounds(nextSounds);
     } catch (error) {
       console.error('Failed to load sound list', error);
-      setLoadError('사운드 목록 로드 실패');
+      setLoadError(t('soundPicker.loadFailed') || '사운드 목록 로드 실패');
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +62,12 @@ const SoundPicker = ({
   useEffect(() => {
     if (!open) return;
     void loadSounds();
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (open) return;
+    menu.close();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filterOptions = [
     { value: 'all', label: t('soundPicker.filterAll') || '전체' },
@@ -64,7 +78,6 @@ const SoundPicker = ({
     const query = searchQuery.trim().toLowerCase();
 
     return sounds.filter((item) => {
-      if (!item.enabled) return false;
       if (filterType === 'local' && item.source !== 'local') {
         return false;
       }
@@ -76,6 +89,73 @@ const SoundPicker = ({
     });
   })();
 
+  const menuTargetItem =
+    menu.menuKey !== null
+      ? sounds.find((item) => item.soundPath === menu.menuKey) ?? null
+      : null;
+
+  const menuItems: ListItem[] = [
+    {
+      id: 'edit',
+      label: t('soundPicker.edit') || '편집',
+      disabled: !menuTargetItem?.originalPath,
+    },
+    {
+      id: 'delete',
+      label: t('soundPicker.delete') || '삭제',
+    },
+  ];
+
+  const moreMenuLabel = (() => {
+    const translated = t('common.more');
+    return translated && translated !== 'common.more' ? translated : '더보기';
+  })();
+
+  const handleAddFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (addFileInputRef.current) {
+      addFileInputRef.current.value = '';
+    }
+    if (!file) return;
+    setTrimState({ mode: 'create', file });
+  };
+
+  const handleDelete = async (item: SoundListItem) => {
+    const confirmed = await window.api.ui.dialog.confirm(
+      t('soundPicker.deleteConfirm') ||
+        '사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다.',
+      {
+        confirmText: t('contextMenu.delete') || '삭제',
+        cancelText: t('common.cancel') || '취소',
+        danger: true,
+      },
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await window.api.sound.remove(item.soundPath);
+      if (normalizedSelectedSound === item.soundPath) {
+        onSoundSelect(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete sound', error);
+      setLoadError(t('soundPicker.deleteFailed') || '사운드 삭제 실패');
+    }
+    await loadSounds();
+  };
+
+  const handleTrimSaved = (soundPath: string) => {
+    onSoundSelect(soundPath);
+    setTrimState(null);
+    void loadSounds();
+  };
+
+  const handlePickerClose = () => {
+    if (menu.menuKey !== null) return;
+    onClose();
+  };
+
   return (
     <>
       <CommonListPickerPopup<SoundListItem>
@@ -83,7 +163,7 @@ const SoundPicker = ({
         referenceRef={referenceRef}
         panelElement={panelElement}
         interactiveRefs={interactiveRefs}
-        onClose={onClose}
+        onClose={handlePickerClose}
         widthClass="w-[156px]"
         estimatedWidth={164}
         estimatedHeight={276}
@@ -94,44 +174,121 @@ const SoundPicker = ({
         filterValue={filterType}
         onFilterChange={(value) => setFilterType(value as 'all' | 'local')}
         items={filteredSounds}
+        getItemKey={(item) => item.soundPath}
         renderItem={(item) => {
           const isSelected = item.soundPath === normalizedSelectedSound;
+          const isLocal = item.source === 'local';
+          const displayName = item.displayName || item.fileName;
+
           return (
-            <button
+            <div
               key={item.soundPath}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onSoundSelect(item.soundPath)}
-              className={`w-full min-h-[24px] h-[24px] flex-shrink-0 px-[8px] rounded-[7px] text-left text-style-4 transition-colors truncate ${
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSoundSelect(item.soundPath);
+                }
+              }}
+              onContextMenu={
+                isLocal
+                  ? (event) => menu.openFromContextMenu(event, item.soundPath)
+                  : undefined
+              }
+              className={`w-full h-[24px] px-[8px] rounded-[7px] text-style-4 transition-colors flex items-center gap-[4px] cursor-pointer group ${
                 isSelected
                   ? 'bg-[#2E2D33] text-[#FFFFFF]'
                   : 'text-[#DBDEE8] hover:bg-[#26262C]'
               }`}
-              title={item.displayName || item.fileName}
+              title={displayName}
             >
-              {item.displayName || item.fileName}
-            </button>
+              <span className="min-w-0 flex-1 truncate text-left">
+                {displayName}
+              </span>
+
+              {isLocal ? (
+                <button
+                  type="button"
+                  className={`w-[18px] h-[18px] rounded-[5px] transition-all flex items-center justify-center shrink-0 ${
+                    isSelected || menu.menuKey === item.soundPath
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                  } ${
+                    isSelected
+                      ? 'text-[#D9DCE6] hover:text-[#FFFFFF] hover:bg-[#3A3943]'
+                      : 'text-[#8A8D99] hover:text-[#DBDEE8] hover:bg-[#2A2A30]'
+                  }`}
+                  title={moreMenuLabel}
+                  aria-label={moreMenuLabel}
+                  onClick={(event) =>
+                    menu.openFromButton(event, item.soundPath)
+                  }
+                >
+                  <MoreVerticalIcon />
+                </button>
+              ) : null}
+            </div>
           );
         }}
         emptyText={t('soundPicker.noSounds') || '사운드 없음'}
         isLoading={isLoading}
         loadingText={t('propertiesPanel.loading') || '로딩...'}
         errorText={loadError}
-        onAdd={() => setShowManager(true)}
+        onAdd={() => addFileInputRef.current?.click()}
         addButtonContent={<PlusIcon />}
       />
 
-      <SoundManagerModal
-        isOpen={showManager}
-        selectedSound={selectedSound}
-        onSelectSound={(path) => {
-          onSoundSelect(path);
-          void loadSounds();
-        }}
-        onClose={() => {
-          setShowManager(false);
-          void loadSounds();
-        }}
+      <input
+        ref={addFileInputRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAddFileChange}
+      />
+
+      {menu.menuKey !== null && (
+        <ListPopup
+          open
+          position={menu.menuPosition ?? undefined}
+          onClose={menu.close}
+          textAlign="center"
+          items={menuItems}
+          onSelect={(id) => {
+            const item = menuTargetItem;
+            menu.close();
+            if (!item) return;
+            if (id === 'edit') {
+              setTrimState({ mode: 'edit', item });
+            } else if (id === 'delete') {
+              void handleDelete(item);
+            }
+          }}
+          className="z-[60]"
+          offsetX={0}
+          offsetY={0}
+        />
+      )}
+
+      <SoundTrimModal
+        isOpen={trimState !== null}
+        onClose={() => setTrimState(null)}
+        onSaved={handleTrimSaved}
         previewVolume={previewVolume}
+        editingSoundPath={
+          trimState?.mode === 'edit' ? trimState.item.soundPath : null
+        }
+        editingTrimStartRatio={
+          trimState?.mode === 'edit' ? trimState.item.trimStartRatio : undefined
+        }
+        editingTrimEndRatio={
+          trimState?.mode === 'edit' ? trimState.item.trimEndRatio : undefined
+        }
+        editingDisplayName={
+          trimState?.mode === 'edit' ? trimState.item.displayName : undefined
+        }
+        initialFile={trimState?.mode === 'create' ? trimState.file : null}
       />
     </>
   );

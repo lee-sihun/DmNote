@@ -558,16 +558,12 @@
     "searchPlaceholder": "검색",
     "filterAll": "전체",
     "filterLocal": "로컬 사운드",
-    "noSounds": "사운드 없음"
-  },
-  "soundManager": {
-    "title": "사운드",
-    "noSounds": "사운드가 없습니다",
-    "addSound": "추가",
+    "noSounds": "사운드 없음",
     "loadFailed": "사운드 목록 로드 실패",
-    "stateChangeFailed": "사운드 상태 변경 실패",
+    "edit": "편집",
+    "delete": "삭제",
     "deleteFailed": "사운드 삭제 실패",
-    "editSound": "편집"
+    "deleteConfirm": "사운드를 삭제하시겠습니까? 파일이 삭제되고 이 사운드를 사용하는 모든 요소에서 해제됩니다."
   },
   "soundTrimModal": {
     "defaultTitle": "사운드 추가",

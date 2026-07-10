@@ -16,11 +16,6 @@ export const soundApi = {
     invoke<import('@src/types/plugin/api').SoundLoadResult>('sound_load'),
   list: () =>
     invoke<import('@src/types/plugin/api').SoundListItem[]>('sound_list'),
-  setEnabled: (soundPath: string, enabled: boolean) =>
-    invoke<import('@src/types/plugin/api').SoundSetEnabledResult>(
-      'sound_set_enabled',
-      { soundPath, enabled },
-    ),
   remove: (soundPath: string) =>
     invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
       soundPath,

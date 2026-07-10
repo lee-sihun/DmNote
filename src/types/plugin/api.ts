@@ -101,7 +101,6 @@ export type SoundListItem = {
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
-  enabled: boolean;
   source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;
@@ -113,12 +112,6 @@ export type SoundSaveProcessedWavResult = {
   success: boolean;
   error?: string;
   soundPath?: string;
-};
-
-export type SoundSetEnabledResult = {
-  success: boolean;
-  soundPath: string;
-  enabled: boolean;
 };
 
 export type SoundDeleteResult = {
@@ -881,10 +874,6 @@ export interface DMNoteAPI {
   sound: {
     load(): Promise<SoundLoadResult>;
     list(): Promise<SoundListItem[]>;
-    setEnabled(
-      soundPath: string,
-      enabled: boolean,
-    ): Promise<SoundSetEnabledResult>;
     remove(soundPath: string): Promise<SoundDeleteResult>;
     saveProcessedWav(
       wavBase64: string,

@@ -557,16 +557,12 @@
     "searchPlaceholder": "Search...",
     "filterAll": "All",
     "filterLocal": "Local Sounds",
-    "noSounds": "No sounds"
-  },
-  "soundManager": {
-    "title": "Sounds",
     "noSounds": "No sounds",
-    "addSound": "Add",
     "loadFailed": "Failed to load sound list",
-    "stateChangeFailed": "Failed to change sound state",
+    "edit": "Edit",
+    "delete": "Delete",
     "deleteFailed": "Failed to delete sound",
-    "editSound": "Edit"
+    "deleteConfirm": "Delete this sound? The file will be deleted and unassigned from every element using it."
   },
   "soundTrimModal": {
     "defaultTitle": "Add Sound",
