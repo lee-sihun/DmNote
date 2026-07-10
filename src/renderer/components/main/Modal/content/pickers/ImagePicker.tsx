@@ -197,10 +197,10 @@ const ImagePicker = ({
             <button
               key={item.key}
               type="button"
-              className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-style-4 text-fg transition-colors ${
+              className={`flex-1 whitespace-nowrap px-[9px] h-[23px] rounded-md text-body transition-colors duration-fast ${
                 mode === item.key
-                  ? 'bg-surface-active text-fg'
-                  : 'hover:bg-white/[0.1] text-fg-faint'
+                  ? 'bg-surface-active text-fg shadow-elevation-1'
+                  : 'hover:bg-white/[0.06] text-fg-muted hover:text-fg'
               }`}
               onClick={() => setMode(item.key)}
             >
