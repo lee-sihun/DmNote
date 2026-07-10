@@ -35,10 +35,10 @@ const LayerPanelTabButton: React.FC<LayerPanelTabButtonProps> = ({
 }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
+    className={`w-full h-[24px] rounded-md text-style-2 transition-colors ${
       active
-        ? 'bg-[#3A3943] text-white'
-        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
+        ? 'bg-surface-active text-fg shadow-elevation-1'
+        : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -60,7 +60,7 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
   onTabChange,
   t,
 }) => (
-  <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
+  <div className="flex w-full h-[30px] bg-inset rounded-md items-center p-[3px] gap-[5px]">
     <LayerPanelTabButton
       active={activeTab === LAYER_PANEL_TABS.LAYER}
       onClick={() => onTabChange(LAYER_PANEL_TABS.LAYER)}
@@ -109,14 +109,14 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
 
   return (
     <div
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-elevated border-l border-line flex flex-col z-30 shadow-lg"
       onMouseDown={handleHeaderEmptyClick}
     >
       {/* 헤더 + 탭 영역 */}
-      <div className="flex-shrink-0 border-b border-[#3A3943]">
+      <div className="flex-shrink-0 border-b border-line">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-[12px] pb-[8px]">
-          <span className="text-[#DBDEE8] text-style-2">
+          <span className="text-fg text-style-2">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
           <div className="flex items-center gap-[4px]">
@@ -126,7 +126,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
               onClick={hasSelection ? onSwitchToProperty : undefined}
               className={`w-[24px] h-[24px] flex items-center justify-center rounded-[4px] transition-colors ${
                 hasSelection
-                  ? 'hover:bg-[#2A2A30] cursor-pointer'
+                  ? 'hover:bg-surface-hover cursor-pointer'
                   : 'cursor-not-allowed opacity-70'
               }`}
               title={
@@ -138,7 +138,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
             {/* 패널 닫기 버튼 */}
             <button
               onClick={onClose}
-              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+              className="w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-[4px] transition-colors"
               title={t('propertiesPanel.closePanel') || 'Close Panel'}
             >
               <SidebarToggleIcon isOpen={true} />

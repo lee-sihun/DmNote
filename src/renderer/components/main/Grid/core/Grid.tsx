@@ -1464,8 +1464,8 @@ const Grid = ({
         gridContainerRef.current = node;
       }}
       data-grid-container
-      className="relative w-full h-full bg-[#3A3943] rounded-[0px] overflow-hidden"
-      style={{ backgroundColor: color === 'transparent' ? '#3A3943' : color }}
+      className="relative w-full h-full bg-panel rounded-[0px] overflow-hidden"
+      style={{ backgroundColor: color === 'transparent' ? '#141417' : color }}
       onContextMenu={(e) => {
         if (duplicateState) {
           setDuplicateState(null);
@@ -1543,7 +1543,7 @@ const Grid = ({
         zoom={zoom}
         panX={panX}
         panY={panY}
-        color={color === 'transparent' ? '#3A3943' : color}
+        color={color === 'transparent' ? '#141417' : color}
       />
       {/* 줌/팬이 적용되는 콘텐츠 영역 */}
       <div

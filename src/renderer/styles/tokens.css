@@ -22,11 +22,11 @@
   --ui-fg-faint: #64666f;
   --ui-fg-disabled: #45464e;
 
-  /* 액센트 — 단일 블루 */
-  --ui-accent: #3e7bfa;
-  --ui-accent-hover: #5a8efb;
-  --ui-accent-active: #3569e8;
-  --ui-accent-muted: rgba(62, 123, 250, 0.15);
+  /* 액센트 — 브랜드 퍼플 */
+  --ui-accent: #8b5cf6;
+  --ui-accent-hover: #9d74f8;
+  --ui-accent-active: #7a4be0;
+  --ui-accent-muted: rgba(139, 92, 246, 0.16);
   --ui-accent-fg: #ffffff;
 
   /* 시맨틱 */

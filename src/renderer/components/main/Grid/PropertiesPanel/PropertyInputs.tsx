@@ -238,12 +238,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
-        className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
+          isFocused ? 'border-accent' : 'border-line'
         } text-style-4 ${
           showMixedPlaceholder
-            ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic'
-            : 'text-[#DBDEE8]'
+            ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
+            : 'text-fg'
         }`}
         style={{ width }}
       />
@@ -252,13 +252,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div
-      className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+      className={`relative h-[23px] bg-inset rounded-md border-[1px] ${
+        isFocused ? 'border-accent' : 'border-line'
       }`}
       style={{ width }}
     >
       {prefix && !showMixedPlaceholder && (
-        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
           {prefix}
         </span>
       )}
@@ -277,8 +277,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
         } bg-transparent text-style-4 ${
           showMixedPlaceholder
-            ? 'text-[#6B6D75] italic placeholder:text-[#6B6D75] placeholder:italic'
-            : 'text-[#DBDEE8]'
+            ? 'text-fg-faint italic placeholder:text-fg-faint placeholder:italic'
+            : 'text-fg'
         } text-center`}
       />
     </div>
@@ -470,22 +470,22 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
     : placeholder;
 
   const placeholderClass = effectivePlaceholder
-    ? 'placeholder:text-[#6B6D75] placeholder:italic'
+    ? 'placeholder:text-fg-faint placeholder:italic'
     : '';
   const textClass = showMixedPlaceholder
-    ? 'text-[#6B6D75] italic'
-    : 'text-[#DBDEE8]';
+    ? 'text-fg-faint italic'
+    : 'text-fg';
 
   if (prefix) {
     return (
       <div
-        className={`relative h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        className={`relative h-[23px] bg-inset rounded-md border-[1px] ${
+          isFocused ? 'border-accent' : 'border-line'
         }`}
         style={{ width }}
       >
         {!showMixedPlaceholder && (
-          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-[#97999E] text-style-1 pointer-events-none">
+          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
             {prefix}
           </span>
         )}
@@ -519,8 +519,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={effectivePlaceholder}
-        className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+        className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
+          isFocused ? 'border-accent' : 'border-line'
         } text-style-4 ${textClass} ${placeholderClass}`}
         style={{ width }}
       />
@@ -537,8 +537,8 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
       placeholder={effectivePlaceholder}
-      className={`text-center h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+      className={`text-center h-[23px] bg-inset rounded-md border-[1px] ${
+        isFocused ? 'border-accent' : 'border-line'
       } text-style-4 ${textClass} ${placeholderClass}`}
       style={{ width }}
     />
@@ -584,12 +584,12 @@ export const TextInput: React.FC<TextInputProps> = ({
       onFocus={() => setIsFocused(true)}
       onBlur={handleBlur}
       placeholder={placeholder}
-      className={`text-center h-[23px] p-[6px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-        isFocused ? 'border-[#459BF8]' : 'border-[#3A3943]'
+      className={`text-center h-[23px] p-[6px] bg-inset rounded-md border-[1px] ${
+        isFocused ? 'border-accent' : 'border-line'
       } text-style-4 ${
         isMixed
-          ? 'text-[#DBDEE8] placeholder:text-[#6B6D75] placeholder:italic'
-          : 'text-[#DBDEE8]'
+          ? 'text-fg placeholder:text-fg-faint placeholder:italic'
+          : 'text-fg'
       }`}
       style={{ width }}
     />
@@ -718,8 +718,8 @@ export const ColorInput: React.FC<ColorInputProps> = ({
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
-          open ? 'border-[#459BF8]' : 'border-[#3A3943] hover:border-[#505058]'
+        className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          open ? 'border-accent' : 'border-line hover:border-line-strong'
         }`}
         style={{
           backgroundColor: getDisplayColor(
@@ -767,11 +767,11 @@ export const SelectInput: React.FC<SelectInputProps> = ({
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`h-[23px] min-w-[70px] bg-[#2A2A30] rounded-[7px] border-[1px] ${
-          isOpen ? 'border-[#459BF8]' : 'border-[#3A3943]'
-        } px-[8px] flex items-center justify-between gap-[4px] hover:border-[#505058] transition-colors`}
+        className={`h-[23px] min-w-[70px] bg-inset rounded-md border-[1px] ${
+          isOpen ? 'border-accent' : 'border-line'
+        } px-[8px] flex items-center justify-between gap-[4px] hover:border-line-strong transition-colors`}
       >
-        <span className="text-style-4 text-[#DBDEE8]">
+        <span className="text-style-4 text-fg">
           {options.find((opt) => opt.value === value)?.label || value}
         </span>
         <svg
@@ -796,7 +796,7 @@ export const SelectInput: React.FC<SelectInputProps> = ({
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute top-[27px] left-0 right-0 bg-[#2A2A30] border border-[#3A3943] rounded-[7px] z-20 overflow-hidden shadow-lg min-w-[70px]">
+          <div className="absolute top-[27px] left-0 right-0 bg-elevated border border-line rounded-lg z-20 overflow-hidden shadow-elevation-2 min-w-[70px]">
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -804,8 +804,8 @@ export const SelectInput: React.FC<SelectInputProps> = ({
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`w-full px-[8px] py-[6px] text-left text-style-4 hover:bg-[#32323A] transition-colors ${
-                  value === opt.value ? 'text-[#459BF8]' : 'text-[#DBDEE8]'
+                className={`w-full px-[8px] py-[6px] text-left text-style-4 hover:bg-surface-hover transition-colors ${
+                  value === opt.value ? 'text-accent' : 'text-fg'
                 }`}
               >
                 {opt.label}
@@ -830,7 +830,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     <button
       onClick={() => onChange(!checked)}
       className={`w-[32px] h-[18px] rounded-full transition-colors relative flex-shrink-0 ${
-        checked ? 'bg-[#459BF8]' : 'bg-[#3A3943]'
+        checked ? 'bg-accent' : 'bg-white/[0.14]'
       }`}
     >
       <div
@@ -847,7 +847,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
 // ============================================================================
 
 export const SectionDivider: React.FC = () => (
-  <div className="w-full h-[1px] bg-[#3A3943]" />
+  <div className="w-full h-[1px] bg-surface-active" />
 );
 
 // ============================================================================
@@ -966,12 +966,12 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
   const buttonClass = (active: boolean) =>
     `w-[24px] h-[21px] flex items-center justify-center transition-colors ${
       active
-        ? 'bg-[#493C1D] text-[#FFB400]'
-        : 'bg-[#2A2A30] text-[#6B6D75] hover:bg-[#32323A] hover:text-[#97999E]'
+        ? 'bg-accent-muted text-accent'
+        : 'bg-inset text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
     }`;
 
   return (
-    <div className="flex items-center h-[23px] bg-[#2A2A30] rounded-[7px] border border-[#3A3943] overflow-hidden">
+    <div className="flex items-center h-[23px] bg-inset rounded-md border border-line overflow-hidden">
       <button
         onClick={() => onBoldChange(!isBold)}
         className={buttonClass(isBold)}
@@ -1011,10 +1011,10 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
 const TabButton: React.FC<TabButtonProps> = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
-    className={`w-full h-[24px] rounded-[7px] text-style-2 transition-colors ${
+    className={`w-full h-[24px] rounded-md text-style-2 transition-colors ${
       active
-        ? 'bg-[#3A3943] text-white'
-        : 'bg-[#26262C] text-[#9395A1] hover:bg-[#303036]'
+        ? 'bg-surface-active text-fg shadow-elevation-1'
+        : 'text-fg-muted hover:text-fg'
     }`}
   >
     {children}
@@ -1032,7 +1032,7 @@ export const Tabs: React.FC<TabsProps> = ({
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
   return (
-    <div className="flex w-full h-[30px] bg-[#26262C] rounded-[7px] items-center p-[3px] gap-[5px]">
+    <div className="flex w-full h-[30px] bg-inset rounded-md items-center p-[3px] gap-[5px]">
       {tabs.includes(TABS.STYLE) && (
         <TabButton
           active={activeTab === TABS.STYLE}

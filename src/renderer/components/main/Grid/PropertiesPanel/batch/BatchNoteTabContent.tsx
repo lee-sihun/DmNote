@@ -168,7 +168,7 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
       {/* 노트 정렬 */}
       <PropertyRow label={t('keySetting.noteAlignment') || '노트 정렬'}>
         {getMixedValue((pos) => pos.noteAlignment, 'center').isMixed && (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-style-4 italic">Mixed</span>
         )}
         <Dropdown
           options={[
@@ -202,10 +202,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         <button
           ref={batchNoteColorButtonRef}
           onClick={onNoteColorPickerToggle}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isNoteColorPickerOpen
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
+              ? 'border-accent'
+              : 'border-line hover:border-line-strong'
           }`}
           style={getBatchNoteColorDisplay().style}
           title={getBatchNoteColorDisplay().label}
@@ -220,10 +220,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
             ref={batchBorderColorButtonRef}
             type="button"
             onClick={onBorderColorPickerToggle}
-            className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
               isBorderColorPickerOpen
-                ? 'border-[#459BF8]'
-                : 'border-[#3A3943] hover:border-[#505058]'
+                ? 'border-accent'
+                : 'border-line hover:border-line-strong'
             }`}
             style={getBatchBorderColorDisplay().style}
             title={getBatchBorderColorDisplay().label}
@@ -393,10 +393,10 @@ const BatchNoteTabContent: React.FC<BatchNoteTabContentProps> = ({
         <button
           ref={batchGlowColorButtonRef}
           onClick={onGlowColorPickerToggle}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             isGlowColorPickerOpen
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
+              ? 'border-accent'
+              : 'border-line hover:border-line-strong'
           }`}
           style={getBatchGlowColorDisplay().style}
           title={getBatchGlowColorDisplay().label}

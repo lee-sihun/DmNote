@@ -539,10 +539,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           ref={noteColorButtonRef}
           type="button"
           onClick={() => handlePickerToggle('note')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'note'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
+              ? 'border-accent'
+              : 'border-line hover:border-line-strong'
           }`}
           style={getNoteColorDisplay().style}
         />
@@ -555,10 +555,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
             ref={borderColorButtonRef}
             type="button"
             onClick={() => handlePickerToggle('border')}
-            className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+            className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
               pickerFor === 'border'
-                ? 'border-[#459BF8]'
-                : 'border-[#3A3943] hover:border-[#505058]'
+                ? 'border-accent'
+                : 'border-line hover:border-line-strong'
             }`}
             style={{ backgroundColor: borderColor }}
           />
@@ -705,10 +705,10 @@ const NoteTabContent: React.FC<NoteTabContentProps> = ({
           ref={glowColorButtonRef}
           type="button"
           onClick={() => handlePickerToggle('glow')}
-          className={`w-[23px] h-[23px] rounded-[7px] border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
+          className={`w-[23px] h-[23px] rounded-md border-[1px] overflow-hidden cursor-pointer transition-colors flex-shrink-0 ${
             pickerFor === 'glow'
-              ? 'border-[#459BF8]'
-              : 'border-[#3A3943] hover:border-[#505058]'
+              ? 'border-accent'
+              : 'border-line hover:border-line-strong'
           }`}
           style={getGlowColorDisplay().style}
         />

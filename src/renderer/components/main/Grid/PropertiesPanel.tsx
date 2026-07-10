@@ -2099,7 +2099,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   ) => {
     if (!schema || Object.keys(schema).length === 0) {
       return (
-        <p className="text-[#6B6D75] text-style-4 text-center">
+        <p className="text-fg-faint text-style-4 text-center">
           {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
         </p>
       );
@@ -2552,7 +2552,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       <div className="absolute right-0 top-0 z-30">
         <button
           onClick={handleTogglePanel}
-          className="m-[8px] w-[32px] h-[32px] bg-[#1F1F24] border border-[#3A3943] rounded-[7px] flex items-center justify-center hover:bg-[#2A2A30] hover:border-[#505058] transition-colors shadow-lg"
+          className="m-[8px] w-[32px] h-[32px] bg-elevated border border-line rounded-md flex items-center justify-center hover:bg-surface-hover hover:border-line-strong transition-colors shadow-lg"
           title={t('propertiesPanel.openPanel') || '속성 패널 열기'}
         >
           <SidebarToggleIcon isOpen={false} />

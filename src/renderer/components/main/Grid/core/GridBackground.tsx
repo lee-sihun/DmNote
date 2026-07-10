@@ -19,8 +19,8 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
-  color: _color = '#3A3943',
-  lineColor = 'rgb(25, 25, 28)',
+  color: _color = '#141417',
+  lineColor = 'rgba(255, 255, 255, 0.05)',
 }) => {
   // 실제 화면에 그려질 그리드 크기 (줌 적용)
   const scaledGridSize = gridSize * zoom;

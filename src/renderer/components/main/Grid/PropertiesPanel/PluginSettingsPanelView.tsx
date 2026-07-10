@@ -45,20 +45,20 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   return (
     <div
       ref={setPanelElement}
-      className="absolute right-0 top-0 bottom-0 w-[220px] bg-[#1F1F24] border-l border-[#3A3943] flex flex-col z-30 shadow-lg"
+      className="absolute right-0 top-0 bottom-0 w-[220px] bg-elevated border-l border-line flex flex-col z-30 shadow-lg"
     >
-      <div className="flex items-center justify-between p-[12px] border-b border-[#3A3943]">
+      <div className="flex items-center justify-between p-[12px] border-b border-line">
         <div className="flex flex-col gap-[2px]">
-          <span className="text-[#DBDEE8] text-style-2">
+          <span className="text-fg text-style-2">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
           </span>
-          <span className="text-[#6B6D75] text-style-4 truncate max-w-[150px]">
+          <span className="text-fg-faint text-style-4 truncate max-w-[150px]">
             {pluginSettingsPanel.pluginId}
           </span>
         </div>
         <button
           onClick={handlePluginSettingsPanelCancel}
-          className="w-[24px] h-[24px] flex items-center justify-center hover:bg-[#2A2A30] rounded-[4px] transition-colors"
+          className="w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-[4px] transition-colors"
           title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
         >
           <SidebarToggleIcon isOpen={true} />
@@ -87,17 +87,17 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
           </div>
         </div>
       </div>
-      <div className="border-t border-[#3A3943] p-[12px]">
+      <div className="border-t border-line p-[12px]">
         <div className="flex gap-[8px]">
           <button
             onClick={handlePluginSettingsPanelCancel}
-            className="flex-1 h-[30px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#303036] transition-colors"
+            className="flex-1 h-[30px] bg-white/[0.07] border border-line rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
           >
             {t('common.cancel') || '취소'}
           </button>
           <button
             onClick={handlePluginSettingsPanelConfirm}
-            className="flex-1 h-[30px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] text-style-3 text-[#DBDEE8] hover:bg-[#303036] transition-colors"
+            className="flex-1 h-[30px] bg-white/[0.07] border border-line rounded-lg text-style-3 text-fg hover:bg-white/[0.1] transition-colors"
           >
             {t('common.save') || '저장'}
           </button>

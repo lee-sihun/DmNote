@@ -208,7 +208,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('left')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignLeft') || '왼쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -239,7 +239,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('centerH')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignCenterH') || '수평 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -270,7 +270,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('right')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-r-[7px] flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignRight') || '오른쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -304,7 +304,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('top')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line rounded-l-[7px] border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignTop') || '위쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -335,7 +335,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('centerV')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] border-r-0 flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line border-r-0 flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignCenterV') || '수직 중앙 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -366,7 +366,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             <button
               type="button"
               onClick={() => handleBatchAlign('bottom')}
-              className="w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-r-[7px] flex items-center justify-center hover:bg-[#353540] transition-colors"
+              className="w-[24px] h-[23px] bg-inset border border-line rounded-r-[7px] flex items-center justify-center hover:bg-surface-hover transition-colors"
               title={t('propertiesPanel.alignBottom') || '아래쪽 정렬'}
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -405,10 +405,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             type="button"
             onClick={() => handleBatchDistribute('horizontal')}
             disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] flex items-center justify-center transition-colors ${
+            className={`w-[24px] h-[23px] bg-inset border border-line rounded-md flex items-center justify-center transition-colors ${
               selectedCount < 3
                 ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-[#353540]'
+                : 'hover:bg-surface-hover'
             }`}
             title={t('propertiesPanel.distributeH') || '수평 분배'}
           >
@@ -443,10 +443,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
             type="button"
             onClick={() => handleBatchDistribute('vertical')}
             disabled={selectedCount < 3}
-            className={`w-[24px] h-[23px] bg-[#2A2A30] border border-[#3A3943] rounded-[7px] flex items-center justify-center transition-colors ${
+            className={`w-[24px] h-[23px] bg-inset border border-line rounded-md flex items-center justify-center transition-colors ${
               selectedCount < 3
                 ? 'opacity-40 cursor-not-allowed'
-                : 'hover:bg-[#353540]'
+                : 'hover:bg-surface-hover'
             }`}
             title={t('propertiesPanel.distributeV') || '수직 분배'}
           >
@@ -542,7 +542,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 'rgba(46, 46, 47, 0.9)',
               ).isMixed
         ) ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
@@ -585,7 +585,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 'rgba(113, 113, 113, 0.9)',
               ).isMixed
         ) ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-style-4 italic">Mixed</span>
         ) : null}
         <ColorInput
           value={
@@ -618,7 +618,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {/* 테두리 두께 */}
       <PropertyRow label={t('propertiesPanel.borderWidth') || '테두리 두께'}>
         {getMixedValue((pos) => pos.borderWidth, 3).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-style-4 italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderWidth, 3).value}
@@ -636,7 +636,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       {/* 모서리 반경 */}
       <PropertyRow label={t('propertiesPanel.borderRadius') || '모서리 반경'}>
         {getMixedValue((pos) => pos.borderRadius, 10).isMixed ? (
-          <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+          <span className="text-fg-faint text-style-4 italic">Mixed</span>
         ) : null}
         <NumberInput
           value={getMixedValue((pos) => pos.borderRadius, 10).value}
@@ -656,9 +656,9 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         <button
           ref={batchImageButtonRef}
           type="button"
-          className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-            showBatchImagePicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-          } text-[#DBDEE8] text-style-4`}
+          className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+            showBatchImagePicker ? 'border-accent' : 'border-line'
+          } text-fg text-style-4`}
           onClick={onToggleBatchImagePicker}
         >
           {t('propertiesPanel.configure') || '설정하기'}
@@ -697,14 +697,14 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           {/* 폰트 */}
           <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
             {getMixedValue((pos) => pos.fontFamily, null).isMixed ? (
-              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-style-4 italic">Mixed</span>
             ) : null}
             <button
               ref={fontButtonRef}
               type="button"
-              className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                showFontPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-              } text-[#DBDEE8] text-style-4`}
+              className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                showFontPicker ? 'border-accent' : 'border-line'
+              } text-fg text-style-4`}
               onClick={() => setShowFontPicker(!showFontPicker)}
             >
               {t('propertiesPanel.configure') || '설정하기'}
@@ -714,7 +714,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
           {/* 글꼴 크기 */}
           <PropertyRow label={t('propertiesPanel.fontSize') || '글꼴 크기'}>
             {getMixedValue((pos) => pos.fontSize, 14).isMixed ? (
-              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-style-4 italic">Mixed</span>
             ) : null}
             <NumberInput
               value={getMixedValue((pos) => pos.fontSize, 14).value}
@@ -742,7 +742,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                     'rgba(121, 121, 121, 0.9)',
                   ).isMixed
             ) ? (
-              <span className="text-[#6B6D75] text-style-4 italic">Mixed</span>
+              <span className="text-fg-faint text-style-4 italic">Mixed</span>
             ) : null}
             <ColorInput
               value={
@@ -868,7 +868,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 }
               >
                 {soundMixedValue((pos) => pos.soundEnabled, false).isMixed ? (
-                  <span className="text-[#6B6D75] text-style-4 italic">
+                  <span className="text-fg-faint text-style-4 italic">
                     Mixed
                   </span>
                 ) : null}
@@ -888,16 +888,16 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
 
               <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
                 {soundMixedValue((pos) => pos.soundPath, '').isMixed ? (
-                  <span className="text-[#6B6D75] text-style-4 italic">
+                  <span className="text-fg-faint text-style-4 italic">
                     Mixed
                   </span>
                 ) : null}
                 <button
                   ref={soundButtonRef}
                   type="button"
-                  className={`px-[7px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] flex items-center justify-center ${
-                    showSoundPicker ? 'border-[#459BF8]' : 'border-[#3A3943]'
-                  } text-[#DBDEE8] text-style-4`}
+                  className={`px-[7px] h-[23px] bg-inset rounded-md border-[1px] flex items-center justify-center ${
+                    showSoundPicker ? 'border-accent' : 'border-line'
+                  } text-fg text-style-4`}
                   onClick={() => setShowSoundPicker((prev) => !prev)}
                 >
                   {t('propertiesPanel.configure') || '설정하기'}
@@ -908,7 +908,7 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 label={t('propertiesPanel.soundVolume') || '사운드 볼륨'}
               >
                 {soundMixedValue((pos) => pos.soundVolume, 100).isMixed ? (
-                  <span className="text-[#6B6D75] text-style-4 italic">
+                  <span className="text-fg-faint text-style-4 italic">
                     Mixed
                   </span>
                 ) : null}
