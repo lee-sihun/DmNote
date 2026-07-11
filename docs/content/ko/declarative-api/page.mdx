@@ -91,8 +91,14 @@ dmn.plugin.defineElement({
 
 ### 지원 타입
 
-```javascript
+```javascript fragment=object-members
 settings: {
+  // 카드 섹션 — 새 설정 카드를 시작
+  appearanceSection: {
+    type: "section",
+    label: "모양", // 카드 위 캡션, 선택사항
+  },
+
   // 문자열
   nickname: {
     type: "string",
@@ -118,11 +124,6 @@ settings: {
     label: "그래프 표시",
   },
 
-  // 구분선
-  sectionDivider: {
-    type: "divider",
-  },
-
   // 색상
   textColor: {
     type: "color",
@@ -143,20 +144,36 @@ settings: {
 },
 ```
 
-`type: "divider"`는 설정 UI에 구분선만 추가하며 `default`나 `label`이 필요하지 않습니다.
+`type: "section"`은 새 카드를 시작합니다. section 키는 레이아웃 식별자이므로 저장값,
+기본값, `getSettings()`, 변경 콜백에 포함되지 않습니다. 첫 section 앞의 설정은 암시적
+무제목 카드에 표시되며, `label`이 없어도 카드 경계로 동작합니다.
+
+<Callout type="info">
+  과거의 `type: "divider"`(카드 안 구분선)는 section 도입과 함께 제거되었습니다.
+  기존 플러그인의 divider 항목은 무시되며(크래시 없음), 그룹 구분은 section을
+  사용하세요.
+</Callout>
+
+section은 속성 패널과 `settingsUI: "modal"`에서 동일하게 동작합니다.
 
 ### 조건부 표시 (visible)
 
 설정 항목에 `visible` 속성을 추가하면 다른 설정값에 따라 동적으로 표시/숨김할 수 있습니다.
 `visible`이 없는 설정은 항상 표시됩니다 (기존 동작과 동일).
 
-```javascript
+```javascript fragment=object-members
 settings: {
   // 모드 선택
   showGraph: {
     type: "boolean",
     default: true,
     label: "그래프 표시",
+  },
+
+  graphSection: {
+    type: "section",
+    label: "그래프",
+    visible: (settings) => settings.showGraph,
   },
 
   // 정적 boolean — 항상 숨김
@@ -168,10 +185,6 @@ settings: {
   },
 
   // 함수 — 다른 설정값에 따라 동적으로 표시/숨김
-  graphDivider: {
-    type: "divider",
-    visible: (settings) => settings.showGraph,
-  },
   graphColor: {
     type: "color",
     default: "#86EFAC",
@@ -191,15 +204,21 @@ settings: {
   숨겨진 설정의 저장값은 유지됩니다 — 표시만 제어하며 데이터 손실은 없습니다.
 </Callout>
 
+section의 `visible`은 다음 section 전까지의 그룹 전체에 적용됩니다. 숨겨져도 경계는
+유지되므로 인접 그룹이 합쳐지지 않습니다. section 안의 값 설정이 모두 숨겨지면 카드와
+캡션도 함께 숨겨집니다. visibility 함수가 예외를 던지면 해당 항목 또는 section을
+숨기는 fail-closed 방식으로 처리하고 오류를 기록합니다. 패널과 모달의 의미 규칙 및
+빈 상태 동작은 같습니다.
+
 `visible` 시그니처는 컨텍스트 메뉴의 `PluginMenuItem.visible`과 동일한 패턴입니다:
 
-```typescript
+```typescript fragment=type-members
 visible?: boolean | ((settings: Record<string, any>) => boolean);
 ```
 
 ### 설정 접근
 
-```javascript
+```javascript fragment=object-members
 // template에서
 template: (state, settings, { html }) => html`
   <div style="color: ${settings.textColor};">
@@ -258,7 +277,7 @@ dmn.plugin.defineElement({
 dmn.plugin.defineElement({
   name: "Dynamic Anchor Panel",
 
-  onMount: ({ setAnchor, getAnchor }) => {
+  onMount: ({ setAnchor, getAnchor, getSettings }) => {
     // 현재 앵커 확인
     console.log("현재 앵커:", getAnchor()); // "top-left"
 
@@ -361,7 +380,7 @@ dmn.plugin.defineElement({
 
 ### 기본 설정
 
-```javascript
+```javascript fragment=object-members
 contextMenu: {
   create: "패널 생성",     // 그리드 빈 공간 우클릭 시
   delete: "패널 삭제",     // 패널 우클릭 시
@@ -370,7 +389,7 @@ contextMenu: {
 
 ### 커스텀 메뉴 항목
 
-```javascript
+```javascript fragment=object-members
 contextMenu: {
   create: "패널 생성",
   delete: "패널 삭제",
@@ -385,10 +404,10 @@ contextMenu: {
         await actions.exportData();
       },
       // 조건부 표시
-      visible: ({ element }) => element.state.hasData,
+      visible: ({ element }) => !!element.settings.enableExport,
       // 조건부 비활성화
-      disabled: ({ element }) => element.state.isLoading,
-      // 위치 (top 또는 bottom)
+      disabled: ({ element }) => element.settings.exportFormat === "none",
+      // 위치 (top 또는 bottom, 기본값: bottom)
       position: "bottom",
     },
   ],
@@ -403,12 +422,44 @@ onMount: ({ expose, setState }) => {
 },
 ```
 
+`position: "top"` 항목은 기본 메뉴 항목 위에, 나머지는 아래에 표시됩니다.
+
+<Callout type="info">
+  메뉴 predicate는 메인 윈도우에서 `{ element, actions }`로 평가됩니다.
+  오버레이에서 `setState`로 갱신한 런타임 상태는 기본적으로 이 컨텍스트에
+  동기화되지 않으며, `element.state`는 메인 윈도우 상태(`previewState`로
+  초기화)를 반영합니다. 오버레이 상태 기반 조건이 필요하면
+  `contextMenuStateKeys`에 키를 선언하세요.
+</Callout>
+
+### predicate에서 오버레이 상태 사용 (contextMenuStateKeys)
+
+메뉴 predicate가 참조할 오버레이 상태 키를 선언합니다. 선언된 키만
+(`setState` 변경 시) 메인 윈도우로 미러링되어 predicate 평가 시
+`element.state`에 병합됩니다. 고빈도 상태는 선언하지 않는 한 절대 전송되지
+않고, 메인 윈도우의 프리뷰 상태도 변하지 않습니다.
+
+```javascript fragment=object-members
+// 메뉴 predicate용으로 active만 미러링
+contextMenuStateKeys: ["active"],
+
+contextMenu: {
+  items: [
+    {
+      label: "캡처 중지",
+      action: "stopCapture",
+      visible: ({ element }) => !!element.state?.active,
+    },
+  ],
+},
+```
+
 ## 템플릿 (template)
 
 템플릿 함수는 `state`와 `settings`를 받아 UI를 반환합니다.
 자세한 문법은 [템플릿 문법](/docs/template-syntax) 문서를 참고하세요.
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html, t, locale }) => html`
   <div style="color: ${settings.textColor};">
     <strong>${state.value}</strong>
@@ -432,7 +483,7 @@ template: (state, settings, { html, t, locale }) => html`
 메인 윈도우에서 보여줄 미리보기용 초기 상태입니다.
 실제 로직은 오버레이에서만 실행되므로, 메인에서는 이 상태가 표시됩니다.
 
-```javascript
+```javascript fragment=object-members
 previewState: {
   kps: 12,
   history: [5, 8, 12, 10, 15],
@@ -445,7 +496,7 @@ previewState: {
 
 ### Context 객체
 
-```javascript
+```javascript fragment=object-members
 onMount: (context) => {
   const {
     setState,         // 상태 업데이트
@@ -467,7 +518,7 @@ onMount: (context) => {
 
 ### 이벤트 훅 (onHook)
 
-```javascript
+```javascript fragment=object-members
 onMount: ({ onHook, setState }) => {
   // 매핑된 키 이벤트
   onHook("key", ({ key, state, mode }) => {
@@ -493,7 +544,7 @@ onMount: ({ onHook, setState }) => {
   사용하세요.
 </Callout>
 
-```javascript
+```javascript fragment=object-members
 onMount: ({ setState, getSettings, onSettingsChange }) => {
   const fetchData = async (nickname) => {
     const response = await fetch(`/api/user/${nickname}`);
@@ -574,7 +625,6 @@ dmn.plugin.defineElement({
   settings: {
     showGraph: { type: "boolean", default: true, label: "그래프 표시" },
     textColor: { type: "color", default: "#FFFFFF", label: "텍스트 색상" },
-    graphDivider: { type: "divider", visible: (s) => s.showGraph },
     graphColor: {
       type: "color",
       default: "#86EFAC",

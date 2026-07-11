@@ -172,7 +172,7 @@ dmn.plugin.defineElement({
 
 상태가 실제로 변경될 때만 `setState`를 호출하세요:
 
-```javascript
+```javascript fragment=object-members
 onMount: ({ setState, getSettings }) => {
   let lastKps = 0;
 
@@ -186,7 +186,7 @@ onMount: ({ setState, getSettings }) => {
   }, 100);
 
   return () => clearInterval(interval);
-};
+},
 ```
 
 ## 멀티 윈도우 패턴

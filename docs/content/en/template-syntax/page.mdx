@@ -12,11 +12,11 @@ It allows intuitive writing close to standard HTML syntax.
 
 ### Value Interpolation
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <div>Current value: ${state.value}</div>
   <div style="color: ${settings.color};">Colored text</div>
-`;
+`,
 ```
 
 <Callout type="warning">
@@ -112,7 +112,7 @@ html`
 
 ### Inline Styles
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <div
     style="
@@ -124,12 +124,12 @@ template: (state, settings, { html }) => html`
   >
     ${state.value}
   </div>
-`;
+`,
 ```
 
 ### `<style>` Tag
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <style>
     .panel {
@@ -152,14 +152,14 @@ template: (state, settings, { html }) => html`
     <div class="panel__value">${state.value}</div>
     <div class="panel__label">KPS</div>
   </div>
-`;
+`,
 ```
 
 ## Practical Example
 
 ### Stats Panel
 
-```javascript
+```javascript fragment=object-members
 template: (state, settings, { html }) => html`
   <style>
     .stats-panel {
@@ -211,5 +211,5 @@ template: (state, settings, { html }) => html`
         `
       : ""}
   </div>
-`;
+`,
 ```
