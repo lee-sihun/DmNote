@@ -10,12 +10,20 @@ declare global {
     __dmn_window_type?: 'main' | 'overlay';
     __dmn_current_plugin_id?: string;
     __dmn_current_locale?: string;
-    __dmn_showAlert?: (message: string, confirmText?: string) => void;
+    __dmn_showAlert?: (
+      message: string,
+      confirmText?: string,
+      onDismiss?: () => void,
+    ) => void;
     __dmn_showConfirm?: (
       message: string,
       onConfirm: () => void,
-      onCancel?: () => void,
-      confirmText?: string,
+      options?: {
+        onCancel?: () => void;
+        confirmText?: string;
+        cancelText?: string;
+        danger?: boolean;
+      },
     ) => void;
     __dmn_showCustomDialog?: (
       html: string,
@@ -25,6 +33,7 @@ declare global {
         confirmText?: string;
         cancelText?: string;
         showCancel?: boolean;
+        onContentMount?: (element: HTMLElement) => void | (() => void);
       },
     ) => void;
     __dmn_showColorPicker?: (options: {

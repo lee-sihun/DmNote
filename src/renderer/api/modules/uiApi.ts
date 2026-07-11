@@ -7,7 +7,7 @@ import {
   createPanel,
   createFormRow,
 } from '@utils/plugin/pluginComponents';
-import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
+import { attachPluginDialogInteractions } from '@utils/plugin/pluginDialogInteractions';
 import { displayElementApi } from '../pluginDisplayElements';
 
 import type {
@@ -88,8 +88,8 @@ export const uiApi = {
           resolve();
           return;
         }
-        showAlert(message, options?.confirmText);
-        setTimeout(resolve, 0);
+        // 확인 클릭 또는 배경 클릭으로 닫힐 때 resolve
+        showAlert(message, options?.confirmText, () => resolve());
       });
     },
 
@@ -108,12 +108,12 @@ export const uiApi = {
           resolve(false);
           return;
         }
-        showConfirm(
-          message,
-          () => resolve(true),
-          () => resolve(false),
-          options?.confirmText,
-        );
+        showConfirm(message, () => resolve(true), {
+          onCancel: () => resolve(false),
+          confirmText: options?.confirmText,
+          cancelText: options?.cancelText,
+          danger: options?.danger,
+        });
       });
     },
 
@@ -145,117 +145,8 @@ export const uiApi = {
           confirmText: options?.confirmText,
           cancelText: options?.cancelText,
           showCancel: options?.showCancel,
+          onContentMount: attachPluginDialogInteractions,
         });
-
-        setTimeout(() => {
-          const dialogContent = document.querySelector(
-            '[data-plugin-dialog-content]',
-          );
-          if (!dialogContent) return;
-
-          dialogContent.addEventListener('click', (e: Event) => {
-            const target = e.target as HTMLElement;
-            const checkbox = target.closest('[data-checkbox-toggle]');
-            if (checkbox) {
-              const input = checkbox.querySelector(
-                'input[type=checkbox]',
-              ) as HTMLInputElement;
-              const knob = checkbox.querySelector('div') as HTMLElement;
-
-              if (input) {
-                input.checked = !input.checked;
-
-                if (input.checked) {
-                  checkbox.classList.remove('bg-[#3B4049]');
-                  checkbox.classList.add('bg-[#493C1D]');
-                  knob.classList.remove('left-[2px]', 'bg-[#989BA6]');
-                  knob.classList.add('left-[13px]', 'bg-[#FFB400]');
-                } else {
-                  checkbox.classList.remove('bg-[#493C1D]');
-                  checkbox.classList.add('bg-[#3B4049]');
-                  knob.classList.remove('left-[13px]', 'bg-[#FFB400]');
-                  knob.classList.add('left-[2px]', 'bg-[#989BA6]');
-                }
-
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-              }
-            }
-          });
-
-          setupPluginDropdownInteractions(dialogContent as HTMLElement);
-
-          const handleInputBlur = (e: Event) => {
-            const targetEl = e.target as HTMLInputElement;
-            if (
-              targetEl.tagName === 'INPUT' &&
-              targetEl.type === 'number' &&
-              targetEl.hasAttribute('data-plugin-input-blur')
-            ) {
-              const minStr = targetEl.getAttribute('data-plugin-input-min');
-              const maxStr = targetEl.getAttribute('data-plugin-input-max');
-              const currentValue = targetEl.value;
-
-              if (currentValue === '' || isNaN(parseFloat(currentValue))) {
-                const defaultValue = minStr ? parseFloat(minStr) : 0;
-                targetEl.value = String(defaultValue);
-                targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-                return;
-              }
-
-              const numValue = parseFloat(currentValue);
-              let clampedValue = numValue;
-
-              if (minStr && numValue < parseFloat(minStr)) {
-                clampedValue = parseFloat(minStr);
-              }
-              if (maxStr && numValue > parseFloat(maxStr)) {
-                clampedValue = parseFloat(maxStr);
-              }
-
-              if (clampedValue !== numValue) {
-                targetEl.value = String(clampedValue);
-                targetEl.dispatchEvent(new Event('change', { bubbles: true }));
-              }
-            }
-          };
-
-          const handleEvent = (e: Event) => {
-            const target = e.target as HTMLElement;
-            const handlerAttr =
-              e.type === 'click'
-                ? 'data-plugin-handler'
-                : e.type === 'input'
-                ? 'data-plugin-handler-input'
-                : e.type === 'change'
-                ? 'data-plugin-handler-change'
-                : null;
-
-            if (!handlerAttr) return;
-
-            let element: HTMLElement | null = target;
-            let handlerName: string | null = null;
-
-            while (element && element !== dialogContent) {
-              handlerName = element.getAttribute(handlerAttr);
-              if (handlerName) break;
-              element = element.parentElement;
-            }
-
-            if (!handlerName) return;
-
-            const handler = (window as unknown as Record<string, unknown>)[
-              handlerName
-            ];
-            if (typeof handler === 'function') {
-              (handler as (e: Event) => void)(e);
-            }
-          };
-
-          dialogContent.addEventListener('click', handleEvent);
-          dialogContent.addEventListener('change', handleEvent);
-          dialogContent.addEventListener('input', handleEvent);
-          dialogContent.addEventListener('blur', handleInputBlur, true);
-        }, 0);
       });
     },
   },

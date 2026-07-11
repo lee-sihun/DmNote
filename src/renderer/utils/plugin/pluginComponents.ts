@@ -4,6 +4,7 @@
  */
 
 import { registerComponentHandler } from './pluginUtils';
+import { FORM_ROW_CLASS, FORM_LABEL_CLASS } from '@utils/cardRecipes';
 
 /**
  * 현재 실행 중인 플러그인 ID를 가져옵니다.
@@ -76,19 +77,20 @@ export function createButton(
     id = '',
   } = options;
 
-  const baseClass = 'transition-colors rounded-[7px] text-style-3';
+  // 앱 버튼 관례와 동기 — primary=액센트 CTA, danger=muted 레드, secondary=회색 필
+  const baseClass =
+    'transition-colors duration-fast rounded-surface text-label';
 
   const variantClass = {
     primary:
-      'bg-[#2A2A30] hover:bg-[#303036] active:bg-[#393941] text-[#DCDEE7]',
+      'bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active text-accent-fg',
     danger:
-      'bg-[#3C1E1E] hover:bg-[#442222] active:bg-[#522929] text-[#E6DBDB]',
-    secondary:
-      'bg-[#2A2A31] border-[1px] border-[#3A3944] text-[#DBDEE8] hover:bg-[#34343c]',
+      'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg',
+    secondary: 'bg-fill hover:bg-fill-hover active:bg-fill-active text-fg',
   }[variant];
 
   const sizeClass = {
-    small: 'h-[24px] px-[12px]',
+    small: 'h-[23px] px-[12px]',
     medium: 'h-[30px] px-[16px]',
     large: 'h-[36px] px-[20px]',
   }[size];
@@ -128,24 +130,25 @@ export function createButton(
 export function createCheckbox(options: CheckboxOptions = {}): string {
   const { checked = false, onChange, id = '' } = options;
 
-  const bgClass = checked ? 'bg-[#493C1D]' : 'bg-[#3B4049]';
-  const knobClass = checked
-    ? 'left-[13px] bg-[#FFB400]'
-    : 'left-[2px] bg-[#989BA6]';
+  // 메인 UI Checkbox와 동일한 크기·토큰 (30x18, 액센트/line-strong 트랙, 14px 흰 노브)
+  const bgClass = checked ? 'bg-accent' : 'bg-line-strong';
+  const knobClass = checked ? 'left-[14px]' : 'left-[2px]';
 
   // 핸들러 처리: 함수면 등록, 문자열이면 레거시 방식
   let onChangeAttr = '';
   if (onChange) {
     if (typeof onChange === 'function') {
       const pluginId = getCurrentPluginId();
-      // 체크박스는 checked 상태를 전달
+      // 토글 후 input에서 버블링되는 change 이벤트로 checked 전달 —
+      // click 위임은 target이 label이라 checked를 읽을 수 없음
       const wrappedHandler = (e: Event) => {
         const target = e.target as HTMLInputElement;
         onChange(target.checked);
       };
       const handlerId = registerComponentHandler(pluginId, wrappedHandler);
-      onChangeAttr = `data-plugin-handler="${handlerId}"`;
+      onChangeAttr = `data-plugin-handler-change="${handlerId}"`;
     } else {
+      // 레거시 문자열 핸들러는 click 이벤트 계약 유지
       onChangeAttr = `data-plugin-handler="${onChange}"`;
     }
   }
@@ -154,11 +157,11 @@ export function createCheckbox(options: CheckboxOptions = {}): string {
   const inputIdAttr = id ? `id="${id}-input"` : ''; // input에도 id 추가
 
   // 내부 input[type=checkbox] 추가 (실제 상태 유지)
-  return `<label ${labelIdAttr} class="relative inline-block w-[27px] h-[16px] rounded-[75px] cursor-pointer transition-colors duration-75 ${bgClass}" data-checkbox-toggle ${onChangeAttr}>
+  return `<label ${labelIdAttr} class="relative inline-block w-[30px] h-[18px] rounded-full cursor-pointer transition-colors duration-base ease-out-expo ${bgClass}" data-checkbox-toggle ${onChangeAttr}>
     <input type="checkbox" ${inputIdAttr} ${
     checked ? 'checked' : ''
   } class="absolute opacity-0 w-0 h-0" />
-    <div class="absolute w-[12px] h-[12px] rounded-[75px] top-[2px] transition-all duration-75 ease-in-out ${knobClass}"></div>
+    <div class="absolute w-[14px] h-[14px] rounded-full top-[2px] bg-white shadow-elevation-1 transition-all duration-base ease-out-expo ${knobClass}"></div>
   </label>`;
 }
 
@@ -234,7 +237,7 @@ export function createInput(options: InputOptions = {}): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  return `<input ${idAttr} type="${type}" value="${escapedValue}" placeholder="${placeholder}" class="text-center px-[8px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] focus:border-[#459BF8] text-style-4 text-[#DBDEE8] outline-none" style="width: ${width}px" ${minAttr} ${maxAttr} ${stepAttr} ${onBlurAttr} ${
+  return `<input ${idAttr} type="${type}" value="${escapedValue}" placeholder="${placeholder}" class="text-center h-[23px] bg-inset rounded-md text-body tabular-nums text-fg outline-none focus:shadow-focus-ring" style="width: ${width}px" ${minAttr} ${maxAttr} ${stepAttr} ${onBlurAttr} ${
     disabled ? 'disabled' : ''
   } ${onInputAttr} ${onChangeAttr} />`;
 }
@@ -278,7 +281,7 @@ export function createDropdown(options: DropdownOptions): string {
   const itemsHtml = items
     .map(
       (opt) => `
-    <button type="button" class="text-left w-full h-[24px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
+    <button type="button" class="text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
       selected === opt.value
         ? 'bg-surface-active text-fg pointer-events-none'
         : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
@@ -292,7 +295,7 @@ export function createDropdown(options: DropdownOptions): string {
   return `<div class="relative plugin-dropdown" ${idAttr} ${onChangeAttr} data-selected="${
     selected || ''
   }">
-    <button type="button" class="flex items-center justify-between h-[24px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast outline-none ${
+    <button type="button" class="flex items-center justify-between h-[23px] px-[8px] bg-fill hover:bg-fill-hover rounded-md text-fg text-body transition-colors duration-fast outline-none ${
       disabled ? 'opacity-40 pointer-events-none' : ''
     }" data-dropdown-toggle>
       <span class="truncate">${displayText}</span>
@@ -300,7 +303,7 @@ export function createDropdown(options: DropdownOptions): string {
         <path d="M1 1L7 7L13 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <div class="hidden absolute left-0 top-[28px] flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
+    <div class="hidden absolute left-0 top-[27px] flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
       ${itemsHtml}
     </div>
   </div>`;
@@ -316,8 +319,10 @@ export function createPanel(
   const { title = '', width } = options;
   const widthStyle = width ? `style="width: ${width}px"` : '';
 
-  return `<div class="bg-[#1A191E] rounded-[13px] border-[1px] border-[#2A2A30] p-[20px] flex flex-col gap-[16px]" ${widthStyle}>
-    ${title ? `<div class="text-style-3 text-[#FFFFFF]">${title}</div>` : ''}
+  // Display Element 전용 캔버스 표면 (다이얼로그 내부 사용 금지 — 문서 계약)
+  // 오버레이는 투명 배경이라 글래스 대신 불투명 surface, 반경은 팝업 계층
+  return `<div class="bg-surface rounded-popup shadow-elevation-2 p-[12px] flex flex-col gap-[12px] text-left" ${widthStyle}>
+    ${title ? `<div class="text-title text-fg">${title}</div>` : ''}
     ${content}
   </div>`;
 }
@@ -326,8 +331,8 @@ export function createPanel(
  * 폼 행 (라벨 + 컴포넌트) HTML 생성
  */
 export function createFormRow(label: string, component: string): string {
-  return `<div class="flex justify-between w-full items-center">
-    <p class="text-white text-style-2">${label}</p>
+  return `<div class="${FORM_ROW_CLASS}">
+    <p class="${FORM_LABEL_CLASS}">${label}</p>
     ${component}
   </div>`;
 }
