@@ -36,6 +36,8 @@ pub struct SoundListItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_at_ms: Option<u64>,
     pub hidden: bool,
+    // deprecated — 1.6.1 플러그인 계약 호환용 역논리 별칭 (enabled = !hidden)
+    pub enabled: bool,
     pub source: SoundSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_path: Option<String>,
@@ -205,6 +207,7 @@ pub fn sound_list(
             size_bytes: metadata.len(),
             modified_at_ms,
             hidden: entry_meta.hidden,
+            enabled: !entry_meta.hidden,
             source: entry_meta.source,
             original_path: entry_meta.original_path,
             trim_start_ratio: entry_meta.trim_start_ratio,

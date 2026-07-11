@@ -18,6 +18,7 @@ type SoundListItem = {
   sizeBytes: number;
   modifiedAtMs?: number;
   hidden: boolean; // 피커 목록에서 숨김 — 재생에는 영향 없음
+  enabled: boolean; // deprecated — hidden의 역논리 별칭, 1.6.1 호환 유지용
   source: 'local' | 'builtin';
   originalPath?: string; // 트림 전 원본 (편집된 사운드에 존재)
   trimStartRatio?: number;
@@ -99,4 +100,5 @@ type SoundSetHiddenResult = {
 
 ### `dmn.sound.setLatencyLogging(enabled): Promise<void>`
 
-오디오 엔진의 키음 지연 로깅을 켜거나 끕니다.
+오디오 엔진의 키음 지연 로깅을 켜거나 끕니다. 켜기는 dev/debug 빌드에서만
+가능하며, 릴리스 빌드에서 `enabled: true`는 에러로 거부됩니다.

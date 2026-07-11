@@ -103,6 +103,8 @@ export type SoundListItem = {
   modifiedAtMs?: number;
   /** 피커 목록에서 숨김 여부 — 재생에는 영향 없음 */
   hidden: boolean;
+  /** @deprecated hidden의 역논리 별칭 (enabled = !hidden) — 1.6.1 호환 */
+  enabled: boolean;
   source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;

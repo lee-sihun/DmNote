@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     fs,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -257,8 +258,23 @@ impl AppStore {
         }
 
         let json = serde_json::to_string_pretty(&root)?;
-        fs::write(&self.path, json)
-            .with_context(|| format!("failed to write store file at {}", self.path.display()))
+        // 원자 교체 — 쓰기 도중 크래시해도 기존 store가 온전히 남도록
+        // 같은 디렉토리의 임시 파일에 쓴 뒤 rename (동일 파일시스템 보장)
+        let tmp_path = self.path.with_extension("json.tmp");
+        {
+            let mut tmp = fs::File::create(&tmp_path).with_context(|| {
+                format!("failed to create temp store file at {}", tmp_path.display())
+            })?;
+            tmp.write_all(json.as_bytes()).with_context(|| {
+                format!("failed to write temp store file at {}", tmp_path.display())
+            })?;
+            // 전원 손실 대비 — rename 전에 데이터를 디스크로 플러시
+            tmp.sync_all().with_context(|| {
+                format!("failed to sync temp store file at {}", tmp_path.display())
+            })?;
+        }
+        fs::rename(&tmp_path, &self.path)
+            .with_context(|| format!("failed to replace store file at {}", self.path.display()))
     }
 
     /// 앱 종료 시점에 한 번 호출하는 자원 정리.

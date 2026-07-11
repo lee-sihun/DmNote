@@ -18,6 +18,7 @@ type SoundListItem = {
   sizeBytes: number;
   modifiedAtMs?: number;
   hidden: boolean; // hidden from picker lists — playback is unaffected
+  enabled: boolean; // deprecated — inverse alias of hidden, kept for 1.6.1 compat
   source: 'local' | 'builtin';
   originalPath?: string; // pre-trim original (present for edited sounds)
   trimStartRatio?: number;
@@ -99,4 +100,6 @@ Overwrites an edited sound's processed WAV in place.
 
 ### `dmn.sound.setLatencyLogging(enabled): Promise<void>`
 
-Toggles key-sound latency logging in the audio engine.
+Toggles key-sound latency logging in the audio engine. Enabling is only
+available in dev/debug builds — release builds reject `enabled: true` with an
+error.

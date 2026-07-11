@@ -259,6 +259,7 @@ const CounterAnimationPicker = ({
               tabIndex={0}
               onClick={() => handlePresetSelect(preset)}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
                   handlePresetSelect(preset);
@@ -281,7 +282,7 @@ const CounterAnimationPicker = ({
                   className={`${pickerMoreButtonClass} ${
                     isSelected || menu.menuKey === preset.id
                       ? 'opacity-100'
-                      : 'opacity-0 group-hover:opacity-100'
+                      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                   } ${
                     isSelected
                       ? 'text-fg hover:text-fg'
