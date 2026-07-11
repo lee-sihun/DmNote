@@ -6,7 +6,10 @@ import type {
 } from '@src/types/plugin/api';
 import type { PluginSettingsPanelPayload } from '@stores/grid/usePropertiesPanelStore';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from './panelChrome';
-import { PropertySection } from './PropertyInputs';
+import {
+  hasRenderableSettings,
+  type SettingsNormalizationErrorKind,
+} from '@plugins/runtime/settingsSections';
 
 interface PluginSettingsPanelViewProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
@@ -22,10 +25,16 @@ interface PluginSettingsPanelViewProps {
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
     messages: PluginMessages | undefined,
+    pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-    options?: { wrap?: boolean },
   ) => React.ReactNode;
+  reportNormalizationError: (
+    pluginId: string,
+    key: string,
+    error: unknown,
+    kind: SettingsNormalizationErrorKind,
+  ) => void;
   t: (key: string) => string | undefined;
 }
 
@@ -37,14 +46,24 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   handlePluginSettingsPanelConfirm,
   setPluginScrollRef,
   renderPluginSettingsForm,
+  reportNormalizationError,
   t,
 }) => {
+  // 렌더할 설정이 없으면 안내 문구를 패널 세로 중앙에 배치
+  // empty-state로 단락돼도 visibility 예외가 기록되도록 폼과 같은 리포터 전달
+  const settingsRenderable = hasRenderableSettings(
+    pluginSettingsPanel.definition.settings,
+    pluginPanelSettings,
+    (key, error, kind) =>
+      reportNormalizationError(pluginSettingsPanel.pluginId, key, error, kind),
+  );
+
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
         {/* 한 줄 헤더 — 타이틀 + 연한 플러그인 id (배치 패널의 카운트 표기와 동일 관례) */}
         <div className="flex items-center gap-[8px] min-w-0">
-          <span className="text-fg text-style-2 leading-none flex-shrink-0">
+          <span className="text-fg text-label leading-none flex-shrink-0">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
           </span>
           <span
@@ -55,31 +74,36 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
           </span>
         </div>
       </div>
-      <div className="flex-1 properties-panel-overlay-scroll">
-        <div
-          ref={setPluginScrollRef}
-          className="properties-panel-overlay-viewport"
-        >
-          <div className="px-[12px] pb-[12px]">
-            {/* 요소 선택 패널과 동일한 섹션 카드로 폼을 감쌈 */}
-            <PropertySection>
+      {settingsRenderable ? (
+        <div className="flex-1 properties-panel-overlay-scroll">
+          <div
+            ref={setPluginScrollRef}
+            className="properties-panel-overlay-viewport"
+          >
+            <div className="px-[12px] pb-[12px]">
               {renderPluginSettingsForm(
                 pluginSettingsPanel.definition.settings,
                 pluginPanelSettings,
                 pluginSettingsPanel.definition.messages,
+                pluginSettingsPanel.pluginId,
                 `plugin-settings-${pluginSettingsPanel.pluginId}`,
                 handlePluginSettingsPanelChange,
-                { wrap: false },
               )}
-            </PropertySection>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center px-[24px]">
+          <p className="text-fg-faint text-body text-center">
+            {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
+          </p>
+        </div>
+      )}
       {/* 단일 저장 CTA — 취소는 우상단 패널 토글(X)이 담당 */}
       <div className="p-[12px] shrink-0">
         <button
           onClick={handlePluginSettingsPanelConfirm}
-          className="w-full h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+          className="w-full h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
         >
           {t('common.save') || '저장'}
         </button>

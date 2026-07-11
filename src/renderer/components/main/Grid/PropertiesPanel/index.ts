@@ -12,7 +12,6 @@ export {
   ToggleSwitch,
   FontStyleToggle,
   Tabs,
-  SectionDivider,
   CloseIcon,
   ModeToggleIcon,
 } from './PropertyInputs';

@@ -17,6 +17,10 @@ import type {
 import type { KeyInfo } from '@utils/core/KeyMaps';
 import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
+  hasRenderableSettings,
+  type SettingsNormalizationErrorKind,
+} from '@plugins/runtime/settingsSections';
+import {
   PropertyRow,
   NumberInput,
   TextInput,
@@ -95,10 +99,16 @@ interface PluginSelectionPanelProps {
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
     messages: PluginMessages | undefined,
+    pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-    options?: { wrap?: boolean },
   ) => React.ReactNode;
+  reportNormalizationError: (
+    pluginId: string,
+    key: string,
+    error: unknown,
+    kind: SettingsNormalizationErrorKind,
+  ) => void;
   selectedPluginDefinition: PluginDefinitionInternal | null;
   resolvedPluginSettings: Record<string, unknown>;
   handlePluginSettingChange: (key: string, value: unknown) => void;
@@ -120,15 +130,55 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   showModalHint,
   showSettings,
   renderPluginSettingsForm,
+  reportNormalizationError,
   selectedPluginDefinition,
   resolvedPluginSettings,
   handlePluginSettingChange,
   t,
 }) => {
+  // 위치 섹션도 설정 폼도 없을 때는 안내 문구만 남음 — 패널 세로 중앙에 배치
+  // notice-only로 단락돼도 visibility 예외가 기록되도록 폼과 같은 리포터 전달
+  const settingsRenderable =
+    showSettings &&
+    hasRenderableSettings(
+      selectedPluginDefinition?.settings,
+      resolvedPluginSettings,
+      (key, error, kind) =>
+        reportNormalizationError(
+          selectedPluginDefinition?.pluginId ?? 'unknown',
+          key,
+          error,
+          kind,
+        ),
+    );
+  const noticeOnly = !isPluginResizable && !settingsRenderable;
+  const noticeText = !hasSinglePluginSelection
+    ? t('propertiesPanel.pluginMultiSelection') ||
+      '플러그인 요소는 한 번에 하나만 편집할 수 있습니다.'
+    : showModalHint
+    ? t('propertiesPanel.pluginModalHint') ||
+      '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'
+    : t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.';
+
+  if (noticeOnly) {
+    return (
+      <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
+        <div className={PANEL_HEADER_CLASS}>
+          <span className="text-fg text-label leading-none truncate max-w-[120px]">
+            {pluginTitle}
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center px-[24px] pb-[48px]">
+          <p className="text-fg-faint text-body text-center">{noticeText}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className={PANEL_HEADER_CLASS}>
-        <span className="text-fg text-style-2 leading-none truncate max-w-[120px]">
+        <span className="text-fg text-label leading-none truncate max-w-[120px]">
           {pluginTitle}
         </span>
       </div>
@@ -194,20 +244,15 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
                   '이 플러그인은 설정 모달을 사용합니다. 요소를 클릭해 설정하세요.'}
               </p>
             )}
-            {showSettings && (
-              <PropertySection>
-                {renderPluginSettingsForm(
-                  selectedPluginDefinition?.settings,
-                  resolvedPluginSettings,
-                  selectedPluginDefinition?.messages,
-                  `plugin-element-${
-                    selectedPluginElement?.fullId ?? 'unknown'
-                  }`,
-                  handlePluginSettingChange,
-                  { wrap: false },
-                )}
-              </PropertySection>
-            )}
+            {showSettings &&
+              renderPluginSettingsForm(
+                selectedPluginDefinition?.settings,
+                resolvedPluginSettings,
+                selectedPluginDefinition?.messages,
+                selectedPluginDefinition?.pluginId ?? 'unknown',
+                `plugin-element-${selectedPluginElement?.fullId ?? 'unknown'}`,
+                handlePluginSettingChange,
+              )}
           </div>
         </div>
       </div>
@@ -287,7 +332,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -309,7 +354,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
         ) : (
           <div className="flex items-center gap-[4px] min-w-0">
             <span
-              className="text-fg text-style-2 truncate max-w-[100px] cursor-default"
+              className="text-fg text-label truncate max-w-[100px] cursor-default"
               onDoubleClick={handleRenameStart}
               title={graphTitle}
             >
@@ -906,7 +951,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
           <input
             ref={renameInputRef}
             type="text"
-            className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+            className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => {
@@ -928,7 +973,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
         ) : (
           <div className="flex items-center gap-[4px] min-w-0">
             <span
-              className="text-fg text-style-2 truncate max-w-[100px] cursor-default"
+              className="text-fg text-label truncate max-w-[100px] cursor-default"
               onDoubleClick={handleRenameStart}
               title={knobTitle}
             >
@@ -959,7 +1004,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
                   onClick={() => setCapturing((v) => !v)}
                   className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                     capturing ? 'shadow-focus-ring' : ''
-                  } text-fg text-style-2`}
+                  } text-fg text-label`}
                   title={singleKnobPosition.axisId || ''}
                 >
                   <span className="truncate max-w-[120px]">
@@ -1444,7 +1489,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
             <input
               ref={renameInputRef}
               type="text"
-              className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+              className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={() => {
@@ -1466,7 +1511,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
           ) : (
             <div className="flex items-center gap-[4px] min-w-0">
               <span
-                className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
+                className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                 onDoubleClick={handleRenameStart}
                 title={keyLikeTitle}
               >

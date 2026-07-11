@@ -13,6 +13,12 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { getKeyInfoByGlobalKey } from '@utils/core/KeyMaps';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
 import {
+  getDefaultSettings,
+  normalizeSettingsSections,
+  omitLayoutSettingValues,
+  type SettingsNormalizationErrorKind,
+} from '@plugins/runtime/settingsSections';
+import {
   toRgbHexColor,
   parseAlphaPercent,
   hexWithAlphaPercent,
@@ -37,10 +43,10 @@ import {
   TABS,
   TabType,
   PropertyRow,
+  PropertySection,
   NumberInput,
   ColorInput,
   TextInput,
-  SectionDivider,
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
@@ -300,6 +306,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     Partial<KeyPosition> & { dx?: number; dy?: number }
   >({});
   const pluginSettingsHistoryRef = useRef<string | null>(null);
+  const pluginVisibilityErrorsRef = useRef(new Set<string>());
   const pluginTransformHistoryRef = useRef<string | null>(null);
 
   // preview가 store를 직접 변경하므로, commit이 아닌 preview 시작 시 히스토리 저장
@@ -1062,23 +1069,16 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const showFrame = isPanelVisible || !!pluginSettingsPanel;
 
-  const pluginDefaultSettings = (() => {
-    const defaults: Record<string, unknown> = {};
-    if (selectedPluginDefinition?.settings) {
-      Object.entries(selectedPluginDefinition.settings).forEach(
-        ([key, schema]) => {
-          const schemaValue = schema as PluginSettingSchema;
-          if (schemaValue.type === 'divider') return;
-          defaults[key] = schemaValue.default;
-        },
-      );
-    }
-    return defaults;
-  })();
+  const pluginDefaultSettings = getDefaultSettings(
+    selectedPluginDefinition?.settings,
+  );
 
   const resolvedPluginSettings = {
     ...pluginDefaultSettings,
-    ...(selectedPluginElement?.settings || {}),
+    ...omitLayoutSettingValues(
+      selectedPluginDefinition?.settings,
+      selectedPluginElement?.settings || {},
+    ),
   };
 
   const ensurePluginSettingsHistory = () => {
@@ -2126,15 +2126,39 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     handleKnobBatchUpdate(batchUpdates);
   };
 
+  // 정규화 진단 리포터 — 플러그인·키당 1회만 기록, empty-state 단락 경로의
+  // hasRenderableSettings에도 동일 리포터를 전달해 로깅 누락 방지
+  const reportPluginNormalizationError = (
+    pluginId: string,
+    key: string,
+    error: unknown,
+    kind: SettingsNormalizationErrorKind,
+  ) => {
+    const errorKey = `${pluginId}:${key}`;
+    if (pluginVisibilityErrorsRef.current.has(errorKey)) return;
+    pluginVisibilityErrorsRef.current.add(errorKey);
+    const message =
+      kind === 'unsupported-type'
+        ? `Unsupported setting type for "${key}"`
+        : `Failed to evaluate visibility for setting "${key}"`;
+    console.error(`[Plugin ${pluginId}] ${message}:`, error);
+  };
+
   const renderPluginSettingsForm = (
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
     messages: PluginMessages | undefined,
+    pluginId: string,
     colorIdPrefix: string,
     onChange: (key: string, value: unknown) => void,
-    options?: { wrap?: boolean },
   ) => {
-    if (!schema || Object.keys(schema).length === 0) {
+    const sections = normalizeSettingsSections(
+      schema,
+      values,
+      (key, error, kind) =>
+        reportPluginNormalizationError(pluginId, key, error, kind),
+    );
+    if (!sections.some((section) => section.renderVisible)) {
       return (
         <p className="text-fg-faint text-body text-center">
           {t('propertiesPanel.pluginNoSettings') || '설정할 항목이 없습니다.'}
@@ -2165,21 +2189,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       return '200px';
     };
 
-    const wrap = options?.wrap !== false;
-    const rows = Object.entries(schema).map(([key, setting]) => {
-      const schemaValue = setting as PluginSettingSchema;
-
-      if (schemaValue.visible !== undefined) {
-        const vis =
-          typeof schemaValue.visible === 'function'
-            ? schemaValue.visible(values)
-            : schemaValue.visible;
-        if (!vis) return null;
-      }
-
-      if (schemaValue.type === 'divider') {
-        return <SectionDivider key={`divider-${key}`} />;
-      }
+    const renderEntry = (
+      key: string,
+      schemaValue: Exclude<PluginSettingSchema, { type: 'section' }>,
+      renderVisible: boolean,
+    ) => {
+      if (!renderVisible) return null;
       const rawValue =
         values[key] !== undefined ? values[key] : schemaValue.default;
       const labelText = translate(schemaValue.label, schemaValue.label);
@@ -2297,15 +2312,33 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           {control}
         </PropertyRow>
       );
-    });
+    };
 
-    const filtered = rows.filter(Boolean);
-
-    if (!wrap) {
-      return <>{filtered}</>;
-    }
-
-    return <div className="flex flex-col gap-[12px]">{filtered}</div>;
+    return (
+      <div className="flex flex-col gap-[12px]">
+        {sections.map((section) => {
+          if (!section.renderVisible) return null;
+          const sectionLabel = translate(section.label, section.label);
+          return (
+            <div
+              key={section.key ?? 'implicit'}
+              className="flex flex-col gap-[6px]"
+            >
+              {section.label && (
+                <p className="text-fg-faint text-body text-left px-[2px]">
+                  {sectionLabel}
+                </p>
+              )}
+              <PropertySection>
+                {section.entries.map((entry) =>
+                  renderEntry(entry.key, entry.schema, entry.renderVisible),
+                )}
+              </PropertySection>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   // 배치 편집용 interactiveRefs
@@ -2595,6 +2628,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
           setPluginScrollRef={setPluginScrollRef}
           renderPluginSettingsForm={renderPluginSettingsForm}
+          reportNormalizationError={reportPluginNormalizationError}
           t={t}
         />
       );
@@ -2845,6 +2879,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           showModalHint={showModalHint}
           showSettings={showSettings}
           renderPluginSettingsForm={renderPluginSettingsForm}
+          reportNormalizationError={reportPluginNormalizationError}
           selectedPluginDefinition={selectedPluginDefinition}
           resolvedPluginSettings={resolvedPluginSettings}
           handlePluginSettingChange={handlePluginSettingChange}

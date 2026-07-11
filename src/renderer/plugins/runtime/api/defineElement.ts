@@ -8,7 +8,20 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import {
+  SECTION_WRAPPER_CLASS,
+  SECTION_LABEL_CLASS,
+  SECTION_CARD_CLASS,
+  FORM_ROW_CLASS,
+  FORM_LABEL_CLASS,
+} from '@utils/cardRecipes';
 import { handlerRegistry } from '../handlers';
+import {
+  coerceSettingValue,
+  getDefaultSettings,
+  normalizeSettingsSections,
+  omitLayoutSettingValues,
+} from '../settingsSections';
 import type { NamespacedStorage } from '../context';
 import type {
   PluginDefinition,
@@ -47,6 +60,7 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
     wrapFunctionWithContext,
     isReloading,
   } = deps;
+  const visibilityErrorKeys = new Set<string>();
 
   return (definition: PluginDefinition) => {
     const defId = pluginId;
@@ -101,14 +115,8 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       registerCleanup(unsubStore);
     }
 
-    const defaultSettings: Record<string, string | number | boolean> = {};
-    if (definition.settings) {
-      Object.entries(definition.settings).forEach(([key, schema]) => {
-        if (schema.type !== 'divider') {
-          defaultSettings[key] = schema.default;
-        }
-      });
-    }
+    const defaultSettings: Record<string, string | number | boolean> =
+      getDefaultSettings(definition.settings);
 
     let currentLocale = 'ko';
     const applyLocale = (next?: string) => {
@@ -243,60 +251,109 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
         pluginElements,
       });
 
-      const currentSettings: Record<string, unknown> = {
-        ...defaultSettings,
-        ...(element.settings || {}),
-      };
+      const currentSettings: Record<string, unknown> = omitLayoutSettingValues(
+        definition.settings,
+        {
+          ...defaultSettings,
+          ...(element.settings || {}),
+        },
+      );
       const originalSettings = { ...currentSettings };
 
-      let htmlContent =
-        '<div class="flex flex-col gap-[19px] w-full text-left">';
-
-      const _evalVisible = (
-        visible:
-          | boolean
-          | ((settings: Record<string, unknown>) => boolean)
-          | undefined,
-        settings: Record<string, unknown>,
-      ): boolean => {
-        if (visible === undefined) return true;
-        return typeof visible === 'function' ? visible(settings) : visible;
+      const reportNormalizationError = (
+        key: string,
+        error: unknown,
+        kind: 'visibility' | 'unsupported-type',
+      ) => {
+        if (visibilityErrorKeys.has(key)) return;
+        visibilityErrorKeys.add(key);
+        const message =
+          kind === 'unsupported-type'
+            ? `Unsupported setting type for "${key}"`
+            : `Failed to evaluate visibility for setting "${key}"`;
+        console.error(`[Plugin ${pluginId}] ${message}:`, error);
       };
-
-      const _updateVisibility = () => {
-        if (!definition.settings) return;
-        for (const [k, s] of Object.entries(definition.settings)) {
-          if (s.visible === undefined) continue;
-          const el = document.querySelector(
-            `[data-setting-key="${k}"]`,
-          ) as HTMLElement | null;
-          if (el)
-            el.style.display = _evalVisible(
-              s.visible as
-                | boolean
-                | ((settings: Record<string, unknown>) => boolean)
-                | undefined,
-              currentSettings,
-            )
-              ? ''
-              : 'none';
+      const getNormalizedSections = () =>
+        normalizeSettingsSections(
+          definition.settings,
+          currentSettings,
+          reportNormalizationError,
+        );
+      const modalScope = `plugin-element-${encodeURIComponent(
+        pluginId,
+      )}-${encodeURIComponent(instanceId)}`;
+      const findModalElement = (attribute: string, value: string) =>
+        Array.from(
+          document.querySelectorAll<HTMLElement>(`[${attribute}]`),
+        ).find((element) => element.getAttribute(attribute) === value);
+      const updateVisibility = () => {
+        const sections = getNormalizedSections();
+        sections.forEach((section, sectionIndex) => {
+          const sectionElement = findModalElement(
+            'data-settings-section',
+            `${modalScope}-${sectionIndex}`,
+          );
+          if (sectionElement) {
+            sectionElement.style.display = section.renderVisible ? '' : 'none';
+          }
+          section.entries.forEach((entry, entryIndex) => {
+            const entryElement = findModalElement(
+              'data-settings-entry',
+              `${modalScope}-${sectionIndex}-${entryIndex}`,
+            );
+            if (entryElement) {
+              entryElement.style.display = entry.renderVisible ? '' : 'none';
+            }
+          });
+        });
+        const emptyElement = findModalElement(
+          'data-settings-empty',
+          modalScope,
+        );
+        if (emptyElement) {
+          emptyElement.style.display = sections.some(
+            (section) => section.renderVisible,
+          )
+            ? 'none'
+            : '';
         }
       };
+      const commitSettingValue = async (
+        key: string,
+        newValue: string | number | boolean,
+      ) => {
+        currentSettings[key] = newValue;
+        window.api.ui.displayElement.update(instanceId, {
+          settings: { ...currentSettings },
+        });
+        updateVisibility();
+      };
 
-      if (definition.settings) {
-        for (const [key, schema] of Object.entries(definition.settings)) {
-          const _vis = _evalVisible(
-            schema.visible as
-              | boolean
-              | ((settings: Record<string, unknown>) => boolean)
-              | undefined,
-            currentSettings,
+      const normalizedSections = getNormalizedSections();
+      // 패널(renderPluginSettingsForm)과 동일한 섹션 카드 구조·토큰 — section이
+      // 없어도 암시적 카드 하나로 렌더 (모달-패널 외형 통합, 2026-07-12 결정)
+      let htmlContent =
+        '<div class="flex flex-col gap-[12px] w-full text-left">';
+
+      for (const [sectionIndex, section] of normalizedSections.entries()) {
+        htmlContent += `<div data-settings-section="${modalScope}-${sectionIndex}" style="${
+          section.renderVisible ? '' : 'display:none'
+        }" class="${SECTION_WRAPPER_CLASS}">`;
+        if (section.label) {
+          const sectionLabel = translate(
+            section.label,
+            undefined,
+            section.label,
           );
-          if (schema.type === 'divider') {
-            htmlContent += `<div data-setting-key="${key}" style="${
-              _vis ? '' : 'display:none'
-            }" class="w-full h-[1px] bg-[#3A3943]"></div>`;
-          } else {
+          htmlContent += `<p class="${SECTION_LABEL_CLASS}">${sectionLabel}</p>`;
+        }
+        htmlContent += `<div class="${SECTION_CARD_CLASS}">`;
+        for (const [entryIndex, entry] of section.entries.entries()) {
+          const { key, schema } = entry;
+          const entryAttributes = `data-settings-entry="${modalScope}-${sectionIndex}-${entryIndex}" style="${
+            entry.renderVisible ? '' : 'display:none'
+          }"`;
+          {
             const value =
               currentSettings[key] !== undefined
                 ? currentSettings[key]
@@ -308,19 +365,12 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 ? translate(schema.placeholder, undefined, schema.placeholder)
                 : schema.placeholder;
 
-            const handleChange = async (
-              newValue: string | number | boolean,
-            ) => {
-              currentSettings[key] = newValue;
-              const newSettings = { ...currentSettings };
-
-              window.api.ui.displayElement.update(instanceId, {
-                settings: newSettings,
-              });
-              _updateVisibility();
-            };
-
-            const wrappedChange = wrapFunctionWithContext(handleChange);
+            const wrappedChange = wrapFunctionWithContext((newValue) => {
+              // DOM 문자열을 스키마 타입으로 복원, 복원 불가면 커밋 스킵
+              const coerced = coerceSettingValue(schema, newValue);
+              if (coerced === null) return;
+              return commitSettingValue(key, coerced);
+            });
 
             if (schema.type === 'boolean') {
               componentHtml = window.api.ui.components.checkbox({
@@ -350,23 +400,21 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                   }
                 }
 
-                target.classList.remove('border-[#3A3943]');
-                target.classList.add('border-[#459BF8]');
+                target.classList.add('shadow-focus-ring');
 
                 window.api.ui.pickColor({
                   initialColor: String(currentSettings[key] ?? ''),
                   id: pickerId,
                   referenceElement: target as HTMLElement,
                   onColorChange: (newColor) => {
-                    const preview = target.querySelector('div');
-                    if (preview) preview.style.backgroundColor = newColor;
+                    // 스와치(버튼 자체) 미리보기 업데이트
+                    target.style.backgroundColor = newColor;
                   },
                   onColorChangeComplete: (newColor) => {
                     wrappedChange(newColor);
                   },
                   onClose: () => {
-                    target.classList.remove('border-[#459BF8]');
-                    target.classList.add('border-[#3A3943]');
+                    target.classList.remove('shadow-focus-ring');
                   },
                 });
               };
@@ -376,14 +424,13 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 handleColorClick,
               );
 
+              // 패널 ColorInput과 동일한 스와치 단독 버튼
               componentHtml = `
-              <button type="button" 
-                class="relative w-[80px] h-[23px] bg-[#2A2A30] rounded-[7px] border-[1px] border-[#3A3943] flex items-center justify-center text-[#DBDEE8] text-style-2"
+              <button type="button"
+                class="w-[23px] h-[23px] rounded-md border-[1px] border-line overflow-hidden cursor-pointer transition-colors flex-shrink-0"
+                style="background-color: ${value}"
                 data-plugin-handler="${handlerId}"
-              >
-                <div class="absolute left-[6px] top-[4.5px] w-[11px] h-[11px] rounded-[2px] border border-[#3A3943]" style="background-color: ${value}"></div>
-                <span class="ml-[16px] text-left truncate w-[50px]">Linear</span>
-              </button>
+              ></button>
             `;
             } else if (schema.type === 'string' || schema.type === 'number') {
               const strVal = String(value);
@@ -427,27 +474,30 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
             }
 
             htmlContent += `
-            <div data-setting-key="${key}" style="${
-              _vis ? '' : 'display:none'
-            }" class="flex justify-between w-full items-center">
-              <p class="text-white text-style-2">${labelText}</p>
+            <div ${entryAttributes} class="${FORM_ROW_CLASS}">
+              <p class="${FORM_LABEL_CLASS}">${labelText}</p>
               ${componentHtml}
             </div>
           `;
           }
         }
-      } else {
-        const noSettingsText = await window.api.settings
-          .get()
-          .then((s) => {
-            const locale = s.language || 'ko';
-            return locale === 'en'
-              ? 'No settings available.'
-              : '설정할 항목이 없습니다.';
-          })
-          .catch(() => '설정할 항목이 없습니다.');
-        htmlContent += `<div class="text-gray-400 text-center">${noSettingsText}</div>`;
+        htmlContent += '</div></div>';
       }
+
+      const noSettingsText = await window.api.settings
+        .get()
+        .then((s) => {
+          const locale = s.language || 'ko';
+          return locale === 'en'
+            ? 'No settings available.'
+            : '설정할 항목이 없습니다.';
+        })
+        .catch(() => '설정할 항목이 없습니다.');
+      htmlContent += `<div data-settings-empty="${modalScope}" style="${
+        normalizedSections.some((section) => section.renderVisible)
+          ? 'display:none'
+          : ''
+      }" class="text-fg-faint text-body text-center">${noSettingsText}</div>`;
 
       htmlContent += '</div>';
 
@@ -622,7 +672,10 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
                 position: inst.position,
                 draggable: true,
                 definitionId: defId,
-                settings: inst.settings || { ...defaultSettings },
+                settings: omitLayoutSettingValues(
+                  definition.settings,
+                  inst.settings || { ...defaultSettings },
+                ) as Record<string, string | number | boolean>,
                 state: definition.previewState || {},
                 measuredSize: inst.measuredSize,
                 tabId: inst.tabId,

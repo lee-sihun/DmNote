@@ -12,6 +12,11 @@ import type {
   FontStyleToggleProps,
 } from './types';
 import { TABS } from './types';
+import {
+  SECTION_CARD_CLASS,
+  FORM_ROW_CLASS,
+  FORM_LABEL_CLASS,
+} from '@utils/cardRecipes';
 import ColorPicker from '@components/main/Modal/content/pickers/ColorPicker';
 
 // ============================================================================
@@ -22,8 +27,8 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
   label,
   children,
 }) => (
-  <div className="flex justify-between items-center w-full min-h-[32px]">
-    <p className="text-fg-muted text-label">{label}</p>
+  <div className={FORM_ROW_CLASS}>
+    <p className={FORM_LABEL_CLASS}>{label}</p>
     <div className="flex items-center gap-[8px]">{children}</div>
   </div>
 );
@@ -31,11 +36,7 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
 // 그룹 카드 — 관련 속성 행을 하나의 면으로 묶는 섹션 컨테이너
 export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
   children,
-}) => (
-  <div className="bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-col">
-    {children}
-  </div>
-);
+}) => <div className={SECTION_CARD_CLASS}>{children}</div>;
 
 // ============================================================================
 // 숫자 입력
@@ -45,8 +46,9 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
   onBlur,
-  min = 0,
-  max = 9999,
+  // 미지정 방향은 무제한 — 플러그인 설정 스키마의 optional min/max 계약과 동일
+  min = Number.NEGATIVE_INFINITY,
+  max = Number.POSITIVE_INFINITY,
   prefix,
   suffix,
   width = '54px',
@@ -266,7 +268,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       style={{ width }}
     >
       {prefix && !showMixedPlaceholder && (
-        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
+        <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
           {prefix}
         </span>
       )}
@@ -281,7 +283,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         placeholder={showMixedPlaceholder ? mixedPlaceholder : undefined}
         className={`absolute ${
           prefix && !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-        } top-[-1px] h-[23px] ${
+        } top-0 h-[23px] ${
           prefix && !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
         } bg-transparent text-body tabular-nums ${
           showMixedPlaceholder
@@ -491,7 +493,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
         style={{ width }}
       >
         {!showMixedPlaceholder && (
-          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-style-1 pointer-events-none">
+          <span className="absolute left-[5px] top-[50%] transform -translate-y-1/2 text-fg-muted text-body pointer-events-none">
             {prefix}
           </span>
         )}
@@ -506,7 +508,7 @@ export const OptionalNumberInput: React.FC<OptionalNumberInputProps> = ({
           placeholder={effectivePlaceholder}
           className={`absolute ${
             !showMixedPlaceholder ? 'left-[20px]' : 'left-0'
-          } top-[-1px] h-[23px] ${
+          } top-0 h-[23px] ${
             !showMixedPlaceholder ? 'w-[26px]' : 'w-full'
           } bg-transparent text-body tabular-nums ${textClass} ${placeholderClass} text-center`}
         />
@@ -781,14 +783,6 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
     </button>
   );
 };
-
-// ============================================================================
-// 섹션 구분선
-// ============================================================================
-
-export const SectionDivider: React.FC = () => (
-  <div className="w-full h-[1px] bg-line" />
-);
 
 // ============================================================================
 // 글꼴 스타일 아이콘

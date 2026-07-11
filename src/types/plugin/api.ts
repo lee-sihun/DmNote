@@ -429,22 +429,29 @@ export interface PluginDefinitionContextMenuItem {
   position?: 'top' | 'bottom';
 }
 
-export type PluginSettingType =
+export type PluginValueSettingType =
   | 'boolean'
   | 'color'
   | 'number'
   | 'string'
-  | 'select'
-  | 'divider';
+  | 'select';
+
+// divider 타입은 section 도입과 함께 제거 — 기존 플러그인의 divider는
+// 정규화에서 미지원 타입으로 조용히 제외됨 (fail-closed)
+export type PluginLayoutSettingType = 'section';
+
+export type PluginSettingType =
+  | PluginValueSettingType
+  | PluginLayoutSettingType;
 
 export type PluginSettingSchema =
   | {
-      type: 'divider';
+      type: 'section';
       label?: string;
       visible?: boolean | ((settings: Record<string, unknown>) => boolean);
     }
   | {
-      type: Exclude<PluginSettingType, 'divider'>;
+      type: PluginValueSettingType;
       default: string | number | boolean;
       label: string;
       min?: number; // for number
