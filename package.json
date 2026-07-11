@@ -27,6 +27,7 @@
     "sync-version": "node scripts/sync-version.js",
     "version": "npm run sync-version && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml README.md docs/readme_en.md docs/readme_zh-cn.md",
     "test": "vitest run",
+    "test:docs": "vitest run tests/docs-code-blocks.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "contributors:add": "all-contributors add",
