@@ -58,15 +58,18 @@ dmn.plugin.defineElement({
       {
         label: "menu.start",
         action: "startCapture",
-        visible: (ctx) => !ctx.state?.active,
+        visible: ({ element }) => !element.state?.active,
       },
       {
         label: "menu.stop",
         action: "stopCapture",
-        visible: (ctx) => !!ctx.state?.active,
+        visible: ({ element }) => !!element.state?.active,
       },
     ],
   },
+
+  // active만 메뉴 predicate용으로 메인에 동기화 (bars는 전송 안 됨)
+  contextMenuStateKeys: ["active"],
 
   /* ---- 설정 ---- */
 
@@ -108,7 +111,7 @@ dmn.plugin.defineElement({
       label: "sensitivity",
     },
 
-    divider1: { type: "divider" },
+    visualSection: { type: "section", label: "section.visual" },
 
     visualStyle: {
       type: "select",
@@ -145,7 +148,7 @@ dmn.plugin.defineElement({
       label: "barRadius",
     },
 
-    divider2: { type: "divider" },
+    colorSection: { type: "section", label: "section.color" },
 
     colorMode: {
       type: "select",
@@ -169,7 +172,7 @@ dmn.plugin.defineElement({
       visible: (s) => s.colorMode === "gradient",
     },
 
-    divider3: { type: "divider" },
+    effectSection: { type: "section", label: "section.effect" },
 
     bgOpacity: {
       type: "number",
@@ -206,6 +209,9 @@ dmn.plugin.defineElement({
       "fftSize": "FFT 크기",
       "smoothing": "스무딩",
       "sensitivity": "감도",
+      "section.visual": "시각화",
+      "section.color": "색상",
+      "section.effect": "효과",
       "style": "스타일",
       "style.bars": "바",
       "style.mirror": "미러",
@@ -236,6 +242,9 @@ dmn.plugin.defineElement({
       "fftSize": "FFT Size",
       "smoothing": "Smoothing",
       "sensitivity": "Sensitivity",
+      "section.visual": "Visualization",
+      "section.color": "Color",
+      "section.effect": "Effects",
       "style": "Style",
       "style.bars": "Bars",
       "style.mirror": "Mirror",
@@ -402,6 +411,9 @@ dmn.plugin.defineElement({
 
   onMount: (ctx) => {
     const { setState, getSettings, onSettingsChange, expose } = ctx;
+
+    // 오버레이 초기 상태는 previewState(active: true) 잔재 — 캡처 전 실제 상태로 정정
+    setState({ active: false });
 
     let audioCtx = null;
     let analyser = null;
