@@ -526,7 +526,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -548,7 +548,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -564,7 +564,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2 leading-none">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
@@ -1059,7 +1059,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1081,7 +1081,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1097,7 +1097,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2 leading-none">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}
@@ -1395,7 +1395,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="text-fg text-style-2 leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
+                  className="text-fg text-label leading-none bg-transparent border-none p-0 outline-none w-[130px] caret-accent"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={() => {
@@ -1417,7 +1417,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               ) : (
                 <div className="flex items-center gap-[4px] min-w-0">
                   <span
-                    className="text-fg text-style-2 leading-none cursor-default truncate max-w-[110px]"
+                    className="text-fg text-label leading-none cursor-default truncate max-w-[110px]"
                     onDoubleClick={handleRenameStart}
                     title={selectedGroupInfo.name}
                   >
@@ -1433,7 +1433,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 </div>
               )
             ) : (
-              <span className="text-fg text-style-2 leading-none">
+              <span className="text-fg text-label leading-none">
                 {t('propertiesPanel.multiSelection') || '다중 선택'}
               </span>
             )}

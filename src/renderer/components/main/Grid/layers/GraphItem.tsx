@@ -381,6 +381,9 @@ const GraphItem = ({
   };
 
   const handleClick = (e: React.MouseEvent) => {
+    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
+    // 이 클릭이 선택·패널 오픈으로 이어져 방금 연 메뉴를 닫는 것을 차단
+    if (macOS && e.ctrlKey) return;
     const isPrimaryModifierPressed = macOS ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 

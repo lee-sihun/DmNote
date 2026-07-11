@@ -414,7 +414,7 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
               onClick={onKeyListen}
               className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                 isListening ? 'shadow-focus-ring' : ''
-              } text-fg text-style-2`}
+              } text-fg text-label`}
             >
               {isListening
                 ? t('propertiesPanel.pressAnyKey') || 'Press any key'

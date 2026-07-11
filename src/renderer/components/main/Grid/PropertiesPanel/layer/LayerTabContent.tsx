@@ -242,6 +242,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
 
     onSelectionFromPanel?.();
 
+    // macOS ctrl+클릭은 우클릭 제스처 — contextmenu 뒤에 따라오는 click 무시
+    if (isMac() && e.ctrlKey) return;
+
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;
 
@@ -381,6 +384,9 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
       return;
     }
     if (dnd.getIsDraggingRef()) return;
+
+    // macOS ctrl+클릭은 우클릭 제스처 — contextmenu 뒤에 따라오는 click 무시
+    if (isMac() && e.ctrlKey) return;
 
     const isPrimaryModifierPressed = isMac() ? e.metaKey : e.ctrlKey;
     const isShiftPressed = e.shiftKey;

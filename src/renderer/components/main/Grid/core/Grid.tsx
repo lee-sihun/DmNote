@@ -109,8 +109,12 @@ interface GridProps {
   showConfirm: (
     message: string,
     onConfirm: () => void,
-    onCancelOrConfirmText?: (() => void) | string,
-    confirmText?: string,
+    options?: {
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    },
   ) => void;
   showAlert: (message: string, confirmText?: string) => void;
   selectedKey: SelectedKeyInfo | null;
@@ -1002,7 +1006,7 @@ const Grid = ({
             showConfirm(
               t('confirm.removeKey', { name: displayName }),
               () => onKeyDelete(index),
-              t('confirm.remove'),
+              { confirmText: t('confirm.remove') },
             );
           }}
           onContextMenu={(e) => {
@@ -1108,7 +1112,7 @@ const Grid = ({
           showConfirm(
             t('confirm.removeStat', { name: displayName }),
             () => deleteStatAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1210,7 +1214,7 @@ const Grid = ({
           showConfirm(
             t('confirm.removeGraph', { name: displayName }),
             () => deleteGraphAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1309,7 +1313,7 @@ const Grid = ({
           showConfirm(
             t('confirm.removeKnob', { name: 'Knob' }),
             () => deleteKnobAtIndex(index),
-            t('confirm.remove'),
+            { confirmText: t('confirm.remove') },
           );
         }}
         onContextMenu={(e) => {
@@ -1895,7 +1899,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeStat', { name: displayName }),
                   () => deleteStatAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateStat(contextIndex);
@@ -1921,7 +1925,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeGraph', { name: displayName }),
                   () => deleteGraphAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateGraph(contextIndex);
@@ -1941,7 +1945,7 @@ const Grid = ({
                 showConfirm(
                   t('confirm.removeKnob', { name: 'Knob' }),
                   () => deleteKnobAtIndex(contextIndex),
-                  t('confirm.remove'),
+                  { confirmText: t('confirm.remove') },
                 );
               } else if (id === 'duplicate') {
                 beginDuplicateKnob(contextIndex);
@@ -2002,7 +2006,7 @@ const Grid = ({
               showConfirm(
                 t('confirm.removeKey', { name: displayName }),
                 () => onKeyDelete(contextIndex),
-                t('confirm.remove'),
+                { confirmText: t('confirm.remove') },
               );
             } else if (id === 'duplicate') {
               const keyCode =
@@ -2070,7 +2074,7 @@ const Grid = ({
                     console.error('Failed to reset key counter', error);
                   }
                 },
-                t('confirm.reset'),
+                { confirmText: t('confirm.reset') },
               );
             } else if (id === 'bringToFront') {
               if (typeof onMoveToFront === 'function') {

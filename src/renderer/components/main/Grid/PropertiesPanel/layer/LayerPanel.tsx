@@ -119,7 +119,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       <div className="flex-shrink-0">
         {/* 헤더 */}
         <div className={PANEL_HEADER_CLASS}>
-          <span className="text-fg text-style-2 leading-none">
+          <span className="text-fg text-label leading-none">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
         </div>
