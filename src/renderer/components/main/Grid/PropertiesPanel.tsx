@@ -2593,7 +2593,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           pluginPanelSettings={pluginPanelSettings}
           handlePluginSettingsPanelChange={handlePluginSettingsPanelChange}
           handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
-          handlePluginSettingsPanelCancel={handlePluginSettingsPanelCancel}
           setPluginScrollRef={setPluginScrollRef}
           renderPluginSettingsForm={renderPluginSettingsForm}
           t={t}
