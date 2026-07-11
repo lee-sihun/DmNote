@@ -253,20 +253,19 @@ body.dmn-custom-cursor * {
   animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
 }
 
+/* 종료 상태는 클래스 자연값 — to 블록 생략 */
 @keyframes modalScale {
   from {
     transform: scale(0.97);
     opacity: 0;
   }
-
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
 }
 
-.animate-modal-scale {
-  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) forwards;
+/* 래퍼가 아닌 콘텐츠 루트가 직접 애니메이션 — opacity가 1 미만인 조상은
+   backdrop root가 되어 글래스 블러가 죽었다가 애니메이션이 끝나는 순간 튐.
+   블러 소유 엘리먼트 자신의 페이드는 블러를 살린 채 진행됨 (Dropdown 참고) */
+.animate-modal-scale > * {
+  animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
 }
 
 /* 틴트와 블러를 한 키프레임에서 보간 — 종료 상태는 클래스 자연값 */
@@ -455,7 +454,7 @@ body.dmn-custom-cursor * {
 /* 모션 축소 설정 존중 — 이동은 제거, 표시 자체는 유지 */
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
-  .animate-modal-scale,
+  .animate-modal-scale > *,
   .animate-modal-scrim,
   .view-enter,
   .view-fade {
