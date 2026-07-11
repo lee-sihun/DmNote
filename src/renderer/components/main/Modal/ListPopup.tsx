@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
@@ -43,6 +43,7 @@ const SubMenu = ({
   anchorRect,
   onMouseEnter,
   onMouseLeave,
+  onRequestClose,
 }: {
   items: ListItem[];
   onSelect?: (id: string) => void;
@@ -52,48 +53,57 @@ const SubMenu = ({
   anchorRect: DOMRect | null;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onRequestClose?: () => void;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
   const siblingActiveRef = useRef<{
     id: string | null;
     close: (() => void) | null;
   }>({ id: null, close: null });
-  const pos = (() => {
-    if (!anchorRect) return null;
+  // 실측 기반 배치 — 히든 렌더 후 페인트 전에 측정·확정 (추정치 없음)
+  const [pos, setPos] = useState<{
+    left?: number;
+    right?: number;
+    top: number;
+  } | null>(null);
+
+  // Escape 소유 — 열린 동안 최상위 레이어이므로 소비 후 자신만 닫기
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      onRequestClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onRequestClose]);
+
+  useLayoutEffect(() => {
+    const el = subMenuRef.current;
+    if (!anchorRect || !el) return;
 
     const padding = 5;
+    const { offsetWidth: width, offsetHeight: height } = el;
     const normalLeft = anchorRect.right + 2;
     let top = anchorRect.top;
 
-    // 서브메뉴의 대략적인 높이 추정 (아이템 26 + 갭 4 + 패딩 8)
-    const separatorCount = items.filter((i) => i.type === 'separator').length;
-    const itemCount = items.length - separatorCount;
-    const estimatedHeight = itemCount * 30 + separatorCount * 5 + 4;
-    const estimatedWidth = 160;
-
     // 오른쪽 경계 체크 → 공간 부족 시 왼쪽에 표시 (right 기준 정렬)
-    const flipToLeft =
-      normalLeft + estimatedWidth > window.innerWidth - padding;
+    const flipToLeft = normalLeft + width > window.innerWidth - padding;
 
     // 아래쪽 경계 체크
-    if (top + estimatedHeight > window.innerHeight - padding) {
-      top = window.innerHeight - estimatedHeight - padding;
+    if (top + height > window.innerHeight - padding) {
+      top = window.innerHeight - height - padding;
     }
     if (top < padding) top = padding;
 
-    if (flipToLeft) {
-      return { right: window.innerWidth - anchorRect.left + 2, top } as {
-        left?: number;
-        right?: number;
-        top: number;
-      };
-    }
-    return { left: normalLeft, top } as {
-      left?: number;
-      right?: number;
-      top: number;
-    };
-  })();
+    // 측정→배치 패턴: 페인트 전 위치 확정이 목적이라 동기 setState가 의도임
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPos(
+      flipToLeft
+        ? { right: window.innerWidth - anchorRect.left + 2, top }
+        : { left: normalLeft, top },
+    );
+  }, [anchorRect, items.length]);
 
   const itemHeight = 26;
   const itemGap = 4;
@@ -110,7 +120,7 @@ const SubMenu = ({
     wheelMultiplier: 0.7,
   });
 
-  if (!pos) return null;
+  if (!anchorRect) return null;
 
   // body 포털 필수 — 부모 팝업의 backdrop-filter가 fixed의 containing block이 되어
   // 뷰포트 좌표가 어긋나는 것 방지. 호버 유지는 onMouseEnter/Leave 콜백으로 연결
@@ -124,13 +134,14 @@ const SubMenu = ({
       data-dmn-popup-submenu="true"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
+      className={`fixed z-[60] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
-        left: pos.left,
-        right: pos.right,
-        top: pos.top,
+        left: pos?.left,
+        right: pos?.right,
+        top: pos?.top ?? 0,
+        visibility: pos ? undefined : 'hidden',
         ...(maxHeight
           ? { maxHeight, overflowY: 'auto', overflowX: 'hidden' }
           : {}),
@@ -347,6 +358,13 @@ const MenuItemRow = ({
             if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
           }}
           onMouseLeave={handleMouseLeave}
+          onRequestClose={() => {
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+            setSubMenuOpen(false);
+            if (siblingActiveRef?.current.id === item.id) {
+              siblingActiveRef.current = { id: null, close: null };
+            }
+          }}
         />
       )}
     </div>

@@ -64,16 +64,23 @@ const FloatingPopup = ({
       refs.setReference(referenceRef.current);
   }, [referenceRef, refs.setReference]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Escape 소유는 autoClose와 무관 — 한 번에 한 겹씩 닫힘.
+  // 위에 body 포털 서브메뉴가 떠 있으면 그쪽이 상위 레이어이므로 양보
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (document.querySelector('[data-dmn-popup-submenu="true"]')) return;
+      // 이 레이어가 소비 — 하위 레이어(페이지·그리드 선택)로 내려가지 않게
+      e.preventDefault();
+      onClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   useEffect(() => {
     if (open && autoClose) {
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          // 이 레이어가 소비 — 하위 레이어(페이지·그리드 선택)로 내려가지 않게
-          e.preventDefault();
-          onClose?.();
-        }
-      };
-
       const onClickAway = (e: MouseEvent) => {
         const target = e.target as Node;
         if (!refs.floating.current) return;
@@ -98,10 +105,8 @@ const FloatingPopup = ({
         onClose?.();
       };
 
-      document.addEventListener('keydown', onKey);
       document.addEventListener('mousedown', onClickAway);
       return () => {
-        document.removeEventListener('keydown', onKey);
         document.removeEventListener('mousedown', onClickAway);
       };
     }

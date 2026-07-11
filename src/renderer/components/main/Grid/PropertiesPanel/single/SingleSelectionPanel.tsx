@@ -142,6 +142,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
             onClick={handleToggleMode}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
@@ -149,6 +150,7 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
             onClick={handleTogglePanel}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+            aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
           >
             <SidebarToggleIcon isOpen={true} />
           </button>
@@ -355,6 +357,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             onClick={handleToggleMode}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
@@ -362,6 +365,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             onClick={handleTogglePanel}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || 'Close'}
+            aria-label={t('propertiesPanel.closePanel') || 'Close'}
           >
             <SidebarToggleIcon isOpen={true} />
           </button>
@@ -994,6 +998,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             onClick={handleToggleMode}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
           >
             <ModeToggleIcon mode="layer" />
           </button>
@@ -1001,6 +1006,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             onClick={handleTogglePanel}
             className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
             title={t('propertiesPanel.closePanel') || 'Close'}
+            aria-label={t('propertiesPanel.closePanel') || 'Close'}
           >
             <SidebarToggleIcon isOpen={true} />
           </button>
@@ -1554,6 +1560,9 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+              aria-label={
+                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
+              }
             >
               <ModeToggleIcon mode="layer" />
             </button>
@@ -1562,6 +1571,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>

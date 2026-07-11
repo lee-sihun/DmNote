@@ -104,8 +104,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
   // 컬러 버튼 refs
   const bgColorBtnRef = useRef<HTMLButtonElement>(null);
   // 폰트 버튼 ref
-  const fontButtonRef = useRef<HTMLButtonElement>(null);
-  const soundButtonRef = useRef<HTMLButtonElement>(null);
   const borderColorBtnRef = useRef<HTMLButtonElement>(null);
   const fontColorBtnRef = useRef<HTMLButtonElement>(null);
   const internalImageButtonRef = useRef<HTMLButtonElement>(null);
@@ -591,7 +589,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         {/* 폰트 */}
         <PropertyRow label={t('propertiesPanel.font') || '폰트'}>
           <button
-            ref={fontButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -706,7 +703,6 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
 
           <PropertyRow label={t('propertiesPanel.keySound') || '키 사운드'}>
             <button
-              ref={soundButtonRef}
               type="button"
               className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                 activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -801,13 +797,10 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <FontPicker
             open
-            referenceRef={fontButtonRef}
             selectedFont={keyPosition.fontFamily || null}
             onFontSelect={(fontName) => {
               handleStyleChangeComplete('fontFamily', fontName);
             }}
-            onClose={closePage}
-            renderMode="page"
             pageTitle={t('propertiesPanel.font') || '폰트'}
             onBack={closePage}
           />,
@@ -821,16 +814,13 @@ const StyleTabContent: React.FC<StyleTabContentInternalProps> = ({
         createPortal(
           <SoundPicker
             open
-            referenceRef={soundButtonRef}
             selectedSound={keyPosition.soundPath || null}
             onSoundSelect={(soundPath) => {
               const nextPath = soundPath || '';
               onKeyPreview?.(keyIndex, { soundPath: nextPath });
               onKeyUpdate({ index: keyIndex, soundPath: nextPath });
             }}
-            onClose={closePage}
             previewVolume={keyPosition.soundVolume ?? 100}
-            renderMode="page"
             pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
             onBack={closePage}
           />,

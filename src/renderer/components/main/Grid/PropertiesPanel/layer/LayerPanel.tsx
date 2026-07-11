@@ -140,6 +140,9 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
               title={
                 t('propertiesPanel.switchToProperty') || 'Switch to Property'
               }
+              aria-label={
+                t('propertiesPanel.switchToProperty') || 'Switch to Property'
+              }
             >
               <ModeToggleIcon mode="property" disabled={!hasSelection} />
             </button>
@@ -148,6 +151,7 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
               onClick={onClose}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || 'Close Panel'}
+              aria-label={t('propertiesPanel.closePanel') || 'Close Panel'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>

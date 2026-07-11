@@ -57,7 +57,7 @@ pub fn run() -> Result<()> {
 
     #[cfg(target_os = "macos")]
     {
-        return macos::run_macos();
+        macos::run_macos()
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]

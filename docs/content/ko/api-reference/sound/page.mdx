@@ -1,0 +1,102 @@
+---
+title: 사운드 API
+description: 키음 라이브러리를 위한 dmn.sound API 레퍼런스
+---
+
+# 사운드 API
+
+키음 라이브러리 — 키 요소가 눌릴 때 재생할 수 있는 오디오 파일 풀 — 를
+관리합니다. 사운드는 앱 데이터의 `sounds` 디렉토리에 저장되며, 사용자가
+가져온 파일(`local`)과 기본 내장 파일(`builtin`)로 나뉩니다.
+
+## 타입
+
+```typescript
+type SoundListItem = {
+  soundPath: string; // 절대 경로 — 안정적인 식별자로도 사용
+  fileName: string;
+  sizeBytes: number;
+  modifiedAtMs?: number;
+  hidden: boolean; // 피커 목록에서 숨김 — 재생에는 영향 없음
+  source: 'local' | 'builtin';
+  originalPath?: string; // 트림 전 원본 (편집된 사운드에 존재)
+  trimStartRatio?: number;
+  trimEndRatio?: number;
+  displayName?: string;
+};
+```
+
+## 라이브러리
+
+### `dmn.sound.list(): Promise<SoundListItem[]>`
+
+라이브러리의 모든 사운드를 **숨긴 항목까지 포함해** 반환합니다. `hidden`
+기준 필터링은 호출자의 몫입니다 (내장 피커는 기본 뷰에서 숨기고 "숨긴
+사운드" 필터에서 보여줍니다).
+
+```typescript
+const sounds = await dmn.sound.list();
+const visible = sounds.filter((s) => !s.hidden);
+```
+
+### `dmn.sound.load(): Promise<SoundLoadResult>`
+
+파일 대화상자를 열어 선택한 오디오 파일을 라이브러리로 복사하고
+`soundPath`를 반환합니다.
+
+### `dmn.sound.rename(soundPath, displayName): Promise<SoundRenameResult>`
+
+피커에 표시되는 이름을 설정합니다. 파일 이름 자체는 바뀌지 않습니다.
+
+### `dmn.sound.remove(soundPath): Promise<SoundDeleteResult>`
+
+파일을 삭제하고, 이 사운드를 사용하는 모든 요소에서 할당을 해제합니다.
+
+## 표시 여부
+
+### `dmn.sound.setHidden(soundPath, hidden): Promise<SoundSetHiddenResult>`
+
+사운드를 피커 목록에서 숨기거나 다시 표시합니다. 숨김은 목록 정리용
+기능일 뿐이라 **이미 이 사운드를 쓰는 키는 계속 재생됩니다**. 내장
+사운드도 숨길 수 있습니다.
+
+```typescript
+await dmn.sound.setHidden(sound.soundPath, true); // 숨기기
+await dmn.sound.setHidden(sound.soundPath, false); // 숨김 해제
+```
+
+```typescript
+type SoundSetHiddenResult = {
+  success: boolean;
+  soundPath: string;
+  hidden: boolean;
+};
+```
+
+### `dmn.sound.setEnabled(soundPath, enabled): Promise<SoundSetEnabledResult>`
+
+<Callout type="warning">
+  Deprecated — 하위 호환용 역논리 별칭입니다. `enabled`는 단순히
+  `!hidden`이며, `setHidden`을 사용하세요.
+</Callout>
+
+## 편집
+
+### `dmn.sound.saveProcessedWav(wavBase64, fileName?, originalBase64?, originalExtension?, trimStartRatio?, trimEndRatio?): Promise<SoundSaveProcessedWavResult>`
+
+가공(트림)된 WAV를 라이브러리에 저장합니다. 나중에 다시 편집할 수 있도록
+원본을 함께 저장할 수 있습니다.
+
+### `dmn.sound.loadOriginal(soundPath): Promise<SoundLoadOriginalResult>`
+
+편집된 사운드의 저장된 원본 오디오(base64)를 반환합니다.
+
+### `dmn.sound.updateProcessedWav(soundPath, wavBase64, trimStartRatio?, trimEndRatio?, displayName?): Promise<SoundUpdateProcessedWavResult>`
+
+편집된 사운드의 가공 WAV를 제자리에서 덮어씁니다.
+
+## 진단
+
+### `dmn.sound.setLatencyLogging(enabled): Promise<void>`
+
+오디오 엔진의 키음 지연 로깅을 켜거나 끕니다.

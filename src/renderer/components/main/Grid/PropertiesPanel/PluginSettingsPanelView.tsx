@@ -56,6 +56,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
           onClick={handlePluginSettingsPanelCancel}
           className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
           title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+          aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
         >
           <SidebarToggleIcon isOpen={true} />
         </button>

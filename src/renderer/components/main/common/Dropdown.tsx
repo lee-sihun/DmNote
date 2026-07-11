@@ -84,6 +84,18 @@ const Dropdown: React.FC<DropdownProps> = ({
     setOpen((prev) => !prev);
   };
 
+  // Escape 소유 — 최상위 포털 레이어이므로 소비 후 자신만 닫기
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 

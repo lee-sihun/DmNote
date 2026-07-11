@@ -28,11 +28,6 @@ interface UseLenisOptions {
    * @default LENIS_CONFIG.touchMultiplier
    */
   touchMultiplier?: number;
-  /**
-   * 스크롤 이벤트 콜백
-   * Lenis 스크롤 발생 시 호출됨
-   */
-  onScroll?: () => void;
 }
 
 // easeOutExpo 이징 함수
@@ -49,12 +44,6 @@ export const useLenis = (options: UseLenisOptions = {}) => {
   const [wrapper, setWrapper] = useState<HTMLElement | null>(null);
   const wrapperRef = useRef<HTMLElement | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
-  const onScrollRef = useRef<(() => void) | undefined>(options.onScroll);
-
-  // onScroll 콜백 업데이트
-  useEffect(() => {
-    onScrollRef.current = options.onScroll;
-  }, [options.onScroll]);
 
   const {
     duration,
@@ -97,12 +86,6 @@ export const useLenis = (options: UseLenisOptions = {}) => {
 
     lenisRef.current = lenis;
 
-    // Lenis scroll 이벤트 리스너 등록
-    const handleLenisScroll = () => {
-      onScrollRef.current?.();
-    };
-    lenis.on('scroll', handleLenisScroll);
-
     // RAF 루프 시작
     let rafId: number;
     const raf = (time: number) => {
@@ -114,7 +97,6 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     // 클린업
     return () => {
       cancelAnimationFrame(rafId);
-      lenis.off('scroll', handleLenisScroll);
       lenis.destroy();
       lenisRef.current = null;
     };

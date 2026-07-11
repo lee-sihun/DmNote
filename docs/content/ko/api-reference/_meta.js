@@ -6,6 +6,7 @@ export default {
   settings: "설정 (settings)",
   overlay: "오버레이 (overlay)",
   "css-js": "CSS/JS",
+  sound: "사운드 (sound)",
   presets: "프리셋 (presets)",
   i18n: "다국어 (i18n)",
   plugin: "플러그인 (plugin)",

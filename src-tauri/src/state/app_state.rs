@@ -1087,7 +1087,7 @@ impl AppState {
 
                             if emitted {
                                 keys_state_emit_count += 1;
-                                if keys_state_emit_count % 500 == 0 {
+                                if keys_state_emit_count.is_multiple_of(500) {
                                     log::debug!(
                                         "[AppState] emitted keys:state {} times (last key={}, state={})",
                                         keys_state_emit_count,
@@ -1342,14 +1342,13 @@ impl AppState {
                 #[cfg(target_os = "macos")]
                 apply_macos_overlay_fullscreen_behavior(&overlay_window, snapshot.always_on_top);
             }
-            WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+            WindowEvent::Moved(_) | WindowEvent::Resized(_)
                 // 윈도우 초기화 중에는 OS가 보고하는 좌표로 저장된 bounds를 덮어쓰지 않음
-                if !initializing_flag.load(Ordering::SeqCst) {
+                if !initializing_flag.load(Ordering::SeqCst) => {
                     if let Err(err) = persist_overlay_bounds(&overlay_window, &store) {
                         log::warn!("failed to persist overlay bounds: {err}");
                     }
                 }
-            }
             _ => {}
         });
     }

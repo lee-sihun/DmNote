@@ -112,10 +112,8 @@ fn generate_permissions() {
 fn extract_fn_name(line: &str) -> Option<String> {
     let rest = if let Some(r) = line.strip_prefix("pub async fn ") {
         r
-    } else if let Some(r) = line.strip_prefix("pub fn ") {
-        r
     } else {
-        return None;
+        line.strip_prefix("pub fn ")?
     };
     rest.split('(').next().map(|s| s.trim().to_string())
 }
@@ -210,7 +208,6 @@ fn maybe_build_macos_dock_helper() {
 
     if let Err(err) = fs::copy(&source_icon, &helper_icon) {
         println!("cargo:warning=failed to copy helper icon: {err}");
-        return;
     }
 }
 

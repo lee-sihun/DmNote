@@ -6,7 +6,7 @@ import { DEFAULT_FONT_FAMILY } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import Modal from '@components/main/Modal/Modal';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
-import CommonListPickerPopup from './CommonListPickerPopup';
+import CommonListPickerPage from './CommonListPickerPage';
 import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
@@ -14,16 +14,10 @@ import { useFontLibrary } from '@hooks/useFontLibrary';
 
 interface FontPickerProps {
   open: boolean;
-  referenceRef: React.RefObject<HTMLElement>;
-  panelElement?: HTMLElement | null;
   selectedFont: string | null;
   onFontSelect: (fontName: string | null) => void;
-  onClose: () => void;
-  interactiveRefs?: Array<React.RefObject<HTMLElement>>;
-  // 페이지 모드 패스스루 — 패널 서브 페이지로 렌더할 때 사용
-  renderMode?: 'popup' | 'page';
-  pageTitle?: string;
-  onBack?: () => void;
+  pageTitle: string;
+  onBack: () => void;
 }
 
 type FilterType = 'all' | 'builtin' | 'local' | 'web';
@@ -92,13 +86,8 @@ const buildPreviewCSS = (font: CustomFont): string | null => {
 
 const FontPicker = ({
   open,
-  referenceRef,
-  panelElement = null,
   selectedFont,
   onFontSelect,
-  onClose,
-  interactiveRefs = [],
-  renderMode = 'popup',
   pageTitle,
   onBack,
 }: FontPickerProps) => {
@@ -302,23 +291,12 @@ const FontPicker = ({
     if (ok) setWebFontModal(null);
   };
 
-  const handlePickerClose = () => {
-    if (menu.menuKey !== null || addMenuPosition !== null) return;
-    onClose();
-  };
-
   return (
     <>
-      <CommonListPickerPopup<CustomFont>
+      <CommonListPickerPage<CustomFont>
         open={open}
-        referenceRef={referenceRef}
-        panelElement={panelElement}
-        interactiveRefs={interactiveRefs}
-        renderMode={renderMode}
         pageTitle={pageTitle}
         onBack={onBack}
-        onClose={handlePickerClose}
-        estimatedHeight={280}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchPlaceholder={t('fontPicker.searchPlaceholder') || '검색...'}
@@ -356,7 +334,7 @@ const FontPicker = ({
                   ? (event) => menu.openFromContextMenu(event, font.id)
                   : undefined
               }
-              className={`${pickerRowClass(renderMode)} ${
+              className={`${pickerRowClass} ${
                 isSelected
                   ? 'bg-surface-active text-fg cursor-pointer'
                   : isDisabled
@@ -402,7 +380,7 @@ const FontPicker = ({
               {isCustom ? (
                 <button
                   type="button"
-                  className={`${pickerMoreButtonClass(renderMode)} ${
+                  className={`${pickerMoreButtonClass} ${
                     isSelected || menu.menuKey === font.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
@@ -454,7 +432,6 @@ const FontPicker = ({
               openWebFontModal(null);
             }
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />
@@ -483,7 +460,6 @@ const FontPicker = ({
               void handleDelete(font);
             }
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />

@@ -1710,7 +1710,7 @@ const Grid = ({
               top: displayBounds.y * zoom + panY - 2,
               width: displayBounds.width * zoom + 4,
               height: displayBounds.height * zoom + 4,
-              border: '2px solid rgba(59, 130, 246, 0.8)',
+              border: '2px solid var(--ui-selection-border)',
               borderRadius: '4px',
               pointerEvents: 'none',
               zIndex: 20,

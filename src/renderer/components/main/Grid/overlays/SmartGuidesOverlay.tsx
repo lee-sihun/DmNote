@@ -273,7 +273,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
 
           return (
             <g key={`size-match-${index}`}>
-              {/* 일치하는 요소에 파란색 테두리 표시 */}
+              {/* 일치하는 요소에 셀렉션 테두리 표시 */}
               {bounds && (
                 <rect
                   x={bounds.left}
@@ -281,12 +281,12 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                   width={bounds.width}
                   height={bounds.height}
                   fill="none"
-                  stroke="#3B82F6"
                   strokeWidth={2 / zoom}
                   strokeDasharray={`${4 / zoom} ${2 / zoom}`}
                   rx={4 / zoom}
                   style={{
-                    filter: 'drop-shadow(0 0 3px rgba(59, 130, 246, 0.5))',
+                    stroke: 'var(--ui-selection)',
+                    filter: 'drop-shadow(0 0 3px var(--ui-selection-glow))',
                   }}
                 />
               )}
@@ -297,7 +297,7 @@ export const SmartGuidesOverlay: React.FC<SmartGuidesOverlayProps> = ({
                 width={48 / zoom}
                 height={16 / zoom}
                 rx={4 / zoom}
-                fill="#3B82F6"
+                style={{ fill: 'var(--ui-selection)' }}
                 opacity={0.9}
               />
               {/* 라벨 텍스트 */}

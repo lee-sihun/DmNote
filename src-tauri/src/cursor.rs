@@ -85,7 +85,7 @@ pub fn get_macos_cursor_settings() -> MacOSCursorSettings {
                 .or_else(|| read_double_from_user_defaults(suite_defaults, "mouseDriverCursorSize"))
                 .or_else(|| read_double_from_prefs(prefs, "mouseDriverCursorSize"));
         if let Some(size) = size {
-            if size >= 1.0 && size <= 4.0 {
+            if (1.0..=4.0).contains(&size) {
                 settings.size = size;
             }
         }

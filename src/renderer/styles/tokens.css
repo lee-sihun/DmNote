@@ -52,6 +52,13 @@
   --ui-accent-deep-hover: #7857d8;
   --ui-accent-deep-active: #5f40bd;
 
+  /* 캔버스 선택 크롬 — 셀렉션은 의미 지점이므로 브랜드 바이올렛 */
+  --ui-selection: #8b5cf6;
+  --ui-selection-border: rgba(139, 92, 246, 0.8);
+  --ui-selection-border-strong: rgba(139, 92, 246, 0.9);
+  --ui-selection-fill: rgba(139, 92, 246, 0.15);
+  --ui-selection-glow: rgba(139, 92, 246, 0.5);
+
   /* 시맨틱 */
   --ui-danger: #e5484d;
   --ui-danger-hover: #ec5d62;

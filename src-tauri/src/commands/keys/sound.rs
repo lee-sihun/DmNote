@@ -35,6 +35,7 @@ pub struct SoundListItem {
     pub size_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_at_ms: Option<u64>,
+    pub hidden: bool,
     pub source: SoundSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_path: Option<String>,
@@ -78,6 +79,22 @@ pub struct SoundDeleteResponse {
 pub struct SoundRenameResponse {
     pub success: bool,
     pub display_name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundSetHiddenResponse {
+    pub success: bool,
+    pub sound_path: String,
+    pub hidden: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundSetEnabledResponse {
+    pub success: bool,
+    pub sound_path: String,
+    pub enabled: bool,
 }
 
 /// 로컬 사운드 파일을 선택하고 appData/sounds 디렉토리로 복사한 뒤 경로 반환
@@ -187,6 +204,7 @@ pub fn sound_list(
             file_name,
             size_bytes: metadata.len(),
             modified_at_ms,
+            hidden: entry_meta.hidden,
             source: entry_meta.source,
             original_path: entry_meta.original_path,
             trim_start_ratio: entry_meta.trim_start_ratio,
@@ -228,6 +246,59 @@ pub fn sound_list(
     });
 
     Ok(items)
+}
+
+#[tauri::command]
+pub fn sound_set_hidden(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    sound_path: String,
+    hidden: bool,
+) -> CmdResult<SoundSetHiddenResponse> {
+    let path_key = set_sound_hidden(&app, state.inner(), &sound_path, hidden)?;
+    Ok(SoundSetHiddenResponse {
+        success: true,
+        sound_path: path_key,
+        hidden,
+    })
+}
+
+#[tauri::command]
+pub fn sound_set_enabled(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    sound_path: String,
+    enabled: bool,
+) -> CmdResult<SoundSetEnabledResponse> {
+    let path_key = set_sound_hidden(&app, state.inner(), &sound_path, !enabled)?;
+    Ok(SoundSetEnabledResponse {
+        success: true,
+        sound_path: path_key,
+        enabled,
+    })
+}
+
+fn set_sound_hidden(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    sound_path: &str,
+    hidden: bool,
+) -> CmdResult<String> {
+    let sounds_dir = ensure_sounds_dir(app)?;
+    let validated_path = validate_sound_path(&sounds_dir, sound_path)?;
+    if !validated_path.exists() {
+        return Err(CommandError::msg("대상 사운드 파일이 존재하지 않습니다."));
+    }
+
+    let path_key = normalize_path_string(&validated_path);
+    state.store.update(|store| {
+        store
+            .sound_library
+            .entry(path_key.clone())
+            .or_default()
+            .hidden = hidden;
+    })?;
+    Ok(path_key)
 }
 
 #[tauri::command]
@@ -459,6 +530,7 @@ pub fn sound_save_processed_wav(
         s.sound_library.insert(
             dest_path_str.clone(),
             SoundLibraryEntry {
+                hidden: false,
                 source: SoundSource::Local,
                 original_path: original_rel_path.clone(),
                 trim_start_ratio: request.trim_start_ratio,

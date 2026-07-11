@@ -5,7 +5,6 @@ import React, {
   type ReactNode,
 } from 'react';
 import { useLenis } from '@hooks/useLenis';
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
 import Modal from './Modal';
 
 const MAX_SCROLL_HEIGHT = 195;
@@ -35,29 +34,11 @@ const ManagerModalLayout = ({
   contentDeps = [],
 }: ManagerModalLayoutProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [scrollState, setScrollState] = useState({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
-  const [skipShadowTransition, setSkipShadowTransition] = useState(true);
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
   const [isScrollable, setIsScrollable] = useState(false);
   const isFirstRender = useRef(true);
 
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const nextState = getScrollShadowState(el, contentRef.current);
-    setScrollState((prev) =>
-      prev.hasTopShadow === nextState.hasTopShadow &&
-      prev.hasBottomShadow === nextState.hasBottomShadow
-        ? prev
-        : nextState,
-    );
-  };
-
-  const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
+  const { scrollContainerRef: scrollRef } = useLenis();
 
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -65,35 +46,23 @@ const ManagerModalLayout = ({
       return;
     }
 
-    setSkipShadowTransition(true);
-    setScrollState({ hasTopShadow: false, hasBottomShadow: false });
     setIsScrollable(false);
 
-    const el = wrapperElement;
     const contentEl = contentRef.current;
-    if (!el) return;
+    if (!contentEl) return;
 
     const updateHeight = () => {
-      if (contentEl) {
-        const contentHeight = contentEl.scrollHeight;
-        setContainerHeight(Math.min(contentHeight, MAX_SCROLL_HEIGHT));
-        setIsScrollable(contentHeight > MAX_SCROLL_HEIGHT);
-      }
+      const contentHeight = contentEl.scrollHeight;
+      setContainerHeight(Math.min(contentHeight, MAX_SCROLL_HEIGHT));
+      setIsScrollable(contentHeight > MAX_SCROLL_HEIGHT);
     };
 
-    const resizeObserver = new ResizeObserver(() => {
-      updateScrollState(el);
-      updateHeight();
-    });
-
-    if (contentEl) resizeObserver.observe(contentEl);
-    resizeObserver.observe(el);
-
-    updateScrollState(el);
+    // 콘텐츠 크기 변경 감지 (높이 애니메이션용)
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(contentEl);
     updateHeight();
 
     const rafId = requestAnimationFrame(() => {
-      setSkipShadowTransition(false);
       isFirstRender.current = false;
     });
 
@@ -102,13 +71,9 @@ const ManagerModalLayout = ({
       cancelAnimationFrame(rafId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, wrapperElement, ...contentDeps]);
+  }, [isOpen, ...contentDeps]);
 
   if (!isOpen) return null;
-
-  const shadowTransitionClass = skipShadowTransition
-    ? ''
-    : 'transition-opacity duration-150';
 
   return (
     <Modal onClick={onClose}>
@@ -120,39 +85,22 @@ const ManagerModalLayout = ({
         {tabs && <div className="pr-[14px]">{tabs}</div>}
 
         {/* 스크롤 영역 */}
-        <div className="relative">
-          {/* 상단 그림자 */}
-          <div
-            className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-glass-heavy to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
-              scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
-            }`}
-          />
-
-          <div
-            ref={scrollRef}
-            className="modal-content-scroll pr-[14px]"
-            style={{
-              height:
-                containerHeight !== null ? `${containerHeight}px` : 'auto',
-              maxHeight: `${MAX_SCROLL_HEIGHT}px`,
-              overflowY: isScrollable ? 'auto' : 'hidden',
-              transition: isFirstRender.current
-                ? 'none'
-                : 'height 100ms ease-in-out',
-              willChange: 'scroll-position',
-            }}
-          >
-            <div ref={contentRef} className="flex flex-col gap-[19px] py-[5px]">
-              {children}
-            </div>
+        <div
+          ref={scrollRef}
+          className="modal-content-scroll dmn-scroll-fade pr-[14px]"
+          style={{
+            height: containerHeight !== null ? `${containerHeight}px` : 'auto',
+            maxHeight: `${MAX_SCROLL_HEIGHT}px`,
+            overflowY: isScrollable ? 'auto' : 'hidden',
+            transition: isFirstRender.current
+              ? 'none'
+              : 'height 100ms ease-in-out',
+            willChange: 'scroll-position',
+          }}
+        >
+          <div ref={contentRef} className="flex flex-col gap-[19px] py-[5px]">
+            {children}
           </div>
-
-          {/* 하단 그림자 */}
-          <div
-            className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-glass-heavy to-transparent pointer-events-none z-10 ${shadowTransitionClass} ${
-              scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
-            }`}
-          />
         </div>
 
         {/* 구분선 */}

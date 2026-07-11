@@ -25,6 +25,17 @@ export const soundApi = {
     invoke<import('@src/types/plugin/api').SoundDeleteResult>('sound_delete', {
       soundPath,
     }),
+  setHidden: (soundPath: string, hidden: boolean) =>
+    invoke<import('@src/types/plugin/api').SoundSetHiddenResult>(
+      'sound_set_hidden',
+      { soundPath, hidden },
+    ),
+  // deprecated — setHidden의 역논리 별칭 (enabled = !hidden)
+  setEnabled: (soundPath: string, enabled: boolean) =>
+    invoke<import('@src/types/plugin/api').SoundSetEnabledResult>(
+      'sound_set_enabled',
+      { soundPath, enabled },
+    ),
   saveProcessedWav: (
     wavBase64: string,
     fileName?: string,

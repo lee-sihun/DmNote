@@ -183,8 +183,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
       }
     };
   }, []);
-  const fontButtonRef = useRef<HTMLButtonElement>(null);
-  const soundButtonRef = useRef<HTMLButtonElement>(null);
 
   // displayText의 실제 표시 값(displayText || keyInfo.displayName)을 기준으로 Mixed 판단
   const getDisplayTextMixed = (): { isMixed: boolean; value: string } => {
@@ -715,7 +713,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <button
-                  ref={fontButtonRef}
                   type="button"
                   className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                     activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -914,7 +911,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                   <span className="text-fg-faint text-body italic">Mixed</span>
                 ) : null}
                 <button
-                  ref={soundButtonRef}
                   type="button"
                   className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
                     activePageKey === SOUND_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -961,13 +957,10 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         createPortal(
           <FontPicker
             open
-            referenceRef={fontButtonRef}
             selectedFont={getMixedValue((pos) => pos.fontFamily, null).value}
             onFontSelect={(fontName) => {
               handleBatchStyleChangeComplete('fontFamily', fontName);
             }}
-            onClose={closePage}
-            renderMode="page"
             pageTitle={t('propertiesPanel.font') || '폰트'}
             onBack={closePage}
           />,
@@ -981,7 +974,6 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
         createPortal(
           <SoundPicker
             open={true}
-            referenceRef={soundButtonRef}
             selectedSound={
               (getKeyOnlyMixedValue ?? getMixedValue)(
                 (pos) => pos.soundPath,
@@ -994,14 +986,12 @@ const BatchStyleTabContent: React.FC<BatchStyleTabContentProps> = ({
                 handleBatchStyleChangeComplete
               )('soundPath', soundPath || '');
             }}
-            onClose={closePage}
             previewVolume={
               (getKeyOnlyMixedValue ?? getMixedValue)(
                 (pos) => pos.soundVolume,
                 100,
               ).value
             }
-            renderMode="page"
             pageTitle={t('propertiesPanel.keySound') || '키 사운드'}
             onBack={closePage}
           />,

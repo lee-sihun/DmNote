@@ -25,24 +25,32 @@ const LEGACY_OVERLAY_HEIGHT: f64 = 320.0;
 pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("failed to read store file at {}", path.display()))?;
-    let (state, needs_persist) = match serde_json::from_str::<AppStoreData>(&content) {
-        Ok(mut data) => {
-            let mut needs_persist = data.font_settings.custom_fonts.iter().any(|font| {
-                font.font_type == FontType::Local
-                    && font
-                        .css_content
-                        .as_ref()
-                        .map(|c| !c.trim().is_empty())
-                        .unwrap_or(false)
-            });
-            // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
-            if has_convertible_note_border_color(&data) {
-                needs_persist = true;
+    let (state, needs_persist) = match serde_json::from_str::<Value>(&content) {
+        Ok(mut value) => {
+            let sound_library_migrated = migrate_sound_library_enabled(&mut value);
+            match serde_json::from_value::<AppStoreData>(value) {
+                Ok(mut data) => {
+                    let mut needs_persist = sound_library_migrated
+                        || data.font_settings.custom_fonts.iter().any(|font| {
+                            font.font_type == FontType::Local
+                                && font
+                                    .css_content
+                                    .as_ref()
+                                    .map(|c| !c.trim().is_empty())
+                                    .unwrap_or(false)
+                        });
+                    // rgba로 깨진 noteBorderColor가 있으면 정규화 후 디스크에도 영속 (이슈 #73)
+                    if has_convertible_note_border_color(&data) {
+                        needs_persist = true;
+                    }
+                    if migrate_legacy_knob_sensitivity(&mut data) {
+                        needs_persist = true;
+                    }
+                    (normalize_state(data), needs_persist)
+                }
+                // 레거시/비정상 store 파일 복구 후 정규화 상태 저장
+                Err(_) => (repair_legacy_state(&content), true),
             }
-            if migrate_legacy_knob_sensitivity(&mut data) {
-                needs_persist = true;
-            }
-            (normalize_state(data), needs_persist)
         }
         // 레거시/비정상 store 파일 복구 후 정규화 상태 저장
         Err(_) => (repair_legacy_state(&content), true),
@@ -54,6 +62,27 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<(AppStoreData, bool)> 
         );
     }
     Ok((state, needs_persist))
+}
+
+fn migrate_sound_library_enabled(value: &mut Value) -> bool {
+    let Some(sound_library) = value.get_mut("soundLibrary").and_then(Value::as_object_mut) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for entry in sound_library.values_mut().filter_map(Value::as_object_mut) {
+        let Some(enabled) = entry.remove("enabled") else {
+            continue;
+        };
+
+        changed = true;
+        if !entry.contains_key("hidden") {
+            if let Some(enabled) = enabled.as_bool() {
+                entry.insert("hidden".to_string(), Value::Bool(!enabled));
+            }
+        }
+    }
+    changed
 }
 
 /// 레거시 노브 민감도 마이그레이션: 도수/카운트(구 기본 1.40625) → 순수 배율(1.0)
@@ -680,7 +709,86 @@ struct LegacyOverlayPosition {
 
 #[cfg(test)]
 mod tests {
-    use super::rgba_to_hex;
+    use super::{load_store_from_path, migrate_sound_library_enabled, rgba_to_hex};
+    use crate::models::AppStoreData;
+    use serde_json::{json, Value};
+
+    const TEST_SOUND_PATH: &str = "/tmp/test-sound.wav";
+
+    fn load_store_with_sound_entry(entry: Value) -> (AppStoreData, bool) {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-sound-migration-test-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut value = serde_json::to_value(AppStoreData::default()).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "soundLibrary".to_string(),
+            json!({ TEST_SOUND_PATH: entry }),
+        );
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let result = load_store_from_path(&path).unwrap();
+        let _ = std::fs::remove_file(path);
+        result
+    }
+
+    #[test]
+    fn sound_library_enabled_false_migrates_to_hidden_true() {
+        let mut value = json!({
+            "soundLibrary": {
+                TEST_SOUND_PATH: { "enabled": false }
+            }
+        });
+        assert!(migrate_sound_library_enabled(&mut value));
+        let entry = &value["soundLibrary"][TEST_SOUND_PATH];
+        assert_eq!(entry["hidden"], true);
+        assert!(entry.get("enabled").is_none());
+
+        let (data, needs_persist) = load_store_with_sound_entry(json!({ "enabled": false }));
+        assert!(data.sound_library[TEST_SOUND_PATH].hidden);
+        assert!(needs_persist);
+    }
+
+    #[test]
+    fn sound_library_enabled_true_migrates_to_hidden_false() {
+        let (data, needs_persist) = load_store_with_sound_entry(json!({ "enabled": true }));
+        assert!(!data.sound_library[TEST_SOUND_PATH].hidden);
+        assert!(needs_persist);
+    }
+
+    #[test]
+    fn sound_library_without_enabled_is_unchanged() {
+        let mut value = json!({
+            "soundLibrary": {
+                TEST_SOUND_PATH: { "source": "local" }
+            }
+        });
+        let original = value.clone();
+        assert!(!migrate_sound_library_enabled(&mut value));
+        assert_eq!(value, original);
+
+        let (data, needs_persist) = load_store_with_sound_entry(json!({ "source": "local" }));
+        assert!(!data.sound_library[TEST_SOUND_PATH].hidden);
+        assert!(!needs_persist);
+    }
+
+    #[test]
+    fn sound_library_hidden_takes_precedence_over_enabled() {
+        let mut value = json!({
+            "soundLibrary": {
+                TEST_SOUND_PATH: { "hidden": false, "enabled": false }
+            }
+        });
+        assert!(migrate_sound_library_enabled(&mut value));
+        let entry = &value["soundLibrary"][TEST_SOUND_PATH];
+        assert_eq!(entry["hidden"], false);
+        assert!(entry.get("enabled").is_none());
+
+        let (data, needs_persist) =
+            load_store_with_sound_entry(json!({ "hidden": false, "enabled": false }));
+        assert!(!data.sound_library[TEST_SOUND_PATH].hidden);
+        assert!(needs_persist);
+    }
 
     #[test]
     fn rgba_to_hex_converts_and_drops_alpha() {

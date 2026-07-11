@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import type { KeyCounterSettings } from '@src/types/key/keys';
 import {
@@ -78,8 +78,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
   isStrokePickerOpen,
   t,
 }) => {
-  const fontButtonRef = useRef<HTMLButtonElement>(null);
-  const animationButtonRef = useRef<HTMLButtonElement>(null);
   // 인-패널 내비게이션 (폰트/애니메이션 서브 페이지)
   const { activePageKey, renderPageKey, openPage, closePage, pageHost } =
     usePanelNav();
@@ -248,7 +246,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         {/* 폰트 */}
         <PropertyRow label={t('counterSetting.font') || '폰트'}>
           <button
-            ref={fontButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -318,7 +315,6 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
 
         <PropertyRow label={t('counterSetting.animation') || '애니메이션 설정'}>
           <button
-            ref={animationButtonRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -339,13 +335,10 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         createPortal(
           <FontPicker
             open
-            referenceRef={fontButtonRef}
             selectedFont={batchCounterSettings.fontFamily || null}
             onFontSelect={(fontFamily) => {
               handleBatchCounterUpdate({ fontFamily });
             }}
-            onClose={closePage}
-            renderMode="page"
             pageTitle={t('counterSetting.font') || '폰트'}
             onBack={closePage}
           />,
@@ -358,14 +351,11 @@ const BatchCounterTabContent: React.FC<BatchCounterTabContentProps> = ({
         createPortal(
           <CounterAnimationPicker
             open
-            referenceRef={animationButtonRef}
             animation={batchCounterSettings.animation}
             counterSettings={batchCounterSettings}
             keyVisual={keyVisual}
             onAnimationChange={handleAnimationUpdate}
-            onClose={closePage}
             t={t}
-            renderMode="page"
             pageTitle={t('counterSetting.animation') || '애니메이션'}
             onBack={closePage}
           />,

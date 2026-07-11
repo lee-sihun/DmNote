@@ -65,6 +65,8 @@ fn default_sound_source() -> SoundSource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SoundLibraryEntry {
+    #[serde(default)]
+    pub hidden: bool,
     #[serde(default = "default_sound_source")]
     pub source: SoundSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,6 +82,7 @@ pub struct SoundLibraryEntry {
 impl Default for SoundLibraryEntry {
     fn default() -> Self {
         Self {
+            hidden: false,
             source: SoundSource::Local,
             original_path: None,
             trim_start_ratio: None,
@@ -573,7 +576,7 @@ pub fn normalize_user_counter_animation_presets(
         })
         .collect();
 
-    normalized.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    normalized.sort_by_key(|a| a.name.to_lowercase());
     normalized
 }
 

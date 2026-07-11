@@ -130,7 +130,7 @@ impl LatencySummary {
     }
 
     fn should_emit_summary(&self) -> bool {
-        self.samples > 0 && self.samples % LATENCY_SUMMARY_INTERVAL == 0
+        self.samples > 0 && self.samples.is_multiple_of(LATENCY_SUMMARY_INTERVAL)
     }
 
     fn emit_summary(&self) {

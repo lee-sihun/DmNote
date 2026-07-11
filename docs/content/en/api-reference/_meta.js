@@ -6,6 +6,7 @@ export default {
   settings: "Settings",
   overlay: "Overlay",
   "css-js": "CSS/JS",
+  sound: "Sound",
   presets: "Presets",
   i18n: "i18n",
   plugin: "Plugin",

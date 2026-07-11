@@ -585,6 +585,9 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+              aria-label={
+                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
+              }
             >
               <ModeToggleIcon mode="layer" />
             </button>
@@ -592,6 +595,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -1138,6 +1142,9 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+              aria-label={
+                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
+              }
             >
               <ModeToggleIcon mode="layer" />
             </button>
@@ -1145,6 +1152,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>
@@ -1494,6 +1502,9 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               onClick={handleToggleMode}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
+              aria-label={
+                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
+              }
             >
               <ModeToggleIcon mode="layer" />
             </button>
@@ -1501,6 +1512,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               onClick={handleTogglePanel}
               className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
               title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
+              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
             >
               <SidebarToggleIcon isOpen={true} />
             </button>

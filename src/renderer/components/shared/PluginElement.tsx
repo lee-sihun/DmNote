@@ -1612,7 +1612,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             onClose={() => setContextMenuOpen(false)}
             items={contextMenuItems}
             onSelect={handleContextMenuSelect}
-            className="!z-[10000]"
           />,
           document.body,
         )}

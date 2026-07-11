@@ -795,7 +795,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
             }}
             items={actions.contextMenuItems}
             onSelect={actions.handleContextMenuSelect}
-            className="!z-[10000]"
           />,
           document.body,
         )}

@@ -101,11 +101,25 @@ export type SoundListItem = {
   fileName: string;
   sizeBytes: number;
   modifiedAtMs?: number;
+  /** 피커 목록에서 숨김 여부 — 재생에는 영향 없음 */
+  hidden: boolean;
   source: 'local' | 'builtin';
   originalPath?: string;
   trimStartRatio?: number;
   trimEndRatio?: number;
   displayName?: string;
+};
+
+export type SoundSetHiddenResult = {
+  success: boolean;
+  soundPath: string;
+  hidden: boolean;
+};
+
+export type SoundSetEnabledResult = {
+  success: boolean;
+  soundPath: string;
+  enabled: boolean;
 };
 
 export type SoundSaveProcessedWavResult = {
@@ -881,6 +895,15 @@ export interface DMNoteAPI {
     list(): Promise<SoundListItem[]>;
     rename(soundPath: string, displayName: string): Promise<SoundRenameResult>;
     remove(soundPath: string): Promise<SoundDeleteResult>;
+    setHidden(
+      soundPath: string,
+      hidden: boolean,
+    ): Promise<SoundSetHiddenResult>;
+    /** @deprecated setHidden의 역논리 별칭 — enabled = !hidden */
+    setEnabled(
+      soundPath: string,
+      enabled: boolean,
+    ): Promise<SoundSetEnabledResult>;
     saveProcessedWav(
       wavBase64: string,
       fileName?: string,

@@ -35,8 +35,8 @@ export const MarqueeSelectionOverlay: React.FC<
         top: rect.top * zoom + panY,
         width: rect.width * zoom,
         height: rect.height * zoom,
-        backgroundColor: 'rgba(59, 130, 246, 0.15)',
-        border: '1px dashed rgba(59, 130, 246, 0.8)',
+        backgroundColor: 'var(--ui-selection-fill)',
+        border: '1px dashed var(--ui-selection-border)',
         pointerEvents: 'none',
         zIndex: 9998,
       }}

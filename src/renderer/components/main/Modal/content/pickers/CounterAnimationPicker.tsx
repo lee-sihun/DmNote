@@ -14,14 +14,12 @@ import {
 } from '@src/types/key/counterAnimation';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
-import CommonListPickerPopup from './CommonListPickerPopup';
+import CommonListPickerPage from './CommonListPickerPage';
 import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
 import CounterAnimationEditorModal from '../editors/CounterAnimationEditorModal';
 
 interface CounterAnimationPickerProps {
   open: boolean;
-  referenceRef: React.RefObject<HTMLElement>;
-  panelElement?: HTMLElement | null;
   animation: KeyCounterAnimationSettings;
   counterSettings?: KeyCounterSettings;
   keyVisual?: {
@@ -48,13 +46,9 @@ interface CounterAnimationPickerProps {
     isStat?: boolean;
   };
   onAnimationChange: (next: KeyCounterAnimationSettings) => void;
-  onClose: () => void;
   t: (key: string) => string;
-  interactiveRefs?: Array<React.RefObject<HTMLElement>>;
-  // 페이지 모드 패스스루 — 패널 서브 페이지로 렌더할 때 사용
-  renderMode?: 'popup' | 'page';
-  pageTitle?: string;
-  onBack?: () => void;
+  pageTitle: string;
+  onBack: () => void;
 }
 
 type FilterType = 'all' | 'builtin' | 'user';
@@ -83,16 +77,11 @@ const EMPTY_LIBRARY: CounterAnimationListResponse = {
 
 const CounterAnimationPicker = ({
   open,
-  referenceRef,
-  panelElement = null,
   animation,
   counterSettings,
   keyVisual,
   onAnimationChange,
-  onClose,
   t,
-  interactiveRefs = [],
-  renderMode = 'popup',
   pageTitle,
   onBack,
 }: CounterAnimationPickerProps) => {
@@ -240,23 +229,12 @@ const CounterAnimationPicker = ({
     }
   };
 
-  const handlePickerClose = () => {
-    if (menu.menuKey !== null) return;
-    onClose();
-  };
-
   return (
     <>
-      <CommonListPickerPopup<CounterAnimationPreset>
+      <CommonListPickerPage<CounterAnimationPreset>
         open={open}
-        referenceRef={referenceRef}
-        panelElement={panelElement}
-        interactiveRefs={interactiveRefs}
-        renderMode={renderMode}
         pageTitle={pageTitle}
         onBack={onBack}
-        onClose={handlePickerClose}
-        estimatedHeight={276}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         searchPlaceholder={
@@ -286,7 +264,7 @@ const CounterAnimationPicker = ({
                   handlePresetSelect(preset);
                 }
               }}
-              className={`${pickerRowClass(renderMode)} cursor-pointer ${
+              className={`${pickerRowClass} cursor-pointer ${
                 isSelected
                   ? 'bg-surface-active text-fg'
                   : 'text-fg hover:bg-surface-hover'
@@ -300,14 +278,14 @@ const CounterAnimationPicker = ({
               {isUserPreset ? (
                 <button
                   type="button"
-                  className={`${pickerMoreButtonClass(renderMode)} ${
+                  className={`${pickerMoreButtonClass} ${
                     isSelected || menu.menuKey === preset.id
                       ? 'opacity-100'
                       : 'opacity-0 group-hover:opacity-100'
                   } ${
                     isSelected
-                      ? 'text-fg hover:text-fg hover:bg-surface-active'
-                      : 'text-fg-muted hover:text-fg hover:bg-surface-hover'
+                      ? 'text-fg hover:text-fg'
+                      : 'text-fg-muted hover:text-fg'
                   }`}
                   title={moreMenuLabel}
                   aria-label={moreMenuLabel}
@@ -350,7 +328,6 @@ const CounterAnimationPicker = ({
             }
             menu.close();
           }}
-          className="z-[60]"
           offsetX={0}
           offsetY={0}
         />

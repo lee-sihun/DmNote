@@ -220,6 +220,8 @@ fn main() {
             commands::keys::key_sound::key_sound_get_output_state,
             commands::keys::sound::sound_load,
             commands::keys::sound::sound_list,
+            commands::keys::sound::sound_set_hidden,
+            commands::keys::sound::sound_set_enabled,
             commands::keys::sound::sound_rename,
             commands::keys::sound::sound_delete,
             commands::keys::sound::sound_save_processed_wav,
@@ -818,8 +820,8 @@ fn request_accessibility_permission() {
             keys.as_ptr(),
             values.as_ptr(),
             1,
-            &kCFTypeDictionaryKeyCallBacks as *const _ as *const c_void,
-            &kCFTypeDictionaryValueCallBacks as *const _ as *const c_void,
+            &kCFTypeDictionaryKeyCallBacks as *const c_void,
+            &kCFTypeDictionaryValueCallBacks as *const c_void,
         );
 
         let trusted = AXIsProcessTrustedWithOptions(options);

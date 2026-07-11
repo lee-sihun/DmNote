@@ -38,8 +38,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 }) => {
   const fillBtnRef = useRef<HTMLButtonElement>(null);
   const strokeBtnRef = useRef<HTMLButtonElement>(null);
-  const fontBtnRef = useRef<HTMLButtonElement>(null);
-  const animationBtnRef = useRef<HTMLButtonElement>(null);
 
   const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
   const pickerOpen = pickerFor !== null;
@@ -307,7 +305,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         {/* 폰트 */}
         <PropertyRow label={t('counterSetting.font') || '폰트'}>
           <button
-            ref={fontBtnRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               activePageKey === FONT_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -378,7 +375,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
 
         <PropertyRow label={t('counterSetting.animation') || '애니메이션 설정'}>
           <button
-            ref={animationBtnRef}
             type="button"
             className={`px-[8px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md flex items-center justify-center ${
               activePageKey === ANIMATION_PAGE_KEY ? 'shadow-focus-ring' : ''
@@ -418,13 +414,10 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         createPortal(
           <FontPicker
             open
-            referenceRef={fontBtnRef}
             selectedFont={counterSettings.fontFamily || null}
             onFontSelect={(fontName) => {
               handleCounterUpdate({ fontFamily: fontName });
             }}
-            onClose={closePage}
-            renderMode="page"
             pageTitle={t('counterSetting.font') || '폰트'}
             onBack={closePage}
           />,
@@ -437,7 +430,6 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
         createPortal(
           <CounterAnimationPicker
             open
-            referenceRef={animationBtnRef}
             animation={counterSettings.animation}
             counterSettings={counterSettings}
             keyVisual={{
@@ -464,9 +456,7 @@ const CounterTabContent: React.FC<CounterTabContentProps> = ({
               isStat,
             }}
             onAnimationChange={handleAnimationUpdate}
-            onClose={closePage}
             t={t}
-            renderMode="page"
             pageTitle={t('counterSetting.animation') || '애니메이션'}
             onBack={closePage}
           />,

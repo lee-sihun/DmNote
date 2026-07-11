@@ -107,6 +107,8 @@
           "sound_load_original",
           "sound_rename",
           "sound_save_processed_wav",
+          "sound_set_enabled",
+          "sound_set_hidden",
           "sound_update_processed_wav",
           "stat_positions_get",
           "stat_positions_update",

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useLenis } from '@hooks/useLenis';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
-import { getScrollShadowState } from '@utils/grid/scrollShadow';
 
 interface AlertProps {
   isOpen: boolean;
@@ -27,41 +26,10 @@ const Alert = ({
 }: AlertProps) => {
   const { t } = useTranslation();
 
-  const [scrollState, setScrollState] = useState<{
-    hasTopShadow: boolean;
-    hasBottomShadow: boolean;
-  }>({
-    hasTopShadow: false,
-    hasBottomShadow: false,
-  });
-
-  // 스크롤 상태 업데이트 함수
-  const updateScrollState = (el: HTMLElement | null) => {
-    if (!el) return;
-    const nextState = getScrollShadowState(el);
-    setScrollState((prev) =>
-      prev.hasTopShadow === nextState.hasTopShadow &&
-      prev.hasBottomShadow === nextState.hasBottomShadow
-        ? prev
-        : nextState,
-    );
-  };
-
-  // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
-  const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
-    onScroll: () => updateScrollState(wrapperElement),
-  });
+  const { scrollContainerRef: scrollRef } = useLenis();
 
   const isConfirm = type === 'confirm';
   const isCustom = type === 'custom';
-
-  useEffect(() => {
-    if (isCustom && wrapperElement) {
-      // DOM이 렌더링된 후 스크롤 상태 확인
-      const timer = setTimeout(() => updateScrollState(wrapperElement), 0);
-      return () => clearTimeout(timer);
-    }
-  }, [isCustom, message, wrapperElement]);
 
   if (!isOpen) return null;
 
@@ -77,27 +45,11 @@ const Alert = ({
       >
         {/* 메시지 텍스트 or Custom HTML */}
         {isCustom ? (
-          <div className="relative">
-            {/* 상단 그림자 */}
-            <div
-              className={`absolute top-0 left-0 right-[14px] h-[10px] bg-gradient-to-b from-glass-heavy to-transparent pointer-events-none z-10 transition-opacity duration-fast ${
-                scrollState.hasTopShadow ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-
-            <div
-              ref={scrollRef}
-              className="max-h-[244px] overflow-y-auto modal-content-scroll pr-[14px] text-center text-fg"
-              dangerouslySetInnerHTML={{ __html: message }}
-            />
-
-            {/* 하단 그림자 */}
-            <div
-              className={`absolute bottom-0 left-0 right-[14px] h-[10px] bg-gradient-to-t from-glass-heavy to-transparent pointer-events-none z-10 transition-opacity duration-fast ${
-                scrollState.hasBottomShadow ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          </div>
+          <div
+            ref={scrollRef}
+            className="max-h-[244px] overflow-y-auto modal-content-scroll dmn-scroll-fade pr-[14px] text-center text-fg"
+            dangerouslySetInnerHTML={{ __html: message }}
+          />
         ) : (
           <div className="max-w-[236px] text-center text-fg text-label pr-[14px]">
             {message}
