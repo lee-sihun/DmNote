@@ -555,6 +555,13 @@ export interface PluginDefinition {
     items?: PluginDefinitionContextMenuItem[];
   };
   /**
+   * 메뉴 predicate가 참조할 오버레이 상태 키 (옵트인 저빈도 동기화)
+   * 선언된 키의 setState 변경만 메인 윈도우로 전달되어 contextMenu.items의
+   * visible/disabled 평가 시 element.state에 병합됨 — 고빈도 상태(bars 등)는
+   * 선언하지 않는 한 절대 전송되지 않음. 프리뷰(previewState 기반 state)는 불변
+   */
+  contextMenuStateKeys?: string[];
+  /**
    * 설정 UI 표시 방식
    * - "panel": 속성 패널 (기본값)
    * - "modal": 기존 모달

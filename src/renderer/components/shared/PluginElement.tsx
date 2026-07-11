@@ -35,6 +35,12 @@ import {
   clearExposedActions,
 } from '@utils/displayElementActions';
 import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
+import { obsApi } from '@api/modules/obsApi';
+import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
+import {
+  getPluginMenuRuntimeState,
+  normalizeStateKeys,
+} from '@utils/plugin/pluginMenuRuntimeState';
 
 const DEFAULT_POSITION_OFFSET = { x: 0, y: 0 };
 const EMPTY_SELECTED_ELEMENTS: SelectedElement[] = [];
@@ -214,6 +220,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const exposedActionsRef = useRef<
     Record<string, (...args: unknown[]) => unknown>
   >({});
+  // 컨텍스트 메뉴 predicate 예외는 요소·항목당 1회만 기록
+  const menuPredicateErrorRef = useRef(new Set<string>());
 
   // Settings 변경 감지용 ref와 콜백 리스트
   const prevSettingsRef = useRef<Record<string, unknown> | null>(null);
@@ -976,6 +984,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         const targetEl = e.target as HTMLElement;
         const checkbox = targetEl.closest('[data-checkbox-toggle]');
         if (checkbox) {
+          // label 기본 동작(input으로의 합성 클릭 재토글) 차단 — 수동 토글만 커밋
+          e.preventDefault();
           const input = checkbox.querySelector(
             'input[type=checkbox]',
           ) as HTMLInputElement;
@@ -984,17 +994,17 @@ export const PluginElement: React.FC<PluginElementProps> = ({
           if (input) {
             input.checked = !input.checked;
 
-            // 스타일 토글
+            // 스타일 토글 — createCheckbox의 액센트 토큰과 동기
             if (input.checked) {
-              checkbox.classList.remove('bg-[#3B4049]');
-              checkbox.classList.add('bg-[#493C1D]');
-              knob.classList.remove('left-[2px]', 'bg-[#989BA6]');
-              knob.classList.add('left-[13px]', 'bg-[#FFB400]');
+              checkbox.classList.remove('bg-line-strong');
+              checkbox.classList.add('bg-accent');
+              knob.classList.remove('left-[2px]');
+              knob.classList.add('left-[14px]');
             } else {
-              checkbox.classList.remove('bg-[#493C1D]');
-              checkbox.classList.add('bg-[#3B4049]');
-              knob.classList.remove('left-[13px]', 'bg-[#FFB400]');
-              knob.classList.add('left-[2px]', 'bg-[#989BA6]');
+              checkbox.classList.remove('bg-accent');
+              checkbox.classList.add('bg-line-strong');
+              knob.classList.remove('left-[14px]');
+              knob.classList.add('left-[2px]');
             }
 
             // change 이벤트 발생
@@ -1091,8 +1101,60 @@ export const PluginElement: React.FC<PluginElementProps> = ({
 
     const cleanups: (() => void)[] = [];
 
+    // 메뉴 predicate용 선언 키(contextMenuStateKeys) 동기화 —
+    // 스토어는 rAF 배치라 동기 shadow에서 diff를 계산해 변경분만 송신
+    const menuStateKeys = normalizeStateKeys(definition.contextMenuStateKeys);
+    const latestState: Record<string, unknown> = {
+      ...(usePluginDisplayElementStore
+        .getState()
+        .elements.find((el) => el.fullId === element.fullId)?.state ?? {}),
+    };
+    const lastSentMenuState: Record<string, unknown> = {};
+    const sendMenuStateSync = () => {
+      if (menuStateKeys.length === 0) return;
+      const changed: Record<string, unknown> = {};
+      for (const key of menuStateKeys) {
+        if (!Object.prototype.hasOwnProperty.call(latestState, key)) continue;
+        const value = latestState[key];
+        if (
+          Object.prototype.hasOwnProperty.call(lastSentMenuState, key) &&
+          Object.is(lastSentMenuState[key], value)
+        ) {
+          continue;
+        }
+        changed[key] = value;
+        lastSentMenuState[key] = value;
+      }
+      if (Object.keys(changed).length === 0) return;
+      try {
+        void Promise.resolve(
+          window.api?.bridge?.sendTo(
+            'main',
+            'plugin:displayElement:syncMenuState',
+            { fullId: element.fullId, state: changed },
+          ),
+        ).catch((error) => {
+          console.error('[PluginElement] Failed to sync menu state:', error);
+        });
+      } catch (error) {
+        console.error('[PluginElement] Failed to sync menu state:', error);
+      }
+    };
+
+    // OBS WS 재연결 시 단절 중 유실됐을 수 있는 제어 상태 재송신
+    if (menuStateKeys.length > 0) {
+      const unsubMenuStateResync = obsApi.onResync(() => {
+        Object.keys(lastSentMenuState).forEach((key) => {
+          delete lastSentMenuState[key];
+        });
+        sendMenuStateSync();
+      });
+      cleanups.push(unsubMenuStateResync);
+    }
+
     const context = {
       setState: (updates: Record<string, unknown>) => {
+        Object.assign(latestState, updates);
         // rAF 기반 배치 업데이트 사용 (성능 최적화)
         const currentElement = usePluginDisplayElementStore
           .getState()
@@ -1102,6 +1164,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
             state: { ...currentElement.state, ...updates },
           });
         }
+        sendMenuStateSync();
       },
       getSettings: () => {
         const currentElement = usePluginDisplayElementStore
@@ -1205,6 +1268,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     if (typeof mountCleanup === 'function') {
       cleanups.push(mountCleanup);
     }
+
+    // 동기 onMount 완료 후 초기 1회 송신 — 이미 setState로 보낸 키는 dedup됨
+    sendMenuStateSync();
 
     return () => {
       clearExposedActions(element.fullId);
@@ -1311,6 +1377,9 @@ export const PluginElement: React.FC<PluginElementProps> = ({
   const handleClick = (e: React.MouseEvent) => {
     // 우클릭은 컨텍스트 메뉴용이므로 제외
     if (e.button !== 0) return;
+
+    // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화
+    if (isMac() && e.ctrlKey) return;
 
     if (windowType === 'main' && activeTool === 'eraser') {
       e.stopPropagation();
@@ -1473,43 +1542,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     }
   };
 
-  // 컨텍스트 메뉴 항목 생성
-  const contextMenuItems: ListItem[] = (() => {
-    if (!element.contextMenu) return [];
-
-    const {
-      enableDelete = true,
-      deleteLabel = '삭제',
-      customItems = [],
-    } = element.contextMenu;
-    const items: ListItem[] = [];
-
-    if (enableDelete) {
-      items.push({
-        id: 'delete',
-        label: pluginTranslate(deleteLabel, undefined, deleteLabel),
-      });
-    }
-
-    // 커스텀 항목 추가
-    customItems.forEach((item, index) => {
-      items.push({
-        id: `custom-${index}`,
-        label: pluginTranslate(item.label, undefined, item.label),
-      });
-    });
-
-    // z-order 항목 추가
-    items.push(
-      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
-      // { id: "bringForward", label: t("contextMenu.bringForward") },
-      // { id: "sendBackward", label: t("contextMenu.sendBackward") },
-      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
-    );
-
-    return items;
-  })();
-
   const createActionsProxy = (elementId: string) =>
     new Proxy(
       {},
@@ -1537,6 +1569,68 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         },
       },
     );
+
+  // 컨텍스트 메뉴 항목 생성 — 열려 있을 때만 커스텀 predicate 평가
+  const contextMenuItems: ListItem[] = (() => {
+    if (!contextMenuOpen || !element.contextMenu) return [];
+
+    const {
+      enableDelete = true,
+      deleteLabel = '삭제',
+      customItems = [],
+    } = element.contextMenu;
+
+    // predicate가 보는 element.state에는 contextMenuStateKeys로 선언된
+    // 오버레이 런타임 값만 병합 — 프리뷰용 state 자체는 불변
+    const menuStateKeys = normalizeStateKeys(definition?.contextMenuStateKeys);
+    const menuElement =
+      menuStateKeys.length > 0
+        ? {
+            ...element,
+            state: {
+              ...element.state,
+              ...getPluginMenuRuntimeState(element.fullId, menuStateKeys),
+            },
+          }
+        : element;
+
+    // visible/disabled/position 계약 이행 (grid/key 메뉴와 동일 의미)
+    const { top, bottom } = evaluatePluginMenuItems(
+      customItems,
+      { element: menuElement, actions: createActionsProxy(element.fullId) },
+      (label) => pluginTranslate(label, undefined, label),
+      (index, kind, error) => {
+        const errorKey = `${element.fullId}:${index}:${kind}`;
+        if (menuPredicateErrorRef.current.has(errorKey)) return;
+        menuPredicateErrorRef.current.add(errorKey);
+        console.error(
+          `[Plugin ${element.pluginId}] Failed to evaluate context menu "${kind}" for item ${index}:`,
+          error,
+        );
+      },
+    );
+
+    const items: ListItem[] = [...top];
+
+    if (enableDelete) {
+      items.push({
+        id: 'delete',
+        label: pluginTranslate(deleteLabel, undefined, deleteLabel),
+      });
+    }
+
+    // z-order 항목 추가
+    items.push(
+      { id: 'bringToFront', label: t('contextMenu.bringToFront') },
+      // { id: "bringForward", label: t("contextMenu.bringForward") },
+      // { id: "sendBackward", label: t("contextMenu.sendBackward") },
+      { id: 'sendToBack', label: t('contextMenu.sendToBack') },
+    );
+
+    items.push(...bottom);
+
+    return items;
+  })();
 
   // 컨텍스트 메뉴 항목 선택
   const handleContextMenuSelect = (itemId: string) => {

@@ -185,6 +185,9 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
     };
   }, [windowType, updateElement]);
 
+  // 메뉴 predicate용 상태 동기화(contextMenuStateKeys) 수신은
+  // usePluginDisplayElementsResponder가 담당 — Grid 언마운트 중에도 유실 방지
+
   return (
     <>
       {filteredElements.map((element, index) => (
