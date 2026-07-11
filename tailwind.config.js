@@ -8,6 +8,7 @@ module.exports = {
       borderRadius: {
         md: 'var(--ui-radius-inner)',
         surface: 'var(--ui-radius-surface)',
+        popup: 'var(--ui-radius-popup)',
         modal: 'var(--ui-radius-modal)',
       },
       colors: {
@@ -131,31 +132,6 @@ module.exports = {
           lineHeight: '22px',
           letterSpacing: '-0.014em',
           fontWeight: '700',
-        },
-        // 레거시 별칭 — 마이그레이션 완료 후 제거
-        '.text-style-1': {
-          fontSize: '12px',
-          lineHeight: '18px',
-          letterSpacing: '0',
-          fontWeight: '500',
-        },
-        '.text-style-2': {
-          fontSize: '13px',
-          lineHeight: '18px',
-          letterSpacing: '0',
-          fontWeight: '500',
-        },
-        '.text-style-3': {
-          fontSize: '14px',
-          lineHeight: '20px',
-          letterSpacing: '0',
-          fontWeight: '500',
-        },
-        '.text-style-4': {
-          fontSize: '14px',
-          lineHeight: '20px',
-          letterSpacing: '0',
-          fontWeight: '500',
         },
       });
     },
