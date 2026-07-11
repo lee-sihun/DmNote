@@ -195,7 +195,8 @@
     "cancel": "Отмена",
     "ok": "ОК",
     "save": "Сохранить",
-    "more": "Ещё"
+    "more": "Ещё",
+    "dialog": "Диалог"
   },
   "tooltip": {
     "github": "GitHub",

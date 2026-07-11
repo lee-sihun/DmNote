@@ -3,7 +3,12 @@ import { useTranslation } from '@contexts/useTranslation';
 import type { SoundListItem } from '@src/types/plugin/api';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPage from './CommonListPickerPage';
-import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
+import {
+  pickerRowClass,
+  pickerMoreButtonClass,
+  pickerMoreButtonVisibleClass,
+  pickerMoreButtonHiddenClass,
+} from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import SoundTrimModal from '../managers/SoundTrimModal';
@@ -257,7 +262,7 @@ const SoundPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-accent"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-label text-fg caret-accent"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -288,8 +293,8 @@ const SoundPicker = ({
                 type="button"
                 className={`${pickerMoreButtonClass} ${
                   isSelected || menu.menuKey === item.soundPath
-                    ? 'opacity-100'
-                    : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                    ? pickerMoreButtonVisibleClass
+                    : pickerMoreButtonHiddenClass
                 } ${
                   isSelected
                     ? 'text-fg hover:text-fg'

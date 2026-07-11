@@ -841,9 +841,9 @@ const CounterAnimationEditorModal = ({
       : t('counterSetting.createAnimationTitle') || '모션 추가';
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={headerTitle}>
       <div
-        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-elevated rounded-[12px] shadow-2xl overflow-hidden"
+        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">
@@ -1062,6 +1062,8 @@ const CounterAnimationEditorModal = ({
                       }}
                       allowDecimal={true}
                       decimalScale={2}
+                      min={0}
+                      max={9999}
                       width="100%"
                     />
                   </div>
@@ -1367,7 +1369,7 @@ const CounterAnimationEditorModal = ({
           </div>
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
+            className={`w-[120px] h-[30px] rounded-surface text-label transition-colors duration-fast ${
               canSave
                 ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
                 : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
@@ -1383,7 +1385,7 @@ const CounterAnimationEditorModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel') || '취소'}

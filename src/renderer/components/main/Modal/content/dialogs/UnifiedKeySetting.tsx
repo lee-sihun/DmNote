@@ -182,28 +182,30 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   };
 
   return (
-    <Modal onClick={handleClose} animate={!initialSkipRef.current}>
+    <Modal
+      onClick={handleClose}
+      animate={!initialSkipRef.current}
+      ariaLabel={t('keySetting.title')}
+    >
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pr-[14px]">
-          <TabSwitch
-            tabs={[
-              { id: TABS.KEY, label: t('keySetting.tabKey') },
-              { id: TABS.NOTE, label: t('keySetting.tabNote') },
-              { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
-            ]}
-            activeTab={activeTab}
-            onTabChange={(tab) => setActiveTab(tab as TabType)}
-            className="mb-[19px]"
-          />
-        </div>
+        <TabSwitch
+          tabs={[
+            { id: TABS.KEY, label: t('keySetting.tabKey') },
+            { id: TABS.NOTE, label: t('keySetting.tabNote') },
+            { id: TABS.COUNTER, label: t('keySetting.tabCounter') },
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab as TabType)}
+          className="mb-[12px]"
+        />
 
-        {/* 스크롤 영역 - 스크롤바가 모달 오른쪽 끝에 위치 */}
+        {/* 스크롤 영역 */}
         <div
           ref={scrollRef}
-          className="overflow-y-auto modal-content-scroll dmn-scroll-fade pr-[14px]"
+          className="overflow-y-auto modal-content-scroll dmn-scroll-fade"
           style={{
             height: containerHeight !== null ? `${containerHeight}px` : 'auto',
             maxHeight: '195px',
@@ -216,16 +218,16 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
         </div>
 
         {/* 저장/취소 버튼 */}
-        <div className="flex gap-[8px] mt-[19px] pr-[14px]">
+        <div className="flex gap-[8px] mt-[12px]">
           <button
             onClick={handleSubmit}
-            className="w-[150px] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleClose}
-            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}
           </button>

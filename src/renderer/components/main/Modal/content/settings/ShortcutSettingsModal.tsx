@@ -332,7 +332,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[12px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -399,7 +399,7 @@ const ShortcutSettingsModal = ({
                           }}
                           className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
-                          } text-fg text-style-2`}
+                          } text-fg text-label`}
                         >
                           {display}
                         </button>
@@ -452,7 +452,7 @@ const ShortcutSettingsModal = ({
                           }}
                           className={`flex items-center justify-center h-[23px] min-w-[0px] px-[8px] bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast rounded-md ${
                             isRowListening ? 'shadow-focus-ring' : ''
-                          } text-fg text-style-2`}
+                          } text-fg text-label`}
                         >
                           {display}
                         </button>
@@ -473,7 +473,7 @@ const ShortcutSettingsModal = ({
 
         <div className="flex gap-[8px] mt-[12px]">
           <button
-            className="flex-1 h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSave}
             disabled={isListening}
             style={
@@ -483,7 +483,7 @@ const ShortcutSettingsModal = ({
             {t('shortcutSetting.save')}
           </button>
           <button
-            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
             disabled={isListening}
             style={

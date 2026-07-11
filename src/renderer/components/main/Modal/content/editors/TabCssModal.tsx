@@ -2,6 +2,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Modal from '../../Modal';
 import Checkbox from '@components/main/common/Checkbox';
+import {
+  PropertyRow,
+  PropertySection,
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import { useTranslation } from '@contexts/useTranslation';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import type { TabCss } from '@src/types/plugin/css';
@@ -135,26 +139,22 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   const cssEnabled = tabCss?.enabled ?? true;
 
   return (
-    <Modal onClick={handleCancel}>
+    <Modal onClick={handleCancel} ariaLabel={t('tabCss.enableCss')}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 gap-[19px]"
+        className="flex flex-col min-w-[264px] p-[14px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 gap-[12px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* CSS 사용 여부 토글 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-fg-muted text-label">{t('tabCss.enableCss')}</p>
-          <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
-        </div>
-
-        {/* CSS 파일 */}
-        <div className="flex justify-between w-full items-center">
-          <p className="text-fg-muted text-label">{t('tabCss.cssFile')}</p>
-          <div className="flex items-center gap-[8px]">
+        {/* CSS 설정 카드 */}
+        <PropertySection>
+          <PropertyRow label={t('tabCss.enableCss')}>
+            <Checkbox checked={cssEnabled} onChange={handleToggleCss} />
+          </PropertyRow>
+          <PropertyRow label={t('tabCss.cssFile')}>
             <button
               type="button"
               onClick={handleClearCss}
               disabled={isLoading || !hasTabCss}
-              className={`px-[8px] h-[23px] rounded-md transition-colors duration-fast flex items-center justify-center text-style-4 ${
+              className={`px-[8px] h-[23px] rounded-md transition-colors duration-fast flex items-center justify-center text-body ${
                 hasTabCss
                   ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
                   : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
@@ -166,24 +166,24 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               type="button"
               onClick={handleLoadCss}
               disabled={isLoading}
-              className="px-[7px] h-[23px] bg-fill rounded-md flex items-center justify-center text-fg text-style-4 hover:bg-fill-hover active:bg-fill-active"
+              className="px-[7px] h-[23px] bg-fill rounded-md flex items-center justify-center text-fg text-body hover:bg-fill-hover active:bg-fill-active"
             >
               {t('tabCss.loadFile')}
             </button>
-          </div>
-        </div>
+          </PropertyRow>
+        </PropertySection>
 
         {/* 버튼 영역 */}
         <div className="flex gap-[8px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.save')}
           </button>
           <button
             onClick={handleCancel}
-            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('keySetting.cancel')}
           </button>

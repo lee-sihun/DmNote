@@ -22,6 +22,8 @@ interface ManagerModalLayoutProps {
   extra?: ReactNode;
   /** 콘텐츠 변경 시 높이/스크롤 재계산 트리거 의존성 */
   contentDeps?: unknown[];
+  /** 스크린리더용 다이얼로그 이름 */
+  ariaLabel?: string;
 }
 
 const ManagerModalLayout = ({
@@ -32,6 +34,7 @@ const ManagerModalLayout = ({
   footer,
   extra,
   contentDeps = [],
+  ariaLabel,
 }: ManagerModalLayoutProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState<number | null>(null);
@@ -76,18 +79,18 @@ const ManagerModalLayout = ({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={ariaLabel}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 탭 영역 */}
-        {tabs && <div className="pr-[14px]">{tabs}</div>}
+        {tabs && <div className="mb-[12px]">{tabs}</div>}
 
         {/* 스크롤 영역 */}
         <div
           ref={scrollRef}
-          className="modal-content-scroll dmn-scroll-fade pr-[14px]"
+          className="modal-content-scroll dmn-scroll-fade"
           style={{
             height: containerHeight !== null ? `${containerHeight}px` : 'auto',
             maxHeight: `${MAX_SCROLL_HEIGHT}px`,
@@ -98,16 +101,13 @@ const ManagerModalLayout = ({
             willChange: 'scroll-position',
           }}
         >
-          <div ref={contentRef} className="flex flex-col gap-[19px] py-[5px]">
+          <div ref={contentRef} className="flex flex-col gap-[12px] py-[5px]">
             {children}
           </div>
         </div>
 
-        {/* 구분선 */}
-        <div className="h-px bg-line my-[20px] -ml-[20px] -mr-[6px]" />
-
         {/* 하단 버튼 */}
-        <div className="flex items-center gap-[8px] pr-[14px]">{footer}</div>
+        <div className="flex items-center gap-[8px] mt-[12px]">{footer}</div>
 
         {/* 추가 콘텐츠 (로딩/에러 등) */}
         {extra}

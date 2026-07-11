@@ -42,10 +42,11 @@ export const PluginManagerModal = ({
     isOpen={isOpen}
     onClose={onClose}
     contentDeps={[plugins.length]}
+    ariaLabel={t('settings.managePluginsTitle')}
     footer={
       <>
         <button
-          className={`flex items-center justify-center w-[150px] h-[30px] rounded-md text-style-3 text-fg transition-colors ${
+          className={`flex items-center justify-center flex-[2] h-[30px] rounded-surface text-label text-fg transition-colors ${
             isAdding
               ? 'bg-fill-faint cursor-not-allowed opacity-50'
               : 'bg-fill hover:bg-fill-hover'
@@ -58,7 +59,7 @@ export const PluginManagerModal = ({
             : `${t('settings.loadJs')} (${plugins.length})`}
         </button>
         <button
-          className="flex items-center justify-center w-[75px] h-[30px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
+          className="flex items-center justify-center flex-1 h-[30px] bg-fill rounded-surface text-label text-fg hover:bg-fill-hover transition-colors"
           onClick={onClose}
         >
           {t('common.ok')}
@@ -67,7 +68,7 @@ export const PluginManagerModal = ({
     }
   >
     {plugins.length === 0 ? (
-      <div className="flex items-center justify-center py-[10px] px-[12px] text-style-2 text-white">
+      <div className="flex items-center justify-center py-[10px] px-[12px] text-label text-fg-muted">
         {t('settings.noPlugins')}
       </div>
     ) : (

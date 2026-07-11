@@ -195,7 +195,8 @@
     "cancel": "취소",
     "ok": "확인",
     "save": "저장",
-    "more": "더보기"
+    "more": "더보기",
+    "dialog": "대화상자"
   },
   "tooltip": {
     "github": "깃허브",

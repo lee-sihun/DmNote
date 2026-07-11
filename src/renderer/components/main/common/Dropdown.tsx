@@ -59,8 +59,8 @@ const Dropdown: React.FC<DropdownProps> = ({
       // 하단 메뉴 높이 고려 (약 50px)
       const bottomPadding = 60;
 
-      // 드롭다운 메뉴 예상 높이 (아이템 24 + 갭 4 리듬, padding 포함)
-      const estimatedMenuHeight = Math.min(options.length * 28 + 4, 200);
+      // 드롭다운 메뉴 예상 높이 (아이템 23 + 갭 4 리듬, padding 포함)
+      const estimatedMenuHeight = Math.min(options.length * 27 + 4, 200);
 
       // 버튼 아래 공간이 부족하면 위로 펼치기
       const spaceBelow = viewportHeight - rect.bottom - bottomPadding;
@@ -162,7 +162,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                 <button
                   key={opt.value}
                   type="button"
-                  className={`text-left w-full h-[24px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
+                  className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
                     value === opt.value
                       ? 'bg-surface-active text-fg pointer-events-none'
                       : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
@@ -190,7 +190,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex items-center justify-center w-[24px] h-[24px] rounded-md cursor-pointer bg-fill hover:bg-fill-hover transition-colors duration-fast ${
+          className={`flex items-center justify-center w-[23px] h-[23px] rounded-md cursor-pointer bg-fill hover:bg-fill-hover transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           }`}
           onClick={toggleOpen}
@@ -205,7 +205,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           className={`flex box-border items-center justify-between ${
             size === 'lg'
               ? 'h-[30px] px-[10px] rounded-surface'
-              : 'h-[24px] px-[8px] rounded-md'
+              : 'h-[23px] px-[8px] rounded-md'
           } bg-fill hover:bg-fill-hover text-fg text-body transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}

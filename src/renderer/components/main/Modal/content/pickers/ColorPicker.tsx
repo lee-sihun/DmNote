@@ -58,6 +58,8 @@ interface ColorPickerWrapperProps {
   position?: { x: number; y: number } | string;
   offsetY?: number;
   placement?: string;
+  portalToBody?: boolean;
+  closeOnScroll?: boolean;
 }
 
 const extractAlphaFromColor = (colorValue: ColorValue): number => {
@@ -100,6 +102,8 @@ const ColorPickerWrapper = ({
   position = undefined,
   offsetY = -80,
   placement = 'right-start',
+  portalToBody = false,
+  closeOnScroll = false,
 }: ColorPickerWrapperProps) => {
   const initialMode = solidOnly
     ? MODES.solid
@@ -776,13 +780,13 @@ const ColorPickerWrapper = ({
       interactiveRefs={interactiveRefs}
       onClose={handleClose}
       autoClose={false}
-      closeOnScroll={false}
-      portalToBody={Boolean(panelElement)}
+      closeOnScroll={closeOnScroll}
+      portalToBody={Boolean(panelElement) || portalToBody}
       animate={!panelElement}
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-popup shadow-elevation-3"
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
         }}
@@ -1218,7 +1222,7 @@ const Input = ({
               onValueCommit?.();
             }
           }}
-          className="pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg uppercase pt-[1px] leading-[23px]"
+          className="pl-[23px] text-left w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body text-fg uppercase pt-[1px] leading-[23px]"
         />
       </div>
 
@@ -1241,7 +1245,7 @@ const Input = ({
                 event.currentTarget.blur();
               }
             }}
-            className="px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px]"
+            className="px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg pt-[1px] leading-[23px]"
           />
         </div>
       )}
@@ -1376,7 +1380,7 @@ function GradientInput({
             }
           }}
           placeholder={label}
-          className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-style-4 text-fg uppercase pt-[1px] leading-[23px] ${
+          className={`pl-[23px] text-left w-full h-[23px] bg-inset rounded-md text-body text-fg uppercase pt-[1px] leading-[23px] ${
             selected ? 'shadow-focus-ring' : 'focus:shadow-focus-ring'
           }`}
         />
@@ -1400,7 +1404,7 @@ function GradientInput({
                 event.currentTarget.blur();
               }
             }}
-            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg pt-[1px] leading-[23px] ${''}`}
+            className={`px-[6px] text-center w-full h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg pt-[1px] leading-[23px] ${''}`}
             title={rightTitle}
           />
         </div>

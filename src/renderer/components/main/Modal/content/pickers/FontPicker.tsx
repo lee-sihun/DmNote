@@ -7,7 +7,12 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import Modal from '@components/main/Modal/Modal';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPage from './CommonListPickerPage';
-import { pickerRowClass, pickerMoreButtonClass } from './pickerRowClass';
+import {
+  pickerRowClass,
+  pickerMoreButtonClass,
+  pickerMoreButtonVisibleClass,
+  pickerMoreButtonHiddenClass,
+} from './pickerRowClass';
 import MoreVerticalIcon from './MoreVerticalIcon';
 import { usePickerItemMenu } from '@hooks/usePickerItemMenu';
 import { useFontLibrary } from '@hooks/useFontLibrary';
@@ -347,7 +352,7 @@ const FontPicker = ({
                 <input
                   ref={renameInputRef}
                   type="text"
-                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-style-4 text-fg caret-accent"
+                  className="min-w-0 flex-1 bg-transparent border-none p-0 outline-none text-label text-fg caret-accent"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={() => {
@@ -382,8 +387,8 @@ const FontPicker = ({
                   type="button"
                   className={`${pickerMoreButtonClass} ${
                     isSelected || menu.menuKey === font.id
-                      ? 'opacity-100'
-                      : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                      ? pickerMoreButtonVisibleClass
+                      : pickerMoreButtonHiddenClass
                   } ${
                     isSelected
                       ? 'text-fg hover:text-fg'
@@ -469,9 +474,9 @@ const FontPicker = ({
       {webFontModal ? (
         <Suspense
           fallback={
-            <Modal onClick={() => setWebFontModal(null)}>
+            <Modal onClick={() => setWebFontModal(null)} ariaLabel="로딩 중...">
               <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-surface"
+                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-body leading-[16px] text-fg-muted">

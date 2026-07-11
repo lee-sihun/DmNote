@@ -195,7 +195,8 @@
     "cancel": "取消",
     "ok": "确定",
     "save": "保存",
-    "more": "更多"
+    "more": "更多",
+    "dialog": "对话框"
   },
   "tooltip": {
     "github": "GitHub",

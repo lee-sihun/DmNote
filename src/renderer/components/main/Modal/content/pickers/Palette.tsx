@@ -52,7 +52,7 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
 
   return (
     <div
-      className="flex flex-col justify-between rounded-lg bg-glass backdrop-blur-[24px] shadow-elevation-2 p-[8px]"
+      className="flex flex-col justify-between rounded-popup bg-glass backdrop-blur-[24px] shadow-elevation-2 p-[8px]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="grid grid-cols-5 gap-x-[8px] gap-y-[8px]">
@@ -69,7 +69,7 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
         placeholder="#FFFFFF"
         value={color}
         onChange={(e) => handleColorChange(e.target.value)}
-        className="w-[142px] h-[22px] mt-[10px] rounded-md bg-inset border-line border-[1px] focus:border-accent transition-colors duration-fast px-[10px] flex items-center text-style-3 text-fg"
+        className="w-[142px] h-[22px] mt-[10px] rounded-md bg-inset focus:shadow-focus-ring px-[10px] flex items-center text-body text-fg"
       />
     </div>
   );

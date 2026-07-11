@@ -21,41 +21,38 @@ export function PluginDataDeleteModal({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={t('settings.pluginDataDeleteTitle')}>
       <div
-        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] gap-[16px]"
+        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px] gap-[12px]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex flex-col gap-[8px]">
-          <span className="text-style-3 text-fg !leading-[1.5]">
-            {t('settings.pluginDataDeleteMessage', { name: pluginName })}
-          </span>
-        </div>
+        <span className="text-label text-fg !leading-[1.5]">
+          {t('settings.pluginDataDeleteMessage', { name: pluginName })}
+        </span>
 
-        <div className="flex flex-col gap-[8px] p-[12px] bg-inset rounded-[8px]">
-          <div className="flex items-start gap-[8px]">
-            <span className="text-style-3 text-warning mt-[6px]">⚠️</span>
-            <span className="text-style-2 text-fg !leading-[1.2]">
-              {t('settings.pluginDataDeleteWarning')}
-            </span>
-          </div>
+        {/* 경고 카드 */}
+        <div className="flex items-start gap-[8px] p-[12px] bg-fill-faint rounded-surface">
+          <span className="text-label text-warning mt-[6px]">⚠️</span>
+          <span className="text-label text-fg !leading-[1.2]">
+            {t('settings.pluginDataDeleteWarning')}
+          </span>
         </div>
 
         <div className="flex items-center gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-danger border-[1px] border-danger-active rounded-md text-style-3 text-fg hover:bg-danger-active transition-colors"
+            className="flex-1 h-[30px] bg-danger border-[1px] border-danger-active rounded-surface text-label text-fg hover:bg-danger-active transition-colors duration-fast"
             onClick={onDeleteWithData}
           >
             {t('settings.deleteWithData')}
           </button>
           <button
-            className="flex-1 h-[30px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onDeletePluginOnly}
           >
             {t('settings.deletePluginOnly')}
           </button>
           <button
-            className="h-[30px] px-[12px] bg-fill rounded-md text-style-3 text-fg hover:bg-fill-hover transition-colors"
+            className="h-[30px] px-[12px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel')}

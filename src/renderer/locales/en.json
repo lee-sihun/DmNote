@@ -195,7 +195,8 @@
     "cancel": "Cancel",
     "ok": "OK",
     "save": "Save",
-    "more": "More"
+    "more": "More",
+    "dialog": "Dialog"
   },
   "tooltip": {
     "github": "GitHub",

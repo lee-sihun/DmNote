@@ -1015,9 +1015,9 @@ const SoundTrimModal = ({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={closeModal}>
+    <Modal onClick={closeModal} ariaLabel={headerTitle}>
       <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-surface overflow-hidden"
+        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 헤더 바 */}
@@ -1175,7 +1175,7 @@ const SoundTrimModal = ({
         <div className="bg-fill-faint px-[12px] py-[10px] flex items-center justify-end gap-[8px]">
           <button
             type="button"
-            className={`w-[120px] h-[30px] rounded-lg text-label transition-colors duration-fast ${
+            className={`w-[120px] h-[30px] rounded-surface text-label transition-colors duration-fast ${
               canSubmit
                 ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
                 : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
@@ -1193,7 +1193,7 @@ const SoundTrimModal = ({
           </button>
           <button
             type="button"
-            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={closeModal}
             disabled={isSaving}
           >

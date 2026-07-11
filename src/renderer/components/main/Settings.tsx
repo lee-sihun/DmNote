@@ -80,8 +80,12 @@ interface SettingsProps {
   showConfirm: (
     msg: string,
     onConfirm: () => void,
-    onCancel?: () => void,
-    confirmText?: string,
+    options?: {
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    },
   ) => void;
 }
 
@@ -590,7 +594,7 @@ const Settings = ({
   };
 
   const actionButtonClass = (enabled: boolean): string =>
-    'inline-flex items-center h-[24px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
+    'inline-flex items-center h-[23px] px-[10px] rounded-md text-body transition-colors duration-fast ' +
     (enabled
       ? 'bg-fill text-fg hover:bg-fill-hover active:bg-fill-active'
       : 'bg-fill-faint text-fg-disabled cursor-not-allowed');
@@ -707,8 +711,7 @@ const Settings = ({
           console.error('Failed to regenerate OBS token', error);
         }
       },
-      undefined,
-      t('settings.obsTokenRegenConfirm'),
+      { confirmText: t('settings.obsTokenRegenConfirm') },
     );
   };
 
@@ -773,12 +776,9 @@ const Settings = ({
     };
 
     if (showConfirm) {
-      showConfirm(
-        t('settings.resetAllConfirm'),
-        reset,
-        undefined,
-        t('settings.initialize'),
-      );
+      showConfirm(t('settings.resetAllConfirm'), reset, {
+        confirmText: t('settings.initialize'),
+      });
     } else {
       reset();
     }
@@ -823,7 +823,7 @@ const Settings = ({
         <div className="flex flex-row gap-[12px]">
           <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
               <div
                 className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
                 onMouseEnter={() => setHoveredKey('overlayLock')}
@@ -932,7 +932,7 @@ const Settings = ({
               </div>
             </div>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
               <div
                 className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
@@ -999,7 +999,7 @@ const Settings = ({
                       onClick={handleReloadPlugins}
                       disabled={!canReloadPlugins || isReloadingPlugins}
                       className={
-                        'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
+                        'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
                         (canReloadPlugins && !isReloadingPlugins
                           ? 'bg-fill text-fg hover:bg-fill-hover'
                           : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
@@ -1025,7 +1025,7 @@ const Settings = ({
             </div>
             {/* OBS 모드 */}
             <div
-              className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl"
+              className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface"
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
@@ -1060,7 +1060,7 @@ const Settings = ({
                     onClick={handleObsRegenerateToken}
                     disabled={!obsStatus.running}
                     className={
-                      'flex items-center justify-center w-[24px] h-[24px] rounded-md transition-colors duration-fast ' +
+                      'flex items-center justify-center w-[23px] h-[23px] rounded-md transition-colors duration-fast ' +
                       (obsStatus.running
                         ? 'bg-fill text-fg hover:bg-fill-hover'
                         : 'bg-fill-faint text-fg-disabled cursor-not-allowed')
@@ -1079,7 +1079,7 @@ const Settings = ({
               </div>
             </div>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
               <div
                 className="flex flex-row justify-between items-center h-[40px]"
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
@@ -1156,7 +1156,7 @@ const Settings = ({
               </div>
             </div>
             {/* 기타 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-xl">
+            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
               <div className="flex flex-row justify-between items-center h-[40px]">
                 <p className="text-label text-fg">{t('settings.language')}</p>
                 <Dropdown
@@ -1216,13 +1216,13 @@ const Settings = ({
                 />
               </div>
               {/* 버전 및 설정 초기화 */}
-              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-lg mt-[8px] mb-[12px]">
+              <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-md mt-[8px] mb-[12px]">
                 <p className="text-body text-fg-muted tabular-nums">
                   Ver {__APP_VERSION__}
                 </p>
                 <div className="flex gap-[8px]">
                   <button
-                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-fg bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center h-[23px] px-[10px] rounded-md text-body text-fg bg-fill hover:bg-fill-hover active:bg-fill-active transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
                     onClick={() => checkForUpdates(true)}
                     disabled={isChecking}
                   >
@@ -1231,7 +1231,7 @@ const Settings = ({
                       : t('update.checkUpdate')}
                   </button>
                   <button
-                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active transition-colors duration-fast"
+                    className="inline-flex items-center h-[23px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active transition-colors duration-fast"
                     onClick={handleResetAll}
                   >
                     {t('settings.resetData')}
@@ -1242,7 +1242,7 @@ const Settings = ({
           </div>
         </div>
       </div>
-      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-fill-faint rounded-xl pointer-events-none overflow-hidden">
+      <div className="absolute flex items-center justify-center top-[12px] right-[12px] w-[518px] h-[372px] bg-fill-faint rounded-surface pointer-events-none overflow-hidden">
         {hoveredKey && PREVIEW_SOURCES[hoveredKey] ? (
           <div className="relative w-full h-full">
             <video

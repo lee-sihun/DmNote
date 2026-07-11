@@ -1,6 +1,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Checkbox from '@components/main/common/Checkbox';
 import TabSwitch from '@components/main/common/TabSwitch';
+import {
+  PropertyRow,
+  PropertySection,
+} from '@components/main/Grid/PropertiesPanel/PropertyInputs';
 import Modal from '../../Modal';
 import { useTranslation } from '@contexts/useTranslation';
 import {
@@ -16,7 +20,7 @@ const ADVANCED_TAB = 'advanced' as const;
 type TabId = typeof NOTE_TAB | typeof ADVANCED_TAB;
 
 const INPUT_CLASS =
-  'text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-style-4 text-fg';
+  'text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-body tabular-nums text-fg';
 
 function sanitizeNumericValue(
   value: string | number | undefined,
@@ -206,83 +210,70 @@ const NoteSetting = ({
 
   const renderNoteTab = () => (
     <div className="flex flex-col gap-[12px]">
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">
-          {t('noteSetting.frameLimit')}
-        </p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.frameLimit.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.frameLimit.max}
-          value={frameLimit}
-          onChange={(e) => setFrameLimit(e.target.value)}
-          onBlur={() =>
-            setFrameLimit(
-              String(sanitizeNumericValue(frameLimit, 'frameLimit')),
-            )
-          }
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
+      <PropertySection>
+        <PropertyRow label={t('noteSetting.frameLimit')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.frameLimit.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.frameLimit.max}
+            value={frameLimit}
+            onChange={(e) => setFrameLimit(e.target.value)}
+            onBlur={() =>
+              setFrameLimit(
+                String(sanitizeNumericValue(frameLimit, 'frameLimit')),
+              )
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+        <PropertyRow label={t('noteSetting.speed')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.speed.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.speed.max}
+            value={speed}
+            onChange={(e) => setSpeed(e.target.value)}
+            onBlur={() =>
+              setSpeed(String(sanitizeNumericValue(speed, 'speed')))
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+        <PropertyRow label={t('noteSetting.trackHeight')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.trackHeight.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.trackHeight.max}
+            value={trackHeight}
+            onChange={(e) => setTrackHeight(e.target.value)}
+            onBlur={() =>
+              setTrackHeight(
+                String(sanitizeNumericValue(trackHeight, 'trackHeight')),
+              )
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">{t('noteSetting.speed')}</p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.speed.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.speed.max}
-          value={speed}
-          onChange={(e) => setSpeed(e.target.value)}
-          onBlur={() => setSpeed(String(sanitizeNumericValue(speed, 'speed')))}
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">
-          {t('noteSetting.trackHeight')}
-        </p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.trackHeight.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.trackHeight.max}
-          value={trackHeight}
-          onChange={(e) => setTrackHeight(e.target.value)}
-          onBlur={() =>
-            setTrackHeight(
-              String(sanitizeNumericValue(trackHeight, 'trackHeight')),
-            )
-          }
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('noteSetting.reverseEffect')}
-        </p>
-        <Checkbox
-          checked={reverse}
-          onChange={() => setReverse((prev) => !prev)}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center min-h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('noteSetting.fade')}
-          {reverse ? ' (R)' : ''}
-        </p>
-        <div className="flex items-center gap-[8px]">
+      <PropertySection>
+        <PropertyRow label={t('noteSetting.reverseEffect')}>
+          <Checkbox
+            checked={reverse}
+            onChange={() => setReverse((prev) => !prev)}
+          />
+        </PropertyRow>
+        <PropertyRow label={`${t('noteSetting.fade')}${reverse ? ' (R)' : ''}`}>
           <div
             className="relative h-[23px] bg-inset rounded-md"
             style={{ width: '54px' }}
           >
             <svg
-              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none"
+              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none text-fg-muted"
               width="12"
               height="12"
               viewBox="0 0 14 14"
-              fill="#97999E"
+              fill="currentColor"
             >
               <rect x="2" y="2" width="10" height="2" opacity="0.2" rx="1" />
               <rect x="2" y="6" width="10" height="2" opacity="0.6" rx="1" />
@@ -313,7 +304,7 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeTopPx, 'fadeTopPx')),
                   );
               }}
-              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-center"
+              className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-center"
             />
           </div>
           <div
@@ -321,11 +312,11 @@ const NoteSetting = ({
             style={{ width: '54px' }}
           >
             <svg
-              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none"
+              className="absolute left-[5px] top-[50%] transform -translate-y-1/2 pointer-events-none text-fg-muted"
               width="12"
               height="12"
               viewBox="0 0 14 14"
-              fill="#97999E"
+              fill="currentColor"
             >
               <rect x="2" y="2" width="10" height="2" opacity="1" rx="1" />
               <rect x="2" y="6" width="10" height="2" opacity="0.6" rx="1" />
@@ -356,112 +347,105 @@ const NoteSetting = ({
                     String(sanitizeNumericValue(fadeBottomPx, 'fadeBottomPx')),
                   );
               }}
-              className="absolute left-[20px] top-[-1px] h-[23px] w-[26px] bg-transparent text-style-4 text-fg text-center"
+              className="absolute left-[20px] top-0 h-[23px] w-[26px] bg-transparent text-body tabular-nums text-fg text-center"
             />
           </div>
-        </div>
-      </div>
+        </PropertyRow>
+      </PropertySection>
     </div>
   );
 
   const renderAdvancedTab = () => (
     <div className="flex flex-col gap-[12px]">
-      <div className="flex justify-between w-full items-center h-[23px]">
-        <p className="text-fg-muted text-label">
-          {t('laboratory.delayToggle')}
-        </p>
-        <Checkbox
-          checked={delayedNoteEnabled}
-          onChange={() => setDelayedNoteEnabled((prev) => !prev)}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">{t('laboratory.minLength')}</p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.max}
-          value={shortNoteMinLengthPx}
-          onChange={(e) => setShortNoteMinLengthPx(e.target.value)}
-          onBlur={() =>
-            setShortNoteMinLengthPx(
-              String(
-                sanitizeNumericValue(
-                  shortNoteMinLengthPx,
-                  'shortNoteMinLengthPx',
+      <PropertySection>
+        <PropertyRow label={t('laboratory.delayToggle')}>
+          <Checkbox
+            checked={delayedNoteEnabled}
+            onChange={() => setDelayedNoteEnabled((prev) => !prev)}
+          />
+        </PropertyRow>
+        <PropertyRow label={t('laboratory.minLength')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.shortNoteMinLengthPx.max}
+            value={shortNoteMinLengthPx}
+            onChange={(e) => setShortNoteMinLengthPx(e.target.value)}
+            onBlur={() =>
+              setShortNoteMinLengthPx(
+                String(
+                  sanitizeNumericValue(
+                    shortNoteMinLengthPx,
+                    'shortNoteMinLengthPx',
+                  ),
                 ),
-              ),
-            )
-          }
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">{t('laboratory.threshold')}</p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.max}
-          value={shortNoteThresholdMs}
-          onChange={(e) => setShortNoteThresholdMs(e.target.value)}
-          onBlur={() =>
-            setShortNoteThresholdMs(
-              String(
-                sanitizeNumericValue(
-                  shortNoteThresholdMs,
-                  'shortNoteThresholdMs',
+              )
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+        <PropertyRow label={t('laboratory.threshold')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.shortNoteThresholdMs.max}
+            value={shortNoteThresholdMs}
+            onChange={(e) => setShortNoteThresholdMs(e.target.value)}
+            onBlur={() =>
+              setShortNoteThresholdMs(
+                String(
+                  sanitizeNumericValue(
+                    shortNoteThresholdMs,
+                    'shortNoteThresholdMs',
+                  ),
                 ),
-              ),
-            )
-          }
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
+              )
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+      </PropertySection>
 
-      <div className="w-full h-[1px] bg-line" />
-
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-muted text-label">{t('laboratory.keyDelay')}</p>
-        <input
-          type="number"
-          min={NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.min}
-          max={NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.max}
-          value={keyDisplayDelayMs}
-          onChange={(e) => setKeyDisplayDelayMs(e.target.value)}
-          onBlur={() =>
-            setKeyDisplayDelayMs(
-              String(
-                sanitizeNumericValue(keyDisplayDelayMs, 'keyDisplayDelayMs'),
-              ),
-            )
-          }
-          className={`${INPUT_CLASS} w-[47px]`}
-        />
-      </div>
-
-      <div className="flex justify-between w-full items-center">
-        <p className="text-fg-faint text-style-4">
-          {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
-        </p>
-        <button
-          onClick={handleAutoCalculate}
-          className="px-[10px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-md text-fg text-style-4"
-        >
-          {t('laboratory.autoCalc')}
-        </button>
-      </div>
+      <PropertySection>
+        <PropertyRow label={t('laboratory.keyDelay')}>
+          <input
+            type="number"
+            min={NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.min}
+            max={NOTE_SETTINGS_CONSTRAINTS.keyDisplayDelayMs.max}
+            value={keyDisplayDelayMs}
+            onChange={(e) => setKeyDisplayDelayMs(e.target.value)}
+            onBlur={() =>
+              setKeyDisplayDelayMs(
+                String(
+                  sanitizeNumericValue(keyDisplayDelayMs, 'keyDisplayDelayMs'),
+                ),
+              )
+            }
+            className={`${INPUT_CLASS} w-[47px]`}
+          />
+        </PropertyRow>
+        <div className="flex justify-between items-center w-full min-h-[32px]">
+          <p className="text-fg-faint text-body">
+            {t('laboratory.keyDelayAuto', { value: calculatedDelay })}
+          </p>
+          <button
+            onClick={handleAutoCalculate}
+            className="px-[10px] h-[23px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-md text-fg text-body"
+          >
+            {t('laboratory.autoCalc')}
+          </button>
+        </div>
+      </PropertySection>
     </div>
   );
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={title ?? t('keySetting.tabNote')}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px]"
+        className="flex flex-col w-[264px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {title && <p className="text-fg-muted text-label mb-[10px]">{title}</p>}
+        {title && <p className="text-fg-muted text-label mb-[12px]">{title}</p>}
         <TabSwitch
           tabs={[
             { id: NOTE_TAB, label: t('keySetting.tabNote') },
@@ -474,7 +458,7 @@ const NoteSetting = ({
               setActiveTab(tab as TabId);
             }
           }}
-          className="mb-[19px]"
+          className="mb-[12px]"
         />
 
         <div
@@ -498,16 +482,16 @@ const NoteSetting = ({
           </div>
         </div>
 
-        <div className="flex gap-[8px] mt-[19px]">
+        <div className="flex gap-[8px] mt-[12px]">
           <button
             onClick={handleSave}
-            className="w-[150px] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.save')}
           </button>
           <button
             onClick={onClose}
-            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
           >
             {t('noteSetting.cancel')}
           </button>

@@ -62,34 +62,35 @@ const TabNameModal = ({
   if (!isOpen) return null;
 
   return (
-    <Modal onClick={onClose}>
+    <Modal onClick={onClose} ariaLabel={t('tabs.createTitle')}>
       <div
-        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
+        className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-style-3 text-fg">{t('tabs.createTitle')}</div>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit();
-          }}
-          className="w-full min-w-0 h-[30px] px-[12px] rounded-md bg-inset text-fg text-style-3 focus:shadow-focus-ring"
-          placeholder={t('tabs.name.placeholder')}
-        />
-        {error && (
-          <div className="text-danger text-style-1 my-[-12px]">{error}</div>
-        )}
+        <div className="text-title text-fg">{t('tabs.createTitle')}</div>
+        {/* 인풋·에러 묶음 — 에러는 인풋에 밀착 */}
+        <div className="flex flex-col gap-[6px]">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSubmit();
+            }}
+            className="w-full min-w-0 h-[30px] px-[12px] rounded-surface bg-inset text-fg text-body focus:shadow-focus-ring"
+            placeholder={t('tabs.name.placeholder')}
+          />
+          {error && <div className="text-danger text-body">{error}</div>}
+        </div>
         <div className="flex gap-[8px]">
           <button
-            className="flex-1 h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-lg text-accent-fg text-label transition-colors duration-fast"
+            className="flex-[2] h-[30px] bg-accent-deep hover:bg-accent-deep-hover active:bg-accent-deep-active rounded-surface text-accent-fg text-label transition-colors duration-fast"
             onClick={handleSubmit}
           >
             {t('tabs.create')}
           </button>
           <button
-            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+            className="flex-1 h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
             onClick={onClose}
           >
             {t('common.cancel')}
