@@ -318,8 +318,6 @@ const FontPicker = ({
         pageTitle={pageTitle}
         onBack={onBack}
         onClose={handlePickerClose}
-        widthClass="w-[156px]"
-        estimatedWidth={164}
         estimatedHeight={280}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
@@ -497,7 +495,7 @@ const FontPicker = ({
           fallback={
             <Modal onClick={() => setWebFontModal(null)}>
               <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-[10px]"
+                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-elevated rounded-surface"
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-body leading-[16px] text-fg-muted">

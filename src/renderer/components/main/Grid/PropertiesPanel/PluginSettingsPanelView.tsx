@@ -19,7 +19,6 @@ interface PluginSettingsPanelViewProps {
   handlePluginSettingsPanelConfirm: () => void;
   handlePluginSettingsPanelCancel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
-  setPluginThumbRef: (node: HTMLDivElement | null) => void;
   renderPluginSettingsForm: (
     schema: Record<string, PluginSettingSchema> | undefined,
     values: Record<string, unknown>,
@@ -39,7 +38,6 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
   handlePluginSettingsPanelConfirm,
   handlePluginSettingsPanelCancel,
   setPluginScrollRef,
-  setPluginThumbRef,
   renderPluginSettingsForm,
   t,
 }) => {
@@ -75,13 +73,6 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
               `plugin-settings-${pluginSettingsPanel.pluginId}`,
               handlePluginSettingsPanelChange,
             )}
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={setPluginThumbRef}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
           </div>
         </div>
       </div>

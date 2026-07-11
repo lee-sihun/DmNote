@@ -278,7 +278,7 @@ export function createDropdown(options: DropdownOptions): string {
   const itemsHtml = items
     .map(
       (opt) => `
-    <button type="button" class="text-left w-full h-[24px] px-[8px] rounded-[6px] text-body transition-colors duration-fast flex items-center ${
+    <button type="button" class="text-left w-full h-[24px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
       selected === opt.value
         ? 'bg-surface-active text-fg pointer-events-none'
         : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
@@ -300,7 +300,7 @@ export function createDropdown(options: DropdownOptions): string {
         <path d="M1 1L7 7L13 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
-    <div class="hidden absolute left-0 top-[28px] flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
+    <div class="hidden absolute left-0 top-[28px] flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2 z-20 overflow-x-hidden overflow-y-auto tooltip-fade-in" data-dropdown-menu>
       ${itemsHtml}
     </div>
   </div>`;

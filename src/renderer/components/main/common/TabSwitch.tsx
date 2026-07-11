@@ -26,7 +26,7 @@ const TabSwitch = ({
 
   return (
     <div
-      className={`relative flex w-full h-[30px] bg-inset rounded-[10px] items-center p-[2px] ${
+      className={`relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px] ${
         className ?? ''
       }`}
     >

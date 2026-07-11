@@ -142,7 +142,6 @@ const Settings = ({
   const { checkForUpdates, isChecking } = useUpdateCheck();
 
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const [isScrollHovered, setIsScrollHovered] = useState<boolean>(false);
   const [isPluginModalOpen, setPluginModalOpen] = useState<boolean>(false);
   const [isDataDeleteModalOpen, setDataDeleteModalOpen] =
     useState<boolean>(false);
@@ -818,11 +817,7 @@ const Settings = ({
     <div className="relative w-full h-full">
       <div
         ref={scrollContainerRef}
-        className={`settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-app ${
-          isScrollHovered ? 'show-scrollbar' : ''
-        }`}
-        onMouseEnter={() => setIsScrollHovered(true)}
-        onMouseLeave={() => setIsScrollHovered(false)}
+        className="settings-content-scroll w-full h-full flex flex-col py-[12px] px-[12px] gap-[12px] overflow-y-auto bg-app"
       >
         {/* 설정 */}
         <div className="flex flex-row gap-[12px]">
@@ -877,12 +872,6 @@ const Settings = ({
               >
                 <p className="text-label text-fg">{t('settings.keyCounter')}</p>
                 <div className="flex items-center gap-[8px]">
-                  {/* <button
-                    onClick={handleResetCounters}
-                    className="py-[4px] px-[8px] bg-[#2A2A31] border-[1px] border-[#3A3944] rounded-[7px] text-style-2 text-[#DBDEE8] hover:bg-[#34343c]"
-                  >
-                    {t("settings.counterResetButton")}
-                  </button> */}
                   <Checkbox
                     checked={keyCounterEnabled}
                     onChange={handleKeyCounterToggle}
@@ -1242,7 +1231,7 @@ const Settings = ({
                       : t('update.checkUpdate')}
                   </button>
                   <button
-                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] transition-colors duration-fast"
+                    className="inline-flex items-center h-[24px] px-[10px] rounded-md text-body text-danger-fg bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active transition-colors duration-fast"
                     onClick={handleResetAll}
                   >
                     {t('settings.resetData')}

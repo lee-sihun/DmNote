@@ -67,7 +67,11 @@ const FloatingPopup = ({
   useEffect(() => {
     if (open && autoClose) {
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose?.();
+        if (e.key === 'Escape') {
+          // 이 레이어가 소비 — 하위 레이어(페이지·그리드 선택)로 내려가지 않게
+          e.preventDefault();
+          onClose?.();
+        }
       };
 
       const onClickAway = (e: MouseEvent) => {

@@ -782,7 +782,7 @@ const ColorPickerWrapper = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
+        className="flex flex-col p-[8px] gap-[8px] w-[146px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
         }}

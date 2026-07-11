@@ -62,7 +62,7 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
   const activeIndex = activeTab === LAYER_PANEL_TABS.GRID ? 1 : 0;
 
   return (
-    <div className="relative flex w-full h-[30px] bg-inset rounded-[10px] items-center p-[2px]">
+    <div className="relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px]">
       <div
         aria-hidden
         className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"

@@ -85,7 +85,6 @@ interface PluginSelectionPanelProps {
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
-  setPluginThumbRef: (node: HTMLDivElement | null) => void;
   isPluginResizable: boolean;
   selectedPluginElement: PluginDisplayElementInternal | null;
   pluginDisplaySize: { width: number; height: number };
@@ -116,7 +115,6 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   handleToggleMode,
   handleTogglePanel,
   setPluginScrollRef,
-  setPluginThumbRef,
   isPluginResizable,
   selectedPluginElement,
   pluginDisplaySize,
@@ -233,13 +231,6 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
               </PropertySection>
             )}
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={setPluginThumbRef}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
       </div>
     </div>
@@ -269,7 +260,6 @@ interface SingleGraphPanelProps {
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   showGraphImagePicker: boolean;
   setShowGraphImagePicker: (value: boolean) => void;
   graphImageButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -297,7 +287,6 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleTogglePanel,
   handleGraphUpdate,
   singleScrollRefFor,
-  singleThumbRefFor,
   showGraphImagePicker,
   setShowGraphImagePicker,
   graphImageButtonRef,
@@ -659,13 +648,6 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
               </PropertySection>
             )}
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
       </div>
 
@@ -766,7 +748,6 @@ interface SingleKnobPanelProps {
   handleToggleMode: () => void;
   handleTogglePanel: () => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
   t: (key: string) => string;
@@ -789,7 +770,6 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleToggleMode,
   handleTogglePanel,
   singleScrollRefFor,
-  singleThumbRefFor,
   panelElement,
   useCustomCSS,
   t,
@@ -1246,13 +1226,6 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
               )}
             </PropertySection>
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
       </div>
 
@@ -1390,7 +1363,6 @@ interface SingleKeyStatPanelProps {
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  singleThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   t: (key: string) => string | undefined;
 }
 
@@ -1434,7 +1406,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   panelElement,
   useCustomCSS,
   singleScrollRefFor,
-  singleThumbRefFor,
   t,
 }) => {
   const availableTabs = isSingleStat
@@ -1661,13 +1632,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onSizeBlur={handleSizeBlur}
             />
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
 
         {/* NOTE 탭 viewport */}
@@ -1686,13 +1650,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
                 onKeyPreview={onKeyPreview}
                 panelElement={panelElement}
                 t={t}
-              />
-            </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={singleThumbRefFor(TABS.NOTE)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -1714,13 +1671,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               onKeyUpdate={handleKeyLikeUpdate}
               panelElement={panelElement}
               t={t}
-            />
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={singleThumbRefFor(TABS.COUNTER)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
             />
           </div>
         </div>

@@ -1016,7 +1016,7 @@ const SoundTrimModal = ({
   return (
     <Modal onClick={closeModal}>
       <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-[10px] overflow-hidden"
+        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-surface overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 헤더 바 */}

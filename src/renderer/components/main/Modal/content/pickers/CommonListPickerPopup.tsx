@@ -10,6 +10,9 @@ import FloatingPopup from '../../FloatingPopup';
 import { useLenis } from '@hooks/useLenis';
 import Dropdown from '@components/main/common/Dropdown';
 
+// 팝업 셸 예상 폭 (측정 전 위치 계산용)
+const ESTIMATED_WIDTH = 164;
+
 type FilterOption = {
   value: string;
   label: string;
@@ -21,8 +24,6 @@ interface CommonListPickerPopupProps<T> {
   panelElement?: HTMLElement | null;
   onClose: () => void;
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
-  widthClass?: string;
-  estimatedWidth?: number;
   estimatedHeight?: number;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -36,7 +37,6 @@ interface CommonListPickerPopupProps<T> {
   isLoading?: boolean;
   loadingText?: string;
   errorText?: string;
-  listHeightClass?: string;
   onAdd: (event: React.MouseEvent<HTMLButtonElement>) => void;
   addLabel: string;
   // 추가 버튼에 앵커된 메뉴가 열릴 때 외부 클릭 판정 제외용
@@ -53,8 +53,6 @@ export default function CommonListPickerPopup<T>({
   panelElement = null,
   onClose,
   interactiveRefs = [],
-  widthClass = 'w-[156px]',
-  estimatedWidth = 164,
   estimatedHeight = 280,
   searchQuery,
   onSearchQueryChange,
@@ -68,7 +66,6 @@ export default function CommonListPickerPopup<T>({
   isLoading = false,
   loadingText = '로딩...',
   errorText = '',
-  listHeightClass = 'h-[120px]',
   onAdd,
   addLabel,
   addButtonRef,
@@ -89,7 +86,7 @@ export default function CommonListPickerPopup<T>({
 
     const panelRect = panelElement.getBoundingClientRect();
     const popupEl = containerRef.current;
-    const popupWidth = popupEl ? popupEl.offsetWidth : estimatedWidth;
+    const popupWidth = popupEl ? popupEl.offsetWidth : ESTIMATED_WIDTH;
     const popupHeight = popupEl ? popupEl.offsetHeight : estimatedHeight;
 
     const gap = 5;
@@ -110,7 +107,7 @@ export default function CommonListPickerPopup<T>({
       if (prev && prev.x === fixedX && prev.y === fixedY) return prev;
       return { x: fixedX, y: fixedY };
     });
-  }, [estimatedHeight, estimatedWidth, panelElement]);
+  }, [estimatedHeight, panelElement]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -180,7 +177,7 @@ export default function CommonListPickerPopup<T>({
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full h-[30px] pl-[30px] pr-[10px] bg-inset rounded-[10px] text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
+          className="w-full h-[30px] pl-[30px] pr-[10px] bg-inset rounded-surface text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
         />
       </div>
     ) : (
@@ -196,7 +193,7 @@ export default function CommonListPickerPopup<T>({
   // 필터 + 추가 — 같은 재질의 칩 한 쌍. 페이지는 검색과 같은 30 크롬 스케일
   const controlChipClass =
     renderMode === 'page'
-      ? 'w-[30px] h-[30px] rounded-[10px]'
+      ? 'w-[30px] h-[30px] rounded-surface'
       : 'w-[24px] h-[24px] rounded-md';
   const filterAddRow = (
     <div
@@ -211,11 +208,7 @@ export default function CommonListPickerPopup<T>({
             value={filterValue}
             onChange={onFilterChange}
             fullWidth
-            heightClass={renderMode === 'page' ? 'h-[30px]' : 'h-[24px]'}
-            paddingXClass={renderMode === 'page' ? 'px-[10px]' : 'px-[8px]'}
-            roundedClass={
-              renderMode === 'page' ? 'rounded-[10px]' : 'rounded-md'
-            }
+            size={renderMode === 'page' ? 'lg' : 'sm'}
           />
         </div>
       ) : null}
@@ -296,7 +289,7 @@ export default function CommonListPickerPopup<T>({
         {/* 검색 — 리스트와 인접한 프라이머리 컨트롤 */}
         <div className="px-[12px] pb-[12px] shrink-0">{searchInput}</div>
         {/* 리스트 웰 — 리세스드 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
-        <div className="mx-[12px] bg-inset rounded-[10px] p-[4px] flex-1 min-h-0 flex flex-col">
+        <div className="mx-[12px] bg-inset rounded-surface p-[4px] flex-1 min-h-0 flex flex-col">
           <div
             ref={scrollRef}
             className="flex-1 min-h-0 flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade"
@@ -328,7 +321,7 @@ export default function CommonListPickerPopup<T>({
     >
       <div
         ref={containerRef}
-        className={`flex flex-col p-[8px] gap-[8px] ${widthClass} bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3`.trim()}
+        className={`flex flex-col p-[8px] gap-[8px] w-[156px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3`.trim()}
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
         }}
@@ -339,7 +332,7 @@ export default function CommonListPickerPopup<T>({
         <div className="bg-inset rounded-md p-[4px] flex flex-col gap-[4px]">
           <div
             ref={scrollRef}
-            className={`flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade ${listHeightClass}`}
+            className="flex flex-col overflow-y-auto modal-content-scroll dmn-scroll-fade h-[120px]"
           >
             {listInner}
           </div>

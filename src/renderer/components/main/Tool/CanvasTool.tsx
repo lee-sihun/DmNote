@@ -107,7 +107,7 @@ const CanvasTool = ({
 
   return (
     <TooltipGroup>
-      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
+      <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
         {tools.map((toolItem) => (
           <FloatingTooltip
             key={toolItem.key}

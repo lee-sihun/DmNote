@@ -420,7 +420,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     closePage();
   }, [activeTab, panelMode, isPanelVisible, selectedKeyType, closePage]);
 
-  // Escape로 서브 페이지 닫기 — 입력 필드 편집과 경합 방지
+  // 패널 본문 종류(단일/배치/플러그인 등)가 바뀌면 트리거 사이트가 함께
+  // 사라지므로 서브 페이지 무효화 — 선택 이펙트의 early return 경로 보완
+  const panelScopeKey = [
+    pluginSettingsPanel ? 'plugin-settings' : 'grid',
+    selectedKeyElements.length,
+    selectedElements.length,
+    selectedPluginElements.length,
+    selectedGraphElements.length,
+    selectedKnobElements.length,
+  ].join('|');
+  useEffect(() => {
+    closePage();
+  }, [panelScopeKey, closePage]);
+
+  // Escape로 서브 페이지 닫기 — 입력 필드 편집·상위 레이어와 경합 방지
   useEffect(() => {
     if (!activePageKey) return;
     const onKey = (event: KeyboardEvent) => {
@@ -434,10 +448,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ) {
         return;
       }
+      // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
+      if (
+        document.querySelector(
+          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-submenu="true"], [role="dialog"]',
+        )
+      ) {
+        return;
+      }
+      // 이 레이어가 소비 — 그리드의 선택 해제까지 내려가지 않게
+      event.preventDefault();
+      event.stopPropagation();
       closePage();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, [activePageKey, closePage]);
 
   // 통계 요소 선택 시 NOTE 탭 숨김 처리
@@ -671,69 +696,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   }, [selectedElements]);
 
   // 스크롤 훅 사용
-  const {
-    batchScrollRefFor,
-    batchThumbRefFor,
-    singleScrollRefFor,
-    singleThumbRefFor,
-  } = usePanelScroll(activeTab, selectedElements.length);
+  const { batchScrollRefFor, singleScrollRefFor } = usePanelScroll();
 
   // 플러그인 패널 스크롤
-  const pluginScrollElementRef = useRef<HTMLDivElement | null>(null);
-  const pluginThumbRef = useRef<HTMLDivElement | null>(null);
-
-  const calculatePluginThumb = (el: HTMLDivElement) => {
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const canScroll = scrollHeight > clientHeight + 1;
-    if (!canScroll) return { top: 0, height: 0, visible: false };
-
-    const minThumbHeight = 16;
-    const height = Math.max(
-      minThumbHeight,
-      (clientHeight / scrollHeight) * clientHeight,
-    );
-    const maxTop = clientHeight - height;
-    const top =
-      maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-
-    return { top, height, visible: true };
-  };
-
-  const updatePluginThumbDOM = () => {
-    if (!pluginThumbRef.current || !pluginScrollElementRef.current) return;
-    const thumb = calculatePluginThumb(pluginScrollElementRef.current);
-    pluginThumbRef.current.style.top = `${thumb.top}px`;
-    pluginThumbRef.current.style.height = `${thumb.height}px`;
-    pluginThumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
-
-  const { scrollContainerRef: pluginLenisRef } = useLenis({
-    onScroll: updatePluginThumbDOM,
-  });
-
-  const setPluginScrollRef = (node: HTMLDivElement | null) => {
-    pluginScrollElementRef.current = node;
-    pluginLenisRef(node);
-  };
-
-  const setPluginThumbRef = (node: HTMLDivElement | null) => {
-    pluginThumbRef.current = node;
-  };
-
-  useEffect(() => {
-    const hasPluginPanel =
-      !!pluginSettingsPanel ||
-      (selectedPluginElements.length > 0 &&
-        selectedKeyLikeElements.length === 0 &&
-        selectedGraphElements.length === 0);
-
-    if (!hasPluginPanel) return;
-
-    const raf = requestAnimationFrame(() => {
-      updatePluginThumbDOM();
-    });
-    return () => cancelAnimationFrame(raf);
-  });
+  const { scrollContainerRef: setPluginScrollRef } = useLenis();
 
   // 배치 편집용 로컬 ColorPicker 상태
   type BatchPickerTarget =
@@ -2641,7 +2607,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handlePluginSettingsPanelConfirm={handlePluginSettingsPanelConfirm}
           handlePluginSettingsPanelCancel={handlePluginSettingsPanelCancel}
           setPluginScrollRef={setPluginScrollRef}
-          setPluginThumbRef={setPluginThumbRef}
           renderPluginSettingsForm={renderPluginSettingsForm}
           t={t}
         />
@@ -2750,7 +2715,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             handleBatchGlowColorChangeCompleteKeysOnly
           }
           batchScrollRefFor={batchScrollRefFor}
-          batchThumbRefFor={batchThumbRefFor}
           batchNoteColorButtonRef={batchNoteColorButtonRef}
           batchGlowColorButtonRef={batchGlowColorButtonRef}
           batchBorderColorButtonRef={batchBorderColorButtonRef}
@@ -2819,7 +2783,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValueKnobsAsKey={getMixedValueKnobsAsKey}
           getSelectedKnobsData={getSelectedKnobsData}
           batchScrollRefFor={batchScrollRefFor}
-          batchThumbRefFor={batchThumbRefFor}
           batchImageButtonRef={batchImageButtonRef}
           showBatchImagePicker={showBatchImagePicker}
           setShowBatchImagePicker={setShowBatchImagePicker}
@@ -2867,7 +2830,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           getMixedValueGraphsAsKey={getMixedValueGraphsAsKey}
           getSelectedGraphsData={getSelectedGraphsData}
           batchScrollRefFor={batchScrollRefFor}
-          batchThumbRefFor={batchThumbRefFor}
           batchImageButtonRef={batchImageButtonRef}
           showBatchImagePicker={showBatchImagePicker}
           setShowBatchImagePicker={setShowBatchImagePicker}
@@ -2898,7 +2860,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleToggleMode={handleToggleMode}
           handleTogglePanel={handleTogglePanel}
           setPluginScrollRef={setPluginScrollRef}
-          setPluginThumbRef={setPluginThumbRef}
           isPluginResizable={isPluginResizable}
           selectedPluginElement={selectedPluginElement}
           pluginDisplaySize={pluginDisplaySize}
@@ -2944,7 +2905,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleToggleMode={handleToggleMode}
           handleTogglePanel={handleTogglePanel}
           singleScrollRefFor={singleScrollRefFor}
-          singleThumbRefFor={singleThumbRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
           t={t}
@@ -2977,7 +2937,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleTogglePanel={handleTogglePanel}
           handleGraphUpdate={handleGraphUpdate}
           singleScrollRefFor={singleScrollRefFor}
-          singleThumbRefFor={singleThumbRefFor}
           showGraphImagePicker={showGraphImagePicker}
           setShowGraphImagePicker={setShowGraphImagePicker}
           graphImageButtonRef={graphImageButtonRef}
@@ -3038,7 +2997,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         panelElement={panelElement}
         useCustomCSS={useCustomCSS}
         singleScrollRefFor={singleScrollRefFor}
-        singleThumbRefFor={singleThumbRefFor}
         t={t}
       />
     );
@@ -3053,10 +3011,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       value={{ activePageKey, renderPageKey, openPage, closePage, pageHost }}
     >
       <div className={SIDE_PANEL_FRAME_CLASS}>
+        {/* inert — 슬라이드 아웃된 레이어를 키보드 탭 순회·접근성 트리에서 제외 */}
         <div
           className="dmn-panel-page"
           data-page-depth="root"
           data-active={activePageKey ? 'false' : 'true'}
+          inert={activePageKey ? true : undefined}
         >
           {panelBody}
         </div>
@@ -3065,6 +3025,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           className="dmn-panel-page"
           data-page-depth="sub"
           data-active={activePageKey ? 'true' : 'false'}
+          inert={activePageKey ? undefined : true}
         />
       </div>
     </PanelNavProvider>

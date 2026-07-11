@@ -92,7 +92,6 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
     scrollContainerRef: scrollRef,
     wrapperElement,
     lenisInstance,
-    scrollbarWidth,
   } = useLenis({
     onScroll: () => updateScrollState(wrapperElement),
   });
@@ -234,7 +233,7 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
   return (
     <Modal onClick={handleClose} animate={!initialSkipRef.current}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pr-[14px]">
@@ -268,18 +267,6 @@ const UnifiedKeySetting: React.FC<UnifiedKeySettingProps> = ({
               height:
                 containerHeight !== null ? `${containerHeight}px` : 'auto',
               maxHeight: '195px',
-              width:
-                hasOverflow && scrollbarWidth > 0
-                  ? `calc(100% + ${scrollbarWidth}px)`
-                  : undefined,
-              transform:
-                hasOverflow && scrollbarWidth > 0
-                  ? `translateX(-${scrollbarWidth}px)`
-                  : undefined,
-              paddingLeft:
-                hasOverflow && scrollbarWidth > 0
-                  ? `${scrollbarWidth}px`
-                  : undefined,
               transition: isFirstRender.current
                 ? 'none'
                 : 'height 100ms ease-in-out',

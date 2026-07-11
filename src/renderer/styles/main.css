@@ -16,68 +16,8 @@ body.dmn-custom-cursor * {
 
 /* ===== 스크롤바 ===== */
 
-.settings-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-scroll::-webkit-scrollbar {
-  width: 6px;
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb,
-.settings-scroll:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover,
-.settings-scroll:hover::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.settings-scroll.show-scrollbar::-webkit-scrollbar-thumb:active,
-.settings-scroll:hover::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.32);
-}
-
 .listpopup-scroll {
   overscroll-behavior: contain;
-}
-
-.listpopup-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.listpopup-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 4px;
-}
-
-.listpopup-scroll:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.26);
-}
-
-.listpopup-scroll::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.32);
 }
 
 .modal-content-scroll {
@@ -88,20 +28,8 @@ body.dmn-custom-cursor * {
   contain: paint;
 }
 
-.modal-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-  background: transparent;
-}
-
-.modal-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.modal-content-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 2px;
+.settings-content-scroll {
+  overscroll-behavior: contain;
 }
 
 /* 스크롤바 전역 숨김 — 위치 단서는 스크롤 엣지 페이드 마스크가 대신함 */
@@ -111,42 +39,6 @@ body.dmn-custom-cursor * {
 
 *::-webkit-scrollbar {
   display: none !important;
-}
-
-.properties-panel-overlay-bar {
-  display: none !important;
-}
-
-/* 설정 스크롤 - 호버 시에만 표시 */
-.settings-content-scroll {
-  overscroll-behavior: contain;
-}
-
-.settings-content-scroll::-webkit-scrollbar {
-  width: 4px;
-  background: transparent;
-}
-
-.settings-content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.settings-content-scroll.show-scrollbar::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.26);
 }
 
 /* PropertiesPanel 오버레이 스크롤바 (레이아웃 수축 방지) */
@@ -209,42 +101,6 @@ body.dmn-custom-cursor * {
   }
 }
 
-.properties-panel-overlay-viewport::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.properties-panel-overlay-bar {
-  position: absolute;
-  top: 0;
-  right: 0px;
-  bottom: 0;
-  width: 4px;
-  opacity: 0;
-  transition: opacity var(--ui-duration-fast) var(--ui-ease-out);
-  pointer-events: none;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-bar {
-  opacity: 1;
-}
-
-.properties-panel-overlay-thumb {
-  position: absolute;
-  left: 0;
-  right: 0;
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 2px;
-}
-
-.properties-panel-overlay-scroll:hover .properties-panel-overlay-thumb {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.properties-panel-overlay-scroll:active .properties-panel-overlay-thumb {
-  background: rgba(255, 255, 255, 0.26);
-}
-
 /* ===== 등장 모션 ===== */
 
 /* 화면 전환 (캔버스 ↔ 설정) */
@@ -285,8 +141,7 @@ body.dmn-custom-cursor * {
   inset: 0;
   display: flex;
   flex-direction: column;
-  transition:
-    opacity var(--ui-duration-page) var(--ui-ease-page),
+  transition: opacity var(--ui-duration-page) var(--ui-ease-page),
     transform var(--ui-duration-page) var(--ui-ease-page),
     filter var(--ui-duration-page) var(--ui-ease-page);
 }
@@ -330,10 +185,12 @@ body.dmn-custom-cursor * {
 @keyframes modalScale {
   from {
     transform: scale(0.97);
+    opacity: 0;
   }
 
   to {
     transform: scale(1);
+    opacity: 1;
   }
 }
 
@@ -341,14 +198,17 @@ body.dmn-custom-cursor * {
   animation: modalScale var(--ui-duration-base) var(--ui-ease-out) forwards;
 }
 
-@keyframes modalFade {
-  to {
-    opacity: 1;
+/* 틴트와 블러를 한 키프레임에서 보간 — 종료 상태는 클래스 자연값 */
+@keyframes modalScrim {
+  from {
+    background-color: transparent;
+    -webkit-backdrop-filter: blur(0px);
+    backdrop-filter: blur(0px);
   }
 }
 
-.animate-modal-fade {
-  animation: modalFade var(--ui-duration-fast) var(--ui-ease-out) forwards;
+.animate-modal-scrim {
+  animation: modalScrim var(--ui-duration-fast) var(--ui-ease-out) both;
 }
 
 /* ===== ColorPicker ===== */
@@ -525,14 +385,10 @@ body.dmn-custom-cursor * {
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
   .animate-modal-scale,
-  .animate-modal-fade,
+  .animate-modal-scrim,
   .view-enter,
   .view-fade {
     animation: none;
-  }
-
-  .animate-modal-fade {
-    opacity: 1;
   }
 
   .dmn-panel-page {

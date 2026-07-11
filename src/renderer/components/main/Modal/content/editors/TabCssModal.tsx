@@ -137,7 +137,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   return (
     <Modal onClick={handleCancel}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 gap-[19px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 gap-[19px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* CSS 사용 여부 토글 */}
@@ -156,7 +156,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
               disabled={isLoading || !hasTabCss}
               className={`px-[8px] h-[23px] rounded-md transition-colors duration-fast flex items-center justify-center text-style-4 ${
                 hasTabCss
-                  ? 'bg-danger-muted hover:bg-[rgba(229,72,77,0.2)] active:bg-[rgba(229,72,77,0.26)] text-danger-fg'
+                  ? 'bg-danger-muted hover:bg-danger-muted-hover active:bg-danger-muted-active text-danger-fg'
                   : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
               }`}
             >

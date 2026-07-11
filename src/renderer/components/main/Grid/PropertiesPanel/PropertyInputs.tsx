@@ -1,13 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import type {
   PropertyRowProps,
   NumberInputProps,
   OptionalNumberInputProps,
   TextInputProps,
   ColorInputProps,
-  SelectInputProps,
   ToggleSwitchProps,
   TabButtonProps,
   TabsProps,
@@ -34,7 +32,7 @@ export const PropertyRow: React.FC<PropertyRowProps> = ({
 export const PropertySection: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => (
-  <div className="bg-fill-faint rounded-[10px] px-[10px] py-[4px] flex flex-col">
+  <div className="bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-col">
     {children}
   </div>
 );
@@ -761,127 +759,6 @@ export const ColorInput: React.FC<ColorInputProps> = ({
 };
 
 // ============================================================================
-// 선택 입력
-// ============================================================================
-
-export const SelectInput: React.FC<SelectInputProps> = ({
-  value,
-  options,
-  onChange,
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{
-    left: number;
-    top: number;
-    width: number;
-  } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // 트리거가 스크롤/리사이즈로 움직이면 좌표가 어긋나므로 닫는다
-  // (메뉴 내부 스크롤은 제외)
-  useEffect(() => {
-    if (!isOpen) return;
-    const close = (event?: Event) => {
-      if (
-        event?.target instanceof Node &&
-        menuRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-      setIsOpen(false);
-    };
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [isOpen]);
-
-  return (
-    <div className="relative">
-      <button
-        ref={triggerRef}
-        onClick={() => {
-          if (!isOpen && triggerRef.current) {
-            const rect = triggerRef.current.getBoundingClientRect();
-            setMenuPos({
-              left: rect.left,
-              top: rect.bottom + 4,
-              width: rect.width,
-            });
-          }
-          setIsOpen(!isOpen);
-        }}
-        className={`h-[23px] min-w-[70px] bg-inset rounded-md ${
-          isOpen ? 'shadow-focus-ring' : ''
-        } px-[8px] flex items-center justify-between gap-[4px] transition-colors`}
-      >
-        <span className="text-body tabular-nums text-fg">
-          {options.find((opt) => opt.value === value)?.label || value}
-        </span>
-        <svg
-          width="8"
-          height="5"
-          viewBox="0 0 8 5"
-          fill="none"
-          className="flex-shrink-0 text-white/45"
-        >
-          <path
-            d="M1 1L4 4L7 1"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-      {isOpen &&
-        menuPos &&
-        createPortal(
-          // 패널의 backdrop-filter·mask 아래에서는 중첩 backdrop-blur가
-          // 무력화되므로 메뉴는 body로 포털해 backdrop root 밖에서 그린다
-          <>
-            <div
-              className="fixed inset-0 z-[59]"
-              onClick={() => setIsOpen(false)}
-            />
-            <div
-              ref={menuRef}
-              data-dmn-popup-submenu="true"
-              className="fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] shadow-elevation-2 min-w-[70px] tooltip-fade-in"
-              style={{
-                left: menuPos.left,
-                top: menuPos.top,
-                width: menuPos.width,
-              }}
-            >
-              {options.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setIsOpen(false);
-                  }}
-                  className={`text-left w-full h-[24px] px-[8px] rounded-[6px] text-body tabular-nums transition-colors duration-fast flex items-center ${
-                    value === opt.value
-                      ? 'bg-surface-active text-fg pointer-events-none'
-                      : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
-                  }`}
-                >
-                  <span className="truncate">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </>,
-          document.body,
-        )}
-    </div>
-  );
-};
-
-// ============================================================================
 // 토글 스위치
 // ============================================================================
 
@@ -1101,7 +978,7 @@ export const Tabs: React.FC<TabsProps> = ({
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
 
   return (
-    <div className="relative flex w-full h-[30px] bg-inset rounded-[10px] items-center p-[2px]">
+    <div className="relative flex w-full h-[30px] bg-inset rounded-surface items-center p-[2px]">
       <div
         aria-hidden
         className="absolute top-[2px] bottom-[2px] left-[2px] rounded-[8px] bg-fill-active shadow-elevation-chrome transition-transform duration-base ease-out-expo"

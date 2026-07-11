@@ -113,7 +113,7 @@ const ManagerModalLayout = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 탭 영역 */}

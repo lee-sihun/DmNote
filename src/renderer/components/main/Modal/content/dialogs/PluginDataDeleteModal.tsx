@@ -23,13 +23,10 @@ export function PluginDataDeleteModal({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] gap-[16px]"
+        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] gap-[16px]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex flex-col gap-[8px]">
-          {/* <span className="text-style-3 text-fg">
-            {t("settings.pluginDataDeleteTitle")}
-          </span> */}
           <span className="text-style-3 text-fg !leading-[1.5]">
             {t('settings.pluginDataDeleteMessage', { name: pluginName })}
           </span>

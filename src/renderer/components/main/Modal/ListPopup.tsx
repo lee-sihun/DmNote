@@ -124,7 +124,7 @@ const SubMenu = ({
       data-dmn-popup-submenu="true"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
+      className={`fixed z-[10001] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -247,7 +247,7 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[108px] h-[26px] px-[24px] rounded-[6px] flex items-center justify-center transition-colors duration-fast ${
+        className={`w-full min-w-[108px] h-[26px] px-[24px] rounded-md flex items-center justify-center transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
@@ -275,7 +275,7 @@ const MenuItemRow = ({
         type="button"
         disabled={item.disabled}
         onClick={handleSelect}
-        className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-[6px] flex items-center gap-[6px] transition-colors duration-fast ${
+        className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-md flex items-center gap-[6px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
             : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
@@ -368,7 +368,7 @@ const ListPopup = ({
 }: ListPopupProps) => {
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
-    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-[10px] p-[4px] flex flex-col gap-[4px]';
+    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산 (아이템 26 + 갭 4 리듬)

@@ -264,7 +264,7 @@ const WebFontInputModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-[10px] overflow-hidden"
+        className="w-[640px] max-w-[calc(100vw-80px)] flex flex-col bg-fill-faint rounded-surface overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">

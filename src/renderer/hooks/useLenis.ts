@@ -48,7 +48,6 @@ const easeOutExpo = (t: number): number => {
 export const useLenis = (options: UseLenisOptions = {}) => {
   const [wrapper, setWrapper] = useState<HTMLElement | null>(null);
   const wrapperRef = useRef<HTMLElement | null>(null);
-  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const lenisRef = useRef<Lenis | null>(null);
   const onScrollRef = useRef<(() => void) | undefined>(options.onScroll);
 
@@ -73,14 +72,6 @@ export const useLenis = (options: UseLenisOptions = {}) => {
 
   useEffect(() => {
     if (!wrapper) return;
-
-    const computeScrollbarWidth = () => {
-      // offsetWidth는 스크롤바 포함, clientWidth는 스크롤바 제외
-      const width = Math.max(0, wrapper.offsetWidth - wrapper.clientWidth);
-      setScrollbarWidth((prev) => (prev === width ? prev : width));
-    };
-
-    computeScrollbarWidth();
 
     // 기존 Lenis 인스턴스 정리
     if (lenisRef.current) {
@@ -120,21 +111,9 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     };
     rafId = requestAnimationFrame(raf);
 
-    // 스크롤바 너비 변화를 감지 (OS/시스템 설정에 따라 스크롤바가 레이아웃 폭을 차지할 수 있음)
-    let ro: ResizeObserver | null = null;
-    const onResize = () => computeScrollbarWidth();
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(onResize);
-      ro.observe(wrapper);
-    } else {
-      window.addEventListener('resize', onResize);
-    }
-
     // 클린업
     return () => {
       cancelAnimationFrame(rafId);
-      if (ro) ro.disconnect();
-      else window.removeEventListener('resize', onResize);
       lenis.off('scroll', handleLenisScroll);
       lenis.destroy();
       lenisRef.current = null;
@@ -146,7 +125,5 @@ export const useLenis = (options: UseLenisOptions = {}) => {
     /** 스크롤 컨테이너 DOM 요소 (state로 관리됨) */
     wrapperElement: wrapper,
     lenisInstance: lenisRef,
-    /** wrapper의 실제 스크롤바 너비(px). overlay 스크롤바인 경우 0일 수 있음 */
-    scrollbarWidth,
   };
 };

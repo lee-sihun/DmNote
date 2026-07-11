@@ -458,7 +458,7 @@ const NoteSetting = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px]"
         onClick={(e) => e.stopPropagation()}
       >
         {title && <p className="text-fg-muted text-label mb-[10px]">{title}</p>}

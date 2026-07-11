@@ -167,7 +167,6 @@ interface BatchKeyLikePanelProps {
   handleBatchGlowColorChangeCompleteKeysOnly: (value: NoteColor) => void;
   // refs
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchNoteColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchGlowColorButtonRef: React.RefObject<HTMLButtonElement | null>;
   batchBorderColorButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -251,7 +250,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleBatchGlowColorChange: _handleBatchGlowColorChange,
   handleBatchGlowColorChangeComplete: _handleBatchGlowColorChangeComplete,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchNoteColorButtonRef,
   batchGlowColorButtonRef,
   batchBorderColorButtonRef,
@@ -766,13 +764,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 t={t}
               />
             </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={batchThumbRefFor(TABS.STYLE)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
-              />
-            </div>
           </div>
 
           {/* NOTE 탭 viewport */}
@@ -810,13 +801,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   t={t}
                 />
               </div>
-              <div className="properties-panel-overlay-bar">
-                <div
-                  ref={batchThumbRefFor(TABS.NOTE)}
-                  className="properties-panel-overlay-thumb"
-                  style={{ display: 'none' }}
-                />
-              </div>
             </div>
           )}
 
@@ -841,13 +825,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 isFillPickerOpen={batchPickerFor === 'fill'}
                 isStrokePickerOpen={batchPickerFor === 'stroke'}
                 t={t}
-              />
-            </div>
-            <div className="properties-panel-overlay-bar">
-              <div
-                ref={batchThumbRefFor(TABS.COUNTER)}
-                className="properties-panel-overlay-thumb"
-                style={{ display: 'none' }}
               />
             </div>
           </div>
@@ -1022,7 +999,6 @@ interface BatchGraphOnlyPanelProps {
   getMixedValueGraphsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedGraphsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   showBatchImagePicker: boolean;
   setShowBatchImagePicker: (value: boolean) => void;
@@ -1060,7 +1036,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   getMixedValueGraphsAsKey,
   getSelectedGraphsData,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -1313,13 +1288,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
               t={t}
             />
           </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={batchThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
-            />
-          </div>
         </div>
       </div>
 
@@ -1412,7 +1380,6 @@ interface BatchKnobOnlyPanelProps {
   getMixedValueKnobsAsKey: MixedValueGetter<KeyPosition>;
   getSelectedKnobsData: () => KeyData[];
   batchScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
-  batchThumbRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   batchImageButtonRef: React.RefObject<HTMLButtonElement | null>;
   showBatchImagePicker: boolean;
   setShowBatchImagePicker: (value: boolean) => void;
@@ -1450,7 +1417,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   getMixedValueKnobsAsKey,
   getSelectedKnobsData,
   batchScrollRefFor,
-  batchThumbRefFor,
   batchImageButtonRef,
   showBatchImagePicker,
   setShowBatchImagePicker,
@@ -1620,13 +1586,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
               panelElement={panelElement}
               useCustomCSS={useCustomCSS}
               t={t}
-            />
-          </div>
-          <div className="properties-panel-overlay-bar">
-            <div
-              ref={batchThumbRefFor(TABS.STYLE)}
-              className="properties-panel-overlay-thumb"
-              style={{ display: 'none' }}
             />
           </div>
         </div>

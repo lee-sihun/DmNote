@@ -258,7 +258,7 @@ SettingToolProps) => {
     <div className="flex gap-[8px]">
       {!isSettingsOpen && (
         <TooltipGroup>
-          <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[0px]">
+          <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[0px]">
             <FloatingTooltip content={t('tooltip.exportPreset')}>
               <Button icon={<FolderIcon />} onClick={handlePresetSave} />
             </FloatingTooltip>
@@ -315,7 +315,7 @@ SettingToolProps) => {
         </TooltipGroup>
       )}
       <TooltipGroup>
-        <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-[10px] gap-[4px]">
+        <div className="flex items-center h-[40px] p-[5px] bg-fill rounded-surface gap-[4px]">
           <FloatingTooltip
             content={
               isObsModeActive

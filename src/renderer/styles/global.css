@@ -2,31 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 레거시 컴포넌트 클래스 — ui/ 프리미티브로 흡수 후 제거 예정 */
-@layer components {
-  .icon-btn {
-    @apply w-[24px] h-[24px] flex items-center justify-center hover:bg-surface-hover rounded-md transition-colors;
-  }
-  .input-field {
-    @apply text-center h-[23px] bg-inset rounded-md focus:shadow-focus-ring text-[11px] text-fg;
-  }
-  .btn-danger {
-    @apply bg-danger-muted rounded-md text-danger-fg;
-  }
-  .btn-danger:hover {
-    background: rgba(229, 72, 77, 0.2);
-  }
-  .btn-danger:active {
-    background: rgba(229, 72, 77, 0.26);
-  }
-  .btn-secondary {
-    @apply bg-surface hover:bg-surface-hover active:bg-surface-active rounded-md text-fg;
-  }
-  .btn-default {
-    @apply px-[10px] h-[23px] bg-surface hover:bg-surface-hover active:bg-surface-active rounded-md text-[11px];
-  }
-}
-
 /* 기본 서체 — 가변 웨이트 셀프호스팅 */
 @font-face {
   font-family: 'Pretendard Variable';

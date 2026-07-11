@@ -87,12 +87,6 @@ export interface ColorInputProps {
   onToggle?: () => void;
 }
 
-export interface SelectInputProps {
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
-}
-
 export interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;

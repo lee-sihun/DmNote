@@ -69,7 +69,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col w-[184px] p-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] shadow-elevation-2">
+    <div className="flex flex-col w-[184px] p-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2">
       {customTabs.length > 0 && (
         <>
           {/* 섹션 헤더 */}
@@ -87,41 +87,38 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
                 .reverse()
                 .map((tab) => {
                   const isSelected = selectedKeyType === tab.id;
+                  // 인터랙티브 요소 중첩 금지 — 행 래퍼는 비인터랙티브,
+                  // 선택은 행 전체를 덮는 스트레치드 버튼, 삭제는 형제 button
                   return (
-                    <button
+                    <div
                       key={tab.id}
-                      className={`group w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center gap-[4px] px-[8px] rounded-[6px] text-body transition-colors duration-fast ${
+                      className={`group relative w-full min-h-[26px] h-[26px] flex-shrink-0 flex items-center gap-[4px] px-[8px] rounded-md text-body cursor-pointer transition-colors duration-fast ${
                         isSelected
                           ? 'bg-surface-active text-fg'
                           : 'text-fg-muted hover:text-fg hover:bg-surface-hover active:bg-surface-active'
                       }`}
-                      onClick={() => handleSelect(tab.id)}
                     >
-                      <span className="flex-1 min-w-0 truncate text-left">
+                      <button
+                        type="button"
+                        aria-label={tab.name}
+                        className="absolute inset-0 rounded-md"
+                        onClick={() => handleSelect(tab.id)}
+                      />
+                      <span className="relative flex-1 min-w-0 truncate text-left pointer-events-none">
                         {tab.name}
                       </span>
                       {isSelected && (
-                        <span
-                          role="button"
-                          tabIndex={0}
+                        <button
+                          type="button"
                           title={t('tabs.delete')}
-                          className="w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger-muted transition-all duration-fast"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAskDelete(true);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setAskDelete(true);
-                            }
-                          }}
+                          aria-label={t('tabs.delete')}
+                          className="relative w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] text-fg-faint opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 hover:text-danger hover:bg-danger-muted transition-all duration-fast"
+                          onClick={() => setAskDelete(true)}
                         >
                           <TrashIcon className="w-[10px] h-[10px]" />
-                        </span>
+                        </button>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
             </div>
@@ -133,7 +130,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
 
       {!maxReached && (
         <button
-          className="w-full h-[28px] rounded-[6px] bg-fill hover:bg-fill-hover active:bg-fill-active flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
+          className="w-full h-[28px] rounded-md bg-fill hover:bg-fill-hover active:bg-fill-active flex items-center justify-center gap-[6px] text-fg transition-colors duration-fast"
           onClick={() => setShowNameModal(true)}
         >
           <PlusIcon className="w-[9px] h-[9px] shrink-0" />

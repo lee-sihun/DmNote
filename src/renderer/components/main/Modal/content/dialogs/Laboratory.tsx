@@ -83,7 +83,7 @@ const LaboratoryModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 gap-[16px]"
+        className="flex flex-col items-center justify-center p-[20px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 gap-[16px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between w-full items-center">

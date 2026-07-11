@@ -310,12 +310,6 @@ const ShortcutSettingsModal = ({
     setListeningKey((prev) => (prev === key ? null : key));
   };
 
-  // const handleReset = () => {
-  //   setError(null);
-  //   setListeningKey(null);
-  //   setDraft(defaults);
-  // };
-
   const handleSave = async () => {
     const validationError = validate(safeDraft);
     setError(validationError);
@@ -338,7 +332,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[12px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[12px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;
@@ -498,16 +492,6 @@ const ShortcutSettingsModal = ({
           >
             {t('shortcutSetting.cancel')}
           </button>
-          {/* <button
-            className="w-[75px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-lg text-fg-muted hover:text-fg text-label transition-colors duration-fast"
-            onClick={handleReset}
-            disabled={isListening}
-            style={
-              isListening ? { opacity: 0.6, pointerEvents: "none" } : undefined
-            }
-          >
-            {t("shortcutSetting.reset")}
-          </button> */}
         </div>
       </div>
     </Modal>

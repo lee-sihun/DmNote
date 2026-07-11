@@ -57,11 +57,18 @@
   --ui-danger-hover: #ec5d62;
   --ui-danger-active: #d93b40;
   --ui-danger-muted: rgba(229, 72, 77, 0.14);
+  --ui-danger-muted-hover: rgba(229, 72, 77, 0.2);
+  --ui-danger-muted-active: rgba(229, 72, 77, 0.26);
   --ui-danger-fg: #ff9599;
   --ui-success: #3dbe7b;
   --ui-success-muted: rgba(61, 190, 123, 0.14);
   --ui-warning: #f0b429;
   --ui-warning-muted: rgba(240, 180, 41, 0.14);
+
+  /* 라운딩 — 3단: 표면 안 요소 6 < 1차 표면 10 < 모달 셸 14 */
+  --ui-radius-inner: 6px;
+  --ui-radius-surface: 10px;
+  --ui-radius-modal: 14px;
 
   /* 모션 */
   --ui-duration-fast: 120ms;

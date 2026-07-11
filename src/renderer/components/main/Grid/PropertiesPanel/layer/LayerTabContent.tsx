@@ -101,47 +101,15 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
     return () => clearPendingDeselect();
   });
 
-  // 스크롤 상태
+  // 스크롤 상태 — scrollElementRef는 DnD 훅의 오토스크롤 계산용
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
-  const thumbRef = useRef<HTMLDivElement | null>(null);
 
-  const calculateThumb = (el: HTMLDivElement) => {
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const canScroll = scrollHeight > clientHeight + 1;
-    if (!canScroll) return { top: 0, height: 0, visible: false };
-
-    const minThumbHeight = 16;
-    const height = Math.max(
-      minThumbHeight,
-      (clientHeight / scrollHeight) * clientHeight,
-    );
-    const maxTop = clientHeight - height;
-    const top =
-      maxTop <= 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-
-    return { top, height, visible: true };
-  };
-
-  const updateThumbDOM = () => {
-    if (!thumbRef.current || !scrollElementRef.current) return;
-    const thumb = calculateThumb(scrollElementRef.current);
-    thumbRef.current.style.top = `${thumb.top}px`;
-    thumbRef.current.style.height = `${thumb.height}px`;
-    thumbRef.current.style.display = thumb.visible ? 'block' : 'none';
-  };
-
-  const { scrollContainerRef: lenisRef, lenisInstance } = useLenis({
-    onScroll: updateThumbDOM,
-  });
+  const { scrollContainerRef: lenisRef, lenisInstance } = useLenis();
 
   const setScrollRef = (node: HTMLDivElement | null) => {
     scrollElementRef.current = node;
     lenisRef(node);
   };
-
-  useEffect(() => {
-    updateThumbDOM();
-  });
 
   // 레이어 아이템 목록
   const layerItems = buildLayerItems({
@@ -180,7 +148,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
       lenisInstance.current?.resize();
-      updateThumbDOM();
     });
     return () => cancelAnimationFrame(rafId);
   });
@@ -645,7 +612,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         e.stopPropagation();
                         actions.handleToggleGroupVisibility(e, gh.groupId);
                       }}
-                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] cursor-pointer ${
+                      className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
                         gh.allHidden
                           ? ''
                           : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
@@ -783,7 +750,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         ? t('propertiesPanel.showLayer') || 'Show'
                         : t('propertiesPanel.hideLayer') || 'Hide'
                     }
-                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-[6px] cursor-pointer ${
+                    className={`flex-shrink-0 w-[28px] h-[28px] flex items-center justify-center rounded-md cursor-pointer ${
                       item.hidden
                         ? ''
                         : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
@@ -814,15 +781,6 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
               )}
           </div>
         )}
-
-        {/* 커스텀 스크롤바 */}
-        <div className="properties-panel-overlay-bar">
-          <div
-            ref={thumbRef}
-            className="properties-panel-overlay-thumb"
-            style={{ display: 'none' }}
-          />
-        </div>
       </div>
 
       {/* 컨텍스트 메뉴 */}

@@ -61,7 +61,7 @@ const ZoomButton = ({ onClick, title, style, children }: ZoomButtonProps) => (
       ...style,
     }}
     onMouseEnter={(e) =>
-      (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)')
+      (e.currentTarget.style.backgroundColor = 'var(--ui-fill-active)')
     }
     onMouseLeave={(e) =>
       (e.currentTarget.style.backgroundColor = 'transparent')

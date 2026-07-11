@@ -871,7 +871,7 @@ const CounterAnimationEditorModal = ({
               />
             </div>
 
-            <div className="flex-1 flex gap-[16px] p-[16px] rounded-[10px] bg-elevated shadow-sm min-h-0 items-center">
+            <div className="flex-1 flex gap-[16px] p-[16px] rounded-surface bg-elevated shadow-sm min-h-0 items-center">
               <div className="shrink-0 flex flex-col">
                 <div
                   className="rounded-[8px] bg-inset overflow-hidden"
@@ -882,7 +882,7 @@ const CounterAnimationEditorModal = ({
                   }}
                 >
                   <div
-                    className="relative rounded-[6px] overflow-hidden"
+                    className="relative rounded-md overflow-hidden"
                     style={{
                       width: `${TOTAL_SIZE}px`,
                       height: `${TOTAL_SIZE}px`,
@@ -1094,9 +1094,9 @@ const CounterAnimationEditorModal = ({
             ) : null}
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-[10px] overflow-hidden shadow-inner relative">
+          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-surface overflow-hidden shadow-inner relative">
             <div
-              className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-[10px] cursor-pointer select-none"
+              className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-surface cursor-pointer select-none"
               onPointerDown={handlePreviewPointerDown}
             >
               {previewCss && (

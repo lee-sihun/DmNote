@@ -81,7 +81,7 @@ const UpdateModal = ({
   return (
     <Modal onClick={handleClose}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] min-w-[320px] max-w-[400px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] min-w-[320px] max-w-[400px]"
         onClick={(e) => e.stopPropagation()}
       >
         {isLatestVersion ? (

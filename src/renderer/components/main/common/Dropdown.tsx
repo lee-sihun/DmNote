@@ -20,12 +20,8 @@ interface DropdownProps {
   align?: 'left' | 'center' | 'right';
   /** 트리거/메뉴 너비 고정용 Tailwind 클래스 (예: 'w-[160px]'). 길면 말줄임(...) 처리됨 */
   widthClass?: string;
-  /** 트리거 높이 클래스 (기본 h-[24px]) */
-  heightClass?: string;
-  /** 트리거 수평 패딩 클래스 (기본 px-[8px]) */
-  paddingXClass?: string;
-  /** 트리거 라운딩 클래스 (기본 rounded-md) */
-  roundedClass?: string;
+  /** 트리거 크기 — sm: 24px 크롬(기본), lg: 30px 크롬(패널 페이지) */
+  size?: 'sm' | 'lg';
 }
 
 interface MenuPosition {
@@ -45,9 +41,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   iconTrigger,
   align = 'left',
   widthClass = '',
-  heightClass = 'h-[24px]',
-  paddingXClass = 'px-[8px]',
-  roundedClass = 'rounded-md',
+  size = 'sm',
 }) => {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
@@ -138,7 +132,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           <div
             ref={menuRef}
             data-dmn-popup-submenu="true"
-            className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-[10px] shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
+            className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
             style={{
               left: menuPos.left,
               top: menuPos.top,
@@ -156,7 +150,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                 <button
                   key={opt.value}
                   type="button"
-                  className={`text-left w-full h-[24px] px-[8px] rounded-[6px] text-body transition-colors duration-fast flex items-center ${
+                  className={`text-left w-full h-[24px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
                     value === opt.value
                       ? 'bg-surface-active text-fg pointer-events-none'
                       : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
@@ -196,7 +190,11 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          className={`flex box-border items-center justify-between ${heightClass} ${paddingXClass} bg-fill hover:bg-fill-hover ${roundedClass} text-fg text-body transition-colors duration-fast ${
+          className={`flex box-border items-center justify-between ${
+            size === 'lg'
+              ? 'h-[30px] px-[10px] rounded-surface'
+              : 'h-[24px] px-[8px] rounded-md'
+          } bg-fill hover:bg-fill-hover text-fg text-body transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={toggleOpen}

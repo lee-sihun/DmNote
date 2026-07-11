@@ -9,7 +9,6 @@ export {
   OptionalNumberInput,
   TextInput,
   ColorInput,
-  SelectInput,
   ToggleSwitch,
   FontStyleToggle,
   Tabs,

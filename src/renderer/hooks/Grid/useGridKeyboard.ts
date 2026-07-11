@@ -161,8 +161,9 @@ export function useGridKeyboard({
         return;
       }
 
-      // Escape 키로 선택 해제
+      // Escape 키로 선택 해제 — 상위 레이어(메뉴·패널 페이지)가 소비했으면 양보
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
         clearSelection();
         return;
       }

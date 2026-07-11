@@ -48,11 +48,7 @@ const Alert = ({
   };
 
   // Lenis smooth scroll 적용 (onScroll 콜백으로 그림자 업데이트)
-  const {
-    scrollContainerRef: scrollRef,
-    wrapperElement,
-    scrollbarWidth,
-  } = useLenis({
+  const { scrollContainerRef: scrollRef, wrapperElement } = useLenis({
     onScroll: () => updateScrollState(wrapperElement),
   });
 
@@ -73,14 +69,10 @@ const Alert = ({
   const cancelLabel = cancelText || t('common.cancel');
   const shouldShowCancel = isConfirm || (isCustom && showCancel);
 
-  const hasOverflow =
-    !!wrapperElement &&
-    wrapperElement.scrollHeight > wrapperElement.clientHeight + 1;
-
   return (
     <Modal onClick={onCancel}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3 p-[20px] pr-[6px]"
+        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[20px] pr-[6px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 메시지 텍스트 or Custom HTML */}
@@ -96,20 +88,6 @@ const Alert = ({
             <div
               ref={scrollRef}
               className="max-h-[244px] overflow-y-auto modal-content-scroll pr-[14px] text-center text-fg"
-              style={{
-                width:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `calc(100% + ${scrollbarWidth}px)`
-                    : undefined,
-                transform:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `translateX(-${scrollbarWidth}px)`
-                    : undefined,
-                paddingLeft:
-                  hasOverflow && scrollbarWidth > 0
-                    ? `${scrollbarWidth}px`
-                    : undefined,
-              }}
               dangerouslySetInnerHTML={{ __html: message }}
             />
 

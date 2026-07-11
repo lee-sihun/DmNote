@@ -64,7 +64,7 @@ const TabNameModal = ({
   return (
     <Modal onClick={onClose}>
       <div
-        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-glass-heavy backdrop-blur-[32px] rounded-[14px] shadow-elevation-3"
+        className="flex flex-col justify-between w-[280px] p-[20px] gap-[19px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-style-3 text-fg">{t('tabs.createTitle')}</div>
