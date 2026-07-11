@@ -5,8 +5,7 @@ import type {
   PluginSettingValue,
 } from '@src/types/plugin/api';
 import type { PluginSettingsPanelPayload } from '@stores/grid/usePropertiesPanelStore';
-import { SidebarToggleIcon } from './PropertyInputs';
-import { PANEL_ROOT_CLASS } from './panelChrome';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from './panelChrome';
 
 interface PluginSettingsPanelViewProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
@@ -43,7 +42,7 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
 }) => {
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className={PANEL_HEADER_CLASS}>
         <div className="flex flex-col gap-[2px]">
           <span className="text-fg text-style-2 leading-none">
             {t('propertiesPanel.pluginSettings') || '플러그인 설정'}
@@ -52,14 +51,6 @@ const PluginSettingsPanelView: React.FC<PluginSettingsPanelViewProps> = ({
             {pluginSettingsPanel.pluginId}
           </span>
         </div>
-        <button
-          onClick={handlePluginSettingsPanelCancel}
-          className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-          title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-          aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-        >
-          <SidebarToggleIcon isOpen={true} />
-        </button>
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div

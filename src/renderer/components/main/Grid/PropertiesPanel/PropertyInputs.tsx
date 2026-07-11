@@ -1015,63 +1015,6 @@ export const CloseIcon: React.FC = () => (
   </svg>
 );
 
-export const SidebarToggleIcon: React.FC<{
-  isOpen: boolean;
-  color?: string;
-}> = ({ isOpen, color = 'currentColor' }) => (
-  <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
-    <rect
-      x="0.75"
-      y="0.75"
-      width="14.5"
-      height="12.5"
-      rx="2"
-      stroke={color}
-      strokeWidth="1.5"
-      fill="none"
-    />
-    <line
-      x1={isOpen ? '10' : '12'}
-      y1="1"
-      x2={isOpen ? '10' : '12'}
-      y2="13"
-      stroke={color}
-      strokeWidth="1.5"
-    />
-    {isOpen && (
-      <>
-        <line
-          x1="12"
-          y1="4"
-          x2="13.5"
-          y2="4"
-          stroke={color}
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        <line
-          x1="12"
-          y1="7"
-          x2="13.5"
-          y2="7"
-          stroke={color}
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        <line
-          x1="12"
-          y1="10"
-          x2="13.5"
-          y2="10"
-          stroke={color}
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-      </>
-    )}
-  </svg>
-);
-
 // 레이어/속성 모드 전환 토글 아이콘
 export const ModeToggleIcon: React.FC<{
   mode: 'layer' | 'property';

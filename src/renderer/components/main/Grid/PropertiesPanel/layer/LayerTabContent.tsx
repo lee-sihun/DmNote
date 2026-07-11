@@ -13,6 +13,7 @@ import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayEle
 import { isMac } from '@utils/core/platform';
 import { useLenis } from '@hooks/useLenis';
 import ListPopup from '@components/main/Modal/ListPopup';
+import IconSwap from '@components/main/common/IconSwap';
 import CloseEyeIcon from '@assets/svgs/close_eye.svg';
 import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
@@ -618,19 +619,23 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                           : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                       }`}
                     >
-                      {gh.allHidden ? (
-                        <CloseEyeIcon
-                          width={14}
-                          height={14}
-                          fill="currentColor"
-                        />
-                      ) : (
-                        <OpenEyeIcon
-                          width={14}
-                          height={14}
-                          fill="currentColor"
-                        />
-                      )}
+                      <IconSwap
+                        active={gh.allHidden}
+                        activeIcon={
+                          <CloseEyeIcon
+                            width={14}
+                            height={14}
+                            fill="currentColor"
+                          />
+                        }
+                        inactiveIcon={
+                          <OpenEyeIcon
+                            width={14}
+                            height={14}
+                            fill="currentColor"
+                          />
+                        }
+                      />
                     </button>
                   </div>
                 );
@@ -756,15 +761,23 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
                         : 'opacity-0 group-hover:opacity-60 hover:!opacity-100'
                     }`}
                   >
-                    {item.hidden ? (
-                      <CloseEyeIcon
-                        width={14}
-                        height={14}
-                        fill="currentColor"
-                      />
-                    ) : (
-                      <OpenEyeIcon width={14} height={14} fill="currentColor" />
-                    )}
+                    <IconSwap
+                      active={item.hidden}
+                      activeIcon={
+                        <CloseEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      }
+                      inactiveIcon={
+                        <OpenEyeIcon
+                          width={14}
+                          height={14}
+                          fill="currentColor"
+                        />
+                      }
+                    />
                   </button>
                 </div>
               );

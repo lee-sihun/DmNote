@@ -166,6 +166,77 @@ body.dmn-custom-cursor * {
   filter: blur(0);
 }
 
+/* 아이콘 스왑 — 토글 버튼의 두 SVG를 겹쳐두고 크로스페이드.
+   나가는 아이콘은 줄며 블러 아웃, 들어오는 아이콘은 커지며 선명해짐.
+   will-change는 의도적으로 생략 — 레이어 리스트처럼 수십 개 깔리는 곳에서
+   컴포지터 레이어 남발 방지 */
+.dmn-icon-swap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.dmn-icon-swap > [data-icon] {
+  grid-area: 1 / 1;
+  display: flex;
+  /* 보이는 상태를 명시 — filter: none에서 시작하면 WKWebView가 보간을 못 함 */
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+  transition: opacity var(--ui-icon-swap-duration) var(--ui-icon-swap-ease),
+    filter var(--ui-icon-swap-duration) var(--ui-icon-swap-ease),
+    transform var(--ui-icon-swap-duration) var(--ui-icon-swap-ease);
+}
+
+.dmn-icon-swap[data-state='on'] > [data-icon='off'],
+.dmn-icon-swap[data-state='off'] > [data-icon='on'] {
+  opacity: 0;
+  filter: blur(var(--ui-icon-swap-blur));
+  transform: scale(var(--ui-icon-swap-scale));
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-icon-swap > [data-icon] {
+    transition: none;
+  }
+}
+
+/* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
+   드로우·이레이즈 모두 좌상→우하 한 방향 관통 스와이프 */
+
+/* 패널 토글 — 하나의 지속 버튼이 닫힘(글래스 칩) ↔ 열림(베어 아이콘)으로 모프.
+   칩 opacity 페이드는 PanelToggleButton.tsx에서 WAAPI로 처리.
+   아이콘 구분선은 슬라이드, 디테일 라인은 페이드 */
+.dmn-panel-toggle-divider {
+  /* 닫힘: 구분선이 x=12 위치 */
+  transform: translateX(2px);
+  transition: transform var(--ui-duration-base) var(--ui-ease-out);
+}
+
+.dmn-panel-toggle[data-open='true'] .dmn-panel-toggle-divider {
+  transform: translateX(0);
+}
+
+.dmn-panel-toggle-lines {
+  opacity: 0;
+  transform: translateX(-1.5px);
+  transition: opacity var(--ui-duration-base) var(--ui-ease-out),
+    transform var(--ui-duration-base) var(--ui-ease-out);
+}
+
+.dmn-panel-toggle[data-open='true'] .dmn-panel-toggle-lines {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmn-panel-toggle-divider,
+  .dmn-panel-toggle-lines {
+    transition: none;
+  }
+}
+
 @keyframes tooltipFadeIn {
   from {
     opacity: 0;

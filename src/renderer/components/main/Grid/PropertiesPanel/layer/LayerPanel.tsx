@@ -2,8 +2,7 @@ import React from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import { SidebarToggleIcon, ModeToggleIcon } from '../PropertyInputs';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import { LAYER_PANEL_TABS, type LayerPanelTabType } from '../types';
 import LayerTabContent from './LayerTabContent';
 import GridTabContent from '../GridTabContent';
@@ -13,9 +12,7 @@ import GridTabContent from '../GridTabContent';
 // ============================================================================
 
 interface LayerPanelProps {
-  onClose: () => void;
   onSwitchToProperty?: () => void;
-  hasSelection?: boolean;
   onSelectionFromPanel?: () => void;
 }
 
@@ -92,9 +89,7 @@ const LayerPanelTabs: React.FC<LayerPanelTabsProps> = ({
 // ============================================================================
 
 const LayerPanel: React.FC<LayerPanelProps> = ({
-  onClose,
   onSwitchToProperty,
-  hasSelection = false,
   onSelectionFromPanel,
 }) => {
   const { t } = useTranslation();
@@ -123,39 +118,10 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className={PANEL_HEADER_CLASS}>
           <span className="text-fg text-style-2 leading-none">
             {t('propertiesPanel.canvas') || 'Canvas'}
           </span>
-          <div className="flex items-center gap-[4px]">
-            {/* 모드 토글 버튼 - hasSelection에 따라 활성/비활성 */}
-            <button
-              disabled={!hasSelection}
-              onClick={hasSelection ? onSwitchToProperty : undefined}
-              className={`w-[24px] h-[24px] -my-[6px] flex items-center justify-center rounded-[4px] transition-colors ${
-                hasSelection
-                  ? 'text-white/45 hover:text-white/90 cursor-pointer'
-                  : 'text-fg-disabled cursor-not-allowed'
-              }`}
-              title={
-                t('propertiesPanel.switchToProperty') || 'Switch to Property'
-              }
-              aria-label={
-                t('propertiesPanel.switchToProperty') || 'Switch to Property'
-              }
-            >
-              <ModeToggleIcon mode="property" disabled={!hasSelection} />
-            </button>
-            {/* 패널 닫기 버튼 */}
-            <button
-              onClick={onClose}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.closePanel') || 'Close Panel'}
-              aria-label={t('propertiesPanel.closePanel') || 'Close Panel'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
-          </div>
         </div>
 
         {/* 탭 */}

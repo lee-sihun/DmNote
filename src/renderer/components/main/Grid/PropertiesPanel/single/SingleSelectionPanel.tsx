@@ -15,15 +15,13 @@ import type {
   PluginDisplayElementInternal,
 } from '@src/types/plugin/api';
 import type { KeyInfo } from '@utils/core/KeyMaps';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
   PropertyRow,
   NumberInput,
   TextInput,
   ColorInput,
   PropertySection,
-  SidebarToggleIcon,
-  ModeToggleIcon,
   Tabs,
   StyleTabContent,
   NoteTabContent,
@@ -82,8 +80,6 @@ const RenameIcon: React.FC = () => (
 interface PluginSelectionPanelProps {
   setPanelElement: (el: HTMLDivElement | null) => void;
   pluginTitle: string;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   setPluginScrollRef: (node: HTMLDivElement | null) => void;
   isPluginResizable: boolean;
   selectedPluginElement: PluginDisplayElementInternal | null;
@@ -112,8 +108,6 @@ interface PluginSelectionPanelProps {
 export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
   setPanelElement,
   pluginTitle,
-  handleToggleMode,
-  handleTogglePanel,
   setPluginScrollRef,
   isPluginResizable,
   selectedPluginElement,
@@ -133,28 +127,10 @@ export const PluginSelectionPanel: React.FC<PluginSelectionPanelProps> = ({
 }) => {
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className={PANEL_HEADER_CLASS}>
         <span className="text-fg text-style-2 leading-none truncate max-w-[120px]">
           {pluginTitle}
         </span>
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
@@ -256,8 +232,6 @@ interface SingleGraphPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleGraphUpdate: (
     data: Partial<GraphItemPosition> & { index: number },
   ) => void;
@@ -285,8 +259,6 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleGraphUpdate,
   singleScrollRefFor,
   showGraphImagePicker,
@@ -310,7 +282,7 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
 
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className={PANEL_HEADER_CLASS}>
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -345,31 +317,13 @@ export const SingleGraphPanel: React.FC<SingleGraphPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.closePanel') || 'Close'}
-            aria-label={t('propertiesPanel.closePanel') || 'Close'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
       <div className="flex-1 properties-panel-overlay-scroll">
         <div
@@ -749,8 +703,6 @@ interface SingleKnobPanelProps {
   handleKnobUpdate: (
     data: Partial<KnobItemPosition> & { index: number },
   ) => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   singleScrollRefFor: (tab: TabType) => (node: HTMLDivElement | null) => void;
   panelElement: HTMLDivElement | null;
   useCustomCSS: boolean;
@@ -771,8 +723,6 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
   handleRenameCancel,
   handleRenameStart,
   handleKnobUpdate,
-  handleToggleMode,
-  handleTogglePanel,
   singleScrollRefFor,
   panelElement,
   useCustomCSS,
@@ -951,7 +901,7 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
 
   return (
     <div ref={setRef} className={PANEL_ROOT_CLASS}>
-      <div className="flex items-center justify-between p-[12px] pb-[12px]">
+      <div className={PANEL_HEADER_CLASS}>
         {isRenaming ? (
           <input
             ref={renameInputRef}
@@ -986,31 +936,13 @@ export const SingleKnobPanel: React.FC<SingleKnobPanelProps> = ({
             </span>
             <button
               onClick={handleRenameStart}
-              className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+              className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
               title={t('contextMenu.rename') || 'Rename'}
             >
               <RenameIcon />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-[4px]">
-          <button
-            onClick={handleToggleMode}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-            aria-label={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-          >
-            <ModeToggleIcon mode="layer" />
-          </button>
-          <button
-            onClick={handleTogglePanel}
-            className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-            title={t('propertiesPanel.closePanel') || 'Close'}
-            aria-label={t('propertiesPanel.closePanel') || 'Close'}
-          >
-            <SidebarToggleIcon isOpen={true} />
-          </button>
-        </div>
       </div>
 
       <div className="flex-1 properties-panel-overlay-scroll">
@@ -1341,8 +1273,6 @@ interface SingleKeyStatPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   onPositionChange: (index: number, dx: number, dy: number) => void;
@@ -1391,8 +1321,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   activeTab,
   setActiveTab,
   onPositionChange,
@@ -1511,7 +1439,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className={PANEL_HEADER_CLASS}>
           {isRenaming ? (
             <input
               ref={renameInputRef}
@@ -1546,36 +1474,13 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
               </span>
               <button
                 onClick={handleRenameStart}
-                className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+                className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                 title={t('contextMenu.rename') || 'Rename'}
               >
                 <RenameIcon />
               </button>
             </div>
           )}
-
-          <div className="flex items-center gap-[4px]">
-            {/* 레이어 모드로 전환 버튼 */}
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-              aria-label={
-                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
-              }
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            {/* 패널 닫기 버튼 */}
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
-          </div>
         </div>
 
         {/* 탭 */}

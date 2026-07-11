@@ -3,12 +3,12 @@ import { useTranslation } from '@contexts/useTranslation';
 import { useUIStore } from '@stores/useUIStore';
 import FolderIcon from '@assets/svgs/folder.svg';
 import SettingIcon from '@assets/svgs/setting.svg';
-import CloseEyeIcon from '@assets/svgs/close_eye.svg';
-import OpenEyeIcon from '@assets/svgs/open_eye.svg';
 import ChevronDownIcon from '@assets/svgs/chevron-down.svg';
 import TurnIcon from '@assets/svgs/turn_arrow.svg';
 import FloatingTooltip from '../Modal/FloatingTooltip';
 import ListPopup from '../Modal/ListPopup';
+import IconSwap from '../common/IconSwap';
+import EyeToggleIcon from '../common/EyeToggleIcon';
 import { TooltipGroup } from '../Modal/TooltipGroup';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
@@ -326,7 +326,7 @@ SettingToolProps) => {
             }
           >
             <Button
-              icon={isOverlayVisible ? <CloseEyeIcon /> : <OpenEyeIcon />}
+              icon={<EyeToggleIcon slashed={isOverlayVisible} />}
               onClick={isObsModeActive ? undefined : toggleOverlay}
               disabled={isObsModeActive}
             />
@@ -338,7 +338,13 @@ SettingToolProps) => {
               }
             >
               <Button
-                icon={isSettingsOpen ? <TurnIcon /> : <SettingIcon />}
+                icon={
+                  <IconSwap
+                    active={isSettingsOpen}
+                    activeIcon={<TurnIcon />}
+                    inactiveIcon={<SettingIcon />}
+                  />
+                }
                 onClick={isSettingsOpen ? onCloseSettings : onOpenSettings}
               />
             </FloatingTooltip>

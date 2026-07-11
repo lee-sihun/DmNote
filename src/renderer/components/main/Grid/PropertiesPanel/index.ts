@@ -14,7 +14,6 @@ export {
   Tabs,
   SectionDivider,
   CloseIcon,
-  SidebarToggleIcon,
   ModeToggleIcon,
 } from './PropertyInputs';
 

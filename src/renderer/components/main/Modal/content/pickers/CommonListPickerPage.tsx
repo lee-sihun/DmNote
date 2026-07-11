@@ -64,7 +64,8 @@ export default function CommonListPickerPage<T>({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* 헤더 — 뒤로가기: 타이틀 캡하이트급 셰브론 + 타이틀 통짜 버튼 */}
-      <div className="p-[12px]">
+      {/* 48px 고정 — 패널 루트 헤더(PANEL_HEADER_CLASS)와 높이 동기, 전환 시 타이틀 세로 고정 */}
+      <div className="h-[48px] px-[12px] flex items-center shrink-0">
         <button
           type="button"
           onClick={onBack}

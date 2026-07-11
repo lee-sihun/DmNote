@@ -11,7 +11,7 @@ import type {
 } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
 import type { SelectedElement } from '@stores/grid/useGridSelectionStore';
-import { PANEL_ROOT_CLASS } from '../panelChrome';
+import { PANEL_ROOT_CLASS, PANEL_HEADER_CLASS } from '../panelChrome';
 import {
   normalizeCounterSettings,
   createDefaultCounterSettings,
@@ -20,8 +20,6 @@ import {
   PropertyRow,
   NumberInput,
   ColorInput,
-  SidebarToggleIcon,
-  ModeToggleIcon,
   Tabs,
   BatchStyleTabContent,
   BatchNoteTabContent,
@@ -111,8 +109,6 @@ interface BatchKeyLikePanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   // batch handlers
@@ -214,8 +210,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   activeTab,
   setActiveTab,
   handleBatchAlign,
@@ -525,7 +519,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
       {/* 헤더 + 탭 영역 */}
       <div className="flex-shrink-0">
         {/* 헤더 */}
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -562,7 +556,7 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -579,26 +573,6 @@ export const BatchKeyLikePanel: React.FC<BatchKeyLikePanelProps> = ({
                 ({selectedBatchStyleElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-              aria-label={
-                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
-              }
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
 
@@ -976,8 +950,6 @@ interface BatchGraphOnlyPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleBatchAlign: (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
   ) => void;
@@ -1024,8 +996,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleBatchAlign,
   handleBatchDistribute,
   handleBatchSpacing,
@@ -1082,7 +1052,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1119,7 +1089,7 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1136,26 +1106,6 @@ export const BatchGraphOnlyPanel: React.FC<BatchGraphOnlyPanelProps> = ({
                 ({selectedGraphElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-              aria-label={
-                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
-              }
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
       </div>
@@ -1361,8 +1311,6 @@ interface BatchKnobOnlyPanelProps {
   handleRenameCommit: (value: string) => void;
   handleRenameCancel: () => void;
   handleRenameStart: () => void;
-  handleToggleMode: () => void;
-  handleTogglePanel: () => void;
   handleBatchAlign: (
     direction: 'left' | 'centerH' | 'right' | 'top' | 'centerV' | 'bottom',
   ) => void;
@@ -1409,8 +1357,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   handleRenameCommit,
   handleRenameCancel,
   handleRenameStart,
-  handleToggleMode,
-  handleTogglePanel,
   handleBatchAlign,
   handleBatchDistribute,
   handleBatchSpacing,
@@ -1442,7 +1388,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
   return (
     <div ref={setPanelElement} className={PANEL_ROOT_CLASS}>
       <div className="flex-shrink-0">
-        <div className="flex items-center justify-between p-[12px] pb-[12px]">
+        <div className={PANEL_HEADER_CLASS}>
           <div className="flex items-center gap-[8px]">
             {selectedGroupInfo ? (
               isRenaming ? (
@@ -1479,7 +1425,7 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                   </span>
                   <button
                     onClick={handleRenameStart}
-                    className="w-[18px] h-[18px] -my-[3px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
+                    className="w-[18px] h-[18px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors flex-shrink-0"
                     title={t('contextMenu.rename') || 'Rename'}
                   >
                     <RenameIcon />
@@ -1496,26 +1442,6 @@ export const BatchKnobOnlyPanel: React.FC<BatchKnobOnlyPanelProps> = ({
                 ({selectedKnobElements.length})
               </span>
             )}
-          </div>
-          <div className="flex items-center gap-[4px]">
-            <button
-              onClick={handleToggleMode}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.switchToLayer') || 'Switch to Layer'}
-              aria-label={
-                t('propertiesPanel.switchToLayer') || 'Switch to Layer'
-              }
-            >
-              <ModeToggleIcon mode="layer" />
-            </button>
-            <button
-              onClick={handleTogglePanel}
-              className="w-[24px] h-[24px] -my-[6px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
-              title={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-              aria-label={t('propertiesPanel.closePanel') || '속성 패널 닫기'}
-            >
-              <SidebarToggleIcon isOpen={true} />
-            </button>
           </div>
         </div>
       </div>

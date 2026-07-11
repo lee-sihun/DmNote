@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import Modal from '../../Modal';
+import IconSwap from '@components/main/common/IconSwap';
 import {
   getCursor,
   setCustomCursorHover,
@@ -1066,33 +1067,47 @@ const SoundTrimModal = ({
                   onClick={handlePlay}
                   disabled={!audioBuffer}
                 >
-                  {isPlaying ? (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <rect
-                        x="2"
-                        y="1.5"
-                        width="3"
-                        height="9"
-                        rx="0.75"
-                        fill="currentColor"
-                      />
-                      <rect
-                        x="7"
-                        y="1.5"
-                        width="3"
-                        height="9"
-                        rx="0.75"
-                        fill="currentColor"
-                      />
-                    </svg>
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path
-                        d="M3.5 1.8C3.5 1.49 3.84 1.3 4.1 1.47L10.1 5.67C10.34 5.83 10.34 6.17 10.1 6.33L4.1 10.53C3.84 10.7 3.5 10.51 3.5 10.2V1.8Z"
-                        fill="currentColor"
-                      />
-                    </svg>
-                  )}
+                  <IconSwap
+                    active={isPlaying}
+                    activeIcon={
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                      >
+                        <rect
+                          x="2"
+                          y="1.5"
+                          width="3"
+                          height="9"
+                          rx="0.75"
+                          fill="currentColor"
+                        />
+                        <rect
+                          x="7"
+                          y="1.5"
+                          width="3"
+                          height="9"
+                          rx="0.75"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    }
+                    inactiveIcon={
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                      >
+                        <path
+                          d="M3.5 1.8C3.5 1.49 3.84 1.3 4.1 1.47L10.1 5.67C10.34 5.83 10.34 6.17 10.1 6.33L4.1 10.53C3.84 10.7 3.5 10.51 3.5 10.2V1.8Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    }
+                  />
                 </button>
                 <span className="text-caption leading-[12px] text-fg-muted font-medium tabular-nums">
                   {audioBuffer ? formatSecLabel(trimDurationMs) : '--'}

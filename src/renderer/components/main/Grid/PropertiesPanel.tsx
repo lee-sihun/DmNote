@@ -41,7 +41,6 @@ import {
   ColorInput,
   TextInput,
   SectionDivider,
-  SidebarToggleIcon,
   LayerPanel,
   PluginSelectionPanel,
   SingleGraphPanel,
@@ -56,6 +55,8 @@ import {
 } from './PropertiesPanel/index';
 import { SIDE_PANEL_FRAME_CLASS } from './PropertiesPanel/panelChrome';
 import { PanelNavProvider } from './PropertiesPanel/PanelNavContext';
+import PanelHeaderActions from './PropertiesPanel/PanelHeaderActions';
+import PanelToggleButton from './PropertiesPanel/PanelToggleButton';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
 import type { NoteColor } from '@src/types/key/keys';
@@ -1058,6 +1059,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const handleToggleMode = () => {
     setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
   };
+
+  const showFrame = isPanelVisible || !!pluginSettingsPanel;
 
   const pluginDefaultSettings = (() => {
     const defaults: Record<string, unknown> = {};
@@ -2580,22 +2583,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 렌더링
   // ============================================================================
 
-  // 패널이 닫혀있을 때는 토글 버튼만 표시
-  if (!isPanelVisible && !pluginSettingsPanel) {
-    return (
-      <div className="absolute right-0 top-0 z-30">
-        <button
-          onClick={handleTogglePanel}
-          className="m-[8px] w-[32px] h-[32px] flex items-center justify-center bg-glass-dim backdrop-blur-[24px] rounded-[8px] shadow-elevation-chrome text-white/45 hover:text-white/90 transition-colors"
-          title={t('propertiesPanel.openPanel') || '속성 패널 열기'}
-          aria-label={t('propertiesPanel.openPanel') || '속성 패널 열기'}
-        >
-          <SidebarToggleIcon isOpen={false} />
-        </button>
-      </div>
-    );
-  }
-
   // 선택 상태별 구상 패널 — 프레임(글래스) 안의 루트 페이지 콘텐츠
   const renderPanelBody = () => {
     if (pluginSettingsPanel) {
@@ -2616,13 +2603,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
     // 레이어 모드일 때는 선택 여부와 관계없이 레이어 패널 표시
     if (panelMode === 'layer') {
-      const hasAnySelection =
-        selectedKeyElements.length > 0 || selectedElements.length > 0;
       return (
         <LayerPanel
-          onClose={handleTogglePanel}
           onSwitchToProperty={handleToggleMode}
-          hasSelection={hasAnySelection}
           onSelectionFromPanel={() => {
             selectionFromLayerPanelRef.current = true;
           }}
@@ -2634,7 +2617,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (selectedKeyElements.length === 0 && selectedElements.length === 0) {
       return (
         <LayerPanel
-          onClose={handleTogglePanel}
           onSwitchToProperty={handleToggleMode}
           onSelectionFromPanel={() => {
             selectionFromLayerPanelRef.current = true;
@@ -2667,8 +2649,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           handleBatchAlign={handleBatchAlign}
@@ -2768,8 +2748,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           handleBatchAlign={handleBatchAlign}
           handleBatchDistribute={handleBatchDistribute}
           handleBatchSpacing={handleBatchSpacing}
@@ -2815,8 +2793,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           handleBatchAlign={handleBatchAlign}
           handleBatchDistribute={handleBatchDistribute}
           handleBatchSpacing={handleBatchSpacing}
@@ -2858,8 +2834,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <PluginSelectionPanel
           setPanelElement={setPanelElement}
           pluginTitle={pluginTitle}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           setPluginScrollRef={setPluginScrollRef}
           isPluginResizable={isPluginResizable}
           selectedPluginElement={selectedPluginElement}
@@ -2903,8 +2877,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
           handleKnobUpdate={handleKnobUpdate}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           singleScrollRefFor={singleScrollRefFor}
           panelElement={panelElement}
           useCustomCSS={useCustomCSS}
@@ -2934,8 +2906,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           handleRenameCommit={handleRenameCommit}
           handleRenameCancel={handleRenameCancel}
           handleRenameStart={handleRenameStart}
-          handleToggleMode={handleToggleMode}
-          handleTogglePanel={handleTogglePanel}
           handleGraphUpdate={handleGraphUpdate}
           singleScrollRefFor={singleScrollRefFor}
           showGraphImagePicker={showGraphImagePicker}
@@ -2977,8 +2947,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         handleRenameCommit={handleRenameCommit}
         handleRenameCancel={handleRenameCancel}
         handleRenameStart={handleRenameStart}
-        handleToggleMode={handleToggleMode}
-        handleTogglePanel={handleTogglePanel}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onPositionChange={onPositionChange}
@@ -3003,33 +2971,71 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     );
   };
 
-  const panelBody = renderPanelBody();
-  if (!panelBody) return null;
+  // 열림/닫힘과 무관하게 항상 렌더되는 지속 토글 — 리마운트 없이 모프 전환
+  const toggleButton = (
+    <PanelToggleButton
+      open={showFrame}
+      onClick={
+        pluginSettingsPanel
+          ? handlePluginSettingsPanelCancel
+          : handleTogglePanel
+      }
+    />
+  );
 
-  // 프레임이 글래스를 소유하고, 루트/서브 페이지가 그 안에서 슬라이드 전환
+  const panelBody = showFrame ? renderPanelBody() : null;
+
+  // 헤더 액션 기준 모드 — panelMode가 property여도 선택이 없으면 레이어 뷰가 표시됨
+  const hasAnySelection =
+    selectedKeyElements.length > 0 || selectedElements.length > 0;
+  const displayedPanelMode =
+    panelMode === 'layer' || !hasAnySelection ? 'layer' : 'property';
+
+  // 프레임이 글래스를 소유하고, 루트/서브 페이지가 그 안에서 슬라이드 전환.
+  // 열림/닫힘 모두 같은 프래그먼트 구조 유지 — 토글 버튼이 리마운트되면
+  // 호버 상태가 끊겨 아이콘이 깜빡임
   return (
-    <PanelNavProvider
-      value={{ activePageKey, renderPageKey, openPage, closePage, pageHost }}
-    >
-      <div className={SIDE_PANEL_FRAME_CLASS}>
-        {/* inert — 슬라이드 아웃된 레이어를 키보드 탭 순회·접근성 트리에서 제외 */}
-        <div
-          className="dmn-panel-page"
-          data-page-depth="root"
-          data-active={activePageKey ? 'false' : 'true'}
-          inert={activePageKey ? true : undefined}
+    <>
+      {showFrame && panelBody && (
+        <PanelNavProvider
+          value={{
+            activePageKey,
+            renderPageKey,
+            openPage,
+            closePage,
+            pageHost,
+          }}
         >
-          {panelBody}
-        </div>
-        <div
-          ref={setPageHost}
-          className="dmn-panel-page"
-          data-page-depth="sub"
-          data-active={activePageKey ? 'true' : 'false'}
-          inert={activePageKey ? undefined : true}
-        />
-      </div>
-    </PanelNavProvider>
+          <div className={SIDE_PANEL_FRAME_CLASS}>
+            {/* inert — 슬라이드 아웃된 레이어를 키보드 탭 순회·접근성 트리에서 제외 */}
+            <div
+              className="dmn-panel-page"
+              data-page-depth="root"
+              data-active={activePageKey ? 'false' : 'true'}
+              inert={activePageKey ? true : undefined}
+            >
+              {panelBody}
+              <PanelHeaderActions
+                mode={displayedPanelMode}
+                modeToggleHidden={!!pluginSettingsPanel}
+                modeToggleDisabled={
+                  displayedPanelMode === 'layer' && !hasAnySelection
+                }
+                onToggleMode={handleToggleMode}
+              />
+            </div>
+            <div
+              ref={setPageHost}
+              className="dmn-panel-page"
+              data-page-depth="sub"
+              data-active={activePageKey ? 'true' : 'false'}
+              inert={activePageKey ? undefined : true}
+            />
+          </div>
+        </PanelNavProvider>
+      )}
+      {toggleButton}
+    </>
   );
 };
 
