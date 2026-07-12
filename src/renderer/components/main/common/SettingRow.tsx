@@ -48,6 +48,8 @@ export const SettingRow = ({
     onClick={onClick}
     onMouseEnter={onMouseEnter}
     onMouseLeave={onMouseLeave}
+    // 행 전체 클릭도 내부 토글의 직접 클릭으로 인정 (usePressGatedSwap)
+    data-dmn-press-scope={onClick ? '' : undefined}
   >
     {typeof label === 'string' ? (
       <p className="text-label text-fg">{label}</p>

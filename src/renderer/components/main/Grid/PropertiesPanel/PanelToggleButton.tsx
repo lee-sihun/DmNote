@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
+import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
 
 interface PanelToggleButtonProps {
   open: boolean;
@@ -21,6 +22,8 @@ const CHIP_HIDDEN = '0';
 // 눈 토글과 같은 규칙: FROM 상태를 정적으로 고정하고 TO 커밋은 onfinish에서
 const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
   const { t } = useTranslation();
+  // 버튼에 data-instant 부여 — 외부 개폐 시 divider/lines transition도 차단
+  const { ref, isInstant } = usePressGatedSwap<HTMLButtonElement>(open);
   const chipRef = useRef<HTMLSpanElement>(null);
   const mountedRef = useRef(false);
   const animRef = useRef<Animation | null>(null);
@@ -43,7 +46,11 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
     animRef.current?.cancel();
     animRef.current = null;
 
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // 직접 클릭이 아닌 외부 개폐는 페이드 없이 즉시 커밋
+    if (
+      isInstant() ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
       chip.style.opacity = restState;
       return;
     }
@@ -58,7 +65,7 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
       chip.style.opacity = restState;
     };
     animRef.current = anim;
-  }, [open]);
+  }, [open, isInstant]);
 
   const label = open
     ? t('propertiesPanel.closePanel') || '속성 패널 닫기'
@@ -67,6 +74,7 @@ const PanelToggleButton = ({ open, onClick }: PanelToggleButtonProps) => {
   return (
     <div className="absolute top-0 right-0 z-30 w-[48px] h-[48px] flex items-center justify-center pointer-events-none">
       <button
+        ref={ref}
         onClick={onClick}
         className="dmn-panel-toggle pointer-events-auto relative w-[32px] h-[32px] flex items-center justify-center text-white/45 hover:text-white/90 transition-colors"
         data-open={open ? 'true' : 'false'}

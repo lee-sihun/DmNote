@@ -202,6 +202,14 @@ body.dmn-custom-cursor * {
   }
 }
 
+/* 직접 클릭이 아닌 외부 상태 변경은 즉시 전환 —
+   usePressGatedSwap이 변경 프레임 동안만 부여. dmn- 접두사는
+   같은 DOM에 들어오는 플러그인 마크업과의 속성 충돌 방지 */
+[data-dmn-instant],
+[data-dmn-instant] * {
+  transition: none !important;
+}
+
 /* 눈 토글의 사선 드로우 모션은 EyeToggleIcon.tsx에서 WAAPI로 처리 —
    드로우·이레이즈 모두 좌상→우하 한 방향 관통 스와이프 */
 

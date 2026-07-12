@@ -1,4 +1,5 @@
 import React, { useId, useLayoutEffect, useRef } from 'react';
+import { usePressGatedSwap } from '@hooks/usePressGatedSwap';
 
 interface EyeToggleIconProps {
   slashed: boolean;
@@ -21,6 +22,7 @@ const SLASH_ERASED = 'translate(20px, 16.25px)';
 // 시작이 한 프레임 늦어도 이전 모습이 유지될 뿐 깜빡임이 없음
 const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
   const maskId = useId();
+  const { ref, isInstant } = usePressGatedSwap<SVGSVGElement>(slashed);
   const slashRef = useRef<SVGLineElement>(null);
   const gapRef = useRef<SVGLineElement>(null);
   const mountedRef = useRef(false);
@@ -48,7 +50,11 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
     animsRef.current = [];
 
     const restState = slashed ? SLASH_DRAWN : SLASH_HIDDEN;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // 직접 클릭이 아닌 외부 상태 변경은 드로우 없이 즉시 커밋
+    if (
+      isInstant() ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
       applyStatic(restState);
       return;
     }
@@ -66,10 +72,11 @@ const EyeToggleIcon = ({ slashed }: EyeToggleIconProps) => {
       };
       animsRef.current.push(anim);
     });
-  }, [slashed]);
+  }, [slashed, isInstant]);
 
   return (
     <svg
+      ref={ref}
       className="dmn-eye-toggle"
       width="18"
       height="14"
