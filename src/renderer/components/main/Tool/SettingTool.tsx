@@ -278,7 +278,6 @@ SettingToolProps) => {
                 open={isExportImportOpen}
                 referenceRef={exportImportRef}
                 onClose={() => setIsExportImportOpen(false)}
-                textAlign="left"
                 items={[
                   {
                     id: 'import',

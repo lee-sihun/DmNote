@@ -27,8 +27,6 @@ interface ListPopupProps {
   className?: string;
   offsetX?: number;
   offsetY?: number;
-  /** 텍스트 정렬 방향 */
-  textAlign?: 'left' | 'center';
   /** 최대 표시 항목 수 (초과 시 스크롤) */
   maxVisibleItems?: number;
 }
@@ -38,7 +36,6 @@ const SubMenu = ({
   items,
   onSelect,
   onCloseAll,
-  textAlign = 'left',
   maxVisibleItems,
   anchorRect,
   onMouseEnter,
@@ -48,7 +45,6 @@ const SubMenu = ({
   items: ListItem[];
   onSelect?: (id: string) => void;
   onCloseAll?: () => void;
-  textAlign?: 'left' | 'center';
   maxVisibleItems?: number;
   anchorRect: DOMRect | null;
   onMouseEnter?: () => void;
@@ -151,7 +147,6 @@ const SubMenu = ({
         <MenuItemRow
           key={it.id}
           item={it}
-          textAlign={textAlign}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
           siblingActiveRef={siblingActiveRef}
@@ -166,14 +161,12 @@ const SubMenu = ({
 /** 개별 메뉴 항목 행 */
 const MenuItemRow = ({
   item,
-  textAlign,
   onSelect,
   onCloseAll,
   siblingActiveRef,
   hasCheckColumn = false,
 }: {
   item: ListItem;
-  textAlign: 'left' | 'center';
   onSelect?: (id: string) => void;
   onCloseAll?: () => void;
   /** 형제 항목 중 활성 서브메뉴를 추적하는 ref (즉시 전환용) */
@@ -242,38 +235,13 @@ const MenuItemRow = ({
     );
   }
 
-  const isLeft = textAlign === 'left';
   const hasCheck = typeof item.checked === 'boolean';
-  const isBasicCenterItem = !isLeft && !hasCheck && !hasChildren;
 
   const handleSelect = () => {
     if (item.disabled || hasChildren) return;
     onSelect?.(item.id);
     onCloseAll?.();
   };
-
-  if (isBasicCenterItem) {
-    return (
-      <button
-        type="button"
-        disabled={item.disabled}
-        onClick={handleSelect}
-        className={`w-full min-w-[108px] h-[26px] px-[24px] rounded-md flex items-center justify-center transition-colors duration-fast ${
-          item.disabled
-            ? 'opacity-70'
-            : 'hover:bg-surface-hover active:bg-surface-active cursor-pointer'
-        }`}
-      >
-        <span
-          className={`text-body whitespace-nowrap ${
-            item.disabled ? 'text-fg-disabled' : 'text-fg'
-          }`}
-        >
-          {item.label}
-        </span>
-      </button>
-    );
-  }
 
   return (
     <div
@@ -317,9 +285,9 @@ const MenuItemRow = ({
 
         {/* 라벨 텍스트 */}
         <span
-          className={`flex-1 text-body whitespace-nowrap ${
-            isLeft ? 'text-left' : 'text-center'
-          } ${item.disabled ? 'text-fg-disabled' : 'text-fg'}`}
+          className={`flex-1 text-body whitespace-nowrap text-left ${
+            item.disabled ? 'text-fg-disabled' : 'text-fg'
+          }`}
         >
           {item.label}
         </span>
@@ -350,7 +318,6 @@ const MenuItemRow = ({
           items={item.children!}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
-          textAlign={textAlign}
           maxVisibleItems={item.maxVisibleChildren}
           anchorRect={rowRect}
           onMouseEnter={() => {
@@ -381,7 +348,6 @@ const ListPopup = ({
   className = '',
   offsetX = 0,
   offsetY = 0,
-  textAlign = 'center',
   maxVisibleItems,
 }: ListPopupProps) => {
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
@@ -440,7 +406,6 @@ const ListPopup = ({
           <MenuItemRow
             key={it.id}
             item={it}
-            textAlign={textAlign}
             onSelect={onSelect}
             onCloseAll={onClose}
             siblingActiveRef={siblingActiveRef}

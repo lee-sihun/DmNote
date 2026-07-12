@@ -427,7 +427,6 @@ const FontPicker = ({
           referenceRef={addButtonRef}
           position={addMenuPosition}
           onClose={() => setAddMenuPosition(null)}
-          textAlign="center"
           items={addMenuItems}
           onSelect={(id) => {
             setAddMenuPosition(null);
@@ -447,7 +446,6 @@ const FontPicker = ({
           open
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
-          textAlign="center"
           items={menuItems}
           onSelect={(id) => {
             const font = menuTargetFont;

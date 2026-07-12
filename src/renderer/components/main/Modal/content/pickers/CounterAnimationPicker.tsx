@@ -322,7 +322,6 @@ const CounterAnimationPicker = ({
           open
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
-          textAlign="center"
           items={menuItems}
           onSelect={(id) => {
             const preset = allPresets.find((p) => p.id === menu.menuKey);

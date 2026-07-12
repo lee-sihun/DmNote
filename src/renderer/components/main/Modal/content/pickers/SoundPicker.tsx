@@ -334,7 +334,6 @@ const SoundPicker = ({
           open
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
-          textAlign="center"
           items={menuItems}
           onSelect={(id) => {
             const item = menuTargetItem;
