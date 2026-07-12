@@ -187,7 +187,7 @@ const ImagePicker = ({
     >
       <div
         ref={pickerContainerRef}
-        className="flex flex-col p-[8px] gap-[8px] w-[172px] bg-glass-heavy backdrop-blur-[32px] rounded-popup shadow-elevation-3"
+        className="flex flex-col p-[8px] gap-[8px] w-[172px] bg-glass-heavy backdrop-glass rounded-popup shadow-elevation-3"
         style={{
           visibility: panelElement && !fixedPosition ? 'hidden' : undefined,
         }}
@@ -247,7 +247,7 @@ const ImagePicker = ({
                 handleReset();
               }}
               title={t('imagePicker.reset')}
-              className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-blur-[24px] shadow-elevation-chrome text-white/45 hover:text-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
+              className="absolute top-[4px] right-[4px] z-10 w-[18px] h-[18px] flex items-center justify-center rounded-[5px] bg-glass-dim backdrop-glass-popup shadow-elevation-chrome text-white/45 hover:text-white/90 opacity-0 group-hover:opacity-100 transition-opacity duration-fast"
             >
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                 <path

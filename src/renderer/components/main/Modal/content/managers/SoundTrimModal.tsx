@@ -1017,7 +1017,7 @@ const SoundTrimModal = ({
   return (
     <Modal onClick={closeModal} ariaLabel={headerTitle}>
       <div
-        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 overflow-hidden"
+        className="w-[340px] max-w-[calc(100vw-80px)] flex flex-col bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         {/* 헤더 바 */}

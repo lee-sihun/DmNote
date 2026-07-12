@@ -130,7 +130,7 @@ const SubMenu = ({
       data-dmn-popup-submenu="true"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`fixed z-[60] bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
+      className={`fixed z-[60] bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
         needsScroll ? ' listpopup-scroll' : ''
       }`}
       style={{
@@ -352,7 +352,7 @@ const ListPopup = ({
 }: ListPopupProps) => {
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
-    'z-40 bg-glass backdrop-blur-[24px] shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
+    'z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
   const effectiveClassName = `${defaultClassName} ${className}`.trim();
 
   // 스크롤 필요 여부 계산 (아이템 26 + 갭 4 리듬)

@@ -14,6 +14,45 @@ body.dmn-custom-cursor * {
   cursor: none !important;
 }
 
+/* ===== 글래스 백드롭 ===== */
+
+/* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
+   글래스 틴트(--ui-glass-*)는 그대로 두고 백드롭만 손봐서
+   기본 배경에선 기존과 거의 동일, 밝은 배경에서만 투과를 억제 */
+.backdrop-glass {
+  -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+  backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+}
+
+.backdrop-glass-popup {
+  -webkit-backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+  backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+    saturate(var(--ui-glass-backdrop-sat));
+}
+
+/* 포지셔닝 보정 — 이미 fixed/absolute인 표면은 :where(0 특이도)라 그대로 유지 */
+:where(.backdrop-glass, .backdrop-glass-popup) {
+  position: relative;
+}
+
+/* 루미노시티 캡 — 틴트·백드롭 합성 결과의 휘도만 어두운 쪽으로 당김 (색조 유지)
+   backdrop-filter가 만드는 스태킹 컨텍스트 안에 격리되어 콘텐츠에는 영향 없음 */
+.backdrop-glass::after,
+.backdrop-glass-popup::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ui-glass-backdrop-lum-tint);
+  mix-blend-mode: luminosity;
+  opacity: var(--ui-glass-backdrop-lum);
+  pointer-events: none;
+}
+
 /* ===== 스크롤바 ===== */
 
 .listpopup-scroll {

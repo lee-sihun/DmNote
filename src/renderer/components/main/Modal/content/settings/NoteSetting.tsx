@@ -442,7 +442,7 @@ const NoteSetting = ({
   return (
     <Modal onClick={onClose} ariaLabel={title ?? t('keySetting.tabNote')}>
       <div
-        className="flex flex-col w-[264px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
+        className="flex flex-col w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         {title && <p className="text-fg-muted text-label mb-[12px]">{title}</p>}

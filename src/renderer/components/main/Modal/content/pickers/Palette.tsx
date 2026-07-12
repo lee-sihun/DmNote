@@ -52,7 +52,7 @@ const Palette = ({ color, onColorChange }: PaletteProps) => {
 
   return (
     <div
-      className="flex flex-col justify-between rounded-popup bg-glass backdrop-blur-[24px] shadow-elevation-2 p-[8px]"
+      className="flex flex-col justify-between rounded-popup bg-glass backdrop-glass-popup shadow-elevation-2 p-[8px]"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="grid grid-cols-5 gap-x-[8px] gap-y-[8px]">

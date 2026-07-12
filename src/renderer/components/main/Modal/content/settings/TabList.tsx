@@ -69,7 +69,7 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
   };
 
   return (
-    <div className="flex flex-col w-[184px] p-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2">
+    <div className="flex flex-col w-[184px] p-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2">
       {customTabs.length > 0 && (
         <>
           {/* 섹션 헤더 */}

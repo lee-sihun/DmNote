@@ -23,7 +23,7 @@ export function PluginDataDeleteModal({
   return (
     <Modal onClick={onClose} ariaLabel={t('settings.pluginDataDeleteTitle')}>
       <div
-        className="flex flex-col w-[380px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px] gap-[12px]"
+        className="flex flex-col w-[380px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px] gap-[12px]"
         onClick={(event) => event.stopPropagation()}
       >
         <span className="text-label text-fg !leading-[1.5]">

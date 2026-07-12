@@ -332,7 +332,7 @@ const ShortcutSettingsModal = ({
       }}
     >
       <div
-        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
+        className="flex flex-col min-w-[320px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDownCapture={(event) => {
           if (!isListening) return;

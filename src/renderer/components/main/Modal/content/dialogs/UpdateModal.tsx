@@ -81,7 +81,7 @@ const UpdateModal = ({
   return (
     <Modal onClick={handleClose} ariaLabel={t('update.title')}>
       <div
-        className="flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px] min-w-[320px] max-w-[400px]"
+        className="flex flex-col bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px] min-w-[320px] max-w-[400px]"
         onClick={(e) => e.stopPropagation()}
       >
         {isLatestVersion ? (

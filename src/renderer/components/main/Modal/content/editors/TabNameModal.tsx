@@ -64,7 +64,7 @@ const TabNameModal = ({
   return (
     <Modal onClick={onClose} ariaLabel={t('tabs.createTitle')}>
       <div
-        className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
+        className="flex flex-col w-[280px] p-[14px] gap-[12px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-title text-fg">{t('tabs.createTitle')}</div>

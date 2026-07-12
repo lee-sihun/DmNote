@@ -81,7 +81,7 @@ const ManagerModalLayout = ({
   return (
     <Modal onClick={onClose} ariaLabel={ariaLabel}>
       <div
-        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 p-[14px]"
+        className="flex flex-col min-w-[264px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 p-[14px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 탭 영역 */}

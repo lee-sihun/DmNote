@@ -202,7 +202,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           <div
             ref={menuRef}
             data-dmn-popup-submenu="true"
-            className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-blur-[24px] rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
+            className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
             style={{
               // 실측 전에는 원점에서 히든 렌더 — 자연 크기 그대로 측정
               left: menuPos ? menuPos.left : 0,

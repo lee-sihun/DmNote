@@ -141,7 +141,7 @@ const TabCssModal = ({ isOpen, onClose, showAlert }: TabCssModalProps) => {
   return (
     <Modal onClick={handleCancel} ariaLabel={t('tabCss.enableCss')}>
       <div
-        className="flex flex-col min-w-[264px] p-[14px] bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 gap-[12px]"
+        className="flex flex-col min-w-[264px] p-[14px] bg-glass-heavy backdrop-glass rounded-modal shadow-elevation-3 gap-[12px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* CSS 설정 카드 */}
