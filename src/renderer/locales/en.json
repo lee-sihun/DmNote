@@ -359,8 +359,8 @@
     "noAnimations": "No motions",
     "createAnimationTitle": "Add Motion",
     "editAnimationTitle": "Edit Motion",
-    "animationName": "Motion Name",
-    "animationNamePlaceholder": "Motion name",
+    "nameLabel": "Name",
+    "animationNamePlaceholder": "e.g. My Motion",
     "newAnimationDefaultName": "New Motion",
     "pressToPreview": "Press to Preview",
     "motionPerformanceNotice": "Motion effects use additional system resources",
@@ -408,7 +408,9 @@
     "fontStyle": "Font Style",
     "apply": "Apply",
     "cancel": "Cancel",
-    "addAnimation": "Add Animation"
+    "addAnimation": "Add Animation",
+    "presetLabel": "Preset",
+    "bezierLabel": "Bezier"
   },
   "tabCss": {
     "enableCss": "Active tab CSS",
@@ -609,7 +611,6 @@
     "cssLabel": "@font-face CSS",
     "submit": "Save",
     "update": "Edit",
-    "defaultFileName": "web-font",
     "availabilityIdle": "Waiting for input",
     "availabilityReady": "Available",
     "availabilityNotReady": "Unavailable",

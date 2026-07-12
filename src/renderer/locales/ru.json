@@ -359,8 +359,8 @@
     "noAnimations": "Нет моушнов",
     "createAnimationTitle": "Добавить моушн",
     "editAnimationTitle": "Редакт. моушн",
-    "animationName": "Название моушна",
-    "animationNamePlaceholder": "Название моушна",
+    "nameLabel": "Имя",
+    "animationNamePlaceholder": "напр. Мой моушн",
     "newAnimationDefaultName": "Новый моушн",
     "pressToPreview": "Нажмите для просмотра",
     "motionPerformanceNotice": "Эффекты анимации используют дополнительные системные ресурсы",
@@ -408,7 +408,9 @@
     "fontStyle": "Начертание",
     "apply": "Применить",
     "cancel": "Отмена",
-    "addAnimation": "Добавить анимацию"
+    "addAnimation": "Добавить анимацию",
+    "presetLabel": "Пресет",
+    "bezierLabel": "Безье"
   },
   "tabCss": {
     "enableCss": "CSS вкладки",
@@ -609,7 +611,6 @@
     "cssLabel": "@font-face CSS",
     "submit": "Сохранить",
     "update": "Изменить",
-    "defaultFileName": "web-font",
     "availabilityIdle": "Ожидание ввода",
     "availabilityReady": "Доступен",
     "availabilityNotReady": "Недоступен",

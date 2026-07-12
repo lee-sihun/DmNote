@@ -359,8 +359,8 @@
     "noAnimations": "沒有動態",
     "createAnimationTitle": "新增動態",
     "editAnimationTitle": "編輯動態",
-    "animationName": "動態名稱",
-    "animationNamePlaceholder": "動態名稱",
+    "nameLabel": "名稱",
+    "animationNamePlaceholder": "例:我的動態",
     "newAnimationDefaultName": "新動態",
     "pressToPreview": "按下預覽",
     "motionPerformanceNotice": "動態效果會額外佔用系統資源",
@@ -408,7 +408,9 @@
     "fontStyle": "字體樣式",
     "apply": "應用",
     "cancel": "取消",
-    "addAnimation": "新增動畫"
+    "addAnimation": "新增動畫",
+    "presetLabel": "預設",
+    "bezierLabel": "貝茲"
   },
   "tabCss": {
     "enableCss": "啟用標籤頁 CSS",
@@ -609,7 +611,6 @@
     "cssLabel": "@font-face CSS",
     "submit": "儲存",
     "update": "修改",
-    "defaultFileName": "web-font",
     "availabilityIdle": "等待輸入",
     "availabilityReady": "可用",
     "availabilityNotReady": "不可用",

@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type {
   CounterAnimationBezier,
   KeyCounterSettings,
 } from '@src/types/key/keys';
 import type { CounterAnimationPreset } from '@src/types/key/counterAnimation';
-import Modal from '@components/main/Modal/Modal';
+import FullSurfaceModalLayout from '@components/main/Modal/FullSurfaceModalLayout';
 import Dropdown from '@components/main/common/Dropdown';
 import {
   TextInput,
@@ -65,9 +65,17 @@ const EDITOR_SIZE = 110;
 const EDITOR_PADDING = 20;
 const TOTAL_SIZE = EDITOR_SIZE + EDITOR_PADDING * 2;
 const GRID_SUB = EDITOR_SIZE / 4;
-const GRID_EXTENT = 24;
+const GRID_EXTENT = 40;
+// 캔버스 그리드 색 — 커브 에디터와 미리보기 스테이지가 공유
+// 흰색 알파 토큰이라 반투명 인셋 웰(글래스) 위에서 배경 톤을 따라 자연 합성됨
+const GRID_MAJOR_COLOR = 'var(--ui-line)';
+const GRID_MINOR_COLOR = 'var(--ui-line-faint)';
 const HANDLE_RADIUS = 6;
 const HANDLE_HIT_RADIUS = 10;
+// 기준 렌더 크기 — 핸들·코너 화면 크기의 기준값 (실제 렌더는 캔버스 실측)
+// 뷰박스 세로는 TOTAL_SIZE 기준, 가로는 캔버스 종횡비만큼 넓어지는 풀블리드 캔버스
+// 오프셋 (0,0) = 커브 정사각이 뷰 중앙, 포인터 수학은 비율 좌표라 크기 변화에 안전
+const EDITOR_RENDER_SIZE = 220;
 const PAN_MARGIN = 14;
 const MAX_DURATION = 5000;
 const MIN_ZOOM = 0.15;
@@ -75,6 +83,34 @@ const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.002;
 const AUTO_FIT_MARGIN = 14;
 const AUTO_FIT_DURATION = 260;
+
+// 격자 경로 — 월드 좌표가 정적이라 모듈에서 1회 생성, <line> 162개 대신 <path> 2개
+const buildGridPath = (major: boolean) => {
+  const far = GRID_EXTENT * GRID_SUB;
+  const start = EDITOR_PADDING - far;
+  const end = EDITOR_PADDING + far;
+  const segments: string[] = [];
+  for (let i = -GRID_EXTENT; i <= GRID_EXTENT; i++) {
+    if ((i % 4 === 0) !== major) continue;
+    const pos = EDITOR_PADDING + i * GRID_SUB;
+    segments.push(`M ${pos} ${start} V ${end}`);
+    segments.push(`M ${start} ${pos} H ${end}`);
+  }
+  return segments.join(' ');
+};
+const GRID_PATH_MAJOR = buildGridPath(true);
+const GRID_PATH_MINOR = buildGridPath(false);
+
+// 뷰박스 치수 — 커브 정사각(TOTAL_SIZE)이 짧은 변에 맞고, 긴 변은 종횡비만큼 넓어짐
+const viewDims = (scale: number, aspect: number) => {
+  const base = TOTAL_SIZE / scale;
+  const safeAspect = Math.max(aspect, 0.01);
+  return {
+    base,
+    vbW: base * Math.max(safeAspect, 1),
+    vbH: base * Math.max(1 / safeAspect, 1),
+  };
+};
 
 const normalizeScale = (value: number) => {
   if (!Number.isFinite(value)) return 1.1;
@@ -164,8 +200,18 @@ const CounterAnimationEditorModal = ({
   const pinchStartOffsetRef = useRef({ x: 0, y: 0 });
   const pinchStartMidFracRef = useRef({ x: 0, y: 0 });
   const autoFitRafRef = useRef<number | null>(null);
+  const editorAreaRef = useRef<HTMLDivElement>(null);
+  const editorSizeRef = useRef({
+    width: EDITOR_RENDER_SIZE,
+    height: EDITOR_RENDER_SIZE,
+  });
 
   const [nameInput, setNameInput] = useState('');
+  // 캔버스 실측 — 뷰박스 종횡비와 핸들 화면 크기 계산용
+  const [editorSize, setEditorSize] = useState({
+    width: EDITOR_RENDER_SIZE,
+    height: EDITOR_RENDER_SIZE,
+  });
   const [localBezier, setLocalBezier] = useState<CounterAnimationBezier>([
     0.25, 0.46, 0.45, 0.94,
   ]);
@@ -220,13 +266,18 @@ const CounterAnimationEditorModal = ({
     const minY = Math.min(ptsMinY, EDITOR_PADDING);
     const maxY = Math.max(ptsMaxY, EDITOR_PADDING + EDITOR_SIZE);
 
-    const defaultBox = { minX: 0, minY: 0, maxX: TOTAL_SIZE, maxY: TOTAL_SIZE };
+    // 기본 뷰의 긴 변 허용 범위는 종횡비만큼 넓다 (측정 전에는 정사각 취급)
+    const { width: canvasW, height: canvasH } = editorSizeRef.current;
+    const aspect = canvasH > 0 ? canvasW / canvasH : 1;
+    const defaultView = viewDims(1, aspect);
+    const defaultExtraW = (defaultView.vbW - TOTAL_SIZE) / 2;
+    const defaultExtraH = (defaultView.vbH - TOTAL_SIZE) / 2;
 
     if (
-      minX >= defaultBox.minX &&
-      maxX <= defaultBox.maxX &&
-      minY >= defaultBox.minY &&
-      maxY <= defaultBox.maxY
+      minX >= -defaultExtraW &&
+      maxX <= TOTAL_SIZE + defaultExtraW &&
+      minY >= -defaultExtraH &&
+      maxY <= TOTAL_SIZE + defaultExtraH
     ) {
       return { offset: { x: 0, y: 0 }, scale: 1 };
     }
@@ -244,7 +295,12 @@ const CounterAnimationEditorModal = ({
 
     const needW = fitMaxX - fitMinX;
     const needH = fitMaxY - fitMinY;
-    const needSize = Math.max(needW, needH, TOTAL_SIZE);
+    // 긴 변은 종횡비만큼 더 보이므로 짧은 변 기준 크기로 환산해 맞춤
+    const needSize = Math.max(
+      needW / Math.max(aspect, 1),
+      needH * Math.min(Math.max(aspect, 0.01), 1),
+      TOTAL_SIZE,
+    );
 
     const maxVB = TOTAL_SIZE / MIN_ZOOM;
     const vbSize = Math.min(needSize, maxVB);
@@ -295,6 +351,28 @@ const CounterAnimationEditorModal = ({
   }, [isOpen]);
 
   useEffect(() => () => cancelAutoFit(), []);
+
+  // 캔버스 리사이즈 추적 — 첫 페인트 전에 실측해야 초기 aspect 불일치로
+  // 커브가 늘어났다 복귀하는 프레임이 없음 (preserveAspectRatio=none)
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const area = editorAreaRef.current;
+    if (!area) return;
+
+    const measure = () => {
+      const rect = area.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      if (width <= 0 || height <= 0) return;
+      editorSizeRef.current = { width, height };
+      setEditorSize({ width, height });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(area);
+    return () => observer.disconnect();
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -434,10 +512,15 @@ const CounterAnimationEditorModal = ({
 
     const scale = viewScaleRef.current;
     const offset = viewOffsetRef.current;
-    const vbSize = TOTAL_SIZE / scale;
+    const { base, vbW, vbH } = viewDims(
+      scale,
+      rect.width / Math.max(rect.height, 1),
+    );
+    const extraW = (vbW - base) / 2;
+    const extraH = (vbH - base) / 2;
 
-    const worldX = offset.x + fracX * vbSize;
-    const worldY = offset.y + fracY * vbSize;
+    const worldX = offset.x - extraW + fracX * vbW;
+    const worldY = offset.y - extraH + fracY * vbH;
 
     const bezierX = (worldX - EDITOR_PADDING) / EDITOR_SIZE;
     const bezierY = 1 - (worldY - EDITOR_PADDING) / EDITOR_SIZE;
@@ -477,10 +560,12 @@ const CounterAnimationEditorModal = ({
     let nx = offset.x;
     let ny = offset.y;
 
-    if (hx < offset.x + margin) nx = hx - margin;
-    else if (hx > offset.x + vbSize - margin) nx = hx - vbSize + margin;
-    if (hy < offset.y + margin) ny = hy - margin;
-    else if (hy > offset.y + vbSize - margin) ny = hy - vbSize + margin;
+    const viewLeft = offset.x - extraW;
+    const viewTop = offset.y - extraH;
+    if (hx < viewLeft + margin) nx = hx - margin + extraW;
+    else if (hx > viewLeft + vbW - margin) nx = hx - vbW + margin + extraW;
+    if (hy < viewTop + margin) ny = hy - margin + extraH;
+    else if (hy > viewTop + vbH - margin) ny = hy - vbH + margin + extraH;
 
     if (nx !== offset.x || ny !== offset.y) {
       const next = { x: nx, y: ny };
@@ -517,16 +602,20 @@ const CounterAnimationEditorModal = ({
           MAX_ZOOM,
         );
 
+        const rect = svg.getBoundingClientRect();
+        const aspect = rect.width / Math.max(rect.height, 1);
         const fracX = pinchStartMidFracRef.current.x;
         const fracY = pinchStartMidFracRef.current.y;
-        const oldVB = TOTAL_SIZE / oldScale;
-        const newVB = TOTAL_SIZE / newScale;
+        const oldView = viewDims(oldScale, aspect);
+        const newView = viewDims(newScale, aspect);
         const startOff = pinchStartOffsetRef.current;
-        const worldX = startOff.x + fracX * oldVB;
-        const worldY = startOff.y + fracY * oldVB;
+        const worldX =
+          startOff.x - (oldView.vbW - oldView.base) / 2 + fracX * oldView.vbW;
+        const worldY =
+          startOff.y - (oldView.vbH - oldView.base) / 2 + fracY * oldView.vbH;
         const newOff = {
-          x: worldX - fracX * newVB,
-          y: worldY - fracY * newVB,
+          x: worldX + (newView.vbW - newView.base) / 2 - fracX * newView.vbW,
+          y: worldY + (newView.vbH - newView.base) / 2 - fracY * newView.vbH,
         };
 
         applyView(newOff, newScale);
@@ -538,11 +627,14 @@ const CounterAnimationEditorModal = ({
         if (!svg) return;
         const rect = svg.getBoundingClientRect();
         const scale = viewScaleRef.current;
-        const vbSize = TOTAL_SIZE / scale;
+        const { vbW, vbH } = viewDims(
+          scale,
+          rect.width / Math.max(rect.height, 1),
+        );
         const dxClient = event.clientX - panStartRef.current.clientX;
         const dyClient = event.clientY - panStartRef.current.clientY;
-        const dxWorld = -(dxClient / rect.width) * vbSize;
-        const dyWorld = -(dyClient / rect.height) * vbSize;
+        const dxWorld = -(dxClient / rect.width) * vbW;
+        const dyWorld = -(dyClient / rect.height) * vbH;
 
         const newOffset = {
           x: panStartRef.current.offsetX + dxWorld,
@@ -594,7 +686,9 @@ const CounterAnimationEditorModal = ({
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
     };
-  });
+    // 핸들러는 ref만 읽어서 재구독 불필요 — 매 렌더 재등록이 드래그 렉을 만듦
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handlePointPointerDown = (
     event: React.PointerEvent<SVGCircleElement>,
@@ -616,24 +710,24 @@ const CounterAnimationEditorModal = ({
 
     const rect = svg.getBoundingClientRect();
     const scale = viewScaleRef.current;
-    const vbSize = TOTAL_SIZE / scale;
+    const aspect = rect.width / Math.max(rect.height, 1);
+    const { base, vbW, vbH } = viewDims(scale, aspect);
 
     if (event.ctrlKey || event.metaKey) {
       const fracX = (event.clientX - rect.left) / rect.width;
       const fracY = (event.clientY - rect.top) / rect.height;
 
-      const oldVB = vbSize;
       const delta = -event.deltaY * ZOOM_SENSITIVITY;
       const factor = Math.exp(delta);
       const newScale = Math.min(Math.max(scale * factor, MIN_ZOOM), MAX_ZOOM);
-      const newVB = TOTAL_SIZE / newScale;
+      const newView = viewDims(newScale, aspect);
 
       const off = viewOffsetRef.current;
-      const worldX = off.x + fracX * oldVB;
-      const worldY = off.y + fracY * oldVB;
+      const worldX = off.x - (vbW - base) / 2 + fracX * vbW;
+      const worldY = off.y - (vbH - base) / 2 + fracY * vbH;
       const newOff = {
-        x: worldX - fracX * newVB,
-        y: worldY - fracY * newVB,
+        x: worldX + (newView.vbW - newView.base) / 2 - fracX * newView.vbW,
+        y: worldY + (newView.vbH - newView.base) / 2 - fracY * newView.vbH,
       };
 
       applyView(newOff, newScale);
@@ -644,10 +738,10 @@ const CounterAnimationEditorModal = ({
     const dx =
       ((event.shiftKey ? event.deltaX || event.deltaY : event.deltaX) /
         rect.width) *
-      vbSize;
+      vbW;
     const dy =
       ((event.shiftKey && !event.deltaX ? 0 : event.deltaY) / rect.height) *
-      vbSize;
+      vbH;
     const newOff = { x: off.x + dx, y: off.y + dy };
     viewOffsetRef.current = newOff;
     setViewOffset(newOff);
@@ -730,41 +824,6 @@ const CounterAnimationEditorModal = ({
     applyView({ x: 0, y: 0 }, 1);
   };
 
-  const gridLines = (() => {
-    const lines: React.ReactElement[] = [];
-    const far = GRID_EXTENT * GRID_SUB;
-    for (let i = -GRID_EXTENT; i <= GRID_EXTENT; i++) {
-      const pos = EDITOR_PADDING + i * GRID_SUB;
-      const isMajor = i % 4 === 0;
-      const color = isMajor ? '#3A3943' : '#2D2D35';
-      lines.push(
-        <line
-          key={`gv${i}`}
-          x1={pos}
-          y1={EDITOR_PADDING - far}
-          x2={pos}
-          y2={EDITOR_PADDING + far}
-          stroke={color}
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />,
-      );
-      lines.push(
-        <line
-          key={`gh${i}`}
-          x1={EDITOR_PADDING - far}
-          y1={pos}
-          x2={EDITOR_PADDING + far}
-          y2={pos}
-          stroke={color}
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />,
-      );
-    }
-    return lines;
-  })();
-
   const parsedScale = (() => {
     const parsed = parseNumber(scaleInput);
     const normalized = normalizeScale(parsed ?? 1.1);
@@ -831,9 +890,18 @@ const CounterAnimationEditorModal = ({
   const startW = { x: P, y: P + S };
   const endW = { x: P + S, y: P };
 
-  const vbSize = TOTAL_SIZE / viewScale;
-  const viewBoxStr = `${viewOffset.x} ${viewOffset.y} ${vbSize} ${vbSize}`;
+  const renderAspect =
+    editorSize.height > 0 ? editorSize.width / editorSize.height : 1;
+  const { base: vbBase, vbW, vbH } = viewDims(viewScale, renderAspect);
+  const viewLeft = viewOffset.x - (vbW - vbBase) / 2;
+  const viewTop = viewOffset.y - (vbH - vbBase) / 2;
+  const viewBoxStr = `${viewLeft} ${viewTop} ${vbW} ${vbH}`;
   const ns = 1 / viewScale;
+  // 캔버스가 커져도 핸들·코너는 기준 렌더 크기의 화면 크기 유지 (짧은 변 기준)
+  const uns =
+    ns *
+    (EDITOR_RENDER_SIZE /
+      Math.max(Math.min(editorSize.width, editorSize.height), 1));
 
   const headerTitle =
     mode === 'edit'
@@ -841,275 +909,178 @@ const CounterAnimationEditorModal = ({
       : t('counterSetting.createAnimationTitle') || '모션 추가';
 
   return (
-    <Modal onClick={onClose} ariaLabel={headerTitle}>
-      <div
-        className="w-[730px] max-w-[calc(100vw-80px)] h-[366px] flex flex-col bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3 overflow-hidden"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="h-[37px] bg-fill-faint px-[12px] flex items-center justify-between">
-          <div className="min-w-0 flex items-center gap-[8px]">
-            <span className="px-[6px] h-[18px] rounded-md bg-elevated text-caption leading-[18px] font-semibold tracking-[0.2px] text-accent-hover">
-              Motion
-            </span>
-            <span className="truncate text-body leading-[16px] text-fg">
-              {headerTitle}
-            </span>
-          </div>
+    <FullSurfaceModalLayout
+      onClose={onClose}
+      title={headerTitle}
+      headerInfo={
+        <div className="min-w-0 flex items-center gap-[6px] text-fg-faint">
+          <svg
+            className="w-[14px] h-[14px] shrink-0"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+          </svg>
+          <span className="text-caption truncate">
+            {t('counterSetting.motionPerformanceNotice') ||
+              '모션 효과는 시스템 리소스를 추가로 사용합니다'}
+          </span>
         </div>
-
-        <div className="flex-1 p-[16px] flex gap-[16px] bg-inset min-h-0">
-          <div className="w-[390px] flex flex-col gap-[16px] min-h-0 shrink-0">
-            <div>
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(event) => setNameInput(event.target.value)}
-                placeholder={
-                  t('counterSetting.animationNamePlaceholder') || '모션 이름'
-                }
-                className="w-full h-[32px] px-[12px] rounded-[8px] bg-app text-body leading-[16px] text-fg placeholder-fg-faint outline-none focus:ring-1 focus:ring-accent/20 transition-all font-medium shadow-inner"
-              />
+      }
+      submitLabel={
+        isSaving
+          ? t('counterSetting.saving') || '저장 중...'
+          : t('common.save') || '저장'
+      }
+      submitDisabled={!canSave}
+      onSubmit={() => {
+        void handleSave();
+      }}
+      cancelLabel={t('common.cancel') || '취소'}
+    >
+      {/* 본문 — 상단: 캔버스 히어로 + 미리보기 무대, 하단: 파라미터 데크 */}
+      <div className="flex-1 min-h-0 flex flex-col gap-[12px]">
+        <div className="flex-1 min-h-0 flex gap-[12px]">
+          {/* 커브 캔버스 — 카드 내부를 통째로 채우는 풀블리드 캔버스 */}
+          <div className="flex-1 min-w-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
+            <div
+              ref={editorAreaRef}
+              className="relative flex-1 min-h-0 min-w-0 rounded-md overflow-hidden bg-inset"
+            >
+              <svg
+                ref={svgRef}
+                className="absolute inset-0 w-full h-full"
+                viewBox={viewBoxStr}
+                preserveAspectRatio="none"
+                onWheel={handleWheel}
+                onPointerDown={handleSvgPointerDown}
+                onDoubleClick={handleDoubleClick}
+                style={{ cursor: 'default', touchAction: 'none' }}
+              >
+                {/* 배경 웰은 컨테이너 div(bg-inset)가 소유 — 프레임별 좌표 갱신 제거 */}
+                {/* 커브 작업 사각형 — 좌표 영역이라 라운딩 없이 각을 유지 */}
+                <rect
+                  x={P}
+                  y={P}
+                  width={S}
+                  height={S}
+                  fill="var(--ui-fill-faint)"
+                />
+                {/* crispEdges — CSS 그리드(미리보기)와 같은 또렷한 1px 라인 */}
+                <path
+                  d={GRID_PATH_MINOR}
+                  fill="none"
+                  stroke={GRID_MINOR_COLOR}
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
+                />
+                <path
+                  d={GRID_PATH_MAJOR}
+                  fill="none"
+                  stroke={GRID_MAJOR_COLOR}
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="crispEdges"
+                />
+                <rect
+                  x={P}
+                  y={P}
+                  width={S}
+                  height={S}
+                  fill="none"
+                  stroke="var(--ui-line)"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={P}
+                  y1={P + S}
+                  x2={P + S}
+                  y2={P}
+                  stroke="var(--ui-line-strong)"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  strokeDasharray="3 3"
+                />
+                <line
+                  x1={startW.x}
+                  y1={startW.y}
+                  x2={p1w.x}
+                  y2={p1w.y}
+                  stroke="#505058"
+                  strokeWidth="1.2"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={endW.x}
+                  y1={endW.y}
+                  x2={p2w.x}
+                  y2={p2w.y}
+                  stroke="#505058"
+                  strokeWidth="1.2"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d={`M ${startW.x} ${startW.y} C ${p1w.x} ${p1w.y}, ${p2w.x} ${p2w.y}, ${endW.x} ${endW.y}`}
+                  fill="none"
+                  stroke="var(--ui-accent)"
+                  strokeWidth="1.8"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <circle
+                  cx={p1w.x}
+                  cy={p1w.y}
+                  r={HANDLE_HIT_RADIUS * uns}
+                  fill="transparent"
+                  style={{ cursor: 'grab' }}
+                  onPointerDown={(e) => handlePointPointerDown(e, 'p1')}
+                />
+                <circle
+                  cx={p1w.x}
+                  cy={p1w.y}
+                  r={HANDLE_RADIUS * uns}
+                  fill="var(--ui-bg-inset-solid)"
+                  stroke="var(--ui-accent)"
+                  strokeWidth={2 * uns}
+                  style={{ pointerEvents: 'none' }}
+                />
+                <circle
+                  cx={p2w.x}
+                  cy={p2w.y}
+                  r={HANDLE_HIT_RADIUS * uns}
+                  fill="transparent"
+                  style={{ cursor: 'grab' }}
+                  onPointerDown={(e) => handlePointPointerDown(e, 'p2')}
+                />
+                <circle
+                  cx={p2w.x}
+                  cy={p2w.y}
+                  r={HANDLE_RADIUS * uns}
+                  fill="var(--ui-bg-inset-solid)"
+                  stroke="rgba(255, 255, 255, 0.85)"
+                  strokeWidth={2 * uns}
+                  style={{ pointerEvents: 'none' }}
+                />
+              </svg>
             </div>
-
-            <div className="flex-1 flex gap-[16px] p-[16px] rounded-surface bg-elevated shadow-sm min-h-0 items-center">
-              <div className="shrink-0 flex flex-col">
-                <div
-                  className="rounded-[8px] bg-inset overflow-hidden"
-                  style={{
-                    width: `${TOTAL_SIZE + 16}px`,
-                    height: `${TOTAL_SIZE + 16}px`,
-                    padding: '8px',
-                  }}
-                >
-                  <div
-                    className="relative rounded-md overflow-hidden"
-                    style={{
-                      width: `${TOTAL_SIZE}px`,
-                      height: `${TOTAL_SIZE}px`,
-                    }}
-                  >
-                    <svg
-                      ref={svgRef}
-                      className="absolute inset-0"
-                      width={TOTAL_SIZE}
-                      height={TOTAL_SIZE}
-                      viewBox={viewBoxStr}
-                      onWheel={handleWheel}
-                      onPointerDown={handleSvgPointerDown}
-                      onDoubleClick={handleDoubleClick}
-                      style={{ cursor: 'default', touchAction: 'none' }}
-                    >
-                      <rect
-                        x={viewOffset.x}
-                        y={viewOffset.y}
-                        width={vbSize}
-                        height={vbSize}
-                        fill="#0F0F13"
-                      />
-                      <rect
-                        x={P}
-                        y={P}
-                        width={S}
-                        height={S}
-                        fill="#18181D"
-                        rx={6 * ns}
-                        ry={6 * ns}
-                      />
-                      {gridLines}
-                      <rect
-                        x={P}
-                        y={P}
-                        width={S}
-                        height={S}
-                        fill="none"
-                        stroke="#2A2A30"
-                        strokeWidth="1"
-                        vectorEffect="non-scaling-stroke"
-                        rx={6 * ns}
-                        ry={6 * ns}
-                      />
-                      <line
-                        x1={P}
-                        y1={P + S}
-                        x2={P + S}
-                        y2={P}
-                        stroke="#34343D"
-                        strokeWidth="1"
-                        vectorEffect="non-scaling-stroke"
-                        strokeDasharray="3 3"
-                      />
-                      <line
-                        x1={startW.x}
-                        y1={startW.y}
-                        x2={p1w.x}
-                        y2={p1w.y}
-                        stroke="#505058"
-                        strokeWidth="1.2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <line
-                        x1={endW.x}
-                        y1={endW.y}
-                        x2={p2w.x}
-                        y2={p2w.y}
-                        stroke="#505058"
-                        strokeWidth="1.2"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <path
-                        d={`M ${startW.x} ${startW.y} C ${p1w.x} ${p1w.y}, ${p2w.x} ${p2w.y}, ${endW.x} ${endW.y}`}
-                        fill="none"
-                        stroke="#459BF8"
-                        strokeWidth="1.8"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <circle
-                        cx={p1w.x}
-                        cy={p1w.y}
-                        r={HANDLE_HIT_RADIUS * ns}
-                        fill="transparent"
-                        style={{ cursor: 'grab' }}
-                        onPointerDown={(e) => handlePointPointerDown(e, 'p1')}
-                      />
-                      <circle
-                        cx={p1w.x}
-                        cy={p1w.y}
-                        r={HANDLE_RADIUS * ns}
-                        fill="#1A191E"
-                        stroke="#459BF8"
-                        strokeWidth={2 * ns}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                      <circle
-                        cx={p2w.x}
-                        cy={p2w.y}
-                        r={HANDLE_HIT_RADIUS * ns}
-                        fill="transparent"
-                        style={{ cursor: 'grab' }}
-                        onPointerDown={(e) => handlePointPointerDown(e, 'p2')}
-                      />
-                      <circle
-                        cx={p2w.x}
-                        cy={p2w.y}
-                        r={HANDLE_RADIUS * ns}
-                        fill="#1A191E"
-                        stroke="#FFB400"
-                        strokeWidth={2 * ns}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex-1 min-w-0 flex flex-col gap-[12px] justify-start pt-[2px]">
-                <div className="flex flex-col gap-[6px] [&>div]:w-full [&_button]:w-full">
-                  <label className="text-caption font-medium text-fg-muted">
-                    Preset
-                  </label>
-                  <Dropdown
-                    options={presetOptions}
-                    value={selectedPreset}
-                    onChange={(val) => handlePresetChange(String(val))}
-                    fullWidth
-                  />
-                </div>
-
-                <div className="flex flex-col gap-[6px]">
-                  <label className="text-caption font-medium text-fg-muted">
-                    Cubic Bezier
-                  </label>
-                  <TextInput
-                    value={bezierInput}
-                    onChange={(raw) => {
-                      setBezierInput(raw);
-                      const parsed = parseBezierInput(raw);
-                      if (!parsed) return;
-                      localBezierRef.current = parsed;
-                      setLocalBezier(parsed);
-                    }}
-                    onBlur={() => {
-                      const parsed = parseBezierInput(bezierInput);
-                      if (!parsed) {
-                        setBezierInput(
-                          formatBezierInput(localBezierRef.current),
-                        );
-                        return;
-                      }
-                      localBezierRef.current = parsed;
-                      setLocalBezier(parsed);
-                      setBezierInput(formatBezierInput(parsed));
-                    }}
-                    placeholder="0.25, 0.46, 0.45, 0.94"
-                    width="100%"
-                  />
-                </div>
-
-                <div className="flex gap-[12px]">
-                  <div className="flex-1 flex flex-col gap-[6px]">
-                    <label className="text-caption font-medium text-fg-muted">
-                      {t('counterSetting.scale') || '스케일'}
-                    </label>
-                    <NumberInput
-                      value={parsedScale}
-                      onChange={(val) => setScaleInput(String(val))}
-                      onBlur={() => {
-                        const parsed = parseNumber(scaleInput);
-                        const normalized = normalizeScale(parsed ?? 1.1);
-                        setScaleInput(
-                          String(Math.round(normalized * 100) / 100),
-                        );
-                      }}
-                      allowDecimal={true}
-                      decimalScale={2}
-                      min={0}
-                      max={9999}
-                      width="100%"
-                    />
-                  </div>
-
-                  <div className="flex-1 flex flex-col gap-[6px]">
-                    <label className="text-caption font-medium text-fg-muted">
-                      {t('counterSetting.duration') || '지속 시간'}
-                    </label>
-                    <NumberInput
-                      value={parsedDuration}
-                      onChange={(val) => setDurationInput(String(val))}
-                      onBlur={() => {
-                        const parsed = parseNumber(durationInput);
-                        const normalized = clampDuration(parsed ?? 300);
-                        setDurationInput(String(normalized));
-                      }}
-                      width="100%"
-                      min={100}
-                      max={5000}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {errorText ? (
-              <p className="text-caption leading-[14px] text-danger-fg mt-[-8px] ml-[2px]">
-                {errorText}
-              </p>
-            ) : null}
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-app rounded-surface overflow-hidden shadow-inner relative">
+          {/* 미리보기 — 풀하이트 무대, 라벨 없이 스테이지 안 힌트만 */}
+          <div className="w-[300px] shrink-0 min-h-0 bg-fill-faint rounded-surface p-[10px] flex flex-col">
             <div
-              className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-surface cursor-pointer select-none"
+              className="flex-1 min-h-0 flex items-center justify-center relative bg-inset rounded-md overflow-hidden cursor-pointer select-none"
               onPointerDown={handlePreviewPointerDown}
             >
               {previewCss && (
                 <style dangerouslySetInnerHTML={{ __html: previewCss }} />
               )}
+              {/* 그리드 — 커브 캔버스와 동일 팔레트 */}
               <div
-                className="absolute inset-0 opacity-[0.15] pointer-events-none"
+                className="absolute inset-0 pointer-events-none"
                 style={{
-                  backgroundImage:
-                    'linear-gradient(#2A2A30 1px, transparent 1px), linear-gradient(90deg, #2A2A30 1px, transparent 1px)',
-                  backgroundSize: '20px 20px',
+                  backgroundImage: `linear-gradient(${GRID_MINOR_COLOR} 1px, transparent 1px), linear-gradient(90deg, ${GRID_MINOR_COLOR} 1px, transparent 1px)`,
+                  backgroundSize: '40px 40px',
                   backgroundPosition: 'center center',
                 }}
               />
@@ -1344,8 +1315,9 @@ const CounterAnimationEditorModal = ({
                   );
                 })()}
               </div>
-              <div className="absolute bottom-0 left-0 right-0 flex justify-center items-end h-12 bg-gradient-to-t from-black/50 to-transparent pointer-events-none">
-                <span className="mb-2.5 text-white/70 text-body font-medium tracking-wide">
+              {/* 하단 안내 — 스크림 없이 흐린 캡션만 (풀하이트 스테이지라 키와 충돌 없음) */}
+              <div className="absolute inset-x-0 bottom-[10px] z-20 text-center pointer-events-none">
+                <span className="text-caption text-fg-faint">
                   {t('counterSetting.pressToPreview') || '눌러서 미리보기'}
                 </span>
               </div>
@@ -1353,46 +1325,111 @@ const CounterAnimationEditorModal = ({
           </div>
         </div>
 
-        <div className="bg-fill-faint px-[12px] py-[10px] flex items-center gap-[8px]">
-          <div className="flex items-center gap-1.5 mr-auto">
-            <svg
-              className="w-3.5 h-3.5 shrink-0"
-              viewBox="0 0 24 24"
-              fill="#8A8D99"
-            >
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-            </svg>
-            <span className="text-caption text-fg-muted tracking-wide">
-              {t('counterSetting.motionPerformanceNotice') ||
-                '모션 효과는 시스템 리소스를 추가로 사용합니다'}
-            </span>
+        {/* 파라미터 데크 — 하단 풀폭 항상 한 줄, 이름 입력이 남는 폭 흡수 */}
+        <div className="shrink-0 bg-fill-faint rounded-surface px-[10px] py-[4px] flex flex-nowrap items-center gap-x-[12px] overflow-hidden">
+          {/* 이름 필드 — 짧은 라벨 + 예시형 플레이스홀더, 입력이 남는 폭을 정확히 채워
+                  옆 필드와 갭이 동일하게 유지됨 (라벨 길이가 긴 로케일도 flex로 자동 흡수) */}
+          <div className="flex items-center gap-[8px] min-h-[32px] flex-1 min-w-0">
+            <p className="text-fg-muted text-label shrink-0">
+              {t('counterSetting.nameLabel') || '이름'}
+            </p>
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(event) => setNameInput(event.target.value)}
+              placeholder={
+                t('counterSetting.animationNamePlaceholder') || '예: 내 모션'
+              }
+              className="flex-1 min-w-0 h-[23px] px-[8px] bg-inset rounded-md text-body text-fg placeholder-fg-faint outline-none focus:shadow-focus-ring transition-shadow duration-fast"
+            />
           </div>
-          <button
-            type="button"
-            className={`w-[120px] h-[30px] rounded-surface text-label transition-colors duration-fast ${
-              canSave
-                ? 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
-                : 'bg-fill-faint text-fg-disabled cursor-not-allowed'
-            }`}
-            disabled={!canSave}
-            onClick={() => {
-              void handleSave();
-            }}
-          >
-            {isSaving
-              ? t('counterSetting.saving') || '저장 중...'
-              : t('common.save') || '저장'}
-          </button>
-          <button
-            type="button"
-            className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
-            onClick={onClose}
-          >
-            {t('common.cancel') || '취소'}
-          </button>
+
+          <div className="flex items-center gap-[8px] min-h-[32px]">
+            <p className="text-fg-muted text-label shrink-0">
+              {t('counterSetting.presetLabel') || '프리셋'}
+            </p>
+            <Dropdown
+              options={presetOptions}
+              value={selectedPreset}
+              onChange={(val) => handlePresetChange(String(val))}
+              widthClass="w-[130px]"
+            />
+          </div>
+
+          <div className="flex items-center gap-[8px] min-h-[32px]">
+            <p className="text-fg-muted text-label shrink-0">
+              {t('counterSetting.bezierLabel') || '베지어'}
+            </p>
+            <TextInput
+              value={bezierInput}
+              onChange={(raw) => {
+                setBezierInput(raw);
+                const parsed = parseBezierInput(raw);
+                if (!parsed) return;
+                localBezierRef.current = parsed;
+                setLocalBezier(parsed);
+              }}
+              onBlur={() => {
+                const parsed = parseBezierInput(bezierInput);
+                if (!parsed) {
+                  setBezierInput(formatBezierInput(localBezierRef.current));
+                  return;
+                }
+                localBezierRef.current = parsed;
+                setLocalBezier(parsed);
+                setBezierInput(formatBezierInput(parsed));
+              }}
+              placeholder="0.25, 0.46, 0.45, 0.94"
+              width="140px"
+            />
+          </div>
+
+          <div className="flex items-center gap-[8px] min-h-[32px]">
+            <p className="text-fg-muted text-label shrink-0">
+              {t('counterSetting.scale') || '스케일'}
+            </p>
+            <NumberInput
+              value={parsedScale}
+              onChange={(val) => setScaleInput(String(val))}
+              onBlur={() => {
+                const parsed = parseNumber(scaleInput);
+                const normalized = normalizeScale(parsed ?? 1.1);
+                setScaleInput(String(Math.round(normalized * 100) / 100));
+              }}
+              allowDecimal={true}
+              decimalScale={2}
+              min={0}
+              max={9999}
+              width="54px"
+            />
+          </div>
+
+          <div className="flex items-center gap-[8px] min-h-[32px]">
+            <p className="text-fg-muted text-label shrink-0">
+              {t('counterSetting.duration') || '지속 시간'}
+            </p>
+            <NumberInput
+              value={parsedDuration}
+              onChange={(val) => setDurationInput(String(val))}
+              onBlur={() => {
+                const parsed = parseNumber(durationInput);
+                const normalized = clampDuration(parsed ?? 300);
+                setDurationInput(String(normalized));
+              }}
+              width="54px"
+              min={100}
+              max={5000}
+            />
+          </div>
         </div>
+
+        {errorText ? (
+          <p className="shrink-0 text-caption leading-[14px] text-danger-fg">
+            {errorText}
+          </p>
+        ) : null}
       </div>
-    </Modal>
+    </FullSurfaceModalLayout>
   );
 };
 

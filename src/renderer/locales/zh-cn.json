@@ -359,8 +359,8 @@
     "noAnimations": "没有动效",
     "createAnimationTitle": "添加动效",
     "editAnimationTitle": "编辑动效",
-    "animationName": "动效名称",
-    "animationNamePlaceholder": "动效名称",
+    "nameLabel": "名称",
+    "animationNamePlaceholder": "例:我的动效",
     "newAnimationDefaultName": "新动效",
     "pressToPreview": "按下预览",
     "motionPerformanceNotice": "动效会额外占用系统资源",
@@ -408,7 +408,9 @@
     "fontStyle": "字体样式",
     "apply": "应用",
     "cancel": "取消",
-    "addAnimation": "添加动画"
+    "addAnimation": "添加动画",
+    "presetLabel": "预设",
+    "bezierLabel": "贝塞尔"
   },
   "tabCss": {
     "enableCss": "启用标签页 CSS",
@@ -609,7 +611,6 @@
     "cssLabel": "@font-face CSS",
     "submit": "保存",
     "update": "修改",
-    "defaultFileName": "web-font",
     "availabilityIdle": "等待输入",
     "availabilityReady": "可用",
     "availabilityNotReady": "不可用",

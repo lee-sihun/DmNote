@@ -359,8 +359,8 @@
     "noAnimations": "등록된 모션이 없습니다",
     "createAnimationTitle": "모션 추가",
     "editAnimationTitle": "모션 편집",
-    "animationName": "모션 이름",
-    "animationNamePlaceholder": "모션 이름",
+    "nameLabel": "이름",
+    "animationNamePlaceholder": "예: 내 모션",
     "newAnimationDefaultName": "새 모션",
     "pressToPreview": "눌러서 미리보기",
     "motionPerformanceNotice": "모션 효과는 시스템 리소스를 추가로 사용합니다",
@@ -408,7 +408,9 @@
     "fontStyle": "폰트 스타일",
     "apply": "적용하기",
     "cancel": "취소",
-    "addAnimation": "애니메이션 추가"
+    "addAnimation": "애니메이션 추가",
+    "presetLabel": "프리셋",
+    "bezierLabel": "베지어"
   },
   "tabCss": {
     "enableCss": "현재 탭 CSS 활성화",
@@ -609,7 +611,6 @@
     "cssLabel": "@font-face CSS",
     "submit": "저장",
     "update": "수정",
-    "defaultFileName": "web-font",
     "availabilityIdle": "입력 대기",
     "availabilityReady": "사용 가능",
     "availabilityNotReady": "사용 불가",
