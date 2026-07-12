@@ -708,7 +708,11 @@ export function useGridSelection({
         [selectedKeyType]: modeGroups,
       };
       useLayerGroupStore.getState().setLayerGroups(updatedLayerGroups);
-      window.api.layerGroups.update(updatedLayerGroups).catch(() => {});
+      window.api.layerGroups
+        .update(updatedLayerGroups)
+        .catch((error: Error) => {
+          console.error('Failed to paste layer groups', error);
+        });
 
       // 원본 그룹의 collapsed 상태 복원
       for (const cg of clipboardGroups) {

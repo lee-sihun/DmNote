@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     CustomCss, CustomJs, CustomTab, FontSettings, GraphPositions, KeyMappings, KeyPositions,
-    KnobPositions, NoteSettings, StatPositions, TabNoteOverrides,
+    KnobPositions, LayerGroups, NoteSettings, StatPositions, TabCssOverrides, TabNoteOverrides,
 };
 
 #[derive(Serialize)]
@@ -58,6 +58,10 @@ pub(crate) struct PresetFile {
     pub font_settings: Option<FontSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab_note_overrides: Option<TabNoteOverrides>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_groups: Option<LayerGroups>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_css_overrides: Option<TabCssOverrides>,
     pub embedded_local_fonts: Option<Vec<EmbeddedLocalFont>>,
     pub embedded_local_images: Option<Vec<EmbeddedLocalImage>>,
     pub embedded_local_sounds: Option<Vec<EmbeddedLocalSound>>,
@@ -217,4 +221,37 @@ pub(crate) fn option_has_non_empty_text(value: &Option<String>) -> bool {
         .as_ref()
         .map(|text| !text.trim().is_empty())
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PresetFile;
+    use serde_json::json;
+
+    #[test]
+    fn preset_round_trip_preserves_layer_groups_and_tab_css_overrides() {
+        let value = json!({
+            "layerGroups": { "4key": [] },
+            "tabCssOverrides": {
+                "4key": {
+                    "path": "/tmp/tab.css",
+                    "content": ".key { color: red; }",
+                    "enabled": true
+                }
+            }
+        });
+        let preset: PresetFile = serde_json::from_value(value.clone()).unwrap();
+        let serialized = serde_json::to_value(preset).unwrap();
+
+        assert_eq!(serialized["layerGroups"], value["layerGroups"]);
+        assert_eq!(serialized["tabCssOverrides"], value["tabCssOverrides"]);
+    }
+
+    #[test]
+    fn legacy_preset_defaults_new_fields_to_none() {
+        let preset: PresetFile = serde_json::from_value(json!({})).unwrap();
+
+        assert!(preset.layer_groups.is_none());
+        assert!(preset.tab_css_overrides.is_none());
+    }
 }

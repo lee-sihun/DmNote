@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
@@ -6,11 +10,12 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 use crate::{
+    commands::editor::css::TabCssResponse,
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
         CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
-        KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCssOverrides,
     },
     state::AppState,
 };
@@ -50,8 +55,11 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         .custom_tabs
         .unwrap_or_else(|| synthesize_custom_tabs(&keys));
     let snapshot = state.store.snapshot();
+    let previous_tab_css_overrides = snapshot.tab_css_overrides.clone();
     let selected_key_type =
         choose_selected_key_type(preset.selected_key_type, &keys, snapshot.selected_key_type);
+    let preset_layer_groups = preset.layer_groups;
+    let preset_tab_css_overrides = preset.tab_css_overrides;
 
     let mut desired_settings = preset.note_settings.unwrap_or_default();
     desired_settings.migrate_fade_position();
@@ -97,8 +105,24 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         &mut positions,
         &mut stat_positions,
         &mut graph_positions,
+        &mut knob_positions,
         preset.embedded_local_sounds.as_deref(),
     )?;
+
+    // 임포트 경계 — 정의와 참조가 함께 확정되므로 dangling groupId 정리
+    // (프리셋에 그룹 정의가 없으면 현재 스토어의 그룹이 유지되므로 그 기준으로 검사)
+    {
+        let effective_layer_groups = preset_layer_groups
+            .clone()
+            .unwrap_or_else(|| snapshot.layer_groups.clone());
+        crate::state::migration::clear_dangling_group_ids_in(
+            &mut positions,
+            &mut stat_positions,
+            &mut graph_positions,
+            &mut knob_positions,
+            &effective_layer_groups,
+        );
+    }
 
     // 탭별 노트 설정 복원 (없으면 빈 맵으로 초기화 → 전역 폴백)
     let mut tab_note_overrides = preset.tab_note_overrides.unwrap_or_default();
@@ -106,7 +130,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         tab.migrate_fade_position();
     }
 
-    state.store.update(|store| {
+    let normalized = state.store.update(|store| {
         store.keys = keys.clone();
         store.key_positions = positions.clone();
         store.stat_positions = stat_positions.clone();
@@ -115,7 +139,24 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         store.custom_tabs = custom_tabs.clone();
         store.selected_key_type = selected_key_type.clone();
         store.tab_note_overrides = tab_note_overrides.clone();
+        if let Some(layer_groups) = preset_layer_groups.as_ref() {
+            store.layer_groups = layer_groups.clone();
+        }
+        if let Some(tab_css_overrides) = preset_tab_css_overrides.as_ref() {
+            store.tab_css_overrides = tab_css_overrides.clone();
+        }
     })?;
+
+    let keys = normalized.keys;
+    let positions = normalized.key_positions;
+    let stat_positions = normalized.stat_positions;
+    let graph_positions = normalized.graph_positions;
+    let knob_positions = normalized.knob_positions;
+    let custom_tabs = normalized.custom_tabs;
+    let selected_key_type = normalized.selected_key_type;
+    let tab_note_overrides = normalized.tab_note_overrides;
+    let layer_groups = normalized.layer_groups;
+    let tab_css_overrides = normalized.tab_css_overrides;
 
     state.keyboard.update_mappings(keys.clone());
     state.keyboard.set_mode(selected_key_type.clone());
@@ -146,6 +187,13 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
     })?;
 
     state.emit_settings_changed(&diff, &app)?;
+    app.emit("layerGroups:changed", &layer_groups)?;
+    sync_tab_css_runtime(
+        state.inner(),
+        &app,
+        &previous_tab_css_overrides,
+        &tab_css_overrides,
+    )?;
 
     // 프리셋 데이터를 단일 이벤트로 원자적 전달
     app.emit(
@@ -203,6 +251,10 @@ pub fn preset_load_tab(
         knob_positions,
         selected_key_type,
         tab_note_overrides,
+        layer_groups,
+        tab_css_overrides,
+        font_settings,
+        embedded_local_fonts,
         embedded_local_images,
         embedded_local_sounds,
         ..
@@ -210,6 +262,7 @@ pub fn preset_load_tab(
 
     let mut snapshot = state.store.snapshot();
     let current_tab_id = snapshot.selected_key_type.clone();
+    let previous_tab_css_overrides = snapshot.tab_css_overrides.clone();
 
     let imported_keys = keys.unwrap_or_default();
     let source_tab_id = choose_tab_preset_source_tab(
@@ -265,6 +318,7 @@ pub fn preset_load_tab(
         &mut src_key_positions,
         &mut src_stat_positions,
         &mut src_graph_positions,
+        &mut src_knob_positions,
         embedded_local_sounds.as_deref(),
     )?;
 
@@ -293,24 +347,94 @@ pub fn preset_load_tab(
         snapshot.tab_note_overrides.remove(&current_tab_id);
     }
 
-    let full_keys = snapshot.keys.clone();
-    let full_positions = snapshot.key_positions.clone();
-    let full_stat_positions = snapshot.stat_positions.clone();
-    let full_graph_positions = snapshot.graph_positions.clone();
-    let full_knob_positions = snapshot.knob_positions.clone();
-    let full_tab_note_overrides = snapshot.tab_note_overrides.clone();
+    if let Some(imported_layer_groups) = layer_groups {
+        let groups = imported_layer_groups
+            .get(&source_tab_id)
+            .cloned()
+            .unwrap_or_default();
+        snapshot.layer_groups.insert(current_tab_id.clone(), groups);
+    }
 
-    state.store.update(|store| {
-        store.keys = full_keys.clone();
-        store.key_positions = full_positions.clone();
-        store.stat_positions = full_stat_positions.clone();
-        store.graph_positions = full_graph_positions.clone();
-        store.knob_positions = full_knob_positions.clone();
-        store.tab_note_overrides = full_tab_note_overrides.clone();
+    if let Some(imported_tab_css_overrides) = tab_css_overrides {
+        if let Some(css) = imported_tab_css_overrides.get(&source_tab_id) {
+            snapshot
+                .tab_css_overrides
+                .insert(current_tab_id.clone(), css.clone());
+        } else {
+            snapshot.tab_css_overrides.remove(&current_tab_id);
+        }
+    }
+
+    // 임포트 경계 — 병합이 끝난 전체 상태 기준으로 dangling groupId 정리
+    crate::state::migration::clear_dangling_group_ids(&mut snapshot);
+
+    let normalized = state.store.update(|store| {
+        store.keys = snapshot.keys.clone();
+        store.key_positions = snapshot.key_positions.clone();
+        store.stat_positions = snapshot.stat_positions.clone();
+        store.graph_positions = snapshot.graph_positions.clone();
+        store.knob_positions = snapshot.knob_positions.clone();
+        store.tab_note_overrides = snapshot.tab_note_overrides.clone();
+        store.layer_groups = snapshot.layer_groups.clone();
+        store.tab_css_overrides = snapshot.tab_css_overrides.clone();
     })?;
+
+    let full_keys = normalized.keys;
+    let full_positions = normalized.key_positions;
+    let full_stat_positions = normalized.stat_positions;
+    let full_graph_positions = normalized.graph_positions;
+    let full_knob_positions = normalized.knob_positions;
+    let full_tab_note_overrides = normalized.tab_note_overrides;
+    let full_layer_groups = normalized.layer_groups;
+    let full_tab_css_overrides = normalized.tab_css_overrides;
 
     state.keyboard.update_mappings(full_keys.clone());
 
+    // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
+    if let Some(mut imported_fonts) = font_settings {
+        restore_preset_local_fonts(&app, &mut imported_fonts, embedded_local_fonts.as_deref())?;
+
+        let mut merged = snapshot.font_settings.clone();
+        let existing_names: HashSet<&str> = merged
+            .custom_fonts
+            .iter()
+            .map(|font| font.name.as_str())
+            .collect();
+        let existing_ids: HashSet<&str> = merged
+            .custom_fonts
+            .iter()
+            .map(|font| font.id.as_str())
+            .collect();
+
+        let mut incoming = Vec::new();
+        for mut font in imported_fonts.custom_fonts {
+            // 같은 이름은 기존 정의 유지 — 요소가 이름으로 폰트를 참조하므로 그대로 해석됨
+            if existing_names.contains(font.name.as_str()) {
+                continue;
+            }
+            if existing_ids.contains(font.id.as_str()) {
+                font.id = Uuid::new_v4().to_string();
+            }
+            incoming.push(font);
+        }
+
+        if !incoming.is_empty() {
+            merged.custom_fonts.extend(incoming);
+            let diff = state.settings.apply_patch(SettingsPatchInput {
+                font_settings: Some(merged),
+                ..SettingsPatchInput::default()
+            })?;
+            state.emit_settings_changed(&diff, &app)?;
+        }
+    }
+
+    app.emit("layerGroups:changed", &full_layer_groups)?;
+    sync_tab_css_runtime(
+        state.inner(),
+        &app,
+        &previous_tab_css_overrides,
+        &full_tab_css_overrides,
+    )?;
     app.emit("keys:changed", &full_keys)?;
     app.emit("positions:changed", &full_positions)?;
     app.emit("statPositions:changed", &full_stat_positions)?;
@@ -325,6 +449,43 @@ pub fn preset_load_tab(
         success: true,
         error: None,
     })
+}
+
+fn sync_tab_css_runtime(
+    state: &AppState,
+    app: &AppHandle,
+    previous: &TabCssOverrides,
+    current: &TabCssOverrides,
+) -> CmdResult<()> {
+    let tab_ids: BTreeSet<String> = previous.keys().chain(current.keys()).cloned().collect();
+
+    for tab_id in tab_ids {
+        if previous.get(&tab_id) == current.get(&tab_id) {
+            continue;
+        }
+
+        state.unwatch_tab_css(&tab_id);
+        let css = current.get(&tab_id).cloned();
+        if let Some(tab_css) = css.as_ref() {
+            if tab_css.enabled {
+                if let Some(path) = tab_css.path.as_deref() {
+                    if let Err(error) = state.watch_tab_css(path, &tab_id) {
+                        log::warn!("[Preset] 탭 CSS 감시 시작 실패 (tab={tab_id}): {error}");
+                    }
+                }
+            }
+        }
+
+        app.emit(
+            "tabCss:changed",
+            &TabCssResponse {
+                tab_id: tab_id.clone(),
+                css,
+            },
+        )?;
+    }
+
+    Ok(())
 }
 
 fn choose_tab_preset_source_tab(
@@ -645,6 +806,7 @@ fn restore_preset_local_sounds(
     key_positions: &mut KeyPositions,
     stat_positions: &mut StatPositions,
     graph_positions: &mut GraphPositions,
+    knob_positions: &mut KnobPositions,
     embedded_local_sounds: Option<&[EmbeddedLocalSound]>,
 ) -> CmdResult<()> {
     let has_any_sounds = key_positions.values().any(|positions| {
@@ -659,11 +821,38 @@ fn restore_preset_local_sounds(
         positions
             .iter()
             .any(|graph_position| option_has_non_empty_text(&graph_position.position.sound_path))
+    }) || knob_positions.values().any(|positions| {
+        positions
+            .iter()
+            .any(|knob_position| option_has_non_empty_text(&knob_position.position.sound_path))
     });
 
     if !has_any_sounds {
         return Ok(());
     }
+
+    let app_data_dir = app.path().app_data_dir()?;
+    let sounds_dir = app_data_dir.join("sounds");
+
+    restore_preset_local_sounds_in_dir(
+        &sounds_dir,
+        key_positions,
+        stat_positions,
+        graph_positions,
+        knob_positions,
+        embedded_local_sounds,
+    )
+}
+
+fn restore_preset_local_sounds_in_dir(
+    sounds_dir: &Path,
+    key_positions: &mut KeyPositions,
+    stat_positions: &mut StatPositions,
+    graph_positions: &mut GraphPositions,
+    knob_positions: &mut KnobPositions,
+    embedded_local_sounds: Option<&[EmbeddedLocalSound]>,
+) -> CmdResult<()> {
+    fs::create_dir_all(sounds_dir)?;
 
     let embedded_map: HashMap<&str, &EmbeddedLocalSound> = embedded_local_sounds
         .unwrap_or(&[])
@@ -671,16 +860,12 @@ fn restore_preset_local_sounds(
         .map(|sound| (sound.sound_id.as_str(), sound))
         .collect();
 
-    let app_data_dir = app.path().app_data_dir()?;
-    let sounds_dir = app_data_dir.join("sounds");
-    fs::create_dir_all(&sounds_dir)?;
-
     let mut restored_path_cache: HashMap<String, String> = HashMap::new();
 
     for positions in key_positions.values_mut() {
         for position in positions.iter_mut() {
             restore_position_sound_reference(
-                &sounds_dir,
+                sounds_dir,
                 &embedded_map,
                 &mut restored_path_cache,
                 &mut position.sound_path,
@@ -691,7 +876,7 @@ fn restore_preset_local_sounds(
     for positions in stat_positions.values_mut() {
         for stat_position in positions.iter_mut() {
             restore_position_sound_reference(
-                &sounds_dir,
+                sounds_dir,
                 &embedded_map,
                 &mut restored_path_cache,
                 &mut stat_position.position.sound_path,
@@ -702,10 +887,21 @@ fn restore_preset_local_sounds(
     for positions in graph_positions.values_mut() {
         for graph_position in positions.iter_mut() {
             restore_position_sound_reference(
-                &sounds_dir,
+                sounds_dir,
                 &embedded_map,
                 &mut restored_path_cache,
                 &mut graph_position.position.sound_path,
+            )?;
+        }
+    }
+
+    for positions in knob_positions.values_mut() {
+        for knob_position in positions.iter_mut() {
+            restore_position_sound_reference(
+                sounds_dir,
+                &embedded_map,
+                &mut restored_path_cache,
+                &mut knob_position.position.sound_path,
             )?;
         }
     }
@@ -809,4 +1005,62 @@ fn choose_selected_key_type(
         return fallback;
     }
     "4key".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{defaults::default_positions, models::KnobPosition};
+
+    #[test]
+    fn sound_restore_restores_knob_sound() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-knob-load-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let sounds_dir = temp_dir.join("sounds");
+        let sound_id = "knob-sound";
+        let embedded = vec![EmbeddedLocalSound {
+            sound_id: sound_id.to_string(),
+            extension: Some("wav".to_string()),
+            data_base64: BASE64_STANDARD.encode(b"restored-knob-sound"),
+        }];
+
+        let mut position = default_positions()["4key"][0].clone();
+        position.sound_path = Some(format!("{PRESET_LOCAL_SOUND_PREFIX}{sound_id}"));
+        let mut knob_positions = KnobPositions::new();
+        knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            }],
+        );
+
+        restore_preset_local_sounds_in_dir(
+            &sounds_dir,
+            &mut KeyPositions::new(),
+            &mut StatPositions::new(),
+            &mut GraphPositions::new(),
+            &mut knob_positions,
+            Some(&embedded),
+        )
+        .unwrap();
+
+        let restored_path = Path::new(
+            knob_positions["4key"][0]
+                .position
+                .sound_path
+                .as_deref()
+                .unwrap(),
+        );
+        assert!(restored_path.starts_with(&sounds_dir));
+        assert_eq!(
+            std::fs::read(restored_path).unwrap(),
+            b"restored-knob-sound"
+        );
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 }

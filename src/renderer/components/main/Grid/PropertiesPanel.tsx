@@ -354,8 +354,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // 패널 ref (컬러픽커/이미지픽커 위치 기준)
   const [panelElement, setPanelElement] = useState<HTMLDivElement | null>(null);
 
-  // 패널 모드 상태 (layer: 레이어 패널, property: 속성 패널)
-  const [panelMode, setPanelMode] = useState<'layer' | 'property'>('property');
+  // 패널 모드 (layer: 레이어 패널, property: 속성 패널)
+  // 설정 왕복으로 리마운트돼도 열림 상태와 함께 보존되도록 store에 유지
+  const panelMode = usePropertiesPanelStore((state) => state.canvasPanelMode);
+  const setPanelMode = usePropertiesPanelStore(
+    (state) => state.setCanvasPanelMode,
+  );
 
   // panelMode를 ref로도 유지 (useEffect에서 최신 값 참조용)
   const panelModeRef = useRef(panelMode);
@@ -696,6 +700,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     singleStatPosition,
     singleGraphPosition,
     singleKnobPosition,
+    setPanelMode,
   ]);
 
   // 선택이 변경되면 rename 모드 해제
@@ -851,6 +856,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     isPanelVisible,
     pluginSettingsPanel,
     setIsPanelVisible,
+    setPanelMode,
     closePage,
   ]);
 
@@ -871,7 +877,12 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [selectedBatchStyleElements.length, isPanelVisible, setIsPanelVisible]);
+  }, [
+    selectedBatchStyleElements.length,
+    isPanelVisible,
+    setIsPanelVisible,
+    setPanelMode,
+  ]);
 
   useEffect(() => {
     if (pluginSettingsPanel) {
@@ -879,13 +890,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setPanelMode('property');
       setIsPanelVisible(true);
     }
-  }, [pluginSettingsPanel, setIsPanelVisible]);
+  }, [pluginSettingsPanel, setIsPanelVisible, setPanelMode]);
 
-  // 레이어 패널이 열려있고 선택이 없는 상태에서 그리드 빈 공간 클릭 시 패널 닫기
+  // 레이어 뷰가 표시된 상태(선택 없음)에서 그리드 빈 공간 클릭 시 패널 닫기
+  // panelMode가 property로 남아 있어도 선택이 없으면 레이어 뷰가 표시되므로 동일하게 닫음
   useEffect(() => {
     const hasSelection =
       selectedKeyElements.length > 0 || selectedElements.length > 0;
-    if (panelMode !== 'layer' || !isPanelVisible || hasSelection) {
+    if (!isPanelVisible || hasSelection) {
       return undefined;
     }
 
@@ -924,7 +936,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedKeyElements.length,
     selectedKeyLikeElements.length,
     selectedElements.length,
-    panelMode,
     setIsPanelVisible,
   ]);
 
@@ -1064,7 +1075,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleToggleMode = () => {
-    setPanelMode((prev) => (prev === 'layer' ? 'property' : 'layer'));
+    setPanelMode(panelMode === 'layer' ? 'property' : 'layer');
   };
 
   const showFrame = isPanelVisible || !!pluginSettingsPanel;

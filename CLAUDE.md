@@ -108,7 +108,7 @@ src-tauri/src/
 ### OBS 모드 (WebSocket 브릿지)
 
 - **이벤트 포워딩**: 새 Tauri 이벤트(`app.emit(...)`)를 추가할 때, OBS 오버레이에도 전달되어야 하면 `src-tauri/src/services/obs_bridge.rs`의 `register_event_forwarding()` 이벤트 목록에 등록
-- **deny 리스트**: OBS 클라이언트에서 실행 불가능한 커맨드는 `obs_bridge.rs`의 `DENIED_WS_COMMANDS`에 등록 (백엔드가 유일한 source of truth)
+- **allowlist**: OBS 클라이언트에서 실행 가능한 커맨드만 `obs_bridge.rs`의 `ALLOWED_WS_COMMANDS`에 등록 (정확 일치, fail-closed — 목록에 없으면 차단, 백엔드가 유일한 source of truth). 신규 커맨드를 OBS에 노출하려면 검토 후 명시적으로 추가
 - **IPC shim**: `src/renderer/api/ipcShim.ts`는 generic 설계 — 커맨드/이벤트별 분기 없음. 이벤트나 커맨드 추가 시 수정 불필요
 
 ### 주석

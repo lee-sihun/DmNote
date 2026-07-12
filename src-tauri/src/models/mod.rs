@@ -203,6 +203,10 @@ pub struct KeyPosition {
     pub note_color: NoteColor,
     pub note_opacity: u32,
     #[serde(default)]
+    pub note_opacity_top: Option<u32>,
+    #[serde(default)]
+    pub note_opacity_bottom: Option<u32>,
+    #[serde(default)]
     pub note_border_radius: Option<f64>,
     /// 노트 넓이(px). None이면 키 width를 사용(자동).
     #[serde(default)]
@@ -218,6 +222,10 @@ pub struct KeyPosition {
     pub note_glow_size: f64,
     #[serde(default = "default_note_glow_opacity")]
     pub note_glow_opacity: u32,
+    #[serde(default)]
+    pub note_glow_opacity_top: Option<u32>,
+    #[serde(default)]
+    pub note_glow_opacity_bottom: Option<u32>,
     #[serde(default)]
     pub note_glow_color: Option<NoteColor>,
     #[serde(default = "default_note_auto_y_correction")]
@@ -1889,5 +1897,28 @@ mod tests {
         let pos: KeyPosition = serde_json::from_str(&json).unwrap();
         assert_eq!(pos.note_glow_size, 20.0);
         assert_eq!(pos.note_width, None);
+    }
+
+    #[test]
+    fn gradient_opacity_fields_survive_serde_round_trip() {
+        let json = key_position_json(
+            r#""noteOpacityTop": 91, "noteOpacityBottom": 37,
+                "noteGlowOpacityTop": 64, "noteGlowOpacityBottom": 18"#,
+        );
+        let position: KeyPosition = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(position.note_opacity_top, Some(91));
+        assert_eq!(position.note_opacity_bottom, Some(37));
+        assert_eq!(position.note_glow_opacity_top, Some(64));
+        assert_eq!(position.note_glow_opacity_bottom, Some(18));
+
+        let serialized = serde_json::to_value(&position).unwrap();
+        assert_eq!(serialized["noteOpacityTop"], 91);
+        assert_eq!(serialized["noteOpacityBottom"], 37);
+        assert_eq!(serialized["noteGlowOpacityTop"], 64);
+        assert_eq!(serialized["noteGlowOpacityBottom"], 18);
+
+        let restored: KeyPosition = serde_json::from_value(serialized).unwrap();
+        assert_eq!(restored, position);
     }
 }

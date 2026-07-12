@@ -12,7 +12,7 @@ use crate::{
     errors::CmdResult,
     models::{
         FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
-        StatPositions, TabNoteOverrides,
+        LayerGroups, StatPositions, TabCssOverrides, TabNoteOverrides,
     },
     state::AppState,
 };
@@ -43,6 +43,7 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
         &snapshot.key_positions,
         &snapshot.stat_positions,
         &snapshot.graph_positions,
+        &snapshot.knob_positions,
     );
     let (font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
@@ -53,8 +54,13 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
             &snapshot.graph_positions,
             &snapshot.knob_positions,
         )?;
-    let (key_positions, stat_positions, graph_positions, embedded_local_sounds) =
-        build_preset_sound_payload(&key_positions, &stat_positions, &graph_positions)?;
+    let (key_positions, stat_positions, graph_positions, knob_positions, embedded_local_sounds) =
+        build_preset_sound_payload(
+            &key_positions,
+            &stat_positions,
+            &graph_positions,
+            &knob_positions,
+        )?;
 
     let preset = PresetFile {
         keys: Some(snapshot.keys),
@@ -81,6 +87,8 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
                 Some(overrides)
             }
         },
+        layer_groups: Some(snapshot.layer_groups),
+        tab_css_overrides: Some(snapshot.tab_css_overrides),
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
         embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
         embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
@@ -134,8 +142,9 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         &tab_key_positions,
         &tab_stat_positions,
         &tab_graph_positions,
+        &tab_knob_positions,
     );
-    let (_font_settings, embedded_local_fonts) =
+    let (font_settings, embedded_local_fonts) =
         build_preset_font_payload(&snapshot.font_settings, &used_font_families)?;
     let (
         tab_key_positions,
@@ -149,12 +158,18 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         &tab_graph_positions,
         &tab_knob_positions,
     )?;
-    let (tab_key_positions, tab_stat_positions, tab_graph_positions, embedded_local_sounds) =
-        build_preset_sound_payload(
-            &tab_key_positions,
-            &tab_stat_positions,
-            &tab_graph_positions,
-        )?;
+    let (
+        tab_key_positions,
+        tab_stat_positions,
+        tab_graph_positions,
+        tab_knob_positions,
+        embedded_local_sounds,
+    ) = build_preset_sound_payload(
+        &tab_key_positions,
+        &tab_stat_positions,
+        &tab_graph_positions,
+        &tab_knob_positions,
+    )?;
 
     // 단일 탭 키 매핑
     let mut tab_keys: KeyMappings = HashMap::new();
@@ -187,6 +202,21 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         }
     };
 
+    let mut tab_layer_groups = LayerGroups::new();
+    tab_layer_groups.insert(
+        tab_id.clone(),
+        snapshot
+            .layer_groups
+            .get(&tab_id)
+            .cloned()
+            .unwrap_or_default(),
+    );
+
+    let mut tab_css_overrides = TabCssOverrides::new();
+    if let Some(css) = snapshot.tab_css_overrides.get(&tab_id) {
+        tab_css_overrides.insert(tab_id.clone(), css.clone());
+    }
+
     let preset = PresetFile {
         keys: Some(tab_keys),
         key_positions: Some(tab_key_positions),
@@ -203,8 +233,11 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
         custom_css: None,
         use_custom_js: None,
         custom_js: None,
-        font_settings: None,
+        // 탭이 쓰는 폰트만 포함 — 로더가 현재 폰트 목록에 병합
+        font_settings: Some(font_settings),
         tab_note_overrides,
+        layer_groups: Some(tab_layer_groups),
+        tab_css_overrides: Some(tab_css_overrides),
         embedded_local_fonts: (!embedded_local_fonts.is_empty()).then_some(embedded_local_fonts),
         embedded_local_images: (!embedded_local_images.is_empty()).then_some(embedded_local_images),
         embedded_local_sounds: (!embedded_local_sounds.is_empty()).then_some(embedded_local_sounds),
@@ -223,6 +256,7 @@ fn collect_used_font_families(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
+    knob_positions: &KnobPositions,
 ) -> HashSet<String> {
     let mut used = HashSet::new();
 
@@ -248,6 +282,16 @@ fn collect_used_font_families(
             maybe_insert_font_family(graph_position.position.font_family.as_ref(), &mut used);
             maybe_insert_font_family(
                 graph_position.position.counter.font_family.as_ref(),
+                &mut used,
+            );
+        }
+    }
+
+    for positions in knob_positions.values() {
+        for knob_position in positions {
+            maybe_insert_font_family(knob_position.position.font_family.as_ref(), &mut used);
+            maybe_insert_font_family(
+                knob_position.position.counter.font_family.as_ref(),
                 &mut used,
             );
         }
@@ -493,15 +537,18 @@ fn build_preset_sound_payload(
     key_positions: &KeyPositions,
     stat_positions: &StatPositions,
     graph_positions: &GraphPositions,
+    knob_positions: &KnobPositions,
 ) -> CmdResult<(
     KeyPositions,
     StatPositions,
     GraphPositions,
+    KnobPositions,
     Vec<EmbeddedLocalSound>,
 )> {
     let mut exported_key_positions = key_positions.clone();
     let mut exported_stat_positions = stat_positions.clone();
     let mut exported_graph_positions = graph_positions.clone();
+    let mut exported_knob_positions = knob_positions.clone();
     let mut embedded_local_sounds = Vec::new();
     let mut path_to_sound_id: HashMap<String, String> = HashMap::new();
 
@@ -535,10 +582,21 @@ fn build_preset_sound_payload(
         }
     }
 
+    for positions in exported_knob_positions.values_mut() {
+        for knob_position in positions.iter_mut() {
+            rewrite_position_sound_reference(
+                &mut knob_position.position.sound_path,
+                &mut embedded_local_sounds,
+                &mut path_to_sound_id,
+            )?;
+        }
+    }
+
     Ok((
         exported_key_positions,
         exported_stat_positions,
         exported_graph_positions,
+        exported_knob_positions,
         embedded_local_sounds,
     ))
 }
@@ -588,4 +646,56 @@ fn rewrite_position_sound_reference(
     path_to_sound_id.insert(source_key, sound_id.clone());
     *sound_ref = Some(format!("{PRESET_LOCAL_SOUND_PREFIX}{sound_id}"));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{defaults::default_positions, models::KnobPosition};
+
+    #[test]
+    fn sound_payload_embeds_knob_sound() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-knob-save-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let sound_path = temp_dir.join("knob.wav");
+        std::fs::write(&sound_path, b"knob-sound").unwrap();
+
+        let mut position = default_positions()["4key"][0].clone();
+        position.sound_path = Some(sound_path.to_string_lossy().to_string());
+        let mut knob_positions = KnobPositions::new();
+        knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: "axis".to_string(),
+                sensitivity: 1.0,
+                reverse: false,
+                position,
+            }],
+        );
+
+        let (_, _, _, exported_knobs, embedded) = build_preset_sound_payload(
+            &KeyPositions::new(),
+            &StatPositions::new(),
+            &GraphPositions::new(),
+            &knob_positions,
+        )
+        .unwrap();
+
+        assert_eq!(embedded.len(), 1);
+        let sound_ref = exported_knobs["4key"][0]
+            .position
+            .sound_path
+            .as_deref()
+            .unwrap();
+        let sound_id = sound_ref.strip_prefix(PRESET_LOCAL_SOUND_PREFIX).unwrap();
+        assert_eq!(sound_id, embedded[0].sound_id);
+        assert_eq!(
+            BASE64_STANDARD.decode(&embedded[0].data_base64).unwrap(),
+            b"knob-sound"
+        );
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 }

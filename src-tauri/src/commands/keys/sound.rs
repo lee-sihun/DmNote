@@ -385,10 +385,16 @@ pub fn sound_delete(
 
     // 원본 파일도 삭제
     if let Some(ref orig_rel) = original_rel_path {
-        let orig_abs = sounds_dir.join(orig_rel);
-        if orig_abs.exists() && orig_abs.starts_with(&sounds_dir) {
-            if let Err(e) = fs::remove_file(&orig_abs) {
-                log::warn!("[Sound] 원본 사운드 파일 삭제 실패: {e}");
+        let original_path = sounds_dir.join(orig_rel);
+        match validate_sound_path(&sounds_dir, &original_path.to_string_lossy()) {
+            Ok(original_path) if original_path.exists() => {
+                if let Err(e) = fs::remove_file(&original_path) {
+                    log::warn!("[Sound] 원본 사운드 파일 삭제 실패: {e}");
+                }
+            }
+            Ok(_) => {}
+            Err(error) => {
+                log::warn!("[Sound] 잘못된 원본 사운드 경로 무시: {error}");
             }
         }
     }
@@ -427,12 +433,23 @@ pub fn sound_delete(
                 }
             }
         }
+
+        for positions in store.knob_positions.values_mut() {
+            for knob_position in positions.iter_mut() {
+                if knob_position.position.sound_path.as_deref() == Some(&path_key) {
+                    knob_position.position.sound_path = None;
+                    knob_position.position.sound_enabled = Some(false);
+                    references_changed = true;
+                }
+            }
+        }
     })?;
 
     if references_changed {
         app.emit("positions:changed", &updated.key_positions)?;
         app.emit("statPositions:changed", &updated.stat_positions)?;
         app.emit("graphPositions:changed", &updated.graph_positions)?;
+        app.emit("knobPositions:changed", &updated.knob_positions)?;
     }
 
     Ok(SoundDeleteResponse { success: true })
@@ -582,10 +599,8 @@ pub fn sound_load_original(
         })
         .ok_or_else(|| CommandError::msg("원본 파일 정보가 없습니다."))?;
 
-    let original_abs = sounds_dir.join(&original_rel);
-    if !original_abs.starts_with(&sounds_dir) {
-        return Err(CommandError::msg("잘못된 원본 경로입니다."));
-    }
+    let original_path = sounds_dir.join(&original_rel);
+    let original_abs = validate_sound_path(&sounds_dir, &original_path.to_string_lossy())?;
     if !original_abs.exists() {
         return Err(CommandError::msg("원본 파일이 존재하지 않습니다."));
     }
@@ -687,11 +702,47 @@ fn validate_sound_path(sounds_dir: &Path, sound_path: &str) -> CmdResult<PathBuf
     if !path.is_absolute() {
         return Err(CommandError::msg("절대 경로만 허용됩니다."));
     }
-    if !path.starts_with(sounds_dir) {
+
+    let canonical_sounds_dir = fs::canonicalize(sounds_dir)
+        .map_err(|error| CommandError::msg(format!("사운드 디렉토리 확인 실패: {error}")))?;
+    let canonical_path = match fs::canonicalize(&path) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            match fs::symlink_metadata(&path) {
+                Ok(_) => {
+                    return Err(CommandError::msg(format!("사운드 경로 확인 실패: {error}")));
+                }
+                Err(metadata_error) if metadata_error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(CommandError::msg(format!(
+                        "사운드 경로 확인 실패: {metadata_error}"
+                    )));
+                }
+                Err(_) => {}
+            }
+
+            let parent = path
+                .parent()
+                .ok_or_else(|| CommandError::msg("사운드 파일의 부모 경로가 없습니다."))?;
+            let file_name = path
+                .file_name()
+                .ok_or_else(|| CommandError::msg("사운드 파일명이 없습니다."))?;
+            let canonical_parent = fs::canonicalize(parent).map_err(|parent_error| {
+                CommandError::msg(format!("사운드 파일의 부모 경로 확인 실패: {parent_error}"))
+            })?;
+            canonical_parent.join(file_name)
+        }
+        Err(error) => {
+            return Err(CommandError::msg(format!("사운드 경로 확인 실패: {error}")));
+        }
+    };
+
+    if !canonical_path.starts_with(&canonical_sounds_dir) {
         return Err(CommandError::msg(
             "appData/sounds 외부 경로에는 접근할 수 없습니다.",
         ));
     }
+    // canonical은 경계 검사 전용 — 반환은 store 키와 일치하는 원 경로
+    // (Windows에서 canonicalize가 \\?\ verbatim 경로를 반환해 조회 키를 오염시키는 것 방지)
     Ok(path)
 }
 
@@ -725,4 +776,54 @@ fn is_supported_sound_file(path: &Path) -> bool {
     SUPPORTED_SOUND_EXTENSIONS
         .iter()
         .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_sound_path;
+
+    #[test]
+    fn sound_path_validation_resolves_existing_and_missing_paths() {
+        let root =
+            std::env::temp_dir().join(format!("dmnote-sound-path-test-{}", uuid::Uuid::new_v4()));
+        let sounds_dir = root.join("sounds");
+        std::fs::create_dir_all(&sounds_dir).unwrap();
+        let existing = sounds_dir.join("existing.wav");
+        std::fs::write(&existing, b"sound").unwrap();
+
+        // macOS temp_dir는 /var → /private/var 심링크 — 경계 검사는 canonical로 통과하되
+        // 반환은 원 경로여야 함 (store 키 일관성)
+        assert_eq!(
+            validate_sound_path(&sounds_dir, &existing.to_string_lossy()).unwrap(),
+            existing
+        );
+
+        let missing = sounds_dir.join("missing.wav");
+        assert_eq!(
+            validate_sound_path(&sounds_dir, &missing.to_string_lossy()).unwrap(),
+            missing
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sound_path_validation_rejects_parent_directory_escape() {
+        let root = std::env::temp_dir().join(format!(
+            "dmnote-sound-path-escape-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let sounds_dir = root.join("sounds");
+        std::fs::create_dir_all(&sounds_dir).unwrap();
+        let outside = root.join("outside.wav");
+        std::fs::write(&outside, b"outside").unwrap();
+
+        let escaped_existing = sounds_dir.join("..").join("outside.wav");
+        assert!(validate_sound_path(&sounds_dir, &escaped_existing.to_string_lossy()).is_err());
+
+        let escaped_missing = sounds_dir.join("..").join("missing.wav");
+        assert!(validate_sound_path(&sounds_dir, &escaped_missing.to_string_lossy()).is_err());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

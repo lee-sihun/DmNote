@@ -69,6 +69,7 @@ pub struct AppState {
     pub obs_bridge: Arc<ObsBridgeService>,
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
+    shutdown_started: AtomicBool,
 }
 
 impl AppState {
@@ -108,6 +109,7 @@ impl AppState {
             css_watcher: RwLock::new(None),
             obs_bridge,
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
+            shutdown_started: AtomicBool::new(false),
         })
     }
 
@@ -222,6 +224,13 @@ impl AppState {
     }
 
     pub fn set_main_window_hidden(&self, hidden: bool) -> Result<()> {
+        // 값이 그대로면 저장 생략 — 기동마다 전체 store 재기록(fsync) 방지
+        if self
+            .store
+            .with_state(|state| state.main_window_hidden == hidden)
+        {
+            return Ok(());
+        }
         let _ = self.store.update(|state| {
             state.main_window_hidden = hidden;
         })?;
@@ -535,18 +544,28 @@ impl AppState {
     }
 
     pub fn shutdown(&self) {
-        if let Err(err) = self.persist_key_counters() {
-            log::warn!("failed to persist key counters during shutdown: {err}");
-        }
-        if let Err(err) = self.store.cleanup_orphan_assets_now() {
-            log::warn!("failed to cleanup orphan assets during shutdown: {err}");
+        if self.shutdown_started.swap(true, Ordering::SeqCst) {
+            return;
         }
         if let Some(task) = self.keyboard_task.write().take() {
             drop(task);
         }
-        // CSS 워처 정리
         if let Some(watcher) = self.css_watcher.write().take() {
             watcher.shutdown();
+        }
+        if let Err(err) = self.persist_key_counters() {
+            log::warn!("failed to persist key counters during shutdown: {err}");
+        }
+        match self.store.flush_and_shutdown() {
+            Ok(()) => {
+                if let Err(err) = self.store.cleanup_orphan_assets_now() {
+                    log::warn!("failed to cleanup orphan assets during shutdown: {err}");
+                }
+            }
+            Err(err) => {
+                log::warn!("failed to flush store writer during shutdown: {err}");
+                log::warn!("skipping orphan asset cleanup after store flush failure");
+            }
         }
     }
 

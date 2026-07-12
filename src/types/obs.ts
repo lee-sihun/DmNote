@@ -26,7 +26,7 @@ export interface HelloPayload {
 export interface HelloAckPayload {
   serverVersion: string;
   obsMode: boolean;
-  denyList?: string[];
+  allowedList?: string[];
 }
 
 export interface ObsStatus {

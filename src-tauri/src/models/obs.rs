@@ -27,8 +27,8 @@ pub struct ObsEnvelope {
 pub struct HelloAckPayload {
     pub server_version: String,
     pub obs_mode: bool,
-    /// OBS 클라이언트에 전달할 deny list (|로 끝나면 prefix 매칭)
-    pub deny_list: Vec<String>,
+    /// OBS 클라이언트에 전달할 정확 일치 allowlist
+    pub allowed_list: Vec<String>,
 }
 
 /// invoke_request 페이로드 (클라이언트 → 서버)
@@ -86,4 +86,25 @@ fn timestamp_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HelloAckPayload;
+
+    #[test]
+    fn hello_ack_exposes_allowed_list() {
+        let value = serde_json::to_value(HelloAckPayload {
+            server_version: "test".to_string(),
+            obs_mode: true,
+            allowed_list: vec!["settings_get".to_string()],
+        })
+        .unwrap();
+
+        assert_eq!(
+            value.get("allowedList"),
+            Some(&serde_json::json!(["settings_get"]))
+        );
+        assert!(value.get("denyList").is_none());
+    }
 }
