@@ -6,6 +6,7 @@ import { useKeyStore } from '@stores/data/useKeyStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import Checkbox from '@components/main/common/Checkbox';
 import Dropdown from '@components/main/common/Dropdown';
+import { SettingCard, SettingRow } from '@components/main/common/SettingRow';
 import FlaskIcon from '@assets/svgs/flask.svg';
 import ResetIcon from '@assets/svgs/reset.svg';
 import { PluginManagerModal } from '@components/main/Modal/content/managers/PluginManagerModal';
@@ -117,8 +118,6 @@ const Settings = ({
     setAngleMode,
     noteEffect,
     setNoteEffect,
-    laboratoryEnabled,
-    setLaboratoryEnabled,
     trayEnabled,
     setTrayEnabled,
     autoUpdateEnabled,
@@ -638,16 +637,6 @@ const Settings = ({
     }
   };
 
-  const _handleLaboratoryToggle = async (): Promise<void> => {
-    const next: boolean = !laboratoryEnabled;
-    setLaboratoryEnabled(next);
-    try {
-      await window.api.settings.update({ laboratoryEnabled: next });
-    } catch (error) {
-      console.error('Failed to toggle laboratory mode', error);
-    }
-  };
-
   const handleTrayToggle = async (): Promise<void> => {
     const next: boolean = !trayEnabled;
     setTrayEnabled(next);
@@ -823,95 +812,62 @@ const Settings = ({
         <div className="flex flex-row gap-[12px]">
           <div className="flex flex-col gap-[12px] w-[348px]">
             {/* 키뷰어 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+            <SettingCard>
+              <SettingRow
+                label={t('settings.overlayLock')}
+                onClick={handleOverlayLockChange}
                 onMouseEnter={() => setHoveredKey('overlayLock')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleOverlayLockChange}
               >
-                <p className="text-label text-fg">
-                  {t('settings.overlayLock')}
-                </p>
                 <Checkbox
                   checked={overlayLocked}
                   onChange={handleOverlayLockChange}
                 />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              </SettingRow>
+              <SettingRow
+                label={t('settings.alwaysOnTop')}
+                onClick={handleAlwaysOnTopChange}
                 onMouseEnter={() => setHoveredKey('alwaysOnTop')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleAlwaysOnTopChange}
               >
-                <p className="text-label text-fg">
-                  {t('settings.alwaysOnTop')}
-                </p>
                 <Checkbox
                   checked={alwaysOnTop}
                   onChange={handleAlwaysOnTopChange}
                 />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              </SettingRow>
+              <SettingRow
+                label={t('settings.noteEffect')}
+                onClick={handleNoteEffectChange}
                 onMouseEnter={() => setHoveredKey('noteEffect')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleNoteEffectChange}
               >
-                <p className="text-label text-fg">{t('settings.noteEffect')}</p>
                 <Checkbox
                   checked={noteEffect}
                   onChange={handleNoteEffectChange}
                 />
-              </div>
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              </SettingRow>
+              <SettingRow
+                label={t('settings.keyCounter')}
+                onClick={handleKeyCounterToggle}
                 onMouseEnter={() => setHoveredKey('keyCounter')}
                 onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleKeyCounterToggle}
               >
-                <p className="text-label text-fg">{t('settings.keyCounter')}</p>
-                <div className="flex items-center gap-[8px]">
-                  <Checkbox
-                    checked={keyCounterEnabled}
-                    onChange={handleKeyCounterToggle}
-                  />
-                </div>
-              </div>
-              {/*
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
-                onMouseEnter={() => setHoveredKey("laboratory")}
-                onMouseLeave={() => setHoveredKey(null)}
-                onClick={handleLaboratoryToggle}
-              >
-                <p className="text-label text-fg">
-                  {t("settings.laboratory")}
-                </p>
                 <Checkbox
-                  checked={laboratoryEnabled}
-                  onChange={handleLaboratoryToggle}
+                  checked={keyCounterEnabled}
+                  onChange={handleKeyCounterToggle}
                 />
-              </div>
-              */}
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              </SettingRow>
+              <SettingRow
+                label={t('settings.trayEnabled')}
                 onClick={handleTrayToggle}
               >
-                <p className="text-label text-fg">
-                  {t('settings.trayEnabled')}
-                </p>
                 <Checkbox checked={trayEnabled} onChange={handleTrayToggle} />
-              </div>
-              {null}
-              <div
-                className="flex flex-row justify-between items-center h-[40px]"
+              </SettingRow>
+              <SettingRow
+                label={t('settings.resizeAnchor')}
                 onMouseEnter={() => setHoveredKey('resizeAnchor')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-label text-fg">
-                  {t('settings.resizeAnchor')}
-                </p>
                 <Dropdown
                   options={RESIZE_ANCHOR_OPTIONS.map((opt) => ({
                     value: opt.value,
@@ -929,38 +885,37 @@ const Settings = ({
                   placeholder={t('settings.selectAnchor')}
                   align="right"
                 />
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 커스텀 CSS & JS 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
+            <SettingCard>
               <div
-                className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customCSS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+                <SettingRow
+                  label={t('settings.customCSS')}
                   onClick={handleToggleCustomCSS}
                 >
-                  <p className="text-label text-fg">
-                    {t('settings.customCSS')}
-                  </p>
                   <Checkbox
                     checked={useCustomCSS}
                     onChange={handleToggleCustomCSS}
                   />
-                </div>
-                <div className="flex flex-row justify-between items-center h-[40px]">
-                  <p
-                    className={
-                      'text-body truncate max-w-[150px] ' +
-                      (useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled')
-                    }
-                  >
-                    {customCSSPath && customCSSPath.length > 0
-                      ? customCSSPath
-                      : t('settings.noCssFile')}
-                  </p>
+                </SettingRow>
+                <SettingRow
+                  label={
+                    <p
+                      className={
+                        'text-body truncate max-w-[150px] ' +
+                        (useCustomCSS ? 'text-fg-muted' : 'text-fg-disabled')
+                      }
+                    >
+                      {customCSSPath && customCSSPath.length > 0
+                        ? customCSSPath
+                        : t('settings.noCssFile')}
+                    </p>
+                  }
+                >
                   <button
                     onClick={handleLoadCustomCSS}
                     disabled={!useCustomCSS}
@@ -968,32 +923,33 @@ const Settings = ({
                   >
                     {t('settings.loadCss')}
                   </button>
-                </div>
+                </SettingRow>
               </div>
               <div
-                className="flex flex-col gap-[0px]"
                 onMouseEnter={() => setHoveredKey('customJS')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+                <SettingRow
+                  label={t('settings.customJS')}
                   onClick={handleToggleCustomJS}
                 >
-                  <p className="text-label text-fg">{t('settings.customJS')}</p>
                   <Checkbox
                     checked={useCustomJS}
                     onChange={handleToggleCustomJS}
                   />
-                </div>
-                <div className="flex flex-row justify-between items-center h-[40px]">
-                  <p
-                    className={
-                      'text-body truncate max-w-[150px] ' +
-                      (useCustomJS ? 'text-fg-muted' : 'text-fg-disabled')
-                    }
-                  >
-                    {t('settings.pluginManageLabel')}
-                  </p>
+                </SettingRow>
+                <SettingRow
+                  label={
+                    <p
+                      className={
+                        'text-body truncate max-w-[150px] ' +
+                        (useCustomJS ? 'text-fg-muted' : 'text-fg-disabled')
+                      }
+                    >
+                      {t('settings.pluginManageLabel')}
+                    </p>
+                  }
+                >
                   <div className="flex flex-row gap-[6px]">
                     <button
                       onClick={handleReloadPlugins}
@@ -1020,41 +976,42 @@ const Settings = ({
                       {t('settings.managePlugins')}
                     </button>
                   </div>
-                </div>
+                </SettingRow>
               </div>
-            </div>
+            </SettingCard>
             {/* OBS 모드 */}
-            <div
-              className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface"
+            <SettingCard
               onMouseEnter={() => setHoveredKey('obsMode')}
               onMouseLeave={() => setHoveredKey(null)}
             >
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              <SettingRow
+                label={t('settings.obsMode')}
                 onClick={handleObsToggle}
               >
-                <p className="text-label text-fg">{t('settings.obsMode')}</p>
                 <Checkbox
                   checked={obsStatus.running}
                   onChange={handleObsToggle}
                 />
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p
-                  className={
-                    'text-body ' +
-                    (obsStatus.running ? 'text-fg-muted' : 'text-fg-disabled')
-                  }
-                >
-                  {obsStatus.running
-                    ? obsStatus.clientCount > 0
-                      ? `${t('settings.obsRunning')} · ${t(
-                          'settings.obsClients',
-                          { count: obsStatus.clientCount },
-                        )}`
-                      : t('settings.obsRunning')
-                    : t('settings.obsStopped')}
-                </p>
+              </SettingRow>
+              <SettingRow
+                label={
+                  <p
+                    className={
+                      'text-body ' +
+                      (obsStatus.running ? 'text-fg-muted' : 'text-fg-disabled')
+                    }
+                  >
+                    {obsStatus.running
+                      ? obsStatus.clientCount > 0
+                        ? `${t('settings.obsRunning')} · ${t(
+                            'settings.obsClients',
+                            { count: obsStatus.clientCount },
+                          )}`
+                        : t('settings.obsRunning')
+                      : t('settings.obsStopped')}
+                  </p>
+                }
+              >
                 <div className="flex items-center gap-[6px]">
                   <button
                     onClick={handleObsRegenerateToken}
@@ -1076,71 +1033,70 @@ const Settings = ({
                     {t('settings.obsCopyUrl')}
                   </button>
                 </div>
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 키음 출력 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
-              <div
-                className="flex flex-row justify-between items-center h-[40px]"
+            <SettingCard>
+              <SettingRow
+                label={
+                  <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
+                    {t('settings.keySoundOutput') || '키 사운드 출력'}
+                  </p>
+                }
                 onMouseEnter={() => setHoveredKey('keySoundOutput')}
                 onMouseLeave={() => setHoveredKey(null)}
               >
-                <p className="text-label text-fg flex-1 min-w-0 truncate pr-[10px]">
-                  {t('settings.keySoundOutput') || '키 사운드 출력'}
-                </p>
-                <div className="shrink-0">
-                  <Dropdown
-                    options={[
-                      {
-                        value: 'defaultDevice',
-                        label:
-                          t('settings.keySoundOutputDefault') ||
-                          '기본 재생 장치',
-                      },
-                      ...visibleAsioDrivers.map((name) => {
-                        // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
-                        const failed =
-                          name === requestedAsioDriver && !!keySoundOutputError;
-                        return {
-                          value: `asio:${name}`,
-                          // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
-                          label: failed
-                            ? `⚠ ${keySoundOutputError}`
-                            : `ASIO: ${
-                                name.length > 16
-                                  ? `${name.slice(0, 16)}…`
-                                  : name
-                              }`,
-                        };
-                      }),
-                    ]}
-                    value={
-                      keySoundOutput?.requested.kind === 'asio'
-                        ? `asio:${keySoundOutput.requested.driverName}`
-                        : 'defaultDevice'
-                    }
-                    onChange={handleKeySoundOutputChange}
-                    placeholder={
-                      t('settings.keySoundOutputDefault') || '기본 재생 장치'
-                    }
-                    align="right"
-                    widthClass="max-w-[160px]"
-                    disabled={
-                      asioDriversLoaded && visibleAsioDrivers.length === 0
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p
-                  className={`text-label ${
+                <Dropdown
+                  options={[
+                    {
+                      value: 'defaultDevice',
+                      label:
+                        t('settings.keySoundOutputDefault') || '기본 재생 장치',
+                    },
+                    ...visibleAsioDrivers.map((name) => {
+                      // 선택한 ASIO가 열기 실패하면 라벨에 ⚠ + 사유 표시 (인라인 경고 대신)
+                      const failed =
+                        name === requestedAsioDriver && !!keySoundOutputError;
+                      return {
+                        value: `asio:${name}`,
+                        // 드라이버 이름이 길면 …로 축약 (기본 항목 라벨은 안 잘리게 max-w 여유, ASIO만 축약)
+                        label: failed
+                          ? `⚠ ${keySoundOutputError}`
+                          : `ASIO: ${
+                              name.length > 16 ? `${name.slice(0, 16)}…` : name
+                            }`,
+                      };
+                    }),
+                  ]}
+                  value={
                     keySoundOutput?.requested.kind === 'asio'
-                      ? 'text-fg'
-                      : 'text-fg-disabled'
-                  }`}
-                >
-                  {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
-                </p>
+                      ? `asio:${keySoundOutput.requested.driverName}`
+                      : 'defaultDevice'
+                  }
+                  onChange={handleKeySoundOutputChange}
+                  placeholder={
+                    t('settings.keySoundOutputDefault') || '기본 재생 장치'
+                  }
+                  align="right"
+                  widthClass="max-w-[160px]"
+                  disabled={
+                    asioDriversLoaded && visibleAsioDrivers.length === 0
+                  }
+                />
+              </SettingRow>
+              <SettingRow
+                label={
+                  <p
+                    className={`text-label ${
+                      keySoundOutput?.requested.kind === 'asio'
+                        ? 'text-fg'
+                        : 'text-fg-disabled'
+                    }`}
+                  >
+                    {t('settings.keySoundOutputBuffer') || 'ASIO 버퍼 크기'}
+                  </p>
+                }
+              >
                 <Dropdown
                   options={visibleAsioBuffers.map((size) => ({
                     value: String(size),
@@ -1153,12 +1109,11 @@ const Settings = ({
                   widthClass="w-[70px]"
                   disabled={keySoundOutput?.requested.kind !== 'asio'}
                 />
-              </div>
-            </div>
+              </SettingRow>
+            </SettingCard>
             {/* 기타 설정 */}
-            <div className="flex flex-col px-[16px] py-[4px] bg-fill-faint rounded-surface">
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-label text-fg">{t('settings.language')}</p>
+            <SettingCard>
+              <SettingRow label={t('settings.language')}>
                 <Dropdown
                   options={LANGUAGE_OPTIONS}
                   value={language}
@@ -1166,20 +1121,16 @@ const Settings = ({
                   placeholder={t('settings.selectLanguage')}
                   align="right"
                 />
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-label text-fg">{t('settings.shortcuts')}</p>
+              </SettingRow>
+              <SettingRow label={t('settings.shortcuts')}>
                 <button
                   onClick={() => setShortcutModalOpen(true)}
                   className={actionButtonClass(true)}
                 >
                   {t('settings.configure')}
                 </button>
-              </div>
-              <div className="flex flex-row justify-between items-center h-[40px]">
-                <p className="text-label text-fg">
-                  {t('settings.graphicsOption')}
-                </p>
+              </SettingRow>
+              <SettingRow label={t('settings.graphicsOption')}>
                 <Dropdown
                   options={isMacOS ? macAngleOptions : ANGLE_OPTIONS}
                   value={isMacOS ? 'metal' : angleMode}
@@ -1188,33 +1139,27 @@ const Settings = ({
                   disabled={isMacOS}
                   align="right"
                 />
-              </div>
+              </SettingRow>
               {!isMacOS && (
-                <div
-                  className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+                <SettingRow
+                  label={t('settings.autoUpdate')}
                   onClick={handleAutoUpdateToggle}
                 >
-                  <p className="text-label text-fg">
-                    {t('settings.autoUpdate')}
-                  </p>
                   <Checkbox
                     checked={autoUpdateEnabled}
                     onChange={handleAutoUpdateToggle}
                   />
-                </div>
+                </SettingRow>
               )}
-              <div
-                className="flex flex-row justify-between items-center h-[40px] cursor-pointer"
+              <SettingRow
+                label={t('settings.developerMode')}
                 onClick={handleDeveloperModeToggle}
               >
-                <p className="text-label text-fg">
-                  {t('settings.developerMode')}
-                </p>
                 <Checkbox
                   checked={developerModeEnabled}
                   onChange={handleDeveloperModeToggle}
                 />
-              </div>
+              </SettingRow>
               {/* 버전 및 설정 초기화 */}
               <div className="flex justify-between items-center py-[12px] px-[12px] bg-inset rounded-md mt-[8px] mb-[12px]">
                 <p className="text-body text-fg-muted tabular-nums">
@@ -1238,7 +1183,7 @@ const Settings = ({
                   </button>
                 </div>
               </div>
-            </div>
+            </SettingCard>
           </div>
         </div>
       </div>

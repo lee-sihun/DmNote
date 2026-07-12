@@ -18,3 +18,11 @@ export const FORM_ROW_CLASS =
 
 // 행 라벨
 export const FORM_LABEL_CLASS = 'text-fg-muted text-label';
+
+// comfortable 밀도 — 목적지 페이지(Settings) 전용. 도킹 패널·다이얼로그·플러그인 표면은
+// 위의 compact 유지. 밀도는 표면 루트에서 한 번만 결정, 제3 밀도 추가 금지 (tasks/todo.md 2026-07-12)
+export const SECTION_CARD_CLASS_COMFORTABLE =
+  'bg-fill-faint rounded-surface px-[16px] py-[4px] flex flex-col';
+
+export const FORM_ROW_CLASS_COMFORTABLE =
+  'flex justify-between items-center w-full min-h-[40px]';
