@@ -620,6 +620,15 @@
     "availabilityDuplicateFontFamily": "已註冊的 font-family",
     "availabilityMultipleFamilies": "偵測到多個字體",
     "duplicateFontFamilyAlert": "\"{{name}}\" 字體已註冊。",
-    "fixedHint": "您可以添加 @font-face CSS。"
+    "titleAdd": "新增網頁字體",
+    "titleEdit": "編輯網頁字體",
+    "previewLabel": "預覽",
+    "previewEmpty": "貼上有效的 @font-face 規則即可即時預覽",
+    "previewLoading": "正在載入字體…",
+    "previewError": "無法載入字體",
+    "previewErrorHint": "請檢查 src URL",
+    "previewReady": "字體預覽已就緒",
+    "previewPangram": "視野無限廣，窗外有藍天",
+    "weightLoadFailed": "載入失敗"
   }
 }

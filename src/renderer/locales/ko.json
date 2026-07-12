@@ -620,6 +620,15 @@
     "availabilityDuplicateFontFamily": "이미 등록된 font-family",
     "availabilityMultipleFamilies": "다중 폰트 감지",
     "duplicateFontFamilyAlert": "\"{{name}}\" 폰트가 이미 등록되어 있습니다.",
-    "fixedHint": "@font-face CSS를 추가할 수 있습니다."
+    "titleAdd": "웹 폰트 추가",
+    "titleEdit": "웹 폰트 수정",
+    "previewLabel": "미리보기",
+    "previewEmpty": "유효한 @font-face를 입력하면 미리보기가 표시됩니다",
+    "previewLoading": "폰트 불러오는 중…",
+    "previewError": "폰트를 불러오지 못했습니다",
+    "previewErrorHint": "src URL을 확인하세요",
+    "previewReady": "폰트 미리보기 준비됨",
+    "previewPangram": "다람쥐 헌 쳇바퀴에 타고파",
+    "weightLoadFailed": "로드 실패"
   }
 }

@@ -315,6 +315,18 @@ body.dmn-custom-cursor * {
   animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
 }
 
+/* 전면 시트 — 타이틀바에서 내려앉는 등장, 종료 상태는 클래스 자연값 */
+@keyframes modalSheet {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+}
+
+.animate-modal-sheet > * {
+  animation: modalSheet var(--ui-duration-base) var(--ui-ease-out) both;
+}
+
 /* 틴트와 블러를 한 키프레임에서 보간 — 종료 상태는 클래스 자연값 */
 @keyframes modalScrim {
   from {
@@ -383,10 +395,11 @@ body.dmn-custom-cursor * {
   height: 100%;
 }
 
+/* 크롬 색은 사이드 패널과 같은 토큰 — 웰(bg-inset)이 배경을 소유, 에디터는 투명 */
 .webfont-cm-editor .cm-editor {
   height: 100%;
-  background: var(--ui-bg-inset-solid);
-  color: #d4d4d4;
+  background: transparent;
+  color: var(--ui-fg);
 }
 
 .webfont-cm-editor .cm-scroller,
@@ -422,17 +435,22 @@ body.dmn-custom-cursor * {
   min-height: 100%;
   padding: 8px 12px 8px 14px;
   tab-size: 2;
-  caret-color: #d4d4d4;
+  caret-color: var(--ui-fg);
 }
 
+/* relative — 여러 줄 예시 placeholder를 절대배치로 줄 흐름에서 분리,
+   줄 박스가 부풀지 않아 캐럿·거터 높이가 정상 유지됨 */
 .webfont-cm-editor .cm-line {
   padding: 0;
+  position: relative;
 }
 
+/* 웰보다 한 톤 어두운 솔리드 스트립 — 기존 인셋 겹침(검정 30%)과 같은 톤이지만
+   불투명이라 가로 스크롤 시 밑을 지나는 텍스트가 비치지 않음 */
 .webfont-cm-editor .cm-gutters {
-  background: var(--ui-bg-panel);
+  background: color-mix(in srgb, var(--ui-bg-inset-solid) 70%, black);
   color: var(--ui-fg-faint);
-  border-right: 1px solid var(--ui-line);
+  border: none;
 }
 
 .webfont-cm-editor .cm-lineNumbers .cm-gutterElement {
@@ -443,26 +461,17 @@ body.dmn-custom-cursor * {
   text-align: right;
 }
 
-.webfont-cm-editor .cm-activeLine {
-  background: #ffffff10;
-}
-
-.webfont-cm-editor .cm-activeLineGutter {
-  color: var(--ui-fg-muted);
-  background: var(--ui-bg-panel);
-}
-
 .webfont-cm-editor .cm-content ::selection {
-  background: #5b7fae;
+  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
 }
 
 .webfont-cm-editor .cm-content ::-moz-selection {
-  background: #5b7fae;
+  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
 }
 
 .webfont-cm-editor .cm-cursor,
 .webfont-cm-editor .cm-dropCursor {
-  border-left-color: #d4d4d4;
+  border-left-color: var(--ui-fg);
 }
 
 .webfont-cm-editor .cm-editor.cm-focused {
@@ -470,8 +479,12 @@ body.dmn-custom-cursor * {
 }
 
 .webfont-cm-editor .cm-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   color: var(--ui-fg-faint);
   white-space: pre;
+  pointer-events: none;
 }
 
 .webfont-cm-editor .cm-scroller::-webkit-scrollbar {
@@ -502,7 +515,9 @@ body.dmn-custom-cursor * {
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
   .animate-modal-scale > *,
+  .animate-modal-sheet > *,
   .animate-modal-scrim,
+  .animate-pulse,
   .view-enter,
   .view-fade {
     animation: none;

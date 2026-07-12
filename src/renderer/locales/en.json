@@ -620,6 +620,15 @@
     "availabilityDuplicateFontFamily": "Already registered font-family",
     "availabilityMultipleFamilies": "Multiple fonts detected",
     "duplicateFontFamilyAlert": "\"{{name}}\" font is already registered.",
-    "fixedHint": "You can add @font-face CSS."
+    "titleAdd": "Add web font",
+    "titleEdit": "Edit web font",
+    "previewLabel": "Preview",
+    "previewEmpty": "Paste a valid @font-face rule to see a live preview",
+    "previewLoading": "Loading font…",
+    "previewError": "Couldn't load the font",
+    "previewErrorHint": "Check the src URL",
+    "previewReady": "Font preview ready",
+    "previewPangram": "The quick brown fox jumps over the lazy dog",
+    "weightLoadFailed": "Failed to load"
   }
 }

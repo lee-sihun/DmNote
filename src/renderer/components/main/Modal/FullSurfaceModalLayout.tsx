@@ -1,0 +1,74 @@
+import type { ReactNode } from 'react';
+import Modal from './Modal';
+
+// 전면 시트 재질 — 시트 크롬과 로딩 폴백이 같은 소스를 공유
+export const FULL_SURFACE_MATERIAL_CLASS = 'bg-glass-heavy backdrop-glass';
+
+interface FullSurfaceModalLayoutProps {
+  onClose: () => void;
+  title: string;
+  /** 제목 옆 보조 정보 (아이콘 + 캡션 등) */
+  headerInfo?: ReactNode;
+  submitLabel: string;
+  submitDisabled?: boolean;
+  onSubmit: () => void;
+  cancelLabel: string;
+  children: ReactNode;
+}
+
+// 전면 시트 공통 크롬 — 재질·칼럼·헤더·액션을 한 곳이 소유, 본문 레이아웃은 소비자 몫
+const FullSurfaceModalLayout = ({
+  onClose,
+  title,
+  headerInfo,
+  submitLabel,
+  submitDisabled = false,
+  onSubmit,
+  cancelLabel,
+  children,
+}: FullSurfaceModalLayoutProps) => {
+  return (
+    <Modal fullSurface onClick={onClose} ariaLabel={title}>
+      <div
+        className={`w-full h-full flex flex-col ${FULL_SURFACE_MATERIAL_CLASS}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {/* 시트 칼럼 — 모달 카드와 같은 문법: 바깥 14px 패딩 + 내부 12px 갭 */}
+        <div className="w-full h-full max-w-[960px] mx-auto flex flex-col p-[14px] gap-[12px] min-h-0">
+          {/* 헤더 행 — 제목·보조 정보 좌측, 액션 우측 */}
+          <div className="shrink-0 flex items-center justify-between gap-[12px]">
+            <div className="min-w-0 flex items-center gap-[12px]">
+              <h2 className="shrink-0 text-heading text-fg">{title}</h2>
+              {headerInfo}
+            </div>
+            <div className="flex items-center gap-[8px]">
+              <button
+                type="button"
+                className={`w-[120px] h-[30px] rounded-surface text-label transition-colors duration-fast ${
+                  submitDisabled
+                    ? 'bg-fill-faint text-fg-disabled cursor-not-allowed'
+                    : 'bg-accent text-accent-fg hover:bg-accent-hover active:bg-accent-active'
+                }`}
+                onClick={onSubmit}
+                disabled={submitDisabled}
+              >
+                {submitLabel}
+              </button>
+              <button
+                type="button"
+                className="px-[24px] h-[30px] bg-fill hover:bg-fill-hover active:bg-fill-active rounded-surface text-fg-muted hover:text-fg text-label transition-colors duration-fast"
+                onClick={onClose}
+              >
+                {cancelLabel}
+              </button>
+            </div>
+          </div>
+
+          {children}
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default FullSurfaceModalLayout;

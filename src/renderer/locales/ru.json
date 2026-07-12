@@ -620,6 +620,15 @@
     "availabilityDuplicateFontFamily": "font-family уже есть",
     "availabilityMultipleFamilies": "Несколько шрифтов",
     "duplicateFontFamilyAlert": "Шрифт \"{{name}}\" уже добавлен.",
-    "fixedHint": "Можно добавить @font-face CSS."
+    "titleAdd": "Добавить веб-шрифт",
+    "titleEdit": "Изменить веб-шрифт",
+    "previewLabel": "Предпросмотр",
+    "previewEmpty": "Вставьте корректное правило @font-face, чтобы увидеть предпросмотр",
+    "previewLoading": "Загрузка шрифта…",
+    "previewError": "Не удалось загрузить шрифт",
+    "previewErrorHint": "Проверьте URL в src",
+    "previewReady": "Предпросмотр шрифта готов",
+    "previewPangram": "Съешь же ещё этих мягких французских булок",
+    "weightLoadFailed": "Не удалось загрузить"
   }
 }

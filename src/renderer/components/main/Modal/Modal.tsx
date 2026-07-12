@@ -7,6 +7,8 @@ interface ModalProps {
   animate?: boolean;
   /** 스크린리더용 다이얼로그 이름 */
   ariaLabel?: string;
+  /** 중앙 카드 대신 크롬 사이 영역을 통째로 덮는 전면 시트 */
+  fullSurface?: boolean;
 }
 
 const Modal = ({
@@ -14,9 +16,14 @@ const Modal = ({
   children,
   animate = true,
   ariaLabel,
+  fullSurface = false,
 }: ModalProps) => {
   const scrimAnimClass = animate ? 'animate-modal-scrim' : '';
-  const contentAnimClass = animate ? 'animate-modal-scale' : '';
+  const contentAnimClass = animate
+    ? fullSurface
+      ? 'animate-modal-sheet'
+      : 'animate-modal-scale'
+    : '';
   const closeFromBackdropRef = useRef(false);
   const backdropRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClick);
@@ -101,17 +108,27 @@ const Modal = ({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
-      className="fixed top-[31px] bottom-[61px] left-[1px] right-[1px] flex items-center justify-center z-50"
+      className="fixed top-[30px] bottom-[60px] left-0 right-0 flex items-center justify-center z-50"
       onPointerDown={handleBackdropPointerDown}
       onClick={handleBackdropClick}
       onWheel={handleWheel}
     >
-      {/* 스크림 언더레이 — 클릭은 래퍼로 통과 */}
+      {/* 스크림 언더레이 — 클릭은 래퍼로 통과.
+          전면 시트는 스크림 생략 — 시트가 영역을 다 덮어 어둡히기가 무의미하고,
+          스크림이 겹치면 같은 글래스 토큰인데 사이드 패널보다 어둡게 합성됨 */}
+      {!fullSurface && (
+        <div
+          aria-hidden="true"
+          className={`absolute inset-0 bg-black/60 backdrop-blur-[2px] pointer-events-none ${scrimAnimClass}`}
+        />
+      )}
       <div
-        aria-hidden="true"
-        className={`absolute inset-0 bg-black/60 backdrop-blur-[2px] pointer-events-none ${scrimAnimClass}`}
-      />
-      <div className={`relative ${contentAnimClass}`}>{children}</div>
+        className={`${
+          fullSurface ? 'absolute inset-0' : 'relative'
+        } ${contentAnimClass}`}
+      >
+        {children}
+      </div>
     </div>,
     document.body,
   );

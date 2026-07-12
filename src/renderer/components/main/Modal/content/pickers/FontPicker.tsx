@@ -5,6 +5,7 @@ import type { CustomFont } from '@src/types/settings/fonts';
 import { DEFAULT_FONT_FAMILY } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import Modal from '@components/main/Modal/Modal';
+import { FULL_SURFACE_MATERIAL_CLASS } from '@components/main/Modal/FullSurfaceModalLayout';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
@@ -472,9 +473,13 @@ const FontPicker = ({
       {webFontModal ? (
         <Suspense
           fallback={
-            <Modal onClick={() => setWebFontModal(null)} ariaLabel="로딩 중...">
+            <Modal
+              fullSurface
+              onClick={() => setWebFontModal(null)}
+              ariaLabel="로딩 중..."
+            >
               <div
-                className="w-[640px] max-w-[calc(100vw-80px)] h-[335px] flex items-center justify-center bg-glass-heavy backdrop-blur-[32px] rounded-modal shadow-elevation-3"
+                className={`w-full h-full flex items-center justify-center ${FULL_SURFACE_MATERIAL_CLASS}`}
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-body leading-[16px] text-fg-muted">
@@ -489,6 +494,7 @@ const FontPicker = ({
             onClose={() => setWebFontModal(null)}
             onSubmit={handleWebFontSubmit}
             initialCss={editingWebFont?.cssContent || ''}
+            mode={editingWebFont ? 'edit' : 'add'}
             isDuplicateFontFamily={(fontFamily) =>
               fontLibrary.isDuplicateFontFamily(fontFamily, {
                 excludeId: webFontModal.editingId,

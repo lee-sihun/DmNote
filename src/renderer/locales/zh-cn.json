@@ -620,6 +620,15 @@
     "availabilityDuplicateFontFamily": "已注册的 font-family",
     "availabilityMultipleFamilies": "检测到多个字体",
     "duplicateFontFamilyAlert": "\"{{name}}\" 字体已注册。",
-    "fixedHint": "您可以添加 @font-face CSS。"
+    "titleAdd": "添加网页字体",
+    "titleEdit": "编辑网页字体",
+    "previewLabel": "预览",
+    "previewEmpty": "粘贴有效的 @font-face 规则即可实时预览",
+    "previewLoading": "正在加载字体…",
+    "previewError": "无法加载字体",
+    "previewErrorHint": "请检查 src URL",
+    "previewReady": "字体预览已就绪",
+    "previewPangram": "视野无限广，窗外有蓝天",
+    "weightLoadFailed": "加载失败"
   }
 }
