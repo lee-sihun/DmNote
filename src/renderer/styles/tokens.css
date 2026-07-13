@@ -85,7 +85,7 @@
 
   /* 라운딩 — 4단: 표면 안 요소 6 < 1차 표면 10 < 팝업 셸 14 < 모달 셸 16 */
   /* 동심 규칙은 코너 밀착 중첩에만 적용 (팝업 14 = 6 + p-8), 컨트롤은 고정 티어 */
-  /* 모달 16 = macOS 시스템 윈도우 크롬 실측(≈16pt) 매칭 — 창보다 둥글면 위계 역전 */
+  /* 모달 셸은 창보다 둥글지 않게 유지 */
   --ui-radius-inner: 6px;
   --ui-radius-surface: 10px;
   --ui-radius-popup: 14px;
@@ -104,8 +104,7 @@
   --ui-page-slide-distance: 8px;
   --ui-page-blur: 3px;
 
-  /* 아이콘 스왑 — 토글 버튼의 SVG 교체 크로스페이드 다이얼
-     효과 값은 Transitions.dev Icon swap 레퍼런스 그대로, 타이밍만 프로젝트 기준 */
+  /* 아이콘 스왑 — 토글 버튼의 SVG 교체 크로스페이드 다이얼 */
   --ui-icon-swap-duration: var(--ui-duration-base);
   --ui-icon-swap-ease: ease-in-out;
   --ui-icon-swap-blur: 2px;

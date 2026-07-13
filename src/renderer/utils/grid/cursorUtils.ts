@@ -83,9 +83,6 @@ export async function fetchCursorSettings(): Promise<CursorSettings> {
 }
 
 /**
- * apple_cursor 원본 SVG 커서를 생성합니다.
- * https://github.com/ful1e5/apple_cursor
- *
  * 커서 크기는 시스템 설정에 따라 동적으로 변합니다.
  * SVG의 viewBox 스케일링으로 어떤 크기에서도 선명하게 렌더링됩니다.
  */
@@ -108,7 +105,7 @@ function createCursorSvgMarkup(
   let outlinePath: string;
   let fillPath: string;
 
-  // apple_cursor 원본 디자인 (257x257 viewBox)
+  // 기본 SVG path 좌표계 (257x257 viewBox)
   // outline = #0000FF → outline_color
   // fill = #00FF00 → fill_color
   switch (type) {
@@ -141,7 +138,7 @@ function createCursorSvgMarkup(
     )
     .join('');
 
-  // SVG 생성 - 동적 크기, 257x257 viewBox로 선명도 유지 (apple_cursor 원본)
+  // SVG 생성 - 동적 크기, 257x257 viewBox로 선명도 유지
   const svg = `<svg width="${cursorSize}" height="${cursorSize}" viewBox="0 0 257 257" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision"><g>${shadowPaths}<path fill-rule="evenodd" clip-rule="evenodd" d="${outlinePath}" fill="${outline_color}"/><path fill-rule="evenodd" clip-rule="evenodd" d="${fillPath}" fill="${fill_color}"/></g></svg>`;
   return { svg, cursorSize, hotspot };
 }

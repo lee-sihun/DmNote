@@ -151,7 +151,7 @@ export default function CommonListPickerPage<T>({
           </div>
         </div>
       </div>
-      {/* 하단 도구 바 — 필터 + 추가 (Xcode 내비게이터 문법) */}
+      {/* 하단 도구 바 — 필터 + 추가 */}
       <div className="p-[12px] shrink-0">
         <div className="flex items-center gap-[8px]">
           {filterOptions && filterValue !== undefined && onFilterChange ? (
