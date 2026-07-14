@@ -23,8 +23,20 @@ read_executable_name() {
 read_minos() {
   local binary="$1"
   local arch="$2"
-  xcrun vtool -show-build -arch "$arch" "$binary" 2>/dev/null \
-    | awk '$1 == "minos" { print $2; exit }'
+  local build_info
+  local minos
+  build_info="$(xcrun vtool -show-build -arch "$arch" "$binary" 2>/dev/null || true)"
+  minos="$(awk '
+    $1 == "minos" { print $2; found = 1; exit }
+    $1 == "cmd" { legacy = ($2 == "LC_VERSION_MIN_MACOSX"); next }
+    legacy && $1 == "version" { legacy_version = $2; legacy = 0 }
+    END {
+      if (!found && legacy_version != "") print legacy_version
+    }
+  ' <<<"$build_info")"
+  [[ -n "$minos" ]] \
+    || fail "최소 macOS 버전을 판별할 수 없음: $binary ($arch)"
+  echo "$minos"
 }
 
 read_plist_min_version() {
