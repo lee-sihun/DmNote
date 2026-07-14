@@ -785,6 +785,10 @@ export interface DMNoteAPI {
     get(): Promise<KeyMappings>;
     getCounters(): Promise<KeyCounters>;
     update(mappings: KeyMappings): Promise<KeyMappings>;
+    updateWithPositions(
+      mappings: KeyMappings,
+      positions: KeyPositions,
+    ): Promise<{ keys: KeyMappings; positions: KeyPositions }>;
     getPositions(): Promise<KeyPositions>;
     updatePositions(positions: KeyPositions): Promise<KeyPositions>;
     setMode(mode: string): Promise<KeysModeResponse>;

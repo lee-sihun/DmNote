@@ -29,16 +29,14 @@ export async function persistPositionsWithSync(
 }
 
 /**
- * mappings + positions 변경을 동시에 백엔드에 반영
+ * mappings + positions 변경을 단일 트랜잭션으로 백엔드에 반영
+ * 분리 저장은 한쪽만 커밋된 채 강제 종료되면 배열 불일치가 디스크에 남음
  */
 export function persistMappingsAndPositions(
   mappings: KeyMappings,
   positions: KeyPositions,
 ): void {
-  Promise.all([
-    window.api.keys.update(mappings),
-    window.api.keys.updatePositions(positions),
-  ]).catch((error) => {
+  window.api.keys.updateWithPositions(mappings, positions).catch((error) => {
     console.error('Failed to persist key data', error);
   });
 }

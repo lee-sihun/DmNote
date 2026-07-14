@@ -27,6 +27,12 @@ export const keysApi = {
   getCounters: () => invoke<KeyCounters>('keys_get_counters'),
   update: (mappings: KeyMappings) =>
     invoke<KeyMappings>('keys_update', { mappings }),
+  // keys와 positions를 단일 store 트랜잭션으로 커밋 — 한쪽만 저장된 채 중단되는 불일치 방지
+  updateWithPositions: (mappings: KeyMappings, positions: KeyPositions) =>
+    invoke<{ keys: KeyMappings; positions: KeyPositions }>(
+      'keys_update_with_positions',
+      { mappings, positions },
+    ),
   getPositions: () => invoke<KeyPositions>('positions_get'),
   updatePositions: (positions: KeyPositions) =>
     invoke<KeyPositions>('positions_update', { positions }),
