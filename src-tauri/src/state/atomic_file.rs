@@ -75,49 +75,30 @@ pub(crate) fn atomic_replace(path: &Path, content: &[u8], label: &str) -> Result
 
 #[cfg(all(test, unix))]
 pub(crate) mod test_support {
-    use std::os::raw::c_int;
-
-    const RLIMIT_FSIZE: c_int = 1;
-    const SIGXFSZ: c_int = 25;
-    const SIG_IGN: usize = 1;
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct Rlimit {
-        current: u64,
-        maximum: u64,
-    }
-
-    unsafe extern "C" {
-        fn getrlimit(resource: c_int, limit: *mut Rlimit) -> c_int;
-        fn setrlimit(resource: c_int, limit: *const Rlimit) -> c_int;
-        fn signal(signal: c_int, handler: usize) -> usize;
-    }
-
     pub(crate) struct FileSizeLimit {
-        previous_limit: Rlimit,
-        previous_handler: usize,
+        previous_limit: libc::rlimit,
+        previous_handler: libc::sighandler_t,
     }
 
     impl FileSizeLimit {
-        pub(crate) fn set(bytes: u64) -> Self {
-            let mut previous_limit = Rlimit {
-                current: 0,
-                maximum: 0,
+        pub(crate) fn set(bytes: libc::rlim_t) -> Self {
+            let mut previous_limit = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
             };
-            let get_result = unsafe { getrlimit(RLIMIT_FSIZE, &mut previous_limit) };
+            let get_result = unsafe { libc::getrlimit(libc::RLIMIT_FSIZE, &mut previous_limit) };
             assert_eq!(get_result, 0, "getrlimit(RLIMIT_FSIZE) failed");
             assert!(
-                bytes <= previous_limit.maximum,
+                bytes <= previous_limit.rlim_max,
                 "requested file limit exceeds hard limit"
             );
 
-            let previous_handler = unsafe { signal(SIGXFSZ, SIG_IGN) };
-            let limited = Rlimit {
-                current: bytes,
-                maximum: previous_limit.maximum,
+            let previous_handler = unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
+            let limited = libc::rlimit {
+                rlim_cur: bytes,
+                rlim_max: previous_limit.rlim_max,
             };
-            let set_result = unsafe { setrlimit(RLIMIT_FSIZE, &limited) };
+            let set_result = unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &limited) };
             assert_eq!(set_result, 0, "setrlimit(RLIMIT_FSIZE) failed");
 
             Self {
@@ -129,8 +110,8 @@ pub(crate) mod test_support {
 
     impl Drop for FileSizeLimit {
         fn drop(&mut self) {
-            let _ = unsafe { setrlimit(RLIMIT_FSIZE, &self.previous_limit) };
-            let _ = unsafe { signal(SIGXFSZ, self.previous_handler) };
+            let _ = unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &self.previous_limit) };
+            let _ = unsafe { libc::signal(libc::SIGXFSZ, self.previous_handler) };
         }
     }
 }

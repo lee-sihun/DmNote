@@ -1163,6 +1163,7 @@ dependencies = [
  "futures-util",
  "gif",
  "gif-dispose",
+ "libc",
  "local-ip-address",
  "log",
  "minisign-verify",
