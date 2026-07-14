@@ -6,6 +6,7 @@ import '@styles/tokens.css';
 import '@styles/global.css';
 
 window.__dmn_window_type = 'overlay';
+window.__dmn_runtime = 'tauri';
 
 async function bootstrap() {
   try {

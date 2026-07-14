@@ -6,6 +6,7 @@ import type {
   KeyCounterUpdate,
   KeysModeResponse,
   KeysResetAllResponse,
+  ReadyUnsubscribe,
   Unsubscribe,
   ModeChangePayload,
   CustomTabsChangePayload,
@@ -47,8 +48,9 @@ export const keysApi = {
     subscribe<KeyPositions>('positions:changed', listener),
   onModeChanged: (listener: (payload: ModeChangePayload) => void) =>
     subscribe<ModeChangePayload>('keys:mode-changed', listener),
-  onKeyState: (listener: (payload: KeyStatePayload) => void) =>
-    subscribe<KeyStatePayload>('keys:state', listener),
+  onKeyState: (
+    listener: (payload: KeyStatePayload) => void,
+  ): ReadyUnsubscribe => subscribe<KeyStatePayload>('keys:state', listener),
   onRawInput: (listener: (payload: RawInputPayload) => void): Unsubscribe => {
     let unsubscribeFn: (() => void) | null = null;
 

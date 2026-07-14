@@ -452,62 +452,95 @@ export default function App() {
       timerEntry.timers.add(timer);
     };
 
-    // 키 이벤트 버스 초기화 (백엔드에서 한 번만 구독)
-    import('@utils/core/keyEventBus').then(({ keyEventBus }) => {
-      keyEventBus.initialize();
-    });
-
     // HID 축 이벤트 버스 초기화 (input:axis 구독 → axisSignals 누적)
     import('@utils/core/axisEventBus').then(({ axisEventBus }) => {
       axisEventBus.initialize();
     });
 
-    // 버스를 통해 키 이벤트 수신
-    const unsubscribe = import('@utils/core/keyEventBus').then(
-      ({ keyEventBus }) => {
-        return keyEventBus.subscribe(({ key, state, eventAgeMs }) => {
-          const isDown = state === 'DOWN';
-          // 키 UI 업데이트 (딜레이 적용)
-          updateKeySignalWithDelay(key, isDown);
-          // 노트 이펙트는 즉시 처리 (딜레이 없음)
-          if (noteEffect) {
-            // 개별 키의 noteEffectEnabled 확인
-            const currentKeys = keyMappings[selectedKeyType] ?? [];
-            const currentPositions = positions[selectedKeyType] ?? [];
-            const keyIndex = currentKeys.indexOf(key);
-            const keyPosition = currentPositions[keyIndex];
-            const keyNoteEffectEnabled =
-              keyPosition?.noteEffectEnabled !== false;
+    let hydrationCancelled = false;
+    const seenHydrationKeys = new Set<string>();
 
-            if (keyNoteEffectEnabled) {
-              // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
-              // requestAnimationFrame 래핑 시 노트 생성 시각이 프레임 경계로 양자화돼
-              // 주사율/OBS fps에 시간 해상도가 종속되던 문제 해결.
-              // age는 0~MAX_EVENT_AGE_MS로 clamp — 백엔드 stall/클럭 이상 시 노트가
-              // 화면 위로 튀는 것을 방지
-              const age = Math.min(
-                Math.max(eventAgeMs ?? 0, 0),
-                MAX_EVENT_AGE_MS,
-              );
-              const inputTime = performance.now() - age;
-              if (isDown) handleKeyDown(key, inputTime);
-              else handleKeyUp(key, inputTime);
+    // 키 이벤트 구독을 먼저 확립한 뒤 눌림 스냅샷 요청
+    const unsubscribe = import('@utils/core/keyEventBus').then(
+      async ({ keyEventBus }) => {
+        if (hydrationCancelled) return undefined;
+        const unsubscribeKeyEvents = keyEventBus.subscribe(
+          ({ key, state, eventAgeMs }) => {
+            seenHydrationKeys.add(key);
+            const isDown = state === 'DOWN';
+            // 키 UI 업데이트 (딜레이 적용)
+            updateKeySignalWithDelay(key, isDown);
+            // 노트 이펙트는 즉시 처리 (딜레이 없음)
+            if (noteEffect) {
+              // 개별 키의 noteEffectEnabled 확인
+              const currentKeys = keyMappings[selectedKeyType] ?? [];
+              const currentPositions = positions[selectedKeyType] ?? [];
+              const keyIndex = currentKeys.indexOf(key);
+              const keyPosition = currentPositions[keyIndex];
+              const keyNoteEffectEnabled =
+                keyPosition?.noteEffectEnabled !== false;
+
+              if (keyNoteEffectEnabled) {
+                // 실제 입력 시각을 복원해 노트 시작 위치를 보정 (프레임 양자화 방지).
+                // requestAnimationFrame 래핑 시 노트 생성 시각이 프레임 경계로 양자화돼
+                // 주사율/OBS fps에 시간 해상도가 종속되던 문제 해결.
+                // age는 0~MAX_EVENT_AGE_MS로 clamp — 백엔드 stall/클럭 이상 시 노트가
+                // 화면 위로 튀는 것을 방지
+                const age = Math.min(
+                  Math.max(eventAgeMs ?? 0, 0),
+                  MAX_EVENT_AGE_MS,
+                );
+                const inputTime = performance.now() - age;
+                if (isDown) handleKeyDown(key, inputTime);
+                else handleKeyUp(key, inputTime);
+              }
             }
-          }
-        });
+          },
+        );
+
+        try {
+          await keyEventBus.initialize();
+        } catch (error) {
+          unsubscribeKeyEvents();
+          throw error;
+        }
+
+        if (hydrationCancelled) return unsubscribeKeyEvents;
+
+        // 지연 생성된 오버레이 hydration — 구독 이후 이벤트가 온 키는
+        // 최신 이벤트가 스냅샷보다 우선하며 KPS·노트 통계에는 반영하지 않음
+        void window.api.app
+          .bootstrap()
+          .then(({ activeKeys }) => {
+            if (hydrationCancelled || !activeKeys?.length) return;
+            for (const key of activeKeys) {
+              if (!seenHydrationKeys.has(key)) {
+                setKeyActiveSignal(key, true);
+              }
+            }
+          })
+          .catch(() => {});
+
+        return unsubscribeKeyEvents;
       },
     );
+    void unsubscribe.catch((error) => {
+      console.error('Failed to initialize key state listener', error);
+    });
 
     const keyDelayTimers = keyDelayTimersRef.current;
 
     return () => {
-      unsubscribe.then((unsub) => {
-        try {
-          unsub?.();
-        } catch (error) {
-          console.error('Failed to remove key state listener', error);
-        }
-      });
+      hydrationCancelled = true;
+      void unsubscribe
+        .then((unsub) => {
+          try {
+            unsub?.();
+          } catch (error) {
+            console.error('Failed to remove key state listener', error);
+          }
+        })
+        .catch(() => undefined);
       // 키 딜레이 타이머 정리
       keyDelayTimers.forEach((timerEntry) => {
         timerEntry.timers.forEach((timer) => clearTimeout(timer));

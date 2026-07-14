@@ -21,6 +21,7 @@ async function bootstrap() {
 
     // 3. OBS 윈도우 타입 표시
     window.__dmn_window_type = 'overlay';
+    window.__dmn_runtime = 'obs';
 
     // 4. overlay/App.tsx를 I18nProvider로 래핑하여 렌더
     const { I18nProvider } = await import('@contexts/I18nContext');

@@ -8,6 +8,7 @@ import '@styles/global.css';
 import '@styles/main.css';
 
 window.__dmn_window_type = 'main';
+window.__dmn_runtime = 'tauri';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root container not found');

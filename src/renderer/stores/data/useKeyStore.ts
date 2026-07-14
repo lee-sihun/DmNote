@@ -21,6 +21,8 @@ interface KeyStoreState {
   setLocalUpdateInProgress: (value: boolean) => void;
 }
 
+let modeRequestGeneration = 0;
+
 export const useKeyStore = create<KeyStoreState>((set, get) => ({
   selectedKeyType: '4key',
   customTabs: [],
@@ -30,11 +32,42 @@ export const useKeyStore = create<KeyStoreState>((set, get) => ({
   isLocalUpdateInProgress: false,
   setSelectedKeyType: (mode) => {
     set({ selectedKeyType: mode });
-    if (get().isBootstrapped && typeof window !== 'undefined') {
-      window.api.keys.setMode(mode).catch((error) => {
-        console.error('Failed to set key mode', error);
-      });
+    if (
+      !get().isBootstrapped ||
+      typeof window === 'undefined' ||
+      window.__dmn_runtime === 'obs'
+    ) {
+      return;
     }
+
+    const generation = ++modeRequestGeneration;
+    void window.api.keys
+      .setMode(mode)
+      .then((response) => {
+        if (
+          generation !== modeRequestGeneration ||
+          get().selectedKeyType !== mode
+        ) {
+          return;
+        }
+        if (!response.success || response.mode !== mode) {
+          set({ selectedKeyType: response.mode });
+        }
+      })
+      .catch(async (error) => {
+        console.error('Failed to set key mode', error);
+        try {
+          const authoritative = await window.api.app.bootstrap();
+          if (
+            generation === modeRequestGeneration &&
+            get().selectedKeyType === mode
+          ) {
+            set({ selectedKeyType: authoritative.selectedKeyType });
+          }
+        } catch (bootstrapError) {
+          console.error('Failed to reconcile key mode', bootstrapError);
+        }
+      });
   },
   setCustomTabs: (tabs) => set({ customTabs: tabs }),
   setKeyMappings: (mappings) => set({ keyMappings: mappings }),

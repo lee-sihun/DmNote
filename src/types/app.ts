@@ -24,6 +24,8 @@ export interface BootstrapPayload {
   customTabs: CustomTab[];
   selectedKeyType: string;
   currentMode: string;
+  // 부트스트랩 시점에 눌려 있던 키 (오버레이 지연 생성 시 DOWN 상태 복원용)
+  activeKeys: string[];
   overlay: {
     visible: boolean;
     locked: boolean;

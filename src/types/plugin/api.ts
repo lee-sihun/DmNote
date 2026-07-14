@@ -708,6 +708,10 @@ export type PluginDisplayElementConfig = Omit<PluginDisplayElement, 'id'> & {
 
 export type Unsubscribe = () => void;
 
+export type ReadyUnsubscribe = Unsubscribe & {
+  ready: Promise<void>;
+};
+
 // UI Components Options
 export interface ButtonOptions {
   variant?: 'primary' | 'danger' | 'secondary';
@@ -792,7 +796,7 @@ export interface DMNoteAPI {
       listener: (positions: KeyPositions) => void,
     ): Unsubscribe;
     onModeChanged(listener: (payload: ModeChangePayload) => void): Unsubscribe;
-    onKeyState(listener: (payload: KeyStatePayload) => void): Unsubscribe;
+    onKeyState(listener: (payload: KeyStatePayload) => void): ReadyUnsubscribe;
     onRawInput(listener: (payload: RawInputPayload) => void): Unsubscribe;
     resetCounters(): Promise<KeyCounters>;
     resetCountersMode(mode: string): Promise<KeyCounters>;

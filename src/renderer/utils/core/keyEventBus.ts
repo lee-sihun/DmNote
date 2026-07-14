@@ -14,17 +14,16 @@ type KeyEventListener = (payload: KeyStatePayload) => void;
 
 class KeyEventBus {
   private listeners: Set<KeyEventListener> = new Set();
-  private initialized = false;
+  private initializationPromise: Promise<void> | null = null;
 
   /**
    * 백엔드 키 이벤트 구독 초기화 (한 번만 호출)
    */
-  initialize() {
-    if (this.initialized) return;
-    this.initialized = true;
+  initialize(): Promise<void> {
+    if (this.initializationPromise) return this.initializationPromise;
 
     // 백엔드에서 한 번만 구독
-    window.api.keys.onKeyState((payload) => {
+    const subscription = window.api.keys.onKeyState((payload) => {
       // 모든 리스너에게 브로드캐스트
       this.listeners.forEach((listener) => {
         try {
@@ -34,6 +33,16 @@ class KeyEventBus {
         }
       });
     });
+
+    const initialization = subscription.ready.catch((error) => {
+      if (this.initializationPromise === initialization) {
+        this.initializationPromise = null;
+      }
+      throw error;
+    });
+
+    this.initializationPromise = initialization;
+    return initialization;
   }
 
   /**
