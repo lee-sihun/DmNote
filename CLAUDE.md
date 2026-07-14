@@ -130,6 +130,13 @@ src-tauri/src/
 - `useMemo` / `useCallback` 의존성 배열에서 배열/객체는 개별 요소 비교 고려
 - 린트 자동 수정이 의도적 패턴을 덮어쓸 수 있으므로 필요시 `eslint-disable` 주석 사용
 
+## store 자산·복구 안전 규칙
+
+- **파일 자산 종류를 새로 추가할 때** (appData에 파일을 두고 store가 경로를 참조): `store.rs`의 orphan sweep 보호 집합(`collect_local_*_path_keys`)에 참조 수집을 추가하고, 크래시 직후·손상 복구 직후 시나리오와의 교차 테스트 필수
+- **sweep 불변식**: 자산 정리는 즉시 삭제가 아니라 `trash/<세션>/` 30일 격리 — 이를 우회하는 직접 `remove_file` 정리 경로 추가 금지. store 복구가 발생한 세션은 sweep이 자동 스킵됨(`skip_asset_sweep`)
+- **store에 사용자 생성 컬렉션 필드를 추가할 때**: `migration.rs`의 `recover_collection_field`에 항목 단위 복구 등록 검토 (범용 헬퍼 재사용, 한 줄). 미등록 시 그 필드만 "손상 시 통째 초기화"로 폴백
+- **`keys[mode][i]` ↔ `keyPositions[mode][i]`는 인덱스 결합** — 복구·마이그레이션에서 배열 요소 제거 금지, 제자리 대체(`""` / default)만 허용
+
 ## API 문서 동기화
 
 - 프론트엔드 플러그인 API(`dmn.*`) 또는 Tauri 커맨드에 변경이 있으면 `docs/content/` 하위 관련 MDX 문서를 업데이트
