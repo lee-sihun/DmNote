@@ -420,14 +420,14 @@ const FontPicker = ({
           const rect = event.currentTarget.getBoundingClientRect();
           setAddMenuPosition({ x: rect.right + 4, y: rect.top - 2 });
         }}
-        addLabel={t('fontPicker.add') || '폰트 추가'}
+        addLabel={t('fontPicker.add')}
         addButtonRef={addButtonRef}
       />
 
       {addMenuPosition !== null && (
         <ListPopup
           open
-          ariaLabel={t('fontPicker.add') || '폰트 추가'}
+          ariaLabel={t('fontPicker.add')}
           referenceRef={addButtonRef}
           position={addMenuPosition}
           onClose={() => setAddMenuPosition(null)}
