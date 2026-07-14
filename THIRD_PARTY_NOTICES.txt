@@ -160,3 +160,17 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+
+apple_cursor
+------------
+
+DM Note incorporates modified vector path data from the apple_cursor
+project by ful1e5 for its macOS resize cursors.
+
+Source: https://github.com/ful1e5/apple_cursor
+
+apple_cursor is licensed under the GNU General Public License, Version 3.
+DM Note redistributes the modified cursor data under GPL-3.0-only,
+consistent with DM Note's own license. The complete GNU GPL Version 3
+license text is included in the root LICENSE file.

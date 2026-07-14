@@ -157,6 +157,8 @@ fn maybe_build_macos_dock_helper() {
     let helper_macos = helper_contents.join("MacOS");
     let helper_resources = helper_contents.join("Resources");
     let helper_exec = helper_macos.join("DMNoteDockHelper");
+    let helper_arm64_exec = helper_macos.join("DMNoteDockHelper.arm64");
+    let helper_x86_64_exec = helper_macos.join("DMNoteDockHelper.x86_64");
     let helper_bundle_info = helper_contents.join("Info.plist");
     let helper_icon = helper_resources.join("icon.icns");
     let source_icon = PathBuf::from("icons/icon.icns");
@@ -168,6 +170,9 @@ fn maybe_build_macos_dock_helper() {
     if legacy_helper_bundle.exists() {
         let _ = fs::remove_dir_all(&legacy_helper_bundle);
     }
+    if helper_bundle.exists() {
+        let _ = fs::remove_dir_all(&helper_bundle);
+    }
 
     if let Err(err) = fs::create_dir_all(&helper_macos) {
         println!("cargo:warning=failed to create helper MacOS dir: {err}");
@@ -178,21 +183,66 @@ fn maybe_build_macos_dock_helper() {
         return;
     }
 
-    let status = Command::new("xcrun")
-        .args(["--sdk", "macosx", "swiftc"])
-        .arg(&helper_src)
-        .args(["-O", "-framework", "AppKit", "-o"])
+    let helper_slices = [
+        (
+            "arm64",
+            "arm64-apple-macos11.0",
+            helper_arm64_exec.as_path(),
+        ),
+        (
+            "x86_64",
+            "x86_64-apple-macos11.0",
+            helper_x86_64_exec.as_path(),
+        ),
+    ];
+
+    for (arch, target, output) in helper_slices {
+        let status = Command::new("xcrun")
+            .args(["--sdk", "macosx", "swiftc"])
+            .arg(&helper_src)
+            .args(["-target", target, "-O", "-framework", "AppKit", "-o"])
+            .arg(output)
+            .status();
+
+        match status {
+            Ok(s) if s.success() => {}
+            Ok(s) => {
+                println!("cargo:warning=swiftc helper {arch} build failed with status {s}");
+                let _ = fs::remove_file(&helper_arm64_exec);
+                let _ = fs::remove_file(&helper_x86_64_exec);
+                return;
+            }
+            Err(err) => {
+                println!("cargo:warning=failed to invoke swiftc for helper {arch} build: {err}");
+                let _ = fs::remove_file(&helper_arm64_exec);
+                let _ = fs::remove_file(&helper_x86_64_exec);
+                return;
+            }
+        }
+    }
+
+    let lipo_status = Command::new("xcrun")
+        .arg("lipo")
+        .arg("-create")
+        .arg(&helper_arm64_exec)
+        .arg(&helper_x86_64_exec)
+        .arg("-output")
         .arg(&helper_exec)
         .status();
 
-    match status {
+    let _ = fs::remove_file(&helper_arm64_exec);
+    let _ = fs::remove_file(&helper_x86_64_exec);
+
+    match lipo_status {
         Ok(s) if s.success() => {}
         Ok(s) => {
-            println!("cargo:warning=swiftc helper build failed with status {s}");
+            println!("cargo:warning=lipo helper build failed with status {s}");
+            let _ = fs::remove_file(&helper_exec);
             return;
         }
         Err(err) => {
-            println!("cargo:warning=failed to invoke swiftc for helper build: {err}");
+            println!("cargo:warning=failed to invoke lipo for helper build: {err}");
+            let _ = fs::remove_file(&helper_exec);
             return;
         }
     }

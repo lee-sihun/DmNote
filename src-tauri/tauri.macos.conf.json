@@ -4,9 +4,13 @@
     "active": true,
     "targets": ["app", "dmg"],
     "icon": ["icons/icon.icns"],
-    "resources": ["target/dmnote-helper/DM NOTE.app"],
+    "resources": {
+      "target/dmnote-helper/DM NOTE.app": "DM NOTE.app",
+      "../THIRD_PARTY_NOTICES.txt": "THIRD_PARTY_NOTICES.txt"
+    },
     "macOS": {
-      "entitlements": null
+      "entitlements": null,
+      "minimumSystemVersion": "11.0"
     }
   }
 }
