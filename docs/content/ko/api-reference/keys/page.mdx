@@ -18,7 +18,7 @@ type KeyMappings = Record<string, string[]>;
 
 ```javascript
 const mappings = await dmn.keys.get();
-console.log("4key 매핑:", mappings["4key"]);
+console.log('4key 매핑:', mappings['4key']);
 ```
 
 ### update(mappings)
@@ -27,7 +27,7 @@ console.log("4key 매핑:", mappings["4key"]);
 
 ```javascript
 const current = await dmn.keys.get();
-current["4key"] = ["KeyS", "KeyD", "KeyJ", "KeyK"];
+current['4key'] = ['KeyS', 'KeyD', 'KeyJ', 'KeyK'];
 await dmn.keys.update(current);
 ```
 
@@ -46,13 +46,13 @@ interface KeyPosition {
   activeTransparent?: boolean;
   idleTransparent?: boolean;
   count: number;
-  noteColor: string | { type: "gradient"; top: string; bottom: string };
+  noteColor: string | { type: 'gradient'; top: string; bottom: string };
   noteOpacity: number;
   noteEffectEnabled: boolean;
   noteGlowEnabled: boolean;
   noteGlowSize: number;
   noteGlowOpacity: number;
-  noteGlowColor?: string | { type: "gradient"; top: string; bottom: string };
+  noteGlowColor?: string | { type: 'gradient'; top: string; bottom: string };
   noteAutoYCorrection: boolean;
   className?: string;
   zIndex?: number;
@@ -62,7 +62,7 @@ interface KeyPosition {
 
 ```javascript
 const positions = await dmn.keys.getPositions();
-console.log("4key 위치:", positions["4key"]);
+console.log('4key 위치:', positions['4key']);
 ```
 
 ### updatePositions(positions)
@@ -71,7 +71,7 @@ console.log("4key 위치:", positions["4key"]);
 
 ```javascript
 const current = await dmn.keys.getPositions();
-current["4key"][0].dx = 100;
+current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
 ```
 
@@ -82,8 +82,8 @@ await dmn.keys.updatePositions(current);
 현재 활성 키 모드를 변경합니다.
 
 ```javascript
-const result = await dmn.keys.setMode("8key");
-console.log("모드 변경 성공:", result.success);
+const result = await dmn.keys.setMode('8key');
+console.log('모드 변경 성공:', result.success);
 ```
 
 ### resetMode(mode)
@@ -91,7 +91,7 @@ console.log("모드 변경 성공:", result.success);
 특정 키 모드를 기본값으로 초기화합니다.
 
 ```javascript
-await dmn.keys.resetMode("4key");
+await dmn.keys.resetMode('4key');
 ```
 
 ### resetAll()
@@ -110,7 +110,7 @@ const reset = await dmn.keys.resetAll();
 
 ```javascript
 const counters = await dmn.keys.getCounters();
-console.log("4key 카운터:", counters["4key"]);
+console.log('4key 카운터:', counters['4key']);
 ```
 
 ### setCounters(counters)
@@ -119,7 +119,7 @@ console.log("4key 카운터:", counters["4key"]);
 
 ```javascript
 await dmn.keys.setCounters({
-  "4key": { KeyD: 100, KeyF: 200, KeyJ: 150, KeyK: 180 },
+  '4key': { KeyD: 100, KeyF: 200, KeyJ: 150, KeyK: 180 },
 });
 ```
 
@@ -136,7 +136,7 @@ await dmn.keys.resetCounters();
 특정 모드의 키 카운트만 초기화합니다.
 
 ```javascript
-await dmn.keys.resetCountersMode("4key");
+await dmn.keys.resetCountersMode('4key');
 ```
 
 ### resetSingleCounter(mode, key)
@@ -144,7 +144,7 @@ await dmn.keys.resetCountersMode("4key");
 특정 모드의 특정 키 카운트만 초기화합니다.
 
 ```javascript
-await dmn.keys.resetSingleCounter("4key", "KeyD");
+await dmn.keys.resetSingleCounter('4key', 'KeyD');
 ```
 
 ## 이벤트 구독
@@ -172,6 +172,15 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 });
 ```
 
+반환된 함수에는 구독이 백엔드에 실제로 등록된 시점에 resolve되는 `ready`
+프로미스가 함께 노출됩니다. `ready` 이전에 발생한 이벤트는 전달되지 않을 수
+있으므로, 확실한 시작점이 필요하면(예: 스냅샷 요청 전) await 하세요:
+
+```javascript
+const unsub = dmn.keys.onKeyState(handler);
+await unsub.ready; // 이 시점부터 구독이 활성
+```
+
 ### onRawInput(listener)
 
 로우 레벨 입력 이벤트를 구독합니다. 키보드, 마우스, HID 기기의 원시
@@ -179,7 +188,7 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 
 ```typescript
 interface RawInputPayload {
-  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
   label: string; // "KeyD", "MOUSE1", "HIDB:1ccf:101c:9:3" 등
   labels: string[]; // 모든 레이블 목록
   state: string; // "DOWN" | "UP"
@@ -206,7 +215,7 @@ HID 기기 버튼(Windows)은 `device: 'gamepad'`와
 
 ```javascript
 const unsub = dmn.keys.onChanged((mappings) => {
-  console.log("키 매핑 변경:", mappings);
+  console.log('키 매핑 변경:', mappings);
 });
 ```
 
@@ -216,7 +225,7 @@ const unsub = dmn.keys.onChanged((mappings) => {
 
 ```javascript
 const unsub = dmn.keys.onPositionsChanged((positions) => {
-  console.log("키 위치 변경:", positions);
+  console.log('키 위치 변경:', positions);
 });
 ```
 
@@ -226,7 +235,7 @@ const unsub = dmn.keys.onPositionsChanged((positions) => {
 
 ```javascript
 const unsub = dmn.keys.onModeChanged(({ mode }) => {
-  console.log("모드 변경:", mode);
+  console.log('모드 변경:', mode);
 });
 ```
 
@@ -246,7 +255,7 @@ const unsub = dmn.keys.onCounterChanged(({ mode, key, count }) => {
 
 ```javascript
 const unsub = dmn.keys.onCountersChanged((counters) => {
-  console.log("카운터:", counters);
+  console.log('카운터:', counters);
 });
 ```
 
@@ -265,11 +274,11 @@ const tabs = await dmn.keys.customTabs.list();
 새 커스텀 탭을 생성합니다.
 
 ```javascript
-const result = await dmn.keys.customTabs.create("My Keys");
+const result = await dmn.keys.customTabs.create('My Keys');
 if (result.error) {
   console.error(result.error); // "invalid-name", "duplicate-name", "max-reached"
 } else {
-  console.log("생성됨:", result.result);
+  console.log('생성됨:', result.result);
 }
 ```
 
@@ -278,7 +287,7 @@ if (result.error) {
 커스텀 탭을 삭제합니다.
 
 ```javascript
-const result = await dmn.keys.customTabs.delete("custom-123");
+const result = await dmn.keys.customTabs.delete('custom-123');
 ```
 
 ### select(id)
@@ -286,7 +295,7 @@ const result = await dmn.keys.customTabs.delete("custom-123");
 커스텀 탭을 선택합니다.
 
 ```javascript
-await dmn.keys.customTabs.select("custom-123");
+await dmn.keys.customTabs.select('custom-123');
 ```
 
 ### restore(customTabs, selectedKeyType)
@@ -295,8 +304,8 @@ await dmn.keys.customTabs.select("custom-123");
 
 ```javascript
 await dmn.keys.customTabs.restore(
-  [{ id: "custom-123", name: "My Keys", keys: ["KeyA", "KeyS"] }],
-  "custom-123",
+  [{ id: 'custom-123', name: 'My Keys', keys: ['KeyA', 'KeyS'] }],
+  'custom-123',
 );
 ```
 
@@ -307,7 +316,7 @@ await dmn.keys.customTabs.restore(
 ```javascript
 const unsub = dmn.keys.customTabs.onChanged(
   ({ customTabs, selectedKeyType }) => {
-    console.log("선택된 탭:", selectedKeyType);
+    console.log('선택된 탭:', selectedKeyType);
   },
 );
 ```

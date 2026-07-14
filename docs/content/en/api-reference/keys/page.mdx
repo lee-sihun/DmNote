@@ -9,7 +9,7 @@ Key event subscription, mapping, and custom tab management.
 
 ## Key State Events
 
-### `dmn.keys.onKeyState(callback): Unsubscribe`
+### `dmn.keys.onKeyState(callback): ReadyUnsubscribe`
 
 <Callout type="warning">Overlay window only.</Callout>
 
@@ -18,8 +18,8 @@ Subscribes to state changes for registered keys.
 ```typescript
 interface KeyStateEvent {
   key: string; // e.g., 'KeyA', 'MouseLeft'
-  state: "UP" | "DOWN";
-  mode: "keyboard" | "mouse";
+  state: 'UP' | 'DOWN';
+  mode: 'keyboard' | 'mouse';
   // Elapsed time (ms) between input capture and event emit.
   // Recover the real input time with `performance.now() - eventAgeMs`.
   eventAgeMs?: number;
@@ -30,6 +30,16 @@ const unsub = dmn.keys.onKeyState(({ key, state, mode }) => {
 });
 ```
 
+The returned function also exposes a `ready` promise that resolves once the
+subscription is actually registered with the backend. Events fired before
+`ready` resolves may not be delivered — await it when you need a guaranteed
+starting point (e.g. before requesting a snapshot):
+
+```typescript
+const unsub = dmn.keys.onKeyState(handler);
+await unsub.ready; // subscription is live from this point
+```
+
 ### `dmn.keys.onRawInput(callback): Unsubscribe`
 
 <Callout type="warning">Overlay window only.</Callout>
@@ -38,10 +48,10 @@ Subscribes to all raw input events (including unregistered keys).
 
 ```typescript
 interface RawInputEvent {
-  device: "keyboard" | "mouse" | "gamepad" | "unknown";
+  device: 'keyboard' | 'mouse' | 'gamepad' | 'unknown';
   label: string; // e.g., 'A', 'LButton', 'HIDB:1ccf:101c:9:3'
   labels: string[]; // all candidate labels for this event
-  state: "DOWN" | "UP";
+  state: 'DOWN' | 'UP';
 }
 
 const unsub = dmn.keys.onRawInput(({ device, label, state }) => {
@@ -65,7 +75,7 @@ Returns the current cumulative key counter snapshot.
 type KeyCounters = Record<string, Record<string, number>>;
 
 const counters = await dmn.keys.getCounters();
-console.log(counters["4key"]);
+console.log(counters['4key']);
 ```
 
 ### `dmn.keys.onCounterChanged(callback): Unsubscribe`
@@ -95,11 +105,11 @@ Subscribes to input mode changes (keyboard/mouse).
 
 ```typescript
 interface ModeEvent {
-  mode: "keyboard" | "mouse";
+  mode: 'keyboard' | 'mouse';
 }
 
 const unsub = dmn.keys.onModeChanged(({ mode }) => {
-  console.log("Mode changed:", mode);
+  console.log('Mode changed:', mode);
 });
 ```
 
@@ -153,8 +163,8 @@ interface CustomTabOptions {
 }
 
 const unsub = dmn.keys.registerCustomTab({
-  id: "my-tab",
-  label: "My Tab",
+  id: 'my-tab',
+  label: 'My Tab',
   content: (container) => {
     container.innerHTML = `<div>Custom tab content</div>`;
     return () => {
@@ -170,8 +180,8 @@ Restores custom tabs and selected mode atomically. Syncs backend state, overlay,
 
 ```javascript
 await dmn.keys.customTabs.restore(
-  [{ id: "custom-123", name: "My Keys", keys: ["KeyA", "KeyS"] }],
-  "custom-123",
+  [{ id: 'custom-123', name: 'My Keys', keys: ['KeyA', 'KeyS'] }],
+  'custom-123',
 );
 ```
 
@@ -238,7 +248,7 @@ dmn.stats.reset();
 ```javascript
 // KPS counter using stats API
 dmn.plugin.defineElement({
-  name: "KPS Counter",
+  name: 'KPS Counter',
   maxInstances: 1,
 
   template: (state, settings, { html }) => html`
