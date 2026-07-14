@@ -53,6 +53,30 @@ body.dmn-custom-cursor * {
   pointer-events: none;
 }
 
+/* 투명도 축소 설정 존중 — 남는 라이브 글래스(모달 카드·팝오버)를 고알파 솔리드로 강등
+   틴트 토큰만 요소 스코프에서 승격해 라운딩·인셋 링 재질은 그대로 유지 */
+@media (prefers-reduced-transparency: reduce) {
+  .backdrop-glass,
+  .backdrop-glass-popup {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    --ui-glass: rgba(14, 14, 17, 0.96);
+    --ui-glass-heavy: rgba(14, 14, 17, 0.96);
+    --ui-glass-dim: rgba(12, 12, 14, 0.94);
+  }
+
+  /* 루미노시티 캡은 블러 없는 표면에서 무의미 — 블렌드 패스도 함께 제거 */
+  .backdrop-glass::after,
+  .backdrop-glass-popup::after {
+    content: none;
+  }
+
+  /* backdrop 클래스 없는 글래스 틴트 사용처(패널 토글 칩)도 동일 승격 */
+  .bg-glass-panel {
+    --ui-glass-panel: rgba(14, 14, 17, 0.96);
+  }
+}
+
 /* ===== 스크롤바 ===== */
 
 .listpopup-scroll {
@@ -142,35 +166,6 @@ body.dmn-custom-cursor * {
 
 /* ===== 등장 모션 ===== */
 
-/* 화면 전환 (캔버스 ↔ 설정) — 수직 이동 없이 페이드만 */
-@keyframes viewEnter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.view-enter {
-  animation: viewEnter var(--ui-duration-base) var(--ui-ease-out);
-}
-
-@keyframes viewFade {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.view-fade {
-  animation: viewFade var(--ui-duration-base) var(--ui-ease-out);
-}
-
 /* 패널 페이지 전환 — side-by-side push. 두 페이지가 absolute로 겹치고
    활성 페이지만 보임. 루트는 왼쪽으로, 서브 페이지는 오른쪽으로 exit */
 .dmn-panel-page {
@@ -183,10 +178,18 @@ body.dmn-custom-cursor * {
     filter var(--ui-duration-page) var(--ui-ease-page);
 }
 
+/* 퇴장 완료 후 페인트 제외 — visibility만 duration만큼 지연 플립.
+   숨김 확정 뒤엔 페인트 대상이 아니라 상주 blur가 프레임 비용으로 남지 않음.
+   입장은 베이스 transition에 visibility가 없어 즉시 visible */
 .dmn-panel-page[data-active='false'] {
   opacity: 0;
   pointer-events: none;
   filter: blur(var(--ui-page-blur));
+  visibility: hidden;
+  transition: opacity var(--ui-duration-page) var(--ui-ease-page),
+    transform var(--ui-duration-page) var(--ui-ease-page),
+    filter var(--ui-duration-page) var(--ui-ease-page),
+    visibility 0s linear var(--ui-duration-page);
 }
 
 .dmn-panel-page[data-page-depth='root'][data-active='false'] {
@@ -313,23 +316,11 @@ body.dmn-custom-cursor * {
   animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
 }
 
-/* 전면 시트 — 수직 이동 없는 페이드 등장, 종료 상태는 클래스 자연값 */
-@keyframes modalSheet {
-  from {
-    opacity: 0;
-  }
-}
-
-.animate-modal-sheet > * {
-  animation: modalSheet var(--ui-duration-base) var(--ui-ease-out) both;
-}
-
-/* 틴트와 블러를 한 키프레임에서 보간 — 종료 상태는 클래스 자연값 */
+/* 스크림 틴트만 보간 — 종료 상태는 클래스 자연값
+   backdrop-filter 보간 금지: 애니메이션 내내 풀스크린 재필터 (Windows 렉) */
 @keyframes modalScrim {
   from {
     background-color: transparent;
-    -webkit-backdrop-filter: blur(0px);
-    backdrop-filter: blur(0px);
   }
 }
 
@@ -512,15 +503,14 @@ body.dmn-custom-cursor * {
 @media (prefers-reduced-motion: reduce) {
   .tooltip-fade-in,
   .animate-modal-scale > *,
-  .animate-modal-sheet > *,
   .animate-modal-scrim,
-  .animate-pulse,
-  .view-enter,
-  .view-fade {
+  .animate-pulse {
     animation: none;
   }
 
-  .dmn-panel-page {
+  /* 비활성 상태 셀렉터가 자체 transition을 가지므로 같은 특이도로 함께 무효화 */
+  .dmn-panel-page,
+  .dmn-panel-page[data-active='false'] {
     transition: none;
   }
 

@@ -650,12 +650,12 @@ export default function App() {
       <TitleBar />
       <div className="flex-1 bg-panel overflow-hidden flex">
         {isSettingsOpen ? (
-          <div className="h-full w-full overflow-y-auto view-enter">
+          <div className="h-full w-full overflow-y-auto">
             <SettingTab showAlert={showAlert} showConfirm={showConfirm} />
           </div>
         ) : (
           <div
-            className="flex-1 h-full overflow-hidden relative view-fade"
+            className="flex-1 h-full overflow-hidden relative"
             onMouseEnter={() => setGridAreaHovered(true)}
             onMouseLeave={() => setGridAreaHovered(false)}
           >

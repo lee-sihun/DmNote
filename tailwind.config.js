@@ -25,6 +25,8 @@ module.exports = {
         'glass-heavy': 'var(--ui-glass-heavy)',
         'glass-dim': 'var(--ui-glass-dim)',
         'glass-panel': 'var(--ui-glass-panel)',
+        'glass-panel-solid': 'var(--ui-glass-panel-solid)',
+        'glass-dim-solid': 'var(--ui-glass-dim-solid)',
         line: {
           DEFAULT: 'var(--ui-line)',
           strong: 'var(--ui-line-strong)',

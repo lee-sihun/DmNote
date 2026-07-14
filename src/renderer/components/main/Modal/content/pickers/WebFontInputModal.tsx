@@ -425,7 +425,7 @@ const WebFontInputModal = ({
                 key={extractedFontFamily}
                 className="min-w-0 max-h-full overflow-y-auto modal-content-scroll dmn-scroll-fade px-[16px] py-[12px]"
               >
-                <div className="view-enter min-w-0">
+                <div className="min-w-0">
                   <p
                     className="text-[28px] leading-[36px] text-fg break-words"
                     style={{ fontFamily: specimenFontFamily }}
