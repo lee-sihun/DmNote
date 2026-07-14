@@ -5,9 +5,16 @@
 
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { buildValidTabIdSet } from '@constants/keyModes';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import { removeDisplayElementsInternal } from '../displayElement/displayElementApi';
+import {
+  createPluginInstanceLifecycle,
+  createPluginInstanceSaveBarrier,
+  normalizePluginInstanceTabId,
+} from '../displayElement/instanceLifecycle';
 import {
   SECTION_WRAPPER_CLASS,
   SECTION_LABEL_CLASS,
@@ -74,25 +81,52 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
 
     const INSTANCES_KEY = 'instances';
 
-    // 복원 중에는 saveInstances가 호출되지 않도록 플래그 설정
-    let isRestoring = true;
+    const instanceSaveBarrier = createPluginInstanceSaveBarrier();
+
+    const instanceLifecycle =
+      window.__dmn_window_type === 'main'
+        ? createPluginInstanceLifecycle<SavedInstance>({
+            isBootstrapped: () => useKeyStore.getState().isBootstrapped,
+            subscribeBootstrap: (listener) =>
+              useKeyStore.subscribe((state, previousState) => {
+                if (state.isBootstrapped !== previousState.isBootstrapped) {
+                  listener();
+                }
+              }),
+            loadInstances: async () => {
+              const stored = await namespacedStorage.get(INSTANCES_KEY);
+              return Array.isArray(stored) ? (stored as SavedInstance[]) : null;
+            },
+            persistInstances: (instances) =>
+              namespacedStorage.set(INSTANCES_KEY, instances),
+            getMemoryInstances: () =>
+              usePluginDisplayElementStore
+                .getState()
+                .elements.filter((element) => element.definitionId === defId)
+                .map((element) => ({
+                  fullId: element.fullId,
+                  tabId: element.tabId,
+                })),
+            releaseMemoryInstances: removeDisplayElementsInternal,
+          })
+        : null;
 
     const saveInstances = async () => {
       // 전역 리로드 중이거나 개별 복원 중에는 저장하지 않음
-      if (isReloading() || isRestoring) return;
+      if (isReloading() || !instanceSaveBarrier.shouldSave()) return;
 
       const elements = usePluginDisplayElementStore
         .getState()
         .elements.filter((el) => el.definitionId === defId);
 
-      const instances = elements.map((el) => ({
+      const instances: SavedInstance[] = elements.map((el) => ({
         position: el.position,
-        settings: el.settings,
+        settings: el.settings as SavedInstance['settings'],
         measuredSize: el.measuredSize,
-        tabId: el.tabId,
+        tabId: normalizePluginInstanceTabId(el.tabId),
       }));
 
-      await namespacedStorage.set(INSTANCES_KEY, instances);
+      await instanceLifecycle?.saveInstances(instances);
     };
 
     if (window.__dmn_window_type === 'main') {
@@ -108,11 +142,40 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           if (
             JSON.stringify(currentElements) !== JSON.stringify(prevElements)
           ) {
-            saveInstances();
+            void saveInstances().catch((error) => {
+              console.error(
+                `[Plugin ${pluginId}] Failed to save instances:`,
+                error,
+              );
+            });
           }
         },
       );
       registerCleanup(unsubStore);
+
+      const unsubValidTabs = useKeyStore.subscribe((state, previousState) => {
+        if (!state.isBootstrapped) return;
+
+        const validTabIds = buildValidTabIdSet(
+          state.customTabs.map((tab) => tab.id),
+        );
+        const previousValidTabIds = previousState.isBootstrapped
+          ? buildValidTabIdSet(previousState.customTabs.map((tab) => tab.id))
+          : null;
+        const validTabsChanged =
+          previousValidTabIds === null ||
+          validTabIds.size !== previousValidTabIds.size ||
+          [...validTabIds].some((tabId) => !previousValidTabIds.has(tabId));
+        if (!validTabsChanged) return;
+
+        void instanceLifecycle?.reconcile(validTabIds).catch((error) => {
+          console.error(
+            `[Plugin ${pluginId}] Failed to reconcile instances:`,
+            error,
+          );
+        });
+      });
+      registerCleanup(unsubValidTabs);
     }
 
     const defaultSettings: Record<string, string | number | boolean> =
@@ -632,68 +695,100 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
       window.__dmn_element_restorers?.delete(defId);
     });
 
-    // 인스턴스 복원
-    setTimeout(async () => {
-      try {
-        if (window.__dmn_window_type === 'main') {
-          const savedInstances = (await namespacedStorage.get(
-            INSTANCES_KEY,
-          )) as SavedInstance[] | null;
-
-          if (savedInstances && Array.isArray(savedInstances)) {
-            // maxInstances 제한 적용: 탭별로 제한 개수만큼만 복원
-            const maxInstances = definition.maxInstances;
-            let instancesToRestore = savedInstances;
-
-            if (maxInstances && maxInstances > 0) {
-              // 탭별로 그룹화
-              const instancesByTab = new Map<string, SavedInstance[]>();
-              savedInstances.forEach((inst) => {
-                const tabId = inst.tabId || '4key'; // 기본 탭
-                if (!instancesByTab.has(tabId)) {
-                  instancesByTab.set(tabId, []);
+    if (instanceLifecycle) {
+      const restoreTimer = setTimeout(() => {
+        void instanceLifecycle
+          .startRestore(
+            () => {
+              const keyState = useKeyStore.getState();
+              return buildValidTabIdSet(
+                keyState.customTabs.map((tab) => tab.id),
+              );
+            },
+            (savedInstances, readiness) => {
+              instanceSaveBarrier.runRestoreMutation(() => {
+                if (readiness === 'failed') {
+                  console.warn(
+                    `[Plugin ${pluginId}] Bootstrap timed out; restoring all instances`,
+                  );
                 }
-                instancesByTab.get(tabId)!.push(inst);
+
+                const maxInstances = definition.maxInstances;
+                let instancesToRestore = savedInstances;
+
+                if (maxInstances && maxInstances > 0) {
+                  const instancesByTab = new Map<string, SavedInstance[]>();
+                  savedInstances.forEach((instance) => {
+                    const tabId = normalizePluginInstanceTabId(instance.tabId);
+                    if (!instancesByTab.has(tabId)) {
+                      instancesByTab.set(tabId, []);
+                    }
+                    instancesByTab.get(tabId)!.push(instance);
+                  });
+
+                  instancesToRestore = [];
+                  instancesByTab.forEach((instances) => {
+                    instancesToRestore.push(
+                      ...instances.slice(0, maxInstances),
+                    );
+                  });
+                }
+
+                instancesToRestore.forEach((instance) => {
+                  // 비동기 복원 중 플러그인 컨텍스트 재설정
+                  window.__dmn_current_plugin_id = pluginId;
+
+                  window.api.ui.displayElement.add({
+                    html: '<!-- plugin-element -->',
+                    position: instance.position,
+                    draggable: true,
+                    definitionId: defId,
+                    settings: omitLayoutSettingValues(
+                      definition.settings,
+                      instance.settings || { ...defaultSettings },
+                    ) as Record<string, string | number | boolean>,
+                    state: definition.previewState || {},
+                    measuredSize: instance.measuredSize,
+                    tabId: normalizePluginInstanceTabId(instance.tabId),
+                    onClick: useModalSettings ? handleElementClick : undefined,
+                    contextMenu: {
+                      enableDelete: true,
+                      deleteLabel: definition.contextMenu?.delete || '삭제',
+                      customItems: buildCustomContextMenuItems(),
+                    },
+                  } as unknown as PluginDisplayElementConfig);
+                });
               });
+            },
+          )
+          .then(
+            () => {
+              if (instanceSaveBarrier.finishRestoration()) {
+                void saveInstances().catch((error) => {
+                  console.error(
+                    `[Plugin ${pluginId}] Failed to flush pending instance changes:`,
+                    error,
+                  );
+                });
+              }
+            },
+            (error) => {
+              instanceSaveBarrier.cancelRestoration();
+              console.error(
+                `[Plugin ${pluginId}] Failed to restore instances:`,
+                error,
+              );
+            },
+          );
+      }, 0);
 
-              // 각 탭별로 maxInstances만큼만 선택
-              instancesToRestore = [];
-              instancesByTab.forEach((instances) => {
-                instancesToRestore.push(...instances.slice(0, maxInstances));
-              });
-            }
-
-            instancesToRestore.forEach((inst) => {
-              // 각 add 호출 직전에 plugin context 재설정 (비동기 경합 방지)
-              window.__dmn_current_plugin_id = pluginId;
-
-              window.api.ui.displayElement.add({
-                html: '<!-- plugin-element -->',
-                position: inst.position,
-                draggable: true,
-                definitionId: defId,
-                settings: omitLayoutSettingValues(
-                  definition.settings,
-                  inst.settings || { ...defaultSettings },
-                ) as Record<string, string | number | boolean>,
-                state: definition.previewState || {},
-                measuredSize: inst.measuredSize,
-                tabId: inst.tabId,
-                onClick: useModalSettings ? handleElementClick : undefined,
-                contextMenu: {
-                  enableDelete: true,
-                  deleteLabel: definition.contextMenu?.delete || '삭제',
-                  customItems: buildCustomContextMenuItems(),
-                },
-              } as unknown as PluginDisplayElementConfig);
-            });
-          }
-        }
-      } catch (err) {
-        console.error(`[Plugin ${pluginId}] Failed to restore instances:`, err);
-      } finally {
-        isRestoring = false;
-      }
-    }, 0);
+      registerCleanup(() => {
+        clearTimeout(restoreTimer);
+        instanceLifecycle.dispose();
+        instanceSaveBarrier.cancelRestoration();
+      });
+    } else {
+      instanceSaveBarrier.finishRestoration();
+    }
   };
 };

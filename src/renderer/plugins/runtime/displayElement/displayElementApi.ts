@@ -30,18 +30,42 @@ import type {
 /**
  * 내부용 디스플레이 요소 제거 함수
  */
+const disposeDisplayElementResources = (
+  fullId: string,
+  element?: PluginDisplayElementInternal,
+): void => {
+  if (element?._onClickId) handlerRegistry.unregister(element._onClickId);
+  if (element?._onPositionChangeId)
+    handlerRegistry.unregister(element._onPositionChangeId);
+  if (element?._onDeleteId) handlerRegistry.unregister(element._onDeleteId);
+  unregisterDisplayElementInstance(fullId);
+};
+
 const removeDisplayElementInternal = (fullId: string): void => {
   const store = usePluginDisplayElementStore.getState();
   const element = store.elements.find((el) => el.fullId === fullId);
-  if (element) {
-    if (element._onClickId) handlerRegistry.unregister(element._onClickId);
-    if (element._onPositionChangeId)
-      handlerRegistry.unregister(element._onPositionChangeId);
-    if (element._onDeleteId) handlerRegistry.unregister(element._onDeleteId);
-  }
-
+  disposeDisplayElementResources(fullId, element);
   store.removeElement(fullId);
-  unregisterDisplayElementInstance(fullId);
+};
+
+const removeDisplayElementsInternal = (fullIds: readonly string[]): void => {
+  const ids = new Set(fullIds);
+  if (ids.size === 0) return;
+
+  const store = usePluginDisplayElementStore.getState();
+  const elements = store.elements;
+  const elementsById = new Map(
+    elements.map((element) => [element.fullId, element]),
+  );
+
+  ids.forEach((fullId) => {
+    disposeDisplayElementResources(fullId, elementsById.get(fullId));
+  });
+
+  const remaining = elements.filter((element) => !ids.has(element.fullId));
+  if (remaining.length !== elements.length) {
+    store.setElements(remaining);
+  }
 };
 
 /**
@@ -350,4 +374,4 @@ export const displayElementApi = {
   },
 };
 
-export { removeDisplayElementInternal };
+export { removeDisplayElementInternal, removeDisplayElementsInternal };

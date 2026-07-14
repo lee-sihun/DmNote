@@ -7,6 +7,7 @@ import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { setUndoRedoInProgress } from '@api/pluginDisplayElements';
+import { removeDisplayElementsInternal } from '@plugins/runtime/displayElement/displayElementApi';
 import type {
   KeyMappings,
   KeyPositions,
@@ -774,7 +775,16 @@ export function useKeyManager() {
 
   const handleResetCurrentMode = async () => {
     try {
-      await window.api.keys.resetMode(selectedKeyType);
+      const res = await window.api.keys.resetMode(selectedKeyType);
+      // 백엔드가 초기화를 수행한 경우에만 후속 정리 — 커스텀 탭도 이제 지원됨
+      if (!res.success) return;
+      // 이 탭에 놓인 플러그인 표시 요소도 함께 제거 (백엔드 저장소와 별개)
+      const staleElements = usePluginDisplayElementStore
+        .getState()
+        .elements.filter((el) => el.tabId === selectedKeyType);
+      removeDisplayElementsInternal(
+        staleElements.map((element) => element.fullId),
+      );
       setSelectedKey(null);
     } catch (error) {
       console.error('Failed to reset current mode', error);
