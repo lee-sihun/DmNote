@@ -14,9 +14,11 @@ use crate::{
     defaults::{default_keys, default_positions},
     errors::{CmdResult, CommandError},
     models::{
-        CustomCssPatch, CustomJsPatch, FontType, GraphPositions, KeyMappings, KeyPositions,
-        KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions, TabCssOverrides,
+        CustomCssPatch, CustomJsPatch, FontSettings, FontType, GraphPositions, KeyMappings,
+        KeyPositions, KnobPositions, NoteSettingsPatch, SettingsPatchInput, StatPositions,
+        TabCssOverrides,
     },
+    services::settings::apply_patch_to_store,
     state::AppState,
 };
 
@@ -130,39 +132,7 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
         tab.migrate_fade_position();
     }
 
-    let normalized = state.store.update(|store| {
-        store.keys = keys.clone();
-        store.key_positions = positions.clone();
-        store.stat_positions = stat_positions.clone();
-        store.graph_positions = graph_positions.clone();
-        store.knob_positions = knob_positions.clone();
-        store.custom_tabs = custom_tabs.clone();
-        store.selected_key_type = selected_key_type.clone();
-        store.tab_note_overrides = tab_note_overrides.clone();
-        if let Some(layer_groups) = preset_layer_groups.as_ref() {
-            store.layer_groups = layer_groups.clone();
-        }
-        if let Some(tab_css_overrides) = preset_tab_css_overrides.as_ref() {
-            store.tab_css_overrides = tab_css_overrides.clone();
-        }
-    })?;
-
-    let keys = normalized.keys;
-    let positions = normalized.key_positions;
-    let stat_positions = normalized.stat_positions;
-    let graph_positions = normalized.graph_positions;
-    let knob_positions = normalized.knob_positions;
-    let custom_tabs = normalized.custom_tabs;
-    let selected_key_type = normalized.selected_key_type;
-    let tab_note_overrides = normalized.tab_note_overrides;
-    let layer_groups = normalized.layer_groups;
-    let tab_css_overrides = normalized.tab_css_overrides;
-
-    state.keyboard.update_mappings(keys.clone());
-    state.keyboard.set_mode(selected_key_type.clone());
-    state.transfer_active_keys(&selected_key_type);
-
-    let diff = state.settings.apply_patch(SettingsPatchInput {
+    let settings_patch = SettingsPatchInput {
         background_color: Some(
             preset
                 .background_color
@@ -184,7 +154,42 @@ pub fn preset_load(state: State<'_, AppState>, app: AppHandle) -> CmdResult<Pres
             plugins: Some(custom_js.plugins.clone()),
         }),
         ..SettingsPatchInput::default()
+    };
+    let mut settings_diff = None;
+    let normalized = state.store.update(|store| {
+        store.keys = keys.clone();
+        store.key_positions = positions.clone();
+        store.stat_positions = stat_positions.clone();
+        store.graph_positions = graph_positions.clone();
+        store.knob_positions = knob_positions.clone();
+        store.custom_tabs = custom_tabs.clone();
+        store.selected_key_type = selected_key_type.clone();
+        store.tab_note_overrides = tab_note_overrides.clone();
+        if let Some(layer_groups) = preset_layer_groups.as_ref() {
+            store.layer_groups = layer_groups.clone();
+        }
+        if let Some(tab_css_overrides) = preset_tab_css_overrides.as_ref() {
+            store.tab_css_overrides = tab_css_overrides.clone();
+        }
+        settings_diff = Some(apply_patch_to_store(store, &settings_patch));
     })?;
+    let diff = settings_diff
+        .ok_or_else(|| CommandError::msg("preset settings transaction did not produce a diff"))?;
+
+    let keys = normalized.keys;
+    let positions = normalized.key_positions;
+    let stat_positions = normalized.stat_positions;
+    let graph_positions = normalized.graph_positions;
+    let knob_positions = normalized.knob_positions;
+    let custom_tabs = normalized.custom_tabs;
+    let selected_key_type = normalized.selected_key_type;
+    let tab_note_overrides = normalized.tab_note_overrides;
+    let layer_groups = normalized.layer_groups;
+    let tab_css_overrides = normalized.tab_css_overrides;
+
+    state
+        .keyboard
+        .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
 
     state.emit_settings_changed(&diff, &app)?;
     app.emit("layerGroups:changed", &layer_groups)?;
@@ -365,9 +370,23 @@ pub fn preset_load_tab(
         }
     }
 
+    // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
+    let merged_font_settings = if let Some(imported_fonts) = font_settings {
+        merge_tab_preset_fonts(&snapshot.font_settings, imported_fonts, |filtered_fonts| {
+            restore_preset_local_fonts(&app, filtered_fonts, embedded_local_fonts.as_deref())
+        })?
+    } else {
+        None
+    };
+
     // 임포트 경계 — 병합이 끝난 전체 상태 기준으로 dangling groupId 정리
     crate::state::migration::clear_dangling_group_ids(&mut snapshot);
 
+    let font_settings_patch = merged_font_settings.map(|font_settings| SettingsPatchInput {
+        font_settings: Some(font_settings),
+        ..SettingsPatchInput::default()
+    });
+    let mut settings_diff = None;
     let normalized = state.store.update(|store| {
         store.keys = snapshot.keys.clone();
         store.key_positions = snapshot.key_positions.clone();
@@ -377,6 +396,9 @@ pub fn preset_load_tab(
         store.tab_note_overrides = snapshot.tab_note_overrides.clone();
         store.layer_groups = snapshot.layer_groups.clone();
         store.tab_css_overrides = snapshot.tab_css_overrides.clone();
+        if let Some(patch) = font_settings_patch.as_ref() {
+            settings_diff = Some(apply_patch_to_store(store, patch));
+        }
     })?;
 
     let full_keys = normalized.keys;
@@ -390,42 +412,8 @@ pub fn preset_load_tab(
 
     state.keyboard.update_mappings(full_keys.clone());
 
-    // 프리셋에 담긴 폰트를 현재 폰트 목록에 병합 (탭 로드는 전역 설정을 덮지 않음)
-    if let Some(mut imported_fonts) = font_settings {
-        restore_preset_local_fonts(&app, &mut imported_fonts, embedded_local_fonts.as_deref())?;
-
-        let mut merged = snapshot.font_settings.clone();
-        let existing_names: HashSet<&str> = merged
-            .custom_fonts
-            .iter()
-            .map(|font| font.name.as_str())
-            .collect();
-        let existing_ids: HashSet<&str> = merged
-            .custom_fonts
-            .iter()
-            .map(|font| font.id.as_str())
-            .collect();
-
-        let mut incoming = Vec::new();
-        for mut font in imported_fonts.custom_fonts {
-            // 같은 이름은 기존 정의 유지 — 요소가 이름으로 폰트를 참조하므로 그대로 해석됨
-            if existing_names.contains(font.name.as_str()) {
-                continue;
-            }
-            if existing_ids.contains(font.id.as_str()) {
-                font.id = Uuid::new_v4().to_string();
-            }
-            incoming.push(font);
-        }
-
-        if !incoming.is_empty() {
-            merged.custom_fonts.extend(incoming);
-            let diff = state.settings.apply_patch(SettingsPatchInput {
-                font_settings: Some(merged),
-                ..SettingsPatchInput::default()
-            })?;
-            state.emit_settings_changed(&diff, &app)?;
-        }
+    if let Some(diff) = settings_diff.as_ref() {
+        state.emit_settings_changed(diff, &app)?;
     }
 
     app.emit("layerGroups:changed", &full_layer_groups)?;
@@ -516,9 +504,69 @@ fn choose_tab_preset_source_tab(
     Err(CommandError::msg("tab-preset-ambiguous-source"))
 }
 
+fn merge_tab_preset_fonts(
+    existing_font_settings: &FontSettings,
+    mut imported_font_settings: FontSettings,
+    restore_fonts: impl FnOnce(&mut FontSettings) -> CmdResult<()>,
+) -> CmdResult<Option<FontSettings>> {
+    let mut existing_names: HashSet<String> = existing_font_settings
+        .custom_fonts
+        .iter()
+        .map(|font| font.name.clone())
+        .collect();
+
+    // 같은 이름은 기존 정의 유지 — 수용한 이름도 반영해 프리셋 내부 중복 방어
+    imported_font_settings
+        .custom_fonts
+        .retain(|font| existing_names.insert(font.name.clone()));
+    if imported_font_settings.custom_fonts.is_empty() {
+        return Ok(None);
+    }
+
+    // 이름 필터 후 파일 복원 — 제외할 로컬 폰트의 고아 파일 생성 방지
+    restore_fonts(&mut imported_font_settings)?;
+
+    let mut existing_ids: HashSet<String> = existing_font_settings
+        .custom_fonts
+        .iter()
+        .map(|font| font.id.clone())
+        .collect();
+    for font in imported_font_settings.custom_fonts.iter_mut() {
+        if existing_ids.contains(&font.id) {
+            font.id = Uuid::new_v4().to_string();
+        }
+        existing_ids.insert(font.id.clone());
+    }
+
+    let mut merged = existing_font_settings.clone();
+    merged
+        .custom_fonts
+        .extend(imported_font_settings.custom_fonts);
+    Ok(Some(merged))
+}
+
 fn restore_preset_local_fonts(
     app: &AppHandle,
-    font_settings: &mut crate::models::FontSettings,
+    font_settings: &mut FontSettings,
+    embedded_local_fonts: Option<&[EmbeddedLocalFont]>,
+) -> CmdResult<()> {
+    let has_local_fonts = font_settings
+        .custom_fonts
+        .iter()
+        .any(|font| font.font_type == FontType::Local);
+    if !has_local_fonts {
+        return Ok(());
+    }
+
+    let app_data_dir = app.path().app_data_dir()?;
+    let fonts_dir = app_data_dir.join("fonts");
+
+    restore_preset_local_fonts_in_dir(&fonts_dir, font_settings, embedded_local_fonts)
+}
+
+fn restore_preset_local_fonts_in_dir(
+    fonts_dir: &Path,
+    font_settings: &mut FontSettings,
     embedded_local_fonts: Option<&[EmbeddedLocalFont]>,
 ) -> CmdResult<()> {
     let has_local_fonts = font_settings
@@ -535,9 +583,7 @@ fn restore_preset_local_fonts(
         .map(|font| (font.font_id.as_str(), font))
         .collect();
 
-    let app_data_dir = app.path().app_data_dir()?;
-    let fonts_dir = app_data_dir.join("fonts");
-    fs::create_dir_all(&fonts_dir)?;
+    fs::create_dir_all(fonts_dir)?;
 
     for font in font_settings.custom_fonts.iter_mut() {
         if font.font_type != FontType::Local {
@@ -1010,7 +1056,92 @@ fn choose_selected_key_type(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{defaults::default_positions, models::KnobPosition};
+    use crate::{
+        defaults::default_positions,
+        models::{CustomFont, KnobPosition},
+    };
+
+    #[test]
+    fn tab_preset_duplicate_font_does_not_create_embedded_file() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-tab-preset-font-load-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let fonts_dir = temp_dir.join("fonts");
+        std::fs::create_dir_all(&fonts_dir).unwrap();
+        let existing_path = fonts_dir.join("existing.ttf");
+        std::fs::write(&existing_path, b"existing-font").unwrap();
+
+        let existing_fonts = FontSettings {
+            custom_fonts: vec![CustomFont {
+                id: "existing-id".to_string(),
+                font_type: FontType::Local,
+                name: "SharedFont".to_string(),
+                display_name: "Existing Font".to_string(),
+                enabled: true,
+                local_path: Some(existing_path.to_string_lossy().to_string()),
+                css_content: None,
+            }],
+        };
+        let imported_font_id = "imported-id".to_string();
+        let imported_fonts = FontSettings {
+            custom_fonts: vec![CustomFont {
+                id: imported_font_id.clone(),
+                font_type: FontType::Local,
+                name: "SharedFont".to_string(),
+                display_name: "Imported Font".to_string(),
+                enabled: true,
+                local_path: None,
+                css_content: None,
+            }],
+        };
+        let embedded_fonts = vec![EmbeddedLocalFont {
+            font_id: imported_font_id,
+            extension: Some("ttf".to_string()),
+            data_base64: BASE64_STANDARD.encode(b"imported-font"),
+        }];
+        let file_count_before = std::fs::read_dir(&fonts_dir).unwrap().count();
+
+        let merged = merge_tab_preset_fonts(&existing_fonts, imported_fonts, |filtered_fonts| {
+            restore_preset_local_fonts_in_dir(&fonts_dir, filtered_fonts, Some(&embedded_fonts))
+        })
+        .unwrap();
+
+        assert!(merged.is_none());
+        assert_eq!(
+            std::fs::read_dir(&fonts_dir).unwrap().count(),
+            file_count_before
+        );
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn legacy_percent_encoded_file_url_is_copied_on_import() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-image-url-load-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let source_dir = temp_dir.join("source folder");
+        let images_dir = temp_dir.join("restored-images");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&images_dir).unwrap();
+        let source_path = source_dir.join("image with space.png");
+        std::fs::write(&source_path, b"legacy-image").unwrap();
+        let mut image_ref = Some(url::Url::from_file_path(&source_path).unwrap().to_string());
+
+        restore_position_image_reference(
+            &images_dir,
+            &HashMap::new(),
+            &mut HashMap::new(),
+            &mut image_ref,
+        )
+        .unwrap();
+
+        let restored_path = Path::new(image_ref.as_deref().unwrap());
+        assert!(restored_path.starts_with(&images_dir));
+        assert_eq!(std::fs::read(restored_path).unwrap(), b"legacy-image");
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 
     #[test]
     fn sound_restore_restores_knob_sound() {

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::models::{
-    CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, FontType, NoteSettings, NoteSettingsPatch,
-    SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState, ShortcutsState,
+    AppStoreData, CustomCss, CustomCssPatch, CustomJs, CustomJsPatch, FontType, NoteSettings,
+    NoteSettingsPatch, SettingsDiff, SettingsPatch, SettingsPatchInput, SettingsState,
+    ShortcutsState,
 };
 use crate::state::AppStore;
 
@@ -23,39 +24,78 @@ impl SettingsService {
     }
 
     pub fn apply_patch(&self, patch: SettingsPatchInput) -> Result<SettingsDiff> {
-        let current = self.snapshot();
-        let normalized = normalize_patch(&patch, &current);
-        let next = apply_changes(current.clone(), &normalized);
-
+        let mut diff = None;
         self.store.update(|state| {
-            state.hardware_acceleration = next.hardware_acceleration;
-            state.always_on_top = next.always_on_top;
-            state.overlay_locked = next.overlay_locked;
-            state.note_effect = next.note_effect;
-            state.note_settings = next.note_settings.clone();
-            state.angle_mode = next.angle_mode.clone();
-            state.language = next.language.clone();
-            state.laboratory_enabled = next.laboratory_enabled;
-            state.developer_mode_enabled = next.developer_mode_enabled;
-            state.tray_enabled = next.tray_enabled;
-            state.auto_update_enabled = next.auto_update_enabled;
-            state.background_color = next.background_color.clone();
-            state.use_custom_css = next.use_custom_css;
-            state.custom_css = next.custom_css.clone();
-            state.font_settings = next.font_settings.clone();
-            state.use_custom_js = next.use_custom_js;
-            state.custom_js = next.custom_js.clone();
-            state.overlay_resize_anchor = next.overlay_resize_anchor.clone();
-            state.key_counter_enabled = next.key_counter_enabled;
-            state.grid_settings = next.grid_settings.clone();
-            state.shortcuts = next.shortcuts.clone();
-            state.obs_mode_enabled = next.obs_mode_enabled;
+            diff = Some(apply_patch_to_store(state, &patch));
         })?;
+        diff.context("settings patch did not produce a diff")
+    }
+}
 
-        Ok(SettingsDiff {
-            changed: normalized,
-            full: Some(next),
-        })
+pub(crate) fn settings_from_store(store: &AppStoreData) -> SettingsState {
+    let mut custom_js = store.custom_js.clone();
+    let _ = custom_js.normalize();
+
+    SettingsState {
+        hardware_acceleration: store.hardware_acceleration,
+        always_on_top: store.always_on_top,
+        overlay_locked: store.overlay_locked,
+        note_effect: store.note_effect,
+        note_settings: store.note_settings.clone(),
+        angle_mode: store.angle_mode.clone(),
+        language: store.language.clone(),
+        laboratory_enabled: store.laboratory_enabled,
+        developer_mode_enabled: store.developer_mode_enabled,
+        tray_enabled: store.tray_enabled,
+        auto_update_enabled: store.auto_update_enabled,
+        background_color: store.background_color.clone(),
+        use_custom_css: store.use_custom_css,
+        custom_css: store.custom_css.clone(),
+        font_settings: store.font_settings.clone(),
+        use_custom_js: store.use_custom_js,
+        custom_js,
+        overlay_resize_anchor: store.overlay_resize_anchor.clone(),
+        key_counter_enabled: store.key_counter_enabled,
+        grid_settings: store.grid_settings.clone(),
+        shortcuts: store.shortcuts.clone(),
+        obs_mode_enabled: store.obs_mode_enabled,
+    }
+}
+
+pub(crate) fn apply_patch_to_store(
+    store: &mut AppStoreData,
+    patch: &SettingsPatchInput,
+) -> SettingsDiff {
+    let current = settings_from_store(store);
+    let normalized = normalize_patch(patch, &current);
+    let next = apply_changes(current, &normalized);
+
+    store.hardware_acceleration = next.hardware_acceleration;
+    store.always_on_top = next.always_on_top;
+    store.overlay_locked = next.overlay_locked;
+    store.note_effect = next.note_effect;
+    store.note_settings = next.note_settings.clone();
+    store.angle_mode = next.angle_mode.clone();
+    store.language = next.language.clone();
+    store.laboratory_enabled = next.laboratory_enabled;
+    store.developer_mode_enabled = next.developer_mode_enabled;
+    store.tray_enabled = next.tray_enabled;
+    store.auto_update_enabled = next.auto_update_enabled;
+    store.background_color = next.background_color.clone();
+    store.use_custom_css = next.use_custom_css;
+    store.custom_css = next.custom_css.clone();
+    store.font_settings = next.font_settings.clone();
+    store.use_custom_js = next.use_custom_js;
+    store.custom_js = next.custom_js.clone();
+    store.overlay_resize_anchor = next.overlay_resize_anchor.clone();
+    store.key_counter_enabled = next.key_counter_enabled;
+    store.grid_settings = next.grid_settings.clone();
+    store.shortcuts = next.shortcuts.clone();
+    store.obs_mode_enabled = next.obs_mode_enabled;
+
+    SettingsDiff {
+        changed: normalized,
+        full: Some(next),
     }
 }
 

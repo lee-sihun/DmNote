@@ -1,10 +1,9 @@
 use std::time::Instant;
 use std::{
-    collections::HashSet,
     io::{BufRead, BufReader},
-    process::{Child, Command, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     thread::{self, JoinHandle},
@@ -47,6 +46,15 @@ const TRAY_MENU_QUIT_ID: &str = "tray-quit";
 const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const OVERLAY_MARGIN: f64 = 40.0;
+const OVERLAY_BOUNDS_DEBOUNCE_MS: u64 = 400;
+
+fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: bool) -> bool {
+    !obs_mode_enabled && overlay_visible
+}
+
+fn bootstrap_active_keys(keyboard: &KeyboardManager) -> Vec<String> {
+    keyboard.pressed_keys()
+}
 
 pub struct AppState {
     pub store: Arc<AppStore>,
@@ -56,10 +64,10 @@ pub struct AppState {
     overlay_force_close: Arc<AtomicBool>,
     /// 오버레이 윈도우 초기화 중 Moved/Resized 이벤트에서 bounds 저장 억제
     overlay_initializing: Arc<AtomicBool>,
+    overlay_bounds_generation: Arc<AtomicU64>,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     key_counters: Arc<RwLock<KeyCounters>>,
     key_counter_enabled: Arc<AtomicBool>,
-    active_keys: Arc<RwLock<HashSet<String>>>,
     /// Raw input stream subscriber count - emit only when > 0
     raw_input_subscribers: Arc<std::sync::atomic::AtomicU32>,
     key_sound: Arc<KeySoundEngine>,
@@ -74,16 +82,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn initialize(store: AppStore) -> Result<Self> {
+        if let Err(err) = store.recover_interrupted_processed_wav_replacements_now() {
+            log::warn!("failed to recover interrupted processed WAVs during startup: {err}");
+        }
         let store = Arc::new(store);
         let snapshot = store.snapshot();
         let keyboard =
             KeyboardManager::new(snapshot.keys.clone(), snapshot.selected_key_type.clone());
         let settings = SettingsService::new(store.clone());
 
-        let key_counters = Arc::new(RwLock::new(snapshot.key_counters.clone()));
-        Self::sync_counters_with_keys_impl(&key_counters, &snapshot.keys);
+        let mut initial_key_counters = snapshot.key_counters.clone();
+        Self::sync_counters_with_keys_impl(&mut initial_key_counters, &snapshot.keys);
+        let key_counters = Arc::new(RwLock::new(initial_key_counters));
         let key_counter_enabled = Arc::new(AtomicBool::new(snapshot.key_counter_enabled));
-        let active_keys = Arc::new(RwLock::new(HashSet::new()));
         // 저장된 출력 백엔드로 엔진을 처음부터 초기화 → "기본 장치 → ASIO" 전환 깜빡임 제거.
         let initial_backend = snapshot
             .key_sound_output_backend
@@ -100,10 +111,10 @@ impl AppState {
             overlay_visible: Arc::new(RwLock::new(false)),
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
+            overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             keyboard_task: RwLock::new(None),
             key_counters,
             key_counter_enabled,
-            active_keys,
             raw_input_subscribers: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             key_sound,
             css_watcher: RwLock::new(None),
@@ -116,8 +127,7 @@ impl AppState {
     pub fn initialize_runtime(&self, app: &AppHandle) -> Result<()> {
         self.attach_main_window_handlers(app);
         let snapshot = self.store.snapshot();
-        // OBS 모드가 활성화된 상태로 부팅하면 오버레이 생성 건너뛰기 (create→destroy 낭비 방지)
-        if !snapshot.obs_mode_enabled {
+        if should_create_overlay_on_startup(snapshot.obs_mode_enabled, snapshot.overlay_visible) {
             self.ensure_overlay_window(app)?;
         }
         // 개발자 모드가 켜져 있으면 시작 시 DevTools 오픈 허용 및 자동 오픈 시도
@@ -163,6 +173,29 @@ impl AppState {
         });
     }
 
+    pub fn show_main_window(&self, app: &AppHandle) -> Result<()> {
+        let app_handle = app.clone();
+        app.run_on_main_thread(move || {
+            let state = app_handle.state::<AppState>();
+            if let Err(err) = state.show_main_window_inner(&app_handle) {
+                log::warn!("failed to show main window: {err}");
+            }
+        })?;
+        Ok(())
+    }
+
+    fn show_main_window_inner(&self, app: &AppHandle) -> Result<()> {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.unminimize();
+            main.show()?;
+            let _ = main.set_focus();
+        }
+
+        remove_tray_icon(app);
+        self.set_main_window_hidden(false)?;
+        Ok(())
+    }
+
     pub fn ensure_tray_icon_for_background(&self, app: &AppHandle) -> Result<()> {
         if app.tray_by_id(TRAY_ICON_ID).is_some() {
             return Ok(());
@@ -197,14 +230,16 @@ impl AppState {
                     ..
                 } = event
                 {
-                    if let Err(err) = show_main_window(tray.app_handle()) {
+                    let state = tray.app_handle().state::<AppState>();
+                    if let Err(err) = state.show_main_window(tray.app_handle()) {
                         log::error!("failed to show main window from tray click: {err}");
                     }
                 }
             })
             .on_menu_event(move |app_handle, event| {
                 if event.id() == TRAY_MENU_SETTINGS_ID {
-                    if let Err(err) = show_main_window(app_handle) {
+                    let state = app_handle.state::<AppState>();
+                    if let Err(err) = state.show_main_window(app_handle) {
                         log::error!("failed to show main window from tray: {err}");
                     }
                     return;
@@ -278,6 +313,7 @@ impl AppState {
             custom_tabs: state.custom_tabs.clone(),
             selected_key_type: state.selected_key_type.clone(),
             current_mode: self.keyboard.current_mode(),
+            active_keys: bootstrap_active_keys(&self.keyboard),
             overlay: BootstrapOverlayState {
                 visible: *self.overlay_visible.read(),
                 locked: state.overlay_locked,
@@ -322,21 +358,50 @@ impl AppState {
         Ok(())
     }
 
+    /// 저장된 토큰 재사용 또는 신규 생성 후 store에 저장
+    /// 기존 토큰은 commit-after-persist로 디스크 저장이 보장되므로 재저장 생략
+    pub fn resolve_and_save_obs_token(&self) -> Result<String> {
+        if let Some(token) = self
+            .store
+            .with_state(|s| s.obs_token.clone())
+            .filter(|token| !token.is_empty())
+        {
+            return Ok(token);
+        }
+
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let t = token.clone();
+        self.store.update(|s| {
+            s.obs_token = Some(t.clone());
+        })?;
+        Ok(token)
+    }
+
     /// 부팅 시 OBS 모드 자동 시작 (obs_mode_enabled=true일 때)
     fn auto_start_obs(&self, app: &AppHandle) {
         let bridge = self.obs_bridge.clone();
         let store = self.store.clone();
-        let (port, existing_token) = store.with_state(|s| (s.obs_port, s.obs_token.clone()));
-        // 저장된 토큰 재사용 또는 신규 생성
-        let token = match existing_token {
-            Some(t) if !t.is_empty() => t,
-            _ => {
-                let t = uuid::Uuid::new_v4().simple().to_string();
-                let tc = t.clone();
+        let port = store.with_state(|s| s.obs_port);
+
+        // 부팅 시에는 오버레이를 생성하지 않았으므로 이전 표시 상태만 저장
+        // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
+        let was_visible = store.with_state(|s| s.overlay_visible);
+        *self.obs_previous_overlay_visible.write() = Some(was_visible);
+
+        // 저장 안 된 토큰으로 서버를 켜면 재부팅 후 기존 URL이 무효화되므로 시작 중단
+        let token = match self.resolve_and_save_obs_token() {
+            Ok(token) => token,
+            Err(e) => {
+                log::error!(
+                    "[ObsBridge] auto-start 중단: 토큰 저장 실패 ({}) — obs_mode_enabled를 false로 복구",
+                    e
+                );
                 let _ = store.update(|s| {
-                    s.obs_token = Some(tc.clone());
+                    s.obs_mode_enabled = false;
                 });
-                t
+                self.obs_restore_overlay(app);
+                let _ = app.emit("obs:status", &self.obs_bridge.status());
+                return;
             }
         };
         let app_handle = app.clone();
@@ -363,11 +428,6 @@ impl AppState {
         bridge.set_app_handle(app.clone());
         // Tauri 이벤트 → OBS WS 포워딩 리스너 등록
         bridge.register_event_forwarding(app);
-
-        // 부팅 시에는 오버레이를 생성하지 않았으므로 상태만 저장
-        // (initialize_runtime에서 obs_mode_enabled일 때 ensure_overlay_window 건너뜀)
-        let was_visible = self.store.with_state(|s| s.overlay_visible);
-        *self.obs_previous_overlay_visible.write() = Some(was_visible);
 
         // async start를 tokio 런타임에서 실행
         tauri::async_runtime::spawn(async move {
@@ -490,6 +550,13 @@ impl AppState {
     pub fn set_overlay_visibility(&self, app: &AppHandle, visible: bool) -> Result<()> {
         log::debug!("[IPC] set_overlay_visibility: visible={}", visible);
 
+        if !visible {
+            flush_deferred_overlay_bounds(&self.store, &self.overlay_bounds_generation)?;
+        }
+        self.store.update(|state| {
+            state.overlay_visible = visible;
+        })?;
+
         if visible {
             // 오버레이를 열 때: 창이 없으면 생성하고 표시
             let window = self.ensure_overlay_window(app)?;
@@ -510,11 +577,6 @@ impl AppState {
         }
 
         *self.overlay_visible.write() = visible;
-        if let Err(err) = self.store.update(|state| {
-            state.overlay_visible = visible;
-        }) {
-            log::warn!("failed to persist overlay visibility: {err}");
-        }
         app.emit("overlay:visibility", &json!({ "visible": visible }))?;
         Ok(())
     }
@@ -547,6 +609,8 @@ impl AppState {
         if self.shutdown_started.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.overlay_bounds_generation
+            .fetch_add(1, Ordering::SeqCst);
         if let Some(task) = self.keyboard_task.write().take() {
             drop(task);
         }
@@ -556,16 +620,8 @@ impl AppState {
         if let Err(err) = self.persist_key_counters() {
             log::warn!("failed to persist key counters during shutdown: {err}");
         }
-        match self.store.flush_and_shutdown() {
-            Ok(()) => {
-                if let Err(err) = self.store.cleanup_orphan_assets_now() {
-                    log::warn!("failed to cleanup orphan assets during shutdown: {err}");
-                }
-            }
-            Err(err) => {
-                log::warn!("failed to flush store writer during shutdown: {err}");
-                log::warn!("skipping orphan asset cleanup after store flush failure");
-            }
+        if let Err(err) = self.store.flush_cleanup_and_shutdown() {
+            log::warn!("failed to finalize store during shutdown: {err:#}");
         }
     }
 
@@ -622,6 +678,7 @@ impl AppState {
 
         let mut new_x = position.x;
         let mut new_y = position.y;
+        let mut next_content_top_offset = None;
 
         // 초기화 중(첫 resize)에는 anchor 기반 position 재계산을 건너뛰고
         // store에 저장된 위치를 사용 (빌더 position이 무시될 수 있으므로)
@@ -635,9 +692,7 @@ impl AppState {
             // 초기화 중이라도 content_top_offset은 저장해야 다음 resize에서 delta 계산이 정확함
             if let Some(offset) = content_top_offset {
                 if offset.is_finite() {
-                    let _ = self.store.update(|state| {
-                        state.overlay_last_content_top_offset = Some(offset);
-                    })?;
+                    next_content_top_offset = Some(offset);
                 }
             }
         } else {
@@ -681,9 +736,7 @@ impl AppState {
                             _ => new_y -= delta,
                         }
                     }
-                    let _ = self.store.update(|state| {
-                        state.overlay_last_content_top_offset = Some(offset);
-                    })?;
+                    next_content_top_offset = Some(offset);
                 }
             }
         }
@@ -698,10 +751,12 @@ impl AppState {
             height,
         };
 
-        let _ = self.store.update(|state| {
-            state.overlay_bounds = Some(bounds.clone());
-            state.overlay_bounds_are_logical = true;
-        })?;
+        defer_overlay_bounds(
+            &self.store,
+            &self.overlay_bounds_generation,
+            bounds.clone(),
+            next_content_top_offset,
+        )?;
 
         log::debug!(
             "[IPC] resize_overlay: emit overlay:resized ({}x{} at {}, {})",
@@ -758,12 +813,16 @@ impl AppState {
         let mut child = Command::new(current_exe)
             .arg("--keyboard-daemon")
             .env("DMNOTE_HOTKEYS_V1", shortcuts_json)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .context("failed to spawn keyboard daemon process")?;
 
+        let parent_stdin = child
+            .stdin
+            .take()
+            .context("keyboard daemon stdin unavailable")?;
         let stdout = child
             .stdout
             .take()
@@ -957,36 +1016,36 @@ impl AppState {
                                 }
                             }
 
-                            let Some(key_label) =
-                                keyboard.match_candidate(message.labels.iter().map(|s| s.as_str()))
+                            let is_down = state == "DOWN";
+                            let Some((mode, key_label, state_changed)) = keyboard.match_and_register(
+                                message.labels.iter().map(|s| s.as_str()),
+                                is_down,
+                            )
                             else {
                                 continue;
                             };
-                            let mode = keyboard.current_mode();
-                            let state_changed = if state == "DOWN" {
-                                let changed = app_state.register_key_down(&mode, &key_label);
-                                if changed {
-                                    if let Some(count) = app_state.increment_key_counter(&mode, &key_label) {
-                                        log::trace!(
-                                            "[IPC] emit keys:counter: mode={}, key={}, count={}",
-                                            mode, key_label, count
-                                        );
-                                        if let Err(err) = app_handle.emit(
-                                            "keys:counter",
-                                            &json!({
-                                                "mode": mode.clone(),
-                                                "key": key_label.clone(),
-                                                "count": count,
-                                            }),
-                                        ) {
-                                            error!("failed to emit keys:counter event: {err}");
-                                        }
+                            if is_down && state_changed {
+                                if let Some(count) =
+                                    app_state.increment_key_counter(&mode, &key_label)
+                                {
+                                    log::trace!(
+                                        "[IPC] emit keys:counter: mode={}, key={}, count={}",
+                                        mode,
+                                        key_label,
+                                        count
+                                    );
+                                    if let Err(err) = app_handle.emit(
+                                        "keys:counter",
+                                        &json!({
+                                            "mode": mode.clone(),
+                                            "key": key_label.clone(),
+                                            "count": count,
+                                        }),
+                                    ) {
+                                        error!("failed to emit keys:counter event: {err}");
                                     }
                                 }
-                                changed
-                            } else {
-                                app_state.register_key_up(&mode, &key_label)
-                            };
+                            }
                             if !state_changed {
                                 continue;
                             }
@@ -1161,6 +1220,7 @@ impl AppState {
             running,
             reader_handle: Some(reader_handle),
             stderr_handle,
+            parent_stdin: Some(parent_stdin),
             child: Some(child),
         });
         Ok(())
@@ -1325,6 +1385,7 @@ impl AppState {
         let overlay_window = window.clone();
         let force_close_flag = self.overlay_force_close.clone();
         let initializing_flag = self.overlay_initializing.clone();
+        let bounds_generation = self.overlay_bounds_generation.clone();
 
         window.on_window_event(move |event| match event {
             WindowEvent::CloseRequested { api, .. } => {
@@ -1333,15 +1394,23 @@ impl AppState {
                     *overlay_visible.write() = false;
                 } else {
                     api.prevent_close();
-                    if let Err(err) = overlay_window.hide() {
-                        log::error!("failed to hide overlay window on close: {err}");
+                    if let Err(err) =
+                        flush_deferred_overlay_bounds(&store, &bounds_generation)
+                    {
+                        log::warn!("failed to flush overlay bounds on close: {err}");
+                        return;
                     }
-                    *overlay_visible.write() = false;
                     if let Err(err) = store.update(|state| {
                         state.overlay_visible = false;
                     }) {
                         log::warn!("failed to persist overlay visibility on close: {err}");
+                        return;
                     }
+                    if let Err(err) = overlay_window.hide() {
+                        log::error!("failed to hide overlay window on close: {err}");
+                        return;
+                    }
+                    *overlay_visible.write() = false;
                     if let Err(err) =
                         app_handle.emit("overlay:visibility", &json!({ "visible": false }))
                     {
@@ -1364,8 +1433,12 @@ impl AppState {
             WindowEvent::Moved(_) | WindowEvent::Resized(_)
                 // 윈도우 초기화 중에는 OS가 보고하는 좌표로 저장된 bounds를 덮어쓰지 않음
                 if !initializing_flag.load(Ordering::SeqCst) => {
-                    if let Err(err) = persist_overlay_bounds(&overlay_window, &store) {
-                        log::warn!("failed to persist overlay bounds: {err}");
+                    if let Err(err) = defer_overlay_bounds_from_window(
+                        &overlay_window,
+                        &store,
+                        &bounds_generation,
+                    ) {
+                        log::warn!("failed to defer overlay bounds: {err}");
                     }
                 }
             _ => {}
@@ -1477,7 +1550,7 @@ impl AppState {
 
         if let Some(enabled) = diff.changed.tray_enabled {
             if !enabled {
-                let _ = app.remove_tray_by_id(TRAY_ICON_ID);
+                dispatch_remove_tray_icon(app)?;
                 if let Err(err) = self.set_main_window_hidden(false) {
                     log::warn!(
                         "failed to clear main_window_hidden when disabling tray mode: {err}"
@@ -1514,14 +1587,23 @@ impl AppState {
         self.key_counters.read().clone()
     }
 
-    pub fn reset_key_counters(&self) -> KeyCounters {
-        let mut counters = self.key_counters.write();
-        for mode_entry in counters.values_mut() {
-            for value in mode_entry.values_mut() {
-                *value = 0;
+    fn update_key_counters(&self, updater: impl FnOnce(&mut KeyCounters)) -> Result<KeyCounters> {
+        let mut guard = self.key_counters.write();
+        let mut scratch = guard.clone();
+        updater(&mut scratch);
+        let persisted = self.store.set_key_counters(scratch)?;
+        *guard = persisted.clone();
+        Ok(persisted)
+    }
+
+    pub fn reset_key_counters(&self) -> Result<KeyCounters> {
+        self.update_key_counters(|counters| {
+            for mode_entry in counters.values_mut() {
+                for value in mode_entry.values_mut() {
+                    *value = 0;
+                }
             }
-        }
-        counters.clone()
+        })
     }
 
     pub fn replace_key_counters(
@@ -1529,58 +1611,38 @@ impl AppState {
         counters: KeyCounters,
         keys: &KeyMappings,
     ) -> Result<KeyCounters> {
-        {
-            let mut guard = self.key_counters.write();
-            *guard = counters;
-        }
-        self.sync_counters_with_keys(keys);
-        self.persist_key_counters()
+        self.update_key_counters(|scratch| {
+            *scratch = counters;
+            Self::sync_counters_with_keys_impl(scratch, keys);
+        })
     }
 
-    pub fn reset_mode_counters(&self, mode: &str) {
-        let mut counters = self.key_counters.write();
-        if let Some(entry) = counters.get_mut(mode) {
-            for value in entry.values_mut() {
-                *value = 0;
+    pub fn reset_mode_counters(&self, mode: &str) -> Result<KeyCounters> {
+        self.update_key_counters(|counters| {
+            if let Some(entry) = counters.get_mut(mode) {
+                for value in entry.values_mut() {
+                    *value = 0;
+                }
             }
-        }
+        })
     }
 
-    pub fn reset_single_key_counter(&self, mode: &str, key: &str) {
-        let mut counters = self.key_counters.write();
-        if let Some(entry) = counters.get_mut(mode) {
-            if let Some(value) = entry.get_mut(key) {
-                *value = 0;
+    pub fn reset_single_key_counter(&self, mode: &str, key: &str) -> Result<KeyCounters> {
+        self.update_key_counters(|counters| {
+            if let Some(entry) = counters.get_mut(mode) {
+                if let Some(value) = entry.get_mut(key) {
+                    *value = 0;
+                }
             }
-        }
-    }
-
-    pub fn register_key_down(&self, mode: &str, key: &str) -> bool {
-        let mut guard = self.active_keys.write();
-        guard.insert(Self::compose_active_key(mode, key))
-    }
-
-    pub fn register_key_up(&self, mode: &str, key: &str) -> bool {
-        let mut guard = self.active_keys.write();
-        guard.remove(&Self::compose_active_key(mode, key))
+        })
     }
 
     pub fn clear_active_keys(&self) {
-        self.active_keys.write().clear();
+        self.keyboard.clear_active_keys();
     }
 
-    /// 모드 전환 시 active_keys의 prefix를 새 모드로 교체
-    pub fn transfer_active_keys(&self, new_mode: &str) {
-        let mut guard = self.active_keys.write();
-        let transferred: HashSet<String> = guard
-            .drain()
-            .filter_map(|entry| {
-                entry
-                    .split_once("::")
-                    .map(|(_, key)| Self::compose_active_key(new_mode, key))
-            })
-            .collect();
-        *guard = transferred;
+    pub(crate) fn commit_key_counters_mirror(&self, counters: KeyCounters) {
+        *self.key_counters.write() = counters;
     }
 
     pub fn persist_key_counters(&self) -> Result<KeyCounters> {
@@ -1590,23 +1652,19 @@ impl AppState {
     }
 
     pub fn sync_counters_with_keys(&self, keys: &KeyMappings) {
-        Self::sync_counters_with_keys_impl(&self.key_counters, keys);
+        let mut guard = self.key_counters.write();
+        Self::sync_counters_with_keys_impl(&mut guard, keys);
     }
 
-    fn sync_counters_with_keys_impl(target: &Arc<RwLock<KeyCounters>>, keys: &KeyMappings) {
-        let mut guard = target.write();
-        guard.retain(|mode, _| keys.contains_key(mode));
+    fn sync_counters_with_keys_impl(target: &mut KeyCounters, keys: &KeyMappings) {
+        target.retain(|mode, _| keys.contains_key(mode));
         for (mode, key_list) in keys.iter() {
-            let entry = guard.entry(mode.clone()).or_default();
+            let entry = target.entry(mode.clone()).or_default();
             entry.retain(|key, _| key_list.contains(key));
             for key in key_list.iter() {
                 entry.entry(key.clone()).or_insert(0);
             }
         }
-    }
-
-    fn compose_active_key(mode: &str, key: &str) -> String {
-        format!("{}::{}", mode, key)
     }
 
     /// Subscribe to raw input stream (increment subscriber count)
@@ -1654,15 +1712,21 @@ impl AppState {
     pub fn key_sound_set_output_backend(
         &self,
         backend: KeySoundOutputBackend,
-    ) -> KeySoundOutputState {
-        let output_state = self.key_sound.set_output_backend(backend);
-        let requested = output_state.requested.clone();
-        if let Err(err) = self.store.update(|state| {
-            state.key_sound_output_backend = Some(output_backend_to_persist(requested.clone()));
-        }) {
-            warn!("[KeySound] failed to persist output backend: {err}");
-        }
-        output_state
+    ) -> Result<KeySoundOutputState> {
+        let requested = match &backend {
+            KeySoundOutputBackend::DefaultDevice => KeySoundOutputBackend::DefaultDevice,
+            KeySoundOutputBackend::Asio {
+                driver_name,
+                buffer_size,
+            } => KeySoundOutputBackend::Asio {
+                driver_name: driver_name.trim().to_string(),
+                buffer_size: buffer_size.filter(|size| *size > 0),
+            },
+        };
+        self.store.update(|state| {
+            state.key_sound_output_backend = Some(output_backend_to_persist(requested));
+        })?;
+        Ok(self.key_sound.set_output_backend(backend))
     }
 
     pub fn key_sound_get_output_state(&self) -> KeySoundOutputState {
@@ -1864,19 +1928,13 @@ fn tray_menu_labels(_language: &str) -> (&'static str, &'static str) {
     ("Settings", "Quit")
 }
 
-fn show_main_window(app_handle: &AppHandle) -> Result<()> {
-    if let Some(main) = app_handle.get_webview_window("main") {
-        let _ = main.unminimize();
-        main.show()?;
-        let _ = main.set_focus();
-    }
+fn remove_tray_icon(app: &AppHandle) {
+    let _ = app.remove_tray_by_id(TRAY_ICON_ID);
+}
 
-    if app_handle.tray_by_id(TRAY_ICON_ID).is_some() {
-        let _ = app_handle.remove_tray_by_id(TRAY_ICON_ID);
-    }
-
-    let state = app_handle.state::<AppState>();
-    state.set_main_window_hidden(false)?;
+fn dispatch_remove_tray_icon(app: &AppHandle) -> Result<()> {
+    let app_handle = app.clone();
+    app.run_on_main_thread(move || remove_tray_icon(&app_handle))?;
     Ok(())
 }
 
@@ -1900,15 +1958,20 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
         state.shutdown();
     }
 
-    let _ = app_handle.remove_tray_by_id(TRAY_ICON_ID);
-
     if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
         if let Err(err) = overlay.close() {
             log::warn!("failed to close overlay window during shutdown: {err}");
         }
     }
 
-    app_handle.exit(0);
+    let app_for_exit = app_handle.clone();
+    if let Err(err) = app_handle.run_on_main_thread(move || {
+        remove_tray_icon(&app_for_exit);
+        app_for_exit.exit(0);
+    }) {
+        log::warn!("failed to dispatch tray cleanup during shutdown: {err}");
+        app_handle.exit(0);
+    }
 }
 
 fn show_overlay_window(window: &WebviewWindow, _always_on_top: bool) -> Result<()> {
@@ -2239,35 +2302,75 @@ impl MonitorData {
     }
 }
 
-fn persist_overlay_bounds(window: &WebviewWindow, store: &Arc<AppStore>) -> Result<()> {
+fn defer_overlay_bounds_from_window(
+    window: &WebviewWindow,
+    store: &Arc<AppStore>,
+    generation: &Arc<AtomicU64>,
+) -> Result<()> {
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let position = window.outer_position()?.to_logical::<f64>(scale_factor);
     let size = window.outer_size()?.to_logical::<f64>(scale_factor);
 
-    let bounds = OverlayBounds {
-        x: position.x,
-        y: position.y,
-        width: size.width,
-        height: size.height,
-    };
+    defer_overlay_bounds(
+        store,
+        generation,
+        OverlayBounds {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+        },
+        None,
+    )
+}
 
-    let _ = store.update(|state| {
-        state.overlay_bounds = Some(bounds.clone());
+fn defer_overlay_bounds(
+    store: &Arc<AppStore>,
+    generation: &Arc<AtomicU64>,
+    bounds: OverlayBounds,
+    content_top_offset: Option<f64>,
+) -> Result<()> {
+    store.update_deferred(move |state| {
+        state.overlay_bounds = Some(bounds);
         state.overlay_bounds_are_logical = true;
+        if let Some(offset) = content_top_offset {
+            state.overlay_last_content_top_offset = Some(offset);
+        }
     })?;
+    let scheduled_generation = generation.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+
+    let store = Arc::clone(store);
+    let generation = Arc::clone(generation);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(OVERLAY_BOUNDS_DEBOUNCE_MS)).await;
+        if generation.load(Ordering::SeqCst) != scheduled_generation {
+            return;
+        }
+        if let Err(err) = store.flush() {
+            log::warn!("failed to flush debounced overlay bounds: {err}");
+        }
+    });
+
     Ok(())
+}
+
+fn flush_deferred_overlay_bounds(store: &Arc<AppStore>, generation: &Arc<AtomicU64>) -> Result<()> {
+    generation.fetch_add(1, Ordering::SeqCst);
+    store.flush()
 }
 
 struct KeyboardDaemonTask {
     running: Arc<AtomicBool>,
     reader_handle: Option<JoinHandle<()>>,
     stderr_handle: Option<JoinHandle<()>>,
+    parent_stdin: Option<ChildStdin>,
     child: Option<Child>,
 }
 
 impl Drop for KeyboardDaemonTask {
     fn drop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
+        self.parent_stdin.take();
 
         if let Some(child) = self.child.as_mut() {
             if let Err(err) = child.kill() {
@@ -2292,4 +2395,31 @@ impl Drop for KeyboardDaemonTask {
 struct OverlayPosition {
     x: f64,
     y: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{bootstrap_active_keys, should_create_overlay_on_startup};
+    use crate::keyboard::KeyboardManager;
+
+    #[test]
+    fn startup_overlay_creation_covers_all_visibility_and_obs_combinations() {
+        assert!(!should_create_overlay_on_startup(false, false));
+        assert!(should_create_overlay_on_startup(false, true));
+        assert!(!should_create_overlay_on_startup(true, false));
+        assert!(!should_create_overlay_on_startup(true, true));
+    }
+
+    #[test]
+    fn bootstrap_active_keys_include_registered_event_key_names() {
+        let manager = KeyboardManager::new(
+            HashMap::from([("4key".to_string(), vec!["KeyD".to_string()])]),
+            "4key",
+        );
+
+        assert!(manager.register_key_down("4key", "KeyD"));
+        assert_eq!(bootstrap_active_keys(&manager), vec!["KeyD"]);
+    }
 }

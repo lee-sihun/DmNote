@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -14,7 +14,7 @@ use crate::{
         FontSettings, FontType, GraphPositions, KeyMappings, KeyPositions, KnobPositions,
         LayerGroups, StatPositions, TabCssOverrides, TabNoteOverrides,
     },
-    state::AppState,
+    state::{atomic_file::atomic_replace, AppState},
 };
 
 use super::{
@@ -95,7 +95,7 @@ pub fn preset_save(state: State<'_, AppState>) -> CmdResult<PresetOperationResul
     };
 
     let json = serde_json::to_string_pretty(&preset)?;
-    fs::write(&path, json)?;
+    write_preset_file(&path, &json)?;
 
     Ok(PresetOperationResult {
         success: true,
@@ -244,12 +244,17 @@ pub fn preset_save_tab(state: State<'_, AppState>) -> CmdResult<PresetOperationR
     };
 
     let json = serde_json::to_string_pretty(&preset)?;
-    fs::write(&path, json)?;
+    write_preset_file(&path, &json)?;
 
     Ok(PresetOperationResult {
         success: true,
         error: None,
     })
+}
+
+fn write_preset_file(path: &Path, json: &str) -> CmdResult<()> {
+    atomic_replace(path, json.as_bytes(), "preset")?;
+    Ok(())
 }
 
 fn collect_used_font_families(
@@ -654,6 +659,42 @@ mod tests {
     use crate::{defaults::default_positions, models::KnobPosition};
 
     #[test]
+    fn image_payload_embeds_percent_encoded_file_url() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-image-url-save-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let image_path = temp_dir.join("image with space.png");
+        std::fs::write(&image_path, b"image-bytes").unwrap();
+        let image_url = url::Url::from_file_path(&image_path).unwrap().to_string();
+        assert!(image_url.contains("%20"));
+
+        let mut position = default_positions()["4key"][0].clone();
+        position.active_image = Some(image_url);
+        let key_positions = KeyPositions::from([("4key".to_string(), vec![position])]);
+
+        let (exported, _, _, _, embedded) = build_preset_image_payload(
+            &key_positions,
+            &StatPositions::new(),
+            &GraphPositions::new(),
+            &KnobPositions::new(),
+        )
+        .unwrap();
+
+        assert_eq!(embedded.len(), 1);
+        assert_eq!(
+            BASE64_STANDARD.decode(&embedded[0].data_base64).unwrap(),
+            b"image-bytes"
+        );
+        assert_eq!(
+            exported["4key"][0].active_image.as_deref(),
+            Some(format!("{PRESET_LOCAL_IMAGE_PREFIX}{}", embedded[0].image_id).as_str())
+        );
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn sound_payload_embeds_knob_sound() {
         let temp_dir = std::env::temp_dir().join(format!(
             "dmnote-preset-knob-save-test-{}",
@@ -696,6 +737,38 @@ mod tests {
             BASE64_STANDARD.decode(&embedded[0].data_base64).unwrap(),
             b"knob-sound"
         );
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    // 단독 실행: cargo test --lib commands::preset::save::tests::preset_atomic_write_survives_file_size_limit -- --ignored --exact
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "RLIMIT_FSIZE는 프로세스 전역이므로 단독 실행"]
+    fn preset_atomic_write_survives_file_size_limit() {
+        use crate::state::atomic_file::test_support::FileSizeLimit;
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "dmnote-preset-rlimit-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let path = temp_dir.join("preset.json");
+        let original = vec![b'o'; 512];
+        std::fs::write(&path, &original).unwrap();
+
+        {
+            let _limit = FileSizeLimit::set(1_024);
+            let oversized = "x".repeat(4_096);
+            assert!(write_preset_file(&path, &oversized).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
+
+        assert!(!std::fs::read_dir(&temp_dir).unwrap().any(|entry| {
+            entry
+                .ok()
+                .and_then(|entry| entry.file_name().into_string().ok())
+                .is_some_and(|name| name.ends_with(".tmp"))
+        }));
         let _ = std::fs::remove_dir_all(temp_dir);
     }
 }

@@ -52,6 +52,10 @@ fn main() {
     }
 
     if std::env::args().any(|arg| arg == "--keyboard-daemon") {
+        if let Err(err) = keyboard::daemon::start_parent_liveness_watch() {
+            eprintln!("failed to start keyboard parent watch: {err}");
+            std::process::exit(1);
+        }
         if let Err(err) = keyboard::daemon::run() {
             eprintln!("keyboard daemon error: {err:?}");
             std::process::exit(1);
@@ -71,7 +75,7 @@ fn main() {
 
     let context = tauri::generate_context!();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let zoom = compute_compensating_zoom();
@@ -85,7 +89,11 @@ fn main() {
             }
         })
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(state) = app.try_state::<AppState>() {
+                if let Err(err) = state.show_main_window(app) {
+                    log::warn!("failed to show main window from second instance: {err}");
+                }
+            } else if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -264,8 +272,25 @@ fn main() {
             commands::plugin::storage::plugin_storage_has_data,
             commands::plugin::storage::plugin_storage_clear_by_prefix,
         ])
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                state.shutdown();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                if let Err(err) = state.show_main_window(app_handle) {
+                    log::warn!("failed to show main window from Dock helper: {err}");
+                }
+            }
+        }
+        _ => {}
+    });
 }
 
 #[cfg(target_os = "windows")]
@@ -534,7 +559,8 @@ fn launch_macos_dock_helper() {
     };
 
     let mut cmd = Command::new("/usr/bin/open");
-    cmd.arg(&helper_path)
+    cmd.arg("-n")
+        .arg(&helper_path)
         .arg("--args")
         .arg("--main-pid")
         .arg(std::process::id().to_string())

@@ -4,8 +4,6 @@ use crate::cursor::{get_macos_cursor_settings, rgb_to_hex};
 use crate::errors::CmdResult;
 use crate::state::AppState;
 
-const TRAY_ICON_ID: &str = "background-tray";
-
 #[tauri::command]
 pub fn window_minimize(app: AppHandle) -> CmdResult<()> {
     if let Some(window) = app.get_webview_window("main") {
@@ -31,25 +29,15 @@ pub fn app_open_external(_app: AppHandle, url: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-pub fn app_restart(app: AppHandle) -> CmdResult<()> {
+pub fn app_restart(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    state.shutdown();
     app.request_restart();
     Ok(())
 }
 
 #[tauri::command]
 pub fn window_show_main(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.unminimize();
-        main.show()?;
-        let _ = main.set_focus();
-    }
-
-    if app.tray_by_id(TRAY_ICON_ID).is_some() {
-        let _ = app.remove_tray_by_id(TRAY_ICON_ID);
-    }
-
-    state.set_main_window_hidden(false)?;
-
+    state.show_main_window(&app)?;
     Ok(())
 }
 

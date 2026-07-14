@@ -10,6 +10,7 @@ use crate::models::{
     CustomCss, CustomJs, CustomTab, FontSettings, GraphPositions, KeyMappings, KeyPositions,
     KnobPositions, LayerGroups, NoteSettings, StatPositions, TabCssOverrides, TabNoteOverrides,
 };
+use crate::state::local_asset_path::{file_url_to_path, FileUrlPath};
 
 #[derive(Serialize)]
 pub struct PresetOperationResult {
@@ -185,18 +186,10 @@ pub(crate) fn local_source_path_from_image_ref(value: &str) -> Option<PathBuf> {
         return None;
     }
 
-    if let Some(stripped) = trimmed
-        .strip_prefix("file:///")
-        .or_else(|| trimmed.strip_prefix("file://"))
-    {
-        let mut candidate = stripped.to_string();
-        if cfg!(target_os = "windows") {
-            if candidate.starts_with('/') && candidate.as_bytes().get(2) == Some(&b':') {
-                candidate = candidate[1..].to_string();
-            }
-            candidate = candidate.replace('/', "\\");
-        }
-        return Some(PathBuf::from(candidate));
+    match file_url_to_path(trimmed) {
+        FileUrlPath::Path(path) => return Some(path),
+        FileUrlPath::Invalid => return legacy_file_url_path(trimmed),
+        FileUrlPath::NotFileUrl => {}
     }
 
     let path = PathBuf::from(trimmed);
@@ -205,6 +198,27 @@ pub(crate) fn local_source_path_from_image_ref(value: &str) -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+fn legacy_file_url_path(value: &str) -> Option<PathBuf> {
+    let scheme_end = value.find(':')?;
+    if !value[..scheme_end].eq_ignore_ascii_case("file") {
+        return None;
+    }
+    let remainder = &value[scheme_end + 1..];
+    let stripped = remainder
+        .strip_prefix("///")
+        .or_else(|| remainder.strip_prefix("//"))?;
+    let mut candidate = stripped.to_string();
+    if cfg!(target_os = "windows") {
+        if candidate.starts_with('/') && candidate.as_bytes().get(2) == Some(&b':') {
+            candidate = candidate[1..].to_string();
+        }
+        candidate = candidate.replace('/', "\\");
+    } else if remainder.starts_with("///") {
+        candidate.insert(0, '/');
+    }
+    Some(PathBuf::from(candidate))
 }
 
 pub(crate) fn is_remote_or_virtual_image_ref(value: &str) -> bool {
@@ -225,7 +239,8 @@ pub(crate) fn option_has_non_empty_text(value: &Option<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::PresetFile;
+    use super::{local_source_path_from_image_ref, PresetFile};
+    use crate::models::NoteColor;
     use serde_json::json;
 
     #[test]
@@ -253,5 +268,78 @@ mod tests {
 
         assert!(preset.layer_groups.is_none());
         assert!(preset.tab_css_overrides.is_none());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn file_url_image_source_preserves_its_absolute_path() {
+        assert_eq!(
+            local_source_path_from_image_ref("file:///tmp/dmnote-image.png"),
+            Some(std::path::PathBuf::from("/tmp/dmnote-image.png"))
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn file_url_image_source_decodes_percent_sequences_only() {
+        assert_eq!(
+            local_source_path_from_image_ref(
+                "file:///tmp/Application%20Support/%ED%95%9C%EA%B8%80%25+a.png"
+            ),
+            Some(std::path::PathBuf::from(
+                "/tmp/Application Support/한글%+a.png"
+            ))
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn invalid_file_url_uses_legacy_literal_path_for_preset_compatibility() {
+        assert_eq!(
+            local_source_path_from_image_ref("file://[invalid/path.png"),
+            Some(std::path::PathBuf::from("[invalid/path.png"))
+        );
+        assert_eq!(
+            local_source_path_from_image_ref("file:///tmp/broken%ZZ.png"),
+            Some(std::path::PathBuf::from("/tmp/broken%ZZ.png"))
+        );
+    }
+
+    #[test]
+    fn preset_1_0_fixture_preserves_values_and_fills_visual_defaults() {
+        // 1.0.0이 실제 저장하던 프리셋 형식 — height/noteColor/noteOpacity 없음
+        let fixture = r#"{
+            "keys": {
+                "4key": ["Q"],
+                "5key": [],
+                "6key": [],
+                "8key": []
+            },
+            "keyPositions": {
+                "4key": [
+                    {
+                        "dx": 777,
+                        "dy": 130,
+                        "width": 60,
+                        "activeImage": "",
+                        "inactiveImage": "",
+                        "count": 42
+                    }
+                ],
+                "5key": [],
+                "6key": [],
+                "8key": []
+            },
+            "backgroundColor": "transparent"
+        }"#;
+        let preset: PresetFile = serde_json::from_str(fixture).unwrap();
+        let positions = preset.key_positions.unwrap();
+        let position = &positions["4key"][0];
+
+        assert_eq!(position.dx, 777.0);
+        assert_eq!(position.count, 42);
+        assert_eq!(position.height, 60.0);
+        assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
+        assert_eq!(position.note_opacity, 80);
     }
 }

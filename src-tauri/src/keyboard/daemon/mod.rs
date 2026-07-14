@@ -1,4 +1,7 @@
-use std::io::Write;
+use std::{
+    io::{self, Read, Write},
+    thread,
+};
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 use anyhow::anyhow;
@@ -25,6 +28,32 @@ fn load_hotkeys_from_env() -> ShortcutsState {
         .ok()
         .and_then(|value| serde_json::from_str::<ShortcutsState>(&value).ok())
         .unwrap_or_default()
+}
+
+fn wait_for_parent_disconnect(reader: &mut impl Read) -> io::Result<()> {
+    let mut buffer = [0_u8; 1];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+pub fn start_parent_liveness_watch() -> io::Result<()> {
+    thread::Builder::new()
+        .name("keyboard-parent-watch".into())
+        .spawn(|| {
+            let stdin = io::stdin();
+            let mut stdin = stdin.lock();
+            if let Err(err) = wait_for_parent_disconnect(&mut stdin) {
+                eprintln!("keyboard parent watch failed: {err}");
+            }
+            std::process::exit(0);
+        })
+        .map(|_| ())
 }
 
 fn write_message(sink: &mut Box<dyn Write + Send>, message: &HookMessage) -> Result<()> {
@@ -65,5 +94,25 @@ pub fn run() -> Result<()> {
         Err(anyhow!(
             "Raw input backend is only available on Windows and macOS"
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::wait_for_parent_disconnect;
+
+    #[test]
+    fn parent_watch_returns_after_pipe_eof() {
+        let mut reader = Cursor::new(Vec::<u8>::new());
+        wait_for_parent_disconnect(&mut reader).unwrap();
+    }
+
+    #[test]
+    fn parent_watch_ignores_bytes_until_pipe_eof() {
+        let mut reader = Cursor::new(b"keepalive".to_vec());
+        wait_for_parent_disconnect(&mut reader).unwrap();
+        assert_eq!(reader.position(), b"keepalive".len() as u64);
     }
 }

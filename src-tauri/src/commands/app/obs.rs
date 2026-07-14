@@ -5,26 +5,11 @@ use uuid::Uuid;
 
 use crate::{errors::CmdResult, models::obs::ObsStatus, state::AppState};
 
-/// 저장된 토큰 재사용 또는 신규 생성 후 store에 저장
-/// 재사용이어도 항상 저장 — 이전 저장 실패로 메모리/디스크가 갈라졌어도 서버가 쓰는 토큰은
-/// 반드시 디스크에 존재하는 토큰이 되도록 시작 시점에 봉합하고, 저장 불가면 시작을 중단
-fn resolve_and_save_token(state: &AppState) -> CmdResult<String> {
-    let token = state
-        .store
-        .with_state(|s| s.obs_token.clone())
-        .filter(|token| !token.is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().simple().to_string());
-    let t = token.clone();
-    state.store.update(|s| {
-        s.obs_token = Some(t.clone());
-    })?;
-    Ok(token)
-}
-
 #[tauri::command]
 pub async fn obs_start(app: AppHandle, state: State<'_, AppState>) -> CmdResult<ObsStatus> {
     let port = state.store.with_state(|s| s.obs_port);
-    let token = resolve_and_save_token(&state)?;
+    // 저장 불가면 시작 중단 — 서버가 쓰는 토큰은 반드시 디스크에 존재해야 함
+    let token = state.resolve_and_save_obs_token()?;
 
     // OBS 정적 파일 서빙 설정
     if cfg!(debug_assertions) {

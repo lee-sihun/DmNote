@@ -93,6 +93,13 @@ impl Default for SoundLibraryEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingProcessedWavReplacement {
+    pub sound_path: String,
+    pub had_original: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -178,6 +185,7 @@ pub struct KeyPosition {
     pub dx: f64,
     pub dy: f64,
     pub width: f64,
+    #[serde(default = "default_key_height")]
     pub height: f64,
     /// 레이어 표시 여부 (true면 숨김)
     #[serde(default)]
@@ -200,7 +208,9 @@ pub struct KeyPosition {
     #[serde(default)]
     pub idle_transparent: bool,
     pub count: u32,
+    #[serde(default = "default_key_note_color")]
     pub note_color: NoteColor,
+    #[serde(default = "default_key_note_opacity")]
     pub note_opacity: u32,
     #[serde(default)]
     pub note_opacity_top: Option<u32>,
@@ -309,6 +319,72 @@ pub struct KeyPosition {
     /// 레이어 그룹 ID
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,
+}
+
+impl Default for KeyPosition {
+    fn default() -> Self {
+        Self {
+            dx: 0.0,
+            dy: 0.0,
+            width: 60.0,
+            height: default_key_height(),
+            hidden: false,
+            active_image: None,
+            inactive_image: None,
+            sound_enabled: None,
+            sound_path: None,
+            sound_volume: None,
+            active_transparent: false,
+            idle_transparent: false,
+            count: 0,
+            note_color: default_key_note_color(),
+            note_opacity: default_key_note_opacity(),
+            note_opacity_top: None,
+            note_opacity_bottom: None,
+            note_border_radius: None,
+            note_width: None,
+            note_alignment: NoteAlignment::default(),
+            note_effect_enabled: default_note_effect_enabled(),
+            note_glow_enabled: default_note_glow_enabled(),
+            note_glow_size: default_note_glow_size(),
+            note_glow_opacity: default_note_glow_opacity(),
+            note_glow_opacity_top: None,
+            note_glow_opacity_bottom: None,
+            note_glow_color: None,
+            note_auto_y_correction: default_note_auto_y_correction(),
+            note_offset_x: None,
+            note_offset_y: None,
+            note_border_width: None,
+            note_border_color: None,
+            note_border_opacity: default_note_border_opacity(),
+            note_border_side: None,
+            class_name: None,
+            z_index: None,
+            counter: KeyCounterSettings::default(),
+            background_color: None,
+            active_background_color: None,
+            border_color: None,
+            active_border_color: None,
+            border_width: None,
+            border_radius: None,
+            font_size: None,
+            font_color: None,
+            active_font_color: None,
+            graph_animation_enabled: None,
+            font_family: None,
+            image_fit: None,
+            idle_image_fit: None,
+            active_image_fit: None,
+            use_inline_styles: None,
+            display_text: None,
+            font_weight: None,
+            font_italic: None,
+            font_underline: None,
+            font_strikethrough: None,
+            layer_name: None,
+            group_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -788,6 +864,15 @@ fn default_counter_enabled() -> bool {
 fn default_note_effect_enabled() -> bool {
     true
 }
+fn default_key_height() -> f64 {
+    60.0
+}
+fn default_key_note_color() -> NoteColor {
+    NoteColor::Solid("#FFFFFF".to_string())
+}
+fn default_key_note_opacity() -> u32 {
+    80
+}
 fn default_note_glow_enabled() -> bool {
     false
 }
@@ -817,7 +902,7 @@ fn default_reverse_fade_bottom_px() -> u32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct NoteSettings {
     // Legacy: 전역 노트 라운딩 (개별 키 noteBorderRadius로 마이그레이션됨)
     #[serde(default, skip_serializing)]
@@ -1314,6 +1399,9 @@ pub struct AppStoreData {
     /// 사운드 라이브러리 메타데이터 (키: 절대 경로, 값: 메타데이터)
     #[serde(default)]
     pub sound_library: HashMap<String, SoundLibraryEntry>,
+    /// WAV 파일과 메타데이터 커밋 사이의 크래시 복구 저널
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_processed_wav_replacement: Option<PendingProcessedWavReplacement>,
     #[serde(default)]
     pub key_sound_output_backend: Option<KeySoundOutputBackendPersist>,
     /// OBS 모드 활성화 여부
@@ -1376,6 +1464,7 @@ impl Default for AppStoreData {
             grid_settings: GridSettings::default(),
             shortcuts: ShortcutsState::default(),
             sound_library: HashMap::new(),
+            pending_processed_wav_replacement: None,
             key_sound_output_backend: None,
             obs_mode_enabled: false,
             obs_port: default_obs_port(),
@@ -1598,6 +1687,7 @@ pub struct BootstrapPayload {
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
     pub current_mode: String,
+    pub active_keys: Vec<String>,
     pub overlay: BootstrapOverlayState,
     pub key_counters: KeyCounters,
     pub layer_groups: LayerGroups,
@@ -1854,7 +1944,7 @@ pub struct SettingsPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::KeyPosition;
+    use super::{FadePosition, KeyPosition, NoteColor, NoteSettings};
 
     // 필수 필드만 채운 최소 KeyPosition JSON. 시각 px 필드는 호출부에서 주입
     fn key_position_json(visual_px: &str) -> String {
@@ -1920,5 +2010,42 @@ mod tests {
 
         let restored: KeyPosition = serde_json::from_value(serialized).unwrap();
         assert_eq!(restored, position);
+    }
+
+    #[test]
+    fn note_settings_1_3_format_still_preserves_every_field() {
+        // 1.3 시절 noteSettings 전체 필드 실형식
+        let fixture = r#"{
+            "borderRadius": 9,
+            "speed": 456,
+            "trackHeight": 222,
+            "reverse": true,
+            "fadePosition": "bottom",
+            "delayedNoteEnabled": true,
+            "shortNoteThresholdMs": 73,
+            "shortNoteMinLengthPx": 41
+        }"#;
+        let settings: NoteSettings = serde_json::from_str(fixture).unwrap();
+
+        assert_eq!(settings.border_radius, Some(9));
+        assert_eq!(settings.speed, 456);
+        assert_eq!(settings.track_height, 222);
+        assert!(settings.reverse);
+        assert_eq!(settings.fade_position, FadePosition::Bottom);
+        assert!(settings.delayed_note_enabled);
+        assert_eq!(settings.short_note_threshold_ms, 73);
+        assert_eq!(settings.short_note_min_length_px, 41);
+    }
+
+    #[test]
+    fn key_position_1_0_missing_visual_fields_uses_legacy_defaults() {
+        let position: KeyPosition =
+            serde_json::from_str(r#"{"dx":777,"dy":12,"width":60,"count":42}"#).unwrap();
+
+        assert_eq!(position.dx, 777.0);
+        assert_eq!(position.count, 42);
+        assert_eq!(position.height, 60.0);
+        assert_eq!(position.note_color, NoteColor::Solid("#FFFFFF".to_string()));
+        assert_eq!(position.note_opacity, 80);
     }
 }
