@@ -140,7 +140,8 @@ final class DockHelperAppDelegate: NSObject, NSApplicationDelegate {
         let running = NSRunningApplication
             .runningApplications(withBundleIdentifier: mainBundleId)
             .filter { !$0.isTerminated }
-        if running.isEmpty {
+        let trackedPidIsAlive = running.isEmpty && (mainPid.map { kill($0, 0) == 0 } ?? false)
+        if running.isEmpty && !trackedPidIsAlive {
             NSApp.terminate(nil)
             return
         }
@@ -148,6 +149,9 @@ final class DockHelperAppDelegate: NSObject, NSApplicationDelegate {
         if attempt >= 50 {
             for app in running {
                 app.forceTerminate()
+            }
+            if trackedPidIsAlive, let pid = mainPid {
+                kill(pid, SIGKILL)
             }
             NSApp.terminate(nil)
             return
