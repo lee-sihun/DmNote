@@ -187,6 +187,13 @@ pub struct ResetModeResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct KeysWithPositionsResponse {
+    pub keys: KeyMappings,
+    pub positions: KeyPositions,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomTabChangePayload {
     pub custom_tabs: Vec<CustomTab>,
     pub selected_key_type: String,
@@ -241,11 +248,38 @@ pub fn keys_update(
             &serde_json::json!({ "mode": &selected_key_type }),
         )?;
     }
-    state.sync_counters_with_keys(&updated);
-    app.emit("keys:counters", &state.snapshot_key_counters())?;
+    state.sync_counters_with_keys_and_emit(&app, &updated)?;
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
     Ok(updated)
+}
+
+#[tauri::command]
+pub fn keys_update_with_positions(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    mappings: KeyMappings,
+    positions: KeyPositions,
+) -> CmdResult<KeysWithPositionsResponse> {
+    let previous_mode = state.keyboard.current_mode();
+    let (keys, positions, selected_key_type) = state
+        .store
+        .update_keys_with_positions(mappings, positions)?;
+    state
+        .keyboard
+        .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
+    app.emit("keys:changed", &keys)?;
+    app.emit("positions:changed", &positions)?;
+    if previous_mode != selected_key_type {
+        app.emit(
+            "keys:mode-changed",
+            &serde_json::json!({ "mode": &selected_key_type }),
+        )?;
+    }
+    state.sync_counters_with_keys_and_emit(&app, &keys)?;
+    state.obs_broadcast_counters();
+    state.refresh_obs_snapshot();
+    Ok(KeysWithPositionsResponse { keys, positions })
 }
 
 #[tauri::command]
@@ -297,7 +331,6 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
     let knob_positions = crate::models::KnobPositions::new();
     let layer_groups = LayerGroups::new();
     let tab_note_overrides = crate::models::TabNoteOverrides::new();
-    let key_counters = zeroed_counters(&keys);
     let selected_key_type = "4key".to_string();
     let custom_tabs: Vec<CustomTab> = Vec::new();
     let cleared_tab_css_ids: Vec<String> = state
@@ -308,7 +341,7 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
         .cloned()
         .collect();
 
-    state.update_store_with_key_counter_mirror(|store| {
+    state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
         reset_all_editor_data(store, &keys, &positions);
     })?;
 
@@ -381,7 +414,6 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
             &crate::commands::editor::css::TabCssResponse { tab_id, css: None },
         )?;
     }
-    app.emit("keys:counters", &key_counters)?;
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
 
@@ -407,7 +439,7 @@ pub fn keys_reset_mode(
         });
     };
     let cleared_tab_css = snapshot.tab_css_overrides.contains_key(&mode);
-    let updated = state.update_store_with_key_counter_mirror(|store| {
+    let updated = state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
         reset_mode_data(store, &mode, kind);
     })?;
 
@@ -433,7 +465,6 @@ pub fn keys_reset_mode(
             },
         )?;
     }
-    app.emit("keys:counters", &updated.key_counters)?;
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
 
@@ -501,7 +532,7 @@ pub fn custom_tabs_create(
         .keyboard
         .update_mappings_and_set_mode(keys.clone(), id.clone());
     state.sync_counters_with_keys(&keys);
-    let counters_snapshot = state.reset_mode_counters(&id)?;
+    state.reset_mode_counters(&app, &id)?;
 
     app.emit(
         "customTabs:changed",
@@ -513,7 +544,6 @@ pub fn custom_tabs_create(
     app.emit("keys:changed", &keys)?;
     app.emit("positions:changed", &positions)?;
     app.emit("keys:mode-changed", &serde_json::json!({ "mode": &id }))?;
-    app.emit("keys:counters", &counters_snapshot)?;
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
 
@@ -537,7 +567,7 @@ pub fn custom_tabs_delete(
             error: Some("not-found".to_string()),
         });
     };
-    let updated = state.update_store_with_key_counter_mirror(|store| {
+    let updated = state.update_store_with_key_counter_mirror_and_emit(&app, |store| {
         delete_custom_tab_data(store, &id, &plan);
     })?;
 
@@ -571,7 +601,6 @@ pub fn custom_tabs_delete(
         "keys:mode-changed",
         &serde_json::json!({ "mode": &updated.selected_key_type }),
     )?;
-    app.emit("keys:counters", &updated.key_counters)?;
     state.obs_broadcast_counters();
     state.refresh_obs_snapshot();
 
@@ -653,8 +682,7 @@ pub fn custom_tabs_restore(
 
 #[tauri::command]
 pub fn keys_reset_counters(state: State<'_, AppState>, app: AppHandle) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_key_counters()?;
-    app.emit("keys:counters", &snapshot)?;
+    let snapshot = state.reset_key_counters(&app)?;
     state.obs_broadcast_counters();
     Ok(snapshot)
 }
@@ -665,8 +693,7 @@ pub fn keys_reset_counters_mode(
     app: AppHandle,
     mode: String,
 ) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_mode_counters(&mode)?;
-    app.emit("keys:counters", &snapshot)?;
+    let snapshot = state.reset_mode_counters(&app, &mode)?;
     state.obs_broadcast_counters();
     Ok(snapshot)
 }
@@ -678,8 +705,7 @@ pub fn keys_reset_single_counter(
     mode: String,
     key: String,
 ) -> CmdResult<KeyCounters> {
-    let snapshot = state.reset_single_key_counter(&mode, &key)?;
-    app.emit("keys:counters", &snapshot)?;
+    let snapshot = state.reset_single_key_counter(&app, &mode, &key)?;
     state.obs_broadcast_counters();
     Ok(snapshot)
 }
@@ -691,8 +717,7 @@ pub fn keys_set_counters(
     counters: KeyCounters,
 ) -> CmdResult<KeyCounters> {
     let keys_snapshot = state.store.snapshot().keys;
-    let updated = state.replace_key_counters(counters, &keys_snapshot)?;
-    app.emit("keys:counters", &updated)?;
+    let updated = state.replace_key_counters(&app, counters, &keys_snapshot)?;
     state.obs_broadcast_counters();
     Ok(updated)
 }

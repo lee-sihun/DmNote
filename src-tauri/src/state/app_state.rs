@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use log::{error, warn};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde_json::json;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -48,6 +48,40 @@ const DEFAULT_OVERLAY_WIDTH: f64 = 860.0;
 const DEFAULT_OVERLAY_HEIGHT: f64 = 320.0;
 const OVERLAY_MARGIN: f64 = 40.0;
 const OVERLAY_BOUNDS_DEBOUNCE_MS: u64 = 400;
+const OVERLAY_CREATION_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+const SHUTDOWN_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(5);
+const SHUTDOWN_WATCHDOG_EXIT_CODE: i32 = 1;
+
+struct ShutdownWatchdogState {
+    armed: bool,
+    stage: &'static str,
+}
+
+/// 카운터 write lock 내부 전용 이벤트 송신 경계
+/// 동기 Rust listener에서 AppState 카운터 API 재진입 금지
+pub(crate) trait KeyCounterEventEmitter {
+    fn emit_key_counters(&self, counters: &KeyCounters) -> Result<()>;
+    fn emit_key_counter(&self, mode: &str, key: &str, count: u32) -> Result<()>;
+}
+
+impl KeyCounterEventEmitter for AppHandle {
+    fn emit_key_counters(&self, counters: &KeyCounters) -> Result<()> {
+        self.emit("keys:counters", counters)?;
+        Ok(())
+    }
+
+    fn emit_key_counter(&self, mode: &str, key: &str, count: u32) -> Result<()> {
+        self.emit(
+            "keys:counter",
+            &json!({
+                "mode": mode,
+                "key": key,
+                "count": count,
+            }),
+        )?;
+        Ok(())
+    }
+}
 
 fn should_create_overlay_on_startup(obs_mode_enabled: bool, overlay_visible: bool) -> bool {
     !obs_mode_enabled && overlay_visible
@@ -65,6 +99,9 @@ pub struct AppState {
     overlay_force_close: Arc<AtomicBool>,
     /// 오버레이 윈도우 초기화 중 Moved/Resized 이벤트에서 bounds 저장 억제
     overlay_initializing: Arc<AtomicBool>,
+    /// 오버레이 생성·가시성 전환 single-flight 가드
+    /// 메인 스레드 이벤트 콜백에서 획득 금지 — setup 훅은 이벤트 루프 가동 전이라 예외
+    overlay_creation_lock: Mutex<()>,
     overlay_bounds_generation: Arc<AtomicU64>,
     keyboard_task: RwLock<Option<KeyboardDaemonTask>>,
     key_counters: Arc<RwLock<KeyCounters>>,
@@ -79,6 +116,7 @@ pub struct AppState {
     /// OBS 모드 시작 전 오버레이 가시성 상태 (복원용)
     obs_previous_overlay_visible: Arc<RwLock<Option<bool>>>,
     shutdown_started: AtomicBool,
+    shutdown_watchdog: Arc<Mutex<ShutdownWatchdogState>>,
 }
 
 impl AppState {
@@ -112,6 +150,7 @@ impl AppState {
             overlay_visible: Arc::new(RwLock::new(false)),
             overlay_force_close: Arc::new(AtomicBool::new(false)),
             overlay_initializing: Arc::new(AtomicBool::new(false)),
+            overlay_creation_lock: Mutex::new(()),
             overlay_bounds_generation: Arc::new(AtomicU64::new(0)),
             keyboard_task: RwLock::new(None),
             key_counters,
@@ -122,6 +161,10 @@ impl AppState {
             obs_bridge,
             obs_previous_overlay_visible: Arc::new(RwLock::new(None)),
             shutdown_started: AtomicBool::new(false),
+            shutdown_watchdog: Arc::new(Mutex::new(ShutdownWatchdogState {
+                armed: false,
+                stage: "shutdown initialization",
+            })),
         })
     }
 
@@ -550,6 +593,15 @@ impl AppState {
 
     pub fn set_overlay_visibility(&self, app: &AppHandle, visible: bool) -> Result<()> {
         log::debug!("[IPC] set_overlay_visibility: visible={}", visible);
+        let _transition_guard = self
+            .overlay_creation_lock
+            .try_lock_for(OVERLAY_CREATION_LOCK_TIMEOUT)
+            .ok_or_else(|| {
+                anyhow!(
+                    "timed out after {} seconds waiting for overlay creation lock",
+                    OVERLAY_CREATION_LOCK_TIMEOUT.as_secs()
+                )
+            })?;
 
         if !visible {
             flush_deferred_overlay_bounds(&self.store, &self.overlay_bounds_generation)?;
@@ -560,7 +612,7 @@ impl AppState {
 
         if visible {
             // 오버레이를 열 때: 창이 없으면 생성하고 표시
-            let window = self.ensure_overlay_window(app)?;
+            let window = self.ensure_overlay_window_while_locked(app)?;
             let snapshot = self.store.snapshot();
             show_overlay_window(&window, snapshot.always_on_top)?;
 
@@ -624,6 +676,32 @@ impl AppState {
         if let Err(err) = self.store.flush_cleanup_and_shutdown() {
             log::warn!("failed to finalize store during shutdown: {err:#}");
         }
+    }
+
+    pub(crate) fn arm_shutdown_watchdog(&self, stage: &'static str) {
+        {
+            let mut watchdog = self.shutdown_watchdog.lock();
+            if watchdog.armed {
+                return;
+            }
+            watchdog.armed = true;
+            watchdog.stage = stage;
+        }
+        let watchdog = self.shutdown_watchdog.clone();
+        thread::spawn(move || {
+            thread::sleep(SHUTDOWN_WATCHDOG_TIMEOUT);
+            log::error!(
+                "[Shutdown] watchdog exceeded {} seconds during '{}'; forcing process exit with code {}",
+                SHUTDOWN_WATCHDOG_TIMEOUT.as_secs(),
+                watchdog.lock().stage,
+                SHUTDOWN_WATCHDOG_EXIT_CODE
+            );
+            std::process::exit(SHUTDOWN_WATCHDOG_EXIT_CODE);
+        });
+    }
+
+    pub(crate) fn set_shutdown_watchdog_stage(&self, stage: &'static str) {
+        self.shutdown_watchdog.lock().stage = stage;
     }
 
     pub fn request_shutdown(&self, app_handle: AppHandle) {
@@ -1026,26 +1104,11 @@ impl AppState {
                                 continue;
                             };
                             if is_down && state_changed {
-                                if let Some(count) =
-                                    app_state.increment_key_counter(&mode, &key_label)
-                                {
-                                    log::trace!(
-                                        "[IPC] emit keys:counter: mode={}, key={}, count={}",
-                                        mode,
-                                        key_label,
-                                        count
-                                    );
-                                    if let Err(err) = app_handle.emit(
-                                        "keys:counter",
-                                        &json!({
-                                            "mode": mode.clone(),
-                                            "key": key_label.clone(),
-                                            "count": count,
-                                        }),
-                                    ) {
-                                        error!("failed to emit keys:counter event: {err}");
-                                    }
-                                }
+                                app_state.increment_key_counter_and_emit(
+                                    &app_handle,
+                                    &mode,
+                                    &key_label,
+                                );
                             }
                             if !state_changed {
                                 continue;
@@ -1228,6 +1291,14 @@ impl AppState {
     }
 
     fn ensure_overlay_window(&self, app: &AppHandle) -> Result<WebviewWindow> {
+        if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
+            return Ok(window);
+        }
+        let _creation_guard = self.overlay_creation_lock.lock();
+        self.ensure_overlay_window_while_locked(app)
+    }
+
+    fn ensure_overlay_window_while_locked(&self, app: &AppHandle) -> Result<WebviewWindow> {
         if let Some(window) = app.get_webview_window(OVERLAY_LABEL) {
             return Ok(window);
         }
@@ -1573,7 +1644,12 @@ impl AppState {
         Ok(())
     }
 
-    pub fn increment_key_counter(&self, mode: &str, key: &str) -> Option<u32> {
+    pub(crate) fn increment_key_counter_and_emit(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        mode: &str,
+        key: &str,
+    ) -> Option<u32> {
         if !self.key_counter_enabled.load(Ordering::Relaxed) {
             return None;
         }
@@ -1581,24 +1657,56 @@ impl AppState {
         let mode_entry = counters.entry(mode.to_string()).or_default();
         let count = mode_entry.entry(key.to_string()).or_insert(0);
         *count = count.saturating_add(1);
-        Some(*count)
+        let count = *count;
+        log::trace!(
+            "[IPC] emit keys:counter: mode={}, key={}, count={}",
+            mode,
+            key,
+            count
+        );
+        let emit_result = emitter.emit_key_counter(mode, key, count);
+        drop(counters);
+        if let Err(err) = emit_result {
+            error!("failed to emit keys:counter event: {err}");
+        }
+        Some(count)
     }
 
     pub fn snapshot_key_counters(&self) -> KeyCounters {
         self.key_counters.read().clone()
     }
 
-    fn update_key_counters(&self, updater: impl FnOnce(&mut KeyCounters)) -> Result<KeyCounters> {
+    /// 카운터 변경과 전체 emit의 단일 write lock 경계
+    fn with_key_counters_write_and_emit<T>(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        updater: impl FnOnce(&mut KeyCounters) -> Result<T>,
+    ) -> Result<T> {
         let mut guard = self.key_counters.write();
-        let mut scratch = guard.clone();
-        updater(&mut scratch);
-        let persisted = self.store.set_key_counters(scratch)?;
-        *guard = persisted.clone();
-        Ok(persisted)
+        let result = updater(&mut guard)?;
+        emitter.emit_key_counters(&guard)?;
+        Ok(result)
     }
 
-    pub fn reset_key_counters(&self) -> Result<KeyCounters> {
-        self.update_key_counters(|counters| {
+    fn update_key_counters_and_emit(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        updater: impl FnOnce(&mut KeyCounters),
+    ) -> Result<KeyCounters> {
+        self.with_key_counters_write_and_emit(emitter, |guard| {
+            let mut scratch = guard.clone();
+            updater(&mut scratch);
+            let persisted = self.store.set_key_counters(scratch)?;
+            *guard = persisted.clone();
+            Ok(persisted)
+        })
+    }
+
+    pub(crate) fn reset_key_counters(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+    ) -> Result<KeyCounters> {
+        self.update_key_counters_and_emit(emitter, |counters| {
             for mode_entry in counters.values_mut() {
                 for value in mode_entry.values_mut() {
                     *value = 0;
@@ -1607,19 +1715,24 @@ impl AppState {
         })
     }
 
-    pub fn replace_key_counters(
+    pub(crate) fn replace_key_counters(
         &self,
+        emitter: &dyn KeyCounterEventEmitter,
         counters: KeyCounters,
         keys: &KeyMappings,
     ) -> Result<KeyCounters> {
-        self.update_key_counters(|scratch| {
+        self.update_key_counters_and_emit(emitter, |scratch| {
             *scratch = counters;
             Self::sync_counters_with_keys_impl(scratch, keys);
         })
     }
 
-    pub fn reset_mode_counters(&self, mode: &str) -> Result<KeyCounters> {
-        self.update_key_counters(|counters| {
+    pub(crate) fn reset_mode_counters(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        mode: &str,
+    ) -> Result<KeyCounters> {
+        self.update_key_counters_and_emit(emitter, |counters| {
             if let Some(entry) = counters.get_mut(mode) {
                 for value in entry.values_mut() {
                     *value = 0;
@@ -1628,8 +1741,13 @@ impl AppState {
         })
     }
 
-    pub fn reset_single_key_counter(&self, mode: &str, key: &str) -> Result<KeyCounters> {
-        self.update_key_counters(|counters| {
+    pub(crate) fn reset_single_key_counter(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        mode: &str,
+        key: &str,
+    ) -> Result<KeyCounters> {
+        self.update_key_counters_and_emit(emitter, |counters| {
             if let Some(entry) = counters.get_mut(mode) {
                 if let Some(value) = entry.get_mut(key) {
                     *value = 0;
@@ -1642,19 +1760,21 @@ impl AppState {
         self.keyboard.clear_active_keys();
     }
 
-    /// 카운터 스냅샷·store 커밋·runtime mirror 교체의 단일 write lock 경계
-    pub(crate) fn update_store_with_key_counter_mirror(
+    /// 카운터 스냅샷·store 커밋·runtime mirror·전체 emit의 단일 write lock 경계
+    pub(crate) fn update_store_with_key_counter_mirror_and_emit(
         &self,
+        emitter: &dyn KeyCounterEventEmitter,
         updater: impl FnOnce(&mut AppStoreData),
     ) -> Result<AppStoreData> {
-        let mut guard = self.key_counters.write();
-        let runtime_counters = guard.clone();
-        let updated = self.store.update(move |store| {
-            store.key_counters = runtime_counters;
-            updater(store);
-        })?;
-        *guard = updated.key_counters.clone();
-        Ok(updated)
+        self.with_key_counters_write_and_emit(emitter, |guard| {
+            let runtime_counters = guard.clone();
+            let updated = self.store.update(move |store| {
+                store.key_counters = runtime_counters;
+                updater(store);
+            })?;
+            *guard = updated.key_counters.clone();
+            Ok(updated)
+        })
     }
 
     pub fn persist_key_counters(&self) -> Result<KeyCounters> {
@@ -1666,6 +1786,17 @@ impl AppState {
     pub fn sync_counters_with_keys(&self, keys: &KeyMappings) {
         let mut guard = self.key_counters.write();
         Self::sync_counters_with_keys_impl(&mut guard, keys);
+    }
+
+    pub(crate) fn sync_counters_with_keys_and_emit(
+        &self,
+        emitter: &dyn KeyCounterEventEmitter,
+        keys: &KeyMappings,
+    ) -> Result<()> {
+        self.with_key_counters_write_and_emit(emitter, |guard| {
+            Self::sync_counters_with_keys_impl(guard, keys);
+            Ok(())
+        })
     }
 
     fn sync_counters_with_keys_impl(target: &mut KeyCounters, keys: &KeyMappings) {
@@ -1955,6 +2086,10 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
         return;
     }
 
+    app_handle
+        .state::<AppState>()
+        .arm_shutdown_watchdog("background state shutdown");
+
     let main_hidden = app_handle
         .get_webview_window("main")
         .and_then(|window| window.is_visible().ok().map(|visible| !visible))
@@ -1968,6 +2103,7 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
             log::warn!("failed to persist main hidden state during shutdown: {err}");
         }
         state.shutdown();
+        state.set_shutdown_watchdog_stage("overlay window close");
     }
 
     if let Some(overlay) = app_handle.get_webview_window(OVERLAY_LABEL) {
@@ -1976,6 +2112,9 @@ fn shutdown_application(app_handle: AppHandle, overlay_force_close: Arc<AtomicBo
         }
     }
 
+    app_handle
+        .state::<AppState>()
+        .set_shutdown_watchdog_stage("main event loop exit dispatch");
     let app_for_exit = app_handle.clone();
     if let Err(err) = app_handle.run_on_main_thread(move || {
         remove_tray_icon(&app_for_exit);

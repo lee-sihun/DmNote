@@ -145,6 +145,22 @@ await dmn.keys.set({
 });
 ```
 
+### `dmn.keys.updateWithPositions(mappings, positions): Promise<KeysWithPositionsResult>`
+
+Updates key mappings and their index-coupled positions in one durable commit. Use
+this method whenever keys are added, removed, or reordered. The committed values
+are returned, and both `keys:changed` and `positions:changed` are emitted after
+the commit succeeds.
+
+```typescript
+interface KeysWithPositionsResult {
+  keys: KeyMappings;
+  positions: KeyPositions;
+}
+
+const result = await dmn.keys.updateWithPositions(mappings, positions);
+```
+
 ---
 
 ## Custom Tab

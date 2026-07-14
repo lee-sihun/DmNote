@@ -1375,6 +1375,8 @@ mod tests {
         assert!(is_allowed_command("app_bootstrap"));
         assert!(is_allowed_command("plugin_storage_clear_by_prefix"));
         assert!(!is_allowed_command("settings_update"));
+        assert!(!is_allowed_command("keys_update"));
+        assert!(!is_allowed_command("keys_update_with_positions"));
         assert!(!is_allowed_command("app_bootstrap_extra"));
         assert!(!is_allowed_command("plugin:window|close"));
         assert_eq!(build_allowed_list().len(), ALLOWED_WS_COMMANDS.len());

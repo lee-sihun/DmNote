@@ -200,6 +200,7 @@ fn main() {
             commands::keys::keys::keys_get_counters,
             commands::keys::keys::positions_get,
             commands::keys::keys::keys_update,
+            commands::keys::keys::keys_update_with_positions,
             commands::keys::keys::positions_update,
             commands::keys::keys::keys_set_mode,
             commands::keys::keys::keys_reset_all,
@@ -278,7 +279,9 @@ fn main() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             if let Some(state) = app_handle.try_state::<AppState>() {
+                state.arm_shutdown_watchdog("RunEvent state shutdown");
                 state.shutdown();
+                state.set_shutdown_watchdog_stage("RunEvent process exit");
             }
         }
         #[cfg(target_os = "macos")]

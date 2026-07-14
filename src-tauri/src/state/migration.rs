@@ -65,6 +65,7 @@ pub(crate) fn load_store_from_path(path: &Path) -> Result<LoadedStore> {
                         value.get("keyPositions"),
                     );
                     needs_persist |= layout_repaired;
+                    needs_persist |= key_position_lengths_mismatch(&data.keys, &data.key_positions);
                     needs_persist |= !has_valid_selected_key_type(&data);
                     (
                         normalize_state(data),
@@ -149,12 +150,6 @@ fn migrate_legacy_knob_sensitivity(data: &mut AppStoreData) -> bool {
 /// 타입은 맞지만 실제 식별자로 쓸 수 없는 항목을 로드 경계에서만 정리
 fn repair_semantic_identities(data: &mut AppStoreData) -> bool {
     let mut changed = false;
-
-    for positions in data.knob_positions.values_mut() {
-        let original_len = positions.len();
-        positions.retain(|knob| !knob.axis_id.trim().is_empty());
-        changed |= positions.len() != original_len;
-    }
 
     let original_font_len = data.font_settings.custom_fonts.len();
     data.font_settings
@@ -507,6 +502,12 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         merge_default_positions(&mut data.key_positions, default_positions());
     }
 
+    if !has_valid_selected_key_type(&data) {
+        data.selected_key_type = "4key".to_string();
+    }
+
+    pad_key_position_lengths(&mut data.keys, &mut data.key_positions);
+
     // 레거시 마이그레이션: 전역 noteSettings.borderRadius → 키별 noteBorderRadius
     if let Some(legacy_border_radius) = data.note_settings.border_radius.take() {
         for positions in data.key_positions.values_mut() {
@@ -561,10 +562,6 @@ pub(crate) fn normalize_state(mut data: AppStoreData) -> AppStoreData {
         for pos in positions.iter_mut() {
             pos.position.counter.migrate_legacy_defaults();
         }
-    }
-
-    if !has_valid_selected_key_type(&data) {
-        data.selected_key_type = "4key".to_string();
     }
 
     let _ = data.custom_js.normalize();
@@ -672,6 +669,50 @@ fn merge_default_positions(target: &mut KeyPositions, defaults: &KeyPositions) {
             .entry(mode.clone())
             .or_insert_with(|| positions.clone());
     }
+}
+
+/// 인덱스 결합 배열의 길이 보정
+pub(crate) fn pad_key_position_lengths(
+    keys: &mut KeyMappings,
+    positions: &mut KeyPositions,
+) -> bool {
+    let modes = keys
+        .keys()
+        .chain(positions.keys())
+        .cloned()
+        .collect::<HashSet<_>>();
+    let mut changed = false;
+
+    for mode in modes {
+        let key_count = keys.get(&mode).map_or(0, Vec::len);
+        let position_count = positions.get(&mode).map_or(0, Vec::len);
+        if key_count > position_count {
+            log::warn!(
+                "[Store] Padding keyPositions mode '{mode}' from {position_count} to {key_count} entries"
+            );
+            positions
+                .entry(mode)
+                .or_default()
+                .resize(key_count, KeyPosition::default());
+            changed = true;
+        } else if position_count > key_count {
+            log::warn!(
+                "[Store] Padding keys mode '{mode}' from {key_count} to {position_count} entries"
+            );
+            keys.entry(mode)
+                .or_default()
+                .resize(position_count, String::new());
+            changed = true;
+        }
+    }
+
+    changed
+}
+
+fn key_position_lengths_mismatch(keys: &KeyMappings, positions: &KeyPositions) -> bool {
+    keys.keys()
+        .chain(positions.keys())
+        .any(|mode| keys.get(mode).map_or(0, Vec::len) != positions.get(mode).map_or(0, Vec::len))
 }
 
 /// 키 카운터 기본값 병합
@@ -1103,10 +1144,7 @@ fn has_valid_graph_identity(value: &Value) -> bool {
 }
 
 fn has_valid_knob_identity(value: &Value) -> bool {
-    value
-        .get("axisId")
-        .and_then(Value::as_str)
-        .is_some_and(|axis_id| !axis_id.trim().is_empty())
+    value.get("axisId").is_none_or(Value::is_string)
 }
 
 fn recover_key_position_entries(field: &str, value: &Value) -> Option<Value> {
@@ -1493,7 +1531,70 @@ mod tests {
     }
 
     #[test]
-    fn normal_load_repairs_semantically_invalid_font_and_knob_identities() {
+    fn load_pads_every_key_position_length_mismatch_without_compaction() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-key-position-length-load-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        data.keys.get_mut("4key").unwrap().push("F5".to_string());
+        let preserved_position = KeyPosition {
+            dx: 987.0,
+            ..KeyPosition::default()
+        };
+        data.key_positions
+            .get_mut("5key")
+            .unwrap()
+            .push(preserved_position.clone());
+        data.keys.insert(
+            "keys-only".to_string(),
+            vec!["A".to_string(), "B".to_string()],
+        );
+        data.key_positions.insert(
+            "positions-only".to_string(),
+            vec![preserved_position.clone()],
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+
+        let loaded = load_store_from_path(&path).unwrap();
+        assert!(!loaded.repaired);
+        assert!(loaded.needs_persist);
+        assert_eq!(loaded.data.keys["4key"].last().unwrap(), "F5");
+        assert_eq!(
+            loaded.data.key_positions["4key"].last().unwrap(),
+            &KeyPosition::default()
+        );
+        assert_eq!(
+            loaded.data.key_positions["5key"].last().unwrap(),
+            &preserved_position
+        );
+        assert!(loaded.data.keys["5key"].last().unwrap().is_empty());
+        assert_eq!(loaded.data.key_positions["keys-only"].len(), 2);
+        assert_eq!(loaded.data.keys["positions-only"], vec![String::new()]);
+
+        let modes = loaded
+            .data
+            .keys
+            .keys()
+            .chain(loaded.data.key_positions.keys())
+            .collect::<std::collections::HashSet<_>>();
+        for mode in modes {
+            assert_eq!(
+                loaded.data.keys.get(mode).map_or(0, Vec::len),
+                loaded.data.key_positions.get(mode).map_or(0, Vec::len),
+                "mode {mode}"
+            );
+        }
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn normal_load_preserves_unbound_knobs_while_repairing_invalid_fonts() {
         let path = std::env::temp_dir().join(format!(
             "dmnote-semantic-identity-load-{}.json",
             uuid::Uuid::new_v4()
@@ -1523,7 +1624,7 @@ mod tests {
             "4key".to_string(),
             vec![
                 KnobPosition {
-                    axis_id: "   ".to_string(),
+                    axis_id: String::new(),
                     sensitivity: 1.0,
                     reverse: false,
                     position: default_positions()["4key"][0].clone(),
@@ -1547,8 +1648,45 @@ mod tests {
         assert_eq!(local.id, "local-font");
         assert!(!local.enabled);
         assert_eq!(local.local_path, None);
-        assert_eq!(loaded.data.knob_positions["4key"].len(), 1);
-        assert_eq!(loaded.data.knob_positions["4key"][0].axis_id, "axis-valid");
+        assert_eq!(loaded.data.knob_positions["4key"].len(), 2);
+        assert!(loaded.data.knob_positions["4key"][0].axis_id.is_empty());
+        assert_eq!(loaded.data.knob_positions["4key"][1].axis_id, "axis-valid");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn unbound_knob_survives_load_normalize_and_resave() {
+        let path = std::env::temp_dir().join(format!(
+            "dmnote-unbound-knob-roundtrip-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let mut data = AppStoreData {
+            keys: default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        data.knob_positions.insert(
+            "4key".to_string(),
+            vec![KnobPosition {
+                axis_id: String::new(),
+                sensitivity: 1.0,
+                reverse: false,
+                position: default_positions()["4key"][0].clone(),
+            }],
+        );
+        std::fs::write(&path, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+
+        let first = load_store_from_path(&path).unwrap();
+        assert!(!first.repaired);
+        assert!(first.data.knob_positions["4key"][0].axis_id.is_empty());
+
+        let normalized = normalize_state(first.data);
+        std::fs::write(&path, serde_json::to_vec_pretty(&normalized).unwrap()).unwrap();
+        let second = load_store_from_path(&path).unwrap();
+        assert!(!second.repaired);
+        assert_eq!(second.data.knob_positions["4key"].len(), 1);
+        assert!(second.data.knob_positions["4key"][0].axis_id.is_empty());
 
         let _ = std::fs::remove_file(path);
     }
@@ -2070,7 +2208,10 @@ mod tests {
             loaded.data.key_positions["positions-damaged"],
             vec![KeyPosition::default(); 3]
         );
-        assert_eq!(loaded.data.keys["valid-mismatch"], vec!["Q"]);
+        assert_eq!(
+            loaded.data.keys["valid-mismatch"],
+            vec!["Q".to_string(), String::new()]
+        );
         assert_eq!(loaded.data.key_positions["valid-mismatch"].len(), 2);
         assert!(loaded.data.keys["missing-both"].is_empty());
         assert!(loaded.data.key_positions["missing-both"].is_empty());
@@ -2255,8 +2396,8 @@ mod tests {
             })
             .unwrap(),
         );
-        let mut invalid_knob = recoverable_knob.clone();
-        invalid_knob
+        let mut unbound_knob = recoverable_knob.clone();
+        unbound_knob
             .as_object_mut()
             .unwrap()
             .insert("axisId".to_string(), json!(""));
@@ -2281,7 +2422,7 @@ mod tests {
         fields.insert(
             "knobPositions".to_string(),
             json!({
-                "recovery-mode": [recoverable_knob, invalid_knob, invalid_knob_setting]
+                "recovery-mode": [recoverable_knob, unbound_knob, invalid_knob_setting]
             }),
         );
         std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
@@ -2291,19 +2432,22 @@ mod tests {
 
         assert_eq!(loaded.data.stat_positions["recovery-mode"].len(), 1);
         assert_eq!(loaded.data.graph_positions["recovery-mode"].len(), 1);
-        assert_eq!(loaded.data.knob_positions["recovery-mode"].len(), 1);
+        assert_eq!(loaded.data.knob_positions["recovery-mode"].len(), 2);
         let stat = &loaded.data.stat_positions["recovery-mode"][0];
         let graph = &loaded.data.graph_positions["recovery-mode"][0];
         let knob = &loaded.data.knob_positions["recovery-mode"][0];
+        let unbound_knob = &loaded.data.knob_positions["recovery-mode"][1];
         assert_eq!(stat.stat_type, StatType::Kps);
         assert_eq!(graph.graph_type, GraphType::Line);
         assert_eq!(knob.axis_id, "axis-recoverable");
+        assert!(unbound_knob.axis_id.is_empty());
         assert_eq!(stat.position.height, KeyPosition::default().height);
         assert_eq!(graph.position.height, KeyPosition::default().height);
         assert_eq!(knob.position.height, KeyPosition::default().height);
         assert_eq!(stat.position.sound_path, stat_position.sound_path);
         assert_eq!(graph.position.sound_path, graph_position.sound_path);
         assert_eq!(knob.position.sound_path, knob_position.sound_path);
+        assert_eq!(unbound_knob.position.sound_path, knob_position.sound_path);
     }
 
     #[test]

@@ -112,6 +112,8 @@ fn app_auto_update_windows(
 
     self_replace::self_replace(&temp_exe)?;
 
+    // 업데이트 종료 경로도 워치독 커버 — 여기서 행이면 커맨드가 무기한 매달림
+    state.arm_shutdown_watchdog("update-restart");
     state.shutdown();
     app.request_restart();
 

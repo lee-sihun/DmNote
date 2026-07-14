@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use url::Url;
 
@@ -7,6 +7,41 @@ pub(crate) enum FileUrlPath {
     NotFileUrl,
     Path(PathBuf),
     Invalid,
+}
+
+pub(crate) fn path_identity_key(path: &Path) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        windows_path_identity_key(&path.to_string_lossy())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.to_string_lossy().to_string()
+    }
+}
+
+pub(crate) fn paths_have_same_identity(left: &Path, right: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        path_identity_key(left) == path_identity_key(right)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        left == right
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_path_identity_key(value: &str) -> String {
+    let normalized = value.replace('/', "\\").to_ascii_lowercase();
+    if let Some(rest) = normalized.strip_prefix("\\\\?\\unc\\") {
+        format!("\\\\{rest}")
+    } else {
+        normalized
+            .strip_prefix("\\\\?\\")
+            .unwrap_or(&normalized)
+            .to_string()
+    }
 }
 
 pub(crate) fn file_url_to_path(value: &str) -> FileUrlPath {
@@ -63,8 +98,41 @@ fn hex_value(byte: u8) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_url_to_path, FileUrlPath};
+    use super::{file_url_to_path, windows_path_identity_key, FileUrlPath};
     use std::path::PathBuf;
+
+    #[test]
+    fn windows_path_identity_normalizes_drive_paths_as_strings() {
+        let expected = windows_path_identity_key(r"C:\A\b.wav");
+        assert_eq!(expected, windows_path_identity_key("c:/a/B.wav"));
+        assert_eq!(expected, windows_path_identity_key(r"\\?\C:\A\b.wav"));
+    }
+
+    #[test]
+    fn windows_path_identity_normalizes_unc_paths_as_strings() {
+        let expected = windows_path_identity_key(r"\\server\share\a.wav");
+        assert_eq!(
+            expected,
+            windows_path_identity_key(r"\\?\UNC\server\share\a.wav")
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_path_identity_matches_path_values() {
+        use super::path_identity_key;
+        use std::path::Path;
+
+        let drive = path_identity_key(Path::new(r"C:\A\b.wav"));
+        assert_eq!(drive, path_identity_key(Path::new("c:/a/B.wav")));
+        assert_eq!(drive, path_identity_key(Path::new(r"\\?\C:\A\b.wav")));
+
+        let unc = path_identity_key(Path::new(r"\\server\share\a.wav"));
+        assert_eq!(
+            unc,
+            path_identity_key(Path::new(r"\\?\UNC\server\share\a.wav"))
+        );
+    }
 
     #[cfg(not(target_os = "windows"))]
     #[test]

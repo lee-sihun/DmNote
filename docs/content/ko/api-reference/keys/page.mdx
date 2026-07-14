@@ -75,6 +75,21 @@ current['4key'][0].dx = 100;
 await dmn.keys.updatePositions(current);
 ```
 
+### updateWithPositions(mappings, positions)
+
+키 매핑과 인덱스로 결합된 위치 정보를 한 번의 영구 저장으로 갱신합니다.
+키를 추가·삭제·재정렬할 때 사용하세요. 커밋된 값이 반환되며, 저장 성공 후
+`keys:changed`와 `positions:changed` 이벤트가 모두 방출됩니다.
+
+```typescript
+interface KeysWithPositionsResult {
+  keys: KeyMappings;
+  positions: KeyPositions;
+}
+
+const result = await dmn.keys.updateWithPositions(mappings, positions);
+```
+
 ## 모드 관리
 
 ### setMode(mode)

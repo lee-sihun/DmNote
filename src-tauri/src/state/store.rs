@@ -19,7 +19,7 @@ use tauri::Runtime;
 
 use super::atomic_file::atomic_replace;
 use super::builtin_sounds::seed_builtin_sounds;
-use super::local_asset_path::{file_url_to_path, FileUrlPath};
+use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use super::migration::{
     find_legacy_store_file, load_store_from_path, migrate_key_images_to_app_data,
     migrate_local_fonts_to_app_data, normalize_state,
@@ -108,6 +108,7 @@ impl AppStore {
             .with_context(|| format!("failed to create data directory at {}", dir.display()))?;
 
         let default_path = dir.join("store.json");
+        let had_existing_default_store = default_path.exists();
         let (path, mut state, mut needs_persist, skip_asset_sweep) = if default_path.exists() {
             let loaded = load_store_from_path(&default_path)?;
             if loaded.repaired {
@@ -137,6 +138,22 @@ impl AppStore {
         // 내장 키음 시딩
         if seed_builtin_sounds(dir, &mut state) {
             needs_persist = true;
+        }
+
+        warn_unresolved_asset_references(&state);
+
+        if needs_persist && had_existing_default_store && !skip_asset_sweep {
+            match preserve_pre_migration_store(&path) {
+                Ok(Some(backup_path)) => log::info!(
+                    "[Store] Preserved pre-migration store at {}",
+                    backup_path.display()
+                ),
+                Ok(None) => {}
+                Err(err) => log::warn!(
+                    "[Store] Failed to preserve pre-migration store at {}: {err:#}",
+                    path.display()
+                ),
+            }
         }
 
         let store = Self::new(path.clone(), state, skip_asset_sweep)?;
@@ -282,6 +299,26 @@ impl AppStore {
         )
     }
 
+    pub fn update_keys_with_positions(
+        &self,
+        mappings: KeyMappings,
+        positions: KeyPositions,
+    ) -> Result<(KeyMappings, KeyPositions, String)> {
+        self.update_committed(
+            move |state| {
+                state.keys = mappings;
+                state.key_positions = positions;
+            },
+            |state| {
+                (
+                    state.keys.clone(),
+                    state.key_positions.clone(),
+                    state.selected_key_type.clone(),
+                )
+            },
+        )
+    }
+
     pub fn update_positions(&self, positions: KeyPositions) -> Result<KeyPositions> {
         self.update_committed(
             move |state| state.key_positions = positions,
@@ -415,7 +452,7 @@ impl AppStore {
                 &mut trash_session,
             )?;
         } else {
-            log::warn!("[Fonts] Skipping asset sweep because a file URL could not be resolved");
+            log::warn!("[Fonts] Skipping asset sweep because a local path could not be resolved");
         }
         if referenced_images.complete {
             sweep_unreferenced_asset_files(
@@ -425,7 +462,7 @@ impl AppStore {
                 &mut trash_session,
             )?;
         } else {
-            log::warn!("[Images] Skipping asset sweep because a file URL could not be resolved");
+            log::warn!("[Images] Skipping asset sweep because a local path could not be resolved");
         }
         if referenced_sounds.complete {
             sweep_unreferenced_asset_files(
@@ -435,7 +472,7 @@ impl AppStore {
                 &mut trash_session,
             )?;
         } else {
-            log::warn!("[Sounds] Skipping asset sweep because a file URL could not be resolved");
+            log::warn!("[Sounds] Skipping asset sweep because a local path could not be resolved");
         }
         Ok(())
     }
@@ -777,6 +814,29 @@ fn backup_store_file(path: &Path) -> Result<()> {
     })
 }
 
+fn pre_migration_backup_path(path: &Path) -> Result<PathBuf> {
+    let mut file_name = path
+        .file_name()
+        .context("failed to resolve store file name")?
+        .to_os_string();
+    file_name.push(".pre-migration.bak");
+    Ok(path.with_file_name(file_name))
+}
+
+fn preserve_pre_migration_store(path: &Path) -> Result<Option<PathBuf>> {
+    let backup_path = pre_migration_backup_path(path)?;
+    match fs::hard_link(path, &backup_path) {
+        Ok(()) => Ok(Some(backup_path)),
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "failed to create pre-migration backup at {}",
+                backup_path.display()
+            )
+        }),
+    }
+}
+
 fn initialize_default_state() -> AppStoreData {
     use crate::defaults::{default_keys, default_positions};
 
@@ -791,6 +851,7 @@ fn initialize_default_state() -> AppStoreData {
 struct AssetReferencePaths {
     keys: HashSet<String>,
     complete: bool,
+    unresolved_count: usize,
 }
 
 impl AssetReferencePaths {
@@ -798,6 +859,7 @@ impl AssetReferencePaths {
         Self {
             keys: HashSet::new(),
             complete: true,
+            unresolved_count: 0,
         }
     }
 
@@ -807,10 +869,25 @@ impl AssetReferencePaths {
         };
         match resolve_local_asset_path(path) {
             LocalAssetPathResolution::Path(path) => {
-                self.keys.insert(path_lookup_key(&path));
+                self.keys.insert(path_identity_key(&path));
             }
-            LocalAssetPathResolution::InvalidFileUrl => self.complete = false,
+            LocalAssetPathResolution::Unresolved => {
+                self.complete = false;
+                self.unresolved_count += 1;
+            }
             LocalAssetPathResolution::Ignored => {}
+        }
+    }
+}
+
+fn warn_unresolved_asset_references(data: &AppStoreData) {
+    for (category, count) in [
+        ("fonts", collect_local_font_paths(data).unresolved_count),
+        ("images", collect_local_image_paths(data).unresolved_count),
+        ("sounds", collect_local_sound_paths(data).unresolved_count),
+    ] {
+        if count > 0 {
+            log::warn!("[Assets] {category} sweep 보류: 해석 불가 참조 {count}건");
         }
     }
 }
@@ -855,10 +932,7 @@ fn collect_local_sound_paths(data: &AppStoreData) -> AssetReferencePaths {
 
     // 사운드 라이브러리에 등록된 파일도 보호 (키에 할당 안 되어도 유지)
     for key in data.sound_library.keys() {
-        let normalized = PathBuf::from(key);
-        if normalized.is_absolute() {
-            paths.keys.insert(path_lookup_key(&normalized));
-        }
+        paths.collect(Some(key));
     }
 
     paths
@@ -895,7 +969,7 @@ fn iter_all_positions(data: &AppStoreData) -> impl Iterator<Item = &KeyPosition>
 
 enum LocalAssetPathResolution {
     Path(PathBuf),
-    InvalidFileUrl,
+    Unresolved,
     Ignored,
 }
 
@@ -918,16 +992,28 @@ fn resolve_local_asset_path(path: &str) -> LocalAssetPathResolution {
 
     match file_url_to_path(trimmed) {
         FileUrlPath::Path(path) => LocalAssetPathResolution::Path(path),
-        FileUrlPath::Invalid => LocalAssetPathResolution::InvalidFileUrl,
+        FileUrlPath::Invalid => LocalAssetPathResolution::Unresolved,
         FileUrlPath::NotFileUrl => {
             let path = PathBuf::from(trimmed);
             if path.is_absolute() {
                 LocalAssetPathResolution::Path(path)
+            } else if looks_like_unresolved_local_path(trimmed) {
+                LocalAssetPathResolution::Unresolved
             } else {
                 LocalAssetPathResolution::Ignored
             }
         }
     }
+}
+
+fn looks_like_unresolved_local_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let has_windows_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    has_windows_drive
+        || value.starts_with('\\')
+        || value.contains('/')
+        || value.contains('\\')
+        || Path::new(value).extension().is_some()
 }
 
 fn validate_pending_processed_wav_target(sounds_dir: &Path, value: &str) -> Result<PathBuf> {
@@ -1048,19 +1134,6 @@ fn rollback_pending_processed_wav(
     Ok(())
 }
 
-fn path_lookup_key(path: &Path) -> String {
-    #[cfg(target_os = "windows")]
-    {
-        path.to_string_lossy()
-            .replace('/', "\\")
-            .to_ascii_lowercase()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        path.to_string_lossy().to_string()
-    }
-}
-
 fn recover_interrupted_processed_wav_replacements(
     sounds_dir: &Path,
 ) -> Result<SoundRecoveryOutcome> {
@@ -1134,7 +1207,9 @@ where
             Ok(false) => {}
             Err(err) => {
                 outcome.complete = false;
-                outcome.protected_keys.insert(path_lookup_key(&backup_path));
+                outcome
+                    .protected_keys
+                    .insert(path_identity_key(&backup_path));
                 log::warn!(
                     "[Sounds] Failed to inspect processed WAV target '{}': {err}",
                     target_path.display()
@@ -1145,7 +1220,9 @@ where
 
         if let Err(err) = rename(&backup_path, &target_path) {
             outcome.complete = false;
-            outcome.protected_keys.insert(path_lookup_key(&backup_path));
+            outcome
+                .protected_keys
+                .insert(path_identity_key(&backup_path));
             log::warn!(
                 "[Sounds] Failed to recover processed WAV '{}' from '{}': {err}",
                 target_path.display(),
@@ -1261,7 +1338,7 @@ pub(crate) fn stage_sound_files_for_deletion(
     let mut seen = HashSet::new();
 
     for source_path in source_paths {
-        let key = path_lookup_key(source_path);
+        let key = path_identity_key(source_path);
         if !seen.insert(key) {
             continue;
         }
@@ -1474,12 +1551,14 @@ where
         let Some(source_path) = sound_delete_source_path(&backup_path) else {
             continue;
         };
-        let referenced = referenced_keys.contains(&path_lookup_key(&source_path));
+        let referenced = referenced_keys.contains(&path_identity_key(&source_path));
         let source_exists = match source_path.try_exists() {
             Ok(exists) => exists,
             Err(error) => {
                 outcome.complete = false;
-                outcome.protected_keys.insert(path_lookup_key(&backup_path));
+                outcome
+                    .protected_keys
+                    .insert(path_identity_key(&backup_path));
                 log::warn!(
                     "[Sounds] Failed to inspect interrupted deletion source '{}': {error}",
                     source_path.display()
@@ -1490,7 +1569,9 @@ where
         if referenced && !source_exists {
             if let Err(error) = rename(&backup_path, &source_path) {
                 outcome.complete = false;
-                outcome.protected_keys.insert(path_lookup_key(&backup_path));
+                outcome
+                    .protected_keys
+                    .insert(path_identity_key(&backup_path));
                 log::warn!(
                     "[Sounds] Failed to restore interrupted deletion '{}' -> '{}': {error}",
                     backup_path.display(),
@@ -1565,7 +1646,7 @@ fn collect_sound_deletion_reference_keys(
         {
             continue;
         }
-        keys.insert(path_lookup_key(&sounds_dir.join(relative)));
+        keys.insert(path_identity_key(&sounds_dir.join(relative)));
     }
     keys
 }
@@ -1692,7 +1773,7 @@ fn sweep_unreferenced_asset_files(
         if !path.starts_with(target_dir) {
             continue;
         }
-        let key = path_lookup_key(&path);
+        let key = path_identity_key(&path);
         if referenced_path_keys.contains(&key) {
             continue;
         }
@@ -1743,8 +1824,9 @@ fn sweep_unreferenced_asset_files(
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_local_image_path_keys, collect_local_sound_path_keys, path_lookup_key,
-        purge_expired_trash_sessions_at, recover_interrupted_processed_wav_replacements_with,
+        collect_local_font_paths, collect_local_image_path_keys, collect_local_image_paths,
+        collect_local_sound_path_keys, collect_local_sound_paths, purge_expired_trash_sessions_at,
+        recover_interrupted_processed_wav_replacements_with,
         recover_interrupted_sound_deletions_with, stage_sound_files_for_deletion,
         sweep_unreferenced_asset_files, system_time_millis, AppStore, TrashSession,
         PROCESSED_WAV_TRANSACTION_LOCK, TRASH_RETENTION,
@@ -1754,22 +1836,80 @@ mod tests {
         keyboard::KeyboardManager,
         models::{
             AppStoreData, CustomFont, CustomTab, FontType, GraphPosition, GraphStatType, GraphType,
-            KnobPosition, OverlayBounds, PendingProcessedWavReplacement, SettingsPatchInput,
-            SoundLibraryEntry, SoundSource, StatPosition, StatType,
+            KeyCounters, KeyPosition, KnobPosition, OverlayBounds, PendingProcessedWavReplacement,
+            SettingsPatchInput, SoundLibraryEntry, SoundSource, StatPosition, StatType,
         },
         services::settings::apply_patch_to_store,
-        state::AppState,
+        state::{app_state::KeyCounterEventEmitter, local_asset_path::path_identity_key, AppState},
     };
     use serde_json::{json, Value};
     use std::{
         collections::HashSet,
         path::Path,
-        sync::{mpsc, Arc, Barrier},
+        sync::{mpsc, Arc, Barrier, Mutex},
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     fn test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    struct TestCounterEmitter {
+        events: Arc<Mutex<Vec<String>>>,
+        mode: String,
+        key: String,
+        snapshot_emitted: Option<mpsc::Sender<()>>,
+        release_snapshot: Option<Mutex<mpsc::Receiver<()>>>,
+    }
+
+    impl TestCounterEmitter {
+        fn new(events: Arc<Mutex<Vec<String>>>, mode: String, key: String) -> Self {
+            Self {
+                events,
+                mode,
+                key,
+                snapshot_emitted: None,
+                release_snapshot: None,
+            }
+        }
+
+        fn blocking_snapshot(
+            events: Arc<Mutex<Vec<String>>>,
+            mode: String,
+            key: String,
+            snapshot_emitted: mpsc::Sender<()>,
+            release_snapshot: mpsc::Receiver<()>,
+        ) -> Self {
+            Self {
+                events,
+                mode,
+                key,
+                snapshot_emitted: Some(snapshot_emitted),
+                release_snapshot: Some(Mutex::new(release_snapshot)),
+            }
+        }
+    }
+
+    impl KeyCounterEventEmitter for TestCounterEmitter {
+        fn emit_key_counters(&self, counters: &KeyCounters) -> anyhow::Result<()> {
+            let count = counters[&self.mode][&self.key];
+            self.events
+                .lock()
+                .unwrap()
+                .push(format!("snapshot:{count}"));
+            if let Some(snapshot_emitted) = &self.snapshot_emitted {
+                snapshot_emitted.send(()).unwrap();
+            }
+            if let Some(release_snapshot) = &self.release_snapshot {
+                release_snapshot.lock().unwrap().recv().unwrap();
+            }
+            Ok(())
+        }
+
+        fn emit_key_counter(&self, _mode: &str, _key: &str, count: u32) -> anyhow::Result<()> {
+            self.events.lock().unwrap().push(format!("counter:{count}"));
+            Ok(())
+        }
     }
 
     #[test]
@@ -1805,6 +1945,91 @@ mod tests {
 
         store.flush_and_shutdown().unwrap();
         drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn keys_with_positions_commit_is_atomic_and_pads_without_deletion() {
+        let dir = test_directory("keys-positions-atomic-commit-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let before = store.snapshot();
+        let disk_before = std::fs::read(dir.join("store.json")).unwrap();
+        let mut mappings = before.keys.clone();
+        mappings.get_mut("4key").unwrap().push("F5".to_string());
+        let mut positions = before.key_positions.clone();
+        positions
+            .get_mut("5key")
+            .unwrap()
+            .push(KeyPosition::default());
+
+        store.writer.fail_next_persist();
+        assert!(store
+            .update_keys_with_positions(mappings.clone(), positions.clone())
+            .is_err());
+        assert_eq!(store.snapshot(), before);
+        assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), disk_before);
+
+        let persist_count = store.writer.persist_count();
+        let (keys, positions, _) = store
+            .update_keys_with_positions(mappings, positions)
+            .unwrap();
+        assert_eq!(store.writer.persist_count(), persist_count + 1);
+        assert_eq!(keys["4key"].last().unwrap(), "F5");
+        assert_eq!(positions["4key"].last().unwrap(), &KeyPosition::default());
+        assert!(keys["5key"].last().unwrap().is_empty());
+        assert_eq!(keys["4key"].len(), positions["4key"].len());
+        assert_eq!(keys["5key"].len(), positions["5key"].len());
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn legacy_single_collection_commits_preserve_key_position_lengths() {
+        let dir = test_directory("legacy-key-position-commit-length-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+
+        let mut mappings = store.snapshot().keys;
+        mappings.get_mut("4key").unwrap().push("F5".to_string());
+        store.update_keys(mappings).unwrap();
+        let after_keys = store.snapshot();
+        assert_eq!(
+            after_keys.keys["4key"].len(),
+            after_keys.key_positions["4key"].len()
+        );
+        assert_eq!(
+            after_keys.key_positions["4key"].last(),
+            Some(&KeyPosition::default())
+        );
+
+        let mut positions = after_keys.key_positions;
+        positions
+            .get_mut("5key")
+            .unwrap()
+            .push(KeyPosition::default());
+        store.update_positions(positions).unwrap();
+        let after_positions = store.snapshot();
+        assert_eq!(
+            after_positions.keys["5key"].len(),
+            after_positions.key_positions["5key"].len()
+        );
+        assert!(after_positions.keys["5key"].last().unwrap().is_empty());
+
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let reloaded = crate::state::migration::load_store_from_path(&dir.join("store.json"))
+            .unwrap()
+            .data;
+        for mode in reloaded.keys.keys().chain(reloaded.key_positions.keys()) {
+            assert_eq!(
+                reloaded.keys.get(mode).map_or(0, Vec::len),
+                reloaded.key_positions.get(mode).map_or(0, Vec::len)
+            );
+        }
+
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -2010,6 +2235,7 @@ mod tests {
         store.flush_and_shutdown().unwrap();
 
         assert_eq!(std::fs::read(dir.join("store.json.bak")).unwrap(), original);
+        assert!(!dir.join("store.json.pre-migration.bak").exists());
         assert!(serde_json::from_slice::<AppStoreData>(&std::fs::read(path).unwrap()).is_ok());
 
         drop(store);
@@ -2315,7 +2541,10 @@ mod tests {
         let mode = snapshot.selected_key_type.clone();
         let key = snapshot.keys[&mode][0].clone();
         let mut counters = snapshot.key_counters;
-        counters.entry(mode.clone()).or_default().insert(key, 42);
+        counters
+            .entry(mode.clone())
+            .or_default()
+            .insert(key.clone(), 42);
         store.set_key_counters(counters).unwrap();
 
         let state = AppState::initialize(store).unwrap();
@@ -2323,8 +2552,9 @@ mod tests {
         let before_store = state.store.snapshot();
         let before_disk = std::fs::read(dir.join("store.json")).unwrap();
         state.store.writer.fail_next_persist();
+        let emitter = TestCounterEmitter::new(Arc::new(Mutex::new(Vec::new())), mode, key);
 
-        assert!(state.reset_key_counters().is_err());
+        assert!(state.reset_key_counters(&emitter).is_err());
         assert_eq!(state.snapshot_key_counters(), before_runtime);
         assert_eq!(state.store.snapshot(), before_store);
         assert_eq!(std::fs::read(dir.join("store.json")).unwrap(), before_disk);
@@ -2335,58 +2565,67 @@ mod tests {
     }
 
     #[test]
-    fn counter_mirror_commit_blocks_concurrent_increment_until_after_reset() {
+    fn reset_snapshot_emit_precedes_waiting_increment_emit() {
         let dir = test_directory("counter-mirror-race-test");
         let store = AppStore::initialize_in_dir(&dir).unwrap();
-        store
-            .update(|data| data.key_counter_enabled = true)
-            .unwrap();
-        let state = Arc::new(AppState::initialize(store).unwrap());
-        let snapshot = state.store.snapshot();
+        let snapshot = store.snapshot();
         let mode = snapshot.selected_key_type.clone();
         let key = snapshot.keys[&mode][0].clone();
-        assert_eq!(state.increment_key_counter(&mode, &key), Some(1));
-
-        let (update_started_tx, update_started_rx) = mpsc::channel();
-        let (release_update_tx, release_update_rx) = mpsc::channel();
-        let transaction_state = Arc::clone(&state);
-        let transaction_mode = mode.clone();
-        let transaction_handle = std::thread::spawn(move || {
-            transaction_state
-                .update_store_with_key_counter_mirror(move |data| {
-                    for value in data
-                        .key_counters
-                        .get_mut(&transaction_mode)
-                        .unwrap()
-                        .values_mut()
-                    {
-                        *value = 0;
-                    }
-                    update_started_tx.send(()).unwrap();
-                    release_update_rx.recv().unwrap();
-                })
-                .unwrap()
-        });
-        update_started_rx.recv().unwrap();
+        store
+            .update(|data| {
+                data.key_counter_enabled = true;
+                data.key_counters
+                    .entry(mode.clone())
+                    .or_default()
+                    .insert(key.clone(), 7);
+            })
+            .unwrap();
+        let state = Arc::new(AppState::initialize(store).unwrap());
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let (snapshot_emitted_tx, snapshot_emitted_rx) = mpsc::channel();
+        let (release_snapshot_tx, release_snapshot_rx) = mpsc::channel();
+        let reset_emitter = Arc::new(TestCounterEmitter::blocking_snapshot(
+            Arc::clone(&events),
+            mode.clone(),
+            key.clone(),
+            snapshot_emitted_tx,
+            release_snapshot_rx,
+        ));
+        let reset_state = Arc::clone(&state);
+        let reset_handle =
+            std::thread::spawn(move || reset_state.reset_key_counters(reset_emitter.as_ref()));
+        snapshot_emitted_rx
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap();
 
         let (increment_started_tx, increment_started_rx) = mpsc::channel();
         let (increment_done_tx, increment_done_rx) = mpsc::channel();
         let increment_state = Arc::clone(&state);
         let increment_mode = mode.clone();
         let increment_key = key.clone();
+        let increment_emitter = TestCounterEmitter::new(
+            Arc::clone(&events),
+            increment_mode.clone(),
+            increment_key.clone(),
+        );
         let increment_handle = std::thread::spawn(move || {
             increment_started_tx.send(()).unwrap();
-            let count = increment_state.increment_key_counter(&increment_mode, &increment_key);
+            let count = increment_state.increment_key_counter_and_emit(
+                &increment_emitter,
+                &increment_mode,
+                &increment_key,
+            );
             increment_done_tx.send(count).unwrap();
         });
         increment_started_rx.recv().unwrap();
         assert!(increment_done_rx
             .recv_timeout(Duration::from_millis(50))
             .is_err());
+        assert_eq!(*events.lock().unwrap(), vec!["snapshot:0"]);
 
-        release_update_tx.send(()).unwrap();
-        let updated = transaction_handle.join().unwrap();
-        assert_eq!(updated.key_counters[&mode][&key], 0);
+        release_snapshot_tx.send(()).unwrap();
+        let reset_snapshot = reset_handle.join().unwrap().unwrap();
+        assert_eq!(reset_snapshot[&mode][&key], 0);
         assert_eq!(
             increment_done_rx
                 .recv_timeout(Duration::from_secs(3))
@@ -2394,6 +2633,7 @@ mod tests {
             Some(1)
         );
         increment_handle.join().unwrap();
+        assert_eq!(*events.lock().unwrap(), vec!["snapshot:0", "counter:1"]);
         assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
 
         state.shutdown();
@@ -2478,8 +2718,8 @@ mod tests {
         let image_paths = collect_local_image_path_keys(&data);
         let sound_paths = collect_local_sound_path_keys(&data);
         for kind in ["key", "stat", "graph", "knob"] {
-            assert!(image_paths.contains(&path_lookup_key(&root.join(format!("{kind}.png")))));
-            assert!(sound_paths.contains(&path_lookup_key(&root.join(format!("{kind}.wav")))));
+            assert!(image_paths.contains(&path_identity_key(&root.join(format!("{kind}.png")))));
+            assert!(sound_paths.contains(&path_identity_key(&root.join(format!("{kind}.wav")))));
         }
     }
 
@@ -2494,9 +2734,9 @@ mod tests {
             .insert("4key".to_string(), vec![position]);
 
         assert!(collect_local_image_path_keys(&data)
-            .contains(&path_lookup_key(Path::new("/tmp/dmnote-file-url.png"))));
+            .contains(&path_identity_key(Path::new("/tmp/dmnote-file-url.png"))));
         assert!(collect_local_sound_path_keys(&data)
-            .contains(&path_lookup_key(Path::new("/tmp/dmnote-file-url.wav"))));
+            .contains(&path_identity_key(Path::new("/tmp/dmnote-file-url.wav"))));
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2581,6 +2821,356 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_path_like_values_skip_destructive_asset_sweeps() {
+        let dir = test_directory("unresolved-local-path-sweep-test");
+        let image_path = dir.join("images").join("unreferenced.png");
+        let sound_path = dir.join("sounds").join("unreferenced.wav");
+        for path in [&image_path, &sound_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"asset").unwrap();
+        }
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .update(|data| {
+                let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+                position.active_image = Some(r"\unresolved-image.png".to_string());
+                position.sound_path = Some("C:unresolved-sound.wav".to_string());
+            })
+            .unwrap();
+
+        store.cleanup_orphan_assets_now().unwrap();
+
+        assert!(image_path.exists());
+        assert!(sound_path.exists());
+        assert!(!dir.join("trash").exists());
+        store.flush_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unresolved_asset_reference_counts_are_grouped_by_category() {
+        let mut data = AppStoreData::default();
+        data.font_settings.custom_fonts.push(CustomFont {
+            id: "unresolved-font".to_string(),
+            font_type: FontType::Local,
+            name: "Unresolved Font".to_string(),
+            display_name: "Unresolved Font".to_string(),
+            enabled: true,
+            local_path: Some("C:unresolved-font.ttf".to_string()),
+            css_content: None,
+        });
+        data.key_positions.insert(
+            "unresolved-mode".to_string(),
+            vec![KeyPosition {
+                active_image: Some(r"\unresolved-image.png".to_string()),
+                sound_path: Some("C:unresolved-sound.wav".to_string()),
+                ..KeyPosition::default()
+            }],
+        );
+        data.sound_library.insert(
+            r"\unresolved-library-sound.wav".to_string(),
+            SoundLibraryEntry::default(),
+        );
+
+        let fonts = collect_local_font_paths(&data);
+        let images = collect_local_image_paths(&data);
+        let sounds = collect_local_sound_paths(&data);
+
+        assert!(!fonts.complete);
+        assert!(!images.complete);
+        assert!(!sounds.complete);
+        assert_eq!(fonts.unresolved_count, 1);
+        assert_eq!(images.unresolved_count, 1);
+        assert_eq!(sounds.unresolved_count, 2);
+    }
+
+    #[test]
+    fn tauri_1_6_1_literal_fixture_preserves_collections_and_assets_through_shutdown() {
+        let dir = test_directory("tauri-1-6-1-store-fixture-test");
+        let image_path = dir.join("images").join("unbound-knob.png");
+        let sound_path = dir.join("sounds").join("legacy-sound.wav");
+        for path in [&image_path, &sound_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"asset-fixture").unwrap();
+        }
+
+        #[cfg(target_os = "windows")]
+        let stored_sound_path = {
+            let raw = sound_path.to_string_lossy();
+            if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
+                format!(r"\\{rest}")
+            } else {
+                raw.strip_prefix(r"\\?\").unwrap_or(&raw).to_string()
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let stored_sound_path =
+            r"C:\Users\DmNote\AppData\Roaming\com.dmnote\sounds\legacy-sound.wav".to_string();
+
+        let tab_id = "legacy-custom-tab";
+        let fixture = r##"{
+  "hardwareAcceleration": true,
+  "alwaysOnTop": true,
+  "overlayLocked": false,
+  "overlayVisible": false,
+  "noteEffect": true,
+  "noteSettings": {
+    "frameLimit": 0,
+    "speed": 180,
+    "trackHeight": 150,
+    "reverse": false,
+    "fadePosition": "auto",
+    "fadeTopPx": 50,
+    "fadeBottomPx": 0,
+    "reverseFadeTopPx": 0,
+    "reverseFadeBottomPx": 50,
+    "delayedNoteEnabled": false,
+    "shortNoteThresholdMs": 50,
+    "shortNoteMinLengthPx": 30,
+    "keyDisplayDelayMs": 0
+  },
+  "selectedKeyType": "legacy-custom-tab",
+  "customTabs": [{ "id": "legacy-custom-tab", "name": "Legacy custom tab" }],
+  "angleMode": "d3d11",
+  "language": "ko",
+  "laboratoryEnabled": false,
+  "developerModeEnabled": false,
+  "trayEnabled": false,
+  "autoUpdateEnabled": true,
+  "mainWindowHidden": false,
+  "keys": { "legacy-custom-tab": ["F5"] },
+  "keyPositions": {
+    "legacy-custom-tab": [{
+      "dx": 10.0,
+      "dy": 20.0,
+      "width": 60.0,
+      "height": 60.0,
+      "activeImage": "",
+      "inactiveImage": "",
+      "count": 0,
+      "noteColor": "#FFFFFF",
+      "noteOpacity": 80
+    }]
+  },
+  "statPositions": {
+    "legacy-custom-tab": [{
+      "statType": "kps",
+      "dx": 80.0,
+      "dy": 20.0,
+      "width": 80.0,
+      "height": 40.0,
+      "activeImage": "",
+      "inactiveImage": "",
+      "count": 0,
+      "noteColor": "#FFFFFF",
+      "noteOpacity": 80
+    }]
+  },
+  "graphPositions": {
+    "legacy-custom-tab": [{
+      "statType": "kpsAvg",
+      "graphType": "line",
+      "graphSpeed": 1000,
+      "graphColor": "#24BBB4",
+      "showAvgLine": true,
+      "dx": 170.0,
+      "dy": 20.0,
+      "width": 160.0,
+      "height": 80.0,
+      "activeImage": "",
+      "inactiveImage": "",
+      "count": 0,
+      "noteColor": "#FFFFFF",
+      "noteOpacity": 80
+    }]
+  },
+  "knobPositions": {
+    "legacy-custom-tab": [{
+      "axisId": "",
+      "sensitivity": 1.40625,
+      "reverse": false,
+      "dx": 340.0,
+      "dy": 20.0,
+      "width": 80.0,
+      "height": 80.0,
+      "activeImage": __IMAGE_PATH_JSON__,
+      "inactiveImage": "",
+      "count": 0,
+      "noteColor": "#FFFFFF",
+      "noteOpacity": 80
+    }]
+  },
+  "layerGroups": {
+    "legacy-custom-tab": [{ "id": "legacy-group", "name": "Legacy group" }]
+  },
+  "keyCounters": { "legacy-custom-tab": { "F5": 3 } },
+  "backgroundColor": "transparent",
+  "useCustomCss": false,
+  "customCss": { "path": null, "content": "" },
+  "fontSettings": { "customFonts": [] },
+  "counterAnimationPresets": [],
+  "tabCssOverrides": {
+    "legacy-custom-tab": { "path": null, "content": "", "enabled": true }
+  },
+  "tabNoteOverrides": {
+    "legacy-custom-tab": { "speed": 200 }
+  },
+  "useCustomJs": false,
+  "customJs": { "path": null, "content": "", "plugins": [] },
+  "overlayResizeAnchor": "top-left",
+  "overlayBounds": null,
+  "overlayLastContentTopOffset": null,
+  "overlayBoundsAreLogical": false,
+  "keyCounterEnabled": true,
+  "gridSettings": {
+    "alignmentGuides": true,
+    "spacingGuides": true,
+    "sizeMatchGuides": true,
+    "minimapEnabled": true,
+    "gridSnapSize": 5,
+    "overlayPadding": 30
+  },
+  "shortcuts": {
+    "toggleOverlay": { "key": "KeyO", "ctrl": true, "shift": true, "alt": false, "meta": false },
+    "toggleOverlayLock": { "key": "", "ctrl": false, "shift": false, "alt": false, "meta": false },
+    "toggleAlwaysOnTop": { "key": "", "ctrl": false, "shift": false, "alt": false, "meta": false },
+    "switchKeyMode": { "key": "Tab", "ctrl": false, "shift": false, "alt": false, "meta": false },
+    "toggleSettingsPanel": { "key": "KeyB", "ctrl": true, "shift": false, "alt": false, "meta": false },
+    "zoomIn": { "key": "Equal", "ctrl": true, "shift": false, "alt": false, "meta": false },
+    "zoomOut": { "key": "Minus", "ctrl": true, "shift": false, "alt": false, "meta": false },
+    "resetZoom": { "key": "Digit0", "ctrl": true, "shift": false, "alt": false, "meta": false }
+  },
+  "soundLibrary": {
+    __SOUND_PATH_JSON__: {
+      "enabled": true,
+      "source": "local",
+      "originalPath": null,
+      "trimStartRatio": null,
+      "trimEndRatio": null,
+      "displayName": "Legacy sound"
+    }
+  },
+  "keySoundOutputBackend": null,
+  "obsModeEnabled": false,
+  "obsPort": 34891,
+  "obsToken": null
+}"##
+            .replace(
+                "__IMAGE_PATH_JSON__",
+                &serde_json::to_string(&image_path.to_string_lossy()).unwrap(),
+            )
+            .replace(
+                "__SOUND_PATH_JSON__",
+                &serde_json::to_string(&stored_sound_path).unwrap(),
+            );
+        let store_path = dir.join("store.json");
+        std::fs::write(&store_path, fixture.as_bytes()).unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        assert!(!store.skip_asset_sweep);
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.custom_tabs.len(), 1);
+        assert_eq!(snapshot.keys[tab_id], vec!["F5"]);
+        assert_eq!(snapshot.key_positions[tab_id].len(), 1);
+        assert_eq!(snapshot.stat_positions[tab_id].len(), 1);
+        assert_eq!(snapshot.graph_positions[tab_id].len(), 1);
+        assert_eq!(snapshot.knob_positions[tab_id].len(), 1);
+        assert!(snapshot.knob_positions[tab_id][0].axis_id.is_empty());
+        assert_eq!(snapshot.knob_positions[tab_id][0].sensitivity, 1.0);
+        assert_eq!(snapshot.layer_groups[tab_id].len(), 1);
+        assert_eq!(snapshot.key_counters[tab_id]["F5"], 3);
+        assert!(snapshot.tab_css_overrides.contains_key(tab_id));
+        assert!(snapshot.tab_note_overrides.contains_key(tab_id));
+        assert!(snapshot.sound_library.contains_key(&stored_sound_path));
+        assert!(!snapshot.sound_library[&stored_sound_path].hidden);
+        assert!(!dir.join("store.json.bak").exists());
+        assert_eq!(
+            std::fs::read(dir.join("store.json.pre-migration.bak")).unwrap(),
+            fixture.as_bytes()
+        );
+
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        assert!(image_path.exists());
+        assert!(sound_path.exists());
+        assert!(!dir.join("store.json.bak").exists());
+        let reloaded = crate::state::migration::load_store_from_path(&store_path).unwrap();
+        assert!(!reloaded.repaired);
+        assert_eq!(reloaded.data.custom_tabs.len(), 1);
+        assert_eq!(reloaded.data.keys[tab_id], vec!["F5"]);
+        assert_eq!(reloaded.data.key_positions[tab_id].len(), 1);
+        assert_eq!(reloaded.data.stat_positions[tab_id].len(), 1);
+        assert_eq!(reloaded.data.graph_positions[tab_id].len(), 1);
+        assert_eq!(reloaded.data.knob_positions[tab_id].len(), 1);
+        assert!(reloaded.data.knob_positions[tab_id][0].axis_id.is_empty());
+        assert_eq!(reloaded.data.layer_groups[tab_id].len(), 1);
+        assert!(reloaded.data.sound_library.contains_key(&stored_sound_path));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pre_migration_backup_preserves_first_original_across_rewrites() {
+        let dir = test_directory("pre-migration-backup-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let store_path = dir.join("store.json");
+        let backup_path = dir.join("store.json.pre-migration.bak");
+        let first_original = br##"{
+  "hardwareAcceleration": true,
+  "alwaysOnTop": true,
+  "overlayLocked": false,
+  "noteEffect": false,
+  "selectedKeyType": "4key",
+  "angleMode": "d3d11",
+  "language": "ko",
+  "laboratoryEnabled": false,
+  "backgroundColor": "transparent",
+  "useCustomCss": false,
+  "overlayResizeAnchor": "top-left",
+  "overlayBounds": null,
+  "overlayLastContentTopOffset": null,
+  "soundLibrary": {
+    "C:\\legacy\\first.wav": { "enabled": true, "source": "local" }
+  }
+}"##;
+        std::fs::write(&store_path, first_original).unwrap();
+
+        let first = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(std::fs::read(&backup_path).unwrap(), first_original);
+        assert!(!dir.join("store.json.bak").exists());
+        first.flush_cleanup_and_shutdown().unwrap();
+        drop(first);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), first_original);
+
+        let mut second_input: Value =
+            serde_json::from_slice(&std::fs::read(&store_path).unwrap()).unwrap();
+        second_input["soundLibrary"]
+            .as_object_mut()
+            .unwrap()
+            .insert(
+                r"C:\legacy\second.wav".to_string(),
+                json!({ "enabled": true, "source": "local" }),
+            );
+        std::fs::write(
+            &store_path,
+            serde_json::to_vec_pretty(&second_input).unwrap(),
+        )
+        .unwrap();
+
+        let second = AppStore::initialize_in_dir(&dir).unwrap();
+        assert_eq!(std::fs::read(&backup_path).unwrap(), first_original);
+        assert!(!dir.join("store.json.bak").exists());
+        second.flush_cleanup_and_shutdown().unwrap();
+        drop(second);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), first_original);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn interrupted_sound_deletion_restores_files_still_referenced_by_store() {
         let dir = test_directory("sound-delete-startup-restore-test");
         let sounds_dir = dir.join("sounds");
@@ -2648,7 +3238,7 @@ mod tests {
         assert!(!recovery.complete);
         assert!(recovery
             .protected_keys
-            .contains(&path_lookup_key(&backup_path)));
+            .contains(&path_identity_key(&backup_path)));
         assert!(!sound_path.exists());
         assert!(backup_path.exists());
 
@@ -3339,8 +3929,8 @@ mod tests {
         std::fs::write(&temp_path, b"interrupted-new-wav").unwrap();
 
         let mut retained_keys = HashSet::from([
-            path_lookup_key(&first_target),
-            path_lookup_key(&second_target),
+            path_identity_key(&first_target),
+            path_identity_key(&second_target),
         ]);
         let rename_attempts = std::cell::Cell::new(0);
         let failed_backup = std::cell::RefCell::new(None);

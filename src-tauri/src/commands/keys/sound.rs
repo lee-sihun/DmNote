@@ -14,6 +14,7 @@ use crate::errors::{CmdResult, CommandError};
 use crate::models::{AppStoreData, PendingProcessedWavReplacement, SoundLibraryEntry, SoundSource};
 use crate::state::{
     atomic_file::{prepare_atomic_replace, PreparedAtomicReplace},
+    local_asset_path::paths_have_same_identity,
     store::{
         move_staged_sound_deletions_to_trash, restore_staged_sound_deletions,
         stage_sound_files_for_deletion, PROCESSED_WAV_TRANSACTION_LOCK,
@@ -1053,30 +1054,7 @@ fn resolve_sound_path_key_from_keys(validated_path: &Path, stored_keys: &[String
 }
 
 fn canonical_paths_equivalent(left: &Path, right: &Path) -> bool {
-    #[cfg(windows)]
-    {
-        windows_canonical_path_key(left) == windows_canonical_path_key(right)
-    }
-    #[cfg(not(windows))]
-    {
-        left == right
-    }
-}
-
-#[cfg(windows)]
-fn windows_canonical_path_key(path: &Path) -> String {
-    let normalized = path
-        .to_string_lossy()
-        .replace('/', "\\")
-        .to_ascii_lowercase();
-    if let Some(rest) = normalized.strip_prefix("\\\\?\\unc\\") {
-        format!("\\\\{rest}")
-    } else {
-        normalized
-            .strip_prefix("\\\\?\\")
-            .unwrap_or(&normalized)
-            .to_string()
-    }
+    paths_have_same_identity(left, right)
 }
 
 fn canonicalize_sound_path(path: &Path) -> CmdResult<PathBuf> {
