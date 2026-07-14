@@ -12,6 +12,17 @@
   font-display: swap;
 }
 
+/* 'Pretendard' 로컬 alias — 저장 데이터·프리셋에 남은 비가변 family 참조를
+   동일 가변 파일로 해석 (구 CDN 내장 폰트 제거 대체, 오프라인 동작 보장) */
+@font-face {
+  font-family: 'Pretendard';
+  src: url('../assets/fonts/PretendardVariable.woff2')
+    format('woff2-variations');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   font-family: 'Pretendard Variable', 'Pretendard', -apple-system,
     BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;

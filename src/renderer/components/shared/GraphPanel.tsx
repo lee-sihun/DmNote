@@ -418,7 +418,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           overflow: 'hidden',
           cursor: interactive ? 'pointer' : 'default',
           fontFamily:
-            "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
+            "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
           willChange:
             dataEditing || isViewportTransforming ? 'transform' : 'auto',
           backfaceVisibility: 'hidden',
