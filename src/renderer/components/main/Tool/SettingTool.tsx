@@ -276,6 +276,7 @@ SettingToolProps) => {
             <div className="relative">
               <ListPopup
                 open={isExportImportOpen}
+                ariaLabel={t('common.more')}
                 referenceRef={exportImportRef}
                 onClose={() => setIsExportImportOpen(false)}
                 items={[
@@ -363,6 +364,7 @@ SettingToolProps) => {
               <div className="relative">
                 <ListPopup
                   open={isExtrasOpen}
+                  ariaLabel={t('common.more')}
                   referenceRef={extrasRef}
                   onClose={() => setIsExtrasOpen(false)}
                   items={menuItems}

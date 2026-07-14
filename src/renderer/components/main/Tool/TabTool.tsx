@@ -54,6 +54,7 @@ const TabTool = () => {
       </button>
       <FloatingPopup
         open={isPopupOpen && isBootstrapped}
+        ariaLabel={t('tabs.title')}
         referenceRef={gridButtonRef}
         placement="bottom"
         onClose={() => setIsPopupOpen(false)}

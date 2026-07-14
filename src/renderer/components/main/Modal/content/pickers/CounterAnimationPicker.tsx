@@ -320,6 +320,7 @@ const CounterAnimationPicker = ({
       {menu.menuKey !== null && (
         <ListPopup
           open
+          ariaLabel={t('common.more')}
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
           items={menuItems}

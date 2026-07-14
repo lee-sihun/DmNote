@@ -757,6 +757,7 @@ export default function App() {
       {palette && (
         <FloatingPopup
           open={palette}
+          ariaLabel={t('tooltip.palette')}
           referenceRef={primaryButtonRef}
           placement="top"
           offset={25}

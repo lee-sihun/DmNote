@@ -105,6 +105,7 @@ const ColorPickerWrapper = ({
   portalToBody = false,
   closeOnScroll = false,
 }: ColorPickerWrapperProps) => {
+  const { t } = useTranslation();
   const initialMode = solidOnly
     ? MODES.solid
     : isGradientColor(color)
@@ -764,6 +765,7 @@ const ColorPickerWrapper = ({
   return (
     <FloatingPopup
       open={open}
+      ariaLabel={t('noteColor.color')}
       referenceRef={referenceRef}
       fixedX={
         fixedPosition?.x ??

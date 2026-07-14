@@ -322,6 +322,7 @@ const ShortcutSettingsModal = ({
 
   return (
     <Modal
+      ariaLabel={t('shortcutSetting.title')}
       onClick={() => {
         if (isListening) {
           setError(null);

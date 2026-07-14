@@ -1841,6 +1841,7 @@ const Grid = ({
       <div className="relative">
         <ListPopup
           open={isContextOpen}
+          ariaLabel={t('common.more')}
           referenceRef={contextRef}
           position={contextPosition || undefined}
           onClose={() => {
@@ -2102,6 +2103,7 @@ const Grid = ({
       <div className="relative">
         <ListPopup
           open={isGridContextOpen}
+          ariaLabel={t('common.more')}
           position={gridContextClientPos || undefined}
           onClose={() => {
             setIsGridContextOpen(false);

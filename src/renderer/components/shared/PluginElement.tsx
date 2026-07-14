@@ -1702,6 +1702,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         createPortal(
           <ListPopup
             open={contextMenuOpen}
+            ariaLabel={t('common.more')}
             position={contextMenuPosition}
             onClose={() => setContextMenuOpen(false)}
             items={contextMenuItems}

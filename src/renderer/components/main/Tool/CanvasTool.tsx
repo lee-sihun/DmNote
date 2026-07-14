@@ -144,6 +144,7 @@ const CanvasTool = ({
       </div>
       <ListPopup
         open={isAddPopupOpen}
+        ariaLabel={t('common.more')}
         referenceRef={addButtonRef as unknown as React.RefObject<HTMLElement>}
         onClose={() => setIsAddPopupOpen(false)}
         items={[
@@ -167,6 +168,7 @@ const CanvasTool = ({
       />
       <ListPopup
         open={isResetPopupOpen}
+        ariaLabel={t('common.more')}
         referenceRef={resetButtonRef as unknown as React.RefObject<HTMLElement>}
         onClose={() => setIsResetPopupOpen(false)}
         items={[

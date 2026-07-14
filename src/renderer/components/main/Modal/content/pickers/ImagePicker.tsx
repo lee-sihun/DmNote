@@ -172,6 +172,7 @@ const ImagePicker = ({
   return (
     <FloatingPopup
       open={open}
+      ariaLabel={t('keySetting.customImage')}
       referenceRef={referenceRef}
       fixedX={fixedPosition?.x}
       fixedY={fixedPosition?.y}

@@ -1,11 +1,13 @@
 import React, {
   useState,
   useRef,
+  useId,
   useCallback,
   useEffect,
   useLayoutEffect,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { isTopmostPopupLayer, registerPopupLayer } from '../Modal/popupLayer';
 
 interface DropdownOption {
   label: string;
@@ -56,20 +58,66 @@ const Dropdown: React.FC<DropdownProps> = ({
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   // null이면 아직 미실측 — 히든 렌더 후 layout effect에서 확정
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const menuId = useId();
+
+  const selectedIndex = options.findIndex((option) => option.value === value);
+
+  const openMenu = useCallback(
+    (preferredIndex?: number) => {
+      const button = buttonRef.current;
+      if (!button || disabled || options.length === 0) return;
+      setAnchor(button.getBoundingClientRect());
+      setMenuPos(null);
+      const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
+      setActiveIndex(
+        Math.min(
+          Math.max(preferredIndex ?? fallbackIndex, 0),
+          options.length - 1,
+        ),
+      );
+      setOpen(true);
+    },
+    [disabled, options.length, selectedIndex],
+  );
 
   // 메뉴는 body로 포털 — 패널/모달의 backdrop-filter·mask 아래에서는
   // 중첩 backdrop-blur가 무력화되므로 backdrop root 밖에서 그린다
   const toggleOpen = () => {
-    if (!open && buttonRef.current) {
-      // 좌표 계산은 실측 후 layout effect에서 — 여기선 앵커만 캡처
-      setAnchor(buttonRef.current.getBoundingClientRect());
-      setMenuPos(null);
+    if (open) {
+      setOpen(false);
+      return;
     }
-    setOpen((prev) => !prev);
+    openMenu();
   };
+
+  const closeAndFocusTrigger = useCallback(() => {
+    setOpen(false);
+    buttonRef.current?.focus();
+  }, []);
+
+  const selectOption = useCallback(
+    (index: number) => {
+      const option = options[index];
+      if (!option) return;
+      onChange(option.value);
+      closeAndFocusTrigger();
+    },
+    [closeAndFocusTrigger, onChange, options],
+  );
+
+  const moveActiveOption = useCallback(
+    (nextIndex: number) => {
+      if (options.length === 0) return;
+      const normalized = (nextIndex + options.length) % options.length;
+      setActiveIndex(normalized);
+    },
+    [options.length],
+  );
 
   // 실측 기반 확정 배치 — 히든 렌더한 메뉴의 레이아웃 크기(offsetWidth/Height,
   // transform 무관)를 재서 최종 픽셀 좌표를 한 번에 확정하고 표시.
@@ -135,6 +183,24 @@ const Dropdown: React.FC<DropdownProps> = ({
     place();
   }, [open, menuPos, place]);
 
+  // 열린 뒤 옵션이 사라지면 빈 포털을 남기지 않고 트리거로 복귀
+  useLayoutEffect(() => {
+    if (!open || options.length > 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    closeAndFocusTrigger();
+  }, [closeAndFocusTrigger, open, options.length]);
+
+  useLayoutEffect(() => {
+    if (!open || !menuPos || activeIndex < 0) return;
+    optionRefs.current[activeIndex]?.focus();
+  }, [activeIndex, menuPos, open]);
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!open || !menu) return;
+    return registerPopupLayer(menu);
+  }, [anchor, open]);
+
   // 열린 동안 내용 크기 변화(비동기 옵션 로드 등) 시 클램프·플립 재계산
   useEffect(() => {
     if (!open) return;
@@ -156,12 +222,90 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (!open) return;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (!isTopmostPopupLayer(menuRef.current)) return;
       event.preventDefault();
-      setOpen(false);
+      closeAndFocusTrigger();
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [open]);
+  }, [closeAndFocusTrigger, open]);
+
+  const handleTriggerKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const preferredIndex =
+      selectedIndex >= 0
+        ? selectedIndex
+        : event.key === 'ArrowUp'
+        ? options.length - 1
+        : 0;
+    if (open) {
+      moveActiveOption(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+    } else {
+      openMenu(preferredIndex);
+    }
+  };
+
+  const handleOptionKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        moveActiveOption(index + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        moveActiveOption(index - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        setActiveIndex(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        setActiveIndex(options.length - 1);
+        break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        selectOption(index);
+        break;
+      case 'Tab': {
+        event.preventDefault();
+        const selector =
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const modalScope = buttonRef.current?.closest<HTMLElement>(
+          '[data-dmn-modal-backdrop="true"]',
+        );
+        const popupScope = buttonRef.current?.closest<HTMLElement>(
+          '[data-dmn-popup-layer="true"]',
+        );
+        const focusScope: ParentNode = popupScope ?? modalScope ?? document;
+        const tabStops = Array.from(
+          focusScope.querySelectorAll<HTMLElement>(selector),
+        ).filter(
+          (element) =>
+            !menuRef.current?.contains(element) &&
+            !element.closest('[hidden], [aria-hidden="true"]'),
+        );
+        const triggerIndex = buttonRef.current
+          ? tabStops.indexOf(buttonRef.current)
+          : -1;
+        const nextIndex = event.shiftKey ? triggerIndex - 1 : triggerIndex + 1;
+        const wrappedIndex = event.shiftKey ? tabStops.length - 1 : 0;
+        setOpen(false);
+        (
+          tabStops[nextIndex] ??
+          (popupScope || modalScope
+            ? tabStops[wrappedIndex]
+            : buttonRef.current)
+        )?.focus();
+        break;
+      }
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -202,6 +346,9 @@ const Dropdown: React.FC<DropdownProps> = ({
           <div
             ref={menuRef}
             data-dmn-popup-submenu="true"
+            data-dmn-popup-layer="true"
+            role="listbox"
+            id={menuId}
             className={`fixed flex flex-col p-[4px] gap-[4px] bg-glass backdrop-glass-popup rounded-surface shadow-elevation-2 z-[60] overflow-x-hidden overflow-y-auto max-h-[200px] tooltip-fade-in ${widthClass}`}
             style={{
               // 실측 전에는 원점에서 히든 렌더 — 자연 크기 그대로 측정
@@ -220,19 +367,24 @@ const Dropdown: React.FC<DropdownProps> = ({
                 옵션 없음
               </div>
             ) : (
-              options.map((opt) => (
+              options.map((opt, index) => (
                 <button
                   key={opt.value}
+                  ref={(element) => {
+                    optionRefs.current[index] = element;
+                  }}
                   type="button"
+                  role="option"
+                  aria-selected={value === opt.value}
+                  tabIndex={-1}
                   className={`text-left w-full h-[23px] px-[8px] rounded-md text-body transition-colors duration-fast flex items-center ${
                     value === opt.value
                       ? 'bg-surface-active text-fg pointer-events-none'
                       : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
                   }`}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
+                  onFocus={() => setActiveIndex(index)}
+                  onKeyDown={(event) => handleOptionKeyDown(event, index)}
+                  onClick={() => selectOption(index)}
                 >
                   <span className="truncate">{opt.label}</span>
                 </button>
@@ -252,10 +404,14 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
           className={`flex items-center justify-center w-[23px] h-[23px] rounded-md cursor-pointer bg-fill hover:bg-fill-hover transition-colors duration-fast ${
             open ? 'shadow-focus-ring' : ''
           }`}
           onClick={toggleOpen}
+          onKeyDown={handleTriggerKeyDown}
           disabled={disabled}
         >
           {iconTrigger}
@@ -264,6 +420,9 @@ const Dropdown: React.FC<DropdownProps> = ({
         <button
           ref={buttonRef}
           type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
           className={`flex box-border items-center justify-between ${
             size === 'lg'
               ? 'h-[30px] px-[10px] rounded-surface'
@@ -272,6 +431,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             open ? 'shadow-focus-ring' : ''
           } ${fullWidth ? 'w-full' : ''} ${widthClass}`}
           onClick={toggleOpen}
+          onKeyDown={handleTriggerKeyDown}
           disabled={disabled}
         >
           <span className={`truncate ${!selected ? 'text-fg-muted' : ''}`}>

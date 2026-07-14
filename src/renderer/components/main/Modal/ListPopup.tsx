@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import FloatingPopup from './FloatingPopup';
+import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 import { useLenis } from '@hooks/useLenis';
 
 export type ListItem = {
@@ -19,9 +20,10 @@ export type ListItem = {
 
 interface ListPopupProps {
   open: boolean;
+  ariaLabel: string;
   referenceRef?: React.RefObject<HTMLElement>;
   position?: { x: number; y: number };
-  onClose?: () => void;
+  onClose: () => void;
   items: ListItem[];
   onSelect?: (id: string) => void;
   className?: string;
@@ -31,25 +33,102 @@ interface ListPopupProps {
   maxVisibleItems?: number;
 }
 
+const DOCUMENT_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+const getAdjacentFocusTarget = (
+  origin: HTMLElement | null,
+  reverse: boolean,
+) => {
+  const modalScope = origin?.closest<HTMLElement>(
+    '[data-dmn-modal-backdrop="true"]',
+  );
+  const focusScope: ParentNode = modalScope ?? document;
+  const focusable = Array.from(
+    focusScope.querySelectorAll<HTMLElement>(DOCUMENT_FOCUSABLE_SELECTOR),
+  ).filter(
+    (element) =>
+      !element.closest(
+        '[hidden], [aria-hidden="true"], [data-dmn-popup-layer="true"]',
+      ) && element.getAttribute('aria-disabled') !== 'true',
+  );
+  const originIndex = origin ? focusable.indexOf(origin) : -1;
+  if (originIndex < 0) {
+    return reverse ? focusable[focusable.length - 1] : focusable[0];
+  }
+  const adjacent = focusable[originIndex + (reverse ? -1 : 1)];
+  if (adjacent || !modalScope) return adjacent ?? origin;
+  return reverse ? focusable[focusable.length - 1] : focusable[0];
+};
+
+const getMenuItems = (menu: HTMLElement) =>
+  Array.from(
+    menu.querySelectorAll<HTMLButtonElement>(
+      '[role^="menuitem"]:not(:disabled)',
+    ),
+  );
+
+const handleMenuNavigation = (event: React.KeyboardEvent<HTMLElement>) => {
+  if (event.defaultPrevented) return;
+  const items = getMenuItems(event.currentTarget);
+  if (items.length === 0) return;
+
+  const activeIndex = items.indexOf(
+    document.activeElement as HTMLButtonElement,
+  );
+  let nextIndex: number | null = null;
+  if (event.key === 'ArrowDown') {
+    nextIndex = activeIndex < 0 ? 0 : (activeIndex + 1) % items.length;
+  } else if (event.key === 'ArrowUp') {
+    nextIndex =
+      activeIndex < 0
+        ? items.length - 1
+        : (activeIndex - 1 + items.length) % items.length;
+  } else if (event.key === 'Home') {
+    nextIndex = 0;
+  } else if (event.key === 'End') {
+    nextIndex = items.length - 1;
+  }
+
+  if (nextIndex == null) return;
+  event.preventDefault();
+  items[nextIndex].focus();
+};
+
 /** 서브메뉴 컴포넌트 (호버 시 표시) */
 const SubMenu = ({
+  ariaLabel,
   items,
   onSelect,
   onCloseAll,
+  onMenuTab,
   maxVisibleItems,
   anchorRect,
+  parentItemRef,
+  focusFirst,
   onMouseEnter,
   onMouseLeave,
   onRequestClose,
 }: {
+  ariaLabel: string;
   items: ListItem[];
   onSelect?: (id: string) => void;
-  onCloseAll?: () => void;
+  onCloseAll: () => void;
+  onMenuTab: (event: KeyboardEvent) => void;
   maxVisibleItems?: number;
   anchorRect: DOMRect | null;
+  parentItemRef: React.RefObject<HTMLButtonElement | null>;
+  focusFirst: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
-  onRequestClose?: () => void;
+  onRequestClose: () => void;
 }) => {
   const subMenuRef = useRef<HTMLDivElement>(null);
   const siblingActiveRef = useRef<{
@@ -63,16 +142,29 @@ const SubMenu = ({
     top: number;
   } | null>(null);
 
-  // Escape 소유 — 열린 동안 최상위 레이어이므로 소비 후 자신만 닫기
+  useLayoutEffect(() => {
+    const element = subMenuRef.current;
+    if (!element) return;
+    return registerPopupLayer(element);
+  }, [anchorRect]);
+
+  // 최상위 서브메뉴만 키보드 종료를 소유
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (e.defaultPrevented || !isTopmostPopupLayer(subMenuRef.current))
+        return;
+      if (e.key === 'Tab') {
+        onMenuTab(e);
+        return;
+      }
+      if (e.key !== 'Escape') return;
       e.preventDefault();
-      onRequestClose?.();
+      flushSync(onRequestClose);
+      parentItemRef.current?.focus();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onRequestClose]);
+  }, [onMenuTab, onRequestClose, parentItemRef]);
 
   useLayoutEffect(() => {
     const el = subMenuRef.current;
@@ -101,6 +193,14 @@ const SubMenu = ({
     );
   }, [anchorRect, items.length]);
 
+  useLayoutEffect(() => {
+    if (!focusFirst || !pos) return;
+    const firstItem = subMenuRef.current
+      ? getMenuItems(subMenuRef.current)[0]
+      : null;
+    firstItem?.focus();
+  }, [focusFirst, pos]);
+
   const itemHeight = 26;
   const itemGap = 4;
   const separatorCount = items.filter((i) => i.type === 'separator').length;
@@ -128,6 +228,19 @@ const SubMenu = ({
         if (needsScroll) subLenisRef(node);
       }}
       data-dmn-popup-submenu="true"
+      data-dmn-popup-layer="true"
+      role="menu"
+      aria-label={ariaLabel}
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          flushSync(onRequestClose);
+          parentItemRef.current?.focus();
+          return;
+        }
+        handleMenuNavigation(event);
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`fixed z-[60] bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px] tooltip-fade-in${
@@ -149,6 +262,7 @@ const SubMenu = ({
           item={it}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
+          onMenuTab={onMenuTab}
           siblingActiveRef={siblingActiveRef}
           hasCheckColumn={hasCheckColumn}
         />
@@ -163,12 +277,14 @@ const MenuItemRow = ({
   item,
   onSelect,
   onCloseAll,
+  onMenuTab,
   siblingActiveRef,
   hasCheckColumn = false,
 }: {
   item: ListItem;
   onSelect?: (id: string) => void;
-  onCloseAll?: () => void;
+  onCloseAll: () => void;
+  onMenuTab: (event: KeyboardEvent) => void;
   /** 형제 항목 중 활성 서브메뉴를 추적하는 ref (즉시 전환용) */
   siblingActiveRef?: React.RefObject<{
     id: string | null;
@@ -181,8 +297,22 @@ const MenuItemRow = ({
   const rowRef = useRef<HTMLButtonElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [rowRect, setRowRect] = useState<DOMRect | null>(null);
+  const [focusSubMenuOnOpen, setFocusSubMenuOnOpen] = useState(false);
 
   const hasChildren = item.children && item.children.length > 0;
+
+  const showSubMenu = (focusFirst: boolean) => {
+    if (!hasChildren || !rowRef.current) return;
+    setRowRect(rowRef.current.getBoundingClientRect());
+    setFocusSubMenuOnOpen(focusFirst);
+    setSubMenuOpen(true);
+    if (siblingActiveRef) {
+      siblingActiveRef.current = {
+        id: item.id,
+        close: () => setSubMenuOpen(false),
+      };
+    }
+  };
 
   const handleMouseEnter = () => {
     if (!hasChildren) return;
@@ -196,18 +326,7 @@ const MenuItemRow = ({
       active.close();
     }
 
-    hoverTimerRef.current = setTimeout(() => {
-      if (rowRef.current) {
-        setRowRect(rowRef.current.getBoundingClientRect());
-      }
-      setSubMenuOpen(true);
-      if (siblingActiveRef) {
-        siblingActiveRef.current = {
-          id: item.id,
-          close: () => setSubMenuOpen(false),
-        };
-      }
-    }, delay);
+    hoverTimerRef.current = setTimeout(() => showSubMenu(false), delay);
   };
 
   const handleMouseLeave = () => {
@@ -229,7 +348,7 @@ const MenuItemRow = ({
   // 구분선 (부모 p-[4px] 패딩을 무시하고 전체 폭 사용)
   if (item.type === 'separator') {
     return (
-      <div className="-mx-[4px]">
+      <div role="separator" className="-mx-[4px]">
         <div className="h-[1px] bg-line" />
       </div>
     );
@@ -238,9 +357,22 @@ const MenuItemRow = ({
   const hasCheck = typeof item.checked === 'boolean';
 
   const handleSelect = () => {
-    if (item.disabled || hasChildren) return;
+    if (item.disabled) return;
+    if (hasChildren) {
+      showSubMenu(false);
+      return;
+    }
     onSelect?.(item.id);
-    onCloseAll?.();
+    onCloseAll();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!hasChildren || !['ArrowRight', 'Enter', ' '].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    showSubMenu(true);
   };
 
   return (
@@ -253,7 +385,14 @@ const MenuItemRow = ({
         ref={rowRef}
         type="button"
         disabled={item.disabled}
+        role={hasCheck ? 'menuitemcheckbox' : 'menuitem'}
+        aria-checked={hasCheck ? item.checked : undefined}
+        aria-disabled={item.disabled || undefined}
+        aria-haspopup={hasChildren ? 'menu' : undefined}
+        aria-expanded={hasChildren ? subMenuOpen : undefined}
+        tabIndex={-1}
         onClick={handleSelect}
+        onKeyDown={handleKeyDown}
         className={`w-full min-w-[96px] h-[26px] px-[8px] rounded-md flex items-center gap-[6px] transition-colors duration-fast ${
           item.disabled
             ? 'opacity-70'
@@ -315,11 +454,15 @@ const MenuItemRow = ({
       {/* 서브메뉴 */}
       {hasChildren && subMenuOpen && (
         <SubMenu
+          ariaLabel={item.label}
           items={item.children!}
           onSelect={onSelect}
           onCloseAll={onCloseAll}
+          onMenuTab={onMenuTab}
           maxVisibleItems={item.maxVisibleChildren}
           anchorRect={rowRect}
+          parentItemRef={rowRef}
+          focusFirst={focusSubMenuOnOpen}
           onMouseEnter={() => {
             // 포털로 DOM 중첩이 끊기므로 서브메뉴 진입 시 닫힘 타이머 취소
             if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -340,6 +483,7 @@ const MenuItemRow = ({
 
 const ListPopup = ({
   open,
+  ariaLabel,
   referenceRef,
   position,
   onClose,
@@ -350,6 +494,20 @@ const ListPopup = ({
   offsetY = 0,
   maxVisibleItems,
 }: ListPopupProps) => {
+  const openerRef = useRef<HTMLElement | null>(null);
+
+  const handleMenuTab = (event: KeyboardEvent) => {
+    event.preventDefault();
+    const origin = referenceRef?.current ?? openerRef.current;
+    const target = getAdjacentFocusTarget(origin, event.shiftKey);
+    flushSync(onClose);
+    if (target?.isConnected) {
+      target.focus();
+    } else if (origin?.isConnected) {
+      origin.focus();
+    }
+  };
+
   // 일시적 팝업은 상주 크롬(z-30, 패널·미니맵)보다 항상 위
   const defaultClassName =
     'z-40 bg-glass backdrop-glass-popup shadow-elevation-2 rounded-surface p-[4px] flex flex-col gap-[4px]';
@@ -381,6 +539,10 @@ const ListPopup = ({
   return (
     <FloatingPopup
       open={open}
+      role="menu"
+      ariaLabel={ariaLabel}
+      onMenuTab={handleMenuTab}
+      focusOriginRef={openerRef}
       referenceRef={referenceRef}
       placement="top"
       offset={25}
@@ -389,6 +551,7 @@ const ListPopup = ({
       fixedX={position?.x}
       fixedY={position?.y}
       onClose={onClose}
+      onKeyDown={handleMenuNavigation}
       className={effectiveClassName}
     >
       <div
@@ -408,6 +571,7 @@ const ListPopup = ({
             item={it}
             onSelect={onSelect}
             onCloseAll={onClose}
+            onMenuTab={handleMenuTab}
             siblingActiveRef={siblingActiveRef}
             hasCheckColumn={hasCheckColumn}
           />

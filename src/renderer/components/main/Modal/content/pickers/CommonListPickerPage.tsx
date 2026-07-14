@@ -119,7 +119,14 @@ export default function CommonListPickerPage<T>({
             type="text"
             value={searchQuery}
             onChange={(event) => onSearchQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return;
+              event.preventDefault();
+              event.stopPropagation();
+              onBack();
+            }}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
             className="w-full h-[30px] pl-[30px] pr-[10px] bg-inset rounded-surface text-fg text-body placeholder-fg-faint focus:shadow-focus-ring outline-none transition-shadow duration-fast"
           />
         </div>

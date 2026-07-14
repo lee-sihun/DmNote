@@ -9,9 +9,11 @@ import {
   autoUpdate,
   type Placement,
 } from '@floating-ui/react';
+import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
 
-type FloatingPopupProps = {
+interface FloatingPopupBaseProps {
   open: boolean;
+  ariaLabel: string;
   referenceRef?: React.RefObject<HTMLElement>;
   placement?: string;
   offset?: number;
@@ -20,17 +22,168 @@ type FloatingPopupProps = {
   fixedX?: number;
   fixedY?: number;
   interactiveRefs?: Array<React.RefObject<HTMLElement>>;
-  onClose?: () => void;
+  onClose: () => void;
   className?: string;
   children?: React.ReactNode;
   autoClose?: boolean;
   closeOnScroll?: boolean; // 스크롤 시 닫을지 여부
   portalToBody?: boolean;
   animate?: boolean;
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
+}
+
+interface FloatingDialogPopupProps extends FloatingPopupBaseProps {
+  role?: 'dialog';
+  onMenuTab?: never;
+}
+
+interface FloatingMenuPopupProps extends FloatingPopupBaseProps {
+  role: 'menu';
+  onMenuTab: (event: KeyboardEvent) => void;
+}
+
+type FloatingPopupProps = FloatingDialogPopupProps | FloatingMenuPopupProps;
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+const getFocusableElements = (root: HTMLElement) =>
+  Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) =>
+      !element.closest('[hidden], [aria-hidden="true"]') &&
+      element.getAttribute('aria-disabled') !== 'true',
+  );
+
+interface FloatingPopupSurfaceProps {
+  setFloating: (node: HTMLDivElement | null) => void;
+  style: React.CSSProperties;
+  className: string;
+  role: 'dialog' | 'menu';
+  ariaLabel: string;
+  onMenuTab?: (event: KeyboardEvent) => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  focusOriginRef?: React.MutableRefObject<HTMLElement | null>;
+  children?: React.ReactNode;
+}
+
+const FloatingPopupSurface = ({
+  setFloating,
+  style,
+  className,
+  role,
+  ariaLabel,
+  onMenuTab,
+  onKeyDown,
+  focusOriginRef,
+  children,
+}: FloatingPopupSurfaceProps) => {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const prevFocusedRef = useRef<HTMLElement | null>(
+    typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null,
+  );
+
+  // 자식 팝업은 부모 모달의 layout 등록 뒤에 쌓여야 하므로 passive effect 사용
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    return registerPopupLayer(surface);
+  }, []);
+
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    if (focusOriginRef) {
+      focusOriginRef.current = prevFocusedRef.current;
+    }
+    if (surface.contains(document.activeElement)) return;
+    const initialTarget =
+      role === 'menu'
+        ? surface.querySelector<HTMLElement>(
+            '[role^="menuitem"]:not(:disabled)',
+          ) ?? surface
+        : getFocusableElements(surface)[0] ?? surface;
+    initialTarget.focus();
+  }, [focusOriginRef, role]);
+
+  useLayoutEffect(() => {
+    const prevFocused = prevFocusedRef.current;
+    return () => {
+      if (prevFocused && prevFocused.isConnected) {
+        prevFocused.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || event.defaultPrevented) return;
+      const surface = surfaceRef.current;
+      if (!isTopmostPopupLayer(surface)) return;
+
+      if (role === 'menu') {
+        onMenuTab?.(event);
+        return;
+      }
+
+      event.preventDefault();
+      const focusable = getFocusableElements(surface);
+      if (focusable.length === 0) {
+        surface.focus();
+        return;
+      }
+
+      const activeIndex = focusable.indexOf(
+        document.activeElement as HTMLElement,
+      );
+      const nextIndex =
+        activeIndex < 0
+          ? event.shiftKey
+            ? focusable.length - 1
+            : 0
+          : (activeIndex + (event.shiftKey ? -1 : 1) + focusable.length) %
+            focusable.length;
+      focusable[nextIndex].focus();
+    };
+
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onMenuTab, role]);
+
+  return (
+    <div
+      ref={(node) => {
+        setFloating(node);
+        surfaceRef.current = node;
+      }}
+      style={style}
+      className={className}
+      role={role}
+      aria-label={ariaLabel}
+      aria-modal={role === 'dialog' ? false : undefined}
+      data-dmn-popup-layer="true"
+      data-dmn-floating-popup="true"
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+    >
+      {children}
+    </div>
+  );
 };
 
 const FloatingPopup = ({
   open,
+  ariaLabel,
+  role = 'dialog',
   referenceRef,
   placement = 'top',
   offset = 20,
@@ -46,6 +199,9 @@ const FloatingPopup = ({
   closeOnScroll = false,
   portalToBody = false,
   animate = true,
+  onKeyDown,
+  onMenuTab,
+  focusOriginRef,
 }: FloatingPopupProps) => {
   const { x, y, refs, strategy, update } = useFloating({
     placement: placement as Placement,
@@ -70,10 +226,10 @@ const FloatingPopup = ({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (document.querySelector('[data-dmn-popup-submenu="true"]')) return;
+      if (!isTopmostPopupLayer(floatingRef.current)) return;
       // 이 레이어가 소비 — 하위 레이어(페이지·그리드 선택)로 내려가지 않게
       e.preventDefault();
-      onClose?.();
+      onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -102,7 +258,7 @@ const FloatingPopup = ({
           target instanceof Element &&
           !!target.closest('[data-dmn-popup-submenu="true"]');
         if (isInsideSubMenu) return;
-        onClose?.();
+        onClose();
       };
 
       document.addEventListener('mousedown', onClickAway);
@@ -121,7 +277,7 @@ const FloatingPopup = ({
     if (!open || !closeOnScroll) return;
 
     const handleScroll = () => {
-      onClose?.();
+      onClose();
     };
 
     // 캡처 단계에서 모든 스크롤 이벤트 감지
@@ -252,7 +408,7 @@ const FloatingPopup = ({
         return;
       }
 
-      onClose?.();
+      onClose();
     };
 
     // 이벤트 리스너는 document에만 등록 (floatingEl은 동적으로 참조)
@@ -288,8 +444,8 @@ const FloatingPopup = ({
   }
 
   const floatingContent = (
-    <div
-      ref={(node) => {
+    <FloatingPopupSurface
+      setFloating={(node) => {
         refs.setFloating(node);
         floatingRef.current = node;
       }}
@@ -299,11 +455,14 @@ const FloatingPopup = ({
         top,
       }}
       className={`${className}${animate ? ' tooltip-fade-in' : ''}`}
-      role="dialog"
-      aria-modal="false"
+      role={role}
+      ariaLabel={ariaLabel}
+      onMenuTab={onMenuTab}
+      onKeyDown={onKeyDown}
+      focusOriginRef={focusOriginRef}
     >
       {children}
-    </div>
+    </FloatingPopupSurface>
   );
 
   // 위치 계산 전후에 렌더 루트가 바뀌지 않도록 필요 시 처음부터 body에 렌더링

@@ -807,6 +807,7 @@ const LayerTabContent: React.FC<LayerTabContentProps> = ({
         createPortal(
           <ListPopup
             open={actions.contextMenuOpen}
+            ariaLabel={t('common.more')}
             position={actions.contextMenuPosition}
             onClose={() => {
               actions.setContextMenuOpen(false);

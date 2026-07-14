@@ -1,5 +1,23 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { isTopmostPopupLayer, registerPopupLayer } from './popupLayer';
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+const getFocusableElements = (root: HTMLElement) =>
+  Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    (element) =>
+      !element.closest('[hidden], [aria-hidden="true"]') &&
+      element.getAttribute('aria-disabled') !== 'true',
+  );
 
 interface ModalProps {
   onClick?: () => void;
@@ -31,6 +49,21 @@ const Modal = ({
     onCloseRef.current = onClick;
   });
 
+  // 열기 전 포커스를 첫 렌더 시점에 캡처 — passive effect는 자식 autoFocus·
+  // 자식 effect 이후에 실행돼 opener 대신 모달 내부 요소를 잡는 오염이 생긴다.
+  // ref 초기화는 자식 마운트 전에 1회만 실행되므로 opener가 정확히 잡힘
+  const prevFocusedRef = useRef<HTMLElement | null>(
+    typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null,
+  );
+
+  useLayoutEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return;
+    return registerPopupLayer(backdrop);
+  }, []);
+
   useEffect(() => {
     const reset = () => {
       closeFromBackdropRef.current = false;
@@ -43,9 +76,17 @@ const Modal = ({
     };
   }, []);
 
+  // 자식 autoFocus를 존중하고, 지정이 없으면 첫 조작 요소로 포커스 이동
+  useLayoutEffect(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop || backdrop.contains(document.activeElement)) return;
+    const initialTarget = getFocusableElements(backdrop)[0] ?? backdrop;
+    initialTarget.focus();
+  }, []);
+
   // 닫힐 때 열기 전 포커스 복원 (요소가 아직 문서에 연결된 경우만)
   useEffect(() => {
-    const prevFocused = document.activeElement as HTMLElement | null;
+    const prevFocused = prevFocusedRef.current;
     return () => {
       if (prevFocused && prevFocused.isConnected) {
         prevFocused.focus();
@@ -53,22 +94,41 @@ const Modal = ({
     };
   }, []);
 
-  // Escape 닫기 — 레이어 소유권: 위 겹(팝업·서브메뉴·플로팅 피커)이 있으면 양보하고
-  // 최상위 모달(마지막 마운트 백드롭)만 소비. 한 번에 한 겹씩 닫힘
+  // 최상위 모달만 Escape와 Tab 포커스 순환을 소유
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (e.defaultPrevented) return;
+      if (!isTopmostPopupLayer(backdropRef.current)) return;
+
+      if (e.key === 'Tab') {
+        const backdrop = backdropRef.current;
+        if (!backdrop) return;
+        const focusable = getFocusableElements(backdrop);
+        if (focusable.length === 0) {
+          e.preventDefault();
+          backdrop.focus();
+          return;
+        }
+
+        const active = document.activeElement;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!backdrop.contains(active)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && (active === first || active === backdrop)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+
+      if (e.key !== 'Escape') return;
       // 키 리스닝 중엔 양보 — Escape는 리스닝 취소로 예약됨 (raw input 레이스 포함)
       if (window.__dmn_isKeyListening) return;
-      // 서브메뉴·플러그인 드롭다운이 위에 떠 있으면 그쪽이 소유
-      if (document.querySelector('[data-dmn-popup-submenu="true"]')) return;
-      // FloatingPopup 계열(피커·컨텍스트 메뉴)이 위에 떠 있으면 그쪽이 소유
-      if (document.querySelector('[role="dialog"][aria-modal="false"]')) return;
-      // 모달 스택에서 최상위만 소비
-      const backdrops = document.querySelectorAll(
-        '[data-dmn-modal-backdrop="true"]',
-      );
-      if (backdrops[backdrops.length - 1] !== backdropRef.current) return;
       e.preventDefault();
       onCloseRef.current?.();
     };
@@ -108,6 +168,7 @@ const Modal = ({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
+      tabIndex={-1}
       className="fixed top-[30px] bottom-[60px] left-0 right-0 flex items-center justify-center z-50"
       onPointerDown={handleBackdropPointerDown}
       onClick={handleBackdropClick}

@@ -463,7 +463,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       // 모달·포털 메뉴 등 상위 레이어가 열려 있으면 그쪽이 Escape를 소유
       if (
         document.querySelector(
-          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-submenu="true"], [role="dialog"]',
+          '[data-dmn-modal-backdrop="true"], [data-dmn-popup-layer="true"]',
         )
       ) {
         return;

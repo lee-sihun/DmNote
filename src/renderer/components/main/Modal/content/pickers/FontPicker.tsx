@@ -2,7 +2,10 @@ import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
-import { DEFAULT_FONT_FAMILY } from '@src/types/settings/fonts';
+import {
+  DEFAULT_FONT_FAMILY,
+  buildDraftPreviewCss,
+} from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import Modal from '@components/main/Modal/Modal';
 import { FULL_SURFACE_MATERIAL_CLASS } from '@components/main/Modal/FullSurfaceModalLayout';
@@ -80,11 +83,10 @@ const buildPreviewCSS = (font: CustomFont): string | null => {
   }
 
   if (font.type === 'web' && font.cssContent) {
-    // 웹폰트 CSS에서 font-family를 preview 이름으로 교체
-    return font.cssContent.replace(
-      /font-family:\s*['"]?([^'";]+)['"]?\s*;/i,
-      `font-family: '${previewFontFamily}';`,
-    );
+    // @font-face 블록만 추출해 미리보기 이름으로 치환 — 원문 전체를 주입하면
+    // 블록 밖 전역 규칙(body{display:none} 등)과 다른 face까지 앱에 새어든다.
+    // 저장 경로(useFontLibrary)의 validator와 동일한 추출기를 재사용
+    return buildDraftPreviewCss(font.cssContent, previewFontFamily) || null;
   }
 
   return null;
@@ -425,6 +427,7 @@ const FontPicker = ({
       {addMenuPosition !== null && (
         <ListPopup
           open
+          ariaLabel={t('fontPicker.add') || '폰트 추가'}
           referenceRef={addButtonRef}
           position={addMenuPosition}
           onClose={() => setAddMenuPosition(null)}
@@ -445,6 +448,7 @@ const FontPicker = ({
       {menu.menuKey !== null && (
         <ListPopup
           open
+          ariaLabel={t('common.more')}
           position={menu.menuPosition ?? undefined}
           onClose={menu.close}
           items={menuItems}
@@ -476,14 +480,14 @@ const FontPicker = ({
             <Modal
               fullSurface
               onClick={() => setWebFontModal(null)}
-              ariaLabel="로딩 중..."
+              ariaLabel={t('propertiesPanel.loading')}
             >
               <div
                 className={`w-full h-full flex items-center justify-center ${FULL_SURFACE_MATERIAL_CLASS}`}
                 onClick={(event) => event.stopPropagation()}
               >
                 <p className="text-body leading-[16px] text-fg-muted">
-                  로딩 중...
+                  {t('propertiesPanel.loading')}
                 </p>
               </div>
             </Modal>
