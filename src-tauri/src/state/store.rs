@@ -2335,6 +2335,73 @@ mod tests {
     }
 
     #[test]
+    fn counter_mirror_commit_blocks_concurrent_increment_until_after_reset() {
+        let dir = test_directory("counter-mirror-race-test");
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store
+            .update(|data| data.key_counter_enabled = true)
+            .unwrap();
+        let state = Arc::new(AppState::initialize(store).unwrap());
+        let snapshot = state.store.snapshot();
+        let mode = snapshot.selected_key_type.clone();
+        let key = snapshot.keys[&mode][0].clone();
+        assert_eq!(state.increment_key_counter(&mode, &key), Some(1));
+
+        let (update_started_tx, update_started_rx) = mpsc::channel();
+        let (release_update_tx, release_update_rx) = mpsc::channel();
+        let transaction_state = Arc::clone(&state);
+        let transaction_mode = mode.clone();
+        let transaction_handle = std::thread::spawn(move || {
+            transaction_state
+                .update_store_with_key_counter_mirror(move |data| {
+                    for value in data
+                        .key_counters
+                        .get_mut(&transaction_mode)
+                        .unwrap()
+                        .values_mut()
+                    {
+                        *value = 0;
+                    }
+                    update_started_tx.send(()).unwrap();
+                    release_update_rx.recv().unwrap();
+                })
+                .unwrap()
+        });
+        update_started_rx.recv().unwrap();
+
+        let (increment_started_tx, increment_started_rx) = mpsc::channel();
+        let (increment_done_tx, increment_done_rx) = mpsc::channel();
+        let increment_state = Arc::clone(&state);
+        let increment_mode = mode.clone();
+        let increment_key = key.clone();
+        let increment_handle = std::thread::spawn(move || {
+            increment_started_tx.send(()).unwrap();
+            let count = increment_state.increment_key_counter(&increment_mode, &increment_key);
+            increment_done_tx.send(count).unwrap();
+        });
+        increment_started_rx.recv().unwrap();
+        assert!(increment_done_rx
+            .recv_timeout(Duration::from_millis(50))
+            .is_err());
+
+        release_update_tx.send(()).unwrap();
+        let updated = transaction_handle.join().unwrap();
+        assert_eq!(updated.key_counters[&mode][&key], 0);
+        assert_eq!(
+            increment_done_rx
+                .recv_timeout(Duration::from_secs(3))
+                .unwrap(),
+            Some(1)
+        );
+        increment_handle.join().unwrap();
+        assert_eq!(state.snapshot_key_counters()[&mode][&key], 1);
+
+        state.shutdown();
+        drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn existing_obs_token_is_reused_without_persist() {
         let dir = test_directory("obs-token-reuse-test");
         let store = AppStore::initialize_in_dir(&dir).unwrap();

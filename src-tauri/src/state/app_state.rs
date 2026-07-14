@@ -32,9 +32,10 @@ use crate::{
     },
     keyboard::KeyboardManager,
     models::{
-        overlay_resize_anchor_from_str, BootstrapOverlayState, BootstrapPayload, DefaultsPayload,
-        KeyCounterSettings, KeyCounters, KeyMappings, KeySoundOutputBackendPersist, OverlayBounds,
-        OverlayResizeAnchor, SettingsDiff, SettingsState,
+        overlay_resize_anchor_from_str, AppStoreData, BootstrapOverlayState, BootstrapPayload,
+        DefaultsPayload, KeyCounterSettings, KeyCounters, KeyMappings,
+        KeySoundOutputBackendPersist, OverlayBounds, OverlayResizeAnchor, SettingsDiff,
+        SettingsState,
     },
     services::{css_watcher::CssWatcher, obs_bridge::ObsBridgeService, settings::SettingsService},
 };
@@ -1641,8 +1642,19 @@ impl AppState {
         self.keyboard.clear_active_keys();
     }
 
-    pub(crate) fn commit_key_counters_mirror(&self, counters: KeyCounters) {
-        *self.key_counters.write() = counters;
+    /// 카운터 스냅샷·store 커밋·runtime mirror 교체의 단일 write lock 경계
+    pub(crate) fn update_store_with_key_counter_mirror(
+        &self,
+        updater: impl FnOnce(&mut AppStoreData),
+    ) -> Result<AppStoreData> {
+        let mut guard = self.key_counters.write();
+        let runtime_counters = guard.clone();
+        let updated = self.store.update(move |store| {
+            store.key_counters = runtime_counters;
+            updater(store);
+        })?;
+        *guard = updated.key_counters.clone();
+        Ok(updated)
     }
 
     pub fn persist_key_counters(&self) -> Result<KeyCounters> {

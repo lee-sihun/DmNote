@@ -308,18 +308,17 @@ pub fn keys_reset_all(state: State<'_, AppState>, app: AppHandle) -> CmdResult<R
         .cloned()
         .collect();
 
-    state.store.update(|store| {
+    state.update_store_with_key_counter_mirror(|store| {
         reset_all_editor_data(store, &keys, &positions);
     })?;
-
-    for tab_id in &cleared_tab_css_ids {
-        state.unwatch_tab_css(tab_id);
-    }
 
     state
         .keyboard
         .update_mappings_and_set_mode(keys.clone(), selected_key_type.clone());
-    state.commit_key_counters_mirror(key_counters.clone());
+
+    for tab_id in &cleared_tab_css_ids {
+        state.unwatch_tab_css(tab_id);
+    }
 
     let mut note_patch = NoteSettingsPatch::default();
     let defaults = NoteSettings::default();
@@ -408,19 +407,15 @@ pub fn keys_reset_mode(
         });
     };
     let cleared_tab_css = snapshot.tab_css_overrides.contains_key(&mode);
-    let runtime_counters = state.snapshot_key_counters();
-
-    let updated = state.store.update(|store| {
-        store.key_counters = runtime_counters.clone();
+    let updated = state.update_store_with_key_counter_mirror(|store| {
         reset_mode_data(store, &mode, kind);
     })?;
+
+    state.keyboard.update_mappings(updated.keys.clone());
 
     if cleared_tab_css {
         state.unwatch_tab_css(&mode);
     }
-
-    state.keyboard.update_mappings(updated.keys.clone());
-    state.commit_key_counters_mirror(updated.key_counters.clone());
 
     app.emit("keys:changed", &updated.keys)?;
     app.emit("positions:changed", &updated.key_positions)?;
@@ -542,18 +537,14 @@ pub fn custom_tabs_delete(
             error: Some("not-found".to_string()),
         });
     };
-    let runtime_counters = state.snapshot_key_counters();
-
-    let updated = state.store.update(|store| {
-        store.key_counters = runtime_counters.clone();
+    let updated = state.update_store_with_key_counter_mirror(|store| {
         delete_custom_tab_data(store, &id, &plan);
     })?;
 
-    state.unwatch_tab_css(&id);
     state
         .keyboard
         .update_mappings_and_set_mode(updated.keys.clone(), updated.selected_key_type.clone());
-    state.commit_key_counters_mirror(updated.key_counters.clone());
+    state.unwatch_tab_css(&id);
 
     app.emit(
         "customTabs:changed",
