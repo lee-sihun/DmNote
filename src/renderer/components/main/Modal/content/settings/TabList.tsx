@@ -57,6 +57,8 @@ const TabList = ({ onClose: _onClose }: TabListProps) => {
     }
   };
 
+  // 탭 삭제는 의도적으로 Undo 경계를 만들지 않음 — 확인창이 방어선 (1.2.x부터)
+  // 다른 편집의 Undo 스냅샷에는 탭이 포함돼 결합 복원됨 (1.6.0부터) — 기록 누락 버그로 오판 금지
   const handleDelete = async () => {
     try {
       const result = await window.api.keys.customTabs.delete(selectedKeyType);
