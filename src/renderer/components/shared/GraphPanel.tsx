@@ -33,6 +33,7 @@ interface GraphPanelProps {
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onDragStart?: (e: React.DragEvent) => void;
 }
@@ -188,6 +189,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       onClick,
       onDoubleClick,
       onMouseDown,
+      onPointerDown,
       onContextMenu,
       onDragStart,
     },
@@ -437,6 +439,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
         onContextMenu={onContextMenu}
         onDragStart={onDragStart}
       >

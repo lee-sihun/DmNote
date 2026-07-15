@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/immutability */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type RefObject } from 'react';
 import {
   MIN_GRID_POSITION,
   MAX_GRID_POSITION,
@@ -9,6 +8,7 @@ import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { calculateBounds, calculateSnapPoints } from '@utils/grid/smartGuides';
 import { DRAG_THRESHOLD } from './constants';
+import { tryAcquireDragSession, releaseDragSession } from './dragSession';
 
 interface ElementBounds {
   id: string;
@@ -44,6 +44,8 @@ interface UseDraggableReturn {
   dy: number;
   wasMoved: boolean;
   isDragging: boolean;
+  /** 이번 또는 직전 press에서 실이동 발생 — dblclick 편집 진입 가드용 */
+  recentPressMovedRef: RefObject<boolean>;
 }
 
 // 위치 클램핑 함수
@@ -112,6 +114,12 @@ export const useDraggable = ({
   // 진행 중 드래그 세션 존재 여부 — 트랙패드 이중 press가 세션을 겹쳐 시작하면
   // 먼저 끝난 세션의 정리 코드가 커서·리스너를 지워 남은 세션이 오염됨
   const activeDragRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const activeDragCleanupRef = useRef<(() => void) | null>(null);
+  // dblclick은 두 press의 합성 — 직전 press의 이동까지 기억해야
+  // 드래그(제자리 복귀 포함) 직후의 빠른 재클릭이 편집 진입으로 새지 않음
+  const movedThisPressRef = useRef(false);
+  const recentPressMovedRef = useRef(false);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -129,6 +137,7 @@ export const useDraggable = ({
 
   // initialX, initialY 변경 시 동기화
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 외부 위치 변경 동기화
     setOffset({ dx: initialX, dy: initialY });
     lastSnappedRef.current = { dx: initialX, dy: initialY };
   }, [initialX, initialY]);
@@ -152,11 +161,15 @@ export const useDraggable = ({
     document.body.style.cursor = cursor;
   };
 
-  const handleMouseDown = (e: MouseEvent) => {
+  const handlePointerDown = (e: PointerEvent) => {
     if (!node) return;
+    const dragTarget = e.currentTarget as HTMLElement;
 
     // 좌클릭만 처리 (미들 버튼은 그리드 팬에 사용)
     if (e.button !== 0) return;
+
+    // primary 포인터만 — 터치의 두 번째 손가락 등 비주 포인터는 드래그 시작 금지
+    if (!e.isPrimary) return;
 
     // disabled 상태면 드래그 무시
     if (disabledRef.current) return;
@@ -164,9 +177,13 @@ export const useDraggable = ({
     // 미들 버튼 드래그 중이면 요소 드래그 무시 (그리드 팬 우선)
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
 
-    // 세션 재진입 가드 — 드래그 중 추가 press(트랙패드 이중 탭 등)는 무시
+    // 세션 재진입 가드 — 드래그 중 추가 press(트랙패드 이중 탭 등)는 무시.
+    // 전역 소유권까지 획득해야 다른 요소 인스턴스와의 동시 세션도 차단됨
     if (activeDragRef.current) return;
+    if (!tryAcquireDragSession()) return;
     activeDragRef.current = true;
+    activePointerIdRef.current = e.pointerId;
+    dragTarget.setPointerCapture(e.pointerId);
 
     // 드래그 시작 전 기존 스마트 가이드 클리어 (이전 드래그가 정상 종료되지 않은 경우 대비)
     useSmartGuidesStore.getState().clearGuides();
@@ -178,10 +195,12 @@ export const useDraggable = ({
 
     setIsDragging(true);
     setWasMoved(false);
+    recentPressMovedRef.current = movedThisPressRef.current;
+    movedThisPressRef.current = false;
 
     // 잡는 동안만 grabbing — 호버 커서 변경 없음. WKWebView가 hover 중
     // CSS 커서 갱신을 놓치는 문제로 CSS :hover/:active 대신 JS 인라인 유지
-    node.style.cursor = 'grabbing';
+    dragTarget.style.cursor = 'grabbing';
 
     // 현재 줌/팬 값 캡처
     const currentZoom = zoomRef.current;
@@ -210,9 +229,10 @@ export const useDraggable = ({
     // 스마트 가이드 스토어 참조
     const smartGuidesStore = useSmartGuidesStore.getState();
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       // 드래그가 종료되었으면 무시
-      if (dragEnded) return;
+      if (dragEnded || moveEvent.pointerId !== activePointerIdRef.current)
+        return;
 
       // 드래그 임계값 체크
       const deltaX = Math.abs(moveEvent.clientX - startClientX);
@@ -225,8 +245,7 @@ export const useDraggable = ({
         actuallyDragging = true;
         setBodyCursor('grabbing');
         // 실제 드래그가 시작될 때만 최적화 적용
-        node.style.pointerEvents = 'none';
-        node.style.userSelect = 'none';
+        dragTarget.style.userSelect = 'none';
         // 드래그 시작 시 애니메이션 비활성화
         useGridSelectionStore.getState().setDraggingOrResizing(true);
         // 드래그 시작 콜백 호출 (히스토리 저장용)
@@ -366,6 +385,8 @@ export const useDraggable = ({
           snappedY !== initialPosition.dy
         ) {
           setWasMoved(true);
+          movedThisPressRef.current = true;
+          recentPressMovedRef.current = true;
         }
 
         lastSnappedRef.current = { dx: snappedX, dy: snappedY };
@@ -373,10 +394,19 @@ export const useDraggable = ({
       });
     };
 
-    const handleMouseUp = () => {
+    const finishDrag = () => {
+      if (dragEnded) return;
+
       // 드래그 종료 플래그 설정 (pending rAF 콜백이 실행되지 않도록)
       dragEnded = true;
+      const pointerId = activePointerIdRef.current;
       activeDragRef.current = false;
+      activePointerIdRef.current = null;
+      activeDragCleanupRef.current = null;
+      releaseDragSession();
+      if (pointerId !== null && dragTarget.hasPointerCapture(pointerId)) {
+        dragTarget.releasePointerCapture(pointerId);
+      }
       restoreBodyCursor();
 
       // pending rAF가 있으면 취소
@@ -385,9 +415,11 @@ export const useDraggable = ({
         rafId = null;
       }
 
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
+      dragTarget.removeEventListener('pointermove', handlePointerMove);
+      dragTarget.removeEventListener('pointerup', handlePointerEnd);
+      dragTarget.removeEventListener('pointercancel', handlePointerEnd);
+      dragTarget.removeEventListener('lostpointercapture', finishDrag);
+      window.removeEventListener('blur', finishDrag);
 
       setIsDragging(false);
 
@@ -396,9 +428,8 @@ export const useDraggable = ({
 
       // 실제 드래그가 발생했을 때만 복구
       if (actuallyDragging) {
-        node.style.cursor = '';
-        node.style.pointerEvents = 'auto';
-        node.style.userSelect = 'auto';
+        dragTarget.style.cursor = '';
+        dragTarget.style.userSelect = 'auto';
         // 드래그 종료 시 애니메이션 복원
         useGridSelectionStore.getState().setDraggingOrResizing(false);
 
@@ -407,32 +438,41 @@ export const useDraggable = ({
         onPositionChange?.(finalDx, finalDy);
       } else {
         // 클릭만 했을 경우 커서만 복구
-        node.style.cursor = '';
+        dragTarget.style.cursor = '';
       }
     };
 
-    document.addEventListener('mousemove', handleMouseMove, {
+    const handlePointerEnd = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId !== activePointerIdRef.current) return;
+      finishDrag();
+    };
+
+    activeDragCleanupRef.current = finishDrag;
+    dragTarget.addEventListener('pointermove', handlePointerMove, {
       passive: true,
     });
-    document.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
+    dragTarget.addEventListener('pointerup', handlePointerEnd);
+    dragTarget.addEventListener('pointercancel', handlePointerEnd);
+    dragTarget.addEventListener('lostpointercapture', finishDrag);
+    window.addEventListener('blur', finishDrag);
   };
 
   useEffect(() => {
     if (!node) return;
 
-    node.addEventListener('mousedown', handleMouseDown);
+    node.addEventListener('pointerdown', handlePointerDown);
 
     return () => {
-      node.removeEventListener('mousedown', handleMouseDown);
+      node.removeEventListener('pointerdown', handlePointerDown);
     };
   });
 
   useEffect(() => {
     return () => {
+      activeDragCleanupRef.current?.();
       restoreBodyCursor();
     };
-  });
+  }, []);
 
-  return { ref, dx, dy, wasMoved, isDragging };
+  return { ref, dx, dy, wasMoved, isDragging, recentPressMovedRef };
 };

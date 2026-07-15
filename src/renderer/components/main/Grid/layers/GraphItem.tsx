@@ -1,14 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { isMac } from '@utils/core/platform';
 import { useDraggable, useSmartGuidesElements } from '@hooks/Grid';
-import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
+import { useSelectionDrag } from '@hooks/Grid/useSelectionDrag';
 import { useSettingsStore } from '@stores/useSettingsStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
-import {
-  calculateBounds,
-  calculateSnapPoints,
-  calculateGroupBounds,
-} from '@utils/grid/smartGuides';
 import GraphPanel from '@components/shared/GraphPanel';
 import { resolveImageSource } from '@utils/core/imageSource';
 
@@ -131,15 +126,6 @@ const GraphItem = ({
   const [uid] = useState(
     () => `graph-preview-${Math.random().toString(36).slice(2, 11)}`,
   );
-  const multiDragRef = useRef<{
-    isDragging: boolean;
-    startX: number;
-    startY: number;
-    lastSnappedDeltaX?: number;
-    lastSnappedDeltaY?: number;
-  }>({ isDragging: false, startX: 0, startY: 0 });
-  // 마지막 press에서 다중 드래그 이동이 있었는지 — 드래그 직후 dblclick 편집 진입 차단
-  const movedDuringPressRef = useRef(false);
   const effectiveElementId = elementId || `graph-${index}`;
 
   const previewHistory = [...PREVIEW_HISTORY_BASE];
@@ -168,223 +154,24 @@ const GraphItem = ({
     disabled: isSelectionMode,
   });
 
+  const { handlePointerDown, movedDuringPressRef } = useSelectionDrag({
+    enabled: isSelectionMode,
+    zoom,
+    startX: dx,
+    startY: dy,
+    elementId: effectiveElementId,
+    elementWidth: width || 200,
+    elementHeight: height || 100,
+    elementType: 'graph',
+    elementIndex: index,
+    selectedElements,
+    getOtherElements,
+    onMultiDragStart,
+    onMultiDrag,
+    onMultiDragEnd,
+  });
+
   if (position?.hidden) return null;
-
-  const handleSelectionDragMouseDown = (e: React.MouseEvent) => {
-    if (!isSelectionMode || e.button !== 0) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    useSmartGuidesStore.getState().clearGuides();
-    useGridSelectionStore.getState().setDraggingOrResizing(true);
-
-    onMultiDragStart?.();
-
-    const startDx = dx;
-    const startDy = dy;
-    const currentWidth = width || 200;
-    const currentHeight = height || 100;
-    const currentElementId = effectiveElementId;
-
-    movedDuringPressRef.current = false;
-    multiDragRef.current = {
-      isDragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      lastSnappedDeltaX: 0,
-      lastSnappedDeltaY: 0,
-    };
-
-    let rafId: number | null = null;
-    let dragEnded = false;
-    const smartGuidesStore = useSmartGuidesStore.getState();
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!multiDragRef.current.isDragging || dragEnded) return;
-      if (rafId) return;
-
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (dragEnded) return;
-
-        const currentZoom = zoom;
-        const rawDeltaX =
-          (moveEvent.clientX - multiDragRef.current.startX) / currentZoom;
-        const rawDeltaY =
-          (moveEvent.clientY - multiDragRef.current.startY) / currentZoom;
-
-        const newX = startDx + rawDeltaX;
-        const newY = startDy + rawDeltaY;
-
-        const gridSettings = useSettingsStore.getState().gridSettings;
-        const alignmentGuidesEnabled = gridSettings?.alignmentGuides !== false;
-        const spacingGuidesEnabled = gridSettings?.spacingGuides !== false;
-
-        const otherElements = getOtherElements(currentElementId);
-        const nonSelectedElements = otherElements.filter(
-          (el: { id: string }) =>
-            !selectedElements.some((sel) => sel.id === el.id),
-        );
-
-        const draggedBounds = calculateBounds(
-          newX,
-          newY,
-          currentWidth,
-          currentHeight,
-          currentElementId,
-        );
-
-        let groupBounds: ReturnType<typeof calculateGroupBounds> | null = null;
-        if (selectedElements.length > 1) {
-          const selectedBoundsArray = selectedElements
-            .map((sel) => {
-              if (
-                sel.id === currentElementId ||
-                (sel.type === 'graph' && sel.index === index)
-              ) {
-                return draggedBounds;
-              }
-
-              const found = otherElements.find(
-                (el: { id: string }) => el.id === sel.id,
-              );
-              if (!found) return null;
-
-              return calculateBounds(
-                found.left + rawDeltaX,
-                found.top + rawDeltaY,
-                found.width,
-                found.height,
-                found.id,
-              );
-            })
-            .filter(Boolean);
-          groupBounds = calculateGroupBounds(selectedBoundsArray);
-        }
-
-        const snapTargetBounds =
-          selectedElements.length > 1 && groupBounds
-            ? groupBounds
-            : draggedBounds;
-
-        const snapResult = alignmentGuidesEnabled
-          ? calculateSnapPoints(
-              snapTargetBounds,
-              nonSelectedElements,
-              undefined,
-              {
-                groupBounds,
-                disableSpacing: !spacingGuidesEnabled,
-              },
-            )
-          : null;
-
-        let finalX: number;
-        let finalY: number;
-
-        if (snapResult?.didSnapX) {
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaX = snapResult.snappedX - groupBounds.left;
-            finalX = newX + groupSnapDeltaX;
-          } else {
-            finalX = snapResult.snappedX;
-          }
-        } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalX = Math.round(newX / snapSize) * snapSize;
-        }
-
-        if (snapResult?.didSnapY) {
-          if (selectedElements.length > 1 && groupBounds) {
-            const groupSnapDeltaY = snapResult.snappedY - groupBounds.top;
-            finalY = newY + groupSnapDeltaY;
-          } else {
-            finalY = snapResult.snappedY;
-          }
-        } else {
-          const snapSize = gridSettings?.gridSnapSize || 5;
-          finalY = Math.round(newY / snapSize) * snapSize;
-        }
-
-        const snappedDeltaX = Math.round(finalX - startDx);
-        const snappedDeltaY = Math.round(finalY - startDy);
-
-        if (snapResult && (snapResult.didSnapX || snapResult.didSnapY)) {
-          const displayBounds =
-            selectedElements.length > 1 && groupBounds
-              ? calculateBounds(
-                  groupBounds.left +
-                    (snapResult.didSnapX
-                      ? snapResult.snappedX - groupBounds.left
-                      : 0),
-                  groupBounds.top +
-                    (snapResult.didSnapY
-                      ? snapResult.snappedY - groupBounds.top
-                      : 0),
-                  groupBounds.width,
-                  groupBounds.height,
-                  'group',
-                )
-              : calculateBounds(
-                  finalX,
-                  finalY,
-                  currentWidth,
-                  currentHeight,
-                  currentElementId,
-                );
-
-          smartGuidesStore.setDraggedBounds(displayBounds);
-          smartGuidesStore.setActiveGuides(snapResult.guides);
-
-          if (
-            spacingGuidesEnabled &&
-            snapResult.spacingGuides &&
-            snapResult.spacingGuides.length > 0
-          ) {
-            smartGuidesStore.setSpacingGuides(snapResult.spacingGuides);
-          } else {
-            smartGuidesStore.setSpacingGuides([]);
-          }
-        } else {
-          smartGuidesStore.clearGuides();
-        }
-
-        const moveDeltaX =
-          snappedDeltaX - (multiDragRef.current.lastSnappedDeltaX ?? 0);
-        const moveDeltaY =
-          snappedDeltaY - (multiDragRef.current.lastSnappedDeltaY ?? 0);
-
-        if (moveDeltaX !== 0 || moveDeltaY !== 0) {
-          multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
-          multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
-          movedDuringPressRef.current = true;
-          onMultiDrag?.(moveDeltaX, moveDeltaY);
-        }
-      });
-    };
-
-    const handleMouseUp = () => {
-      dragEnded = true;
-      multiDragRef.current.isDragging = false;
-
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
-      useSmartGuidesStore.getState().clearGuides();
-      useGridSelectionStore.getState().setDraggingOrResizing(false);
-      onMultiDragEnd?.();
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
-  };
 
   const handleClick = (e: React.MouseEvent) => {
     // macOS ctrl+클릭은 우클릭 제스처 — Chromium이 contextmenu 뒤에 click도 발화하므로
@@ -431,7 +218,8 @@ const GraphItem = ({
     if (e.shiftKey || e.metaKey || e.ctrlKey) return;
     if (activeTool === 'eraser') return;
     if (isViewportTransforming) return;
-    if (draggable.wasMoved || movedDuringPressRef.current) return;
+    if (draggable.recentPressMovedRef.current || movedDuringPressRef.current)
+      return;
     e.stopPropagation();
     onDoubleClick(e);
   };
@@ -450,7 +238,6 @@ const GraphItem = ({
       setReferenceRef(node);
     }
   };
-
   return (
     <GraphPanel
       ref={attachRef}
@@ -480,8 +267,8 @@ const GraphItem = ({
       dataEditing={isDraggingOrResizing}
       isViewportTransforming={isViewportTransforming}
       onClick={handleClick}
+      onPointerDown={isSelectionMode ? handlePointerDown : undefined}
       onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
-      onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}
     />
