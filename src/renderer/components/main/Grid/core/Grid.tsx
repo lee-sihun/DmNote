@@ -37,6 +37,7 @@ import {
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useUIStore } from '@stores/useUIStore';
 import { useSmartGuidesStore } from '@stores/grid/useSmartGuidesStore';
 import { useSettingsStore } from '@stores/useSettingsStore';
@@ -770,6 +771,25 @@ const Grid = ({
     }
   };
 
+  // 더블클릭 편집 진입 — 대상이 다중 선택의 멤버면 선택을 보존해 배치 편집으로,
+  // 아니면 해당 요소(+그룹)만 선택해 단일 편집으로 property 페이지를 연다
+  const openElementEditor = (
+    type: 'key' | 'stat' | 'graph' | 'knob',
+    index: number,
+  ) => {
+    const { selectedElements: currentSelection } =
+      useGridSelectionStore.getState();
+    const isMultiMember =
+      currentSelection.length > 1 &&
+      currentSelection.some((el) => el.id === `${type}-${index}`);
+    if (!isMultiMember) {
+      selectElementWithGroup(type, index);
+    }
+    const panel = usePropertiesPanelStore.getState();
+    panel.setCanvasPanelMode('property');
+    panel.setCanvasPanelOpen(true);
+  };
+
   // 드래그 시작 시 히스토리 저장
   const pushDragHistory = () => {
     const currentPositions = useKeyStore.getState().positions;
@@ -834,6 +854,7 @@ const Grid = ({
               });
             }
           }}
+          onDoubleClick={() => openElementEditor('key', index)}
           onCtrlClick={() => {
             // 다중 선택: 기존 선택 유지하면서 추가/제거
             toggleSelection({ type: 'key', id: `key-${index}`, index });
@@ -1083,6 +1104,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('stat', index);
         }}
+        onDoubleClick={() => openElementEditor('stat', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'stat', id: `stat-${index}`, index });
         }}
@@ -1179,6 +1201,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('graph', index);
         }}
+        onDoubleClick={() => openElementEditor('graph', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'graph', id: `graph-${index}`, index });
         }}
@@ -1272,6 +1295,7 @@ const Grid = ({
         onClick={() => {
           selectElementWithGroup('knob', index);
         }}
+        onDoubleClick={() => openElementEditor('knob', index)}
         onCtrlClick={() => {
           toggleSelection({ type: 'knob', id: `knob-${index}`, index });
         }}

@@ -25,6 +25,7 @@ import {
   isElementInMarquee,
 } from '@stores/grid/useGridSelectionStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useTranslation } from '@contexts/useTranslation';
 import ListPopup, { ListItem } from '../main/Modal/ListPopup';
@@ -446,6 +447,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
     lastSnappedDeltaX: 0,
     lastSnappedDeltaY: 0,
   });
+  // 마지막 press에서 다중 드래그 이동이 있었는지 — 드래그 직후 dblclick 편집 진입 차단
+  const movedDuringPressRef = useRef(false);
 
   // 선택된 상태면 선택 모드 활성화
   const isSelectionMode = isSelected;
@@ -523,6 +526,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       element.measuredSize?.height ?? element.estimatedSize?.height ?? 150;
     const elementId = element.fullId;
 
+    movedDuringPressRef.current = false;
     multiDragRef.current = {
       isDragging: true,
       startX: e.clientX,
@@ -719,6 +723,7 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         if (moveDeltaX !== 0 || moveDeltaY !== 0) {
           multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
           multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
+          movedDuringPressRef.current = true;
           onMultiDrag?.(moveDeltaX, moveDeltaY);
         }
       });
@@ -1287,12 +1292,8 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       // 명시적인 zIndex가 있으면 사용, 없으면 키 개수 + 배열 인덱스로 계산
       // 키들 뒤에 순서대로 배치되어 통합 z-order 동작
       zIndex: element.zIndex ?? keyCount + arrayIndex,
-      cursor:
-        element.draggable && windowType === 'main'
-          ? 'move'
-          : element.onClick && windowType === 'main'
-          ? 'pointer'
-          : 'default',
+      // 커서는 dmn-grabbable 클래스가 소유 (호버 무변화, 잡는 동안만 grabbing)
+      cursor: windowType === 'main' ? undefined : 'default',
       willChange: shouldPromoteTransformLayer ? 'transform' : 'auto',
       pointerEvents: windowType === 'main' ? 'auto' : 'none',
     };
@@ -1494,6 +1495,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       return;
     }
 
+    // 선택된 상태에서는 일반 클릭 흡수 (키와 동일 순서) —
+    // 다중 선택 멤버 재클릭이 선택을 단일로 축소하지 않아야
+    // 더블클릭의 "멤버면 선택 보존 + 배치 편집 진입" 정책이 성립한다
+    if (isSelectionMode) {
+      e.stopPropagation();
+      return;
+    }
+
     const settingsUI = definition?.settingsUI ?? 'panel';
     if (windowType === 'main' && settingsUI !== 'modal') {
       e.stopPropagation();
@@ -1513,12 +1522,6 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       return;
     }
 
-    // 선택된 상태에서는 일반 클릭 이벤트 무시
-    if (isSelectionMode) {
-      e.stopPropagation();
-      return;
-    }
-
     // onClick 핸들러가 있고, 메인 윈도우에서만
     if (!element.onClick || windowType !== 'main') return;
 
@@ -1531,6 +1534,35 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         (handler as (e: React.MouseEvent) => void)(e);
       }
     }
+  };
+
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외).
+  // 다중 선택의 멤버면 선택을 보존해 배치 편집으로, 아니면 이 요소만 선택.
+  // settingsUI가 modal인 플러그인은 클릭 선택 자체가 없으므로 제외
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (windowType !== 'main') return;
+    if ((definition?.settingsUI ?? 'panel') === 'modal') return;
+    if (isMac() && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.wasMoved || movedDuringPressRef.current) return;
+    e.stopPropagation();
+
+    const { selectedElements: currentSelection } =
+      useGridSelectionStore.getState();
+    const isMultiMember =
+      currentSelection.length > 1 &&
+      currentSelection.some((el) => el.id === element.fullId);
+    if (!isMultiMember) {
+      useGridSelectionStore.getState().selectElement({
+        type: 'plugin',
+        id: element.fullId,
+      });
+    }
+    const panel = usePropertiesPanelStore.getState();
+    panel.setCanvasPanelMode('property');
+    panel.setCanvasPanelOpen(true);
   };
 
   const createActionsProxy = (elementId: string) =>
@@ -1665,12 +1697,15 @@ export const PluginElement: React.FC<PluginElementProps> = ({
       <div
         ref={attachRef}
         id={element.id}
-        className={element.className}
+        className={`${windowType === 'main' ? 'dmn-grabbable' : ''} ${
+          element.className || ''
+        }`}
         style={elementStyle}
         data-plugin-element={element.fullId}
         data-plugin-id={element.pluginId}
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
         onContextMenu={handleContextMenu}
       >

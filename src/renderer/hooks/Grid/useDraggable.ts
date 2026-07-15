@@ -109,6 +109,9 @@ export const useDraggable = ({
   >(getOtherElements);
   const disabledRef = useRef<boolean>(disabled);
   const previousBodyCursorRef = useRef<string | null>(null);
+  // 진행 중 드래그 세션 존재 여부 — 트랙패드 이중 press가 세션을 겹쳐 시작하면
+  // 먼저 끝난 세션의 정리 코드가 커서·리스너를 지워 남은 세션이 오염됨
+  const activeDragRef = useRef(false);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -149,18 +152,6 @@ export const useDraggable = ({
     document.body.style.cursor = cursor;
   };
 
-  const handleMouseOver = () => {
-    // 미들 버튼 드래그 중이면 커서 변경하지 않음
-    if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
-    if (node && !isDragging) node.style.cursor = 'grab';
-  };
-
-  const handleMouseOut = () => {
-    // 미들 버튼 드래그 중이면 커서 변경하지 않음
-    if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
-    if (node && !isDragging) node.style.cursor = '';
-  };
-
   const handleMouseDown = (e: MouseEvent) => {
     if (!node) return;
 
@@ -173,6 +164,10 @@ export const useDraggable = ({
     // 미들 버튼 드래그 중이면 요소 드래그 무시 (그리드 팬 우선)
     if (useGridSelectionStore.getState().isMiddleButtonDragging) return;
 
+    // 세션 재진입 가드 — 드래그 중 추가 press(트랙패드 이중 탭 등)는 무시
+    if (activeDragRef.current) return;
+    activeDragRef.current = true;
+
     // 드래그 시작 전 기존 스마트 가이드 클리어 (이전 드래그가 정상 종료되지 않은 경우 대비)
     useSmartGuidesStore.getState().clearGuides();
 
@@ -183,6 +178,10 @@ export const useDraggable = ({
 
     setIsDragging(true);
     setWasMoved(false);
+
+    // 잡는 동안만 grabbing — 호버 커서 변경 없음. WKWebView가 hover 중
+    // CSS 커서 갱신을 놓치는 문제로 CSS :hover/:active 대신 JS 인라인 유지
+    node.style.cursor = 'grabbing';
 
     // 현재 줌/팬 값 캡처
     const currentZoom = zoomRef.current;
@@ -224,7 +223,6 @@ export const useDraggable = ({
         (deltaX > dragThresholdRef.current || deltaY > dragThresholdRef.current)
       ) {
         actuallyDragging = true;
-        node.style.cursor = 'grabbing';
         setBodyCursor('grabbing');
         // 실제 드래그가 시작될 때만 최적화 적용
         node.style.pointerEvents = 'none';
@@ -378,6 +376,7 @@ export const useDraggable = ({
     const handleMouseUp = () => {
       // 드래그 종료 플래그 설정 (pending rAF 콜백이 실행되지 않도록)
       dragEnded = true;
+      activeDragRef.current = false;
       restoreBodyCursor();
 
       // pending rAF가 있으면 취소
@@ -397,7 +396,7 @@ export const useDraggable = ({
 
       // 실제 드래그가 발생했을 때만 복구
       if (actuallyDragging) {
-        node.style.cursor = 'grab';
+        node.style.cursor = '';
         node.style.pointerEvents = 'auto';
         node.style.userSelect = 'auto';
         // 드래그 종료 시 애니메이션 복원
@@ -408,7 +407,7 @@ export const useDraggable = ({
         onPositionChange?.(finalDx, finalDy);
       } else {
         // 클릭만 했을 경우 커서만 복구
-        node.style.cursor = 'grab';
+        node.style.cursor = '';
       }
     };
 
@@ -423,13 +422,9 @@ export const useDraggable = ({
     if (!node) return;
 
     node.addEventListener('mousedown', handleMouseDown);
-    node.addEventListener('mouseenter', handleMouseOver);
-    node.addEventListener('mouseleave', handleMouseOut);
 
     return () => {
       node.removeEventListener('mousedown', handleMouseDown);
-      node.removeEventListener('mouseenter', handleMouseOver);
-      node.removeEventListener('mouseleave', handleMouseOut);
     };
   });
 

@@ -48,6 +48,7 @@ interface DraggableKeyProps {
   keyName: string;
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
   isSelected?: boolean;
@@ -85,6 +86,7 @@ const DraggableKey = React.memo(
     keyName,
     onPositionChange,
     onClick,
+    onDoubleClick,
     onCtrlClick,
     onShiftClick,
     isSelected = false,
@@ -171,6 +173,8 @@ const DraggableKey = React.memo(
       lastSnappedDeltaY: 0,
     });
     const nodeRef = useRef<HTMLElement | null>(null);
+    // 마지막 press에서 다중 드래그 이동이 있었는지 — 드래그 직후 dblclick 편집 진입 차단
+    const movedDuringPressRef = useRef(false);
     const effectiveElementId = elementId || `key-${index}`;
 
     const isSelectionMode = isSelected;
@@ -212,6 +216,7 @@ const DraggableKey = React.memo(
       const currentHeight = height || 60;
       const currentElementId = effectiveElementId;
 
+      movedDuringPressRef.current = false;
       multiDragRef.current = {
         isDragging: true,
         startX: e.clientX,
@@ -381,6 +386,7 @@ const DraggableKey = React.memo(
           if (moveDeltaX !== 0 || moveDeltaY !== 0) {
             multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
             multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
+            movedDuringPressRef.current = true;
             onMultiDrag?.(moveDeltaX, moveDeltaY);
           }
         });
@@ -446,6 +452,20 @@ const DraggableKey = React.memo(
           onClick(e);
         }
       }
+    };
+
+    // 더블클릭 편집 진입 — 순수 더블클릭만 통과.
+    // 두 번째 press가 다중 드래그로 이어진 경우(movedDuringPressRef)와
+    // 단일 드래그(wasMoved), 수식키·지우개·뷰포트 변환 중은 제외
+    const handleDoubleClick = (e: React.MouseEvent) => {
+      if (!onDoubleClick) return;
+      if (macOS && e.ctrlKey) return;
+      if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+      if (activeTool === 'eraser') return;
+      if (isViewportTransforming) return;
+      if (draggable.wasMoved || movedDuringPressRef.current) return;
+      e.stopPropagation();
+      onDoubleClick(e);
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -618,7 +638,7 @@ const DraggableKey = React.memo(
     return (
       <div
         ref={attachRef}
-        className={`absolute cursor-pointer ${
+        className={`absolute dmn-grabbable ${
           draggable && draggable.wasMoved ? '' : ''
         } ${className || ''}`}
         style={keyStyle}
@@ -626,6 +646,7 @@ const DraggableKey = React.memo(
         data-editing={isDraggingOrResizing ? 'true' : undefined}
         data-key-element="true"
         onClick={handleClick}
+        onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
         onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
         onContextMenu={handleContextMenu}
         onDragStart={(e) => e.preventDefault()}

@@ -31,6 +31,7 @@ interface GraphPanelProps {
   dataEditing?: boolean;
   isViewportTransforming?: boolean;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onMouseDown?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onDragStart?: (e: React.DragEvent) => void;
@@ -185,6 +186,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
       dataEditing,
       isViewportTransforming = false,
       onClick,
+      onDoubleClick,
       onMouseDown,
       onContextMenu,
       onDragStart,
@@ -403,7 +405,9 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
     return (
       <div
         ref={ref}
-        className={`absolute select-none ${className || ''}`}
+        className={`absolute select-none ${
+          interactive ? 'dmn-grabbable' : ''
+        } ${className || ''}`}
         style={{
           width: `${width}px`,
           height: `${height}px`,
@@ -416,7 +420,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          cursor: interactive ? 'pointer' : 'default',
+          cursor: interactive ? undefined : 'default',
           fontFamily:
             "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif",
           willChange:
@@ -431,6 +435,7 @@ const GraphPanel = forwardRef<HTMLDivElement, GraphPanelProps>(
         data-state="inactive"
         data-editing={dataEditing ? 'true' : undefined}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onMouseDown={onMouseDown}
         onContextMenu={onContextMenu}
         onDragStart={onDragStart}

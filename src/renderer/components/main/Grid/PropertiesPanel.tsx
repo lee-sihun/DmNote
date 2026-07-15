@@ -799,28 +799,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     if (hasSelection) {
+      // 열린 패널의 페이지는 sticky — 레이어 목록 표시 중 캔버스 클릭은 선택만 바꾸고
+      // 편집(property) 진입은 더블클릭·목록 더블클릭·헤더 토글만 수행한다 (포토샵식)
       if (!hadSelection) {
         manuallyClosedRef.current = false;
         if (!isPanelVisible) {
           setPanelMode('property');
           setIsPanelVisible(true);
-        } else if (
-          panelModeRef.current === 'layer' &&
-          !selectionFromLayerPanelRef.current &&
-          !skipFromKeyboard
-        ) {
-          setPanelMode('property');
         }
       } else if (!isPanelVisible && !manuallyClosedRef.current) {
         setPanelMode('property');
         setIsPanelVisible(true);
-      } else if (
-        panelModeRef.current === 'layer' &&
-        !selectionFromLayerPanelRef.current &&
-        !skipFromKeyboard &&
-        isPanelVisible
-      ) {
-        setPanelMode('property');
       }
     } else if (hadSelection) {
       if (keyTypeChangedRef.current && isPanelVisible) {
@@ -863,6 +852,28 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       useGridSelectionStore.getState().setSkipPanelModeSwitch(false);
     };
   }, []);
+
+  // 빈 선택 폴백으로 레이어 목록이 표시되는 동안 내부 모드도 layer로 정규화 —
+  // property로 남아 있으면 다음 캔버스 클릭이 목록을 건너뛰고 편집으로 점프함
+  // (플러그인 설정 패널 종료·설정 왕복 리마운트 경로 포함)
+  useEffect(() => {
+    if (
+      isPanelVisible &&
+      !pluginSettingsPanel &&
+      panelMode === 'property' &&
+      selectedKeyElements.length === 0 &&
+      selectedElements.length === 0
+    ) {
+      setPanelMode('layer');
+    }
+  }, [
+    isPanelVisible,
+    pluginSettingsPanel,
+    panelMode,
+    selectedKeyElements.length,
+    selectedElements,
+    setPanelMode,
+  ]);
 
   // 다중 선택 시 패널 자동 열기
   useEffect(() => {

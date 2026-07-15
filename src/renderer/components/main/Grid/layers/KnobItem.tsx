@@ -41,6 +41,7 @@ interface KnobItemProps {
   position: KnobPosition;
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
   isSelected?: boolean;
@@ -65,6 +66,7 @@ const KnobItem = ({
   position,
   onPositionChange,
   onClick,
+  onDoubleClick,
   onCtrlClick,
   onShiftClick,
   isSelected = false,
@@ -116,6 +118,8 @@ const KnobItem = ({
     lastSnappedDeltaX?: number;
     lastSnappedDeltaY?: number;
   }>({ isDragging: false, startX: 0, startY: 0 });
+  // 마지막 press에서 다중 드래그 이동이 있었는지 — 드래그 직후 dblclick 편집 진입 차단
+  const movedDuringPressRef = useRef(false);
   const effectiveElementId = elementId || `knob-${index}`;
 
   const imageSrc =
@@ -164,6 +168,7 @@ const KnobItem = ({
     const currentHeight = height || 60;
     const currentElementId = effectiveElementId;
 
+    movedDuringPressRef.current = false;
     multiDragRef.current = {
       isDragging: true,
       startX: e.clientX,
@@ -334,6 +339,7 @@ const KnobItem = ({
         if (moveDeltaX !== 0 || moveDeltaY !== 0) {
           multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
           multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
+          movedDuringPressRef.current = true;
           onMultiDrag?.(moveDeltaX, moveDeltaY);
         }
       });
@@ -399,6 +405,18 @@ const KnobItem = ({
     }
   };
 
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외)
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!onDoubleClick) return;
+    if (macOS && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.wasMoved || movedDuringPressRef.current) return;
+    e.stopPropagation();
+    onDoubleClick(e);
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -419,19 +437,19 @@ const KnobItem = ({
   return (
     <div
       ref={attachRef}
-      className={`absolute select-none ${className || ''}`}
+      className={`absolute select-none dmn-grabbable ${className || ''}`}
       style={{
         width: `${width}px`,
         height: `${height}px`,
         transform,
         zIndex: position.zIndex ?? zIndex,
-        cursor: 'pointer',
         willChange:
           isDraggingOrResizing || isViewportTransforming ? 'transform' : 'auto',
         contain: 'layout style paint',
       }}
       data-editing={isDraggingOrResizing ? 'true' : undefined}
       onClick={handleClick}
+      onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
       onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}

@@ -47,6 +47,7 @@ interface GraphItemProps {
   position: GraphPosition;
   onPositionChange: (index: number, dx: number, dy: number) => void;
   onClick?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   onCtrlClick?: (e: React.MouseEvent) => void;
   onShiftClick?: (e: React.MouseEvent) => void;
   isSelected?: boolean;
@@ -77,6 +78,7 @@ const GraphItem = ({
   position,
   onPositionChange,
   onClick,
+  onDoubleClick,
   onCtrlClick,
   onShiftClick,
   isSelected = false,
@@ -136,6 +138,8 @@ const GraphItem = ({
     lastSnappedDeltaX?: number;
     lastSnappedDeltaY?: number;
   }>({ isDragging: false, startX: 0, startY: 0 });
+  // 마지막 press에서 다중 드래그 이동이 있었는지 — 드래그 직후 dblclick 편집 진입 차단
+  const movedDuringPressRef = useRef(false);
   const effectiveElementId = elementId || `graph-${index}`;
 
   const previewHistory = [...PREVIEW_HISTORY_BASE];
@@ -183,6 +187,7 @@ const GraphItem = ({
     const currentHeight = height || 100;
     const currentElementId = effectiveElementId;
 
+    movedDuringPressRef.current = false;
     multiDragRef.current = {
       isDragging: true,
       startX: e.clientX,
@@ -353,6 +358,7 @@ const GraphItem = ({
         if (moveDeltaX !== 0 || moveDeltaY !== 0) {
           multiDragRef.current.lastSnappedDeltaX = snappedDeltaX;
           multiDragRef.current.lastSnappedDeltaY = snappedDeltaY;
+          movedDuringPressRef.current = true;
           onMultiDrag?.(moveDeltaX, moveDeltaY);
         }
       });
@@ -418,6 +424,18 @@ const GraphItem = ({
     }
   };
 
+  // 더블클릭 편집 진입 — 순수 더블클릭만 통과 (드래그·수식키·지우개·뷰포트 변환 제외)
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!onDoubleClick) return;
+    if (macOS && e.ctrlKey) return;
+    if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+    if (activeTool === 'eraser') return;
+    if (isViewportTransforming) return;
+    if (draggable.wasMoved || movedDuringPressRef.current) return;
+    e.stopPropagation();
+    onDoubleClick(e);
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -462,6 +480,7 @@ const GraphItem = ({
       dataEditing={isDraggingOrResizing}
       isViewportTransforming={isViewportTransforming}
       onClick={handleClick}
+      onDoubleClick={onDoubleClick ? handleDoubleClick : undefined}
       onMouseDown={isSelectionMode ? handleSelectionDragMouseDown : undefined}
       onContextMenu={handleContextMenu}
       onDragStart={(e: React.DragEvent) => e.preventDefault()}

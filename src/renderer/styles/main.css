@@ -14,6 +14,16 @@ body.dmn-custom-cursor * {
   cursor: none !important;
 }
 
+/* 캔버스 아이템 드래그 커서 — 호버 무변화, 잡는 동안만 grabbing (전 요소 동일 정책) */
+.dmn-grabbable {
+  cursor: default;
+}
+
+.dmn-grabbable:active {
+  cursor: -webkit-grabbing;
+  cursor: grabbing;
+}
+
 /* ===== 글래스 백드롭 ===== */
 
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
