@@ -30,8 +30,9 @@ use super::editor::{
 };
 use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 use super::migration::{
-    find_legacy_store_file, load_store_from_path, migrate_key_images_to_app_data,
-    migrate_local_fonts_to_app_data, normalize_state,
+    find_legacy_store_file, is_foreign_portable_asset_reference, load_store_from_path,
+    migrate_key_images_to_app_data, migrate_local_fonts_to_app_data, normalize_state,
+    rehome_foreign_asset_references,
 };
 
 const TRASH_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -145,6 +146,10 @@ impl AppStore {
             (default_path, initialize_default_state(), true, false)
         };
 
+        // 외래 기기 자산 참조를 먼저 재연결 — 이후 마이그레이션이 실존 파일 기준으로 판단
+        if rehome_foreign_asset_references(dir, &mut state) {
+            needs_persist = true;
+        }
         // 마이그레이션: 로컬 폰트 base64 cssContent → 앱 데이터 경로 기반 파일로 변환
         if migrate_local_fonts_to_app_data(dir, &mut state) {
             needs_persist = true;
@@ -157,7 +162,7 @@ impl AppStore {
             needs_persist = true;
         }
 
-        warn_unresolved_asset_references(&state);
+        warn_unresolved_asset_references(dir, &state);
 
         if needs_persist && had_existing_default_store && !skip_asset_sweep {
             if let Some(backup_path) = preserve_pre_migration_store(&path).with_context(|| {
@@ -722,9 +727,9 @@ impl AppStore {
         }
 
         let snapshot = self.state.read().data.clone();
-        let referenced_fonts = collect_local_font_paths(&snapshot);
-        let referenced_images = collect_local_image_paths(&snapshot);
-        let mut referenced_sounds = collect_local_sound_paths(&snapshot);
+        let referenced_fonts = collect_local_font_paths(app_data_dir, &snapshot);
+        let referenced_images = collect_local_image_paths(app_data_dir, &snapshot);
+        let mut referenced_sounds = collect_local_sound_paths(app_data_dir, &snapshot);
         referenced_sounds.keys.extend(recovered_sound_keys);
         referenced_sounds.complete &= sound_recovery_complete;
         let mut trash_session = TrashSession::new(trash_dir, SystemTime::now())?;
@@ -1217,11 +1222,11 @@ impl AssetReferencePaths {
         }
     }
 
-    fn collect(&mut self, value: Option<&String>) {
+    fn collect(&mut self, app_data_dir: &Path, value: Option<&String>) {
         let Some(path) = value else {
             return;
         };
-        match resolve_local_asset_path(path) {
+        match resolve_local_asset_path(app_data_dir, path) {
             LocalAssetPathResolution::Path(path) => {
                 self.keys.insert(path_identity_key(&path));
             }
@@ -1234,11 +1239,20 @@ impl AssetReferencePaths {
     }
 }
 
-fn warn_unresolved_asset_references(data: &AppStoreData) {
+fn warn_unresolved_asset_references(app_data_dir: &Path, data: &AppStoreData) {
     for (category, count) in [
-        ("fonts", collect_local_font_paths(data).unresolved_count),
-        ("images", collect_local_image_paths(data).unresolved_count),
-        ("sounds", collect_local_sound_paths(data).unresolved_count),
+        (
+            "fonts",
+            collect_local_font_paths(app_data_dir, data).unresolved_count,
+        ),
+        (
+            "images",
+            collect_local_image_paths(app_data_dir, data).unresolved_count,
+        ),
+        (
+            "sounds",
+            collect_local_sound_paths(app_data_dir, data).unresolved_count,
+        ),
     ] {
         if count > 0 {
             log::warn!("[Assets] {category} sweep 보류: 해석 불가 참조 {count}건");
@@ -1246,7 +1260,7 @@ fn warn_unresolved_asset_references(data: &AppStoreData) {
     }
 }
 
-fn collect_local_font_paths(data: &AppStoreData) -> AssetReferencePaths {
+fn collect_local_font_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetReferencePaths {
     let mut paths = AssetReferencePaths::new();
 
     for font in data
@@ -1255,46 +1269,46 @@ fn collect_local_font_paths(data: &AppStoreData) -> AssetReferencePaths {
         .iter()
         .filter(|font| font.font_type == FontType::Local)
     {
-        paths.collect(font.local_path.as_ref());
+        paths.collect(app_data_dir, font.local_path.as_ref());
     }
 
     paths
 }
 
-fn collect_local_image_paths(data: &AppStoreData) -> AssetReferencePaths {
+fn collect_local_image_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetReferencePaths {
     let mut paths = AssetReferencePaths::new();
 
     for position in iter_all_positions(data) {
-        paths.collect(position.active_image.as_ref());
-        paths.collect(position.inactive_image.as_ref());
+        paths.collect(app_data_dir, position.active_image.as_ref());
+        paths.collect(app_data_dir, position.inactive_image.as_ref());
     }
 
     paths
 }
 
 #[cfg(test)]
-fn collect_local_image_path_keys(data: &AppStoreData) -> HashSet<String> {
-    collect_local_image_paths(data).keys
+fn collect_local_image_path_keys(app_data_dir: &Path, data: &AppStoreData) -> HashSet<String> {
+    collect_local_image_paths(app_data_dir, data).keys
 }
 
-fn collect_local_sound_paths(data: &AppStoreData) -> AssetReferencePaths {
+fn collect_local_sound_paths(app_data_dir: &Path, data: &AppStoreData) -> AssetReferencePaths {
     let mut paths = AssetReferencePaths::new();
 
     for position in iter_all_positions(data) {
-        paths.collect(position.sound_path.as_ref());
+        paths.collect(app_data_dir, position.sound_path.as_ref());
     }
 
     // 사운드 라이브러리에 등록된 파일도 보호 (키에 할당 안 되어도 유지)
     for key in data.sound_library.keys() {
-        paths.collect(Some(key));
+        paths.collect(app_data_dir, Some(key));
     }
 
     paths
 }
 
 #[cfg(test)]
-fn collect_local_sound_path_keys(data: &AppStoreData) -> HashSet<String> {
-    collect_local_sound_paths(data).keys
+fn collect_local_sound_path_keys(app_data_dir: &Path, data: &AppStoreData) -> HashSet<String> {
+    collect_local_sound_paths(app_data_dir, data).keys
 }
 
 fn iter_all_positions(data: &AppStoreData) -> impl Iterator<Item = &KeyPosition> {
@@ -1327,7 +1341,7 @@ enum LocalAssetPathResolution {
     Ignored,
 }
 
-fn resolve_local_asset_path(path: &str) -> LocalAssetPathResolution {
+fn resolve_local_asset_path(app_data_dir: &Path, path: &str) -> LocalAssetPathResolution {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return LocalAssetPathResolution::Ignored;
@@ -1345,12 +1359,12 @@ fn resolve_local_asset_path(path: &str) -> LocalAssetPathResolution {
     }
 
     match file_url_to_path(trimmed) {
-        FileUrlPath::Path(path) => LocalAssetPathResolution::Path(path),
+        FileUrlPath::Path(path) => classify_absolute_asset_path(app_data_dir, trimmed, path),
         FileUrlPath::Invalid => LocalAssetPathResolution::Unresolved,
         FileUrlPath::NotFileUrl => {
             let path = PathBuf::from(trimmed);
             if path.is_absolute() {
-                LocalAssetPathResolution::Path(path)
+                classify_absolute_asset_path(app_data_dir, trimmed, path)
             } else if looks_like_unresolved_local_path(trimmed) {
                 LocalAssetPathResolution::Unresolved
             } else {
@@ -1358,6 +1372,18 @@ fn resolve_local_asset_path(path: &str) -> LocalAssetPathResolution {
             }
         }
     }
+}
+
+// 실존하지 않는 외래 참조는 해석 실패로 취급 — sweep 보류 fail-safe 유도
+fn classify_absolute_asset_path(
+    app_data_dir: &Path,
+    raw: &str,
+    path: PathBuf,
+) -> LocalAssetPathResolution {
+    if !path.exists() && is_foreign_portable_asset_reference(app_data_dir, raw) {
+        return LocalAssetPathResolution::Unresolved;
+    }
+    LocalAssetPathResolution::Path(path)
 }
 
 fn looks_like_unresolved_local_path(value: &str) -> bool {
@@ -1987,7 +2013,9 @@ fn collect_sound_deletion_reference_keys(
     data: &AppStoreData,
     sounds_dir: &Path,
 ) -> HashSet<String> {
-    let mut keys = collect_local_sound_paths(data).keys;
+    // sounds_dir는 항상 <appData>/sounds — 분류 루트는 부모로 유도
+    let app_data_dir = sounds_dir.parent().unwrap_or(sounds_dir);
+    let mut keys = collect_local_sound_paths(app_data_dir, data).keys;
     for entry in data.sound_library.values() {
         let Some(original_path) = entry.original_path.as_deref() else {
             continue;
@@ -3735,8 +3763,8 @@ mod tests {
             }],
         );
 
-        let image_paths = collect_local_image_path_keys(&data);
-        let sound_paths = collect_local_sound_path_keys(&data);
+        let image_paths = collect_local_image_path_keys(&root, &data);
+        let sound_paths = collect_local_sound_path_keys(&root, &data);
         for kind in ["key", "stat", "graph", "knob"] {
             assert!(image_paths.contains(&path_identity_key(&root.join(format!("{kind}.png")))));
             assert!(sound_paths.contains(&path_identity_key(&root.join(format!("{kind}.wav")))));
@@ -3753,9 +3781,10 @@ mod tests {
         data.key_positions
             .insert("4key".to_string(), vec![position]);
 
-        assert!(collect_local_image_path_keys(&data)
+        let classify_root = Path::new("/nonexistent-app-data");
+        assert!(collect_local_image_path_keys(classify_root, &data)
             .contains(&path_identity_key(Path::new("/tmp/dmnote-file-url.png"))));
-        assert!(collect_local_sound_path_keys(&data)
+        assert!(collect_local_sound_path_keys(classify_root, &data)
             .contains(&path_identity_key(Path::new("/tmp/dmnote-file-url.wav"))));
     }
 
@@ -3897,9 +3926,10 @@ mod tests {
             SoundLibraryEntry::default(),
         );
 
-        let fonts = collect_local_font_paths(&data);
-        let images = collect_local_image_paths(&data);
-        let sounds = collect_local_sound_paths(&data);
+        let classify_root = Path::new("/nonexistent-app-data");
+        let fonts = collect_local_font_paths(classify_root, &data);
+        let images = collect_local_image_paths(classify_root, &data);
+        let sounds = collect_local_sound_paths(classify_root, &data);
 
         assert!(!fonts.complete);
         assert!(!images.complete);
@@ -3907,6 +3937,173 @@ mod tests {
         assert_eq!(fonts.unresolved_count, 1);
         assert_eq!(images.unresolved_count, 1);
         assert_eq!(sounds.unresolved_count, 2);
+    }
+
+    #[test]
+    fn missing_foreign_file_url_reference_marks_sweep_unresolved() {
+        let dir = test_directory("foreign-file-url-unresolved-test");
+        std::fs::create_dir_all(dir.join("images")).unwrap();
+        let mut data = AppStoreData {
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        data.key_positions.get_mut("4key").unwrap()[0].active_image = Some(
+            "file:///C:/Users/me/AppData/Roaming/com.dmnote.desktop/images/missing.png".to_string(),
+        );
+
+        // 외래 file URL이 이 기기에서 실존하지 않으면 sweep을 보류시켜야 함
+        assert_eq!(collect_local_image_paths(&dir, &data).unresolved_count, 1);
+
+        // 현재 기기 appData의 단순 누락 참조는 기존대로 보류 대상이 아님
+        data.key_positions.get_mut("4key").unwrap()[0].inactive_image = Some(
+            dir.join("images")
+                .join("gone.png")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        assert_eq!(collect_local_image_paths(&dir, &data).unresolved_count, 1);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn missing_foreign_file_url_holds_sweep_and_keeps_unreferenced_image() {
+        let dir = test_directory("foreign-file-url-sweep-hold-test");
+        let kept_image = dir.join("images").join("kept.png");
+        std::fs::create_dir_all(kept_image.parent().unwrap()).unwrap();
+        std::fs::write(&kept_image, b"image").unwrap();
+
+        let mut data = AppStoreData {
+            keys: crate::defaults::default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        data.key_positions.get_mut("4key").unwrap()[0].active_image = Some(
+            "file:///C:/Users/me/AppData/Roaming/com.dmnote.desktop/images/missing.png".to_string(),
+        );
+        std::fs::write(
+            dir.join("store.json"),
+            serde_json::to_vec_pretty(&data).unwrap(),
+        )
+        .unwrap();
+
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        store.cleanup_orphan_assets_now().unwrap();
+
+        // 미해석 외래 참조가 있으면 sweep 보류 — 미참조 로컬 이미지도 격리 금지
+        assert!(kept_image.exists());
+        assert!(!dir.join("trash").exists());
+
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn foreign_asset_references_rehome_before_persist_and_sweep() {
+        let dir = test_directory("foreign-asset-rehome-integration-test");
+        let font_path = dir.join("fonts").join("portable.ttf");
+        let image_path = dir.join("images").join("portable.png");
+        let sound_path = dir.join("sounds").join("portable.wav");
+        for path in [&font_path, &image_path, &sound_path] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"portable-asset").unwrap();
+        }
+
+        let foreign_root = r"C:\Users\Exporter\AppData\Roaming\com.dmnote.desktop";
+        let foreign_font = format!(r"{foreign_root}\fonts\portable.ttf");
+        let foreign_image = format!(r"{foreign_root}\images\portable.png");
+        let foreign_sound = format!(r"{foreign_root}\sounds\portable.wav");
+        let mut data = AppStoreData {
+            keys: crate::defaults::default_keys().clone(),
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        };
+        let position = &mut data.key_positions.get_mut("4key").unwrap()[0];
+        position.active_image = Some(foreign_image.clone());
+        position.sound_path = Some(foreign_sound.clone());
+        data.font_settings.custom_fonts.push(CustomFont {
+            id: "portable-font".to_string(),
+            font_type: FontType::Local,
+            name: "Portable Font".to_string(),
+            display_name: "Portable Font".to_string(),
+            enabled: true,
+            local_path: Some(foreign_font.clone()),
+            css_content: None,
+        });
+        data.sound_library.insert(
+            foreign_sound.clone(),
+            SoundLibraryEntry {
+                display_name: Some("Portable sound".to_string()),
+                ..SoundLibraryEntry::default()
+            },
+        );
+
+        let original = serde_json::to_vec_pretty(&data).unwrap();
+        let store_path = dir.join("store.json");
+        std::fs::write(&store_path, &original).unwrap();
+        let store = AppStore::initialize_in_dir(&dir).unwrap();
+        let snapshot = store.snapshot();
+        let local_font = font_path.to_string_lossy().into_owned();
+        let local_image = image_path.to_string_lossy().into_owned();
+        let local_sound = sound_path.to_string_lossy().into_owned();
+
+        assert_eq!(
+            snapshot.font_settings.custom_fonts[0].local_path.as_deref(),
+            Some(local_font.as_str())
+        );
+        // 이전된 폰트는 경로 재귀화와 함께 활성 상태도 유지되어야 함
+        assert!(snapshot.font_settings.custom_fonts[0].enabled);
+        assert_eq!(
+            snapshot.key_positions["4key"][0].active_image.as_deref(),
+            Some(local_image.as_str())
+        );
+        assert_eq!(
+            snapshot.key_positions["4key"][0].sound_path.as_deref(),
+            Some(local_sound.as_str())
+        );
+        assert!(snapshot.sound_library.contains_key(&local_sound));
+        assert!(!snapshot.sound_library.contains_key(&foreign_sound));
+        assert_eq!(
+            collect_local_font_paths(&dir, &snapshot).unresolved_count,
+            0
+        );
+        assert_eq!(
+            collect_local_image_paths(&dir, &snapshot).unresolved_count,
+            0
+        );
+        assert_eq!(
+            collect_local_sound_paths(&dir, &snapshot).unresolved_count,
+            0
+        );
+        assert_eq!(
+            std::fs::read(dir.join("store.json.pre-migration.bak")).unwrap(),
+            original
+        );
+
+        store.cleanup_orphan_assets_now().unwrap();
+        assert!(font_path.exists());
+        assert!(image_path.exists());
+        assert!(sound_path.exists());
+        store.flush_cleanup_and_shutdown().unwrap();
+        drop(store);
+
+        let reloaded = crate::state::migration::load_store_from_path(&store_path).unwrap();
+        assert!(!reloaded.needs_persist);
+        assert_eq!(
+            collect_local_font_paths(&dir, &reloaded.data).unresolved_count,
+            0
+        );
+        assert_eq!(
+            collect_local_image_paths(&dir, &reloaded.data).unresolved_count,
+            0
+        );
+        assert_eq!(
+            collect_local_sound_paths(&dir, &reloaded.data).unresolved_count,
+            0
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

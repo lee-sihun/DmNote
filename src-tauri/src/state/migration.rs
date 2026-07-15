@@ -9,7 +9,10 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use dirs_next::config_dir;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{Map, Value};
+use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
+
+use super::local_asset_path::{file_url_to_path, path_identity_key, FileUrlPath};
 
 use crate::{
     defaults::{default_keys, default_positions},
@@ -24,6 +27,33 @@ use crate::{
 
 const LEGACY_OVERLAY_WIDTH: f64 = 860.0;
 const LEGACY_OVERLAY_HEIGHT: f64 = 320.0;
+const APP_DATA_MARKER: &str = "com.dmnote.desktop";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AssetCategory {
+    Sounds,
+    Fonts,
+    Images,
+}
+
+impl AssetCategory {
+    fn directory_name(self) -> &'static str {
+        match self {
+            Self::Sounds => "sounds",
+            Self::Fonts => "fonts",
+            Self::Images => "images",
+        }
+    }
+
+    fn from_directory_name(value: &str) -> Option<Self> {
+        match value {
+            "sounds" => Some(Self::Sounds),
+            "fonts" => Some(Self::Fonts),
+            "images" => Some(Self::Images),
+            _ => None,
+        }
+    }
+}
 
 pub(crate) struct LoadedStore {
     pub(crate) data: AppStoreData,
@@ -164,10 +194,11 @@ fn repair_semantic_identities(data: &mut AppStoreData) -> bool {
             continue;
         }
 
-        let invalid_path = font
-            .local_path
-            .as_ref()
-            .is_some_and(|path| path.trim().is_empty() || !Path::new(path.trim()).is_absolute());
+        let invalid_path = font.local_path.as_ref().is_some_and(|path| {
+            path.trim().is_empty()
+                || (!Path::new(path.trim()).is_absolute()
+                    && parse_portable_asset_reference(path).is_none())
+        });
         if invalid_path {
             font.local_path = None;
             changed = true;
@@ -301,6 +332,11 @@ pub(crate) fn migrate_local_fonts_to_app_data(
             continue;
         }
 
+        // 외래 기기 자산 참조는 파일이 나중에 복사되면 재귀화로 치유됨 — 비활성화 보류
+        if is_foreign_portable_asset_reference(app_data_dir, local_path) {
+            continue;
+        }
+
         // 복구 가능한 원본과 data URI가 모두 없을 때 비활성화만 수행
         // css_content는 보존 — 미지 mime 등 디코더 개선 시 재복구 여지 유지
         if font.enabled {
@@ -399,6 +435,233 @@ pub(crate) fn migrate_key_images_to_app_data(app_data_dir: &Path, data: &mut App
     }
 
     changed
+}
+
+/// 다른 기기의 appData 자산 참조를 현재 기기의 실존 파일로 재연결
+pub(crate) fn rehome_foreign_asset_references(
+    app_data_dir: &Path,
+    data: &mut AppStoreData,
+) -> bool {
+    let mut changed = false;
+
+    for positions in data.key_positions.values_mut() {
+        for position in positions {
+            changed |= rehome_position_asset_references(app_data_dir, position);
+        }
+    }
+    for positions in data.stat_positions.values_mut() {
+        for position in positions {
+            changed |= rehome_position_asset_references(app_data_dir, &mut position.position);
+        }
+    }
+    for positions in data.graph_positions.values_mut() {
+        for position in positions {
+            changed |= rehome_position_asset_references(app_data_dir, &mut position.position);
+        }
+    }
+    for positions in data.knob_positions.values_mut() {
+        for position in positions {
+            changed |= rehome_position_asset_references(app_data_dir, &mut position.position);
+        }
+    }
+
+    for font in data
+        .font_settings
+        .custom_fonts
+        .iter_mut()
+        .filter(|font| font.font_type == FontType::Local)
+    {
+        changed |= rehome_optional_asset_reference(app_data_dir, &mut font.local_path);
+    }
+
+    let mut replacements: HashMap<String, Vec<(String, SoundLibraryEntry)>> = HashMap::new();
+    for (foreign_key, entry) in &data.sound_library {
+        let Some(local_key) = rehomed_asset_reference(app_data_dir, foreign_key) else {
+            continue;
+        };
+        replacements
+            .entry(local_key)
+            .or_default()
+            .push((foreign_key.clone(), entry.clone()));
+    }
+    for (local_key, candidates) in replacements {
+        let Some((_, candidate_entry)) = candidates.first() else {
+            continue;
+        };
+        let has_conflict = data
+            .sound_library
+            .get(&local_key)
+            .is_some_and(|existing| existing != candidate_entry)
+            || candidates.iter().any(|(_, entry)| entry != candidate_entry);
+        if has_conflict {
+            continue;
+        }
+
+        data.sound_library
+            .entry(local_key)
+            .or_insert_with(|| candidate_entry.clone());
+        for (foreign_key, _) in candidates {
+            data.sound_library.remove(&foreign_key);
+        }
+        changed = true;
+    }
+
+    changed
+}
+
+fn rehome_position_asset_references(app_data_dir: &Path, position: &mut KeyPosition) -> bool {
+    rehome_optional_asset_reference(app_data_dir, &mut position.sound_path)
+        | rehome_optional_asset_reference(app_data_dir, &mut position.active_image)
+        | rehome_optional_asset_reference(app_data_dir, &mut position.inactive_image)
+}
+
+fn rehome_optional_asset_reference(app_data_dir: &Path, raw: &mut Option<String>) -> bool {
+    let Some(current) = raw.as_ref() else {
+        return false;
+    };
+    let Some(rehomed) = rehomed_asset_reference(app_data_dir, current) else {
+        return false;
+    };
+    if *current == rehomed {
+        return false;
+    }
+    *raw = Some(rehomed);
+    true
+}
+
+fn rehomed_asset_reference(app_data_dir: &Path, raw: &str) -> Option<String> {
+    if local_asset_reference_exists(raw) {
+        return None;
+    }
+    let (category, file_name) = parse_portable_asset_reference(raw)?;
+    let category_dir = app_data_dir.join(category.directory_name());
+    let exact = category_dir.join(&file_name);
+    let resolved = if exact.is_file() {
+        exact
+    } else {
+        find_unique_normalized_file(&category_dir, &file_name)?
+    };
+    Some(resolved.to_string_lossy().into_owned())
+}
+
+fn local_asset_reference_exists(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    match file_url_to_path(trimmed) {
+        FileUrlPath::Path(path) => path.is_file(),
+        FileUrlPath::Invalid => false,
+        FileUrlPath::NotFileUrl => Path::new(trimmed).is_file(),
+    }
+}
+
+fn find_unique_normalized_file(directory: &Path, expected_name: &str) -> Option<PathBuf> {
+    let expected = expected_name.nfc().collect::<String>();
+    let mut matches = fs::read_dir(directory)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            if !file_type.is_file() {
+                return None;
+            }
+            let name = entry.file_name().into_string().ok()?;
+            (name.nfc().collect::<String>() == expected).then_some(entry.path())
+        });
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn parse_portable_asset_reference(raw: &str) -> Option<(AssetCategory, String)> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("data:")
+        || lower.starts_with("blob:")
+        || lower.starts_with("asset:")
+        || lower.starts_with("tauri:")
+    {
+        return None;
+    }
+
+    let portable = match file_url_to_path(trimmed) {
+        FileUrlPath::Path(path) => path.to_string_lossy().into_owned(),
+        FileUrlPath::Invalid => return None,
+        FileUrlPath::NotFileUrl => {
+            let bytes = trimmed.as_bytes();
+            let windows_drive = bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && matches!(bytes[2], b'\\' | b'/');
+            let verbatim_drive = lower.starts_with(r"\\?\")
+                && bytes.get(4).is_some_and(u8::is_ascii_alphabetic)
+                && bytes.get(5) == Some(&b':')
+                && bytes
+                    .get(6)
+                    .is_some_and(|byte| matches!(byte, b'\\' | b'/'));
+            let network = trimmed.starts_with(r"\\") || trimmed.starts_with("//");
+            if !trimmed.starts_with('/') && !windows_drive && !verbatim_drive && !network {
+                return None;
+            }
+            trimmed.to_string()
+        }
+    };
+
+    let components = portable
+        .split(['/', '\\'])
+        .filter(|component| !component.is_empty())
+        .collect::<Vec<_>>();
+    if components
+        .iter()
+        .any(|component| *component == "." || *component == "..")
+    {
+        return None;
+    }
+    let marker_index = components
+        .iter()
+        .rposition(|component| component.eq_ignore_ascii_case(APP_DATA_MARKER))?;
+    if components.len() != marker_index + 3 {
+        return None;
+    }
+    let category = AssetCategory::from_directory_name(components[marker_index + 1])?;
+    let file_name = components[marker_index + 2];
+    if file_name.is_empty() {
+        return None;
+    }
+    Some((category, file_name.to_string()))
+}
+
+/// 외래 기기의 appData 자산 참조인지 — 현재 appData 루트 하위면 로컬 참조로 간주
+pub(crate) fn is_foreign_portable_asset_reference(app_data_dir: &Path, raw: &str) -> bool {
+    if parse_portable_asset_reference(raw).is_none() {
+        return false;
+    }
+    let trimmed = raw.trim();
+    let resolved = match file_url_to_path(trimmed) {
+        FileUrlPath::Path(path) => path,
+        FileUrlPath::Invalid => return false,
+        FileUrlPath::NotFileUrl => PathBuf::from(trimmed),
+    };
+    !path_is_under_root(&resolved, app_data_dir)
+}
+
+fn path_is_under_root(path: &Path, root: &Path) -> bool {
+    if path_ancestor_matches_identity(path, root) {
+        return true;
+    }
+    // 루트가 심링크 경유(/var ↔ /private/var)면 정규화 후 재비교
+    fs::canonicalize(root)
+        .map(|canonical| path_ancestor_matches_identity(path, &canonical))
+        .unwrap_or(false)
+}
+
+// Windows 대소문자·verbatim 표기 차이를 identity 키로 흡수해 조상 비교
+fn path_ancestor_matches_identity(path: &Path, root: &Path) -> bool {
+    let root_key = path_identity_key(root);
+    path.ancestors()
+        .any(|ancestor| path_identity_key(ancestor) == root_key)
 }
 
 /// 개별 이미지 참조를 앱 데이터 디렉터리로 마이그레이션
@@ -1467,7 +1730,8 @@ struct LegacyOverlayPosition {
 mod tests {
     use super::{
         load_store_from_path, migrate_local_fonts_to_app_data, migrate_sound_library_enabled,
-        normalize_state, rgba_to_hex, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
+        normalize_state, parse_portable_asset_reference, rehome_foreign_asset_references,
+        rgba_to_hex, AssetCategory, LEGACY_OVERLAY_HEIGHT, LEGACY_OVERLAY_WIDTH,
     };
     use crate::{
         defaults::{default_keys, default_positions},
@@ -1479,6 +1743,18 @@ mod tests {
     };
     use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
     use serde::{Deserialize, Serialize};
+    use unicode_normalization::UnicodeNormalization;
+
+    fn rehome_test_directory(label: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("dmnote-rehome-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    fn data_with_one_position() -> AppStoreData {
+        AppStoreData {
+            key_positions: default_positions().clone(),
+            ..AppStoreData::default()
+        }
+    }
 
     fn tauri_store_fixture_base() -> serde_json::Value {
         serde_json::json!({
@@ -3172,5 +3448,248 @@ mod tests {
         assert_eq!(std::fs::read(&restored_path).unwrap(), font_bytes);
 
         let _ = std::fs::remove_dir_all(app_data_dir);
+    }
+
+    #[test]
+    fn portable_asset_reference_parser_accepts_cross_platform_absolute_forms() {
+        let cases = [
+            r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\sounds\key.wav",
+            r"\\?\C:\Users\me\AppData\Roaming\com.dmnote.desktop\sounds\key.wav",
+            r"\\server\share\com.dmnote.desktop\sounds\key.wav",
+            r"\\?\UNC\server\share\com.dmnote.desktop\sounds\key.wav",
+            "/Users/me/Library/Application Support/com.dmnote.desktop/sounds/key.wav",
+            "file:///C:/Users/me/AppData/Roaming/com.dmnote.desktop/sounds/key.wav",
+        ];
+        for raw in cases {
+            assert_eq!(
+                parse_portable_asset_reference(raw),
+                Some((AssetCategory::Sounds, "key.wav".to_string())),
+                "failed to parse {raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn cross_platform_asset_forms_rehome_to_existing_local_files() {
+        let dir = rehome_test_directory("absolute-forms");
+        let sounds_dir = dir.join("sounds");
+        std::fs::create_dir_all(&sounds_dir).unwrap();
+        let forms = [
+            r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\sounds\normal.wav",
+            r"\\?\C:\Users\me\AppData\Roaming\com.dmnote.desktop\sounds\verbatim.wav",
+            r"\\server\share\com.dmnote.desktop\sounds\unc.wav",
+            "file:///C:/Users/me/AppData/Roaming/com.dmnote.desktop/sounds/url.wav",
+        ];
+        for name in ["normal.wav", "verbatim.wav", "unc.wav", "url.wav"] {
+            std::fs::write(sounds_dir.join(name), b"sound").unwrap();
+        }
+
+        for (raw, name) in
+            forms
+                .into_iter()
+                .zip(["normal.wav", "verbatim.wav", "unc.wav", "url.wav"])
+        {
+            let mut data = data_with_one_position();
+            data.key_positions.get_mut("4key").unwrap()[0].sound_path = Some(raw.to_string());
+            assert!(rehome_foreign_asset_references(&dir, &mut data));
+            assert_eq!(
+                data.key_positions["4key"][0].sound_path.as_deref(),
+                Some(sounds_dir.join(name).to_string_lossy().as_ref())
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn missing_external_and_traversal_asset_references_remain_unchanged() {
+        let dir = rehome_test_directory("rejected");
+        std::fs::create_dir_all(dir.join("sounds")).unwrap();
+        std::fs::write(dir.join("sounds").join("evil.wav"), b"sound").unwrap();
+        for raw in [
+            r"C:\Users\me\com.dmnote.desktop\sounds\missing.wav",
+            r"D:\music\evil.wav",
+            r"C:\Users\me\com.dmnote.desktop\sounds\..\evil.wav",
+            r"C:\Users\me\com.dmnote.desktop\sounds\..",
+        ] {
+            let mut data = data_with_one_position();
+            data.key_positions.get_mut("4key").unwrap()[0].sound_path = Some(raw.to_string());
+            assert!(!rehome_foreign_asset_references(&dir, &mut data));
+            assert_eq!(
+                data.key_positions["4key"][0].sound_path.as_deref(),
+                Some(raw)
+            );
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn normalized_unicode_file_name_rehomes_only_on_unique_match() {
+        let dir = rehome_test_directory("unicode");
+        let images_dir = dir.join("images");
+        std::fs::create_dir_all(&images_dir).unwrap();
+        let nfc_name = "키음.wav";
+        let nfd_name = nfc_name.nfd().collect::<String>();
+        let actual_path = images_dir.join(&nfd_name);
+        std::fs::write(&actual_path, b"image").unwrap();
+        let mut data = data_with_one_position();
+        data.key_positions.get_mut("4key").unwrap()[0].active_image =
+            Some(format!(r"C:\Users\me\com.dmnote.desktop\images\{nfc_name}"));
+
+        assert!(rehome_foreign_asset_references(&dir, &mut data));
+        let rehomed =
+            std::path::PathBuf::from(data.key_positions["4key"][0].active_image.as_ref().unwrap());
+        assert!(rehomed.is_file());
+        assert_eq!(
+            rehomed
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .nfc()
+                .collect::<String>(),
+            nfc_name
+        );
+        assert!(!rehome_foreign_asset_references(&dir, &mut data));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn foreign_font_reference_stays_enabled_and_heals_after_files_arrive() {
+        let dir = rehome_test_directory("font-heal");
+        std::fs::create_dir_all(dir.join("fonts")).unwrap();
+        let foreign = r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\fonts\portable.ttf";
+        let mut data = AppStoreData::default();
+        data.font_settings.custom_fonts.push(CustomFont {
+            id: "font".to_string(),
+            font_type: FontType::Local,
+            name: "Font".to_string(),
+            display_name: "Font".to_string(),
+            enabled: true,
+            local_path: Some(foreign.to_string()),
+            css_content: None,
+        });
+
+        // store만 복사된 상태 — 로드 체인 순서(재귀화 → 폰트 마이그레이션) 재현
+        assert!(!rehome_foreign_asset_references(&dir, &mut data));
+        migrate_local_fonts_to_app_data(&dir, &mut data);
+        assert!(data.font_settings.custom_fonts[0].enabled);
+        assert_eq!(
+            data.font_settings.custom_fonts[0].local_path.as_deref(),
+            Some(foreign)
+        );
+
+        // 파일이 뒤늦게 복사되면 다음 로드에서 치유
+        let local = dir.join("fonts").join("portable.ttf");
+        std::fs::write(&local, b"font").unwrap();
+        assert!(rehome_foreign_asset_references(&dir, &mut data));
+        migrate_local_fonts_to_app_data(&dir, &mut data);
+        assert!(data.font_settings.custom_fonts[0].enabled);
+        assert_eq!(
+            data.font_settings.custom_fonts[0].local_path.as_deref(),
+            Some(local.to_string_lossy().as_ref())
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dangling_local_font_reference_is_still_disabled() {
+        // 현재 appData 루트가 마커명을 포함하는 실제 구조 재현
+        let root = rehome_test_directory("font-dangling");
+        let dir = root.join("com.dmnote.desktop");
+        std::fs::create_dir_all(dir.join("fonts")).unwrap();
+        let missing_local = dir.join("fonts").join("gone.ttf");
+        let mut data = AppStoreData::default();
+        data.font_settings.custom_fonts.push(CustomFont {
+            id: "font".to_string(),
+            font_type: FontType::Local,
+            name: "Font".to_string(),
+            display_name: "Font".to_string(),
+            enabled: true,
+            local_path: Some(missing_local.to_string_lossy().into_owned()),
+            css_content: None,
+        });
+
+        // 마커가 있어도 현재 루트 하위의 단순 누락 참조는 기존대로 비활성화
+        assert!(!rehome_foreign_asset_references(&dir, &mut data));
+        assert!(migrate_local_fonts_to_app_data(&dir, &mut data));
+        assert!(!data.font_settings.custom_fonts[0].enabled);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_identity_variants_of_current_app_data_are_not_foreign() {
+        let root = rehome_test_directory("win-identity").join("com.dmnote.desktop");
+        std::fs::create_dir_all(root.join("fonts")).unwrap();
+        let missing = root.join("fonts").join("gone.ttf");
+        let plain = missing.to_string_lossy().into_owned();
+
+        // 대소문자·verbatim·file URL 표기 차이는 전부 "현재 appData"로 인식되어야 함
+        let lowercase = plain.to_ascii_lowercase();
+        let verbatim = format!(r"\\?\{plain}");
+        let url = url::Url::from_file_path(&missing).unwrap().to_string();
+        for raw in [lowercase, verbatim, url] {
+            assert!(
+                !super::is_foreign_portable_asset_reference(&root, &raw),
+                "현재 appData 표기 변형이 외래로 오판됨: {raw}"
+            );
+        }
+
+        // 다른 사용자 경로는 외래 판정 유지
+        let other = r"C:\Users\dmnote-other\AppData\Roaming\com.dmnote.desktop\fonts\gone.ttf";
+        assert!(super::is_foreign_portable_asset_reference(&root, other));
+
+        let _ = std::fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[test]
+    fn sound_library_rekey_preserves_metadata_and_conflicts() {
+        let dir = rehome_test_directory("sound-library");
+        let local_path = dir.join("sounds").join("library.wav");
+        std::fs::create_dir_all(local_path.parent().unwrap()).unwrap();
+        std::fs::write(&local_path, b"sound").unwrap();
+        let foreign = r"C:\Users\me\com.dmnote.desktop\sounds\library.wav".to_string();
+        let mut metadata = SoundLibraryEntry {
+            display_name: Some("보존 이름".to_string()),
+            trim_start_ratio: Some(0.25),
+            ..SoundLibraryEntry::default()
+        };
+        let local_key = local_path.to_string_lossy().into_owned();
+
+        let mut data = AppStoreData::default();
+        data.sound_library.insert(foreign.clone(), metadata.clone());
+        assert!(rehome_foreign_asset_references(&dir, &mut data));
+        assert_eq!(data.sound_library[&local_key], metadata);
+        assert!(!data.sound_library.contains_key(&foreign));
+
+        data.sound_library.insert(foreign.clone(), metadata.clone());
+        assert!(rehome_foreign_asset_references(&dir, &mut data));
+        assert_eq!(data.sound_library.len(), 1);
+
+        metadata.display_name = Some("다른 이름".to_string());
+        data.sound_library.insert(foreign.clone(), metadata.clone());
+        assert!(!rehome_foreign_asset_references(&dir, &mut data));
+        assert_eq!(data.sound_library[&foreign], metadata);
+        assert_ne!(data.sound_library[&local_key], metadata);
+
+        let alternate_foreign = r"\\server\share\com.dmnote.desktop\sounds\library.wav".to_string();
+        let mut candidates_only = AppStoreData::default();
+        candidates_only
+            .sound_library
+            .insert(foreign.clone(), SoundLibraryEntry::default());
+        candidates_only
+            .sound_library
+            .insert(alternate_foreign.clone(), metadata.clone());
+        assert!(!rehome_foreign_asset_references(&dir, &mut candidates_only));
+        assert!(candidates_only.sound_library.contains_key(&foreign));
+        assert!(candidates_only
+            .sound_library
+            .contains_key(&alternate_foreign));
+        assert!(!candidates_only.sound_library.contains_key(&local_key));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

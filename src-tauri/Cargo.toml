@@ -34,6 +34,7 @@ rfd = "0.14"
 dirs-next = "2.0"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
+unicode-normalization = "0.1"
 zip = "0.6"
 gif = "0.13.3"
 gif-dispose = "5.0.1"
