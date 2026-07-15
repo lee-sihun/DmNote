@@ -23,6 +23,7 @@ import { i18nApi } from './modules/i18nApi';
 import { statsApi } from './modules/statsApi';
 import { pluginApi } from './modules/pluginApi';
 import { uiApi } from './modules/uiApi';
+import { editorApi } from './modules/editorApi';
 
 // shared.ts is imported for its side-effects (locale init + settings listener)
 import './modules/shared';
@@ -52,6 +53,7 @@ const api: DMNoteAPI = {
   stats: statsApi,
   plugin: pluginApi,
   ui: uiApi as unknown as DMNoteAPI['ui'],
+  editor: editorApi,
 };
 
 if (typeof window !== 'undefined') {

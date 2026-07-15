@@ -6,6 +6,7 @@
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { usePropertiesPanelStore } from '@stores/grid/usePropertiesPanelStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import {
   SECTION_WRAPPER_CLASS,
   SECTION_LABEL_CLASS,
@@ -100,7 +101,7 @@ export const createDefineSettings = (deps: DefineSettingsDependencies) => {
           // JSON 직렬화/역직렬화로 순수 데이터만 복사 (순환 참조 및 특수 객체 제거)
           const safeSettings = JSON.parse(JSON.stringify(newSettings));
 
-          window.api?.bridge?.sendTo('overlay', 'plugin:settings:changed', {
+          sendBridgeMessageBestEffort('overlay', 'plugin:settings:changed', {
             pluginId,
             settings: safeSettings,
           });

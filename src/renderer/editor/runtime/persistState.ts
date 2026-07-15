@@ -5,7 +5,7 @@
 import type { KeyMappings, KeyPositions } from '@src/types/key/keys';
 
 /**
- * positions 변경을 로컬 스토어 + 백엔드 + 오버레이에 반영
+ * positions 변경을 로컬 스토어 + 백엔드에 반영
  * z-order 이동 등에서 공통 사용
  */
 export async function persistPositionsWithSync(
@@ -18,9 +18,6 @@ export async function persistPositionsWithSync(
 
   try {
     await window.api.keys.updatePositions(updatedPositions);
-    window.api.bridge.sendTo('overlay', 'positions:sync', {
-      positions: updatedPositions,
-    });
   } catch (error) {
     console.error('Failed to persist positions', error);
   } finally {

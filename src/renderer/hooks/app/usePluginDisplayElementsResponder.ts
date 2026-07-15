@@ -5,6 +5,7 @@ import {
   normalizeStateKeys,
   setPluginMenuRuntimeState,
 } from '@utils/plugin/pluginMenuRuntimeState';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 
 // 다중 OBS 클라이언트 동시 재연결 시 요청 버스트를 응답 1회로 코얼레싱
 const RESPOND_DEBOUNCE_MS = 100;
@@ -22,11 +23,11 @@ export function usePluginDisplayElementsResponder() {
         timer = setTimeout(() => {
           timer = null;
           const elements = usePluginDisplayElementStore.getState().elements;
-          window.api.bridge
-            .sendTo('overlay', 'plugin:displayElements:sync', { elements })
-            .catch(() => {
-              // OBS 모드 전환 찰나에 overlay 윈도우 부재로 실패 가능 — 무시
-            });
+          sendBridgeMessageBestEffort(
+            'overlay',
+            'plugin:displayElements:sync',
+            { elements },
+          );
         }, RESPOND_DEBOUNCE_MS);
       },
     );

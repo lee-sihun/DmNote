@@ -22,6 +22,7 @@ import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { StatItemPositions } from '@src/types/key/statItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 
 const createMappings = (key: string): KeyMappings => ({
   '4key': [key],
@@ -75,6 +76,7 @@ const resetStores = () => {
     isLocalUpdateInProgress: false,
   });
   useKnobItemStore.setState({ positions: {} });
+  useLayerGroupStore.setState({ layerGroups: {} });
   applyCounterCacheSnapshot({});
 };
 
@@ -272,6 +274,20 @@ describe('useHistoryStore', () => {
     expect(useHistoryStore.getState().past[0]?.knobPositions).toEqual(
       createKnobs(180),
     );
+  });
+
+  it('layerGroups 미제공 시 현재 group store에서 자동 캡처', () => {
+    const groups = { '4key': [{ id: 'group-1', name: 'Group 1' }] };
+    useLayerGroupStore.setState({ layerGroups: groups });
+
+    useHistoryStore.getState().pushState({
+      keyMappings: createMappings('A'),
+      positions: createPositions(1),
+      statPositions: EMPTY_STATS,
+      graphPositions: EMPTY_GRAPHS,
+    });
+
+    expect(useHistoryStore.getState().past[0]?.layerGroups).toEqual(groups);
   });
 
   it('undo는 이전 knobPositions 스냅샷을 반환하고 현재 knob을 future에 저장', () => {

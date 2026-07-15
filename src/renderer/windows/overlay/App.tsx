@@ -24,10 +24,6 @@ import {
   resetAllKeySignals,
 } from '@stores/signals/keySignals';
 import { useSettingsStore } from '@stores/useSettingsStore';
-import type { KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition } from '@src/types/key/statItems';
-import type { GraphItemPosition } from '@src/types/key/graphItems';
-import type { KnobItemPosition } from '@src/types/key/knobs';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import OverlayScene from '@components/shared/OverlayScene';
 import { computeLayout } from '@hooks/shared/useLayoutComputation';
@@ -39,8 +35,9 @@ type KeyDelayTimerEntry = { timers: Set<ReturnType<typeof setTimeout>> };
 const MAX_EVENT_AGE_MS = 250;
 
 export default function App() {
+  const isBootstrapped = useKeyStore((state) => state.isBootstrapped);
   useCustomCssInjection();
-  useCustomJsInjection();
+  useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   useBuiltinStatsSubscription();
   useBlockBrowserShortcuts();
@@ -80,66 +77,6 @@ export default function App() {
         // 무시
       }
     };
-  }, []);
-
-  // 메인에서 bridge를 통한 positions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, KeyPosition[]>;
-    }>('positions:sync', (data) => {
-      if (data?.positions) {
-        useKeyStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 statPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, StatItemPosition[]>;
-    }>('statPositions:sync', (data) => {
-      if (data?.positions) {
-        useStatItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 graphPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, GraphItemPosition[]>;
-    }>('graphPositions:sync', (data) => {
-      if (data?.positions) {
-        useGraphItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 메인에서 bridge를 통한 knobPositions 동기화 수신
-  useEffect(() => {
-    const unsubscribe = window.api.bridge.on<{
-      positions: Record<string, KnobItemPosition[]>;
-    }>('knobPositions:sync', (data) => {
-      if (data?.positions) {
-        useKnobItemStore.setState((state) => ({
-          ...state,
-          positions: data.positions,
-        }));
-      }
-    });
-    return () => unsubscribe();
   }, []);
 
   const selectedKeyType = useKeyStore((state) => state.selectedKeyType);

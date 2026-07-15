@@ -14,6 +14,7 @@
 
 import { usePluginMenuStore } from '@stores/plugin/usePluginMenuStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { extractPluginId } from '@utils/plugin/pluginUtils';
 import { handlerRegistry } from './handlers';
 import {
@@ -110,11 +111,9 @@ export function createCustomJsRuntime(): CustomJsRuntime {
         usePluginDisplayElementStore.getState().setElements([]);
         displayElementInstanceRegistry.clearAll();
 
-        if (window.api?.bridge) {
-          window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-            elements: [],
-          });
-        }
+        sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+          elements: [],
+        });
       } catch (error) {
         console.error('Failed to clear plugin UI elements', error);
       }
@@ -138,11 +137,11 @@ export function createCustomJsRuntime(): CustomJsRuntime {
           usePluginDisplayElementStore.getState().clearByPluginId(pluginId);
           displayElementInstanceRegistry.clearByPluginId(pluginId);
 
-          if (window.api?.bridge) {
-            window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-              elements: usePluginDisplayElementStore.getState().elements,
-            });
-          }
+          sendBridgeMessageBestEffort(
+            'overlay',
+            'plugin:displayElements:sync',
+            { elements: usePluginDisplayElementStore.getState().elements },
+          );
         } catch (error) {
           console.error(
             `Failed to clear UI elements for plugin '${pluginId}'`,

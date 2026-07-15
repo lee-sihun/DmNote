@@ -190,6 +190,14 @@
     "save": "Apply",
     "cancel": "Cancel"
   },
+  "editorConflict": {
+    "message": "Your edit overlaps a change from another window or plugin. Choose which version to keep.\n'Keep My Edit' reapplies your local edit. 'Accept External Change' discards the unsaved local edit.",
+    "keepLocal": "Keep My Edit",
+    "acceptExternal": "Accept External Change"
+  },
+  "editorSave": {
+    "permanentFailure": "This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed."
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",

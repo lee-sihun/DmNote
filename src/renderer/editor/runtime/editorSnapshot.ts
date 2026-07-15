@@ -3,6 +3,7 @@
  */
 
 import { useKeyStore } from '@stores/data/useKeyStore';
+import { unstable_batchedUpdates } from 'react-dom';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
@@ -15,6 +16,9 @@ import { useFontStore, syncFontCSS } from '@stores/useFontStore';
 import { applyCounterSnapshot } from '@stores/signals/keyCounterSignals';
 import { applyCounterCacheSnapshot } from '@stores/signals/keyCounterCache';
 import type { PluginDisplayElementInternal } from '@src/types/plugin/api';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { restoreEditorHistory } from '@api/modules/editorApi';
+import { editorCoordinator } from './editorStateCoordinator';
 
 // ----------------------------------------------------------------------------
 // 히스토리에 현재 상태 저장
@@ -99,7 +103,7 @@ interface RestoredState {
   graphPositions: import('@src/types/key/graphItems').GraphItemPositions;
   knobPositions: import('@src/types/key/knobs').KnobItemPositions;
   pluginElements?: PluginDisplayElementInternal[];
-  layerGroups?: import('@src/types/layerGroups').LayerGroups;
+  layerGroups: import('@src/types/layerGroups').LayerGroups;
   keyCounters?: import('@src/types/key/keys').KeyCounters;
   customTabs: import('@src/types/key/keys').CustomTab[];
   selectedKeyType: string;
@@ -108,44 +112,44 @@ interface RestoredState {
 
 /** 복원된 상태를 로컬 store에 반영 */
 export function applyRestoredStateToStores(state: RestoredState): void {
-  useKeyStore
-    .getState()
-    .setKeyMappingsAndPositions(state.keyMappings, state.positions);
-  useStatItemStore.getState().setPositions(state.statPositions);
-  useGraphItemStore.getState().setPositions(state.graphPositions);
-  if (state.knobPositions !== undefined) {
-    useKnobItemStore.getState().setPositions(state.knobPositions);
-  }
-
-  if (state.layerGroups !== undefined) {
-    useLayerGroupStore.getState().setLayerGroups(state.layerGroups);
-  }
-  if (state.keyCounters) {
-    applyCounterCacheSnapshot(state.keyCounters);
-    if (window.__dmn_window_type === 'overlay') {
-      applyCounterSnapshot(state.keyCounters);
+  unstable_batchedUpdates(() => {
+    useKeyStore
+      .getState()
+      .setKeyMappingsAndPositions(state.keyMappings, state.positions);
+    useStatItemStore.getState().setPositions(state.statPositions);
+    useGraphItemStore.getState().setPositions(state.graphPositions);
+    if (state.knobPositions !== undefined) {
+      useKnobItemStore.getState().setPositions(state.knobPositions);
     }
-  }
-  useKeyStore.getState().setCustomTabs(state.customTabs);
-  useKeyStore.setState({ selectedKeyType: state.selectedKeyType });
 
-  // 설정 스냅샷 복원 (프리셋 로드 undo 전용)
-  if (state.settingsSnapshot) {
-    const snap = state.settingsSnapshot;
-    useSettingsStore.getState().merge({
-      useCustomCSS: snap.useCustomCSS,
-      customCSSContent: snap.customCSSContent,
-      customCSSPath: snap.customCSSPath,
-      useCustomJS: snap.useCustomJS,
-      jsPlugins: snap.jsPlugins,
-      backgroundColor: snap.backgroundColor,
-      noteSettings: snap.noteSettings,
-      noteEffect: snap.noteEffect,
-      tabNoteOverrides: snap.tabNoteOverrides,
-    });
-    useFontStore.getState().setAll(snap.fontSettings.customFonts);
-    syncFontCSS();
-  }
+    useLayerGroupStore.getState().setLayerGroups(state.layerGroups);
+    if (state.keyCounters) {
+      applyCounterCacheSnapshot(state.keyCounters);
+      if (window.__dmn_window_type === 'overlay') {
+        applyCounterSnapshot(state.keyCounters);
+      }
+    }
+    useKeyStore.getState().setCustomTabs(state.customTabs);
+    useKeyStore.setState({ selectedKeyType: state.selectedKeyType });
+
+    // 설정 스냅샷 복원 (프리셋 로드 undo 전용)
+    if (state.settingsSnapshot) {
+      const snap = state.settingsSnapshot;
+      useSettingsStore.getState().merge({
+        useCustomCSS: snap.useCustomCSS,
+        customCSSContent: snap.customCSSContent,
+        customCSSPath: snap.customCSSPath,
+        useCustomJS: snap.useCustomJS,
+        jsPlugins: snap.jsPlugins,
+        backgroundColor: snap.backgroundColor,
+        noteSettings: snap.noteSettings,
+        noteEffect: snap.noteEffect,
+        tabNoteOverrides: snap.tabNoteOverrides,
+      });
+      useFontStore.getState().setAll(snap.fontSettings.customFonts);
+      syncFontCSS();
+    }
+  });
 }
 
 /** 복원된 플러그인 요소를 store에 반영하고 오버레이에 동기화 */
@@ -175,147 +179,53 @@ export function applyRestoredPluginElements(
     .setElements(finalElements as PluginDisplayElementInternal[]);
 
   // 오버레이로 동기화
-  if (window.api?.bridge) {
-    window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-      elements: finalElements,
-    });
-  }
+  sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+    elements: finalElements,
+  });
 }
 
 /** 복원된 상태를 Tauri 백엔드에 동기화 */
 export async function persistRestoredState(
   state: RestoredState,
+  baseRevision: number,
 ): Promise<void> {
-  // keys.update()가 counters를 sync하므로 먼저 실행
-  await window.api.keys.update(state.keyMappings);
+  const document = {
+    schemaVersion: 1,
+    keys: state.keyMappings,
+    keyPositions: state.positions,
+    statPositions: state.statPositions,
+    graphPositions: state.graphPositions,
+    knobPositions: state.knobPositions,
+    layerGroups: state.layerGroups,
+  } as const;
+  const settingsPatch = state.settingsSnapshot
+    ? {
+        useCustomCSS: state.settingsSnapshot.useCustomCSS,
+        useCustomJS: state.settingsSnapshot.useCustomJS,
+        backgroundColor: state.settingsSnapshot.backgroundColor,
+        noteSettings: state.settingsSnapshot.noteSettings,
+        noteEffect: state.settingsSnapshot.noteEffect,
+        fontSettings: state.settingsSnapshot.fontSettings,
+        customCSS: {
+          content: state.settingsSnapshot.customCSSContent,
+          path: state.settingsSnapshot.customCSSPath,
+        },
+        customJS: { plugins: state.settingsSnapshot.jsPlugins },
+      }
+    : undefined;
 
-  // 나머지는 병렬 실행 (실패해도 핵심 복구를 막지 않음)
-  const promises: Promise<unknown>[] = [
-    window.api.keys.updatePositions(state.positions).catch((error) => {
-      console.error('Failed to persist positions', error);
-    }),
-    window.api.statItems.updatePositions(state.statPositions).catch((error) => {
-      console.error('Failed to persist stat positions', error);
-    }),
-    window.api.graphItems
-      .updatePositions(state.graphPositions)
-      .catch((error) => {
-        console.error('Failed to persist graph positions', error);
-      }),
-  ];
+  await restoreEditorHistory({
+    baseRevision,
+    document,
+    customTabs: state.customTabs,
+    selectedKeyType: state.selectedKeyType,
+    keyCounters: state.keyCounters,
+    settingsPatch,
+    tabNoteOverrides: state.settingsSnapshot?.tabNoteOverrides,
+  });
 
-  if (state.knobPositions !== undefined) {
-    promises.push(
-      window.api.knobItems
-        .updatePositions(state.knobPositions)
-        .catch((error) => {
-          console.error('Failed to persist knob positions', error);
-        }),
-    );
-  }
-
-  if (state.layerGroups !== undefined) {
-    promises.push(
-      window.api.layerGroups.update(state.layerGroups).catch((error) => {
-        console.error('Failed to persist layer groups', error);
-      }),
-    );
-  }
-  if (state.keyCounters) {
-    promises.push(window.api.keys.setCounters(state.keyCounters));
-  }
-  promises.push(
-    window.api.keys.customTabs
-      .restore(state.customTabs, state.selectedKeyType)
-      .catch((error) => {
-        console.error('Failed to restore custom tabs', error);
-      }),
-  );
-
-  await Promise.all(promises);
-
-  // 오버레이 동기화
-  try {
-    window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-      positions: state.statPositions,
-    });
-  } catch {
-    /* 무시 */
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-      positions: state.graphPositions,
-    });
-  } catch {
-    /* 무시 */
-  }
-  if (state.knobPositions !== undefined) {
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: state.knobPositions,
-      });
-    } catch {
-      /* 무시 */
-    }
-  }
-
-  // 설정 스냅샷 백엔드 동기화 (프리셋 로드 undo 전용)
-  if (state.settingsSnapshot) {
-    const snap = state.settingsSnapshot;
-
-    // 설정 전체 persist (CSS path/content, JS plugins 포함) 먼저 완료
-    await window.api.settings
-      .update({
-        backgroundColor: snap.backgroundColor,
-        noteSettings: snap.noteSettings,
-        noteEffect: snap.noteEffect,
-        fontSettings: snap.fontSettings,
-        customCSS: { content: snap.customCSSContent, path: snap.customCSSPath },
-        customJS: { plugins: snap.jsPlugins },
-      })
-      .catch((e) => {
-        console.error('Failed to restore settings', e);
-      });
-
-    // CSS 이벤트 발생 (css:content + css:use)
-    const cssEvents = Promise.all([
-      window.api.css.setContent(snap.customCSSContent).catch((e) => {
-        console.error('Failed to emit CSS content', e);
-      }),
-      window.api.css.toggle(snap.useCustomCSS).catch((e) => {
-        console.error('Failed to toggle CSS', e);
-      }),
-    ]);
-
-    // JS 토글 → JS 리로드
-    const jsEvents = window.api.js
-      .toggle(snap.useCustomJS)
-      .then(() => (snap.useCustomJS ? window.api.js.reload() : undefined))
-      .catch((e) => {
-        console.error('Failed to restore JS', e);
-      });
-
-    // tabNoteOverrides 복원 (getAll 실패 시 store 값을 fallback으로 사용)
-    const currentTabOverrides = await window.api.noteTab
-      .getAll()
-      .catch(() => useSettingsStore.getState().tabNoteOverrides);
-    const tabIds = new Set<string>([
-      ...Object.keys(snap.tabNoteOverrides),
-      ...Object.keys(currentTabOverrides),
-    ]);
-    const tabRestore = Promise.all(
-      Array.from(tabIds).map((tabId) => {
-        const snapSettings = snap.tabNoteOverrides[tabId];
-        return snapSettings !== undefined
-          ? window.api.noteTab.set(tabId, snapSettings).catch((e) => {
-              console.error('Failed to restore tab note', e);
-            })
-          : window.api.noteTab.clear(tabId).catch((e) => {
-              console.error('Failed to clear tab note', e);
-            });
-      }),
-    );
-
-    await Promise.all([cssEvents, jsEvents, tabRestore]);
-  }
+  // 이벤트 유실·순서 역전을 막는 최종 canonical 대조
+  await editorCoordinator.sync({ reapply: true }).catch((error) => {
+    console.error('Failed to resync restored editor history', error);
+  });
 }

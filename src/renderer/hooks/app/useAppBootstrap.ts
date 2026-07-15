@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useKeyStore } from '@stores/data/useKeyStore';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
@@ -19,10 +19,17 @@ import {
 } from '@stores/signals/keyCounterCache';
 import { getUndoRedoInProgress } from '@api/pluginDisplayElements';
 import { obsApi } from '@api/modules/obsApi';
-import { notifyLocaleChanged } from '@api/modules/shared';
+import { notifyLocaleChanged, subscribe } from '@api/modules/shared';
+import {
+  acknowledgeLifecycleAfterEditorFlush,
+  cancelLifecycleEditorFlush,
+} from '@api/modules/appApi';
 import { stableStringify } from '@utils/core/stableStringify';
+import { useTranslation } from '@contexts/useTranslation';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { BootstrapPayload } from '@src/types/app';
-import type { KeyMappings, KeyPositions, CustomTab } from '@src/types/key/keys';
+import type { CustomTab } from '@src/types/key/keys';
+import type { EditorCoordinatorState } from '@src/renderer/editor/runtime/editorCoordinator';
 import type { TabNoteOverrides } from '@src/types/settings/noteSettings';
 import type {
   SettingsDiff,
@@ -100,9 +107,18 @@ function buildSettingsSnapshot(
 // 앱 초기 구동 시 메인 스냅샷을 가져오고,
 // 이후 변경 이벤트를 구독해 Zustand 스토어를 최신 상태로 유지
 export function useAppBootstrap() {
+  const { t } = useTranslation();
+  const translationRef = useRef(t);
+
+  useEffect(() => {
+    translationRef.current = t;
+  }, [t]);
+
   useEffect(() => {
     let disposed = false;
     const isOverlayWindow = window.__dmn_window_type === 'overlay';
+    let conflictDialogOpen = false;
+    let lastShownPermanentEditorError: unknown = null;
     // 키 표시 딜레이와 동기화를 위한 카운터 업데이트 지연
     const counterDelayTimers = new Map<
       string,
@@ -170,6 +186,107 @@ export function useAppBootstrap() {
 
     const { setAll, merge } = useSettingsStore.getState();
 
+    const getEditorCopy = (key: string, korean: string, english: string) => {
+      const translated = translationRef.current(key);
+      if (translated && translated !== key) return translated;
+      return useSettingsStore.getState().language === 'ko' ? korean : english;
+    };
+
+    const handleEditorConflict = (state: EditorCoordinatorState) => {
+      if (disposed || !state.conflict || conflictDialogOpen) return;
+      conflictDialogOpen = true;
+
+      const resolve = async () => {
+        try {
+          if (isOverlayWindow) {
+            await editorCoordinator.resolveConflict('acceptCanonical');
+            return;
+          }
+
+          let keepLocal = true;
+          try {
+            const confirm = window.api.ui?.dialog?.confirm;
+            if (typeof confirm === 'function') {
+              keepLocal = await confirm(
+                getEditorCopy(
+                  'editorConflict.message',
+                  "현재 편집 내용과 외부 변경이 겹쳤습니다. '내 편집 유지'는 지금 편집한 내용을 다시 적용하고, '외부 변경 수용'은 저장되지 않은 내 편집을 취소합니다.",
+                  "Your edit overlaps an external change. 'Keep My Edit' reapplies your edit, while 'Accept External Change' discards the unsaved local edit.",
+                ),
+                {
+                  confirmText: getEditorCopy(
+                    'editorConflict.keepLocal',
+                    '내 편집 유지',
+                    'Keep My Edit',
+                  ),
+                  cancelText: getEditorCopy(
+                    'editorConflict.acceptExternal',
+                    '외부 변경 수용',
+                    'Accept External Change',
+                  ),
+                },
+              );
+            }
+          } catch (dialogError) {
+            console.warn(
+              '편집 충돌 대화상자를 열지 못해 내 편집을 유지합니다',
+              dialogError,
+            );
+          }
+          await editorCoordinator.resolveConflict(
+            keepLocal ? 'keepLocal' : 'acceptCanonical',
+          );
+        } catch (error) {
+          console.error('편집 충돌 해결 실패', error);
+        } finally {
+          conflictDialogOpen = false;
+          const latest = editorCoordinator.getState();
+          if (!disposed && latest.conflict) {
+            queueMicrotask(() => handleEditorConflict(latest));
+          }
+        }
+      };
+
+      void resolve();
+    };
+
+    const handleEditorFailure = (state: EditorCoordinatorState) => {
+      if (
+        disposed ||
+        isOverlayWindow ||
+        state.failureKind !== 'permanent' ||
+        !state.error ||
+        state.error === lastShownPermanentEditorError
+      ) {
+        return;
+      }
+
+      lastShownPermanentEditorError = state.error;
+      console.error(
+        '저장할 수 없는 편집 내용을 마지막 저장 상태로 되돌렸습니다',
+        state.error,
+      );
+      void window.api.ui.dialog
+        .alert(
+          getEditorCopy(
+            'editorSave.permanentFailure',
+            '저장할 수 없는 편집 내용이라 마지막으로 저장된 상태로 되돌렸습니다. 방금 변경한 값을 확인해 주세요.',
+            'This edit could not be saved, so the editor was restored to the last saved state. Please check the value you just changed.',
+          ),
+          {
+            confirmText: getEditorCopy('common.ok', '확인', 'OK'),
+          },
+        )
+        .catch((error) => {
+          console.error('편집 저장 실패 안내를 표시하지 못했습니다', error);
+        });
+    };
+
+    const handleEditorCoordinatorState = (state: EditorCoordinatorState) => {
+      handleEditorConflict(state);
+      handleEditorFailure(state);
+    };
+
     const finalizeBootstrap = () =>
       useKeyStore.setState((state) =>
         state.isBootstrapped ? state : { ...state, isBootstrapped: true },
@@ -229,7 +346,7 @@ export function useAppBootstrap() {
     let resyncInFlight = false;
     let resyncQueued = false;
 
-    // 모든 슬라이스를 "변경 시에만" 적용 — 동일 데이터 재적용으로 인한 참조
+    // EditorDocument 밖의 슬라이스를 "변경 시에만" 적용 — 동일 데이터 재적용으로 인한 참조
     // 변경이 overlay 키 이벤트 effect 재실행(키 하이라이트 리셋) 등 시각적
     // 부작용을 유발하는 것을 방지
     const applyResyncSnapshot = (bootstrap: BootstrapPayload) => {
@@ -260,27 +377,13 @@ export function useAppBootstrap() {
         syncFontCSS();
       }
 
-      // 키 스토어: 변경 슬라이스만 모아 단일 setState
+      // 탭 메타데이터는 EditorDocument 밖이므로 bootstrap으로 재동기화
       // setSelectedKeyType 액션은 백엔드 setMode RPC를 역발사하므로 사용 금지
       const keyState = useKeyStore.getState();
       const keyChanges: {
-        keyMappings?: KeyMappings;
-        positions?: KeyPositions;
         customTabs?: CustomTab[];
         selectedKeyType?: string;
       } = {};
-      if (
-        stableStringify(keyState.keyMappings) !==
-        stableStringify(bootstrap.keys)
-      ) {
-        keyChanges.keyMappings = bootstrap.keys;
-      }
-      if (
-        stableStringify(keyState.positions) !==
-        stableStringify(bootstrap.positions)
-      ) {
-        keyChanges.positions = bootstrap.positions;
-      }
       if (
         stableStringify(keyState.customTabs) !==
         stableStringify(bootstrap.customTabs)
@@ -292,47 +395,6 @@ export function useAppBootstrap() {
       }
       if (Object.keys(keyChanges).length > 0) {
         useKeyStore.setState((state) => ({ ...state, ...keyChanges }));
-      }
-
-      // stat/graph/knob positions: 변경 시에만 적용
-      const nextStat = bootstrap.statPositions ?? {};
-      if (
-        stableStringify(useStatItemStore.getState().positions) !==
-        stableStringify(nextStat)
-      ) {
-        useStatItemStore.setState((state) => ({
-          ...state,
-          positions: nextStat,
-        }));
-      }
-      const nextGraph = bootstrap.graphPositions ?? {};
-      if (
-        stableStringify(useGraphItemStore.getState().positions) !==
-        stableStringify(nextGraph)
-      ) {
-        useGraphItemStore.setState((state) => ({
-          ...state,
-          positions: nextGraph,
-        }));
-      }
-      const nextKnob = bootstrap.knobPositions ?? {};
-      if (
-        stableStringify(useKnobItemStore.getState().positions) !==
-        stableStringify(nextKnob)
-      ) {
-        useKnobItemStore.setState((state) => ({
-          ...state,
-          positions: nextKnob,
-        }));
-      }
-
-      // 레이어 그룹: payload 내장값 사용 (추가 RPC 불필요)
-      const nextGroups = bootstrap.layerGroups ?? {};
-      if (
-        stableStringify(useLayerGroupStore.getState().layerGroups) !==
-        stableStringify(nextGroups)
-      ) {
-        useLayerGroupStore.getState().setLayerGroups(nextGroups);
       }
 
       // 카운터: 캐시는 무조건(순수 데이터), 시그널은 동일 값 무통지라 안전.
@@ -362,6 +424,7 @@ export function useAppBootstrap() {
           const bootstrap = await window.api.app.bootstrap();
           if (disposed) return;
           applyResyncSnapshot(bootstrap);
+          await editorCoordinator.sync();
         } catch (error) {
           console.error('OBS 재동기화 실패', error);
         }
@@ -400,18 +463,13 @@ export function useAppBootstrap() {
           ...state,
           positions: bootstrap.knobPositions ?? {},
         }));
+        useLayerGroupStore
+          .getState()
+          .setLayerGroups(bootstrap.layerGroups ?? {});
         applyCounterCacheSnapshot(bootstrap.keyCounters);
         if (isOverlayWindow) {
           applyCounterSnapshot(bootstrap.keyCounters);
         }
-
-        // 레이어 그룹 로드
-        window.api.layerGroups
-          .get()
-          .then((groups) => {
-            useLayerGroupStore.getState().setLayerGroups(groups);
-          })
-          .catch(() => {});
 
         // 탭별 노트 트랙 설정 오버라이드 로드
         window.api.noteTab
@@ -425,6 +483,17 @@ export function useAppBootstrap() {
 
         // macOS 커서 시스템 초기화 (시스템 설정 반영)
         initializeCursorSystem().catch(() => {});
+
+        // 정식 이벤트를 먼저 구독한 뒤 최신 revision을 다시 읽어
+        // bootstrap 도중 발생한 편집도 빠짐없이 반영
+        try {
+          await editorCoordinator.start();
+          // 플러그인이 bootstrap보다 먼저 coordinator를 시작했어도
+          // 늦게 도착한 bootstrap 스냅샷이 최신 편집 화면을 덮지 않게 재적용
+          await editorCoordinator.sync({ reapply: true });
+        } catch (error) {
+          console.error('편집 상태 초기화 실패', error);
+        }
 
         finalizeBootstrap();
       } catch (error) {
@@ -440,51 +509,35 @@ export function useAppBootstrap() {
     })();
 
     const unsubscribers = [
+      editorCoordinator.subscribe(handleEditorCoordinatorState),
+      subscribe<{ handshakeId: string; action: 'quit' | 'restart' }>(
+        'app:close-requested',
+        ({ handshakeId, action }) => {
+          if (disposed) return;
+          void acknowledgeLifecycleAfterEditorFlush(handshakeId).catch(
+            (error) => {
+              console.error(`편집 상태 저장 후 ${action} 실패`, error);
+              void (async () => {
+                await cancelLifecycleEditorFlush(handshakeId).catch(
+                  () => undefined,
+                );
+                const overlay = await window.api.overlay
+                  .get()
+                  .catch(() => null);
+                await window.api.window.showMain();
+                if (overlay?.visible) {
+                  await window.api.overlay.setVisible(true);
+                }
+              })().catch((showError) => {
+                console.error('종료 취소 후 창 복원 실패', showError);
+              });
+            },
+          );
+        },
+      ),
       window.api.settings.onChanged((diff: SettingsDiff) => {
         if (disposed || !diff) return;
         applyDiff(diff);
-      }),
-      window.api.keys.onChanged((keys) => {
-        const isOverlayWindow = window.__dmn_window_type === 'overlay';
-        if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
-          return;
-        useKeyStore.setState((state) => ({ ...state, keyMappings: keys }));
-      }),
-      window.api.keys.onPositionsChanged((positions) => {
-        const isOverlayWindow = window.__dmn_window_type === 'overlay';
-        if (!isOverlayWindow && useKeyStore.getState().isLocalUpdateInProgress)
-          return;
-        useKeyStore.setState((state) => ({ ...state, positions }));
-      }),
-      window.api.statItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = window.__dmn_window_type === 'overlay';
-        if (
-          !isOverlayWindow &&
-          useStatItemStore.getState().isLocalUpdateInProgress
-        )
-          return;
-        useStatItemStore.setState((state) => ({ ...state, positions }));
-      }),
-      window.api.graphItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = window.__dmn_window_type === 'overlay';
-        if (
-          !isOverlayWindow &&
-          useGraphItemStore.getState().isLocalUpdateInProgress
-        )
-          return;
-        useGraphItemStore.setState((state) => ({ ...state, positions }));
-      }),
-      window.api.knobItems.onPositionsChanged((positions) => {
-        const isOverlayWindow = window.__dmn_window_type === 'overlay';
-        if (
-          !isOverlayWindow &&
-          useKnobItemStore.getState().isLocalUpdateInProgress
-        )
-          return;
-        useKnobItemStore.setState((state) => ({ ...state, positions }));
-      }),
-      window.api.layerGroups.onChanged((groups) => {
-        useLayerGroupStore.getState().setLayerGroups(groups);
       }),
       window.api.keys.onModeChanged(({ mode }) => {
         useKeyStore.setState((state) => ({ ...state, selectedKeyType: mode }));
@@ -529,22 +582,8 @@ export function useAppBootstrap() {
         if (disposed) return;
         useKeyStore.setState((state) => ({
           ...state,
-          keyMappings: snapshot.keys,
-          positions: snapshot.positions,
           customTabs: snapshot.customTabs,
           selectedKeyType: snapshot.selectedKeyType,
-        }));
-        useStatItemStore.setState((state) => ({
-          ...state,
-          positions: snapshot.statPositions,
-        }));
-        useGraphItemStore.setState((state) => ({
-          ...state,
-          positions: snapshot.graphPositions,
-        }));
-        useKnobItemStore.setState((state) => ({
-          ...state,
-          positions: snapshot.knobPositions ?? {},
         }));
         useSettingsStore.setState({
           tabNoteOverrides: snapshot.tabNoteOverrides,
@@ -589,6 +628,8 @@ export function useAppBootstrap() {
         }
       }),
     ];
+
+    handleEditorCoordinatorState(editorCoordinator.getState());
 
     if (isOverlayWindow) {
       unsubscribers.push(

@@ -35,6 +35,7 @@ import {
   clearExposedActions,
 } from '@utils/displayElementActions';
 import { setupPluginDropdownInteractions } from '@utils/plugin/pluginDropdownManager';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
 import { evaluatePluginMenuItems } from '@utils/plugin/pluginElementContextMenu';
 import {
@@ -1126,19 +1127,11 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         lastSentMenuState[key] = value;
       }
       if (Object.keys(changed).length === 0) return;
-      try {
-        void Promise.resolve(
-          window.api?.bridge?.sendTo(
-            'main',
-            'plugin:displayElement:syncMenuState',
-            { fullId: element.fullId, state: changed },
-          ),
-        ).catch((error) => {
-          console.error('[PluginElement] Failed to sync menu state:', error);
-        });
-      } catch (error) {
-        console.error('[PluginElement] Failed to sync menu state:', error);
-      }
+      sendBridgeMessageBestEffort(
+        'main',
+        'plugin:displayElement:syncMenuState',
+        { fullId: element.fullId, state: changed },
+      );
     };
 
     // OBS WS 재연결 시 단절 중 유실됐을 수 있는 제어 상태 재송신
@@ -1176,16 +1169,14 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         // 오버레이 로컬 스토어 업데이트
         updateElement(element.fullId, { resizeAnchor: anchor });
         // 메인 윈도우로 동기화 (브릿지 통해)
-        if (window.api?.bridge) {
-          window.api.bridge.sendTo(
-            'main',
-            'plugin:displayElement:updateAnchor',
-            {
-              fullId: element.fullId,
-              resizeAnchor: anchor,
-            },
-          );
-        }
+        sendBridgeMessageBestEffort(
+          'main',
+          'plugin:displayElement:updateAnchor',
+          {
+            fullId: element.fullId,
+            resizeAnchor: anchor,
+          },
+        );
       },
       getAnchor: (): ElementResizeAnchor => {
         const currentElement = usePluginDisplayElementStore
@@ -1549,22 +1540,15 @@ export const PluginElement: React.FC<PluginElementProps> = ({
         get: (_target, prop: string | symbol) => {
           if (typeof prop !== 'string') return undefined;
           return (...args: unknown[]) => {
-            try {
-              window.api?.bridge?.sendTo(
-                'overlay',
-                'plugin:displayElement:invokeAction',
-                {
-                  elementId,
-                  action: prop,
-                  args,
-                },
-              );
-            } catch (error) {
-              console.error(
-                '[PluginElement] Failed to invoke exposed action',
-                error,
-              );
-            }
+            sendBridgeMessageBestEffort(
+              'overlay',
+              'plugin:displayElement:invokeAction',
+              {
+                elementId,
+                action: prop,
+                args,
+              },
+            );
           };
         },
       },

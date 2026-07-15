@@ -9,6 +9,7 @@ import { buildValidTabIdSet } from '@constants/keyModes';
 import { useStatItemStore } from '@stores/data/useStatItemStore';
 import { useGraphItemStore } from '@stores/data/useGraphItemStore';
 import { translatePluginMessage } from '@utils/plugin/pluginI18n';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { removeDisplayElementsInternal } from '../displayElement/displayElementApi';
 import {
   createPluginInstanceLifecycle,
@@ -237,24 +238,15 @@ export const createDefineElement = (deps: DefineElementDependencies) => {
           get: (_target, prop: string | symbol) => {
             if (typeof prop !== 'string') return undefined;
             return (...args: unknown[]) => {
-              try {
-                window.api?.bridge?.sendTo(
-                  'overlay',
-                  'plugin:displayElement:invokeAction',
-                  {
-                    elementId,
-                    action: prop,
-                    args,
-                  },
-                );
-              } catch (error) {
-                console.error(
-                  `[Plugin ${pluginId}] Failed to invoke exposed action '${String(
-                    prop,
-                  )}'`,
-                  error,
-                );
-              }
+              sendBridgeMessageBestEffort(
+                'overlay',
+                'plugin:displayElement:invokeAction',
+                {
+                  elementId,
+                  action: prop,
+                  args,
+                },
+              );
             };
           },
         },

@@ -19,6 +19,8 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { ElementBounds } from '@utils/grid/smartGuides';
+import type { EditorPatchV1 } from '@src/types/editor';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 
 interface ResizeHandle {
   id: string;
@@ -895,13 +897,6 @@ export function useGridResize({
         window.api.knobItems.updatePositions(nextPositions).catch((error) => {
           console.error('Failed to update knob positions after resize', error);
         });
-        try {
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextPositions,
-          });
-        } catch {
-          // 무시
-        }
       } else if (element.type === 'plugin') {
         // 플러그인 요소에 최종 크기 적용
         const pluginStore = usePluginDisplayElementStore.getState();
@@ -957,6 +952,7 @@ export function useGridResize({
       const knobStore = useKnobItemStore.getState();
       const knobPositions = knobStore.positions;
       const currentKnobs = knobPositions[selectedKeyType] || [];
+      const editorChanges: EditorPatchV1 = { schemaVersion: 1 };
 
       // 프리뷰 값을 그대로 사용 (스냅은 이미 드래그 중에 적용됨)
       // 추가 스냅 적용 시 프리뷰와 최종 위치가 달라지는 문제 발생
@@ -986,14 +982,7 @@ export function useGridResize({
           }),
         };
         setPositions(nextPositions);
-
-        // 백엔드에 저장
-        window.api.keys.updatePositions(nextPositions).catch((error) => {
-          console.error(
-            'Failed to update key positions after group resize',
-            error,
-          );
-        });
+        editorChanges.keyPositions = nextPositions;
       }
 
       // 통계 요소들 업데이트
@@ -1022,14 +1011,7 @@ export function useGridResize({
         };
 
         statStore.setPositions(nextStatPositions);
-        window.api.statItems
-          .updatePositions(nextStatPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update stat positions after group resize',
-              error,
-            );
-          });
+        editorChanges.statPositions = nextStatPositions;
       }
 
       // 그래프 요소들 업데이트
@@ -1059,14 +1041,7 @@ export function useGridResize({
         };
 
         graphStore.setPositions(nextGraphPositions);
-        window.api.graphItems
-          .updatePositions(nextGraphPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update graph positions after group resize',
-              error,
-            );
-          });
+        editorChanges.graphPositions = nextGraphPositions;
       }
 
       // 노브 요소들 업데이트
@@ -1095,21 +1070,7 @@ export function useGridResize({
         };
 
         knobStore.setPositions(nextKnobPositions);
-        window.api.knobItems
-          .updatePositions(nextKnobPositions)
-          .catch((error) => {
-            console.error(
-              'Failed to update knob positions after group resize',
-              error,
-            );
-          });
-        try {
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextKnobPositions,
-          });
-        } catch {
-          // 무시
-        }
+        editorChanges.knobPositions = nextKnobPositions;
       }
 
       // 플러그인 요소들 업데이트
@@ -1124,6 +1085,12 @@ export function useGridResize({
             width: bounds.width,
             height: bounds.height,
           },
+        });
+      }
+
+      if (Object.keys(editorChanges).length > 1) {
+        void editorCoordinator.commitPatch(editorChanges).catch((error) => {
+          console.error('Failed to persist group resize', error);
         });
       }
     }

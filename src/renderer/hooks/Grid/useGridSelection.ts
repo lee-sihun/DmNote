@@ -40,6 +40,8 @@ import {
   findPasteAnchorIndex,
   applyZIndexToLayerOrder,
 } from '@utils/layerGroupUtils';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 
 interface UseGridSelectionParams {
   selectedElements: SelectedElement[];
@@ -78,76 +80,30 @@ export function useGridSelection({
   const clipboard = useGridSelectionStore((state) => state.clipboard);
   const setClipboard = useGridSelectionStore((state) => state.setClipboard);
 
-  // 선택된 요소들의 위치를 오버레이에 동기화하는 함수
+  // 선택된 요소들의 최종 위치를 한 번에 저장
   const syncSelectedElementsToOverlay = () => {
-    // 키 위치 동기화
     const currentPositions = useKeyStore.getState().positions;
-    window.api.keys.updatePositions(currentPositions).catch((error: Error) => {
-      console.error('Failed to sync key positions to overlay', error);
-    });
-    try {
-      window.api.bridge.sendTo('overlay', 'positions:sync', {
-        positions: currentPositions,
-      });
-    } catch (error) {
-      console.error('Failed to broadcast key positions to overlay', error);
-    }
-
-    // 통계 요소 위치 동기화
     const currentStatPositions = useStatItemStore.getState().positions;
-    window.api.statItems
-      .updatePositions(currentStatPositions)
-      .catch((error: Error) => {
-        console.error('Failed to sync stat positions to overlay', error);
-      });
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: currentStatPositions,
-      });
-    } catch (error) {
-      console.error('Failed to broadcast stat positions to overlay', error);
-    }
-
-    // 그래프 요소 위치 동기화
     const currentGraphPositions = useGraphItemStore.getState().positions;
-    window.api.graphItems
-      .updatePositions(currentGraphPositions)
-      .catch((error: Error) => {
-        console.error('Failed to sync graph positions to overlay', error);
-      });
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: currentGraphPositions,
-      });
-    } catch (error) {
-      console.error('Failed to broadcast graph positions to overlay', error);
-    }
-
-    // 노브 요소 위치 동기화
     const currentKnobPositions = useKnobItemStore.getState().positions;
-    window.api.knobItems
-      .updatePositions(currentKnobPositions)
+    void editorCoordinator
+      .commitPatch({
+        schemaVersion: 1,
+        keyPositions: currentPositions,
+        statPositions: currentStatPositions,
+        graphPositions: currentGraphPositions,
+        knobPositions: currentKnobPositions,
+      })
       .catch((error: Error) => {
-        console.error('Failed to sync knob positions to overlay', error);
+        console.error('Failed to persist selected element positions', error);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: currentKnobPositions,
-      });
-    } catch (error) {
-      console.error('Failed to broadcast knob positions to overlay', error);
-    }
 
     // 플러그인 요소도 명시적으로 동기화 (드래그 종료 시 skipSync로 인해 동기화되지 않았을 수 있음)
     const currentPluginElements =
       usePluginDisplayElementStore.getState().elements;
-    try {
-      window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-        elements: currentPluginElements,
-      });
-    } catch (error) {
-      console.error('Failed to sync plugin elements to overlay', error);
-    }
+    sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+      elements: currentPluginElements,
+    });
   };
 
   // 선택된 요소들 일괄 이동 함수 (배치 업데이트)
@@ -200,13 +156,6 @@ export function useGridSelection({
 
       newPositions[selectedKeyType] = tabPositions;
       useKeyStore.getState().setPositions(newPositions);
-
-      // syncToOverlay가 true일 때만 API 호출 (드래그 중에는 false)
-      if (syncToOverlay) {
-        window.api.keys.updatePositions(newPositions).catch((error: Error) => {
-          console.error('Failed to sync key positions to overlay', error);
-        });
-      }
     }
 
     // 통계 요소 배치 업데이트
@@ -232,14 +181,6 @@ export function useGridSelection({
 
       newStatPositions[selectedKeyType] = tabPositions;
       useStatItemStore.getState().setPositions(newStatPositions);
-
-      if (syncToOverlay) {
-        window.api.statItems
-          .updatePositions(newStatPositions)
-          .catch((error: Error) => {
-            console.error('Failed to sync stat positions to overlay', error);
-          });
-      }
     }
 
     // 그래프 요소 배치 업데이트
@@ -265,14 +206,6 @@ export function useGridSelection({
 
       newGraphPositions[selectedKeyType] = tabPositions;
       useGraphItemStore.getState().setPositions(newGraphPositions);
-
-      if (syncToOverlay) {
-        window.api.graphItems
-          .updatePositions(newGraphPositions)
-          .catch((error: Error) => {
-            console.error('Failed to sync graph positions to overlay', error);
-          });
-      }
     }
 
     // 노브 요소 배치 업데이트
@@ -298,14 +231,6 @@ export function useGridSelection({
 
       newKnobPositions[selectedKeyType] = tabPositions;
       useKnobItemStore.getState().setPositions(newKnobPositions);
-
-      if (syncToOverlay) {
-        window.api.knobItems
-          .updatePositions(newKnobPositions)
-          .catch((error: Error) => {
-            console.error('Failed to sync knob positions to overlay', error);
-          });
-      }
     }
 
     // 플러그인 요소 배치 업데이트
@@ -330,6 +255,10 @@ export function useGridSelection({
       usePluginDisplayElementStore
         .getState()
         .setElements(newElements, { skipSync: !syncToOverlay });
+    }
+
+    if (syncToOverlay) {
+      syncSelectedElementsToOverlay();
     }
   };
 
@@ -403,24 +332,10 @@ export function useGridSelection({
         [selectedKeyType]: posArray.filter((_, index) => !deleteSet.has(index)),
       };
 
-      // 로컬 업데이트 플래그 설정 (백엔드 이벤트 무시)
-      useKeyStore.getState().setLocalUpdateInProgress(true);
-
       // Atomic update: mappings, positions 동시 업데이트로 중간 상태 방지
       useKeyStore
         .getState()
         .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
-
-      // API 동기화 (순차 실행으로 일관성 보장)
-      try {
-        await window.api.keys.update(updatedMappings);
-        await window.api.keys.updatePositions(updatedPositions);
-      } catch (error) {
-        console.error('Failed to delete keys', error);
-      } finally {
-        // 플래그 해제
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-      }
     }
 
     // 플러그인 요소 배치 삭제
@@ -443,24 +358,7 @@ export function useGridSelection({
         [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
       };
 
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
-      } catch (error) {
-        console.error('Failed to delete stat items', error);
-      } finally {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      // 오버레이 동기화 (이벤트 레이스/누락 대비)
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // 무시
-      }
     }
 
     // 그래프 요소 배치 삭제
@@ -473,23 +371,7 @@ export function useGridSelection({
         [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
       };
 
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-      } catch (error) {
-        console.error('Failed to delete graph items', error);
-      } finally {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // 무시
-      }
     }
 
     // 노브 요소 배치 삭제
@@ -502,23 +384,7 @@ export function useGridSelection({
         [selectedKeyType]: tabPositions.filter((_, idx) => !deleteSet.has(idx)),
       };
 
-      useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKnobItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.knobItems.updatePositions(updatedPositions);
-      } catch (error) {
-        console.error('Failed to delete knob items', error);
-      } finally {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      }
-
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // 무시
-      }
     }
 
     const normalized = normalizeLayerGroupsForMode({
@@ -531,10 +397,6 @@ export function useGridSelection({
     });
 
     if (normalized.positionsChanged || normalized.groupsChanged) {
-      useKeyStore.getState().setLocalUpdateInProgress(true);
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
-      useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(normalized.keyPositions);
       useStatItemStore.getState().setPositions(normalized.statPositions);
       useGraphItemStore.getState().setPositions(normalized.graphPositions);
@@ -542,22 +404,31 @@ export function useGridSelection({
       if (normalized.groupsChanged) {
         useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
       }
+    }
 
+    const hasEditorDeletion =
+      keysToDelete.length > 0 ||
+      statsToDelete.length > 0 ||
+      graphsToDelete.length > 0 ||
+      knobsToDelete.length > 0;
+    if (
+      hasEditorDeletion ||
+      normalized.positionsChanged ||
+      normalized.groupsChanged
+    ) {
+      const keyState = useKeyStore.getState();
       try {
-        await window.api.keys.updatePositions(normalized.keyPositions);
-        await window.api.statItems.updatePositions(normalized.statPositions);
-        await window.api.graphItems.updatePositions(normalized.graphPositions);
-        await window.api.knobItems.updatePositions(normalized.knobPositions);
-        if (normalized.groupsChanged) {
-          await window.api.layerGroups.update(normalized.layerGroups);
-        }
+        await editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          ...(keysToDelete.length > 0 ? { keys: keyState.keyMappings } : {}),
+          keyPositions: keyState.positions,
+          statPositions: useStatItemStore.getState().positions,
+          graphPositions: useGraphItemStore.getState().positions,
+          knobPositions: useKnobItemStore.getState().positions,
+          layerGroups: useLayerGroupStore.getState().layerGroups,
+        });
       } catch (error) {
-        console.error('Failed to normalize layer groups after delete', error);
-      } finally {
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
+        console.error('Failed to persist selected element deletion', error);
       }
     }
   };
@@ -708,11 +579,6 @@ export function useGridSelection({
         [selectedKeyType]: modeGroups,
       };
       useLayerGroupStore.getState().setLayerGroups(updatedLayerGroups);
-      window.api.layerGroups
-        .update(updatedLayerGroups)
-        .catch((error: Error) => {
-          console.error('Failed to paste layer groups', error);
-        });
 
       // 원본 그룹의 collapsed 상태 복원
       for (const cg of clipboardGroups) {
@@ -793,6 +659,9 @@ export function useGridSelection({
     // 새로 추가된 요소들의 선택을 위한 인덱스 추적
     const newSelectedElements: SelectedElement[] = [];
 
+    // 붙여넣은 키 매핑 — 저장은 zIndex 확정 후 마지막에 1회만 (중간 저장은 순서 역전·패딩 위험)
+    let pastedKeyMappings: KeyMappings | null = null;
+
     // 키 추가
     if (keysToAdd.length > 0) {
       const km = useKeyStore.getState().keyMappings;
@@ -819,10 +688,7 @@ export function useGridSelection({
         .getState()
         .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
 
-      // 키 매핑 sync (동기 흐름을 깨지 않도록 fire-and-forget)
-      window.api.keys.update(updatedMappings).catch((error) => {
-        console.error('Failed to paste key mappings', error);
-      });
+      pastedKeyMappings = updatedMappings;
     }
 
     // 통계 요소 추가
@@ -889,14 +755,6 @@ export function useGridSelection({
         [selectedKeyType]: posArray,
       };
       useKnobItemStore.getState().setPositions(updatedPositions);
-      window.api.knobItems.updatePositions(updatedPositions).catch(() => {});
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // 무시
-      }
     }
 
     // 플러그인 요소 추가
@@ -993,51 +851,24 @@ export function useGridSelection({
       }
     }
 
-    // 백엔드/오버레이 통합 동기화 (async — UI는 이미 반영됨)
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
+    // 붙여넣기 전체를 한 revision으로 저장
     try {
-      await window.api.keys.updatePositions(patch.keyPositions);
-      await window.api.statItems.updatePositions(patch.statPositions);
-      await window.api.graphItems.updatePositions(patch.graphPositions);
-      await window.api.knobItems.updatePositions(patch.knobPositions);
+      await editorCoordinator.commitPatch({
+        schemaVersion: 1,
+        ...(pastedKeyMappings ? { keys: pastedKeyMappings } : {}),
+        keyPositions: patch.keyPositions,
+        statPositions: patch.statPositions,
+        graphPositions: patch.graphPositions,
+        knobPositions: patch.knobPositions,
+        layerGroups: useLayerGroupStore.getState().layerGroups,
+      });
     } catch (error) {
-      console.error('Failed to sync zIndex after paste', error);
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
+      console.error('Failed to persist pasted elements', error);
     }
-
-    try {
-      window.api.bridge.sendTo('overlay', 'positions:sync', {
-        positions: patch.keyPositions,
-      });
-    } catch {}
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: patch.statPositions,
-      });
-    } catch {}
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: patch.graphPositions,
-      });
-    } catch {}
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: patch.knobPositions,
-      });
-    } catch {}
-    try {
-      const pluginEls = usePluginDisplayElementStore.getState().elements;
-      window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-        elements: pluginEls,
-      });
-    } catch {}
+    const pluginEls = usePluginDisplayElementStore.getState().elements;
+    sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+      elements: pluginEls,
+    });
   };
 
   return {

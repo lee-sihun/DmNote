@@ -11,6 +11,7 @@ import { useKnobItemStore } from '@stores/data/useKnobItemStore';
 import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { usePluginDisplayElementStore } from '@stores/plugin/usePluginDisplayElementStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import {
   applyGroupIdToSelectedElements,
   buildNextLayerGroupName,
@@ -104,25 +105,21 @@ export async function groupSelectedElements(
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
   useKnobItemStore.getState().setPositions(normalized.knobPositions);
-
-  // API 동기화
-  await Promise.all([
-    window.api.keys.updatePositions(normalized.keyPositions).catch(() => {}),
-    window.api.statItems
-      .updatePositions(normalized.statPositions)
-      .catch(() => {}),
-    window.api.graphItems
-      .updatePositions(normalized.graphPositions)
-      .catch(() => {}),
-    window.api.knobItems
-      .updatePositions(normalized.knobPositions)
-      .catch(() => {}),
-  ]);
-
   if (createdGroup || normalized.groupsChanged) {
     useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    await window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
   }
+
+  // 참조와 그룹 정의를 같은 revision으로 저장
+  await editorCoordinator
+    .commitPatch({
+      schemaVersion: 1,
+      keyPositions: normalized.keyPositions,
+      statPositions: normalized.statPositions,
+      graphPositions: normalized.graphPositions,
+      knobPositions: normalized.knobPositions,
+      layerGroups: normalized.layerGroups,
+    })
+    .catch(() => {});
 
   return true;
 }
@@ -181,25 +178,20 @@ export async function ungroupSelectedElements(
   useStatItemStore.getState().setPositions(normalized.statPositions);
   useGraphItemStore.getState().setPositions(normalized.graphPositions);
   useKnobItemStore.getState().setPositions(normalized.knobPositions);
-
-  // API 동기화
-  await Promise.all([
-    window.api.keys.updatePositions(normalized.keyPositions).catch(() => {}),
-    window.api.statItems
-      .updatePositions(normalized.statPositions)
-      .catch(() => {}),
-    window.api.graphItems
-      .updatePositions(normalized.graphPositions)
-      .catch(() => {}),
-    window.api.knobItems
-      .updatePositions(normalized.knobPositions)
-      .catch(() => {}),
-  ]);
-
   if (normalized.groupsChanged) {
     useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-    await window.api.layerGroups.update(normalized.layerGroups).catch(() => {});
   }
+
+  await editorCoordinator
+    .commitPatch({
+      schemaVersion: 1,
+      keyPositions: normalized.keyPositions,
+      statPositions: normalized.statPositions,
+      graphPositions: normalized.graphPositions,
+      knobPositions: normalized.knobPositions,
+      layerGroups: normalized.layerGroups,
+    })
+    .catch(() => {});
 
   return true;
 }

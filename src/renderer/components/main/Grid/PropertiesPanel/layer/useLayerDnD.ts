@@ -13,6 +13,8 @@ import { useHistoryStore } from '@stores/data/useHistoryStore';
 import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import { useGridSelectionStore } from '@stores/grid/useGridSelectionStore';
 import { normalizeLayerGroupsForMode } from '@utils/layerGroupUtils';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 import type { LayerItem, DisplayItem } from '../types';
 
 // ============================================================================
@@ -31,48 +33,11 @@ interface UseLayerDnDParams {
 // 오버레이 동기화 헬퍼
 // ============================================================================
 
-function syncOverlayPositions(
-  keyPositions: ReturnType<typeof useKeyStore.getState>['positions'],
-  statPositions: ReturnType<typeof useStatItemStore.getState>['positions'],
-  graphPositions: ReturnType<typeof useGraphItemStore.getState>['positions'],
-  knobPositions: ReturnType<typeof useKnobItemStore.getState>['positions'],
-) {
-  try {
-    window.api.bridge.sendTo('overlay', 'positions:sync', {
-      positions: keyPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-      positions: statPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-      positions: graphPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-      positions: knobPositions,
-    });
-  } catch {
-    // ignore
-  }
-  try {
-    const pluginEls = usePluginDisplayElementStore.getState().elements;
-    window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-      elements: pluginEls,
-    });
-  } catch {
-    // ignore
-  }
+function syncOverlayPluginElements() {
+  const pluginEls = usePluginDisplayElementStore.getState().elements;
+  sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+    elements: pluginEls,
+  });
 }
 
 // ============================================================================
@@ -561,34 +526,20 @@ export function useLayerDnD({
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
     }
 
-    // 백엔드/오버레이 동기화
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
-      await window.api.keys.updatePositions(normalized.keyPositions);
-      await window.api.statItems.updatePositions(normalized.statPositions);
-      await window.api.graphItems.updatePositions(normalized.graphPositions);
-      await window.api.knobItems.updatePositions(normalized.knobPositions);
-      if (normalized.groupsChanged) {
-        await window.api.layerGroups.update(normalized.layerGroups);
-      }
+      await editorCoordinator.commitPatch({
+        schemaVersion: 1,
+        keyPositions: normalized.keyPositions,
+        statPositions: normalized.statPositions,
+        graphPositions: normalized.graphPositions,
+        knobPositions: normalized.knobPositions,
+        layerGroups: normalized.layerGroups,
+      });
     } catch (error) {
       console.error('Failed to reorder layers', error);
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
-    syncOverlayPositions(
-      normalized.keyPositions,
-      normalized.statPositions,
-      normalized.graphPositions,
-      normalized.knobPositions,
-    );
+    syncOverlayPluginElements();
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -740,31 +691,19 @@ export function useLayerDnD({
     updatedKnobPositions[selectedKeyType] = currentKnobModePositions;
     useKnobItemStore.getState().setPositions(updatedKnobPositions);
 
-    // 백엔드 동기화
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
     try {
-      await window.api.keys.updatePositions(updatedPositions);
-      await window.api.statItems.updatePositions(updatedStatPositions);
-      await window.api.graphItems.updatePositions(updatedGraphPositions);
-      await window.api.knobItems.updatePositions(updatedKnobPositions);
+      await editorCoordinator.commitPatch({
+        schemaVersion: 1,
+        keyPositions: updatedPositions,
+        statPositions: updatedStatPositions,
+        graphPositions: updatedGraphPositions,
+        knobPositions: updatedKnobPositions,
+      });
     } catch (error) {
       console.error('Failed to reorder group', error);
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
     }
 
-    syncOverlayPositions(
-      updatedPositions,
-      updatedStatPositions,
-      updatedGraphPositions,
-      updatedKnobPositions,
-    );
+    syncOverlayPluginElements();
   };
 
   // ──────────────────────────────────────────────────────────────────────────

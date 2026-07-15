@@ -58,7 +58,7 @@ export default function App() {
   const setGridAreaHovered = useUIStore((state) => state.setGridAreaHovered);
   const { selectedKeyType, setSelectedKeyType, isBootstrapped } = useKeyStore();
   useCustomCssInjection();
-  useCustomJsInjection();
+  useCustomJsInjection(isBootstrapped);
   useAppBootstrap();
   usePluginDisplayElementsResponder();
   useBlockBrowserShortcuts();

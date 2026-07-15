@@ -7,6 +7,7 @@ import type {
   ElementResizeAnchor,
 } from '@src/types/plugin/api';
 import { invokeExposedAction } from '@utils/displayElementActions';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { obsApi } from '@api/modules/obsApi';
 import {
   useGridSelectionStore,
@@ -125,7 +126,7 @@ export const PluginElementsRenderer: React.FC<PluginElementsRendererProps> = ({
     });
 
     const requestElementsFromMain = () => {
-      window.api.bridge.sendTo('main', 'plugin:displayElements:request', {});
+      sendBridgeMessageBestEffort('main', 'plugin:displayElements:request', {});
     };
 
     // 오버레이 초기 로드 시 메인에 현재 상태 요청

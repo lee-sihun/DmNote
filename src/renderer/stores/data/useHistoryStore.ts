@@ -12,6 +12,7 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { useLayerGroupStore } from '@stores/data/useLayerGroupStore';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type {
   NoteSettings,
@@ -47,7 +48,7 @@ export interface HistoryState {
   graphPositions: GraphItemPositions;
   knobPositions: KnobItemPositions;
   pluginElements?: SerializablePluginElement[];
-  layerGroups?: LayerGroups;
+  layerGroups: LayerGroups;
   keyCounters: KeyCounters;
   customTabs: CustomTab[];
   selectedKeyType: string;
@@ -136,6 +137,10 @@ function buildHistoryState(
     'knobPositions' in input && input.knobPositions
       ? input.knobPositions
       : useKnobItemStore.getState().positions;
+  const layerGroups =
+    'layerGroups' in input && input.layerGroups
+      ? input.layerGroups
+      : useLayerGroupStore.getState().layerGroups;
 
   return {
     keyMappings: JSON.parse(JSON.stringify(input.keyMappings)),
@@ -146,9 +151,7 @@ function buildHistoryState(
     pluginElements: input.pluginElements
       ? serializePluginElements(input.pluginElements)
       : undefined,
-    layerGroups: input.layerGroups
-      ? JSON.parse(JSON.stringify(input.layerGroups))
-      : undefined,
+    layerGroups: JSON.parse(JSON.stringify(layerGroups)),
     keyCounters:
       includeCounters && 'keyCounters' in input && input.keyCounters
         ? JSON.parse(JSON.stringify(input.keyCounters))

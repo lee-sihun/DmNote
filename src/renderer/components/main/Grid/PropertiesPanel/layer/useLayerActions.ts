@@ -18,6 +18,9 @@ import {
   normalizeLayerGroupsForMode,
   resolveSingleGroupIdFromSelection,
 } from '@utils/layerGroupUtils';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+import { stableStringify } from '@utils/core/stableStringify';
+import type { EditorPatchV1 } from '@src/types/editor';
 import type { LayerGroups } from '@src/types/layerGroups';
 import type { LayerGroupDef } from '@src/types/layerGroups';
 import type { ListItem } from '@components/main/Modal/ListPopup';
@@ -57,6 +60,10 @@ function pushCurrentStateToHistory(layerGroups?: LayerGroups) {
     pluginElements: pluginEls,
     layerGroups,
   });
+}
+
+function hasChanged(current: unknown, next: unknown) {
+  return stableStringify(current) !== stableStringify(next);
 }
 
 // ============================================================================
@@ -158,13 +165,6 @@ export function useLayerActions({
       } finally {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       }
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
-      }
       return;
     }
 
@@ -191,13 +191,6 @@ export function useLayerActions({
       } finally {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       }
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
-      }
       return;
     }
 
@@ -223,13 +216,6 @@ export function useLayerActions({
         console.error('Failed to toggle knob item visibility', error);
       } finally {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      }
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
       }
       return;
     }
@@ -264,6 +250,8 @@ export function useLayerActions({
 
     pushCurrentStateToHistory();
 
+    const changes: EditorPatchV1 = { schemaVersion: 1 };
+
     // 키 positions
     const keyChildren = children.filter(
       (c) => c.type === 'key' && c.index !== undefined,
@@ -281,13 +269,8 @@ export function useLayerActions({
         }
       });
       updatedPositions[selectedKeyType] = modePositions;
-      useKeyStore.getState().setLocalUpdateInProgress(true);
       useKeyStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.keys.updatePositions(updatedPositions);
-      } finally {
-        useKeyStore.getState().setLocalUpdateInProgress(false);
-      }
+      changes.keyPositions = updatedPositions;
     }
 
     // 통계 positions
@@ -309,13 +292,8 @@ export function useLayerActions({
         ...current,
         [selectedKeyType]: modePositions,
       };
-      useStatItemStore.getState().setLocalUpdateInProgress(true);
       useStatItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.statItems.updatePositions(updatedPositions);
-      } finally {
-        useStatItemStore.getState().setLocalUpdateInProgress(false);
-      }
+      changes.statPositions = updatedPositions;
     }
 
     // 그래프 positions
@@ -337,13 +315,8 @@ export function useLayerActions({
         ...current,
         [selectedKeyType]: modePositions,
       };
-      useGraphItemStore.getState().setLocalUpdateInProgress(true);
       useGraphItemStore.getState().setPositions(updatedPositions);
-      try {
-        await window.api.graphItems.updatePositions(updatedPositions);
-      } finally {
-        useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      }
+      changes.graphPositions = updatedPositions;
     }
 
     // 노브 positions
@@ -365,19 +338,15 @@ export function useLayerActions({
         ...current,
         [selectedKeyType]: modePositions,
       };
-      useKnobItemStore.getState().setLocalUpdateInProgress(true);
       useKnobItemStore.getState().setPositions(updatedPositions);
+      changes.knobPositions = updatedPositions;
+    }
+
+    if (Object.keys(changes).length > 1) {
       try {
-        await window.api.knobItems.updatePositions(updatedPositions);
-      } finally {
-        useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      }
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
+        await editorCoordinator.commitPatch(changes);
+      } catch (error) {
+        console.error('Failed to toggle group visibility', error);
       }
     }
 
@@ -482,13 +451,6 @@ export function useLayerActions({
         await window.api.knobItems.updatePositions(updatedPositions);
       } finally {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
-      }
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: updatedPositions,
-        });
-      } catch {
-        // ignore
       }
     }
   };
@@ -602,11 +564,6 @@ export function useLayerActions({
       });
     }
 
-    useKeyStore.getState().setLocalUpdateInProgress(true);
-    useStatItemStore.getState().setLocalUpdateInProgress(true);
-    useGraphItemStore.getState().setLocalUpdateInProgress(true);
-    useKnobItemStore.getState().setLocalUpdateInProgress(true);
-
     useKeyStore.getState().setPositions(normalized.keyPositions);
     useStatItemStore.getState().setPositions(normalized.statPositions);
     useGraphItemStore.getState().setPositions(normalized.graphPositions);
@@ -616,20 +573,24 @@ export function useLayerActions({
       useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
     }
 
-    try {
-      await window.api.keys.updatePositions(normalized.keyPositions);
-      await window.api.statItems.updatePositions(normalized.statPositions);
-      await window.api.graphItems.updatePositions(normalized.graphPositions);
-      await window.api.knobItems.updatePositions(normalized.knobPositions);
-      if (shouldPersistGroups) {
-        await window.api.layerGroups.update(normalized.layerGroups);
-      }
-    } finally {
-      useKeyStore.getState().setLocalUpdateInProgress(false);
-      useStatItemStore.getState().setLocalUpdateInProgress(false);
-      useGraphItemStore.getState().setLocalUpdateInProgress(false);
-      useKnobItemStore.getState().setLocalUpdateInProgress(false);
+    const changes: EditorPatchV1 = { schemaVersion: 1 };
+    if (hasChanged(pos, normalized.keyPositions)) {
+      changes.keyPositions = normalized.keyPositions;
     }
+    if (hasChanged(currentStatPositions, normalized.statPositions)) {
+      changes.statPositions = normalized.statPositions;
+    }
+    if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
+      changes.graphPositions = normalized.graphPositions;
+    }
+    if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
+      changes.knobPositions = normalized.knobPositions;
+    }
+    if (hasChanged(storeLayerGroups, normalized.layerGroups)) {
+      changes.layerGroups = normalized.layerGroups;
+    }
+
+    await editorCoordinator.commitPatch(changes);
 
     return true;
   };
@@ -894,138 +855,63 @@ export function useLayerActions({
       onSelectionFromPanel?.();
       useGridSelectionStore.getState().clearSelection();
 
-      // 키 삭제
-      if (keysToDelete.length > 0) {
-        const { keyMappings: km, positions: pos } = useKeyStore.getState();
-        const mapping = km[selectedKeyType] || [];
-        const posArray = pos[selectedKeyType] || [];
+      const { keyMappings: currentMappings, positions: currentKeyPositions } =
+        useKeyStore.getState();
+      const currentStatPositions = useStatItemStore.getState().positions;
+      const currentGraphPositions = useGraphItemStore.getState().positions;
+      const currentKnobPositions = useKnobItemStore.getState().positions;
+      const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
 
-        const deleteSet = new Set(keysToDelete);
+      const keyDeleteSet = new Set(keysToDelete);
+      const statDeleteSet = new Set(statsToDelete);
+      const graphDeleteSet = new Set(graphsToDelete);
+      const knobDeleteSet = new Set(knobsToDelete);
 
-        const updatedMappings = {
-          ...km,
-          [selectedKeyType]: mapping.filter(
-            (_, index) => !deleteSet.has(index),
-          ),
-        };
-
-        const updatedPositions = {
-          ...pos,
-          [selectedKeyType]: posArray.filter(
-            (_, index) => !deleteSet.has(index),
-          ),
-        };
-
-        useKeyStore.getState().setLocalUpdateInProgress(true);
-        useKeyStore
-          .getState()
-          .setKeyMappingsAndPositions(updatedMappings, updatedPositions);
-
-        try {
-          await window.api.keys.update(updatedMappings);
-          await window.api.keys.updatePositions(updatedPositions);
-        } catch (error) {
-          console.error('Failed to delete keys', error);
-        } finally {
-          useKeyStore.getState().setLocalUpdateInProgress(false);
-        }
-      }
-
-      // 통계 삭제
-      if (statsToDelete.length > 0) {
-        const current = useStatItemStore.getState().positions;
-        const posArray = current[selectedKeyType] || [];
-        const deleteSet = new Set(statsToDelete);
-
-        const updatedPositions = {
-          ...current,
-          [selectedKeyType]: posArray.filter(
-            (_, index) => !deleteSet.has(index),
-          ),
-        };
-
-        useStatItemStore.getState().setLocalUpdateInProgress(true);
-        useStatItemStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.statItems.updatePositions(updatedPositions);
-        } catch (error) {
-          console.error('Failed to delete stat items', error);
-        } finally {
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-        }
-
-        try {
-          window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-            positions: updatedPositions,
-          });
-        } catch {
-          // ignore
-        }
-      }
-
-      // 그래프 삭제
-      if (graphsToDelete.length > 0) {
-        const current = useGraphItemStore.getState().positions;
-        const posArray = current[selectedKeyType] || [];
-        const deleteSet = new Set(graphsToDelete);
-
-        const updatedPositions = {
-          ...current,
-          [selectedKeyType]: posArray.filter(
-            (_, index) => !deleteSet.has(index),
-          ),
-        };
-
-        useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useGraphItemStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.graphItems.updatePositions(updatedPositions);
-        } catch (error) {
-          console.error('Failed to delete graph items', error);
-        } finally {
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-        }
-
-        try {
-          window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-            positions: updatedPositions,
-          });
-        } catch {
-          // ignore
-        }
-      }
-
-      // 노브 삭제
-      if (knobsToDelete.length > 0) {
-        const current = useKnobItemStore.getState().positions;
-        const posArray = current[selectedKeyType] || [];
-        const deleteSet = new Set(knobsToDelete);
-
-        const updatedPositions = {
-          ...current,
-          [selectedKeyType]: posArray.filter(
-            (_, index) => !deleteSet.has(index),
-          ),
-        };
-
-        useKnobItemStore.getState().setLocalUpdateInProgress(true);
-        useKnobItemStore.getState().setPositions(updatedPositions);
-        try {
-          await window.api.knobItems.updatePositions(updatedPositions);
-        } catch (error) {
-          console.error('Failed to delete knob items', error);
-        } finally {
-          useKnobItemStore.getState().setLocalUpdateInProgress(false);
-        }
-
-        try {
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: updatedPositions,
-          });
-        } catch {
-          // ignore
-        }
-      }
+      const nextMappings =
+        keysToDelete.length > 0
+          ? {
+              ...currentMappings,
+              [selectedKeyType]: (
+                currentMappings[selectedKeyType] || []
+              ).filter((_, index) => !keyDeleteSet.has(index)),
+            }
+          : currentMappings;
+      const nextKeyPositions =
+        keysToDelete.length > 0
+          ? {
+              ...currentKeyPositions,
+              [selectedKeyType]: (
+                currentKeyPositions[selectedKeyType] || []
+              ).filter((_, index) => !keyDeleteSet.has(index)),
+            }
+          : currentKeyPositions;
+      const nextStatPositions =
+        statsToDelete.length > 0
+          ? {
+              ...currentStatPositions,
+              [selectedKeyType]: (
+                currentStatPositions[selectedKeyType] || []
+              ).filter((_, index) => !statDeleteSet.has(index)),
+            }
+          : currentStatPositions;
+      const nextGraphPositions =
+        graphsToDelete.length > 0
+          ? {
+              ...currentGraphPositions,
+              [selectedKeyType]: (
+                currentGraphPositions[selectedKeyType] || []
+              ).filter((_, index) => !graphDeleteSet.has(index)),
+            }
+          : currentGraphPositions;
+      const nextKnobPositions =
+        knobsToDelete.length > 0
+          ? {
+              ...currentKnobPositions,
+              [selectedKeyType]: (
+                currentKnobPositions[selectedKeyType] || []
+              ).filter((_, index) => !knobDeleteSet.has(index)),
+            }
+          : currentKnobPositions;
 
       // 플러그인 삭제
       if (pluginsToDelete.length > 0) {
@@ -1040,40 +926,58 @@ export function useLayerActions({
 
       const normalized = normalizeLayerGroupsForMode({
         mode: selectedKeyType,
-        keyPositions: useKeyStore.getState().positions,
-        statPositions: useStatItemStore.getState().positions,
-        graphPositions: useGraphItemStore.getState().positions,
-        knobPositions: useKnobItemStore.getState().positions,
-        layerGroups: useLayerGroupStore.getState().layerGroups,
+        keyPositions: nextKeyPositions,
+        statPositions: nextStatPositions,
+        graphPositions: nextGraphPositions,
+        knobPositions: nextKnobPositions,
+        layerGroups: currentLayerGroups,
       });
 
-      if (normalized.positionsChanged || normalized.groupsChanged) {
-        useKeyStore.getState().setLocalUpdateInProgress(true);
-        useStatItemStore.getState().setLocalUpdateInProgress(true);
-        useGraphItemStore.getState().setLocalUpdateInProgress(true);
-        useKnobItemStore.getState().setLocalUpdateInProgress(true);
+      if (hasChanged(currentMappings, nextMappings)) {
+        useKeyStore
+          .getState()
+          .setKeyMappingsAndPositions(nextMappings, normalized.keyPositions);
+      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
         useKeyStore.getState().setPositions(normalized.keyPositions);
+      }
+      if (hasChanged(currentStatPositions, normalized.statPositions)) {
         useStatItemStore.getState().setPositions(normalized.statPositions);
+      }
+      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
         useGraphItemStore.getState().setPositions(normalized.graphPositions);
+      }
+      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
         useKnobItemStore.getState().setPositions(normalized.knobPositions);
-        if (normalized.groupsChanged) {
-          useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
-        }
+      }
+      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
+        useLayerGroupStore.getState().setLayerGroups(normalized.layerGroups);
+      }
+
+      const changes: EditorPatchV1 = { schemaVersion: 1 };
+      if (hasChanged(currentMappings, nextMappings)) {
+        changes.keys = nextMappings;
+        changes.keyPositions = normalized.keyPositions;
+      } else if (hasChanged(currentKeyPositions, normalized.keyPositions)) {
+        changes.keyPositions = normalized.keyPositions;
+      }
+      if (hasChanged(currentStatPositions, normalized.statPositions)) {
+        changes.statPositions = normalized.statPositions;
+      }
+      if (hasChanged(currentGraphPositions, normalized.graphPositions)) {
+        changes.graphPositions = normalized.graphPositions;
+      }
+      if (hasChanged(currentKnobPositions, normalized.knobPositions)) {
+        changes.knobPositions = normalized.knobPositions;
+      }
+      if (hasChanged(currentLayerGroups, normalized.layerGroups)) {
+        changes.layerGroups = normalized.layerGroups;
+      }
+
+      if (Object.keys(changes).length > 1) {
         try {
-          await window.api.keys.updatePositions(normalized.keyPositions);
-          await window.api.statItems.updatePositions(normalized.statPositions);
-          await window.api.graphItems.updatePositions(
-            normalized.graphPositions,
-          );
-          await window.api.knobItems.updatePositions(normalized.knobPositions);
-          if (normalized.groupsChanged) {
-            await window.api.layerGroups.update(normalized.layerGroups);
-          }
-        } finally {
-          useKeyStore.getState().setLocalUpdateInProgress(false);
-          useStatItemStore.getState().setLocalUpdateInProgress(false);
-          useGraphItemStore.getState().setLocalUpdateInProgress(false);
-          useKnobItemStore.getState().setLocalUpdateInProgress(false);
+          await editorCoordinator.commitPatch(changes);
+        } catch (error) {
+          console.error('Failed to delete layers', error);
         }
       }
     }

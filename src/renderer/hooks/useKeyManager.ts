@@ -50,6 +50,7 @@ import {
   persistPositions,
   persistPositionsWithFlag,
 } from '@src/renderer/editor/runtime/persistState';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 
 type SelectedKey = { key: string; index: number } | null;
 
@@ -744,7 +745,7 @@ export function useKeyManager() {
 
   const handleKeyBatchStyleUpdate = (
     updates: Array<{ index: number } & Partial<KeyPositions[string][number]>>,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -762,6 +763,10 @@ export function useKeyManager() {
       pushCurrentStateToHistory();
     }
     previewHistorySavedRef.current = false;
+    if (options?.deferSave) {
+      setPositions(updatedPositions);
+      return;
+    }
     persistPositionsWithFlag(
       updatedPositions,
       setPositions,
@@ -797,6 +802,20 @@ export function useKeyManager() {
   ) => {
     setUndoRedoInProgress(true);
     try {
+      try {
+        await editorCoordinator.flush();
+      } catch (error) {
+        console.error(`Failed to flush before ${label}`, error);
+        return;
+      }
+      const baseRevision = editorCoordinator.getState().revision;
+      if (baseRevision === null) {
+        console.error(
+          `Failed to apply ${label}: editor revision is unavailable`,
+        );
+        return;
+      }
+
       const currentKeyState = useKeyStore.getState();
       const currentStatPositions = useStatItemStore.getState().positions;
       const currentGraphPositions = useGraphItemStore.getState().positions;
@@ -804,6 +823,7 @@ export function useKeyManager() {
       const currentPluginElements =
         usePluginDisplayElementStore.getState().elements;
       const currentLayerGroups = useLayerGroupStore.getState().layerGroups;
+      const historyBefore = useHistoryStore.getState();
       const targetState = action({
         keyMappings: currentKeyState.keyMappings,
         positions: currentKeyState.positions,
@@ -815,22 +835,33 @@ export function useKeyManager() {
       });
 
       if (targetState) {
-        applyRestoredStateToStores(targetState);
-
-        applyRestoredPluginElements(
-          targetState.pluginElements as
-            | PluginDisplayElementInternal[]
-            | undefined,
-          currentPluginElements,
-          targetState.pluginElements
-            ? new Set(targetState.pluginElements.map((el) => el.fullId))
-            : undefined,
-        );
+        try {
+          await persistRestoredState(targetState, baseRevision);
+        } catch (error) {
+          useHistoryStore.setState({
+            past: historyBefore.past,
+            future: historyBefore.future,
+          });
+          console.error(`Failed to apply ${label}`, error);
+          return;
+        }
 
         try {
-          await persistRestoredState(targetState);
+          applyRestoredStateToStores(targetState);
+          applyRestoredPluginElements(
+            targetState.pluginElements as
+              | PluginDisplayElementInternal[]
+              | undefined,
+            currentPluginElements,
+            targetState.pluginElements
+              ? new Set(targetState.pluginElements.map((el) => el.fullId))
+              : undefined,
+          );
         } catch (error) {
-          console.error(`Failed to apply ${label}`, error);
+          console.error(`Failed to refresh the ${label} view`, error);
+          void editorCoordinator.sync({ reapply: true }).catch((syncError) => {
+            console.error(`Failed to resync after ${label}`, syncError);
+          });
         }
       }
     } finally {

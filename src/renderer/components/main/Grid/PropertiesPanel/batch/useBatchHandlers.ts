@@ -7,6 +7,13 @@ import { normalizeCounterSettings } from '@src/types/key/keys';
 import type { StatItemPosition } from '@src/types/key/statItems';
 import type { GraphItemPosition } from '@src/types/key/graphItems';
 import type { KnobItemPosition } from '@src/types/key/knobs';
+import { useKeyStore } from '@stores/data/useKeyStore';
+import { useStatItemStore } from '@stores/data/useStatItemStore';
+import { useGraphItemStore } from '@stores/data/useGraphItemStore';
+import { useKnobItemStore } from '@stores/data/useKnobItemStore';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
+
+import type { EditorPatchV1 } from '@src/types/editor';
 
 const DEFAULT_ACTIVE_BACKGROUND_COLOR = 'rgba(121, 121, 121, 0.9)';
 const DEFAULT_ACTIVE_BORDER_COLOR = 'rgba(255, 255, 255, 0.9)';
@@ -39,6 +46,7 @@ type KeyLikeBatchUpdate = {
 
 type BatchCommitOptions = {
   skipHistory?: boolean;
+  deferSave?: boolean;
 };
 
 interface SpacingAxisPlan {
@@ -724,26 +732,47 @@ export function useBatchHandlers({
     if (keyUpdates.length > 0) {
       dispatchKeyUpdates(keyUpdates, 'commit', {
         skipHistory: hasSavedHistory,
+        deferSave: true,
       });
       hasSavedHistory = true;
     }
     if (statUpdates.length > 0) {
       dispatchStatUpdates(statUpdates, 'commit', {
         skipHistory: hasSavedHistory,
+        deferSave: true,
       });
       hasSavedHistory = true;
     }
     if (graphUpdates.length > 0) {
       dispatchGraphUpdates(graphUpdates, 'commit', {
         skipHistory: hasSavedHistory,
+        deferSave: true,
       });
       hasSavedHistory = true;
     }
     if (knobUpdates.length > 0) {
       dispatchKnobUpdates(knobUpdates, 'commit', {
         skipHistory: hasSavedHistory,
+        deferSave: true,
       });
     }
+
+    const patch: EditorPatchV1 = { schemaVersion: 1 };
+    if (keyUpdates.length > 0) {
+      patch.keyPositions = useKeyStore.getState().positions;
+    }
+    if (statUpdates.length > 0) {
+      patch.statPositions = useStatItemStore.getState().positions;
+    }
+    if (graphUpdates.length > 0) {
+      patch.graphPositions = useGraphItemStore.getState().positions;
+    }
+    if (knobUpdates.length > 0) {
+      patch.knobPositions = useKnobItemStore.getState().positions;
+    }
+    void editorCoordinator.commitPatch(patch).catch((error) => {
+      console.error('Failed to commit combined batch update', error);
+    });
   };
 
   // 스타일 변경 (프리뷰)
@@ -832,18 +861,6 @@ export function useBatchHandlers({
           index: number;
         } & Partial<KeyPosition>;
       });
-    let hasSavedHistory = false;
-    if (keyUpdates.length > 0) {
-      dispatchKeyUpdates(
-        keyUpdates as Array<{ index: number } & Partial<KeyPosition>>,
-        'commit',
-        {
-          skipHistory: hasSavedHistory,
-        },
-      );
-      hasSavedHistory = true;
-    }
-
     const statUpdates = selectedStats
       .filter((el) => el.index !== undefined)
       .map((el) => {
@@ -888,25 +905,11 @@ export function useBatchHandlers({
           index: number;
         } & Partial<StatItemPosition>;
       });
-    if (statUpdates.length > 0) {
-      dispatchStatUpdates(statUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-      hasSavedHistory = true;
-    }
-
     const graphUpdates = selectedGraphs
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, [property]: value })) as Array<
       { index: number } & Partial<GraphItemPosition>
     >;
-    if (graphUpdates.length > 0) {
-      dispatchGraphUpdates(graphUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-      hasSavedHistory = true;
-    }
-
     const currentKnobs = knobPositions?.[selectedKeyType] || [];
     const knobUpdates = selectedKnobs
       .filter((el) => el.index !== undefined)
@@ -943,11 +946,21 @@ export function useBatchHandlers({
           index: number;
         } & Partial<KnobItemPosition>;
       });
-    if (knobUpdates.length > 0) {
-      dispatchKnobUpdates(knobUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-    }
+    dispatchKeyLikeUpdates([
+      ...keyUpdates.map((update) => ({ type: 'key' as const, ...update })),
+      ...statUpdates.map((update) => ({
+        type: 'stat' as const,
+        ...update,
+      })),
+      ...graphUpdates.map((update) => ({
+        type: 'graph' as const,
+        ...update,
+      })),
+      ...knobUpdates.map((update) => ({
+        type: 'knob' as const,
+        ...update,
+      })),
+    ] as KeyLikeBatchUpdate[]);
   };
 
   // 정렬 핸들러
@@ -1195,54 +1208,41 @@ export function useBatchHandlers({
 
   // 일괄 크기 변경 핸들러
   const handleBatchResize = (dimension: 'width' | 'height', value: number) => {
-    let hasSavedHistory = false;
-
     const keyUpdates = selectedKeys
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
       { index: number } & Partial<KeyPosition>
     >;
-    if (keyUpdates.length > 0) {
-      dispatchKeyUpdates(keyUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-      hasSavedHistory = true;
-    }
-
     const statUpdates = selectedStats
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
       { index: number } & Partial<StatItemPosition>
     >;
-    if (statUpdates.length > 0) {
-      dispatchStatUpdates(statUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-      hasSavedHistory = true;
-    }
-
     const graphUpdates = selectedGraphs
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
       { index: number } & Partial<GraphItemPosition>
     >;
-    if (graphUpdates.length > 0) {
-      dispatchGraphUpdates(graphUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-      hasSavedHistory = true;
-    }
-
     const knobUpdates = selectedKnobs
       .filter((el) => el.index !== undefined)
       .map((el) => ({ index: el.index!, [dimension]: value })) as Array<
       { index: number } & Partial<KnobItemPosition>
     >;
-    if (knobUpdates.length > 0) {
-      dispatchKnobUpdates(knobUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-    }
+    dispatchKeyLikeUpdates([
+      ...keyUpdates.map((update) => ({ type: 'key' as const, ...update })),
+      ...statUpdates.map((update) => ({
+        type: 'stat' as const,
+        ...update,
+      })),
+      ...graphUpdates.map((update) => ({
+        type: 'graph' as const,
+        ...update,
+      })),
+      ...knobUpdates.map((update) => ({
+        type: 'knob' as const,
+        ...update,
+      })),
+    ] as KeyLikeBatchUpdate[]);
   };
 
   // 카운터 업데이트 핸들러
@@ -1260,18 +1260,6 @@ export function useBatchHandlers({
         (update): update is { index: number; counter: KeyCounterSettings } =>
           update !== null,
       );
-    let hasSavedHistory = false;
-    if (keyUpdates.length > 0) {
-      dispatchKeyUpdates(
-        keyUpdates as Array<{ index: number } & Partial<KeyPosition>>,
-        'commit',
-        {
-          skipHistory: hasSavedHistory,
-        },
-      );
-      hasSavedHistory = true;
-    }
-
     const statUpdates = selectedStats
       .filter((el) => el.index !== undefined)
       .map((el) => {
@@ -1291,11 +1279,13 @@ export function useBatchHandlers({
           counter: KeyCounterSettings;
         } & Partial<StatItemPosition> => update !== null,
       );
-    if (statUpdates.length > 0) {
-      dispatchStatUpdates(statUpdates, 'commit', {
-        skipHistory: hasSavedHistory,
-      });
-    }
+    dispatchKeyLikeUpdates([
+      ...keyUpdates.map((update) => ({ type: 'key' as const, ...update })),
+      ...statUpdates.map((update) => ({
+        type: 'stat' as const,
+        ...update,
+      })),
+    ] as KeyLikeBatchUpdate[]);
   };
 
   // 노트 색상 변경 (프리뷰) - 키 요소만

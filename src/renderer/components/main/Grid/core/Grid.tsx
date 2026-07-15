@@ -1069,13 +1069,6 @@ const Grid = ({
       window.api.statItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update stat item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position: StatItemPosition, index: number) => (
@@ -1173,13 +1166,6 @@ const Grid = ({
       window.api.graphItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update graph item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position, index) => (
@@ -1273,13 +1259,6 @@ const Grid = ({
       window.api.knobItems.updatePositions(nextPositions).catch((error) => {
         console.error('Failed to update knob item positions', error);
       });
-      try {
-        window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-          positions: nextPositions,
-        });
-      } catch {
-        // ignore
-      }
     };
 
     return items.map((position, index) => (
@@ -1469,7 +1448,7 @@ const Grid = ({
       }}
       data-grid-container
       className="relative w-full h-full bg-panel rounded-[0px] overflow-hidden"
-      style={{ backgroundColor: color === 'transparent' ? '#141417' : color }}
+      style={color === 'transparent' ? undefined : { backgroundColor: color }}
       onContextMenu={(e) => {
         if (duplicateState) {
           setDuplicateState(null);
@@ -1547,7 +1526,6 @@ const Grid = ({
         zoom={zoom}
         panX={panX}
         panY={panY}
-        color={color === 'transparent' ? '#141417' : color}
       />
       {/* 줌/팬이 적용되는 콘텐츠 영역 */}
       <div

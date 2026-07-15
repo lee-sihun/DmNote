@@ -12,6 +12,12 @@ import type { StatItemPositions } from '@src/types/key/statItems';
 import type { GraphItemPositions } from '@src/types/key/graphItems';
 import type { KnobItemPositions } from '@src/types/key/knobs';
 import type { LayerGroups } from '@src/types/layerGroups';
+import type {
+  EditorCommitRequest,
+  EditorCommitResult,
+  EditorCommittedV1,
+  EditorGetResult,
+} from '@src/types/editor';
 import {
   SettingsDiff,
   SettingsPatchInput,
@@ -780,6 +786,11 @@ export interface DMNoteAPI {
     get(): Promise<SettingsState>;
     update(patch: SettingsPatchInput): Promise<SettingsState>;
     onChanged(listener: (diff: SettingsDiff) => void): Unsubscribe;
+  };
+  editor: {
+    get(): Promise<EditorGetResult>;
+    commit(request: EditorCommitRequest): Promise<EditorCommitResult>;
+    onCommitted(listener: (event: EditorCommittedV1) => void): ReadyUnsubscribe;
   };
   keys: {
     get(): Promise<KeyMappings>;

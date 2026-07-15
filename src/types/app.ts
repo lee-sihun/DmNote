@@ -35,4 +35,5 @@ export interface BootstrapPayload {
   layerGroups: LayerGroups;
   tabNoteOverrides: TabNoteOverrides;
   tabCssOverrides: TabCssOverrides;
+  editorRevision: number;
 }

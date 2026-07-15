@@ -3,6 +3,7 @@ import {
   PluginDisplayElementInternal,
   PluginDefinitionInternal,
 } from '@src/types/plugin/api';
+import { sendBridgeMessageBestEffort } from '@utils/plugin/bridgeMessages';
 import { useKeyStore } from '../data/useKeyStore';
 
 // syncToOverlay 쓰로틀링을 위한 변수
@@ -366,15 +367,9 @@ export const usePluginDisplayElementStore = create<PluginDisplayElementStore>(
 
 // 메인 윈도우에서 오버레이로 동기화 (즉시 실행)
 function syncToOverlay(elements: PluginDisplayElementInternal[]) {
-  try {
-    if (window.api?.bridge) {
-      window.api.bridge.sendTo('overlay', 'plugin:displayElements:sync', {
-        elements,
-      });
-    }
-  } catch (error) {
-    console.error('[DisplayElement Store] Failed to sync to overlay:', error);
-  }
+  sendBridgeMessageBestEffort('overlay', 'plugin:displayElements:sync', {
+    elements,
+  });
 }
 
 // 쓰로틀링된 동기화 (빈번한 호출 방지)

@@ -93,7 +93,7 @@ interface PropertiesPanelProps {
   onKeyUpdate: (data: Partial<KeyPosition> & { index: number }) => void;
   onKeyBatchUpdate?: (
     updates: Array<{ index: number } & Partial<KeyPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; deferSave?: boolean },
   ) => void;
   onKeyPreview?: (index: number, updates: Partial<KeyPosition>) => void;
   onKeyBatchPreview?: (
@@ -661,9 +661,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         useKnobItemStore.getState().setPositions(nextPositions);
         try {
           await window.api.knobItems.updatePositions(nextPositions);
-          window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-            positions: nextPositions,
-          });
         } finally {
           useKnobItemStore.getState().setLocalUpdateInProgress(false);
         }
@@ -1283,13 +1280,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleStatPreview = (
@@ -1362,7 +1352,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const handleStatBatchUpdate = (
     updates: Array<{ index: number } & Partial<StatItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1400,6 +1390,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
     const nextPositions = { ...current, [mode]: nextList };
 
+    if (options?.deferSave) {
+      useStatItemStore.getState().setPositions(nextPositions);
+      return;
+    }
+
     useStatItemStore.getState().setLocalUpdateInProgress(true);
     useStatItemStore.getState().setPositions(nextPositions);
     window.api.statItems
@@ -1410,13 +1405,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useStatItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleGraphUpdate = (
@@ -1458,13 +1446,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleKnobUpdate = (
@@ -1506,13 +1487,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleKnobPreview = (
@@ -1583,7 +1557,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const handleKnobBatchUpdate = (
     updates: Array<{ index: number } & Partial<KnobItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1621,6 +1595,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
     const nextPositions = { ...current, [mode]: nextList };
 
+    if (options?.deferSave) {
+      useKnobItemStore.getState().setPositions(nextPositions);
+      return;
+    }
+
     useKnobItemStore.getState().setLocalUpdateInProgress(true);
     useKnobItemStore.getState().setPositions(nextPositions);
     window.api.knobItems
@@ -1631,13 +1610,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useKnobItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   const handleGraphPreview = (
@@ -1710,7 +1682,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   const handleGraphBatchUpdate = (
     updates: Array<{ index: number } & Partial<GraphItemPosition>>,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; deferSave?: boolean },
   ) => {
     if (updates.length === 0) return;
 
@@ -1748,6 +1720,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
     const nextPositions = { ...current, [mode]: nextList };
 
+    if (options?.deferSave) {
+      useGraphItemStore.getState().setPositions(nextPositions);
+      return;
+    }
+
     useGraphItemStore.getState().setLocalUpdateInProgress(true);
     useGraphItemStore.getState().setPositions(nextPositions);
     window.api.graphItems
@@ -1758,13 +1735,6 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       .finally(() => {
         useGraphItemStore.getState().setLocalUpdateInProgress(false);
       });
-    try {
-      window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-        positions: nextPositions,
-      });
-    } catch {
-      // ignore
-    }
   };
 
   // 크기 변경 완료 (blur 시 저장)

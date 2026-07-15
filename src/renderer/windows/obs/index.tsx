@@ -5,6 +5,9 @@ import '@styles/global.css';
 import { initIpcShim, disposeIpcShim } from '@api/ipcShim';
 
 async function bootstrap() {
+  window.__dmn_window_type = 'overlay';
+  window.__dmn_runtime = 'obs';
+
   // URL 파라미터에서 WS 접속 정보 추출
   const params = new URLSearchParams(window.location.search);
   const host = params.get('host') || window.location.hostname || '127.0.0.1';
@@ -19,11 +22,7 @@ async function bootstrap() {
     // 2. window.api 설치 (shim 위에서 동작)
     await import('@api/dmnoteApi');
 
-    // 3. OBS 윈도우 타입 표시
-    window.__dmn_window_type = 'overlay';
-    window.__dmn_runtime = 'obs';
-
-    // 4. overlay/App.tsx를 I18nProvider로 래핑하여 렌더
+    // 3. overlay/App.tsx를 I18nProvider로 래핑하여 렌더
     const { I18nProvider } = await import('@contexts/I18nContext');
     const { default: App } = await import('@src/renderer/windows/overlay/App');
 

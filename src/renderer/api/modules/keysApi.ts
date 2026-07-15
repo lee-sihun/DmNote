@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { subscribe } from './shared';
 import { rawKeyEventBus } from '@utils/core/rawKeyEventBus';
+import { enqueueEditorCompatibilityWrite } from '@src/renderer/editor/runtime/editorCompatibilityQueue';
+import { editorCoordinator } from '@src/renderer/editor/runtime/editorStateCoordinator';
 
 import type {
   KeyCounterUpdate,
@@ -26,16 +28,33 @@ export const keysApi = {
   get: () => invoke<KeyMappings>('keys_get'),
   getCounters: () => invoke<KeyCounters>('keys_get_counters'),
   update: (mappings: KeyMappings) =>
-    invoke<KeyMappings>('keys_update', { mappings }),
-  // keys와 positions를 단일 store 트랜잭션으로 커밋 — 한쪽만 저장된 채 중단되는 불일치 방지
+    enqueueEditorCompatibilityWrite(
+      () => editorCoordinator.commitPatch({ schemaVersion: 1, keys: mappings }),
+      () => structuredClone(mappings),
+    ),
   updateWithPositions: (mappings: KeyMappings, positions: KeyPositions) =>
-    invoke<{ keys: KeyMappings; positions: KeyPositions }>(
-      'keys_update_with_positions',
-      { mappings, positions },
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          keys: mappings,
+          keyPositions: positions,
+        }),
+      () => ({
+        keys: structuredClone(mappings),
+        positions: structuredClone(positions),
+      }),
     ),
   getPositions: () => invoke<KeyPositions>('positions_get'),
   updatePositions: (positions: KeyPositions) =>
-    invoke<KeyPositions>('positions_update', { positions }),
+    enqueueEditorCompatibilityWrite(
+      () =>
+        editorCoordinator.commitPatch({
+          schemaVersion: 1,
+          keyPositions: positions,
+        }),
+      () => structuredClone(positions),
+    ),
   setMode: (mode: string) =>
     invoke<KeysModeResponse>('keys_set_mode', { mode }),
   resetAll: () => invoke<KeysResetAllResponse>('keys_reset_all'),

@@ -122,13 +122,6 @@ async function persistStatPositions(
   } finally {
     store.setLocalUpdateInProgress(false);
   }
-  try {
-    window.api.bridge.sendTo('overlay', 'statPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
-  }
 }
 
 // Graph positions persist 헬퍼
@@ -146,13 +139,6 @@ async function persistGraphPositions(
   } finally {
     store.setLocalUpdateInProgress(false);
   }
-  try {
-    window.api.bridge.sendTo('overlay', 'graphPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
-  }
 }
 
 // Knob positions persist 헬퍼
@@ -169,13 +155,6 @@ async function persistKnobPositions(
     console.error(errorMessage || 'Failed to update knob items', error);
   } finally {
     store.setLocalUpdateInProgress(false);
-  }
-  try {
-    window.api.bridge.sendTo('overlay', 'knobPositions:sync', {
-      positions: nextPositions,
-    });
-  } catch {
-    /* 무시 */
   }
 }
 

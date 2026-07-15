@@ -190,6 +190,14 @@
     "save": "应用",
     "cancel": "取消"
   },
+  "editorConflict": {
+    "message": "当前编辑与其他窗口或插件的更改发生冲突。请选择要保留的版本。\n“保留我的编辑”会重新应用本地更改，“接受外部更改”会放弃尚未保存的本地编辑。",
+    "keepLocal": "保留我的编辑",
+    "acceptExternal": "接受外部更改"
+  },
+  "editorSave": {
+    "permanentFailure": "此编辑无法保存，编辑器已恢复到上次保存的状态。请检查您刚刚更改的值。"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",
