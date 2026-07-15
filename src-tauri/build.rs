@@ -6,19 +6,22 @@ fn main() {
     maybe_embed_webview2_fixed_runtime();
     #[cfg(target_os = "macos")]
     maybe_build_macos_dock_helper();
-    link_test_common_controls_manifest();
+    delay_load_comctl32_for_windows();
     build_tauri();
 }
 
-// Windows 테스트 exe는 tauri-build 매니페스트가 없어 구버전 comctl32가 로드됨
+// Windows 테스트 exe는 tauri-build 매니페스트가 없어 로드 시점에 구버전 comctl32가 붙음
 // (rfd의 TaskDialogIndirect가 v6 전용 — 없으면 STATUS_ENTRYPOINT_NOT_FOUND)
-fn link_test_common_controls_manifest() {
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+// comctl32를 지연 로드로 바꿔 로드 시점 바인딩 자체를 제거 — 본체는 첫 호출 때 매니페스트로 v6 해석
+// rustc-link-arg-tests는 통합 테스트 타깃 전용이라 유닛 테스트 크레이트에선 빌드가 깨짐 (Windows 실측)
+fn delay_load_comctl32_for_windows() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS");
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV");
+    if target_os.as_deref() != Ok("windows") || target_env.as_deref() != Ok("msvc") {
         return;
     }
-    println!(
-        "cargo:rustc-link-arg-tests=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
-    );
+    println!("cargo:rustc-link-arg=/DELAYLOAD:comctl32.dll");
+    println!("cargo:rustc-link-arg=delayimp.lib");
 }
 
 /// commands/ 디렉토리의 `#[tauri::command]` 함수명을 스캔하여
