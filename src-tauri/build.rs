@@ -6,7 +6,19 @@ fn main() {
     maybe_embed_webview2_fixed_runtime();
     #[cfg(target_os = "macos")]
     maybe_build_macos_dock_helper();
+    link_test_common_controls_manifest();
     build_tauri();
+}
+
+// Windows 테스트 exe는 tauri-build 매니페스트가 없어 구버전 comctl32가 로드됨
+// (rfd의 TaskDialogIndirect가 v6 전용 — 없으면 STATUS_ENTRYPOINT_NOT_FOUND)
+fn link_test_common_controls_manifest() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    println!(
+        "cargo:rustc-link-arg-tests=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+    );
 }
 
 /// commands/ 디렉토리의 `#[tauri::command]` 함수명을 스캔하여

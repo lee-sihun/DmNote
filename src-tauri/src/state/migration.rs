@@ -1305,9 +1305,15 @@ fn recover_sound_library_entries(value: &Value) -> Option<Value> {
             }
         }
 
-        if Path::new(key).is_absolute() {
+        // 외래 기기의 관리 사운드 경로 키도 재건 대상 — 삭제하면 재귀화 치유 기회가 사라짐
+        let rebuildable_key = Path::new(key).is_absolute()
+            || matches!(
+                parse_portable_asset_reference(key),
+                Some((AssetCategory::Sounds, _))
+            );
+        if rebuildable_key {
             log::warn!(
-                "[Store] Rebuilding invalid soundLibrary entry '{key}' from its absolute path during recovery"
+                "[Store] Rebuilding invalid soundLibrary entry '{key}' from its asset path during recovery"
             );
             recovered.insert(key.clone(), default_entry.clone());
         } else {
@@ -1563,7 +1569,13 @@ fn recover_local_font_enabled(value: &Value) -> Option<Value> {
         return None;
     }
     let local_path = source.get("localPath").and_then(Value::as_str)?;
-    if local_path.trim().is_empty() || !Path::new(local_path).is_absolute() {
+    let trimmed_path = local_path.trim();
+    // 외래 기기의 관리 폰트 경로도 유효한 복구 정체성 — 항목 삭제 대신 비활성 복구
+    let portable_font_path = matches!(
+        parse_portable_asset_reference(trimmed_path),
+        Some((AssetCategory::Fonts, _))
+    );
+    if trimmed_path.is_empty() || (!Path::new(trimmed_path).is_absolute() && !portable_font_path) {
         return None;
     }
 
@@ -1747,6 +1759,15 @@ mod tests {
 
     fn rehome_test_directory(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("dmnote-rehome-{label}-{}", uuid::Uuid::new_v4()))
+    }
+
+    // Windows에선 /tmp가 절대 경로가 아니므로 픽스처는 플랫폼별 절대 경로 사용
+    fn absolute_fixture_path(name: &str) -> String {
+        if cfg!(target_os = "windows") {
+            format!(r"C:\tmp\{name}")
+        } else {
+            format!("/tmp/{name}")
+        }
     }
 
     fn data_with_one_position() -> AppStoreData {
@@ -3146,16 +3167,21 @@ mod tests {
             json!({ "key": "F12", "ctrl": true, "shift": false, "alt": false, "meta": false }),
         );
 
+        let repaired_key = absolute_fixture_path("repaired.wav");
+        let path_only_key = absolute_fixture_path("path-only.wav");
+        let mut sound_library = serde_json::Map::new();
+        sound_library.insert(
+            repaired_key.clone(),
+            json!({
+                "source": 42,
+                "displayName": "Recovered sound",
+                "trimStartRatio": 0.2
+            }),
+        );
+        sound_library.insert(path_only_key.clone(), json!(42));
         fields.insert(
             "soundLibrary".to_string(),
-            json!({
-                "/tmp/repaired.wav": {
-                    "source": 42,
-                    "displayName": "Recovered sound",
-                    "trimStartRatio": 0.2
-                },
-                "/tmp/path-only.wav": 42
-            }),
+            serde_json::Value::Object(sound_library),
         );
 
         std::fs::write(&path, serde_json::to_vec_pretty(&fixture).unwrap()).unwrap();
@@ -3237,21 +3263,21 @@ mod tests {
             AppStoreData::default().shortcuts.toggle_overlay
         );
         assert_eq!(
-            loaded.data.sound_library["/tmp/repaired.wav"]
+            loaded.data.sound_library[repaired_key.as_str()]
                 .display_name
                 .as_deref(),
             Some("Recovered sound")
         );
         assert_eq!(
-            loaded.data.sound_library["/tmp/repaired.wav"].trim_start_ratio,
+            loaded.data.sound_library[repaired_key.as_str()].trim_start_ratio,
             Some(0.2)
         );
         assert_eq!(
-            loaded.data.sound_library["/tmp/repaired.wav"].source,
+            loaded.data.sound_library[repaired_key.as_str()].source,
             crate::models::SoundSource::Local
         );
         assert_eq!(
-            loaded.data.sound_library["/tmp/path-only.wav"],
+            loaded.data.sound_library[path_only_key.as_str()],
             SoundLibraryEntry::default()
         );
     }
@@ -3299,7 +3325,7 @@ mod tests {
             name: "Font Sentinel".to_string(),
             display_name: "Font Sentinel".to_string(),
             enabled: true,
-            local_path: Some("/tmp/font-sentinel.ttf".to_string()),
+            local_path: Some(absolute_fixture_path("font-sentinel.ttf")),
             css_content: None,
         };
 
@@ -3643,6 +3669,47 @@ mod tests {
         assert!(super::is_foreign_portable_asset_reference(&root, other));
 
         let _ = std::fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[test]
+    fn corrupt_entries_with_foreign_managed_paths_survive_recovery() {
+        // 사운드: 외래 관리 경로 키 + 손상 값 → 삭제 대신 기본 메타데이터로 재건
+        let foreign_sound = r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\sounds\key.wav";
+        let posix_sound = "/Users/me/Library/Application Support/com.dmnote.desktop/sounds/k2.wav";
+        let mut entries = serde_json::Map::new();
+        entries.insert(foreign_sound.to_string(), json!(42));
+        entries.insert(posix_sound.to_string(), json!(42));
+        entries.insert("not-a-path".to_string(), json!(42));
+
+        let recovered =
+            super::recover_sound_library_entries(&serde_json::Value::Object(entries)).unwrap();
+        let recovered = recovered.as_object().unwrap();
+        assert!(recovered.contains_key(foreign_sound));
+        assert!(recovered.contains_key(posix_sound));
+        assert!(!recovered.contains_key("not-a-path"));
+
+        // 폰트: 외래 관리 경로 + enabled 손상 → 항목 삭제 대신 비활성 복구
+        let mut font = serde_json::to_value(CustomFont {
+            id: "font".to_string(),
+            font_type: FontType::Local,
+            name: "Font".to_string(),
+            display_name: "Font".to_string(),
+            enabled: true,
+            local_path: Some(
+                r"C:\Users\me\AppData\Roaming\com.dmnote.desktop\fonts\p.ttf".to_string(),
+            ),
+            css_content: None,
+        })
+        .unwrap();
+        font.as_object_mut()
+            .unwrap()
+            .insert("enabled".to_string(), json!(42));
+
+        let candidate = super::recover_local_font_enabled(&font).unwrap();
+        assert_eq!(
+            candidate.as_object().unwrap().get("enabled"),
+            Some(&serde_json::Value::Bool(false))
+        );
     }
 
     #[test]

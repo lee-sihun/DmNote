@@ -239,7 +239,10 @@ pub(crate) fn option_has_non_empty_text(value: &Option<String>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{local_source_path_from_image_ref, PresetFile};
+    use super::PresetFile;
+    // file URL 경로 테스트가 유닉스 전용이라 Windows에선 미사용 경고 방지
+    #[cfg(not(target_os = "windows"))]
+    use super::local_source_path_from_image_ref;
     use crate::models::NoteColor;
     use serde_json::json;
 
