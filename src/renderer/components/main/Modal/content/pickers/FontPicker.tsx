@@ -1,4 +1,11 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from '@contexts/useTranslation';
 import { useFontStore } from '@stores/useFontStore';
 import type { CustomFont } from '@src/types/settings/fonts';
@@ -7,8 +14,6 @@ import {
   buildDraftPreviewCss,
 } from '@src/types/settings/fonts';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import Modal from '@components/main/Modal/Modal';
-import { FULL_SURFACE_MATERIAL_CLASS } from '@components/main/Modal/FullSurfaceModalLayout';
 import ListPopup, { type ListItem } from '@components/main/Modal/ListPopup';
 import CommonListPickerPage from './CommonListPickerPage';
 import {
@@ -169,12 +174,7 @@ const FontPicker = ({
   // 피커가 열려 있는 동안 WebFontInputModal 코드를 미리 로드
   useEffect(() => {
     if (!open) return;
-
-    const timer = window.setTimeout(() => {
-      void preloadWebFontInputModal();
-    }, 120);
-
-    return () => window.clearTimeout(timer);
+    void preloadWebFontInputModal();
   }, [open]);
 
   // 필터링된 폰트 목록 (비활성 폰트도 노출 — 행에서 흐리게 표시)
@@ -287,7 +287,9 @@ const FontPicker = ({
 
   const openWebFontModal = (editingId: string | null) => {
     void preloadWebFontInputModal();
-    setWebFontModal({ editingId });
+    startTransition(() => {
+      setWebFontModal({ editingId });
+    });
   };
 
   const handleWebFontSubmit = (css: string, displayName: string) => {
@@ -473,26 +475,8 @@ const FontPicker = ({
         />
       )}
 
-      {/* 웹폰트 CSS 입력 모달 */}
-      {webFontModal ? (
-        <Suspense
-          fallback={
-            <Modal
-              fullSurface
-              onClick={() => setWebFontModal(null)}
-              ariaLabel={t('propertiesPanel.loading')}
-            >
-              <div
-                className={`w-full h-full flex items-center justify-center ${FULL_SURFACE_MATERIAL_CLASS}`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <p className="text-body leading-[16px] text-fg-muted">
-                  {t('propertiesPanel.loading')}
-                </p>
-              </div>
-            </Modal>
-          }
-        >
+      <Suspense fallback={null}>
+        {webFontModal ? (
           <LazyWebFontInputModal
             isOpen
             onClose={() => setWebFontModal(null)}
@@ -506,8 +490,8 @@ const FontPicker = ({
             }
             t={t}
           />
-        </Suspense>
-      ) : null}
+        ) : null}
+      </Suspense>
     </>
   );
 };

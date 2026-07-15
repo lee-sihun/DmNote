@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type {
   KeyCounterAnimationSettings,
   KeyCounterSettings,
@@ -80,6 +80,8 @@ const EMPTY_LIBRARY: CounterAnimationListResponse = {
   userPresets: [],
 };
 
+let counterAnimationLibraryCache: CounterAnimationListResponse | null = null;
+
 const CounterAnimationPicker = ({
   open,
   animation,
@@ -92,33 +94,56 @@ const CounterAnimationPicker = ({
 }: CounterAnimationPickerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
-  const [library, setLibrary] =
-    useState<CounterAnimationListResponse>(EMPTY_LIBRARY);
+  const [library, setLibrary] = useState<CounterAnimationListResponse>(
+    () => counterAnimationLibraryCache ?? EMPTY_LIBRARY,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [editorState, setEditorState] = useState<EditorState | null>(null);
+  const loadRequestRef = useRef(0);
+  const isOpenRef = useRef(open);
   const menu = usePickerItemMenu<string>();
 
   const loadLibrary = async () => {
-    setIsLoading(true);
+    const requestId = ++loadRequestRef.current;
+    const cachedLibrary = counterAnimationLibraryCache;
+    if (cachedLibrary) {
+      setLibrary(cachedLibrary);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setErrorText('');
     try {
       const response = await window.api.counterAnimation.list();
-      setLibrary(normalizeCounterAnimationLibrary(response));
+      const nextLibrary = normalizeCounterAnimationLibrary(response);
+      if (requestId !== loadRequestRef.current) return;
+      counterAnimationLibraryCache = nextLibrary;
+      if (!isOpenRef.current) return;
+      setLibrary(nextLibrary);
     } catch (error) {
+      if (requestId !== loadRequestRef.current || !isOpenRef.current) return;
       console.error('Failed to load counter animation presets', error);
       setErrorText(
         t('counterSetting.loadAnimationFailed') ||
           '애니메이션 목록을 불러오지 못했습니다.',
       );
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current && isOpenRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    isOpenRef.current = open;
     if (!open) return;
     void loadLibrary();
+
+    return () => {
+      isOpenRef.current = false;
+      loadRequestRef.current += 1;
+    };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

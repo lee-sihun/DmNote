@@ -26,6 +26,8 @@ type TrimState =
   | { mode: 'create'; file: File }
   | { mode: 'edit'; item: SoundListItem };
 
+let soundListCache: SoundListItem[] | null = null;
+
 const SoundPicker = ({
   open,
   selectedSound,
@@ -39,7 +41,9 @@ const SoundPicker = ({
   const [filterType, setFilterType] = useState<'all' | 'local' | 'hidden'>(
     'all',
   );
-  const [sounds, setSounds] = useState<SoundListItem[]>([]);
+  const [sounds, setSounds] = useState<SoundListItem[]>(
+    () => soundListCache ?? [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [trimState, setTrimState] = useState<TrimState | null>(null);
@@ -48,27 +52,48 @@ const SoundPicker = ({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelledRef = useRef(false);
   const addFileInputRef = useRef<HTMLInputElement>(null);
+  const loadRequestRef = useRef(0);
+  const isOpenRef = useRef(open);
   const menu = usePickerItemMenu<string>();
 
   const normalizedSelectedSound = (selectedSound || '').trim();
 
   const loadSounds = async () => {
-    setIsLoading(true);
+    const requestId = ++loadRequestRef.current;
+    const cachedSounds = soundListCache;
+    if (cachedSounds) {
+      setSounds(cachedSounds);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError('');
     try {
       const nextSounds = await window.api.sound.list();
+      if (requestId !== loadRequestRef.current) return;
+      soundListCache = nextSounds;
+      if (!isOpenRef.current) return;
       setSounds(nextSounds);
     } catch (error) {
+      if (requestId !== loadRequestRef.current || !isOpenRef.current) return;
       console.error('Failed to load sound list', error);
       setLoadError(t('soundPicker.loadFailed') || '사운드 목록 로드 실패');
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestRef.current && isOpenRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    isOpenRef.current = open;
     if (!open) return;
     void loadSounds();
+
+    return () => {
+      isOpenRef.current = false;
+      loadRequestRef.current += 1;
+    };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
