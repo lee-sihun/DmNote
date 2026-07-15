@@ -131,7 +131,7 @@ export default function CommonListPickerPage<T>({
           />
         </div>
       </div>
-      {/* 리스트 웰 — 리세스드 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
+      {/* 리스트 컨테이너 — 배경보다 한 단계 밝은 필 테이블. 빈 공간도 테이블의 빈 영역으로 읽힘 */}
       <div className="mx-[12px] bg-inset rounded-surface p-[4px] flex-1 min-h-0 flex flex-col">
         <div
           ref={scrollRef}

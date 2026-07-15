@@ -901,7 +901,7 @@ export const FontStyleToggle: React.FC<FontStyleToggleProps> = ({
     `w-[24px] h-[21px] flex items-center justify-center transition-colors duration-fast ${
       active
         ? 'bg-fill-active text-fg'
-        : 'bg-inset text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
+        : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted'
     }`;
 
   return (

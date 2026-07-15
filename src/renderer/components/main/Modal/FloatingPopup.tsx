@@ -454,7 +454,7 @@ const FloatingPopup = ({
         left,
         top,
       }}
-      className={`${className}${animate ? ' tooltip-fade-in' : ''}`}
+      className={`${className}${animate ? ' animate-popup-fade' : ''}`}
       role={role}
       ariaLabel={ariaLabel}
       onMenuTab={onMenuTab}

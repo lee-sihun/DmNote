@@ -6,7 +6,6 @@ interface GridBackgroundProps {
   zoom?: number;
   panX?: number;
   panY?: number;
-  color?: string;
   lineColor?: string;
 }
 
@@ -19,8 +18,7 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
   zoom = 1,
   panX = 0,
   panY = 0,
-  color: _color = '#141417',
-  lineColor = 'rgba(255, 255, 255, 0.05)',
+  lineColor = 'var(--ui-line-faint)',
 }) => {
   // 실제 화면에 그려질 그리드 크기 (줌 적용)
   const scaledGridSize = gridSize * zoom;
@@ -56,13 +54,13 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
           x={offsetX}
           y={offsetY}
         >
-          {/* 수직선 */}
+          {/* 수직선 — CSS 변수 지원을 위해 stroke는 style로 지정 */}
           <line
             x1="0"
             y1="0"
             x2="0"
             y2={scaledGridSize}
-            stroke={lineColor}
+            style={{ stroke: lineColor }}
             strokeWidth="1"
           />
           {/* 수평선 */}
@@ -71,7 +69,7 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
             y1="0"
             x2={scaledGridSize}
             y2="0"
-            stroke={lineColor}
+            style={{ stroke: lineColor }}
             strokeWidth="1"
           />
         </pattern>

@@ -17,19 +17,20 @@ body.dmn-custom-cursor * {
 /* ===== 글래스 백드롭 ===== */
 
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
-   글래스 틴트(--ui-glass-*)는 그대로 두고 백드롭만 손봐서
-   기본 배경에선 기존과 거의 동일, 밝은 배경에서만 투과를 억제 */
+   블러 반경은 매 프레임 면적×반경 비례로 재필터되는 비용 다이얼 —
+   어두운 틴트 아래서 큰 반경은 체감 차이 없이 비용만 늘어 16px 상한 유지.
+   글래스 체감은 반경이 아니라 틴트 알파·클램프 완화·채도 부스트가 만든다 */
 .backdrop-glass {
-  -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(16px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(16px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
 .backdrop-glass-popup {
-  -webkit-backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(12px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(12px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
@@ -314,6 +315,11 @@ body.dmn-custom-cursor * {
    블러 소유 엘리먼트 자신의 페이드는 블러를 살린 채 진행됨 (Dropdown 참고) */
 .animate-modal-scale > * {
   animation: modalScale var(--ui-duration-base) var(--ui-ease-out) both;
+}
+
+/* FloatingPopup 래퍼용 — 같은 원리로 페이드를 래퍼가 아닌 콘텐츠 루트(글래스 노드)에 적용 */
+.animate-popup-fade > * {
+  animation: tooltipFadeIn var(--ui-duration-fast) var(--ui-ease-out);
 }
 
 /* 스크림 틴트만 보간 — 종료 상태는 클래스 자연값
