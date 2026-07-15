@@ -391,9 +391,11 @@ impl Default for KeyPosition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum StatType {
     Kps,
+    KpsAvg,
+    KpsMax,
     Total,
 }
 
@@ -1951,7 +1953,23 @@ pub struct SettingsPatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{FadePosition, KeyPosition, NoteColor, NoteSettings};
+    use super::{FadePosition, KeyPosition, NoteColor, NoteSettings, StatType};
+
+    #[test]
+    fn stat_type_wire_values_round_trip() {
+        for (stat_type, wire_value) in [
+            (StatType::Kps, "kps"),
+            (StatType::KpsAvg, "kpsAvg"),
+            (StatType::KpsMax, "kpsMax"),
+            (StatType::Total, "total"),
+        ] {
+            let serialized = serde_json::to_value(&stat_type).unwrap();
+            assert_eq!(serialized, wire_value);
+
+            let restored: StatType = serde_json::from_value(serialized).unwrap();
+            assert_eq!(restored, stat_type);
+        }
+    }
 
     // 필수 필드만 채운 최소 KeyPosition JSON. 시각 px 필드는 호출부에서 주입
     fn key_position_json(visual_px: &str) -> String {

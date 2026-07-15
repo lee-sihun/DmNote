@@ -1,7 +1,12 @@
 /* eslint-disable react-hooks/refs */
 import React, { useEffect, useRef, useState } from 'react';
 import type { ImageFit, KeyPosition } from '@src/types/key/keys';
-import type { StatItemPosition, StatItemType } from '@src/types/key/statItems';
+import {
+  STAT_BASE_OPTIONS,
+  STAT_KPS_OPTIONS,
+  type StatItemPosition,
+  type StatItemType,
+} from '@src/types/key/statItems';
 import type {
   GraphItemPosition,
   GraphItemType,
@@ -1391,17 +1396,6 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
     ? [TABS.STYLE, TABS.COUNTER]
     : [TABS.STYLE, TABS.NOTE, TABS.COUNTER];
 
-  const statBaseOptions = [
-    { label: 'KPS', value: 'kps' },
-    { label: 'Total', value: 'total' },
-  ];
-
-  const statKpsOptions = [
-    { label: 'KPS', value: 'kps' },
-    { label: 'AVG', value: 'kpsAvg' },
-    { label: 'MAX', value: 'kpsMax' },
-  ];
-
   const resolvedStatType =
     (singleStatPosition?.statType as StatItemType) || 'kps';
   const statBaseValue = resolvedStatType === 'total' ? 'total' : 'kps';
@@ -1445,7 +1439,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
     <>
       <PropertyRow label={t('propertiesPanel.statType') || 'Stat Type'}>
         <Dropdown
-          options={statBaseOptions}
+          options={STAT_BASE_OPTIONS}
           value={statBaseValue}
           onChange={(value) => {
             if (value === 'total') {
@@ -1465,7 +1459,7 @@ export const SingleKeyStatPanel: React.FC<SingleKeyStatPanelProps> = ({
       {statBaseValue === 'kps' ? (
         <PropertyRow label={t('propertiesPanel.statKpsType') || 'KPS Type'}>
           <Dropdown
-            options={statKpsOptions}
+            options={STAT_KPS_OPTIONS}
             value={resolvedStatType}
             onChange={(value) =>
               handleStatUpdate({
