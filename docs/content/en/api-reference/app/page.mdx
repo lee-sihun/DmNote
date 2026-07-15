@@ -9,6 +9,11 @@ description: dmn.app, dmn.window API reference
 
 App-level control including boot, restart, and external URLs.
 
+<Callout type="info">
+  Automatic update is main-window only. Restart and quit wait for pending editor
+  writes in every native Tauri window before the process exits.
+</Callout>
+
 ### `dmn.app.bootstrap(): Promise<Bootstrap>`
 
 Returns app bootstrap data (settings, keys, presets, etc.)
@@ -31,12 +36,12 @@ Restarts the app. Settings are preserved.
 await dmn.app.restart();
 ```
 
-### `dmn.app.openExternalUrl(url: string): Promise<void>`
+### `dmn.app.openExternal(url: string): Promise<void>`
 
 Opens a URL in the system default browser.
 
 ```javascript
-await dmn.app.openExternalUrl("https://dmstudio.app");
+await dmn.app.openExternal('https://dmstudio.app');
 ```
 
 ---
@@ -50,7 +55,7 @@ Window management API.
 Returns the current window type.
 
 ```typescript
-type WindowType = "main" | "overlay";
+type WindowType = 'main' | 'overlay';
 
 console.log(dmn.window.type); // 'main' or 'overlay'
 ```
@@ -86,13 +91,13 @@ await dmn.window.openDevtoolsAll();
 ```javascript
 // App info display
 dmn.plugin.defineElement({
-  name: "App Info",
+  name: 'App Info',
   maxInstances: 1,
 
   template: (state, settings, { html }) => html`
     <div style="background: #333; padding: 16px; border-radius: 8px;">
       <div>Window: ${dmn.window.type}</div>
-      <div>Mode: ${state.mode ?? "loading..."}</div>
+      <div>Mode: ${state.mode ?? 'loading...'}</div>
     </div>
   `,
 

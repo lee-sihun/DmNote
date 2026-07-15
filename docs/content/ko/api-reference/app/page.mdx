@@ -7,6 +7,11 @@ description: 앱 부팅, 재시작, 윈도우 제어 API
 
 ## dmn.app
 
+<Callout type="info">
+  자동 업데이트는 메인 창에서만 사용할 수 있습니다. 재시작과 종료는 모든
+  네이티브 Tauri 창의 편집 저장이 끝난 뒤 프로세스를 닫습니다.
+</Callout>
+
 ### bootstrap()
 
 앱 초기화 시 필요한 모든 데이터를 한 번에 가져옵니다.
@@ -30,8 +35,8 @@ interface BootstrapPayload {
 
 ```javascript
 const bootstrap = await dmn.app.bootstrap();
-console.log("현재 모드:", bootstrap.selectedKeyType);
-console.log("4key 매핑:", bootstrap.keys["4key"]);
+console.log('현재 모드:', bootstrap.selectedKeyType);
+console.log('4key 매핑:', bootstrap.keys['4key']);
 ```
 
 ### openExternal(url)
@@ -39,7 +44,7 @@ console.log("4key 매핑:", bootstrap.keys["4key"]);
 외부 URL을 기본 브라우저에서 엽니다.
 
 ```javascript
-await dmn.app.openExternal("https://github.com");
+await dmn.app.openExternal('https://github.com');
 ```
 
 ### restart()
@@ -62,11 +67,11 @@ await dmn.app.restart();
 | `"overlay"` | 오버레이 윈도우 (키 시각화)   |
 
 ```javascript
-if (dmn.window.type === "overlay") {
+if (dmn.window.type === 'overlay') {
   // 오버레이 전용 코드
 }
 
-if (dmn.window.type === "main") {
+if (dmn.window.type === 'main') {
   // 메인 윈도우 전용 코드
 }
 ```

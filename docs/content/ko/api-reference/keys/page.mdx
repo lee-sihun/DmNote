@@ -5,7 +5,19 @@ description: 키 매핑, 이벤트, 커스텀 탭 API
 
 # 키 (keys)
 
+<Callout type="info">
+  OBS는 읽기 전용입니다. 네이티브 Tauri 메인·오버레이 창은 revision
+  coordinator를 거쳐 쓰고 같은 canonical 이벤트를 구독할 수 있습니다.
+</Callout>
+
 ## 키 매핑 조회/수정
+
+<Callout type="warning">
+  `keys[mode][i]`와 `keyPositions[mode][i]`는 인덱스로 결합되어 있습니다. 모드
+  집합이나 배열 길이를 바꾸는 `update()` 또는 `updatePositions()` 단독 호출은
+  `PAIRED_UPDATE_REQUIRED`로 실패할 수 있습니다. 키 추가·삭제·재정렬은
+  `updateWithPositions()`를 사용하세요.
+</Callout>
 
 ### get()
 
@@ -77,9 +89,10 @@ await dmn.keys.updatePositions(current);
 
 ### updateWithPositions(mappings, positions)
 
-키 매핑과 인덱스로 결합된 위치 정보를 한 번의 영구 저장으로 갱신합니다.
-키를 추가·삭제·재정렬할 때 사용하세요. 커밋된 값이 반환되며, 저장 성공 후
-`keys:changed`와 `positions:changed` 이벤트가 모두 방출됩니다.
+키 매핑과 인덱스로 결합된 위치 정보를 한 번의 원자적 커밋으로 갱신합니다.
+두 값의 모드 집합과 모드별 배열 길이는 같아야 합니다. 키를 추가·삭제·재정렬할
+때 사용하세요. 커밋된 값이 반환되며, 저장 성공 후 `keys:changed`와
+`positions:changed` 이벤트가 모두 방출됩니다.
 
 ```typescript
 interface KeysWithPositionsResult {
@@ -224,6 +237,14 @@ HID 기기 버튼(Windows)은 `device: 'gamepad'`와
   구독자가 없으면 백엔드에서 이벤트를 emit하지 않아 성능 오버헤드가 없습니다.
 </Callout>
 
+<Callout type="warning">
+  아래 `onChanged()`와 `onPositionsChanged()`는 기존 플러그인 호환을 위해 계속
+  제공되지만, 신규 에디터 상태 동기화 용도로는 deprecated입니다. 여러 컬렉션의
+  원자적 변경은
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#커밋된-변경-구독)로
+  구독하세요.
+</Callout>
+
 ### onChanged(listener)
 
 키 매핑 변경 이벤트를 구독합니다.
@@ -315,11 +336,14 @@ await dmn.keys.customTabs.select('custom-123');
 
 ### restore(customTabs, selectedKeyType)
 
-커스텀 탭 목록과 선택된 모드를 일괄 복원합니다. 백엔드 상태, 오버레이, 메인 윈도우가 모두 동기화됩니다.
+이미 존재하는 커스텀 탭의 이름·순서와 선택 모드를 원자적으로 복원합니다. 모든
+탭 ID에는 짝이 맞는 `keys`와 `keyPositions`가 이미 있어야 합니다. 탭 추가·삭제나
+키 구조 변경에는 `create`, `delete`, `updateWithPositions`를 사용하세요. 고아 탭
+정보나 잘못된 입력은 저장 데이터를 바꾸지 않고 거절됩니다.
 
 ```javascript
 await dmn.keys.customTabs.restore(
-  [{ id: 'custom-123', name: 'My Keys', keys: ['KeyA', 'KeyS'] }],
+  [{ id: 'custom-123', name: 'My Keys' }],
   'custom-123',
 );
 ```

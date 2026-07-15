@@ -5,6 +5,11 @@ description: HID 노브 요소를 위한 dmn.knobItems API 레퍼런스
 
 # 노브 API
 
+<Callout type="info">
+  OBS는 읽기 전용입니다. 네이티브 Tauri 메인·오버레이 창은 revision
+  coordinator를 거쳐 노브 레이아웃을 쓸 수 있습니다.
+</Callout>
+
 노브 요소 — HID 기기 축(예: 리듬게임 컨트롤러의 노브)에 바인딩되어 물리
 노브와 함께 회전하는 시각화 요소 — 를 관리합니다. HID 기기의 **버튼**은
 키보드 키와 완전히 동일하게 매핑·시각화되고, **축**은 전용 노브 요소로
@@ -80,6 +85,13 @@ await dmn.knobItems.updatePositions(positions);
 ### `dmn.knobItems.onPositionsChanged(callback): Unsubscribe`
 
 노브 레이아웃 변경(`knobPositions:changed`)을 구독합니다.
+
+<Callout type="warning">
+  이 이벤트는 기존 플러그인 호환을 위해 계속 제공되지만, 신규 에디터 상태 동기화
+  용도로는 deprecated입니다. canonical 원자적 변경 흐름은
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#커밋된-변경-구독)로
+  구독하세요.
+</Callout>
 
 ```typescript
 const unsub = dmn.knobItems.onPositionsChanged((positions) => {

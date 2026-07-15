@@ -1,0 +1,237 @@
+---
+title: 에디터 API
+description: 에디터 문서의 원자적 조회, 커밋, 변경 이벤트 API
+---
+
+# 에디터 API
+
+<Callout type="warning">
+  OBS는 읽기 전용입니다. 네이티브 Tauri 메인·오버레이 창은 revision
+  coordinator를 거쳐 쓸 수 있고, OBS는 canonical 문서를 조회·구독만 할 수
+  있습니다.
+</Callout>
+
+`dmn.editor`는 에디터 레이아웃을 이루는 여섯 컬렉션을 revision이 있는 문서
+하나로 조회하고 갱신합니다. 사용자 동작 하나가 여러 컬렉션을 함께 바꾸거나,
+소비자가 순서가 보장된 변경 흐름 하나를 받아야 할 때 사용하세요.
+
+## 문서 타입
+
+```typescript
+type EditorField =
+  | 'keys'
+  | 'keyPositions'
+  | 'statPositions'
+  | 'graphPositions'
+  | 'knobPositions'
+  | 'layerGroups';
+
+interface EditorDocumentV1 {
+  schemaVersion: 1;
+  keys: KeyMappings;
+  keyPositions: KeyPositions;
+  statPositions: StatItemPositions;
+  graphPositions: GraphItemPositions;
+  knobPositions: KnobItemPositions;
+  layerGroups: LayerGroups;
+}
+
+type EditorPatchV1 = {
+  schemaVersion: 1;
+} & Partial<Pick<EditorDocumentV1, EditorField>>;
+```
+
+`EditorPatchV1`에 포함한 각 필드는 해당 최상위 컬렉션의 canonical 전체
+값입니다. 항목 하나만 표현하는 diff가 아닙니다.
+
+## 현재 문서 조회
+
+### `dmn.editor.get(): Promise<EditorGetResult>`
+
+현재 revision과 그 revision에 정확히 대응하는 전체 문서를 한 스냅샷으로
+반환합니다.
+
+```typescript
+interface EditorGetResult {
+  revision: number;
+  document: EditorDocumentV1;
+}
+
+const { revision, document } = await dmn.editor.get();
+console.log(revision, document.keyPositions);
+```
+
+반환된 `revision`을 보관하세요. 이후 커밋의 `baseRevision`으로 사용하여 오래된
+스냅샷이 최신 편집을 조용히 덮어쓰지 못하게 합니다.
+
+## 변경 사항 원자적 커밋
+
+### `dmn.editor.commit(request): Promise<EditorCommitResult>`
+
+`baseRevision`의 문서에 `changes`를 합치고, 완성된 문서를 검증한 다음, 포함된
+모든 컬렉션을 한 번의 원자적 교체로 함께 저장합니다. 커밋이 거절되면 일부만
+적용되지 않습니다. DM Note는 지원 플랫폼마다 가능한 가장 강한 파일·디렉터리
+내구성 barrier를 요청합니다. 다만 하드웨어나 펌웨어가 이 barrier를 지키지 않는
+고장까지 애플리케이션이 절대 보장할 수는 없습니다.
+
+<Callout type="info">
+  앱의 Undo/Redo도 편집 컬렉션 6개, 커스텀 탭 정보, 선택 모드, 카운터,
+  프리셋 설정, 탭별 노트 설정을 백엔드 store 트랜잭션 한 번으로 함께 복원합니다.
+  이 내부 커맨드는 공개 플러그인 API로 노출하지 않습니다.
+</Callout>
+
+```typescript
+interface EditorCommitRequest {
+  baseRevision: number;
+  mutationId: string;
+  changes: EditorPatchV1;
+}
+
+interface EditorCommitResult {
+  revision: number;
+  changedFields: EditorField[];
+}
+
+const snapshot = await dmn.editor.get();
+const result = await dmn.editor.commit({
+  baseRevision: snapshot.revision,
+  mutationId: crypto.randomUUID(),
+  changes: {
+    schemaVersion: 1,
+    statPositions: nextStatPositions,
+    layerGroups: nextLayerGroups,
+  },
+});
+
+console.log('커밋된 revision:', result.revision);
+```
+
+`mutationId`는 64바이트 이하의 UUID 문자열이어야 합니다. 현재 앱 프로세스에서
+최근 요청을 같은 ID로 재시도하면 중복 적용되지 않습니다. 이 메모리 내 중복
+방지는 즉시 IPC 재시도용이며 앱을 재시작하면 유지되지 않습니다. 아직 보관 중인
+ID를 다른 요청에 재사용하면 거절됩니다.
+
+제출한 값이 이미 현재 값과 같으면 현재 revision과 빈 `changedFields`를
+반환하고 canonical committed 이벤트는 발행하지 않습니다. 호환 wrapper는 예전
+필드별 refresh 이벤트를 한 번 투영할 수 있지만, 같은 `mutationId` 재시도에서는
+다시 투영하지 않습니다.
+
+### 키 구조는 반드시 함께 변경
+
+`keys[mode][i]`와 `keyPositions[mode][i]`는 같은 인덱스로 하나의 항목을
+나타냅니다. 모드를 추가·삭제하거나 배열 길이를 바꿀 때는 두 컬렉션을 같은
+커밋에 함께 넣으세요. 두 컬렉션의 모드 집합과 모드별 길이는 같아야 합니다.
+
+```typescript
+await dmn.editor.commit({
+  baseRevision,
+  mutationId: crypto.randomUUID(),
+  changes: {
+    schemaVersion: 1,
+    keys: nextKeys,
+    keyPositions: nextKeyPositions,
+  },
+});
+```
+
+키 이름이나 위치 속성처럼 구조와 길이가 그대로인 변경은 해당 컬렉션 하나만
+갱신해도 됩니다. 구조를 바꾸면서 `keys` 또는 `keyPositions` 하나만 제출하면
+`PAIRED_UPDATE_REQUIRED`로 거절됩니다.
+
+호환용 `dmn.keys` API를 사용할 때 이런 구조 변경은
+`dmn.keys.updateWithPositions(keys, keyPositions)`로 제출하세요. `update()`와
+`updatePositions()` 두 호출로 나누면 안 됩니다.
+
+## 커밋 오류
+
+`commit()`은 아래 구조의 오류로 reject됩니다. 사람이 읽는 `message`가 아니라
+`errorCode`로 분기하세요.
+
+```typescript
+type EditorCommitErrorCode =
+  | 'REVISION_CONFLICT'
+  | 'VALIDATION_FAILED'
+  | 'PAIRED_UPDATE_REQUIRED'
+  | 'MUTATION_ID_REUSED'
+  | 'IO_ERROR';
+
+interface EditorCommitError {
+  errorCode: EditorCommitErrorCode;
+  message: string;
+  details?: {
+    currentRevision?: number;
+    validationCode?: string;
+    field?: string;
+  };
+  retryable: boolean;
+}
+```
+
+| 코드                     | 의미                                              | `retryable` |
+| ------------------------ | ------------------------------------------------- | ----------- |
+| `REVISION_CONFLICT`      | `baseRevision`이 오래됨. 다시 조회·조정한 뒤 커밋 | `true`      |
+| `VALIDATION_FAILED`      | 완성된 문서가 에디터 검증 규칙을 위반함           | `false`     |
+| `PAIRED_UPDATE_REQUIRED` | 키 구조 변경에 짝 컬렉션이 빠짐                   | `false`     |
+| `MUTATION_ID_REUSED`     | 같은 mutation ID를 다른 요청에 재사용함           | `false`     |
+| `IO_ERROR`               | 문서를 디스크에 저장하지 못함                     | `true`      |
+
+오류에 해당할 때 `details.currentRevision`, `details.validationCode`,
+`details.field`가 함께 제공됩니다.
+
+## 커밋된 변경 구독
+
+### `dmn.editor.onCommitted(callback): ReadyUnsubscribe`
+
+canonical `editor:committed` 흐름을 구독합니다. 이벤트 하나가 성공한 원자적
+에디터 커밋 하나를 나타냅니다.
+
+```typescript
+interface EditorCommittedV1 {
+  schemaVersion: 1;
+  revision: number;
+  mutationId: string;
+  origin?: string;
+  changedFields: EditorField[];
+  patch: EditorPatchV1;
+}
+
+const unsubscribe = dmn.editor.onCommitted((event) => {
+  console.log(event.revision, event.changedFields);
+  applyEditorPatch(event.patch);
+});
+
+await unsubscribe.ready;
+
+dmn.plugin.registerCleanup(() => {
+  unsubscribe();
+});
+```
+
+반환된 구독 해제 함수에는 `ready: Promise<void>` 속성이 있습니다. 스냅샷을
+조회하기 전에 이벤트가 하나도 빠지면 안 되는 경우 await 하세요.
+
+이벤트는 대응하는 `commit()` Promise가 resolve되기 전에 도착할 수 있습니다.
+`mutationId`와 `revision`으로 같은 변경을 두 번 적용하지 마세요. 수신한
+revision이 하나 이상 건너뛰면 `dmn.editor.get()`으로 전체 스냅샷을 다시
+맞추세요. 모르는 `origin` 값과 앞으로 추가될 모르는 필드는 무시하세요.
+
+## 기존 변경 이벤트
+
+<Callout type="warning">
+  아래 컬렉션별 이벤트는 기존 플러그인 호환을 위해 같은 페이로드로 계속
+  제공되지만, 신규 에디터 상태 동기화 용도로는 deprecated입니다. 여러 컬렉션을
+  바꾼 편집 하나를 순서가 있는 변경 하나로 받으려면 `dmn.editor.onCommitted()`를
+  사용하세요.
+</Callout>
+
+| 호환 이벤트                           | 대체 API                   |
+| ------------------------------------- | -------------------------- |
+| `dmn.keys.onChanged()`                | `dmn.editor.onCommitted()` |
+| `dmn.keys.onPositionsChanged()`       | `dmn.editor.onCommitted()` |
+| `dmn.statItems.onPositionsChanged()`  | `dmn.editor.onCommitted()` |
+| `dmn.graphItems.onPositionsChanged()` | `dmn.editor.onCommitted()` |
+| `dmn.knobItems.onPositionsChanged()`  | `dmn.editor.onCommitted()` |
+| `dmn.layerGroups.onChanged()`         | `dmn.editor.onCommitted()` |
+
+기존 플러그인은 당장 마이그레이션하지 않아도 됩니다. 신규 동기화 코드는 canonical
+이벤트와 호환 이벤트를 둘 다 적용하지 말고 canonical 이벤트만 구독하세요.

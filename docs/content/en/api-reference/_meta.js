@@ -2,6 +2,7 @@ export default {
   index: "Overview",
   app: "App",
   keys: "Keys",
+  editor: "Editor",
   knobs: "Knobs",
   settings: "Settings",
   overlay: "Overlay",

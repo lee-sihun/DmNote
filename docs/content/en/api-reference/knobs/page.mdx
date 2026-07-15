@@ -5,6 +5,11 @@ description: dmn.knobItems API reference for HID knob elements
 
 # Knobs API
 
+<Callout type="info">
+  OBS is read-only. Native Tauri main and overlay windows can write knob layout
+  changes through the revision coordinator.
+</Callout>
+
 Manage knob elements — rotary visualization elements bound to HID device axes
 (e.g., rhythm game controller knobs). While HID device **buttons** are mapped
 and visualized exactly like keyboard keys, **axes** are visualized with
@@ -82,6 +87,13 @@ await dmn.knobItems.updatePositions(positions);
 ### `dmn.knobItems.onPositionsChanged(callback): Unsubscribe`
 
 Subscribes to knob layout changes (`knobPositions:changed`).
+
+<Callout type="warning">
+  This event remains available for compatibility, but is deprecated for new
+  editor state synchronization. Use
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#subscribe-to-committed-changes)
+  for the canonical atomic change stream.
+</Callout>
 
 ```typescript
 const unsub = dmn.knobItems.onPositionsChanged((positions) => {

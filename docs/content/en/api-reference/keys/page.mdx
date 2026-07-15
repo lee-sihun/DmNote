@@ -7,6 +7,11 @@ description: dmn.keys API reference for key events and mappings
 
 Key event subscription, mapping, and custom tab management.
 
+<Callout type="info">
+  OBS is read-only. Native Tauri main and overlay windows can write through the
+  revision coordinator and subscribe to the same canonical events.
+</Callout>
+
 ## Key State Events
 
 ### `dmn.keys.onKeyState(callback): ReadyUnsubscribe`
@@ -117,40 +122,59 @@ const unsub = dmn.keys.onModeChanged(({ mode }) => {
 
 ## Key Mapping
 
-### `dmn.keys.get(): Promise<KeysState>`
+### `dmn.keys.get(): Promise<KeyMappings>`
 
-Returns current key mapping and counter state.
+Returns the key mappings for all modes.
 
 ```typescript
-interface KeysState {
-  keyboard: KeyboardMapping;
-  mouse: MouseMapping;
-  counter: Record<string, number>;
-}
+type KeyMappings = Record<string, string[]>;
 
-const keys = await dmn.keys.get();
-console.log(keys.keyboard);
-console.log(keys.counter);
+const mappings = await dmn.keys.get();
+console.log(mappings['4key']);
 ```
 
-### `dmn.keys.set(keys: Partial<KeysState>): Promise<void>`
+### `dmn.keys.update(mappings: KeyMappings): Promise<KeyMappings>`
 
-Updates key mapping.
+Replaces the key mappings and returns the committed value.
 
-```javascript
-await dmn.keys.set({
-  keyboard: {
-    /* new mapping */
-  },
-});
+```typescript
+const mappings = await dmn.keys.get();
+mappings['4key'][0] = 'KeyS';
+const committed = await dmn.keys.update(mappings);
 ```
+
+### `dmn.keys.getPositions(): Promise<KeyPositions>`
+
+Returns the key positions for all modes.
+
+```typescript
+const positions = await dmn.keys.getPositions();
+console.log(positions['4key']);
+```
+
+### `dmn.keys.updatePositions(positions: KeyPositions): Promise<KeyPositions>`
+
+Replaces the key positions and returns the committed value.
+
+```typescript
+const positions = await dmn.keys.getPositions();
+positions['4key'][0].dx = 100;
+const committed = await dmn.keys.updatePositions(positions);
+```
+
+<Callout type="warning">
+  `keys[mode][i]` and `keyPositions[mode][i]` are coupled by index. A standalone
+  `update()` or `updatePositions()` may fail with `PAIRED_UPDATE_REQUIRED` if it
+  changes a mode set or an array length. Use `updateWithPositions()` for key
+  additions, removals, and reordering.
+</Callout>
 
 ### `dmn.keys.updateWithPositions(mappings, positions): Promise<KeysWithPositionsResult>`
 
-Updates key mappings and their index-coupled positions in one durable commit. Use
-this method whenever keys are added, removed, or reordered. The committed values
-are returned, and both `keys:changed` and `positions:changed` are emitted after
-the commit succeeds.
+Updates key mappings and their index-coupled positions in one atomic commit.
+The two values must have matching mode sets and array lengths. The committed
+values are returned, and both `keys:changed` and `positions:changed` are emitted
+after the commit succeeds.
 
 ```typescript
 interface KeysWithPositionsResult {
@@ -160,6 +184,33 @@ interface KeysWithPositionsResult {
 
 const result = await dmn.keys.updateWithPositions(mappings, positions);
 ```
+
+### `dmn.keys.onChanged(callback): Unsubscribe`
+
+Subscribes to key mapping changes (`keys:changed`).
+
+```typescript
+const unsubscribe = dmn.keys.onChanged((mappings) => {
+  console.log('key mappings changed', mappings);
+});
+```
+
+### `dmn.keys.onPositionsChanged(callback): Unsubscribe`
+
+Subscribes to key position changes (`positions:changed`).
+
+```typescript
+const unsubscribe = dmn.keys.onPositionsChanged((positions) => {
+  console.log('key positions changed', positions);
+});
+```
+
+<Callout type="warning">
+  These two per-collection events remain available for compatibility, but are
+  deprecated for new editor state synchronization. Use
+  [`dmn.editor.onCommitted()`](/docs/api-reference/editor#subscribe-to-committed-changes)
+  to observe atomic multi-collection edits.
+</Callout>
 
 ---
 
@@ -192,11 +243,14 @@ const unsub = dmn.keys.registerCustomTab({
 
 ### `dmn.keys.customTabs.restore(customTabs, selectedKeyType): Promise<void>`
 
-Restores custom tabs and selected mode atomically. Syncs backend state, overlay, and main window.
+Restores the names/order of existing custom tabs and the selected mode
+atomically. Every tab ID must already have paired `keys` and `keyPositions`;
+use `create`, `delete`, and `updateWithPositions` for topology changes. Invalid
+or orphaned tab metadata is rejected without changing stored data.
 
 ```javascript
 await dmn.keys.customTabs.restore(
-  [{ id: 'custom-123', name: 'My Keys', keys: ['KeyA', 'KeyS'] }],
+  [{ id: 'custom-123', name: 'My Keys' }],
   'custom-123',
 );
 ```
