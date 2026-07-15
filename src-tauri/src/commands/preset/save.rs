@@ -496,6 +496,11 @@ fn rewrite_position_image_reference(
         return Ok(());
     };
     if !source_path.exists() {
+        // 실물 없는 참조는 임베드 불가 — 진단용 흔적만 남김
+        log::warn!(
+            "[Preset] Skipping image embed for a file missing on this machine: {}",
+            source_path.display()
+        );
         return Ok(());
     }
 
@@ -611,6 +616,8 @@ fn rewrite_position_sound_reference(
 
     let source_path = PathBuf::from(trimmed);
     if !source_path.is_absolute() || !source_path.exists() {
+        // 실물 없는 참조는 임베드 불가 — 진단용 흔적만 남김
+        log::warn!("[Preset] Skipping sound embed for a missing or non-absolute path: {trimmed}");
         return Ok(());
     }
 

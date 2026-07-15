@@ -817,6 +817,10 @@ fn restore_preset_local_fonts_in_dir(
             .unwrap_or(false);
 
         if !has_existing_valid_path {
+            log::warn!(
+                "[Preset] Disabling font '{}' — no embedded payload and its file is missing on this machine",
+                font.name
+            );
             font.local_path = None;
             font.enabled = false;
         }
@@ -1027,6 +1031,9 @@ fn restore_position_image_reference(
         }
 
         // 다른 기기에서 import된 Preset: 해석 불가한 절대 경로는 정상 fallback 처리
+        log::warn!(
+            "[Preset] Clearing image reference to a file missing on this machine: {trimmed}"
+        );
         *image_ref = None;
         return Ok(());
     }
@@ -1205,6 +1212,7 @@ fn restore_position_sound_reference(
     }
 
     // 다른 기기에서 임포트된 프리셋: 경로를 해석할 수 없으면 초기화.
+    log::warn!("[Preset] Clearing sound reference to a file missing on this machine: {trimmed}");
     *sound_ref = None;
     Ok(())
 }
