@@ -17,20 +17,20 @@ body.dmn-custom-cursor * {
 /* ===== 글래스 백드롭 ===== */
 
 /* 글래스 백드롭 — 블러에 밝기·채도 클램프를 결합.
-   블러 반경은 매 프레임 면적×반경 비례로 재필터되는 비용 다이얼 —
-   어두운 틴트 아래서 큰 반경은 체감 차이 없이 비용만 늘어 16px 상한 유지.
-   글래스 체감은 반경이 아니라 틴트 알파·클램프 완화·채도 부스트가 만든다 */
+   비용 지배 요인은 반경이 아니라 표면 수·면적·아래 damage(재필터 트리거) —
+   Skia가 큰 반경을 저해상도 다운샘플로 처리해 반경 비용은 평탄화됨.
+   글래스는 일시 표면(모달·팝업) 전용 유지, 표면 자체에 transform 애니메이션 금지 */
 .backdrop-glass {
-  -webkit-backdrop-filter: blur(16px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(16px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(32px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
 .backdrop-glass-popup {
-  -webkit-backdrop-filter: blur(12px) brightness(var(--ui-glass-backdrop-dim))
+  -webkit-backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
-  backdrop-filter: blur(12px) brightness(var(--ui-glass-backdrop-dim))
+  backdrop-filter: blur(24px) brightness(var(--ui-glass-backdrop-dim))
     saturate(var(--ui-glass-backdrop-sat));
 }
 
