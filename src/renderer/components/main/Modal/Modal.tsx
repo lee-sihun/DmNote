@@ -158,7 +158,7 @@ const Modal = ({
   // backdrop root가 되어 페이드 동안 블러가 죽었다가 끝나는 순간 튐.
   // 그래서 animate-modal-scale은 래퍼가 아닌 직계 자식(> *)에 적용되고,
   // 등장 모션은 스크림(틴트 키프레임)과 콘텐츠 루트가 각자 소유한다
-  // 스크림은 알파 딤만 — backdrop 블러는 풀스크린 재필터라 금지 (Windows 렉)
+  // 스크림은 검은 딤 + 은은한 상수 블러 — 블러 키프레임 보간만 금지 (Windows 렉 요인)
   return createPortal(
     <div
       ref={backdropRef}
@@ -174,11 +174,12 @@ const Modal = ({
     >
       {/* 스크림 언더레이 — 클릭은 래퍼로 통과.
           전면 시트는 스크림 생략 — 시트가 영역을 다 덮어 어둡히기가 무의미하고,
-          스크림이 겹치면 같은 글래스 토큰인데 사이드 패널보다 어둡게 합성됨 */}
+          스크림이 겹치면 같은 글래스 토큰인데 사이드 패널보다 어둡게 합성됨
+          스크림 알파는 카드 글래스 투과와 곱으로 결합 — --ui-glass-heavy와 함께 조절 */}
       {!fullSurface && (
         <div
           aria-hidden="true"
-          className={`absolute inset-0 bg-black/60 pointer-events-none ${scrimAnimClass}`}
+          className={`absolute inset-0 backdrop-glass-scrim pointer-events-none ${scrimAnimClass}`}
         />
       )}
       <div

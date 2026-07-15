@@ -34,6 +34,17 @@ body.dmn-custom-cursor * {
     saturate(var(--ui-glass-backdrop-sat));
 }
 
+/* 스크림 프로스트 — 검은 딤 + 은은한 전화면 블러 (디자인 개편 전 레시피 복원).
+   틴트는 유틸리티가 아니라 여기서 소유 — 딤·블러 레시피 단일 소스.
+   전화면 재필터라 반경은 최소 유지, 블러 키프레임 보간 금지가 최적화의 핵심 —
+   블러는 첫 프레임부터 상수, 틴트만 페이드. Windows에서 모달 연 채
+   키 연타 프레임 실측이 유지 조건 */
+.backdrop-glass-scrim {
+  background: rgba(0, 0, 0, 0.75);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
 /* 포지셔닝 보정 — 이미 fixed/absolute인 표면은 :where(0 특이도)라 그대로 유지 */
 :where(.backdrop-glass, .backdrop-glass-popup) {
   position: relative;
@@ -64,6 +75,12 @@ body.dmn-custom-cursor * {
     --ui-glass: rgba(14, 14, 17, 0.96);
     --ui-glass-heavy: rgba(14, 14, 17, 0.96);
     --ui-glass-dim: rgba(12, 12, 14, 0.94);
+  }
+
+  /* 스크림은 블러만 끄고 알파 딤으로 폴백 */
+  .backdrop-glass-scrim {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   /* 루미노시티 캡은 블러 없는 표면에서 무의미 — 블렌드 패스도 함께 제거 */
